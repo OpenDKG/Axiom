@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -9,7 +10,9 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using Netpetra.Contracts.Files;
 using Netpetra.Contracts.Modules;
+using Netpetra.Contracts.Reputation;
 using Netpetra.UI.Services;
+using Netpetra.UI.Views;
 
 namespace Netpetra.UI.ViewModels;
 
@@ -26,18 +29,37 @@ public sealed record SecurityModule(
     bool CanAct = false,
     string ActionLabel = "Install");
 
-public sealed record FileScanRow(
-    string Path,
-    string Name,
-    long SizeBytes,
-    string? Sha256,
-    string? SkippedReason)
+public sealed partial class FileScanRow : ObservableObject
 {
+    public FileScanRow(FileScanEntry entry)
+    {
+        Path = entry.Path;
+        Name = System.IO.Path.GetFileName(entry.Path);
+        SizeBytes = entry.SizeBytes;
+        Sha256 = entry.Sha256;
+        SkippedReason = entry.SkippedReason;
+    }
+
+    public string Path { get; }
+
+    public string Name { get; }
+
+    public long SizeBytes { get; }
+
+    public string? Sha256 { get; }
+
+    public string? SkippedReason { get; }
+
+    public bool HasHash => Sha256 is not null;
+
     public string SizeText => $"{SizeBytes:N0} B";
 
     public string HashText => Sha256 ?? SkippedReason ?? "—";
 
     public string StatusText => Sha256 is null ? "SKIPPED" : "HASHED";
+
+    [ObservableProperty]
+    private string _verdictText = "Not checked";
 }
 
 /// <summary>
@@ -52,11 +74,18 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     private readonly BoundedHistory<ModuleActivity> _activityHistory = new(30);
 
+    private readonly ReputationSettingsStore _reputationStore = new();
+
+    private readonly VirusTotalClient _virusTotal = new();
+
+    private ReputationSettings _reputationSettings = new(false, string.Empty);
+
     private readonly DispatcherTimer _activityTimer;
 
     public SecurityViewModel()
         : base("Security", "Optional intelligence and protection modules", "\uE8D7")
     {
+        _reputationSettings = _reputationStore.Load();
         Modules = [];
         SeedCheckingState();
 
@@ -78,6 +107,17 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private bool _isScanning;
+
+    [ObservableProperty]
+    private bool _isCheckingHash;
+
+    private string ReputationStatus => _reputationSettings.Enabled && !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)
+        ? "CONFIGURED"
+        : "NOT CONFIGURED";
+
+    private string ReputationDetail => _reputationSettings.Enabled && !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)
+        ? "Hash-only lookups enabled; the API key is stored with Windows DPAPI."
+        : "No external reputation lookup is enabled. Unknown is shown as unknown.";
 
     [ObservableProperty]
     private bool _isBusy;
@@ -168,6 +208,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             return;
         }
 
+        if (module.Equals("Reputation provider", StringComparison.Ordinal))
+        {
+            await SetupReputationAsync().ConfigureAwait(true);
+            return;
+        }
+
         if (module.Equals("Blackbox", StringComparison.Ordinal))
         {
             var confirmation = MessageBox.Show(
@@ -208,6 +254,58 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     }
 
     [RelayCommand]
+    private async Task CheckHashAsync(FileScanRow? row)
+    {
+        if (row?.Sha256 is null)
+        {
+            return;
+        }
+
+        if (!_reputationSettings.Enabled || string.IsNullOrWhiteSpace(_reputationSettings.ApiKey))
+        {
+            await SetupReputationAsync().ConfigureAwait(true);
+            return;
+        }
+
+        IsCheckingHash = true;
+        row.VerdictText = "Checking…";
+
+        try
+        {
+            var report = await _virusTotal
+                .LookupHashAsync(row.Sha256, _reputationSettings.ApiKey, CancellationToken.None)
+                .ConfigureAwait(true);
+
+            row.VerdictText = report.Summary;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            row.VerdictText = $"Lookup failed: {exception.Message}";
+        }
+        finally
+        {
+            IsCheckingHash = false;
+        }
+    }
+
+    private async Task SetupReputationAsync()
+    {
+        var window = new ReputationSetupWindow(_reputationSettings)
+        {
+            Owner = Application.Current.MainWindow,
+        };
+
+        if (window.ShowDialog() != true)
+        {
+            return;
+        }
+
+        _reputationSettings = window.Settings;
+        _reputationStore.Save(_reputationSettings);
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private async Task ScanFilesAsync()
     {
         var dialog = new OpenFolderDialog
@@ -230,12 +328,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             var entries = await FileScanner.ScanAsync(dialog.FolderName).ConfigureAwait(true);
             foreach (var entry in entries)
             {
-                FileScanResults.Add(new FileScanRow(
-                    entry.Path,
-                    Path.GetFileName(entry.Path),
-                    entry.SizeBytes,
-                    entry.Sha256,
-                    entry.SkippedReason));
+                FileScanResults.Add(new FileScanRow(entry));
             }
 
             FileScanStatus = $"{entries.Count} file(s) scanned locally. Hashes are not uploaded.";
@@ -277,9 +370,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     {
         Modules.Add(new SecurityModule(
             "Reputation provider",
-            "NOT CONFIGURED",
-            "No external reputation lookup is enabled. Unknown is shown as unknown.",
-            "\uE9D9"));
+            ReputationStatus,
+            ReputationDetail,
+            "\uE9D9",
+            false,
+            true,
+            "Setup"));
         Modules.Add(new SecurityModule(
             "Blackbox",
             "CHECKING",
@@ -314,9 +410,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         Modules.Clear();
         Modules.Add(new SecurityModule(
             "Reputation provider",
-            "NOT CONFIGURED",
-            "No external reputation lookup is enabled. Unknown is shown as unknown.",
-            "\uE9D9"));
+            ReputationStatus,
+            ReputationDetail,
+            "\uE9D9",
+            false,
+            true,
+            "Setup"));
         Modules.Add(new SecurityModule(
             "Blackbox",
             blackbox.Status,

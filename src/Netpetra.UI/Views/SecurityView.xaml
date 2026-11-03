@@ -206,8 +206,10 @@
                     <Grid>
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="210" />
-                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="170" />
+                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="150" />
                         <ColumnDefinition Width="70" />
                       </Grid.ColumnDefinitions>
                       <StackPanel Grid.Column="0">
@@ -223,6 +225,16 @@
                                  ToolTip="{Binding HashText}" />
                       <TextBlock Grid.Column="2" Text="{Binding SizeText}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
                       <TextBlock Grid.Column="3" Text="{Binding StatusText}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="4" Text="{Binding VerdictText}" Style="{StaticResource Caption}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding VerdictText}" />
+                      <Button Grid.Column="5"
+                              Style="{StaticResource GhostButton}"
+                              Content="Check"
+                              Padding="6,2"
+                              FontSize="10"
+                              Command="{Binding DataContext.CheckHashCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                              CommandParameter="{Binding}"
+                              IsEnabled="{Binding HasHash}"
+                              ToolTip="Check this SHA-256 with the configured VirusTotal provider. Only the hash is sent." />
                     </Grid>
                   </Border>
                 </DataTemplate>
