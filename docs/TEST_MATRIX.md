@@ -42,13 +42,17 @@ Service in console mode + published standalone UI with `--service`.
 | # | Check | Result | Evidence |
 |---|---|---|---|
 | E01 | Service creates the database and writes flows | ✅ 1.1 MB after ~1 min | `svc-h*.log` |
-| E02 | History shows real rows | ✅ 1000 of 3607 flows | `fnd005-history.png` |
+| E02 | Events shows real rows | ✅ 1000 of 3607 flows | `fnd005-history.png` |
 | E03 | Search and ranges work | ✅ tests + manual | — |
 | E04 | Service stop → UI `Service unavailable` | ✅ | `fnd003-service-offline.png` |
 | E05 | Service restart → history survives | ✅ 4229 flows after restart | `fnd005-history-after-restart.png` |
 | E06 | Reconnect without restarting the UI | ✅ | `fnd003-service-recovered.png` |
 | E07 | Standalone EXE (no SDK) | ✅ | all screenshots |
 | E08 | CSV export | ⚠️ code + escaping; dialog not automated | — |
+| E09 | Eight-page V2 navigation (Overview, Connections, Applications, Events, Firewall, Files, Security, Settings) | ✅ | `fnd006-*.png` |
+| E10 | Files and Security pages state that modules are disabled | ✅ no fake scanner/feed | `fnd006-files.png`, `fnd006-security.png` |
+| E11 | Connections shows the unknown country placeholder | ✅ | `fnd006-connections.png` |
+| E12 | Throughput chart shows three labelled demo event markers | ✅ | `fnd006-overview.png` |
 
 ## 3. FND-005 definition of done
 

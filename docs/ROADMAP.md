@@ -7,7 +7,7 @@ is kept outside the public repository; this page is the public, English roadmap.
 
 | Ticket | Scope | State |
 |---|---|---|
-| FND-001 | Repository, build, WPF shell, demo data, CI | ✅ baseline (UI alignment pending) |
+| FND-001 | Repository, build, WPF shell, demo data, CI | ✅ baseline; V2 eight-page navigation aligned |
 | FND-002 | Read-only TCP/UDP inventory and process attribution | ✅ implemented (PID + path; start time/signature pending) |
 | FND-003 | Windows service + secure local Named Pipe IPC | ✅ implemented (console mode; installer pending) |
 | FND-004 | ETW traffic estimate, real-time charts | ⛔ deferred: requires elevation/VM |
