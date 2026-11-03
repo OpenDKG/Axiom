@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Netrigil.Contracts.Firewall;
 using Netrigil.Contracts.Ipc;
+using Netrigil.Infrastructure.Windows.Firewall;
 using Netrigil.Infrastructure.Windows.Ipc;
 using Netrigil.Persistence;
 using Microsoft.Extensions.Hosting;
@@ -11,6 +13,7 @@ namespace Netrigil.Service;
 public sealed partial class PipeServerWorker(
     ConnectionSnapshotCache cache,
     HistoryStore history,
+    WindowsFirewallPolicyAdapter firewall,
     ILogger<PipeServerWorker> logger) : BackgroundService
 {
     [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "Pipe {Pipe} allows SID {Sid}")]
@@ -30,6 +33,19 @@ public sealed partial class PipeServerWorker(
             () => cache.Latest,
             () => CreateHealth(cache),
             (query, cancellationToken) => history.QueryAsync(query, cancellationToken),
+            async cancellationToken =>
+            {
+                var capability = await firewall.GetCapabilitiesAsync(cancellationToken).ConfigureAwait(false);
+                IReadOnlyList<ManagedRule> rules = capability.Status == FirewallCapabilityStatus.Available
+                    ? await firewall.ListOwnedRulesAsync(cancellationToken).ConfigureAwait(false)
+                    : [];
+
+                return new FirewallRulesSnapshot
+                {
+                    Capability = capability,
+                    Rules = rules,
+                };
+            },
             message => LogMessage(logger, message));
 
         await server.RunAsync(stoppingToken).ConfigureAwait(false);

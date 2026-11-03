@@ -34,6 +34,7 @@ public static class IpcCommandTypes
     public const string RuleApply = "rule.apply";
     public const string RuleRemove = "rule.remove";
     public const string RuleVerify = "rule.verify";
+    public const string RulesQuery = "rules.query";
     public const string HistoryQuery = "history.query";
     public const string ConfigGet = "config.get";
     public const string ConfigSet = "config.set";
@@ -48,6 +49,7 @@ public static class IpcCommandTypes
         RuleApply,
         RuleRemove,
         RuleVerify,
+        RulesQuery,
         HistoryQuery,
         ConfigGet,
         ConfigSet,
