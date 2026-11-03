@@ -9,13 +9,13 @@ SDK: 10.0.403. Configuration: `Release`.
 |---|---|
 | `dotnet restore Netpetra.sln --locked-mode` | passed (also after standalone publish) |
 | `dotnet build Netpetra.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Netpetra.sln -c Release --no-build` | **138/138 passed** |
+| `dotnet test Netpetra.sln -c Release --no-build` | **140/140 passed** |
 | `dotnet publish src\Netpetra.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
 
 | Test project | Count | Notes |
 |---|---|---|
 | Core | 65 | deterministic rule identity, spec and CIDR/port validation |
-| Contracts | 22 | IPC contract, limits, optional-module probe, bounded history, local file hashing and VirusTotal client |
+| Contracts | 24 | IPC contract, limits, optional-module probe, bounded history, local file hashing, VirusTotal and community feed |
 | Persistence | 12 | schema v2, history, firewall state and audit |
 | Infrastructure.Windows | 34 | IP Helper, pipe, COM read-only adapter |
 | Service | 5 | coordinator with a fake adapter |
@@ -58,6 +58,7 @@ SDK: 10.0.403. Configuration: `Release`.
 - The activity strip uses a 30-sample bounded history; a test confirms the oldest sample is dropped.
 - Local file scan: known SHA-256 value and oversized-file skip are tested; hashes never leave the process.
 - VirusTotal client: hash-only URL, `x-apikey` header, stats parsing, 404 and invalid-hash rejection are tested.
+- Community feed: HTTPS-only URL, bearer header, valid SHA-256 entries and invalid-entry filtering are tested.
 
 ## 2. End-to-end checks (executed)
 

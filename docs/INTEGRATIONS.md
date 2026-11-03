@@ -37,6 +37,28 @@ plaintext or logged.
 - Leave the key empty or disable the checkbox to keep the provider off.
 - After scanning a folder, use **Check** on a row to perform the lookup.
 
+## Community feed (opt-in)
+
+The **Community feed** row has a **Setup** action. Enter an HTTPS URL and an optional bearer token;
+the token is stored with Windows DPAPI. The feed is evidence, not a verdict.
+
+```json
+{
+  "entries": [
+    {
+      "sha256": "64-char-hex",
+      "name": "optional display name",
+      "verdict": "optional provider label",
+      "source": "optional source",
+      "updatedUtc": "optional ISO-8601 timestamp"
+    }
+  ]
+}
+```
+
+Only entries with a valid 64-character SHA-256 are accepted. **Refresh feed** fetches the configured
+URL; nothing is published and no local path or connection data is sent.
+
 ## OriginTrail DKG V10
 
 Requirements: Node.js and npm, per the official DKG V10 documentation.

@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
+using Netpetra.Contracts.Community;
 using Netpetra.Contracts.Files;
 using Netpetra.Contracts.Modules;
 using Netpetra.Contracts.Reputation;
@@ -62,6 +63,8 @@ public sealed partial class FileScanRow : ObservableObject
     private string _verdictText = "Not checked";
 }
 
+public sealed record CommunityFeedRow(string Sha256, string Name, string Verdict, string Source);
+
 /// <summary>
 /// Security page. Optional modules are read-only status probes; install buttons launch the official
 /// third-party installer only after an explicit warning. Netpetra does not stop or control a module.
@@ -78,7 +81,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     private readonly VirusTotalClient _virusTotal = new();
 
+    private readonly CommunityFeedSettingsStore _communityStore = new();
+
+    private readonly CommunityFeedClient _communityClient = new();
+
     private ReputationSettings _reputationSettings = new(false, string.Empty);
+
+    private CommunityFeedSettings _communitySettings = new(false, string.Empty, string.Empty);
 
     private readonly DispatcherTimer _activityTimer;
 
@@ -86,6 +95,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         : base("Security", "Optional intelligence and protection modules", "\uE8D7")
     {
         _reputationSettings = _reputationStore.Load();
+        _communitySettings = _communityStore.Load();
         Modules = [];
         SeedCheckingState();
 
@@ -102,11 +112,19 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     public ObservableCollection<FileScanRow> FileScanResults { get; } = [];
 
+    public ObservableCollection<CommunityFeedRow> CommunityEntries { get; } = [];
+
     [ObservableProperty]
     private string _fileScanStatus = "No folder scanned.";
 
     [ObservableProperty]
+    private string _communityStatusText = "Not configured.";
+
+    [ObservableProperty]
     private bool _isScanning;
+
+    [ObservableProperty]
+    private bool _isFetchingCommunity;
 
     [ObservableProperty]
     private bool _isCheckingHash;
@@ -118,6 +136,14 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private string ReputationDetail => _reputationSettings.Enabled && !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)
         ? "Hash-only lookups enabled; the API key is stored with Windows DPAPI."
         : "No external reputation lookup is enabled. Unknown is shown as unknown.";
+
+    private string CommunityStatus => _communitySettings.Enabled && !string.IsNullOrWhiteSpace(_communitySettings.Url)
+        ? "CONFIGURED"
+        : "NOT CONFIGURED";
+
+    private string CommunityDetail => _communitySettings.Enabled && !string.IsNullOrWhiteSpace(_communitySettings.Url)
+        ? "HTTPS feed configured; entries are evidence, not a verdict."
+        : "No community report is fetched, verified or published.";
 
     [ObservableProperty]
     private bool _isBusy;
@@ -152,6 +178,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     {
         _activityTimer.Stop();
         _probe.Dispose();
+        _virusTotal.Dispose();
+        _communityClient.Dispose();
     }
 
     [RelayCommand]
@@ -211,6 +239,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         if (module.Equals("Reputation provider", StringComparison.Ordinal))
         {
             await SetupReputationAsync().ConfigureAwait(true);
+            return;
+        }
+
+        if (module.Equals("Community feed", StringComparison.Ordinal))
+        {
+            await SetupCommunityAsync().ConfigureAwait(true);
             return;
         }
 
@@ -305,6 +339,65 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         await RefreshAsync().ConfigureAwait(true);
     }
 
+    private async Task SetupCommunityAsync()
+    {
+        var window = new CommunitySetupWindow(_communitySettings)
+        {
+            Owner = Application.Current.MainWindow,
+        };
+
+        if (window.ShowDialog() != true)
+        {
+            return;
+        }
+
+        _communitySettings = window.Settings;
+        _communityStore.Save(_communitySettings);
+        await RefreshCommunityAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task RefreshCommunityAsync()
+    {
+        if (!_communitySettings.Enabled || string.IsNullOrWhiteSpace(_communitySettings.Url))
+        {
+            CommunityStatusText = "Not configured.";
+            return;
+        }
+
+        IsFetchingCommunity = true;
+        CommunityStatusText = "Fetching feed…";
+
+        try
+        {
+            var result = await _communityClient
+                .FetchAsync(_communitySettings.Url, _communitySettings.Token, CancellationToken.None)
+                .ConfigureAwait(true);
+
+            CommunityEntries.Clear();
+            foreach (var entry in result.Entries)
+            {
+                CommunityEntries.Add(new CommunityFeedRow(
+                    entry.Sha256,
+                    entry.Name ?? "—",
+                    entry.Verdict ?? "—",
+                    entry.Source ?? "—"));
+            }
+
+            CommunityStatusText = $"{result.Entries.Count} entries fetched at {result.FetchedUtc:HH:mm:ss}.";
+        }
+        catch (Exception exception) when (exception is
+            HttpRequestException or InvalidDataException or System.Text.Json.JsonException or
+            TaskCanceledException or ArgumentException)
+        {
+            CommunityStatusText = $"Feed failed: {exception.Message}";
+        }
+        finally
+        {
+            IsFetchingCommunity = false;
+        }
+    }
+
     [RelayCommand]
     private async Task ScanFilesAsync()
     {
@@ -392,9 +485,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             true));
         Modules.Add(new SecurityModule(
             "Community feed",
-            "NOT CONFIGURED",
-            "No community report is fetched, verified or published.",
-            "\uE774"));
+            CommunityStatus,
+            CommunityDetail,
+            "\uE774",
+            false,
+            true,
+            "Setup"));
         Modules.Add(new SecurityModule(
             "File scanning",
             "NOT ENABLED",
@@ -434,9 +530,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "Install"));
         Modules.Add(new SecurityModule(
             "Community feed",
-            "NOT CONFIGURED",
-            "No community report is fetched, verified or published.",
-            "\uE774"));
+            CommunityStatus,
+            CommunityDetail,
+            "\uE774",
+            false,
+            true,
+            "Setup"));
         Modules.Add(new SecurityModule(
             "File scanning",
             "NOT ENABLED",

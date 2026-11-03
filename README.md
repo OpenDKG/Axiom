@@ -121,6 +121,9 @@ installer only after an explicit confirmation; nothing runs silently. Setup step
   or private keys and never signs or approves transactions.
 - Community reports are opt-in and redacted. A community report never triggers automatic OS
   blocking, and a false report cannot silently block a benign site.
+- The Security page has a **Setup** action for an HTTPS JSON feed. The format is
+  `{"entries":[{"sha256":"...","name":"...","verdict":"...","source":"...","updatedUtc":"..."}]}`.
+  Only entries with a valid SHA-256 are accepted; the feed is evidence, not a verdict.
 
 ### Rules for every optional module
 
