@@ -67,8 +67,8 @@
       <Border Grid.Column="2" Style="{StaticResource Card}">
         <StackPanel>
           <TextBlock Text="WRITE PATH" Style="{StaticResource MetricLabel}" />
-          <TextBlock Text="disabled" Style="{StaticResource MetricValue}" />
-          <TextBlock Text="no rule can be created or removed" Style="{StaticResource Caption}" Margin="0,4,0,0" />
+          <TextBlock Text="{Binding WritePathText}" Style="{StaticResource MetricValue}" />
+          <TextBlock Text="no rule can be created without the explicit gate" Style="{StaticResource Caption}" Margin="0,4,0,0" />
         </StackPanel>
       </Border>
     </Grid>
@@ -132,6 +132,19 @@
               <DataGridTextColumn Header="PORTS" Width="80" Binding="{Binding PortsText}" ElementStyle="{StaticResource TableText}" />
               <DataGridTextColumn Header="ENABLED" Width="70" Binding="{Binding EnabledText}" ElementStyle="{StaticResource TableText}" />
               <DataGridTextColumn Header="STATE" Width="80" Binding="{Binding StateText}" ElementStyle="{StaticResource TableText}" />
+              <DataGridTemplateColumn Header="ACTION" Width="86">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <Button Style="{StaticResource GhostButton}"
+                            Content="Remove"
+                            Padding="8,3"
+                            FontSize="11"
+                            Command="{Binding DataContext.RemoveRuleCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                            CommandParameter="{Binding}"
+                            ToolTip="Remove this owned rule. Requires the explicit write gate." />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
             </DataGrid.Columns>
           </DataGrid>
 

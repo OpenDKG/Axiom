@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Netrigil.Contracts.Firewall;
@@ -12,6 +13,8 @@ namespace Netrigil.UI.ViewModels;
 /// <summary>One owned Windows Firewall rule, read-only.</summary>
 public sealed class FirewallRuleRow(ManagedRule rule)
 {
+    public Guid ManagedRuleId => rule.ManagedRuleId;
+
     public string OsRuleName => rule.OsRuleName;
 
     public string Application => rule.Spec.AppPath.Length == 0
@@ -92,7 +95,15 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
     private string _statusText = string.Empty;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RemoveRuleCommand))]
     private bool _isBusy;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RemoveRuleCommand))]
+    private bool _writesEnabled;
+
+    [ObservableProperty]
+    private string _writePathText = "disabled";
 
     [ObservableProperty]
     private bool _isEmpty;
@@ -106,6 +117,58 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
     public void Dispose()
     {
     }
+
+    [RelayCommand(CanExecute = nameof(CanRemoveRule))]
+    private async Task RemoveRuleAsync(FirewallRuleRow? row)
+    {
+        if (_client is null || row is null || !WritesEnabled)
+        {
+            return;
+        }
+
+        var confirmation = MessageBox.Show(
+            $"Remove the owned Windows Firewall rule for {row.Application}?\n\n" +
+            "Only this Netrigil rule is removed; other Windows Firewall rules are not touched.",
+            "Netrigil firewall write",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await _client
+                .SendAsync<RuleApplyResult>(
+                    IpcCommandTypes.RuleRemove,
+                    new RuleReference { ManagedRuleId = row.ManagedRuleId },
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+
+            StatusText = result.Success
+                ? $"Removed {row.OsRuleName}."
+                : $"Remove failed: {result.ErrorCode} — {result.ErrorMessage}";
+
+            if (result.Success)
+            {
+                await RefreshAsync().ConfigureAwait(true);
+            }
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            StatusText = exception.Message;
+        }
+#pragma warning disable CA1031 // The UI must show an IPC failure instead of crashing.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            StatusText = $"Remove failed: {exception.Message}";
+        }
+    }
+
+    private bool CanRemoveRule() => WritesEnabled && !IsBusy;
 
     [RelayCommand]
     private async Task RefreshAsync()
@@ -140,6 +203,8 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
                 ?? "Windows Firewall COM policy is readable. No rule is changed by this page.";
             OwnedRuleCountText = snapshot.Rules.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
             IsEmpty = snapshot.Rules.Count == 0;
+            WritesEnabled = snapshot.WritesEnabled;
+            WritePathText = snapshot.WritesEnabled ? "enabled (test VM only)" : "disabled";
             HasError = snapshot.Capability.Status == FirewallCapabilityStatus.Unavailable;
             StatusText = snapshot.Rules.Count == 0
                 ? "0 owned rules. Netrigil has not created any Windows Firewall rule on this host."
