@@ -49,6 +49,10 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     [ObservableProperty]
     private string _unownedText = "0";
 
+    public string DatabaseText => ConnectionSourceRegistry.IsServiceMode
+        ? "service-managed"
+        : "not connected";
+
     [ObservableProperty]
     private string _sourceText = string.Empty;
 

@@ -130,8 +130,7 @@
               </Style>
             </DataGrid.RowStyle>
             <DataGrid.Columns>
-              <DataGridTextColumn Header="APP"
-                                  Width="1.2*"
+              <DataGridTextColumn Header="APP" Width="1.15*"
                                   Binding="{Binding AppDisplayName}"
                                   ElementStyle="{StaticResource TableText}" />
               <DataGridTextColumn Header="PID"
@@ -142,32 +141,27 @@
                                   Width="56"
                                   Binding="{Binding ProtocolText}"
                                   ElementStyle="{StaticResource TableText}" />
-              <DataGridTextColumn Header="LOCAL"
-                                  Width="1.1*"
+              <DataGridTextColumn Header="LOCAL" Width="1.05*"
                                   Binding="{Binding LocalEndpoint}"
                                   ElementStyle="{StaticResource TableText}" />
-              <DataGridTextColumn Header="REMOTE"
-                                  Width="1.2*"
+              <DataGridTextColumn Header="REMOTE" Width="1.15*"
                                   Binding="{Binding RemoteEndpoint}"
                                   ElementStyle="{StaticResource TableText}" />
-              <DataGridTextColumn Header="COUNTRY"
-                                  Width="68"
+              <DataGridTextColumn Header="COUNTRY" Width="80"
                                   Binding="{Binding CountryText}"
                                   ElementStyle="{StaticResource TableText}" />
               <DataGridTextColumn Header="STATE"
                                   Width="86"
                                   Binding="{Binding State}"
                                   ElementStyle="{StaticResource TableText}" />
-              <DataGridTextColumn Header="DIR"
-                                  Width="38"
+              <DataGridTextColumn Header="DIR" Width="44"
                                   Binding="{Binding DirectionText}"
                                   ElementStyle="{StaticResource TableText}" />
               <DataGridTextColumn Header="QUALITY"
                                   Width="68"
                                   Binding="{Binding QualityText}"
                                   ElementStyle="{StaticResource TableText}" />
-              <DataGridTextColumn Header="PATH"
-                                  Width="1.35*"
+              <DataGridTextColumn Header="PATH" Width="1.3*"
                                   Binding="{Binding PathText}">
                 <DataGridTextColumn.ElementStyle>
                   <Style TargetType="TextBlock" BasedOn="{StaticResource TableText}">
@@ -176,8 +170,7 @@
                   </Style>
                 </DataGridTextColumn.ElementStyle>
               </DataGridTextColumn>
-              <DataGridTextColumn Header="FIRST SEEN"
-                                  Width="74"
+              <DataGridTextColumn Header="FIRST SEEN" Width="86"
                                   SortMemberPath="FirstObservedUtc"
                                   Binding="{Binding FirstSeenText}"
                                   ElementStyle="{StaticResource TableText}" />
