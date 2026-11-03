@@ -9,13 +9,13 @@ SDK: 10.0.403. Configuration: `Release`.
 |---|---|
 | `dotnet restore Netpetra.sln --locked-mode` | passed (also after standalone publish) |
 | `dotnet build Netpetra.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Netpetra.sln -c Release --no-build` | **126/126 passed** |
+| `dotnet test Netpetra.sln -c Release --no-build` | **131/131 passed** |
 | `dotnet publish src\Netpetra.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
 
 | Test project | Count | Notes |
 |---|---|---|
 | Core | 65 | deterministic rule identity, spec and CIDR/port validation |
-| Contracts | 10 | IPC contract and limits |
+| Contracts | 15 | IPC contract, limits and optional-module probe |
 | Persistence | 12 | schema v2, history, firewall state and audit |
 | Infrastructure.Windows | 34 | IP Helper, pipe, COM read-only adapter |
 | Service | 5 | coordinator with a fake adapter |
@@ -49,6 +49,13 @@ SDK: 10.0.403. Configuration: `Release`.
 - `rule.apply` is rejected with `not_supported` when the gate is closed.
 - CIDR/IP and port scope validation: IPv4/IPv6 addresses, prefix bounds, wildcard-only semantics, the 32-address cap, TCP/UDP-only ports, 1–65535 single ports and ascending ranges.
 
+### Optional module coverage (FND-011/012 status)
+
+- DKG: loopback `/api/status` success is `CONNECTED` with version/peer/role; refusal is `NOT RUNNING`.
+- Blackbox: loopback dashboard response is `CONNECTED`; missing graph status is still reported as running.
+- A non-loopback endpoint returns `UNAVAILABLE` without sending a request.
+- The probe never installs, starts or controls a module.
+
 ## 2. End-to-end checks (executed)
 
 Service in console mode + published standalone UI with `--service`.
@@ -70,6 +77,7 @@ Service in console mode + published standalone UI with `--service`.
 | E13 | Firewall page reads capability `Available`, 0 owned rules and write path `disabled` | ✅ no rule changed | `netpetra-firewall.png` |
 | E14 | Gate-open service: Applications block buttons enabled, Firewall shows `TEST VM` and write path enabled; no click | ✅ 0 owned rules after | `netpetra-applications-writes-enabled.png`, `netpetra-firewall-writes-enabled.png` |
 | E15 | Advanced scope panel: protocol, ports, CIDR/addresses and profile checkboxes; block buttons disabled with the gate closed | ✅ no rule written | `netpetra-applications-scope-expanded.png` |
+| E16 | Security page probes a mock DKG node on loopback and shows `CONNECTED` with version/peer/role; Blackbox stays `NOT RUNNING`; no module started | ✅ loopback-only | `netpetra-security-connected.png` |
 
 ## 3. FND-005 definition of done
 

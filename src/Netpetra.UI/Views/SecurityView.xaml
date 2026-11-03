@@ -20,12 +20,20 @@
                          Style="{StaticResource BodyMuted}"
                          Margin="0,6,0,0" />
             </StackPanel>
-            <Border Grid.Column="1"
-                    Style="{StaticResource StatusPill}"
-                    VerticalAlignment="Top">
-              <TextBlock Text="OFFLINE" Style="{StaticResource StatusPillText}" />
-            </Border>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Check again"
+                      Command="{Binding RefreshCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Re-read the local loopback status. Does not start or control a module." />
+              <Border Style="{StaticResource StatusPill}">
+                <TextBlock Text="{Binding StatusBadge}" Style="{StaticResource StatusPillText}" />
+              </Border>
+            </StackPanel>
           </Grid>
+          <TextBlock Text="{Binding LastCheckedText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,8,0,0" />
         </StackPanel>
       </Border>
 
@@ -82,7 +90,7 @@
       <TextBlock Style="{StaticResource Caption}"
                  Margin="2,12,0,0"
                  TextWrapping="Wrap"
-                 Text="Blackbox and DKG require separately installed third-party software. The standard build never starts or connects to them." />
+                 Text="Netpetra only reads loopback status. It never starts, stops, installs or controls Blackbox or DKG." />
     </StackPanel>
   </ScrollViewer>
 </UserControl>
