@@ -50,7 +50,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ? $"Monitoring: live · {_monitor.PollInterval.TotalSeconds:0} s"
         : "Monitoring: unavailable";
 
-    public string StatusFirewallText => "Firewall control: not implemented";
+    public string StatusFirewallText => "Firewall control: read-only";
 
     public string StatusStorageText => ConnectionSourceRegistry.IsServiceMode
         ? "Database: service-managed"
