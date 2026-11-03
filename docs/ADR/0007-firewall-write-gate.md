@@ -77,7 +77,7 @@ another program still connects) remains **NOT RUN** until an isolated VM is avai
 Positive:
 
 - The full write path exists and is gated, audited and deterministic.
-- Read-only COM, validation, storage and coordinator logic are tested (107 tests).
+- Read-only COM, validation, storage and coordinator logic are tested (126 tests).
 - A normal build cannot create or remove a rule by accident.
 
 Negative / risks:
