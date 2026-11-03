@@ -53,6 +53,12 @@ public sealed class ConnectionRow : ObservableObject
 
     public string PathText => _source.AppPath.Length == 0 ? "—" : _source.AppPath;
 
+    /// <summary>
+    /// No GeoIP database is loaded, so the country is explicitly unknown. A flag is never guessed
+    /// from an IP address.
+    /// </summary>
+    public string CountryText => "—";
+
     public DateTimeOffset FirstObservedUtc => _source.FirstObservedUtc;
 
     public string FirstSeenText => _source.FirstObservedUtc.ToLocalTime()
@@ -99,6 +105,7 @@ public sealed class ConnectionRow : ObservableObject
 
     public string RowTooltip =>
         $"Path: {PathText}\nQuality: {QualityText} · Rule: {RuleStatusText}\n" +
+        $"Country: unknown (no GeoIP database loaded)\n" +
         $"First observed: {FirstSeenText} · State: {State}";
 
     public string SearchBlob => _searchBlob;
