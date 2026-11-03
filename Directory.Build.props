@@ -1,0 +1,31 @@
+<Project>
+
+  <!--
+    Shared build settings for every project in the repository.
+    Milestone: FND-001 (skeleton, mock UI). No platform APIs are used yet.
+  -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- Warnings are errors so that nullable/analyzer regressions fail the build. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+
+    <!-- Pinned dependency graph: central versions + per-project lock files. -->
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+
+    <Company>LocalFirewall</Company>
+    <Product>LocalFirewall</Product>
+    <Copyright>Copyright (C) 2026 The VigilMesh/LocalFirewall contributors</Copyright>
+    <Version>0.1.0</Version>
+    <NeutralLanguage>en</NeutralLanguage>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+</Project>

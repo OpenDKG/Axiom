@@ -1,0 +1,35 @@
+# Build output
+bin/
+obj/
+artifacts/
+TestResults/
+*.binlog
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vscode/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+project.lock.json
+!packages.lock.json
+
+# Test / coverage
+coverage*.xml
+coverage*.json
+*.trx
+
+# OS junk
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Local diagnostics produced while running the demo shell
+*.log

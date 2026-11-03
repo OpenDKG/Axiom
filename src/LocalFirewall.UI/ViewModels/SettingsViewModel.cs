@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using LocalFirewall.Contracts;
+using LocalFirewall.Contracts.Ipc;
+using LocalFirewall.UI.Services;
+
+namespace LocalFirewall.UI.ViewModels;
+
+public sealed partial class SettingsViewModel : PageViewModel, IDisposable
+{
+    public SettingsViewModel(ConnectionMonitor monitor)
+        : base("Settings", "Appearance and build information · settings are not persisted yet", "\uE713")
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+
+        CollectorText = monitor.SourceName;
+        PollText = $"{monitor.PollInterval.TotalSeconds:0} s · read-only";
+
+        ThemeManager.Changed += OnThemeChanged;
+        UpdateThemeText();
+    }
+
+    public string MilestoneText => ProductMilestone.Current;
+
+    public string ProtocolText => $"IPC contract v{IpcProtocol.CurrentVersion} (not connected)";
+
+    public string DataModeText => ConnectionSourceRegistry.IsLive
+        ? "LIVE — local socket inventory, no telemetry"
+        : "DEMO — generated rows, no OS telemetry";
+
+    public string CollectorText { get; }
+
+    public string PollText { get; }
+
+    public string StorageText => @"%ProgramData%\LocalFirewall\localfirewall.db (not created in this build)";
+
+    public string OsText => Environment.OSVersion.VersionString;
+
+    public string ProcessText =>
+        $"{System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture} · 64-bit process: " +
+        $"{(Environment.Is64BitProcess ? "yes" : "no")}";
+
+    [ObservableProperty]
+    private string _currentThemeText = "Dark";
+
+    [RelayCommand]
+    private static void UseDarkTheme() => ThemeManager.Apply(AppTheme.Dark);
+
+    [RelayCommand]
+    private static void UseLightTheme() => ThemeManager.Apply(AppTheme.Light);
+
+    public void Dispose() => ThemeManager.Changed -= OnThemeChanged;
+
+    private void OnThemeChanged(object? sender, EventArgs e) => UpdateThemeText();
+
+    private void UpdateThemeText() =>
+        CurrentThemeText = ThemeManager.Current == AppTheme.Dark ? "Dark" : "Light";
+}

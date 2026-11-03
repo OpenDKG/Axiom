@@ -1,0 +1,59 @@
+# Contributing
+
+Thanks for helping with LocalFirewall / VigilMesh. The project is pre-1.0 and moves one milestone
+at a time; small, verifiable changes are preferred over broad rewrites.
+
+## License of contributions
+
+By contributing you agree that your contribution is licensed under **GPL-3.0-or-later**, the same
+license as the project. Use the Developer Certificate of Origin (DCO):
+
+```text
+git commit -s -m "Short description"
+```
+
+The `Signed-off-by` line certifies that you have the right to submit the change under this license.
+Do not copy GPL-incompatible or unlicensed code into the repository.
+
+## Before you start
+
+- Read `README.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY_MODEL.md` and the current milestone in
+  `docs/TEST_MATRIX.md`.
+- Keep the dependency rules: `LocalFirewall.UI` references **only** `Contracts`; Windows API code
+  belongs in `Infrastructure.Windows`; only `Service` may eventually write firewall rules.
+- Do not add telemetry, accounts, external lookups or network calls to the Standard path.
+- Do not change Windows Firewall, BFE, Defender or audit policy outside an isolated VM with explicit
+  approval.
+
+## Build and test
+
+```powershell
+dotnet restore LocalFirewall.sln --locked-mode
+dotnet build LocalFirewall.sln -c Release --no-restore
+dotnet test LocalFirewall.sln -c Release --no-build
+```
+
+The repository builds with warnings as errors, nullable enabled and pinned package versions. If you
+change a dependency, update `Directory.Packages.props`, regenerate `packages.lock.json` with
+`dotnet restore --force-evaluate`, and update `THIRD_PARTY_NOTICES.md`.
+
+## Code style
+
+- C# with nullable enabled; no `catch { }` that hides failures.
+- Small methods, explicit interfaces, no hidden global state.
+- Tests for pure logic; Windows integration tests must be read-only unless the ticket says otherwise.
+- UI text must state what is real and what is demo. Never show `Protected`, `Blocked` or `Scanned`
+  unless the OS/adapter result is verified.
+- Keep changes focused. One logical change per pull request.
+
+## Reporting
+
+For bugs and feature work, open an issue with: version/commit, Windows version, steps, expected vs.
+actual, and relevant logs with secrets removed. Security issues go through `SECURITY.md`, not public
+issues.
+
+## Review and merge
+
+- Maintainers review for correctness, security and scope.
+- Firewall, IPC, authentication and storage changes need an independent review.
+- Do not merge your own security-sensitive change without review.

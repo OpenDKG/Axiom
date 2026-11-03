@@ -1,0 +1,34 @@
+<Project>
+
+  <!--
+    Every package version is pinned here (central package management).
+    packages.lock.json files next to each project pin the full transitive graph.
+
+    Rules:
+      - Add a version only after checking licence, transitives and advisories.
+      - Never use floating versions ("*", "1.*") in this repository.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MIT. MVVM source generators only; no runtime services. -->
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+
+    <!-- MIT. Local SQLite storage; used from FND-005 onwards. -->
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+
+    <!-- MIT. Windows service lifetime for the worker host (FND-003). -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.14" />
+
+    <!-- Single-file publish pulls this build task in; pinning it keeps restore/lock graphs equal. -->
+    <PackageVersion Include="Microsoft.NET.ILLink.Tasks" Version="10.0.14" />
+
+    <!-- Test stack (MIT / Apache-2.0). -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+</Project>
