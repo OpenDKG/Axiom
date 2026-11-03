@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -93,10 +94,76 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
     partial void OnSelectedAppChanged(AppRow? value) => _selectedKey = value?.Key;
 
     [RelayCommand]
-    private Task BlockOutboundAsync() => BlockAsync(FirewallDirection.Outbound);
+    private Task BlockOutboundAsync() => BlockAsync(SelectedApp, FirewallDirection.Outbound);
 
     [RelayCommand]
-    private Task BlockInboundAsync() => BlockAsync(FirewallDirection.Inbound);
+    private Task BlockInboundAsync() => BlockAsync(SelectedApp, FirewallDirection.Inbound);
+
+    [RelayCommand]
+    private Task BlockOutboundAppAsync(AppRow? app) => BlockAsync(app, FirewallDirection.Outbound);
+
+    [RelayCommand]
+    private Task BlockInboundAppAsync(AppRow? app) => BlockAsync(app, FirewallDirection.Inbound);
+
+    [RelayCommand]
+    private void EndTaskApp(AppRow? app)
+    {
+        if (app is null || app.ProcessIds.Count == 0)
+        {
+            WriteStatusText = "This application has no live PID to end.";
+            return;
+        }
+
+        var confirmation = MessageBox.Show(
+            $"End {app.Name} (PID {string.Join(", ", app.ProcessIds)})?\n\nUnsaved work in that process will be lost.",
+            "End task",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var ended = 0;
+        foreach (var pid in app.ProcessIds)
+        {
+            try
+            {
+                using var process = Process.GetProcessById(pid);
+                process.Kill(entireProcessTree: true);
+                ended++;
+            }
+#pragma warning disable CA1031 // A protected or already-exited process must not crash the UI.
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+            }
+        }
+
+        WriteStatusText = $"Ended {ended} process(es) for {app.Name}.";
+    }
+
+    [RelayCommand]
+    private void CopyPathApp(AppRow? app)
+    {
+        if (app is null || !app.HasPath)
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(app.Path);
+            WriteStatusText = "Executable path copied.";
+        }
+#pragma warning disable CA1031 // Clipboard can be locked by another process.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            WriteStatusText = "Could not copy the path.";
+        }
+    }
 
     private async Task LoadWriteCapabilityAsync()
     {
@@ -123,7 +190,7 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
         }
     }
 
-    private async Task BlockAsync(FirewallDirection direction)
+    private async Task BlockAsync(AppRow? app, FirewallDirection direction)
     {
         if (_client is null || !CanWrite)
         {
@@ -131,13 +198,13 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
             return;
         }
 
-        if (SelectedApp is null)
+        if (app is null)
         {
             WriteStatusText = "Select an application first.";
             return;
         }
 
-        if (SelectedApp.Path.Length == 0)
+        if (app.Path.Length == 0)
         {
             WriteStatusText = "The executable path is not readable; a path-bound rule cannot be created.";
             return;
@@ -145,7 +212,7 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
 
         var directionText = direction == FirewallDirection.Outbound ? "outbound" : "inbound";
         var confirmation = MessageBox.Show(
-            $"Create a Windows Firewall block rule for {SelectedApp.Name} ({directionText})?\n\n" +
+            $"Create a Windows Firewall block rule for {app.Name} ({directionText})?\n\n" +
             "The rule is owned by Netpetra and can be removed from the Firewall page. " +
             "Only continue on an isolated test VM.",
             "Netpetra firewall write",
@@ -158,7 +225,7 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
             return;
         }
 
-        var spec = BuildSpec(direction);
+        var spec = BuildSpec(app, direction);
         if (spec is null)
         {
             return;
@@ -171,7 +238,7 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
                 .ConfigureAwait(true);
 
             WriteStatusText = result.Success
-                ? $"Block applied for {SelectedApp.Name} ({directionText}); verified at {result.VerifiedUtc:HH:mm:ss}."
+                ? $"Block applied for {app.Name} ({directionText}); verified at {result.VerifiedUtc:HH:mm:ss}."
                 : $"Block failed: {result.ErrorCode} — {result.ErrorMessage}";
         }
         catch (ServiceUnavailableException exception)
@@ -186,7 +253,7 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
         }
     }
 
-    private RuleSpec? BuildSpec(FirewallDirection direction)
+    private RuleSpec? BuildSpec(AppRow? app, FirewallDirection direction)
     {
         var profiles = FirewallProfile.None;
 
@@ -211,7 +278,7 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
             return null;
         }
 
-        if (SelectedApp is null)
+        if (app is null)
         {
             return null;
         }
@@ -229,8 +296,8 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
 
         return new RuleSpec
         {
-            ManagedRuleId = RuleIdentity.ForApp(SelectedApp.Path, direction),
-            AppPath = SelectedApp.Path,
+            ManagedRuleId = RuleIdentity.ForApp(app.Path, direction),
+            AppPath = app.Path,
             Direction = direction,
             Action = FirewallAction.Block,
             Profiles = profiles,
@@ -238,7 +305,7 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
             RemoteAddresses = addresses,
             RemotePorts = string.IsNullOrWhiteSpace(RemotePortsText) ? null : RemotePortsText.Trim(),
             CreatedBy = Environment.UserName,
-            Description = $"Netpetra block for {SelectedApp.Name}",
+            Description = $"Netpetra block for {app.Name}",
         };
     }
 

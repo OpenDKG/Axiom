@@ -49,6 +49,26 @@
               <Setter Property="Margin" Value="0,1" />
               <Setter Property="Cursor" Value="Hand" />
               <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+              <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListBox}}" />
+              <Setter Property="ContextMenu">
+                <Setter.Value>
+                  <ContextMenu>
+                    <MenuItem Header="Block outbound"
+                              Command="{Binding PlacementTarget.Tag.BlockOutboundAppCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <MenuItem Header="Block inbound"
+                              Command="{Binding PlacementTarget.Tag.BlockInboundAppCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <Separator />
+                    <MenuItem Header="End task"
+                              Command="{Binding PlacementTarget.Tag.EndTaskAppCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <MenuItem Header="Copy executable path"
+                              Command="{Binding PlacementTarget.Tag.CopyPathAppCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                  </ContextMenu>
+                </Setter.Value>
+              </Setter>
               <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
               <Setter Property="Template">
                 <Setter.Value>
