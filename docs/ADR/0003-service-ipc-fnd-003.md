@@ -20,7 +20,7 @@ claiming an installed service.
 
 ### 1. One host runs as a Windows service and as a console process
 
-`Host.CreateApplicationBuilder` + `AddWindowsService` (service name `LocalFirewall`). Outside SCM the
+`Host.CreateApplicationBuilder` + `AddWindowsService` (service name `Netrigil`). Outside SCM the
 host uses the console lifetime, so development and testing need no admin. The same binary is later
 installed by the installer.
 
@@ -37,7 +37,7 @@ multiply OS calls. A revision is incremented on every successful poll.
 - After connect, the server reads the **client process SID** from its token
   (`GetNamedPipeClientProcessId` + process token). A mismatch closes the connection without a
   response.
-- Allowed SID: `LOCALFIREWALL_ALLOWED_SID`; in console mode the current user. The installer will set
+- Allowed SID: `NETRIGIL_ALLOWED_SID`; in console mode the current user. The installer will set
   it in FND-009.
 
 ### 4. NDJSON with hard limits and no generic commands
