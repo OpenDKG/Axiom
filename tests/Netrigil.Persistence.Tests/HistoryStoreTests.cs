@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Netrigil.Contracts.Firewall;
 using Netrigil.Contracts.History;
 using Netrigil.Contracts.Monitoring;
 using Netrigil.Persistence;
@@ -24,7 +25,7 @@ public sealed class HistoryStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Initialize_creates_schema_version_one()
+    public async Task Initialize_creates_schema_version_two()
     {
         var store = CreateStore();
 
@@ -36,7 +37,50 @@ public sealed class HistoryStoreTests : IDisposable
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT MAX(version) FROM schema_migrations;";
-        Assert.Equal(1L, Convert.ToInt64(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(2L, Convert.ToInt64(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public async Task Firewall_rule_and_audit_round_trip()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var id = Guid.NewGuid();
+        var rule = new ManagedRule
+        {
+            ManagedRuleId = id,
+            OsRuleName = $"Netrigil::{id:D}::OUT",
+            State = RuleState.Applied,
+            LastVerifiedUtc = DateTimeOffset.UtcNow,
+            Spec = new RuleSpec
+            {
+                ManagedRuleId = id,
+                AppPath = @"C:\Program Files\Example\example.exe",
+                Direction = FirewallDirection.Outbound,
+                Action = FirewallAction.Block,
+                Profiles = FirewallProfile.All,
+                CreatedBy = "S-1-5-21-test",
+            },
+        };
+
+        await store.SaveFirewallRuleAsync(rule, "S-1-5-21-test", "rule.apply", "applied", null);
+
+        var rules = await store.ListFirewallRulesAsync();
+        var stored = Assert.Single(rules);
+        Assert.Equal(id, stored.ManagedRuleId);
+        Assert.Equal(rule.OsRuleName, stored.OsRuleName);
+        Assert.Equal(FirewallAction.Block, stored.Spec.Action);
+        Assert.Equal(RuleState.Applied, stored.State);
+
+        await store.DeleteFirewallRuleAsync(id, "S-1-5-21-test", "removed", null);
+        Assert.Empty(await store.ListFirewallRulesAsync());
+
+        await using var connection = new SqliteConnection($"Data Source={store.DatabasePath}");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM rule_audit;";
+        Assert.Equal(2L, Convert.ToInt64(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Fact]

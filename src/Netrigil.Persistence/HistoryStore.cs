@@ -2,7 +2,10 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using Netrigil.Contracts.Firewall;
 using Netrigil.Contracts.History;
+using Netrigil.Contracts.Ipc;
 using Netrigil.Contracts.Monitoring;
 using Microsoft.Data.Sqlite;
 
@@ -14,7 +17,7 @@ namespace Netrigil.Persistence;
 /// </summary>
 public sealed class HistoryStore
 {
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
     public static readonly TimeSpan DefaultRetention = TimeSpan.FromDays(30);
 
@@ -71,6 +74,30 @@ public sealed class HistoryStore
             value_json     TEXT    NOT NULL,
             schema_version INTEGER NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS firewall_rules (
+            managed_rule_id  TEXT    NOT NULL PRIMARY KEY,
+            os_rule_name     TEXT    NOT NULL,
+            spec_json        TEXT    NOT NULL,
+            state            INTEGER NOT NULL,
+            last_verified_utc TEXT,
+            last_error       TEXT,
+            updated_utc      TEXT    NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS rule_audit (
+            id              INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            managed_rule_id TEXT    NOT NULL,
+            actor_sid       TEXT    NOT NULL,
+            timestamp_utc   TEXT    NOT NULL,
+            action          TEXT    NOT NULL,
+            result          TEXT    NOT NULL,
+            old_json        TEXT,
+            new_json        TEXT,
+            error           TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS ix_rule_audit_rule ON rule_audit(managed_rule_id);
         """;
 
     private readonly string _connectionString;
@@ -232,6 +259,118 @@ public sealed class HistoryStore
             DatabasePath = DatabasePath,
             QueriedUtc = DateTimeOffset.UtcNow,
         };
+    }
+
+    /// <summary>Persists an owned firewall rule and one audit row in the same transaction.</summary>
+    public async Task SaveFirewallRuleAsync(
+        ManagedRule rule,
+        string actorSid,
+        string action,
+        string result,
+        string? error,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorSid);
+
+        var now = ToStorage(DateTimeOffset.UtcNow);
+        var specJson = JsonSerializer.Serialize(rule.Spec, IpcJson.Options);
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        await using (var upsert = connection.CreateCommand())
+        {
+            upsert.Transaction = transaction;
+            upsert.CommandText = """
+                INSERT INTO firewall_rules(managed_rule_id, os_rule_name, spec_json, state,
+                                           last_verified_utc, last_error, updated_utc)
+                VALUES ($id, $name, $spec, $state, $verified, $error, $now)
+                ON CONFLICT(managed_rule_id) DO UPDATE SET
+                    os_rule_name = excluded.os_rule_name,
+                    spec_json = excluded.spec_json,
+                    state = excluded.state,
+                    last_verified_utc = excluded.last_verified_utc,
+                    last_error = excluded.last_error,
+                    updated_utc = excluded.updated_utc;
+                """;
+            upsert.Parameters.AddWithValue("$id", rule.ManagedRuleId.ToString("D"));
+            upsert.Parameters.AddWithValue("$name", rule.OsRuleName);
+            upsert.Parameters.AddWithValue("$spec", specJson);
+            upsert.Parameters.AddWithValue("$state", (int)rule.State);
+            upsert.Parameters.AddWithValue("$verified", (object?)ToStorageOrNull(rule.LastVerifiedUtc) ?? DBNull.Value);
+            upsert.Parameters.AddWithValue("$error", (object?)rule.LastErrorCode ?? DBNull.Value);
+            upsert.Parameters.AddWithValue("$now", now);
+            await upsert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await InsertAuditAsync(connection, transaction, rule.ManagedRuleId, actorSid, action, result, specJson, error, now, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task DeleteFirewallRuleAsync(
+        Guid managedRuleId,
+        string actorSid,
+        string result,
+        string? error,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorSid);
+
+        var now = ToStorage(DateTimeOffset.UtcNow);
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        await using (var delete = connection.CreateCommand())
+        {
+            delete.Transaction = transaction;
+            delete.CommandText = "DELETE FROM firewall_rules WHERE managed_rule_id = $id;";
+            delete.Parameters.AddWithValue("$id", managedRuleId.ToString("D"));
+            await delete.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await InsertAuditAsync(connection, transaction, managedRuleId, actorSid, "rule.remove", result, null, error, now, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ManagedRule>> ListFirewallRulesAsync(CancellationToken cancellationToken = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT managed_rule_id, os_rule_name, spec_json, state, last_verified_utc, last_error
+            FROM firewall_rules
+            ORDER BY updated_utc DESC;
+            """;
+
+        var rules = new List<ManagedRule>();
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var spec = JsonSerializer.Deserialize<RuleSpec>(reader.GetString(2), IpcJson.Options);
+            if (spec is null)
+            {
+                continue;
+            }
+
+            rules.Add(new ManagedRule
+            {
+                ManagedRuleId = Guid.Parse(reader.GetString(0)),
+                OsRuleName = reader.GetString(1),
+                Spec = spec,
+                State = (RuleState)reader.GetInt32(3),
+                LastVerifiedUtc = reader.IsDBNull(4) ? null : ParseStorage(reader.GetString(4)),
+                LastErrorCode = reader.IsDBNull(5) ? null : reader.GetString(5),
+            });
+        }
+
+        return rules;
     }
 
     /// <summary>Deletes flows not seen within the retention window and apps without flows.</summary>
@@ -403,6 +542,38 @@ public sealed class HistoryStore
 
     private static string ToStorage(DateTimeOffset value) =>
         value.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+
+    private static string? ToStorageOrNull(DateTimeOffset? value) =>
+        value is null ? null : ToStorage(value.Value);
+
+    private static async Task InsertAuditAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid managedRuleId,
+        string actorSid,
+        string action,
+        string result,
+        string? newJson,
+        string? error,
+        string now,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO rule_audit(managed_rule_id, actor_sid, timestamp_utc, action, result,
+                                   old_json, new_json, error)
+            VALUES ($id, $actor, $now, $action, $result, NULL, $new, $error);
+            """;
+        command.Parameters.AddWithValue("$id", managedRuleId.ToString("D"));
+        command.Parameters.AddWithValue("$actor", actorSid);
+        command.Parameters.AddWithValue("$now", now);
+        command.Parameters.AddWithValue("$action", action);
+        command.Parameters.AddWithValue("$result", result);
+        command.Parameters.AddWithValue("$new", (object?)newJson ?? DBNull.Value);
+        command.Parameters.AddWithValue("$error", (object?)error ?? DBNull.Value);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 
     private static DateTimeOffset ParseStorage(string value) =>
         DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
