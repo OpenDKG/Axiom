@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>Netpetra.Infrastructure.Windows</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Netpetra.Contracts\Netpetra.Contracts.csproj" />
+    <ProjectReference Include="..\Netpetra.Core\Netpetra.Core.csproj" />
+  </ItemGroup>
+
+</Project>
