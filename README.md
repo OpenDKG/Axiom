@@ -84,6 +84,45 @@ process while disabled, and none of it sits on the per-connection firewall path.
 - The difference between `audit` and `block`, and the fail-open limits of a third-party agent guard,
   are stated explicitly. No official partnership is implied.
 
+### OriginTrail DKG V10
+
+- The Standard build uses small, signed offline bundles; no local DKG node, wallet or token is
+  required for the firewall to work.
+- The Advanced mode can use an already installed local Edge Node through the documented DKG
+  API/CLI/MCP interface. No DKG process is started by Standard.
+- DKG is never in the per-flow firewall check. If the node is offline, the local firewall keeps
+  working with the last verified cache.
+- Bundles are verified for publisher signature, version, expiry, revocation, replay and tampering
+  before use. Signed does not mean automatically true.
+
+### Agent security research memory
+
+- A separate, permissively licensed package for collaborative research on public suspicious
+  packages and domains; it can exist without the desktop application.
+- Two or more agents use Working Memory and Shared Memory to record evidence and contradictions,
+  with source, date, confidence and a `unverified`/`reviewed` status.
+- It shares no secrets, wallet keys, private connection history or user paths, and it does not
+  publish to a chain without an explicit later decision.
+
+### Optional publishing, wallet protection and community reports
+
+- TRAC / Verifiable Memory publishing is optional, starts on a test network, and requires an
+  explicit budget and approval. The Standard firewall never depends on it.
+- Wallet protection is a separate browser-extension research path. It never captures seed phrases
+  or private keys and never signs or approves transactions.
+- Community reports are opt-in and redacted. A community report never triggers automatic OS
+  blocking, and a false report cannot silently block a benign site.
+
+### Rules for every optional module
+
+- Off by default: no process, account, wallet, key or network call while disabled.
+- Never in the enforcement hot path; local Windows rules always apply first.
+- Every finding has a source, time, confidence, expiry and a correction path; `unknown` is not
+  `safe`.
+- External terms (VirusTotal, Blackbox feeds, DKG, GeoIP) are reviewed before distribution.
+- Integration modules keep their own permissive license and notices; no GPL-only code is copied
+  into them.
+
 ## How it works
 
 ```text
