@@ -45,4 +45,13 @@ public sealed record FirewallRulesSnapshot
     public required FirewallCapabilityReport Capability { get; init; }
 
     public required IReadOnlyList<ManagedRule> Rules { get; init; }
+
+    /// <summary>True only when the explicit write gate is open on the service.</summary>
+    public bool WritesEnabled { get; init; }
+}
+
+/// <summary>Reference to one managed rule for remove/verify commands.</summary>
+public sealed record RuleReference
+{
+    public required Guid ManagedRuleId { get; init; }
 }

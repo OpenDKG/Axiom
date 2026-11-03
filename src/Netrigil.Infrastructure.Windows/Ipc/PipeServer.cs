@@ -2,9 +2,11 @@
 using System.IO.Pipes;
 using System.Text.Json;
 using Netrigil.Contracts;
+using Netrigil.Contracts.Firewall;
 using Netrigil.Contracts.History;
 using Netrigil.Contracts.Ipc;
 using Netrigil.Contracts.Monitoring;
+using Netrigil.Infrastructure.Windows.Firewall;
 
 namespace Netrigil.Infrastructure.Windows.Ipc;
 
@@ -34,6 +36,12 @@ public sealed class PipeServer
 
     private readonly Func<CancellationToken, Task<FirewallRulesSnapshot>>? _rulesQuery;
 
+    private readonly Func<RuleSpec, string, CancellationToken, Task<RuleApplyResult>>? _ruleApply;
+
+    private readonly Func<Guid, string, CancellationToken, Task<RuleApplyResult>>? _ruleRemove;
+
+    private readonly Func<Guid, CancellationToken, Task<EffectiveRuleReport>>? _ruleVerify;
+
     private readonly Action<string>? _log;
 
     public PipeServer(
@@ -43,6 +51,9 @@ public sealed class PipeServer
         Func<ServiceHealth> healthProvider,
         Func<HistoryQuery, CancellationToken, Task<HistoryPage>>? historyQuery = null,
         Func<CancellationToken, Task<FirewallRulesSnapshot>>? rulesQuery = null,
+        Func<RuleSpec, string, CancellationToken, Task<RuleApplyResult>>? ruleApply = null,
+        Func<Guid, string, CancellationToken, Task<RuleApplyResult>>? ruleRemove = null,
+        Func<Guid, CancellationToken, Task<EffectiveRuleReport>>? ruleVerify = null,
         Action<string>? log = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
@@ -54,6 +65,9 @@ public sealed class PipeServer
         _healthProvider = healthProvider ?? throw new ArgumentNullException(nameof(healthProvider));
         _historyQuery = historyQuery;
         _rulesQuery = rulesQuery;
+        _ruleApply = ruleApply;
+        _ruleRemove = ruleRemove;
+        _ruleVerify = ruleVerify;
         _log = log;
     }
 
@@ -159,7 +173,7 @@ public sealed class PipeServer
                     return;
                 }
 
-                if (!await ProcessAsync(server, line, cancellationToken).ConfigureAwait(false))
+                if (!await ProcessAsync(server, line, clientSid!, cancellationToken).ConfigureAwait(false))
                 {
                     return;
                 }
@@ -184,7 +198,11 @@ public sealed class PipeServer
         }
     }
 
-    private async Task<bool> ProcessAsync(Stream stream, string line, CancellationToken cancellationToken)
+    private async Task<bool> ProcessAsync(
+        Stream stream,
+        string line,
+        string actorSid,
+        CancellationToken cancellationToken)
     {
         IpcEnvelope? envelope;
 
@@ -318,8 +336,89 @@ public sealed class PipeServer
                     break;
 
                 case IpcCommandTypes.RuleApply:
+                    if (_ruleApply is null || !WindowsFirewallPolicyAdapter.IsWriteGateOpen)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Firewall writes are disabled on this service.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var spec = DeserializePayload<RuleSpec>(envelope.Payload);
+                    if (spec is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Rule apply payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var applied = await _ruleApply(spec, actorSid, cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, applied, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.RuleRemove:
+                    if (_ruleRemove is null || !WindowsFirewallPolicyAdapter.IsWriteGateOpen)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Firewall writes are disabled on this service.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var removeReference = DeserializePayload<RuleReference>(envelope.Payload);
+                    if (removeReference is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Rule remove payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var removed = await _ruleRemove(removeReference.ManagedRuleId, actorSid, cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, removed, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.RuleVerify:
+                    if (_ruleVerify is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Rule verification is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var verifyReference = DeserializePayload<RuleReference>(envelope.Payload);
+                    if (verifyReference is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Rule verify payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var report = await _ruleVerify(verifyReference.ManagedRuleId, cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, report, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.ConfigGet:
                 case IpcCommandTypes.ConfigSet:
                 case IpcCommandTypes.DiagnosticsExport:
@@ -376,14 +475,50 @@ public sealed class PipeServer
             commands.Add(IpcCommandTypes.RulesQuery);
         }
 
+        if (WindowsFirewallPolicyAdapter.IsWriteGateOpen)
+        {
+            if (_ruleApply is not null)
+            {
+                commands.Add(IpcCommandTypes.RuleApply);
+            }
+
+            if (_ruleRemove is not null)
+            {
+                commands.Add(IpcCommandTypes.RuleRemove);
+            }
+
+            if (_ruleVerify is not null)
+            {
+                commands.Add(IpcCommandTypes.RuleVerify);
+            }
+        }
+
         return new ServiceCapabilities
         {
             ProtocolVersion = IpcProtocol.CurrentVersion,
             Commands = commands,
             Monitoring = true,
-            FirewallWrites = false,
+            FirewallWrites = WindowsFirewallPolicyAdapter.IsWriteGateOpen,
             Milestone = ProductMilestone.Current,
         };
+    }
+
+    private static T? DeserializePayload<T>(JsonElement? payload)
+        where T : class
+    {
+        if (payload is not { } element)
+        {
+            return null;
+        }
+
+        try
+        {
+            return element.Deserialize<T>(IpcJson.Options);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static async Task WriteResultAsync<T>(

@@ -74,13 +74,14 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
 
     public void Dispose() => _com.Dispose();
 
+    /// <summary>True only when both explicit write-gate variables are present.</summary>
+    public static bool IsWriteGateOpen =>
+        string.Equals(Environment.GetEnvironmentVariable(WriteEnableVariable), "1", StringComparison.Ordinal) &&
+        string.Equals(Environment.GetEnvironmentVariable(WriteConfirmVariable), "yes", StringComparison.OrdinalIgnoreCase);
+
     private static void EnsureWriteGate()
     {
-        var enabled = Environment.GetEnvironmentVariable(WriteEnableVariable);
-        var confirmed = Environment.GetEnvironmentVariable(WriteConfirmVariable);
-
-        if (!string.Equals(enabled, "1", StringComparison.Ordinal) ||
-            !string.Equals(confirmed, "yes", StringComparison.OrdinalIgnoreCase))
+        if (!IsWriteGateOpen)
         {
             throw new NotSupportedException(
                 $"Firewall writes are disabled. Set {WriteEnableVariable}=1 and " +

@@ -245,6 +245,17 @@ public sealed class PipeServerTests : IAsyncLifetime
         Assert.Equal(rule.OsRuleName, result.Rules[0].OsRuleName);
     }
 
+    [Fact]
+    public async Task Rule_apply_is_rejected_when_writes_are_disabled()
+    {
+        _host = await ServerHost.StartAsync();
+
+        var response = await SendAsync(_host.PipeName, IpcCommandTypes.RuleApply);
+
+        Assert.False(response.Ok);
+        Assert.Equal(IpcErrorCodes.NotSupported, response.Error!.Code);
+    }
+
     private static async Task<IpcResponse> SendAsync(string pipeName, string command)
     {
         using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);

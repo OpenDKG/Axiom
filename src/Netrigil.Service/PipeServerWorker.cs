@@ -14,6 +14,7 @@ public sealed partial class PipeServerWorker(
     ConnectionSnapshotCache cache,
     HistoryStore history,
     WindowsFirewallPolicyAdapter firewall,
+    FirewallRuleCoordinator coordinator,
     ILogger<PipeServerWorker> logger) : BackgroundService
 {
     [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "Pipe {Pipe} allows SID {Sid}")]
@@ -44,8 +45,12 @@ public sealed partial class PipeServerWorker(
                 {
                     Capability = capability,
                     Rules = rules,
+                    WritesEnabled = WindowsFirewallPolicyAdapter.IsWriteGateOpen,
                 };
             },
+            (spec, actorSid, cancellationToken) => coordinator.ApplyAsync(spec, actorSid, cancellationToken),
+            (managedRuleId, actorSid, cancellationToken) => coordinator.RemoveAsync(managedRuleId, actorSid, cancellationToken),
+            (managedRuleId, cancellationToken) => coordinator.VerifyAsync(managedRuleId, cancellationToken),
             message => LogMessage(logger, message));
 
         await server.RunAsync(stoppingToken).ConfigureAwait(false);
