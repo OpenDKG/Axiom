@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Netpetra.Contracts.Modules;
+using Netpetra.UI.Services;
 
 namespace Netpetra.UI.ViewModels;
+
+/// <summary>One loopback probe sample for the activity strip.</summary>
+public sealed record ModuleActivity(DateTimeOffset At, bool DkgConnected, bool BlackboxConnected);
 
 /// <summary>Status of one optional security or intelligence module.</summary>
 public sealed record SecurityModule(
@@ -12,31 +19,46 @@ public sealed record SecurityModule(
     string Status,
     string Detail,
     string Glyph,
-    bool IsConnected = false);
+    bool IsConnected = false,
+    bool CanInstall = false);
 
 /// <summary>
-/// Security page. Optional modules are never started or controlled by Netpetra; the page only
-/// reads their loopback status and reports an honest not-running/unavailable state.
+/// Security page. Optional modules are read-only status probes; install buttons launch the official
+/// third-party installer only after an explicit warning. Netpetra does not stop or control a module.
 /// </summary>
 public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 {
     private readonly OptionalModuleProbe _probe = new();
+
+    private readonly OptionalModuleInstaller _installer = new();
+
+    private readonly DispatcherTimer _activityTimer;
 
     public SecurityViewModel()
         : base("Security", "Optional intelligence and protection modules", "\uE8D7")
     {
         Modules = [];
         SeedCheckingState();
+
+        _activityTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        _activityTimer.Tick += (_, _) => _ = RefreshAsync();
+        _activityTimer.Start();
+
         _ = RefreshAsync();
     }
 
     public ObservableCollection<SecurityModule> Modules { get; }
+
+    public ObservableCollection<ModuleActivity> Activity { get; } = [];
 
     [ObservableProperty]
     private bool _isBusy;
 
     [ObservableProperty]
     private string _lastCheckedText = "Not checked yet";
+
+    [ObservableProperty]
+    private string _installStatusText = string.Empty;
 
     public string StatusTitle
     {
@@ -55,10 +77,14 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     public string StatusBadge => Modules.Any(module => module.IsConnected) ? "CONNECTED" : "OFFLINE";
 
     public string StatusText => Modules.Any(module => module.IsConnected)
-        ? "Netpetra only reads loopback status. It never starts, stops or controls these modules."
-        : "The standard build is local and offline. Blackbox and OriginTrail DKG are not running.";
+        ? "Netpetra reads loopback status. Install buttons open the official third-party installer only after confirmation."
+        : "The standard build is local and offline. Use Install to open the official third-party installer after confirmation.";
 
-    public void Dispose() => _probe.Dispose();
+    public void Dispose()
+    {
+        _activityTimer.Stop();
+        _probe.Dispose();
+    }
 
     [RelayCommand]
     private async Task RefreshAsync()
@@ -79,6 +105,15 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
             Rebuild(dkgTask.Result, blackboxTask.Result);
             LastCheckedText = $"Checked {DateTimeOffset.Now:HH:mm:ss}";
+
+            Activity.Add(new ModuleActivity(
+                DateTimeOffset.Now,
+                dkgTask.Result.IsConnected,
+                blackboxTask.Result.IsConnected));
+            while (Activity.Count > 30)
+            {
+                Activity.RemoveAt(0);
+            }
         }
         finally
         {
@@ -88,6 +123,74 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             OnPropertyChanged(nameof(StatusText));
         }
     }
+
+    [RelayCommand]
+    private void InstallModule(string? module)
+    {
+        if (string.IsNullOrWhiteSpace(module))
+        {
+            return;
+        }
+
+        if (module.Equals("Blackbox", StringComparison.Ordinal))
+        {
+            var confirmation = MessageBox.Show(
+                "This downloads and runs Umanitek's official Windows installer with the Oxigraph " +
+                "backend (no Docker).\n\nIt installs Python packages, clones the repository and may " +
+                "register a scheduled task. Review the installer; continue only if you trust it.",
+                "Install Blackbox",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (confirmation != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            _installer.InstallBlackbox();
+            InstallStatusText = "Blackbox installer opened in PowerShell. Complete it, then click Check again.";
+            return;
+        }
+
+        if (module.StartsWith("OriginTrail", StringComparison.Ordinal))
+        {
+            var confirmation = MessageBox.Show(
+                "This installs @origintrail-official/dkg into %LOCALAPPDATA%\\Netpetra\\modules, " +
+                "opens the official testnet setup and starts the node.\n\nIt needs Node.js/npm. Continue?",
+                "Install OriginTrail DKG",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (confirmation != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            _installer.InstallDkg();
+            InstallStatusText = "DKG installer opened in PowerShell. Complete the prompts, then click Check again.";
+        }
+    }
+
+    [RelayCommand]
+    private void Restart()
+    {
+        var executable = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executable))
+        {
+            return;
+        }
+
+        var arguments = Environment.GetCommandLineArgs().Skip(1).Select(QuoteArgument);
+        using var process = Process.Start(new ProcessStartInfo(executable, string.Join(' ', arguments))
+        {
+            UseShellExecute = true,
+        });
+
+        Application.Current.Shutdown();
+    }
+
+    private static string QuoteArgument(string value) =>
+        $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
 
     private void SeedCheckingState()
     {
@@ -100,12 +203,16 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "Blackbox",
             "CHECKING",
             "Looking for a local Blackbox dashboard on 127.0.0.1:9700.",
-            "\uE7BA"));
+            "\uE7BA",
+            false,
+            true));
         Modules.Add(new SecurityModule(
             "OriginTrail DKG",
             "CHECKING",
             "Looking for a local DKG node on 127.0.0.1:9200.",
-            "\uE968"));
+            "\uE968",
+            false,
+            true));
         Modules.Add(new SecurityModule(
             "Community feed",
             "NOT CONFIGURED",
@@ -131,13 +238,15 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             blackbox.Status,
             blackbox.Detail,
             "\uE7BA",
-            blackbox.IsConnected));
+            blackbox.IsConnected,
+            !blackbox.IsConnected));
         Modules.Add(new SecurityModule(
             "OriginTrail DKG",
             dkg.Status,
             dkg.Detail,
             "\uE968",
-            dkg.IsConnected));
+            dkg.IsConnected,
+            !dkg.IsConnected));
         Modules.Add(new SecurityModule(
             "Community feed",
             "NOT CONFIGURED",

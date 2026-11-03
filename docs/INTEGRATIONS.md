@@ -1,11 +1,29 @@
 # Optional integrations
 
 Netpetra's standard build is the local network monitor and firewall policy manager. Blackbox and
-OriginTrail DKG are **optional third-party integrations**. Netpetra never installs, starts, stops or
-controls them; it only reads their loopback status.
+OriginTrail DKG are **optional third-party integrations**. Netpetra reads their loopback status; the
+Install buttons launch the official installers only after an explicit confirmation.
 
 Both probes accept only loopback URLs. A non-loopback endpoint is rejected, and no request leaves
 the machine.
+
+## Install buttons
+
+The Security page has an **Install** button next to each module that is not connected. It opens a
+visible PowerShell window only after a confirmation dialog:
+
+- **DKG**: installs `@origintrail-official/dkg` into
+  `%LOCALAPPDATA%\Netpetra\modules\dkg` with `--ignore-scripts`, sets a per-user `DKG_HOME`, runs
+  the official interactive testnet setup (`--network testnet --role edge --store oxigraph`) and
+  starts the node.
+- **Blackbox**: downloads the official Umanitek Windows installer to
+  `%LOCALAPPDATA%\Netpetra\modules\blackbox`, prints its SHA-256 and runs it with
+  `-StoreBackend oxigraph` (no Docker).
+
+Nothing is installed silently. Close the PowerShell window only after it reports success, then
+click **Check again**. **Restart Netpetra** is available for a clean restart after installation.
+The activity strip shows the last 30 loopback checks; it is a health indicator, not module event
+content.
 
 ## OriginTrail DKG V10
 
@@ -71,7 +89,9 @@ Official documentation: <https://github.com/umanitek/agent-blackbox>
 
 ## Security boundaries
 
-- No automatic installation, process start, stop or configuration.
+- Install buttons launch the official installer only after explicit confirmation; nothing runs
+  silently.
+- Netpetra does not stop, configure or control a module after installation; it only reads status.
 - No remote endpoint, cloud lookup, token display or credential storage.
 - No DKG wallet or token is required for the status probe.
 - Neither module is on the per-connection firewall enforcement path.

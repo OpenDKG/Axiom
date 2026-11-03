@@ -58,7 +58,8 @@ an optional, separately enabled module: none of it is required, none of it start
 process while disabled, and none of it sits on the per-connection firewall path.
 
 The Security page probes a running Blackbox dashboard or DKG node on loopback and reports
-`CONNECTED`, `NOT RUNNING` or `UNAVAILABLE`; it never installs or starts them. Setup steps are in
+`CONNECTED`, `NOT RUNNING` or `UNAVAILABLE`. The Install buttons launch the official third-party
+installer only after an explicit confirmation; nothing runs silently. Setup steps are in
 [Optional integrations](docs/INTEGRATIONS.md).
 
 ### File tracker and local reputation
