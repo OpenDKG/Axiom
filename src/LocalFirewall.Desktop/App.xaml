@@ -23,11 +23,17 @@
       <DataTemplate DataType="{x:Type vm:FirewallRulesViewModel}">
         <views:FirewallRulesView />
       </DataTemplate>
-      <DataTemplate DataType="{x:Type vm:HistoryViewModel}">
-        <views:HistoryView />
+      <DataTemplate DataType="{x:Type vm:EventsViewModel}">
+        <views:EventsView />
       </DataTemplate>
-      <DataTemplate DataType="{x:Type vm:AlertsViewModel}">
-        <views:AlertsView />
+      <DataTemplate DataType="{x:Type vm:FirewallRulesViewModel}">
+        <views:FirewallRulesView />
+      </DataTemplate>
+      <DataTemplate DataType="{x:Type vm:FilesViewModel}">
+        <views:FilesView />
+      </DataTemplate>
+      <DataTemplate DataType="{x:Type vm:SecurityViewModel}">
+        <views:SecurityView />
       </DataTemplate>
       <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
         <views:SettingsView />

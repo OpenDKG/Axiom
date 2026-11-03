@@ -21,9 +21,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             _overview,
             new LiveConnectionsViewModel(monitor),
             new AppsViewModel(monitor),
+            new EventsViewModel(ConnectionSourceRegistry.IsServiceMode),
             new FirewallRulesViewModel(),
-            new HistoryViewModel(ConnectionSourceRegistry.IsServiceMode),
-            new AlertsViewModel(),
+            new FilesViewModel(),
+            new SecurityViewModel(),
             new SettingsViewModel(monitor),
         ];
 
