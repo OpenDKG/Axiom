@@ -14,6 +14,7 @@ public sealed partial class AppRow : ObservableObject
         Key = group.Key;
         Name = group.Name;
         Path = group.Path;
+        ProcessIds = group.ProcessIds;
         Initial = group.Name.Length == 0 ? "?" : group.Name[..1].ToUpperInvariant();
 
         Update(group, barWidth);
@@ -24,6 +25,10 @@ public sealed partial class AppRow : ObservableObject
     public string Name { get; }
 
     public string Path { get; }
+
+    public IReadOnlyList<int> ProcessIds { get; }
+
+    public string PidText => ProcessIds.Count == 0 ? "—" : string.Join(", ", ProcessIds);
 
     public string Initial { get; }
 

@@ -13,7 +13,8 @@ public sealed record AppGroup(
     int TcpCount,
     int UdpCount,
     string States,
-    DateTimeOffset FirstSeenUtc);
+    DateTimeOffset FirstSeenUtc,
+    IReadOnlyList<int> ProcessIds);
 
 public static class AppGrouping
 {
@@ -22,7 +23,7 @@ public static class AppGrouping
         ArgumentNullException.ThrowIfNull(rows);
 
         var groups = new Dictionary<string, (string Name, string Path, int Sockets, int Tcp, int Udp,
-            Dictionary<string, int> States, DateTimeOffset FirstSeen)>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, int> States, DateTimeOffset FirstSeen, HashSet<int> Pids)>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var row in rows)
         {
@@ -52,7 +53,8 @@ public static class AppGrouping
                     Tcp: 0,
                     Udp: 0,
                     States: new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
-                    FirstSeen: source.FirstObservedUtc);
+                    FirstSeen: source.FirstObservedUtc,
+                    Pids: []);
             }
 
             group.Sockets++;
@@ -67,6 +69,7 @@ public static class AppGrouping
 
             group.States.TryGetValue(source.State, out var stateCount);
             group.States[source.State] = stateCount + 1;
+            group.Pids.Add(source.ProcessId);
 
             if (source.FirstObservedUtc < group.FirstSeen)
             {
@@ -85,7 +88,8 @@ public static class AppGrouping
                 pair.Value.Tcp,
                 pair.Value.Udp,
                 FormatStates(pair.Value.States),
-                pair.Value.FirstSeen))
+                pair.Value.FirstSeen,
+                pair.Value.Pids.OrderBy(id => id).ToList()))
             .OrderByDescending(group => group.SocketCount)
             .ThenBy(group => group.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();

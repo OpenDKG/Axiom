@@ -112,12 +112,17 @@
               </StackPanel>
               <TextBlock Text="{Binding BucketLabel}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
             </StackPanel>
-            <ListBox Grid.Column="1"
-                     HorizontalAlignment="Right"
-                     VerticalAlignment="Top"
-                     Style="{StaticResource SegmentList}"
-                     ItemsSource="{Binding Ranges}"
-                     SelectedItem="{Binding SelectedRange}" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+              <ListBox Style="{StaticResource SegmentList}"
+                       ItemsSource="{Binding RateUnits}"
+                       SelectedItem="{Binding SelectedRateUnit}"
+                       Margin="0,0,8,0"
+                       AutomationProperties.Name="Rate unit" />
+              <ListBox Style="{StaticResource SegmentList}"
+                       ItemsSource="{Binding Ranges}"
+                       SelectedItem="{Binding SelectedRange}"
+                       AutomationProperties.Name="Chart range" />
+            </StackPanel>
           </Grid>
 
           <Border Margin="0,12,0,0"

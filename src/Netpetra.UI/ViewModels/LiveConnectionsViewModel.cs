@@ -72,6 +72,17 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
     [ObservableProperty]
     private bool _hasError;
 
+    [ObservableProperty]
+    private ConnectionRow? _selectedConnection;
+
+    [ObservableProperty]
+    private bool _hasRelated;
+
+    [ObservableProperty]
+    private string _relatedTitle = string.Empty;
+
+    public ObservableCollection<ConnectionRow> RelatedConnections { get; } = [];
+
     public void Dispose() => _monitor.Updated -= OnMonitorUpdated;
 
     partial void OnProtocolFilterChanged(string value) => ApplyFilter();
@@ -81,6 +92,39 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
     partial void OnOnlyNewChanged(bool value) => ApplyFilter();
 
     partial void OnOnlyLoopbackChanged(bool value) => ApplyFilter();
+
+    partial void OnSelectedConnectionChanged(ConnectionRow? value) => RefreshRelated();
+
+    private void RefreshRelated()
+    {
+        RelatedConnections.Clear();
+
+        if (SelectedConnection is null)
+        {
+            HasRelated = false;
+            RelatedTitle = string.Empty;
+            return;
+        }
+
+        var source = SelectedConnection.Source;
+        var matches = Connections
+            .Where(candidate => !ReferenceEquals(candidate, SelectedConnection))
+            .Where(candidate => source.AppPath.Length > 0
+                ? string.Equals(candidate.Source.AppPath, source.AppPath, StringComparison.OrdinalIgnoreCase)
+                : candidate.Source.ProcessId == source.ProcessId)
+            .Take(25)
+            .ToList();
+
+        foreach (var match in matches)
+        {
+            RelatedConnections.Add(match);
+        }
+
+        HasRelated = matches.Count > 0;
+        RelatedTitle = matches.Count == 0
+            ? string.Empty
+            : $"Other connections from {SelectedConnection.AppDisplayName} ({matches.Count})";
+    }
 
     [RelayCommand]
     private void ResetFilters()
@@ -100,6 +144,11 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
         }
 
         UpdateStatus();
+
+        if (SelectedConnection is not null)
+        {
+            RefreshRelated();
+        }
     }
 
     private bool HasActiveFilters =>
