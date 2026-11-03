@@ -52,7 +52,7 @@
                    Margin="20,12,20,4"
                    Style="{StaticResource Caption}"
                    TextWrapping="Wrap"
-                   Text="Read-only inventory. No service, no driver, no Windows Firewall change." />
+                   Text="{Binding FooterText}" />
 
         <ListBox ItemsSource="{Binding Pages}"
                  SelectedItem="{Binding SelectedPage}"
@@ -97,13 +97,13 @@
           <Border Style="{StaticResource StatusPill}" Margin="0,0,8,0">
             <StackPanel Orientation="Horizontal">
               <Ellipse Width="6" Height="6" Fill="{DynamicResource Brush.Accent}" Margin="0,0,6,0" VerticalAlignment="Center" />
-              <TextBlock Text="Read-only monitor" Style="{StaticResource StatusPillText}" />
+              <TextBlock Text="{Binding StatusModeText}" Style="{StaticResource StatusPillText}" />
             </StackPanel>
           </Border>
           <Border Style="{StaticResource StatusPill}" Margin="0,0,8,0">
             <StackPanel Orientation="Horizontal">
               <Ellipse Width="6" Height="6" Fill="{DynamicResource Brush.Warning}" Margin="0,0,6,0" VerticalAlignment="Center" />
-              <TextBlock Text="Firewall writes disabled" Style="{StaticResource StatusPillText}" />
+              <TextBlock Text="{Binding StatusFirewallBadgeText}" Style="{StaticResource StatusPillText}" />
             </StackPanel>
           </Border>
           <Button Style="{StaticResource GhostButton}"
@@ -140,7 +140,7 @@
                    HorizontalAlignment="Right"
                    VerticalAlignment="Center"
                    Style="{StaticResource Caption}"
-                   Text="IPC: not connected" />
+                   Text="{Binding StatusIpcText}" />
       </Grid>
     </Border>
   </Grid>
