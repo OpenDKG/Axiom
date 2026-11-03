@@ -14,7 +14,7 @@ is kept outside the public repository; this page is the public, English roadmap.
 | FND-005 | SQLite history, retention, query, export | ✅ implemented (bytes/JSON export pending) |
 | FND-006 | Click-to-block through Windows Firewall COM | 🟡 code complete and gated; real VM block test pending |
 | FND-007 | Alerts and WFP/5157 blocked-event evidence | ⏳ |
-| FND-008 | Scope rules, profiles, import/export | ⏳ |
+| FND-008 | Scope rules, profiles, import/export | 🟡 CIDR/port validation done; scope UI/import-export pending |
 | FND-009 | Installer, service hardening, recovery, QA | ⏳ portable per-user install script available; MSI/service pending |
 | FND-010 | GeoIP, DNS hints, timeline polish, performance | ⏳ |
 
