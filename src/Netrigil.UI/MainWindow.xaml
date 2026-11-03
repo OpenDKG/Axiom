@@ -59,6 +59,7 @@
                  Background="Transparent"
                  BorderThickness="0"
                  Padding="0"
+                 AutomationProperties.Name="Main navigation"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                  ItemContainerStyle="{StaticResource NavItem}">

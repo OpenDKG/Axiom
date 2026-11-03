@@ -133,7 +133,9 @@
                                     DownloadBrush="{DynamicResource Brush.Download}"
                                     GridBrush="{DynamicResource Brush.GridLine}"
                                     MarkerPositions="{Binding EventMarkers}"
-                                    MarkerBrush="{DynamicResource Brush.Warning}" />
+                                    MarkerBrush="{DynamicResource Brush.Warning}"
+                                    AutomationProperties.Name="Throughput chart, demo series"
+                                    AutomationProperties.HelpText="Demo upload and download series with three demo event markers. Byte rates are not measured." />
           </Border>
 
           <DockPanel Margin="0,10,0,0">
