@@ -1,8 +1,9 @@
 # Installing Netpetra (portable, per-user)
 
 Netpetra can be installed for the current Windows user without administrator rights, a Windows
-service, a driver or any firewall change. The portable installer copies one self-contained
-executable, verifies its SHA-256 and creates a Start Menu shortcut.
+service registration, a driver or any firewall change. The portable installer copies two
+self-contained executables (desktop and optional service), verifies their SHA-256 and creates a
+Start Menu shortcut.
 
 ## Requirements
 
@@ -31,6 +32,7 @@ Defaults:
 | Item | Location |
 |---|---|
 | Executable | `%LOCALAPPDATA%\Programs\Netpetra\Netpetra.Desktop.exe` |
+| Service (optional, run manually) | `%LOCALAPPDATA%\Programs\Netpetra\Netpetra.Service.exe` |
 | Manifest (version, SHA-256, time) | `%LOCALAPPDATA%\Programs\Netpetra\install.json` |
 | Start Menu shortcut | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Netpetra.lnk` |
 | Local data (created by the service) | `%LOCALAPPDATA%\Netpetra` |
@@ -72,9 +74,10 @@ Compare it with `SHA256SUMS.txt` from the same release.
 .\scripts\build-release.ps1
 ```
 
-This publishes the standalone build, packs `Netpetra.Desktop.exe` with `LICENSE`, `NOTICE`,
-`THIRD_PARTY_NOTICES.md` and the portable install/uninstall scripts into
-`artifacts\release\Netpetra-<version>-win-x64.zip`, and writes `SHA256SUMS.txt`. Nothing is uploaded.
+This publishes the standalone desktop and service builds, packs `Netpetra.Desktop.exe`,
+`Netpetra.Service.exe`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and the portable
+install/uninstall scripts into `artifacts\release\Netpetra-<version>-win-x64.zip`, and writes
+`SHA256SUMS.txt`. Nothing is uploaded.
 
 From an extracted release archive:
 
@@ -84,7 +87,7 @@ From an extracted release archive:
 
 ## What the portable install does not do
 
-- It does not install or start a Windows service.
+- It copies `Netpetra.Service.exe` but does not register or start a Windows service.
 - It does not create, change or remove Windows Firewall rules.
 - It does not add itself to startup.
 - It does not request administrator rights or elevation.
