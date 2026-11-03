@@ -8,7 +8,7 @@ namespace LocalFirewall.UI.ViewModels;
 public sealed class FirewallRulesViewModel : PageViewModel
 {
     public FirewallRulesViewModel()
-        : base("Firewall Rules", "Owned rule inventory · this build cannot read or change Windows Firewall", "\uE72E")
+        : base("Firewall", "Owned rule inventory · this build cannot read or change Windows Firewall", "\uE72E")
     {
     }
 

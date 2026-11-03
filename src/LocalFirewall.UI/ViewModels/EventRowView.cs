@@ -4,9 +4,11 @@ using LocalFirewall.Contracts.History;
 
 namespace LocalFirewall.UI.ViewModels;
 
-/// <summary>Presentation wrapper for one stored flow.</summary>
-public sealed class HistoryRowView(HistoryRow row)
+/// <summary>Presentation wrapper for one stored event (currently network flows).</summary>
+public sealed class EventRowView(HistoryRow row)
 {
+    public string TypeText => "Network";
+
     public string AppDisplayName => row.AppDisplayName;
 
     public int ProcessId => row.ProcessId;

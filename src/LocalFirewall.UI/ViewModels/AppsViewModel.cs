@@ -20,7 +20,7 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
     private string? _selectedKey;
 
     public AppsViewModel(ConnectionMonitor monitor)
-        : base("Apps", "Executables observed on this host · grouped by resolved path", "\uE71D")
+        : base("Applications", "Executables observed on this host · grouped by resolved path", "\uE71D")
     {
         _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
 

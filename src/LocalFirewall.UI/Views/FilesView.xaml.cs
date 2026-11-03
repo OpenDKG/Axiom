@@ -3,7 +3,7 @@ using System.Windows.Controls;
 
 namespace LocalFirewall.UI.Views;
 
-public partial class HistoryView : UserControl
+public partial class FilesView : UserControl
 {
-    public HistoryView() => InitializeComponent();
+    public FilesView() => InitializeComponent();
 }

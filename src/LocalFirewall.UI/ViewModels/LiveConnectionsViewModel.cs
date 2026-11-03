@@ -18,7 +18,7 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
     private readonly CollectionView _view;
 
     public LiveConnectionsViewModel(ConnectionMonitor monitor)
-        : base("Live Connections", "Sockets read from this Windows host · read-only, poll-only", "\uE774")
+        : base("Connections", "Sockets read from this Windows host · read-only, poll-only", "\uE774")
     {
         _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
         _view = (CollectionView)CollectionViewSource.GetDefaultView(monitor.Connections);

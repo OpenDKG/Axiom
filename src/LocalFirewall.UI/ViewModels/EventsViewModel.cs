@@ -11,7 +11,11 @@ using LocalFirewall.UI.Services;
 
 namespace LocalFirewall.UI.ViewModels;
 
-public sealed partial class HistoryViewModel : PageViewModel, IDisposable
+/// <summary>
+/// Unified event timeline. Network events come from the local service database; the other
+/// categories are present as filters but report that no events of that type exist in this build.
+/// </summary>
+public sealed partial class EventsViewModel : PageViewModel, IDisposable
 {
     private const int PageLimit = 1000;
 
@@ -23,12 +27,12 @@ public sealed partial class HistoryViewModel : PageViewModel, IDisposable
 
     private readonly DispatcherTimer? _searchDebounce;
 
-    public HistoryViewModel(bool serviceMode)
-        : base("History", "Stored observations from the local service · read-only", "\uE81C")
+    public EventsViewModel(bool serviceMode)
+        : base("Events", "Unified timeline · network events from the local service", "\uE81C")
     {
         if (!serviceMode)
         {
-            StatusText = "History is stored by the local service. Start the app with --service to use it.";
+            StatusText = "Events are stored by the local service. Start the app with --service to use them.";
             IsEmpty = true;
             return;
         }
@@ -51,10 +55,15 @@ public sealed partial class HistoryViewModel : PageViewModel, IDisposable
 
     public IReadOnlyList<string> Ranges { get; } = ["15m", "1h", "24h", "7d"];
 
-    public ObservableCollection<HistoryRowView> Rows { get; } = [];
+    public IReadOnlyList<string> Categories { get; } = ["All", "Network", "Blocked", "Files", "Agents", "System"];
+
+    public ObservableCollection<EventRowView> Rows { get; } = [];
 
     [ObservableProperty]
     private string _selectedRange = "1h";
+
+    [ObservableProperty]
+    private string _selectedCategory = "All";
 
     [ObservableProperty]
     private string _searchText = string.Empty;
@@ -85,6 +94,8 @@ public sealed partial class HistoryViewModel : PageViewModel, IDisposable
 
     partial void OnSelectedRangeChanged(string value) => _ = RefreshAsync();
 
+    partial void OnSelectedCategoryChanged(string value) => _ = RefreshAsync();
+
     partial void OnSearchTextChanged(string value)
     {
         if (_searchDebounce is null)
@@ -108,19 +119,29 @@ public sealed partial class HistoryViewModel : PageViewModel, IDisposable
 
         try
         {
+            if (!IsNetworkCategory)
+            {
+                Rows.Clear();
+                TotalCount = 0;
+                IsEmpty = true;
+                CanExport = false;
+                StatusText = $"No {SelectedCategory.ToLowerInvariant()} events are available in this build.";
+                return;
+            }
+
             var page = await LoadAsync(PageLimit).ConfigureAwait(true);
 
             Rows.Clear();
             foreach (var row in page.Rows)
             {
-                Rows.Add(new HistoryRowView(row));
+                Rows.Add(new EventRowView(row));
             }
 
             TotalCount = page.TotalCount;
             DatabaseText = page.DatabasePath;
             IsEmpty = page.TotalCount == 0;
             CanExport = page.Rows.Count > 0;
-            StatusText = $"{page.Rows.Count} of {page.TotalCount} stored flows · {SelectedRange}";
+            StatusText = $"{page.Rows.Count} of {page.TotalCount} network events · {SelectedRange}";
         }
         catch (ServiceUnavailableException exception)
         {
@@ -138,7 +159,7 @@ public sealed partial class HistoryViewModel : PageViewModel, IDisposable
             TotalCount = 0;
             IsEmpty = true;
             CanExport = false;
-            StatusText = $"History query failed: {exception.Message}";
+            StatusText = $"Event query failed: {exception.Message}";
         }
         finally
         {
@@ -149,7 +170,7 @@ public sealed partial class HistoryViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private async Task ExportCsvAsync()
     {
-        if (_client is null)
+        if (_client is null || !IsNetworkCategory)
         {
             return;
         }
@@ -160,7 +181,7 @@ public sealed partial class HistoryViewModel : PageViewModel, IDisposable
 
             var dialog = new Microsoft.Win32.SaveFileDialog
             {
-                FileName = $"localfirewall-history-{DateTime.Now:yyyyMMdd-HHmmss}.csv",
+                FileName = $"localfirewall-events-{DateTime.Now:yyyyMMdd-HHmmss}.csv",
                 Filter = "CSV (*.csv)|*.csv",
                 DefaultExt = ".csv",
             };
@@ -171,12 +192,13 @@ public sealed partial class HistoryViewModel : PageViewModel, IDisposable
             }
 
             var builder = new StringBuilder();
-            builder.AppendLine("app,path,pid,protocol,local,remote,direction,state,quality,first_seen_utc,last_seen_utc");
+            builder.AppendLine("type,app,path,pid,protocol,local,remote,direction,state,quality,first_seen_utc,last_seen_utc");
 
             foreach (var row in page.Rows)
             {
                 builder.AppendLine(string.Join(
                     ',',
+                    "network",
                     Escape(row.AppDisplayName),
                     Escape(row.AppPath),
                     row.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -194,7 +216,7 @@ public sealed partial class HistoryViewModel : PageViewModel, IDisposable
                 .ConfigureAwait(true);
 
             var truncated = page.TotalCount > page.Rows.Count ? " (export limit reached)" : string.Empty;
-            StatusText = $"Exported {page.Rows.Count} rows to {Path.GetFileName(dialog.FileName)}{truncated}";
+            StatusText = $"Exported {page.Rows.Count} events to {Path.GetFileName(dialog.FileName)}{truncated}";
         }
         catch (ServiceUnavailableException exception)
         {
@@ -205,6 +227,10 @@ public sealed partial class HistoryViewModel : PageViewModel, IDisposable
             StatusText = $"Export failed: {exception.Message}";
         }
     }
+
+    private bool IsNetworkCategory =>
+        string.Equals(SelectedCategory, "All", StringComparison.Ordinal) ||
+        string.Equals(SelectedCategory, "Network", StringComparison.Ordinal);
 
     private Task<HistoryPage> LoadAsync(int limit)
     {

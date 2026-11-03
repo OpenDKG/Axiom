@@ -3,7 +3,7 @@ using System.Windows.Controls;
 
 namespace LocalFirewall.UI.Views;
 
-public partial class AlertsView : UserControl
+public partial class EventsView : UserControl
 {
-    public AlertsView() => InitializeComponent();
+    public EventsView() => InitializeComponent();
 }
