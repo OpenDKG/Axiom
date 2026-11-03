@@ -50,6 +50,40 @@ authority. There is no account, no cloud, no advertising and no telemetry.
 - Optional intelligence modules (file reputation, threat feeds, DKG/Blackbox) are separate, off by
   default, and never sit on the per-connection enforcement path.
 
+## Optional modules
+
+The Standard build is the local monitor and firewall policy manager. Everything in this section is
+an optional, separately enabled module: none of it is required, none of it starts a background
+process while disabled, and none of it sits on the per-connection firewall path.
+
+### File tracker and local reputation
+
+- Watches only the folders the user selects (for example Downloads, optionally Desktop), never the
+  whole disk.
+- Debounces file events, computes SHA-256 in the background with size and I/O limits, and reads
+  Authenticode signer metadata for PE files.
+- Shows local provenance, first/last seen and an explicit `unknown` result. It never uploads,
+  deletes or quarantines a file automatically, and never turns an unknown hash into "malware".
+
+### External reputation (VirusTotal gate)
+
+- The default build sends no file, URL, hash or IP to VirusTotal.
+- The safe fallback is manual: copy the SHA-256 or open the VirusTotal website in the browser.
+- A provider-neutral adapter may be added only after the concrete use is confirmed to be allowed by
+  the provider. Such an adapter would be opt-in, use the user's own key, perform hash-only lookups,
+  respect the published rate limits, cache results and never auto-upload files.
+- A VirusTotal result is one source with a timestamp, not a verdict.
+
+### Blackbox compatibility
+
+- An adapter for an already installed Umanitek Blackbox, not a reimplementation and not a
+  replacement for its configuration.
+- The Standard build starts no Blackbox, Hermes, OpenClaw, Python, Node or Docker process.
+- If Blackbox is not installed, the UI says `not installed`; it never claims protection from a
+  component that is absent.
+- The difference between `audit` and `block`, and the fail-open limits of a third-party agent guard,
+  are stated explicitly. No official partnership is implied.
+
 ## How it works
 
 ```text
