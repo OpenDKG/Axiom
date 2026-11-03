@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
 using Netpetra.Contracts.Monitoring;
 using Netpetra.Infrastructure.Windows.IpHelper;
 using Netpetra.UI;
@@ -20,6 +22,18 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Some Windows GPU drivers produce a blank WPF client area after a driver reset.
+        // Software rendering is slower but always paints; hardware is opt-in for machines
+        // where it is known to work.
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("NETPETRA_HARDWARE_RENDER"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+        }
+
         ThemeManager.Apply(AppTheme.Dark);
 
         ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;

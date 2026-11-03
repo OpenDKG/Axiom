@@ -125,6 +125,8 @@ installer only after an explicit confirmation; nothing runs silently. Setup step
 - The Security page has a **Setup** action for an HTTPS JSON feed. The format is
   `{"entries":[{"sha256":"...","name":"...","verdict":"...","source":"...","updatedUtc":"..."}]}`.
   Only entries with a valid SHA-256 are accepted; the feed is evidence, not a verdict.
+- First-run setup can enable the bundled `netpetra://starter` feed: one clearly labelled EICAR
+  test entry, read from disk with no network call. Replace it with an HTTPS feed when available.
 
 ### Rules for every optional module
 
@@ -196,6 +198,10 @@ dotnet test Netpetra.sln -c Release --no-build
 
 The standalone build produces one self-contained `Netpetra.Desktop.exe` in
 `artifacts\publish\win-x64`.
+
+WPF software rendering is enabled by default because some GPU drivers leave the client area blank
+after a driver reset. Set `NETPETRA_HARDWARE_RENDER=1` before starting the app to opt in to hardware
+acceleration on a machine where it is known to work.
 
 ### Portable installation (no administrator)
 

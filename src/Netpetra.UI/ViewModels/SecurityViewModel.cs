@@ -95,6 +95,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     private CommunityFeedSettings _communitySettings = new(false, string.Empty, string.Empty);
 
+    private bool _communityConnected;
+
     private readonly DispatcherTimer _activityTimer;
 
     public SecurityViewModel()
@@ -102,6 +104,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     {
         _reputationSettings = _reputationStore.Load();
         _communitySettings = _communityStore.Load();
+        _communityConnected = IsBundledStarterAvailable();
         _blackboxModeText = _blackboxMode.GetMode();
         Modules = [];
         SeedCheckingState();
@@ -149,13 +152,30 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         ? "Hash-only lookups enabled; the API key is stored with Windows DPAPI."
         : "No external reputation lookup is enabled. Unknown is shown as unknown.";
 
-    private string CommunityStatus => _communitySettings.Enabled && !string.IsNullOrWhiteSpace(_communitySettings.Url)
-        ? "CONFIGURED"
-        : "NOT CONFIGURED";
+    private bool IsCommunityConfigured =>
+        _communitySettings.Enabled && !string.IsNullOrWhiteSpace(_communitySettings.Url);
 
-    private string CommunityDetail => _communitySettings.Enabled && !string.IsNullOrWhiteSpace(_communitySettings.Url)
-        ? "HTTPS feed configured; entries are evidence, not a verdict."
-        : "No community report is fetched, verified or published.";
+    private bool IsStarterFeed =>
+        string.Equals(_communitySettings.Url, CommunityFeedSettingsStore.StarterFeedUrl, StringComparison.OrdinalIgnoreCase);
+
+    private bool IsBundledStarterAvailable() =>
+        IsCommunityConfigured &&
+        IsStarterFeed &&
+        File.Exists(Path.Combine(AppContext.BaseDirectory, "community", "feed.json"));
+
+    private string CommunityStatus => _communityConnected
+        ? "CONNECTED"
+        : IsCommunityConfigured ? "CONFIGURED" : "NOT CONFIGURED";
+
+    private string CommunityDetail => _communityConnected
+        ? IsStarterFeed
+            ? "Bundled starter feed loaded; entries are evidence, not a verdict."
+            : "HTTPS feed loaded; entries are evidence, not a verdict."
+        : IsCommunityConfigured
+            ? IsStarterFeed
+                ? "Bundled starter feed configured; waiting for the first refresh."
+                : "HTTPS feed configured; entries are evidence, not a verdict."
+            : "No community report is fetched, verified or published.";
 
     [ObservableProperty]
     private bool _isBusy;
@@ -374,8 +394,10 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private async Task RefreshCommunityAsync()
     {
-        if (!_communitySettings.Enabled || string.IsNullOrWhiteSpace(_communitySettings.Url))
+        if (!IsCommunityConfigured)
         {
+            _communityConnected = false;
+            ReplaceCommunityModule();
             CommunityStatusText = "Not configured.";
             return;
         }
@@ -399,12 +421,16 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                     entry.Source ?? "—"));
             }
 
+            _communityConnected = true;
+            ReplaceCommunityModule();
             CommunityStatusText = $"{result.Entries.Count} entries fetched at {result.FetchedUtc:HH:mm:ss}.";
         }
         catch (Exception exception) when (exception is
             HttpRequestException or InvalidDataException or System.Text.Json.JsonException or
-            TaskCanceledException or ArgumentException)
+            TaskCanceledException or ArgumentException or FileNotFoundException)
         {
+            _communityConnected = false;
+            ReplaceCommunityModule();
             CommunityStatusText = $"Feed failed: {exception.Message}";
         }
         finally
@@ -584,15 +610,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             !_uninstaller.IsDkgInstalled,
             "Install",
             _uninstaller.IsDkgInstalled));
-        Modules.Add(new SecurityModule(
-            "Community feed",
-            CommunityStatus,
-            CommunityDetail,
-            "\uE774",
-            false,
-            true,
-            "Setup",
-            _communitySettings.Enabled || !string.IsNullOrWhiteSpace(_communitySettings.Url)));
+        Modules.Add(CreateCommunityModule());
         Modules.Add(new SecurityModule(
             "File scanning",
             "NOT ENABLED",
@@ -601,6 +619,32 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             false,
             true,
             "Scan"));
+    }
+
+    private SecurityModule CreateCommunityModule() => new(
+        "Community feed",
+        CommunityStatus,
+        CommunityDetail,
+        "\uE774",
+        _communityConnected,
+        true,
+        "Setup",
+        IsCommunityConfigured);
+
+    private void ReplaceCommunityModule()
+    {
+        for (var index = 0; index < Modules.Count; index++)
+        {
+            if (Modules[index].Name == "Community feed")
+            {
+                Modules[index] = CreateCommunityModule();
+                break;
+            }
+        }
+
+        OnPropertyChanged(nameof(StatusTitle));
+        OnPropertyChanged(nameof(StatusBadge));
+        OnPropertyChanged(nameof(StatusText));
     }
 
     private void Rebuild(OptionalModuleStatus dkg, OptionalModuleStatus blackbox)
@@ -634,15 +678,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             !_uninstaller.IsDkgInstalled,
             "Install",
             _uninstaller.IsDkgInstalled));
-        Modules.Add(new SecurityModule(
-            "Community feed",
-            CommunityStatus,
-            CommunityDetail,
-            "\uE774",
-            false,
-            true,
-            "Setup",
-            _communitySettings.Enabled || !string.IsNullOrWhiteSpace(_communitySettings.Url)));
+        Modules.Add(CreateCommunityModule());
         Modules.Add(new SecurityModule(
             "File scanning",
             "NOT ENABLED",

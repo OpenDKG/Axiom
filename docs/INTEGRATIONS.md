@@ -42,6 +42,11 @@ plaintext or logged.
 The **Community feed** row has a **Setup** action. Enter an HTTPS URL and an optional bearer token;
 the token is stored with Windows DPAPI. The feed is evidence, not a verdict.
 
+First-run setup can instead enable the bundled `netpetra://starter` feed. It reads
+`community/feed.json` next to the executable, contains one clearly labelled EICAR test entry and
+makes no network call. Replace it with an HTTPS source when one is available; the starter feed is
+not live threat intelligence.
+
 ```json
 {
   "entries": [
