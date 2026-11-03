@@ -63,7 +63,7 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
     private readonly ServicePipeClient? _client;
 
     public FirewallRulesViewModel(bool serviceMode)
-        : base("Firewall", "Owned rules read through the service · read-only", "\uE72E")
+        : base("Firewall", "Owned rules read through the local service", "\uE72E")
     {
         if (!serviceMode)
         {
@@ -100,7 +100,15 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RemoveRuleCommand))]
+    [NotifyPropertyChangedFor(nameof(NoticeText))]
+    [NotifyPropertyChangedFor(nameof(NoticeBadgeText))]
     private bool _writesEnabled;
+
+    public string NoticeText => WritesEnabled
+        ? "Rules are read through the service with the documented INetFwPolicy2 COM objects. Writes are enabled for this test session; each change requires confirmation and is audited."
+        : "Rules are read through the service with the documented INetFwPolicy2 COM objects. This session is read-only.";
+
+    public string NoticeBadgeText => WritesEnabled ? "TEST VM" : "READ-ONLY";
 
     [ObservableProperty]
     private string _writePathText = "disabled";

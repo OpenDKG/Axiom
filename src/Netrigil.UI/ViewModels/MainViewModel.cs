@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Netrigil.Contracts.Ipc;
@@ -65,6 +66,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public string StatusModeText => ConnectionSourceRegistry.IsServiceMode
         ? "Service monitor"
         : "Read-only monitor";
+
+    public string StatusLiveText => ConnectionSourceRegistry.IsServiceMode
+        ? "LIVE · SERVICE"
+        : "LIVE · READ-ONLY";
+
+    public string VersionText =>
+        $"v{typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"}";
 
     public string StatusFirewallBadgeText => FirewallWritesEnabled
         ? "Firewall writes enabled"

@@ -42,9 +42,9 @@
                      TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
             <Border Style="{StaticResource LiveBadge}">
-              <TextBlock Style="{StaticResource LiveBadgeText}" Text="LIVE · READ-ONLY" />
+              <TextBlock Style="{StaticResource LiveBadgeText}" Text="{Binding StatusLiveText}" />
             </Border>
-            <TextBlock Text="FND-005" Style="{StaticResource Caption}" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding VersionText}" Style="{StaticResource Caption}" Margin="8,0,0,0" VerticalAlignment="Center" />
           </StackPanel>
         </StackPanel>
 
