@@ -203,6 +203,48 @@ public sealed class PipeServerTests : IAsyncLifetime
         Assert.Equal(3000, snapshot.Connections.Count);
     }
 
+    [Fact]
+    public async Task Rules_query_returns_capability_and_owned_rules()
+    {
+        var rule = new ManagedRule
+        {
+            ManagedRuleId = Guid.NewGuid(),
+            OsRuleName = "Netrigil::11111111-1111-1111-1111-111111111111::OUT",
+            State = RuleState.Applied,
+            Spec = new RuleSpec
+            {
+                ManagedRuleId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                AppPath = @"C:\test.exe",
+                Direction = FirewallDirection.Outbound,
+                Action = FirewallAction.Block,
+                Profiles = FirewallProfile.All,
+                CreatedBy = "test",
+            },
+        };
+
+        var firewall = new FirewallRulesSnapshot
+        {
+            Capability = new FirewallCapabilityReport
+            {
+                Status = FirewallCapabilityStatus.Available,
+                ManagedRulesReadable = true,
+                ManagedRuleCount = 1,
+            },
+            Rules = [rule],
+        };
+
+        _host = await ServerHost.StartAsync(firewall: firewall);
+
+        var response = await SendAsync(_host.PipeName, IpcCommandTypes.RulesQuery);
+
+        Assert.True(response.Ok);
+        var result = response.Result!.Value.Deserialize<FirewallRulesSnapshot>(IpcJson.Options);
+        Assert.NotNull(result);
+        Assert.Equal(FirewallCapabilityStatus.Available, result.Capability.Status);
+        Assert.Single(result.Rules);
+        Assert.Equal(rule.OsRuleName, result.Rules[0].OsRuleName);
+    }
+
     private static async Task<IpcResponse> SendAsync(string pipeName, string command)
     {
         using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
@@ -239,7 +281,8 @@ public sealed class PipeServerTests : IAsyncLifetime
 
         public static async Task<ServerHost> StartAsync(
             string? allowedSid = null,
-            ConnectionSnapshot? snapshot = null)
+            ConnectionSnapshot? snapshot = null,
+            FirewallRulesSnapshot? firewall = null)
         {
             var pipeName = $"Netrigil.Test.{Guid.NewGuid():N}";
             var sid = allowedSid ?? WindowsIdentity.GetCurrent().User!.Value;
@@ -278,7 +321,13 @@ public sealed class PipeServerTests : IAsyncLifetime
                 ProcessCount = snapshot.ProcessCount,
             };
 
-            var server = new PipeServer(pipeName, sid, () => snapshot, () => health);
+            var server = new PipeServer(
+                pipeName,
+                sid,
+                () => snapshot,
+                () => health,
+                historyQuery: null,
+                rulesQuery: firewall is null ? null : _ => Task.FromResult(firewall));
 
             var host = new ServerHost(pipeName, server);
             await host.WaitUntilReadyAsync();

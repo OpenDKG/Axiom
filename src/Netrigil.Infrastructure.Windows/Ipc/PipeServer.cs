@@ -32,6 +32,8 @@ public sealed class PipeServer
 
     private readonly Func<HistoryQuery, CancellationToken, Task<HistoryPage>>? _historyQuery;
 
+    private readonly Func<CancellationToken, Task<FirewallRulesSnapshot>>? _rulesQuery;
+
     private readonly Action<string>? _log;
 
     public PipeServer(
@@ -40,6 +42,7 @@ public sealed class PipeServer
         Func<ConnectionSnapshot?> snapshotProvider,
         Func<ServiceHealth> healthProvider,
         Func<HistoryQuery, CancellationToken, Task<HistoryPage>>? historyQuery = null,
+        Func<CancellationToken, Task<FirewallRulesSnapshot>>? rulesQuery = null,
         Action<string>? log = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
@@ -50,6 +53,7 @@ public sealed class PipeServer
         _snapshotProvider = snapshotProvider ?? throw new ArgumentNullException(nameof(snapshotProvider));
         _healthProvider = healthProvider ?? throw new ArgumentNullException(nameof(healthProvider));
         _historyQuery = historyQuery;
+        _rulesQuery = rulesQuery;
         _log = log;
     }
 
@@ -297,6 +301,22 @@ public sealed class PipeServer
                     await WriteResultAsync(stream, envelope.Id, page, cancellationToken).ConfigureAwait(false);
                     break;
 
+                case IpcCommandTypes.RulesQuery:
+                    if (_rulesQuery is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Firewall rule query is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var firewall = await _rulesQuery(cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, firewall, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.RuleApply:
                 case IpcCommandTypes.RuleRemove:
                 case IpcCommandTypes.RuleVerify:
@@ -349,6 +369,11 @@ public sealed class PipeServer
         if (_historyQuery is not null)
         {
             commands.Add(IpcCommandTypes.HistoryQuery);
+        }
+
+        if (_rulesQuery is not null)
+        {
+            commands.Add(IpcCommandTypes.RulesQuery);
         }
 
         return new ServiceCapabilities

@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Netrigil.Contracts.Firewall;
+
 namespace Netrigil.Contracts.Ipc;
 
 /// <summary>Health snapshot returned by the service.</summary>
@@ -35,4 +37,12 @@ public sealed record ServiceCapabilities
     public required bool FirewallWrites { get; init; }
 
     public required string Milestone { get; init; }
+}
+
+/// <summary>Read-only view of the Windows Firewall capability and rules owned by Netrigil.</summary>
+public sealed record FirewallRulesSnapshot
+{
+    public required FirewallCapabilityReport Capability { get; init; }
+
+    public required IReadOnlyList<ManagedRule> Rules { get; init; }
 }
