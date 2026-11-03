@@ -89,12 +89,21 @@ Infrastructure/Service/Desktop.
 
 ## 6. UI
 
+- Navigation follows the V2 set: Overview, Connections, Applications, Events, Firewall, Files,
+  Security, Settings.
 - `ConnectionMonitor`: 1 s polling, keyed diff, raises `Updated` on success and on error (offline
   banner).
-- `HistoryViewModel`: 15m/1h/24h/7d ranges, search with 400 ms debounce, 10 s auto-refresh,
-  `history.query` over the pipe, CSV export (UTF-8 BOM, escaping).
-- In in-process mode `History` states that the service is required; no fake history.
-- The throughput chart is still a demo series (`DEMO SERIES`); bytes are FND-004.
+- `Connections` includes an explicit `COUNTRY` placeholder. No GeoIP database is loaded, so every
+  row shows an unknown country instead of inferring a flag from an IP address.
+- `Applications` groups observed executables by resolved path with live sorting by socket count.
+- `Events` is a unified timeline. Network events come from the service database; `Blocked`, `Files`,
+  `Agents` and `System` are present as filters but report that no events of that type exist in this
+  build.
+- `Files` and `Security` are gated pages: they list planned scope and disabled optional modules
+  instead of showing a fake scanner, feed or agent connection.
+- `HistoryViewModel`/`Alerts` were replaced by `EventsViewModel`; the database still stores flows.
+- The throughput chart is still a demo series (`DEMO SERIES`) with three labelled demo event
+  markers; real markers and bytes are FND-010/FND-004.
 
 ## 7. Deferred
 
@@ -104,4 +113,4 @@ Infrastructure/Service/Desktop.
 - FND-006 firewall writes, FND-007 alerts, FND-009 installer/signing.
 - Service account and installation ACL; filling `traffic_buckets`.
 
-Decisions: ADR 0001–0005.
+Decisions: ADR 0001–0006.
