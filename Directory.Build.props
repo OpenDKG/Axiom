@@ -24,6 +24,7 @@
     <Product>Netrigil</Product>
     <Copyright>Copyright (C) 2026 The Netrigil contributors</Copyright>
     <Version>0.1.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <NeutralLanguage>en</NeutralLanguage>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
