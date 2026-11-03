@@ -9,12 +9,12 @@ SDK: 10.0.403. Configuration: `Release`.
 |---|---|
 | `dotnet restore Netrigil.sln --locked-mode` | passed (also after standalone publish) |
 | `dotnet build Netrigil.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Netrigil.sln -c Release --no-build` | **107/107 passed** |
+| `dotnet test Netrigil.sln -c Release --no-build` | **126/126 passed** |
 | `dotnet publish src\Netrigil.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
 
 | Test project | Count | Notes |
 |---|---|---|
-| Core | 46 | includes deterministic rule identity |
+| Core | 65 | deterministic rule identity, spec and CIDR/port validation |
 | Contracts | 10 | IPC contract and limits |
 | Persistence | 12 | schema v2, history, firewall state and audit |
 | Infrastructure.Windows | 34 | IP Helper, pipe, COM read-only adapter |
@@ -47,6 +47,7 @@ SDK: 10.0.403. Configuration: `Release`.
   the adapter state.
 - `rules.query` over the pipe returns capability, owned rules and `WritesEnabled=false` by default.
 - `rule.apply` is rejected with `not_supported` when the gate is closed.
+- CIDR/IP and port scope validation: IPv4/IPv6 addresses, prefix bounds, wildcard-only semantics, the 32-address cap, TCP/UDP-only ports, 1–65535 single ports and ascending ranges.
 
 ## 2. End-to-end checks (executed)
 
@@ -67,6 +68,7 @@ Service in console mode + published standalone UI with `--service`.
 | E11 | Connections shows the unknown country placeholder | ✅ | `fnd006-connections.png` |
 | E12 | Throughput chart shows three labelled demo event markers | ✅ | `fnd006-overview.png` |
 | E13 | Firewall page reads capability `Available`, 0 owned rules and write path `disabled` | ✅ no rule changed | `netrigil-firewall.png` |
+| E14 | Gate-open service: Applications block buttons enabled, Firewall shows `TEST VM` and write path enabled; no click | ✅ 0 owned rules after | `netrigil-applications-writes-enabled.png`, `netrigil-firewall-writes-enabled.png` |
 
 ## 3. FND-005 definition of done
 

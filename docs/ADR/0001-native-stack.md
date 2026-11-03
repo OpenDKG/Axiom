@@ -75,7 +75,7 @@ Negative / risks:
 - The demo-versus-real distinction must be removed carefully in FND-002.
 - WPF single-file is not trimmed; size and startup are a trade-off.
 - Windows 10 LTSC is a development host, not proof of Windows 11 behaviour.
-- `RuleSpecValidator` does not cover CIDR/port ranges yet (FND-008).
+- `RuleSpecValidator` validates address/CIDR and port scopes; the scope UI and import/export remain FND-008 work.
 
 ## Alternatives considered
 
