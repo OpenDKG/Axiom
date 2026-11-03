@@ -1,6 +1,6 @@
-# Installing Netrigil (portable, per-user)
+# Installing Netpetra (portable, per-user)
 
-Netrigil can be installed for the current Windows user without administrator rights, a Windows
+Netpetra can be installed for the current Windows user without administrator rights, a Windows
 service, a driver or any firewall change. The portable installer copies one self-contained
 executable, verifies its SHA-256 and creates a Start Menu shortcut.
 
@@ -23,17 +23,17 @@ From the repository root, after a standalone build:
 Or point at an existing executable:
 
 ```powershell
-.\scripts\install-portable.ps1 -Source D:\Dist\Netrigil.Desktop.exe
+.\scripts\install-portable.ps1 -Source D:\Dist\Netpetra.Desktop.exe
 ```
 
 Defaults:
 
 | Item | Location |
 |---|---|
-| Executable | `%LOCALAPPDATA%\Programs\Netrigil\Netrigil.Desktop.exe` |
-| Manifest (version, SHA-256, time) | `%LOCALAPPDATA%\Programs\Netrigil\install.json` |
-| Start Menu shortcut | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Netrigil.lnk` |
-| Local data (created by the service) | `%LOCALAPPDATA%\Netrigil` |
+| Executable | `%LOCALAPPDATA%\Programs\Netpetra\Netpetra.Desktop.exe` |
+| Manifest (version, SHA-256, time) | `%LOCALAPPDATA%\Programs\Netpetra\install.json` |
+| Start Menu shortcut | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Netpetra.lnk` |
+| Local data (created by the service) | `%LOCALAPPDATA%\Netpetra` |
 
 Use `-NoShortcut` to skip the shortcut and `-InstallDir` to choose another directory.
 
@@ -44,8 +44,16 @@ Use `-NoShortcut` to skip the shortcut and `-InstallDir` to choose another direc
 ```
 
 This removes only the installed executable, the manifest and the shortcut. Local data is kept by
-default; add `-RemoveData` to delete the Netrigil database (`netrigil.db` and WAL sidecars). Unknown
+default; add `-RemoveData` to delete the Netpetra database (`netpetra.db` and WAL sidecars). Unknown
 files in the installation directory are never deleted.
+
+## Upgrading from an earlier build
+
+The service, Named Pipe, data directory and owned-rule prefix changed with the Netpetra rename.
+Stop the old build before starting Netpetra. The old database is not migrated automatically; to keep
+its history, copy `%LOCALAPPDATA%\Netrigil\netrigil.db` to
+`%LOCALAPPDATA%\Netpetra\netpetra.db` before the first start. Previously owned firewall rules use
+the old prefix and are not renamed; remove them with the old build before enabling writes.
 
 ## Code signing and SmartScreen
 
@@ -53,7 +61,7 @@ The current release is not code-signed. Windows SmartScreen may warn on first la
 published SHA-256 before running an archive downloaded from the internet:
 
 ```powershell
-Get-FileHash .\Netrigil-<version>-win-x64.zip -Algorithm SHA256
+Get-FileHash .\Netpetra-<version>-win-x64.zip -Algorithm SHA256
 ```
 
 Compare it with `SHA256SUMS.txt` from the same release.
@@ -64,14 +72,14 @@ Compare it with `SHA256SUMS.txt` from the same release.
 .\scripts\build-release.ps1
 ```
 
-This publishes the standalone build, packs `Netrigil.Desktop.exe` with `LICENSE`, `NOTICE`,
+This publishes the standalone build, packs `Netpetra.Desktop.exe` with `LICENSE`, `NOTICE`,
 `THIRD_PARTY_NOTICES.md` and the portable install/uninstall scripts into
-`artifacts\release\Netrigil-<version>-win-x64.zip`, and writes `SHA256SUMS.txt`. Nothing is uploaded.
+`artifacts\release\Netpetra-<version>-win-x64.zip`, and writes `SHA256SUMS.txt`. Nothing is uploaded.
 
 From an extracted release archive:
 
 ```powershell
-.\install-portable.ps1 -Source .\Netrigil.Desktop.exe
+.\install-portable.ps1 -Source .\Netpetra.Desktop.exe
 ```
 
 ## What the portable install does not do

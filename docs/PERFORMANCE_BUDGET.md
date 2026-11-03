@@ -25,14 +25,14 @@ The numbers below are measurements from the development host, not guarantees. Re
   value is a share of the whole machine.
 - Memory: process working set, peak over the samples.
 - Command: `.\scripts\measure-performance.ps1 -Seconds 60 -IntervalSeconds 2`.
-- Raw CSV: `artifacts\performance\netrigil-<timestamp>.csv` (gitignored).
+- Raw CSV: `artifacts\performance\netpetra-<timestamp>.csv` (gitignored).
 
 ## Measured (2026-11-03)
 
 | Process | Average CPU | Peak working set |
 |---|---|---|
-| `Netrigil.Service` (console, polling 1 s, SQLite writer) | **0.35%** | **78.6 MB** |
-| `Netrigil.Desktop` (UI, service mode, ~300 sockets) | **0.47%** | **229.2 MB** |
+| `Netpetra.Service` (console, polling 1 s, SQLite writer) | **0.35%** | **78.6 MB** |
+| `Netpetra.Desktop` (UI, service mode, ~300 sockets) | **0.47%** | **229.2 MB** |
 
 Interpretation:
 

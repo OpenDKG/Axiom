@@ -1,6 +1,6 @@
 # Accessibility and keyboard
 
-Netrigil is a desktop WPF application. The interface uses a high-contrast dark/light palette,
+Netpetra is a desktop WPF application. The interface uses a high-contrast dark/light palette,
 visible keyboard focus and screen-reader names for the main controls.
 
 ## Keyboard shortcuts

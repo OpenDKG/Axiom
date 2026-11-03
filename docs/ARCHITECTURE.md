@@ -1,4 +1,4 @@
-# Architecture — Netrigil (FND-005)
+# Architecture — Netpetra (FND-005)
 
 Current state: read-only inventory in the service, a local Named Pipe, SQLite history, and a UI that
 runs either in-process or through the service. FND-004 (ETW bytes) is deferred because it requires
@@ -8,21 +8,21 @@ elevation.
 
 ```text
 ┌────────────────────────────────────────────────────────┐
-│ Netrigil.Desktop (WinExe, asInvoker)              │
+│ Netpetra.Desktop (WinExe, asInvoker)              │
 │ chooses the source: in-process or service              │
 └───────────────┬────────────────────────────────────────┘
                 │
 ┌───────────────▼────────────────────────────────────────┐
-│ Netrigil.UI (WPF library, Contracts only)         │
+│ Netpetra.UI (WPF library, Contracts only)         │
 │ Live/Apps/History/Overview · ConnectionMonitor         │
 └───────┬──────────────────────────────┬─────────────────┘
         │ IConnectionSnapshotSource    │ ServicePipeClient
 ┌───────▼──────────────────┐    ┌──────▼──────────────────────┐
-│ Infrastructure.Windows   │    │ \\.\pipe\Netrigil.…    │
+│ Infrastructure.Windows   │    │ \\.\pipe\Netpetra.…    │
 │ IP Helper · process      │    └──────┬──────────────────────┘
 │ identity · PipeServer    │           │
 └──────────────────────────┘    ┌──────▼──────────────────────┐
-                                │ Netrigil.Service       │
+                                │ Netpetra.Service       │
                                 │ MonitoringWorker → cache    │
                                 │ HistoryWriter → SQLite      │
                                 │ PipeServerWorker            │
@@ -70,7 +70,7 @@ Infrastructure/Service/Desktop.
 
 ## 5. SQLite history (FND-005)
 
-- Path: `NETRIGIL_DATA_DIR` → otherwise `%LOCALAPPDATA%` (interactive process) or
+- Path: `NETPETRA_DATA_DIR` → otherwise `%LOCALAPPDATA%` (interactive process) or
   `%ProgramData%` (service).
 - WAL, `foreign_keys=ON`, `busy_timeout=5000`, `synchronous=NORMAL`.
 - Tables:
@@ -93,9 +93,9 @@ Infrastructure/Service/Desktop.
   documented `INetFwPolicy2`/`INetFwRule` COM objects on a dedicated STA thread.
 - Read-only operations: capability probe, owned-rule listing and verification. They need no admin
   on a normal host.
-- Write operations: apply and remove, limited to exact `Netrigil::{id}::{OUT|IN}` names. They are
-  refused unless `NETRIGIL_ENABLE_FIREWALL_WRITES=1` and
-  `NETRIGIL_FIREWALL_WRITE_CONFIRM=yes` are both set on the service.
+- Write operations: apply and remove, limited to exact `Netpetra::{id}::{OUT|IN}` names. They are
+  refused unless `NETPETRA_ENABLE_FIREWALL_WRITES=1` and
+  `NETPETRA_FIREWALL_WRITE_CONFIRM=yes` are both set on the service.
 - `FirewallRuleCoordinator` serialises changes and runs
   validate → pending + audit → apply → read-back → applied/failed + audit.
 - SQLite schema v2 adds `firewall_rules` and `rule_audit`; the audit actor is the verified pipe

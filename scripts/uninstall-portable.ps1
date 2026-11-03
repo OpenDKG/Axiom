@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Removes the per-user portable Netrigil installation.
+    Removes the per-user portable Netpetra installation.
 
 .DESCRIPTION
-    Removes only the files installed by install-portable.ps1 (Netrigil.Desktop.exe, install.json)
+    Removes only the files installed by install-portable.ps1 (Netpetra.Desktop.exe, install.json)
     and the Start Menu shortcut. User data is kept unless -RemoveData is specified. No administrator
     rights are required and no Windows service or firewall rule is touched.
 
 .PARAMETER InstallDir
-    Installation directory. Defaults to %LOCALAPPDATA%\Programs\Netrigil.
+    Installation directory. Defaults to %LOCALAPPDATA%\Programs\Netpetra.
 
 .PARAMETER RemoveData
-    Also remove the local Netrigil database (netrigil.db and WAL sidecars). Unknown files are kept.
+    Also remove the local Netpetra database (netpetra.db and WAL sidecars). Unknown files are kept.
 
 .EXAMPLE
     .\scripts\uninstall-portable.ps1
@@ -21,25 +21,25 @@
     .\scripts\uninstall-portable.ps1 -RemoveData
 #>
 param(
-    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Netrigil"),
+    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Netpetra"),
     [switch]$RemoveData
 )
 
 $ErrorActionPreference = "Stop"
 
-if (Get-Process -Name "Netrigil.Desktop" -ErrorAction SilentlyContinue) {
-    throw "Netrigil is running. Close it before uninstalling."
+if (Get-Process -Name "Netpetra.Desktop" -ErrorAction SilentlyContinue) {
+    throw "Netpetra is running. Close it before uninstalling."
 }
 
 $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
-$shortcutPath = Join-Path $startMenu "Netrigil.lnk"
+$shortcutPath = Join-Path $startMenu "Netpetra.lnk"
 if (Test-Path $shortcutPath) {
     Remove-Item $shortcutPath -Force
     Write-Host "Removed shortcut: $shortcutPath"
 }
 
 $installedFiles = @(
-    (Join-Path $InstallDir "Netrigil.Desktop.exe"),
+    (Join-Path $InstallDir "Netpetra.Desktop.exe"),
     (Join-Path $InstallDir "install.json")
 )
 
@@ -63,8 +63,8 @@ if (Test-Path $InstallDir) {
 }
 
 if ($RemoveData) {
-    $dataDir = Join-Path $env:LOCALAPPDATA "Netrigil"
-    foreach ($name in @("netrigil.db", "netrigil.db-wal", "netrigil.db-shm")) {
+    $dataDir = Join-Path $env:LOCALAPPDATA "Netpetra"
+    foreach ($name in @("netpetra.db", "netpetra.db-wal", "netpetra.db-shm")) {
         $path = Join-Path $dataDir $name
         if (Test-Path $path) {
             Remove-Item $path -Force
@@ -81,7 +81,7 @@ if ($RemoveData) {
     }
 }
 else {
-    Write-Host "Local data was kept at $(Join-Path $env:LOCALAPPDATA 'Netrigil'). Use -RemoveData to delete it."
+    Write-Host "Local data was kept at $(Join-Path $env:LOCALAPPDATA 'Netpetra'). Use -RemoveData to delete it."
 }
 
-Write-Host "Netrigil portable installation removed." -ForegroundColor Green
+Write-Host "Netpetra portable installation removed." -ForegroundColor Green

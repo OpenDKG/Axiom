@@ -51,7 +51,7 @@ Rules:
 - Each module keeps its own `LICENSE`, `NOTICE` and third-party notices.
 - The GPL desktop/service may reference a permissively licensed module, but the module must not
   depend on GPL-only code.
-- Shared protocol/schema definitions should live in `Netrigil.Contracts` under GPL-3.0-or-later
+- Shared protocol/schema definitions should live in `Netpetra.Contracts` under GPL-3.0-or-later
   unless they are deliberately extracted into a permissive package with maintainer approval.
 
 ## Reference projects and third-party products

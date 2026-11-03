@@ -3,7 +3,7 @@
     Publishes the standalone (self-contained) Windows x64 shell.
 
 .DESCRIPTION
-    Produces a single Netrigil.UI.exe that runs without a .NET runtime installed.
+    Produces a single Netpetra.Desktop.exe that runs without a .NET runtime installed.
     WPF does not support trimming, so PublishTrimmed stays false. The output lands in
     artifacts\publish\win-x64 by default.
 
@@ -14,7 +14,7 @@
     .\scripts\publish-standalone.ps1
 
 .EXAMPLE
-    .\scripts\publish-standalone.ps1 -Output D:\Dist\Netrigil
+    .\scripts\publish-standalone.ps1 -Output D:\Dist\Netpetra
 #>
 param(
     [string]$Output
@@ -22,7 +22,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $root "src\Netrigil.Desktop\Netrigil.Desktop.csproj"
+$project = Join-Path $root "src\Netpetra.Desktop\Netpetra.Desktop.csproj"
 
 $arguments = @(
     "publish", $project,
@@ -55,7 +55,7 @@ if (-not $Output) {
     $Output = Join-Path $root "artifacts\publish\win-x64"
 }
 
-$exe = Join-Path $Output "Netrigil.Desktop.exe"
+$exe = Join-Path $Output "Netpetra.Desktop.exe"
 if (-not (Test-Path $exe)) { throw "Expected executable not found: $exe" }
 
 $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)

@@ -38,10 +38,10 @@ function Resolve-Dotnet {
 }
 
 $dotnet = Resolve-Dotnet
-$serviceProject = Join-Path $root "src\Netrigil.Service\Netrigil.Service.csproj"
-$desktopProject = Join-Path $root "src\Netrigil.Desktop\Netrigil.Desktop.csproj"
-$serviceLog = Join-Path $env:TEMP "netrigil-service.log"
-$serviceError = Join-Path $env:TEMP "netrigil-service.err.log"
+$serviceProject = Join-Path $root "src\Netpetra.Service\Netpetra.Service.csproj"
+$desktopProject = Join-Path $root "src\Netpetra.Desktop\Netpetra.Desktop.csproj"
+$serviceLog = Join-Path $env:TEMP "netpetra-service.log"
+$serviceError = Join-Path $env:TEMP "netpetra-service.err.log"
 
 Write-Host "Starting the service (console mode)..." -ForegroundColor Cyan
 $service = Start-Process -FilePath $dotnet `
@@ -51,7 +51,7 @@ $service = Start-Process -FilePath $dotnet `
 try {
     $ready = $false
     for ($i = 0; $i -lt 60; $i++) {
-        if (Test-Path "\\.\pipe\Netrigil.Service.v1") { $ready = $true; break }
+        if (Test-Path "\\.\pipe\Netpetra.Service.v1") { $ready = $true; break }
         if ($service.HasExited) { break }
         Start-Sleep -Milliseconds 250
     }

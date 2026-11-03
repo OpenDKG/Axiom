@@ -32,7 +32,7 @@ referencing only `Contracts`. The boundary is enforced by project references, no
 
 ### 3. Demo data isolated in the UI and explicitly labelled
 
-The deterministic generator lives in `Netrigil.UI/Services`, uses a fixed seed and documentation
+The deterministic generator lives in `Netpetra.UI/Services`, uses a fixed seed and documentation
 IP ranges, and is labelled `DEMO DATA`. The UI never renders an unverified "Protected" state.
 
 ### 4. No chart library in FND-001

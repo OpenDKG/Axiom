@@ -1,12 +1,12 @@
 # Trademarks
 
-**Netrigil** is the name used by this project (repository `netrigil`). Names, logos and visual
+**Netpetra** is the name used by this project (repository `netpetra`). Names, logos and visual
 identity are not granted by the source-code license.
 
 The GNU GPL-3.0-or-later gives you the right to use, study, share and modify the **code**. It does
 not give you the right to:
 
-- present a modified build as an official Netrigil release,
+- present a modified build as an official Netpetra release,
 - use the project names or logos in a way that implies endorsement or partnership,
 - register confusingly similar names or logos.
 

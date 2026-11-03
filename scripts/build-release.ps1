@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Builds the portable Netrigil release archive and checksum file.
+    Builds the portable Netpetra release archive and checksum file.
 
 .DESCRIPTION
-    Publishes the standalone Windows x64 build, packs Netrigil.Desktop.exe with the license and
+    Publishes the standalone Windows x64 build, packs Netpetra.Desktop.exe with the license and
     notice files, and writes SHA256SUMS.txt. No network upload, signing or installer is performed.
 
 .PARAMETER Version
@@ -55,17 +55,17 @@ if (-not $OutputDir) {
 }
 
 $dotnet = Resolve-Dotnet
-$project = Join-Path $root "src\Netrigil.Desktop\Netrigil.Desktop.csproj"
+$project = Join-Path $root "src\Netpetra.Desktop\Netpetra.Desktop.csproj"
 
-Write-Host "Publishing Netrigil $Version (win-x64)..." -ForegroundColor Cyan
+Write-Host "Publishing Netpetra $Version (win-x64)..." -ForegroundColor Cyan
 & $dotnet publish $project -c Release -p:PublishProfile=win-x64-selfcontained
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
 
-$exe = Join-Path $root "artifacts\publish\win-x64\Netrigil.Desktop.exe"
+$exe = Join-Path $root "artifacts\publish\win-x64\Netpetra.Desktop.exe"
 if (-not (Test-Path $exe)) { throw "Published executable not found: $exe" }
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-$zipName = "Netrigil-$Version-win-x64.zip"
+$zipName = "Netpetra-$Version-win-x64.zip"
 $zipPath = Join-Path $OutputDir $zipName
 
 $files = @(

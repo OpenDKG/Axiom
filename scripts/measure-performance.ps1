@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Measures CPU and working-set usage of the Netrigil service and UI.
+    Measures CPU and working-set usage of the Netpetra service and UI.
 
 .DESCRIPTION
     Starts the built service in console mode and the published UI with --service, warms up, samples
@@ -27,20 +27,20 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$serviceExe = Join-Path $root "src\Netrigil.Service\bin\Release\net10.0-windows\Netrigil.Service.exe"
-$uiExe = Join-Path $root "artifacts\publish\win-x64\Netrigil.Desktop.exe"
+$serviceExe = Join-Path $root "src\Netpetra.Service\bin\Release\net10.0-windows\Netpetra.Service.exe"
+$uiExe = Join-Path $root "artifacts\publish\win-x64\Netpetra.Desktop.exe"
 
 if (-not (Test-Path $serviceExe)) { throw "Service build not found: $serviceExe. Run dotnet build first." }
 if (-not (Test-Path $uiExe)) { throw "Published UI not found: $uiExe. Run .\scripts\publish-standalone.ps1 first." }
-if (Get-Process -Name "Netrigil.Desktop","Netrigil.Service" -ErrorAction SilentlyContinue) {
-    throw "Netrigil is already running. Close it before measuring."
+if (Get-Process -Name "Netpetra.Desktop","Netpetra.Service" -ErrorAction SilentlyContinue) {
+    throw "Netpetra is already running. Close it before measuring."
 }
 
 $outputDir = Join-Path $root "artifacts\performance"
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$csvPath = Join-Path $outputDir "netrigil-$stamp.csv"
-$logPath = Join-Path $env:TEMP "netrigil-performance-service.log"
+$csvPath = Join-Path $outputDir "netpetra-$stamp.csv"
+$logPath = Join-Path $env:TEMP "netpetra-performance-service.log"
 
 $service = $null
 $ui = $null
@@ -51,7 +51,7 @@ try {
 
     $ready = $false
     for ($i = 0; $i -lt 60; $i++) {
-        if (Test-Path "\\.\pipe\Netrigil.Service.v1") { $ready = $true; break }
+        if (Test-Path "\\.\pipe\Netpetra.Service.v1") { $ready = $true; break }
         if ($service.HasExited) { break }
         Start-Sleep -Milliseconds 250
     }

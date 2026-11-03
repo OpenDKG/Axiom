@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping with Netrigil. The project is pre-1.0 and moves one milestone
+Thanks for helping with Netpetra. The project is pre-1.0 and moves one milestone
 at a time; small, verifiable changes are preferred over broad rewrites.
 
 ## License of contributions
@@ -19,7 +19,7 @@ Do not copy GPL-incompatible or unlicensed code into the repository.
 
 - Read `README.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY_MODEL.md` and the current milestone in
   `docs/TEST_MATRIX.md`.
-- Keep the dependency rules: `Netrigil.UI` references **only** `Contracts`; Windows API code
+- Keep the dependency rules: `Netpetra.UI` references **only** `Contracts`; Windows API code
   belongs in `Infrastructure.Windows`; only `Service` may eventually write firewall rules.
 - Do not add telemetry, accounts, external lookups or network calls to the Standard path.
 - Do not change Windows Firewall, BFE, Defender or audit policy outside an isolated VM with explicit
@@ -28,9 +28,9 @@ Do not copy GPL-incompatible or unlicensed code into the repository.
 ## Build and test
 
 ```powershell
-dotnet restore Netrigil.sln --locked-mode
-dotnet build Netrigil.sln -c Release --no-restore
-dotnet test Netrigil.sln -c Release --no-build
+dotnet restore Netpetra.sln --locked-mode
+dotnet build Netpetra.sln -c Release --no-restore
+dotnet test Netpetra.sln -c Release --no-build
 ```
 
 The repository builds with warnings as errors, nullable enabled and pinned package versions. If you

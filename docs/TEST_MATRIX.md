@@ -1,4 +1,4 @@
-# Test matrix — Netrigil (FND-005)
+# Test matrix — Netpetra (FND-005)
 
 Date: 2026-11-03. Host: Windows 10 IoT Enterprise LTSC 2021, 10.0.19044, x64.
 SDK: 10.0.403. Configuration: `Release`.
@@ -7,10 +7,10 @@ SDK: 10.0.403. Configuration: `Release`.
 
 | Command | Result |
 |---|---|
-| `dotnet restore Netrigil.sln --locked-mode` | passed (also after standalone publish) |
-| `dotnet build Netrigil.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Netrigil.sln -c Release --no-build` | **126/126 passed** |
-| `dotnet publish src\Netrigil.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
+| `dotnet restore Netpetra.sln --locked-mode` | passed (also after standalone publish) |
+| `dotnet build Netpetra.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
+| `dotnet test Netpetra.sln -c Release --no-build` | **126/126 passed** |
+| `dotnet publish src\Netpetra.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
 
 | Test project | Count | Notes |
 |---|---|---|
@@ -67,9 +67,9 @@ Service in console mode + published standalone UI with `--service`.
 | E10 | Files and Security pages state that modules are disabled | ✅ no fake scanner/feed | `fnd006-files.png`, `fnd006-security.png` |
 | E11 | Connections shows the unknown country placeholder | ✅ | `fnd006-connections.png` |
 | E12 | Throughput chart shows three labelled demo event markers | ✅ | `fnd006-overview.png` |
-| E13 | Firewall page reads capability `Available`, 0 owned rules and write path `disabled` | ✅ no rule changed | `netrigil-firewall.png` |
-| E14 | Gate-open service: Applications block buttons enabled, Firewall shows `TEST VM` and write path enabled; no click | ✅ 0 owned rules after | `netrigil-applications-writes-enabled.png`, `netrigil-firewall-writes-enabled.png` |
-| E15 | Advanced scope panel: protocol, ports, CIDR/addresses and profile checkboxes; block buttons disabled with the gate closed | ✅ no rule written | `netrigil-applications-scope-expanded.png` |
+| E13 | Firewall page reads capability `Available`, 0 owned rules and write path `disabled` | ✅ no rule changed | `netpetra-firewall.png` |
+| E14 | Gate-open service: Applications block buttons enabled, Firewall shows `TEST VM` and write path enabled; no click | ✅ 0 owned rules after | `netpetra-applications-writes-enabled.png`, `netpetra-firewall-writes-enabled.png` |
+| E15 | Advanced scope panel: protocol, ports, CIDR/addresses and profile checkboxes; block buttons disabled with the gate closed | ✅ no rule written | `netpetra-applications-scope-expanded.png` |
 
 ## 3. FND-005 definition of done
 
@@ -92,7 +92,7 @@ Service in console mode + published standalone UI with `--service`.
 | Requirement | Status |
 |---|---|
 | COM adapter with STA executor | ✅ read-only paths tested |
-| Exact `Netrigil::{id}::{OUT|IN}` names, no wildcard | ✅ |
+| Exact `Netpetra::{id}::{OUT|IN}` names, no wildcard | ✅ |
 | Two-variable write gate | ✅ tested refusal |
 | Coordinator pending/applied/failed + audit | ✅ fake adapter tests |
 | UI block/unblock/remove | ✅ code; disabled unless `WritesEnabled=true` |
@@ -147,8 +147,8 @@ Therefore:
 ## 8. Reproduction
 
 ```powershell
-dotnet restore Netrigil.sln --locked-mode
-dotnet build Netrigil.sln -c Release --no-restore
-dotnet test Netrigil.sln -c Release --no-build
+dotnet restore Netpetra.sln --locked-mode
+dotnet build Netpetra.sln -c Release --no-restore
+dotnet test Netpetra.sln -c Release --no-build
 .\scripts\run-service.ps1
 ```
