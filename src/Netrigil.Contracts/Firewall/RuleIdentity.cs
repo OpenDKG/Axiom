@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Security.Cryptography;
 using System.Text;
-using Netrigil.Contracts.Firewall;
-
-namespace Netrigil.Core.Firewall;
+namespace Netrigil.Contracts.Firewall;
 
 /// <summary>
 /// Deterministic identity for an app-scoped rule. The same executable path and direction always

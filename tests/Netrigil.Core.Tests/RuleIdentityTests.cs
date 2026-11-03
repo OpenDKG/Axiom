@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Netrigil.Contracts.Firewall;
-using Netrigil.Core.Firewall;
 using Xunit;
 
 namespace Netrigil.Core.Tests;
