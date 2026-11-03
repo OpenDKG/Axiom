@@ -9,13 +9,13 @@ SDK: 10.0.403. Configuration: `Release`.
 |---|---|
 | `dotnet restore Netpetra.sln --locked-mode` | passed (also after standalone publish) |
 | `dotnet build Netpetra.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Netpetra.sln -c Release --no-build` | **133/133 passed** |
+| `dotnet test Netpetra.sln -c Release --no-build` | **135/135 passed** |
 | `dotnet publish src\Netpetra.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
 
 | Test project | Count | Notes |
 |---|---|---|
 | Core | 65 | deterministic rule identity, spec and CIDR/port validation |
-| Contracts | 17 | IPC contract, limits, optional-module probe and bounded history |
+| Contracts | 19 | IPC contract, limits, optional-module probe, bounded history and local file hashing |
 | Persistence | 12 | schema v2, history, firewall state and audit |
 | Infrastructure.Windows | 34 | IP Helper, pipe, COM read-only adapter |
 | Service | 5 | coordinator with a fake adapter |
@@ -56,6 +56,7 @@ SDK: 10.0.403. Configuration: `Release`.
 - A non-loopback endpoint returns `UNAVAILABLE` without sending a request.
 - The probe never installs, starts or controls a module.
 - The activity strip uses a 30-sample bounded history; a test confirms the oldest sample is dropped.
+- Local file scan: known SHA-256 value and oversized-file skip are tested; hashes never leave the process.
 
 ## 2. End-to-end checks (executed)
 
