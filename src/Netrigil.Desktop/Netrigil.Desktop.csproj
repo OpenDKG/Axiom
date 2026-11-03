@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Netrigil.Desktop</RootNamespace>
+    <AssemblyName>Netrigil.Desktop</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <StartupObject>Netrigil.Desktop.Program</StartupObject>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <!--
+    Composition root: the only executable that references Windows adapters.
+    Netrigil.UI stays free of Win32/COM/P-Invoke references.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Netrigil.UI\Netrigil.UI.csproj" />
+    <ProjectReference Include="..\Netrigil.Infrastructure.Windows\Netrigil.Infrastructure.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      PublishSingleFile adds the ILLink task package during publish restore. Referencing it here
+      keeps packages.lock.json identical for normal restore and standalone publish.
+    -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

@@ -20,9 +20,9 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 
-    <Company>LocalFirewall</Company>
-    <Product>LocalFirewall</Product>
-    <Copyright>Copyright (C) 2026 The VigilMesh/LocalFirewall contributors</Copyright>
+    <Company>Netrigil</Company>
+    <Product>Netrigil</Product>
+    <Copyright>Copyright (C) 2026 The Netrigil contributors</Copyright>
     <Version>0.1.0</Version>
     <NeutralLanguage>en</NeutralLanguage>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
