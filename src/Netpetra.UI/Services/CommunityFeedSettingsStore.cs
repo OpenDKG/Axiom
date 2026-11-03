@@ -11,7 +11,7 @@ public sealed record CommunityFeedSettings(bool Enabled, string Url, string Toke
 /// <summary>Stores the optional feed URL and protects the optional token with Windows DPAPI.</summary>
 public sealed class CommunityFeedSettingsStore
 {
-    public const string StarterFeedUrl = "https://raw.githubusercontent.com/a-51-50/Netpetra/main/community/feed.json";
+    public const string StarterFeedUrl = "netpetra://starter";
 
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
