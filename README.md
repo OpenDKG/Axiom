@@ -199,12 +199,16 @@ The standalone build produces one self-contained `Netpetra.Desktop.exe` in
 ### Portable installation (no administrator)
 
 ```powershell
-.\scripts\install-portable.ps1
+irm https://raw.githubusercontent.com/a-51-50/Netpetra/main/scripts/install-from-github.ps1 | iex
 ```
 
-Installs the executable to `%LOCALAPPDATA%\Programs\Netpetra`, verifies its SHA-256 and creates a
-Start Menu shortcut. Remove it with `.\scripts\uninstall-portable.ps1`; local data stays unless
-`-RemoveData` is used. No service, no firewall rule and no elevation are involved. Details:
+The bootstrap downloads the latest release, verifies `SHA256SUMS.txt`, installs under
+`%LOCALAPPDATA%\Programs\Netpetra` and starts the app. The desktop starts the bundled local service
+automatically; no Windows service registration, firewall change or elevation is involved. The first
+run shows a setup wizard with component checkboxes, a warning and an explicit Apply/terms step.
+
+You can also run `.\scripts\install-portable.ps1` from a checkout. Remove with
+`.\scripts\uninstall-portable.ps1`; local data stays unless `-RemoveData` is used. Details:
 [`docs/INSTALL.md`](docs/INSTALL.md).
 
 ## Repository layout
