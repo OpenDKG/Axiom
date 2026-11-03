@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Netpetra.UI</RootNamespace>
+    <AssemblyName>Netpetra.UI</AssemblyName>
+    <!-- Binding-only view model properties cannot be static; CA1822 is noise for MVVM. -->
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    Dependency rule (handoff 4): the UI depends on Contracts only.
+    It must never reference Infrastructure.Windows, Service or Persistence.
+    The Desktop host is the executable composition root.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Netpetra.Contracts\Netpetra.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+  </ItemGroup>
+
+</Project>

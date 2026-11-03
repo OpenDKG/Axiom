@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Netpetra.Desktop</RootNamespace>
+    <AssemblyName>Netpetra.Desktop</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <StartupObject>Netpetra.Desktop.Program</StartupObject>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <!--
+    Composition root: the only executable that references Windows adapters.
+    Netpetra.UI stays free of Win32/COM/P-Invoke references.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Netpetra.UI\Netpetra.UI.csproj" />
+    <ProjectReference Include="..\Netpetra.Infrastructure.Windows\Netpetra.Infrastructure.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      PublishSingleFile adds the ILLink task package during publish restore. Referencing it here
+      keeps packages.lock.json identical for normal restore and standalone publish.
+    -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

@@ -1,11 +1,11 @@
-# Security model — Netrigil (FND-005)
+# Security model — Netpetra (FND-005)
 
 ## 1. Current trust boundary
 
 | Process | Rights | What it does |
 |---|---|---|
-| `Netrigil.Desktop.exe` | `asInvoker` | UI; reads IP Helper or calls the pipe |
-| `Netrigil.Service.exe` | `asInvoker` (console mode) | polls IP Helper, writes SQLite, serves the pipe |
+| `Netpetra.Desktop.exe` | `asInvoker` | UI; reads IP Helper or calls the pipe |
+| `Netpetra.Service.exe` | `asInvoker` (console mode) | polls IP Helper, writes SQLite, serves the pipe |
 
 In production the service would run under a service account (FND-009); the UI stays unprivileged.
 There are no COM/WFP/ETW/netsh calls, no firewall writes and no outbound network communication.
@@ -15,7 +15,7 @@ in the service.
 
 ## 2. Named Pipe protection
 
-- `\\.\pipe\Netrigil.Service.v1`.
+- `\\.\pipe\Netpetra.Service.v1`.
 - Explicit DACL: allow the service account + one SID; deny `Network`/`Anonymous`/`Guests`.
 - The client process SID is read from its token after connect; a mismatch closes the connection.
 - Limits: request 256 KiB, response 4 MiB, 100 requests/s, 30 s idle, 4 instances.
@@ -25,8 +25,8 @@ in the service.
 
 ## 3. Data at rest (FND-005)
 
-- Database: `%LOCALAPPDATA%\Netrigil\netrigil.db` (per-user/console mode) or
-  `%ProgramData%\Netrigil\` (installed service). `NETRIGIL_DATA_DIR` overrides the path.
+- Database: `%LOCALAPPDATA%\Netpetra\netpetra.db` (per-user/console mode) or
+  `%ProgramData%\Netpetra\` (installed service). `NETPETRA_DATA_DIR` overrides the path.
 - Only **connection metadata** is stored: process name/path, PID, protocol, local/remote endpoint,
   state, direction, quality, first/last seen.
 - No payload, TLS content, DNS queries, tokens or credentials are stored.
@@ -34,16 +34,16 @@ in the service.
 - SQLite WAL; `foreign_keys=ON`; `integrity_check` at startup.
 - A corrupt file is moved to `.corrupt-<timestamp>` (not deleted) and the database is recreated.
 - CSV export writes to a path the user explicitly selects; UTF-8 BOM; escaping.
-- The installer (FND-009) must set an explicit ACL on `%ProgramData%\Netrigil\`; development
+- The installer (FND-009) must set an explicit ACL on `%ProgramData%\Netpetra\`; development
   uses per-user LocalAppData.
 
 ## 4. Firewall write gate (FND-006)
 
 - `WindowsFirewallPolicyAdapter` uses the documented COM policy/rule objects on a dedicated STA
   thread. Read-only listing and verification are enabled; writes are gated.
-- Both variables must be present on the service process: `NETRIGIL_ENABLE_FIREWALL_WRITES=1` and
-  `NETRIGIL_FIREWALL_WRITE_CONFIRM=yes`. A normal build starts with both unset.
-- Only exact `Netrigil::{id}::{OUT|IN}` names are created or removed; no wildcard, prefix or group
+- Both variables must be present on the service process: `NETPETRA_ENABLE_FIREWALL_WRITES=1` and
+  `NETPETRA_FIREWALL_WRITE_CONFIRM=yes`. A normal build starts with both unset.
+- Only exact `Netpetra::{id}::{OUT|IN}` names are created or removed; no wildcard, prefix or group
   deletion exists.
 - The coordinator writes pending/applied/failed state and an audit row (actor SID, time, action,
   result, spec, error) in the same SQLite transaction as the rule state.

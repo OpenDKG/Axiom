@@ -20,9 +20,9 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 
-    <Company>Netrigil</Company>
-    <Product>Netrigil</Product>
-    <Copyright>Copyright (C) 2026 The Netrigil contributors</Copyright>
+    <Company>Netpetra</Company>
+    <Product>Netpetra</Product>
+    <Copyright>Copyright (C) 2026 The Netpetra contributors</Copyright>
     <Version>0.2.1</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <NeutralLanguage>en</NeutralLanguage>

@@ -1,10 +1,10 @@
-# Netrigil
+# Netpetra
 
 **Open-Source Firewall & Security Monitor**
 
-**Repository:** https://github.com/a-51-50/netrigil · **License:** GPL-3.0-or-later
+**Repository:** https://github.com/a-51-50/Netpetra · **License:** GPL-3.0-or-later
 
-Netrigil is a local, offline Windows network monitor and firewall policy manager. It shows
+Netpetra is a local, offline Windows network monitor and firewall policy manager. It shows
 which applications use the network, which endpoints they talk to, and what happened over time. It
 manages only its own rules in the built-in Windows Firewall; Windows remains the enforcement
 authority. There is no account, no cloud, no advertising and no telemetry.
@@ -33,7 +33,7 @@ authority. There is no account, no cloud, no advertising and no telemetry.
 
 - Rules are path-scoped and bound to a direction and Windows network profile.
 - Every rule owned by the application has a deterministic name,
-  `Netrigil::{rule-id}::{OUT|IN}`, so it can be found and removed without touching anyone
+  `Netpetra::{rule-id}::{OUT|IN}`, so it can be found and removed without touching anyone
   else's rules.
 - A rule is reported as applied only after an OS read-back of the created rule; an external block or
   Group Policy remains authoritative.
@@ -168,9 +168,9 @@ Windows Service
 ## Building and running
 
 ```powershell
-dotnet restore Netrigil.sln --locked-mode
-dotnet build Netrigil.sln -c Release --no-restore
-dotnet test Netrigil.sln -c Release --no-build
+dotnet restore Netpetra.sln --locked-mode
+dotnet build Netpetra.sln -c Release --no-restore
+dotnet test Netpetra.sln -c Release --no-build
 .\scripts\publish-standalone.ps1
 ```
 
@@ -179,10 +179,10 @@ dotnet test Netrigil.sln -c Release --no-build
 .\scripts\run-service.ps1
 
 # in-process read-only mode
-.\artifacts\publish\win-x64\Netrigil.Desktop.exe
+.\artifacts\publish\win-x64\Netpetra.Desktop.exe
 ```
 
-The standalone build produces one self-contained `Netrigil.Desktop.exe` in
+The standalone build produces one self-contained `Netpetra.Desktop.exe` in
 `artifacts\publish\win-x64`.
 
 ### Portable installation (no administrator)
@@ -191,7 +191,7 @@ The standalone build produces one self-contained `Netrigil.Desktop.exe` in
 .\scripts\install-portable.ps1
 ```
 
-Installs the executable to `%LOCALAPPDATA%\Programs\Netrigil`, verifies its SHA-256 and creates a
+Installs the executable to `%LOCALAPPDATA%\Programs\Netpetra`, verifies its SHA-256 and creates a
 Start Menu shortcut. Remove it with `.\scripts\uninstall-portable.ps1`; local data stays unless
 `-RemoveData` is used. No service, no firewall rule and no elevation are involved. Details:
 [`docs/INSTALL.md`](docs/INSTALL.md).
@@ -200,13 +200,13 @@ Start Menu shortcut. Remove it with `.\scripts\uninstall-portable.ps1`; local da
 
 ```text
 src/
-  Netrigil.Contracts/              # DTOs, IPC and history contracts
-  Netrigil.Core/                   # domain rules and firewall port
-  Netrigil.Infrastructure.Windows/ # IP Helper, process identity, Named Pipe server
-  Netrigil.Persistence/            # SQLite schema, queries, retention
-  Netrigil.Service/                # Worker host, monitoring, history writer, pipe
-  Netrigil.UI/                     # WPF library: views, view models, theme
-  Netrigil.Desktop/                # composition root / the only UI executable
+  Netpetra.Contracts/              # DTOs, IPC and history contracts
+  Netpetra.Core/                   # domain rules and firewall port
+  Netpetra.Infrastructure.Windows/ # IP Helper, process identity, Named Pipe server
+  Netpetra.Persistence/            # SQLite schema, queries, retention
+  Netpetra.Service/                # Worker host, monitoring, history writer, pipe
+  Netpetra.UI/                     # WPF library: views, view models, theme
+  Netpetra.Desktop/                # composition root / the only UI executable
 tests/                                  # unit and Windows integration tests
 docs/                                   # architecture, security, test matrix, licensing, ADRs
 scripts/                                # local run, service mode, standalone publish
@@ -226,7 +226,7 @@ scripts/                                # local run, service mode, standalone pu
 
 ## License and copyright
 
-Copyright (C) 2026 The Netrigil/Netrigil contributors.
+Copyright (C) 2026 The Netpetra/Netpetra contributors.
 
 The desktop application, the Windows service and the core libraries are licensed under
 **GNU GPL v3.0 or later**. See [`LICENSE`](LICENSE) for the full text and [`NOTICE`](NOTICE) for the

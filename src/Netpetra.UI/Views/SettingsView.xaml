@@ -1,0 +1,95 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<UserControl x:Class="Netpetra.UI.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="24,18,24,24" MaxWidth="900" HorizontalAlignment="Left">
+
+      <Border Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Text="Appearance" Style="{StaticResource SectionTitle}" />
+          <TextBlock Text="{Binding CurrentThemeText, StringFormat=Active theme: {0}}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,3,0,10" />
+          <StackPanel Orientation="Horizontal">
+            <Button Style="{StaticResource PrimaryButton}"
+                    Content="Dark"
+                    Command="{Binding UseDarkThemeCommand}"
+                    Margin="0,0,8,0" />
+            <Button Style="{StaticResource GhostButton}"
+                    Content="Light"
+                    Command="{Binding UseLightThemeCommand}" />
+          </StackPanel>
+          <TextBlock Style="{StaticResource Caption}"
+                     Margin="0,10,0,0"
+                     TextWrapping="Wrap"
+                     Text="The theme is applied at runtime and is not stored between runs yet." />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <TextBlock Text="Build and runtime" Style="{StaticResource SectionTitle}" />
+          <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="190" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="Milestone" Style="{StaticResource Caption}" Margin="0,0,0,9" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding MilestoneText}" Style="{StaticResource BodyMuted}" Margin="0,0,0,9" />
+
+            <TextBlock Grid.Row="1" Text="Data mode" Style="{StaticResource Caption}" Margin="0,0,0,9" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DataModeText}" Style="{StaticResource BodyMuted}" Margin="0,0,0,9" />
+
+            <TextBlock Grid.Row="2" Text="Collector" Style="{StaticResource Caption}" Margin="0,0,0,9" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CollectorText}" Style="{StaticResource BodyMuted}" Margin="0,0,0,9" />
+
+            <TextBlock Grid.Row="3" Text="Poll interval" Style="{StaticResource Caption}" Margin="0,0,0,9" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PollText}" Style="{StaticResource BodyMuted}" Margin="0,0,0,9" />
+
+            <TextBlock Grid.Row="4" Text="IPC contract" Style="{StaticResource Caption}" Margin="0,0,0,9" />
+            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding ProtocolText}" Style="{StaticResource BodyMuted}" Margin="0,0,0,9" />
+
+            <TextBlock Grid.Row="5" Text="Planned database" Style="{StaticResource Caption}" Margin="0,0,0,9" />
+            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding StorageText}" Style="{StaticResource BodyMuted}" FontFamily="{StaticResource Font.Mono}" FontSize="11.5" Margin="0,0,0,9" />
+
+            <TextBlock Grid.Row="6" Text="Operating system" Style="{StaticResource Caption}" Margin="0,0,0,9" />
+            <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding OsText}" Style="{StaticResource BodyMuted}" Margin="0,0,0,9" />
+
+            <TextBlock Grid.Row="7" Text="Process" Style="{StaticResource Caption}" />
+            <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding ProcessText}" Style="{StaticResource BodyMuted}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <TextBlock Text="Privacy" Style="{StaticResource SectionTitle}" />
+          <TextBlock Style="{StaticResource BodyMuted}"
+                     Margin="0,8,0,0"
+                     Text="No account, no cloud, no telemetry. Socket rows are read locally from this machine; only the overview throughput chart is a generated demo series. Nothing is uploaded anywhere." />
+          <TextBlock Style="{StaticResource BodyMuted}"
+                     Margin="0,8,0,0"
+                     Text="External lookups (GeoIP, reverse DNS, reputation) do not exist in this build. When they arrive they stay off by default and require an explicit opt-in." />
+        </StackPanel>
+      </Border>
+
+      <TextBlock Style="{StaticResource Caption}"
+                 Margin="2,12,0,0"
+                 TextWrapping="Wrap"
+                 Text="Windows 11 x64 is the supported target; Windows 10 is best-effort. This host runs Windows 10 IoT Enterprise LTSC 2021 (10.0.19044)." />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
