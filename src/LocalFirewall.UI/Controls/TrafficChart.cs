@@ -42,6 +42,18 @@ public sealed class TrafficChart : FrameworkElement
         typeof(TrafficChart),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public static readonly DependencyProperty MarkerPositionsProperty = DependencyProperty.Register(
+        nameof(MarkerPositions),
+        typeof(IReadOnlyList<double>),
+        typeof(TrafficChart),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public static readonly DependencyProperty MarkerBrushProperty = DependencyProperty.Register(
+        nameof(MarkerBrush),
+        typeof(Brush),
+        typeof(TrafficChart),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
     private INotifyCollectionChanged? _uploadSource;
     private INotifyCollectionChanged? _downloadSource;
 
@@ -89,6 +101,19 @@ public sealed class TrafficChart : FrameworkElement
         set => SetValue(GridBrushProperty, value);
     }
 
+    /// <summary>Normalised 0..1 positions of event markers on the time axis.</summary>
+    public IReadOnlyList<double>? MarkerPositions
+    {
+        get => (IReadOnlyList<double>?)GetValue(MarkerPositionsProperty);
+        set => SetValue(MarkerPositionsProperty, value);
+    }
+
+    public Brush? MarkerBrush
+    {
+        get => (Brush?)GetValue(MarkerBrushProperty);
+        set => SetValue(MarkerBrushProperty, value);
+    }
+
     protected override void OnRender(DrawingContext drawingContext)
     {
         ArgumentNullException.ThrowIfNull(drawingContext);
@@ -119,8 +144,42 @@ public sealed class TrafficChart : FrameworkElement
             downloadValues.Count == 0 ? 0 : downloadValues.Max());
         var scalePeak = Math.Max(1, peak * 1.18);
 
+        DrawEventMarkers(drawingContext, width, height);
+
         DrawSeries(drawingContext, downloadValues, DownloadBrush, width, height, scalePeak);
         DrawSeries(drawingContext, uploadValues, UploadBrush, width, height, scalePeak);
+    }
+
+    private void DrawEventMarkers(DrawingContext drawingContext, double width, double height)
+    {
+        if (MarkerPositions is not { Count: > 0 } positions || MarkerBrush is null)
+        {
+            return;
+        }
+
+        var linePen = new Pen(MarkerBrush, 1)
+        {
+            DashStyle = new DashStyle([4, 4], 0),
+        };
+        linePen.Freeze();
+
+        foreach (var position in positions)
+        {
+            var x = Math.Clamp(position, 0, 1) * width;
+
+            drawingContext.DrawLine(linePen, new Point(x, 8), new Point(x, height));
+
+            var triangle = new StreamGeometry();
+            using (var context = triangle.Open())
+            {
+                context.BeginFigure(new Point(x - 3, 0), isFilled: true, isClosed: true);
+                context.LineTo(new Point(x + 3, 0), isStroked: false, isSmoothJoin: false);
+                context.LineTo(new Point(x, 5), isStroked: false, isSmoothJoin: false);
+            }
+
+            triangle.Freeze();
+            drawingContext.DrawGeometry(MarkerBrush, null, triangle);
+        }
     }
 
     private static void OnSeriesChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

@@ -31,6 +31,9 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
 
     public IReadOnlyList<string> Ranges { get; } = ["5m", "1h", "24h", "7d"];
 
+    /// <summary>Demo marker positions on the time axis; real event markers arrive with FND-010.</summary>
+    public IReadOnlyList<double> EventMarkers { get; } = [0.18, 0.52, 0.77];
+
     [ObservableProperty]
     private string _connectionsText = "0";
 
