@@ -30,7 +30,7 @@
                     CornerRadius="4"
                     Padding="6,2"
                     VerticalAlignment="Top">
-              <TextBlock Text="LIVE · READ-ONLY"
+              <TextBlock Text="{Binding ModeBadgeText}"
                          Foreground="{DynamicResource Brush.Accent}"
                          FontSize="9"
                          FontWeight="Bold" />

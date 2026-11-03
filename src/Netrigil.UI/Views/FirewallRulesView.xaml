@@ -20,20 +20,20 @@
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <StackPanel Grid.Column="0">
-          <TextBlock Text="Read-only Windows Firewall inventory"
+          <TextBlock Text="Windows Firewall inventory"
                      FontSize="12"
                      FontWeight="SemiBold"
                      Foreground="{DynamicResource Brush.TextPrimary}" />
           <TextBlock Style="{StaticResource BodyMuted}"
                      Margin="0,3,0,0"
-                     Text="Rules are read through the service with the documented INetFwPolicy2 COM objects. This build creates, changes and removes no rule." />
+                     Text="{Binding NoticeText}" />
         </StackPanel>
         <Border Grid.Column="1"
                 Style="{StaticResource StatusPill}"
                 Background="Transparent"
                 BorderBrush="{DynamicResource Brush.Warning}"
                 VerticalAlignment="Top">
-          <TextBlock Text="READ-ONLY" Style="{StaticResource StatusPillText}" Foreground="{DynamicResource Brush.Warning}" />
+          <TextBlock Text="{Binding NoticeBadgeText}" Style="{StaticResource StatusPillText}" Foreground="{DynamicResource Brush.Warning}" />
         </Border>
       </Grid>
     </Border>

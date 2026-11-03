@@ -60,6 +60,8 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
     [ObservableProperty]
     private bool _canWrite;
 
+    public string ModeBadgeText => _client is null ? "LIVE · READ-ONLY" : "LIVE · SERVICE";
+
     [ObservableProperty]
     private string _writeStatusText = "Firewall writes are disabled.";
 
