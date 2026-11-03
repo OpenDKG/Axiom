@@ -1,0 +1,88 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<Window x:Class="Netpetra.UI.Views.FirstRunWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Set up Netpetra"
+        Width="720"
+        Height="620"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="{DynamicResource Brush.WindowBackground}">
+  <Grid Margin="24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0">
+      <TextBlock Text="Set up Netpetra" FontSize="22" FontWeight="SemiBold" />
+      <TextBlock Style="{StaticResource BodyMuted}"
+                 Margin="0,6,0,0"
+                 TextWrapping="Wrap"
+                 Text="Netpetra core is already installed. Choose optional components below. Nothing is downloaded or installed until you click Apply and accept the terms." />
+    </StackPanel>
+
+    <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,16,0,0">
+      <StackPanel>
+        <TextBlock Text="Components (Modify)" Style="{StaticResource SectionTitle}" />
+        <CheckBox x:Name="ServiceCheck"
+                  Style="{StaticResource AppCheckBox}"
+                  IsChecked="True"
+                  IsEnabled="False"
+                  Margin="0,10,0,0"
+                  Content="Local service — history, firewall inventory and secure IPC (built in)" />
+        <CheckBox x:Name="FileScanCheck"
+                  Style="{StaticResource AppCheckBox}"
+                  IsChecked="True"
+                  IsEnabled="False"
+                  Margin="0,6,0,0"
+                  Content="Local file scanner — SHA-256 on demand, no upload (built in)" />
+        <CheckBox x:Name="DkgCheck"
+                  Style="{StaticResource AppCheckBox}"
+                  Margin="0,10,0,0"
+                  Content="OriginTrail DKG testnet — downloads the npm package, creates a local testnet node and starts it" />
+        <CheckBox x:Name="BlackboxCheck"
+                  Style="{StaticResource AppCheckBox}"
+                  Margin="0,6,0,0"
+                  Content="Blackbox — runs Umanitek's official installer (Python/Node/Git, Oxigraph; large download; third-party terms)" />
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,12,0,0">
+      <StackPanel>
+        <TextBlock Text="Before you apply" Style="{StaticResource SectionTitle}" />
+        <TextBlock Style="{StaticResource BodyMuted}"
+                   Margin="0,6,0,0"
+                   TextWrapping="Wrap"
+                   Text="Selected installers run in a visible PowerShell window. They may download hundreds of MB, create a local testnet wallet/config and a scheduled task, and may ask for UAC or third-party terms. Netpetra does not hide, bundle or vouch for third-party code. VirusTotal and community feed are configured later on Security; they are not installed here." />
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,12,0,0">
+      <StackPanel>
+        <TextBlock Text="What will be installed" Style="{StaticResource SectionTitle}" />
+        <TextBlock Style="{StaticResource Caption}"
+                   Margin="0,6,0,0"
+                   TextWrapping="Wrap"
+                   Text="Core/service and local scanner are already present. DKG and Blackbox are optional and unchecked by default. The official installers decide their own prerequisites; if Node.js, Python or Git is missing, the window prints the exact command." />
+      </StackPanel>
+    </Border>
+
+    <CheckBox x:Name="AcceptCheck"
+              Grid.Row="4"
+              Style="{StaticResource AppCheckBox}"
+              Margin="0,16,0,0"
+              Checked="Accept_Changed"
+              Unchecked="Accept_Changed"
+              Content="I have read the warnings and accept the third-party terms and the changes above." />
+
+    <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+      <Button Style="{StaticResource GhostButton}" Content="Skip for now" Click="Skip_Click" Margin="0,0,8,0" />
+      <Button x:Name="ApplyButton" Style="{StaticResource GhostButton}" Content="Apply" IsEnabled="False" Click="Apply_Click" />
+    </StackPanel>
+  </Grid>
+</Window>

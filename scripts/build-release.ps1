@@ -88,7 +88,8 @@ $files = @(
     (Join-Path $root "NOTICE"),
     (Join-Path $root "THIRD_PARTY_NOTICES.md"),
     (Join-Path $root "scripts\install-portable.ps1"),
-    (Join-Path $root "scripts\uninstall-portable.ps1")
+    (Join-Path $root "scripts\uninstall-portable.ps1"),
+    (Join-Path $root "scripts\install-from-github.ps1")
 ) | Where-Object { Test-Path $_ }
 
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }

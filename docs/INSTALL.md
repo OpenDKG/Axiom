@@ -14,6 +14,17 @@ Start Menu shortcut.
 
 ## Install
 
+The shortest path from a GitHub release is the bootstrap installer. It downloads the latest
+`Netpetra-<version>-win-x64.zip`, verifies `SHA256SUMS.txt`, installs for the current user and starts
+the app:
+
+```powershell
+irm https://raw.githubusercontent.com/a-51-50/Netpetra/main/scripts/install-from-github.ps1 | iex
+```
+
+This runs a remote script; read it first if you prefer. It needs no administrator rights and makes
+no firewall change. You can also download the release ZIP and run `install-portable.ps1` manually.
+
 From the repository root, after a standalone build:
 
 ```powershell
@@ -38,6 +49,23 @@ Defaults:
 | Local data (created by the service) | `%LOCALAPPDATA%\Netpetra` |
 
 Use `-NoShortcut` to skip the shortcut and `-InstallDir` to choose another directory.
+
+## First run
+
+The desktop starts the bundled `Netpetra.Service.exe` automatically when it sits next to the
+executable. This is a per-user console process, not a registered Windows service. If it cannot start,
+the app falls back to in-process monitoring.
+
+The first run shows a setup wizard:
+
+- built-in service and local file scanner are listed as already present;
+- DKG and Blackbox are optional and unchecked by default;
+- the warning lists downloads, third-party terms, possible UAC and local node/wallet creation;
+- **Apply** stays disabled until you accept the terms; **Skip for now** continues without installing;
+- selected official installers open in a visible PowerShell window.
+
+VirusTotal and the community feed are configured later on Security; they are not installed by the
+wizard.
 
 ## Uninstall
 
@@ -87,7 +115,8 @@ From an extracted release archive:
 
 ## What the portable install does not do
 
-- It copies `Netpetra.Service.exe` but does not register or start a Windows service.
+- It copies `Netpetra.Service.exe` and the desktop starts it as a per-user console process; it does
+  not register or start a Windows service.
 - It does not create, change or remove Windows Firewall rules.
 - It does not add itself to startup.
 - It does not request administrator rights or elevation.

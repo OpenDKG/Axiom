@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
 using Netpetra.Contracts.Monitoring;
@@ -7,15 +8,28 @@ using Netpetra.Infrastructure.Windows.IpHelper;
 using Netpetra.UI;
 using Netpetra.UI.Services;
 using Netpetra.UI.ViewModels;
+using Netpetra.UI.Views;
 
 namespace Netpetra.Desktop;
 
+[SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The WPF Application lifetime disposes the service host in OnExit.")]
 public partial class App : Application
 {
+    private BundledServiceHost? _serviceHost;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         ThemeManager.Apply(AppTheme.Dark);
+
+        ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+        if (!OnboardingStore.IsCompleted)
+        {
+            var setup = new FirstRunWindow();
+            setup.ShowDialog();
+        }
+
+        ShutdownMode = System.Windows.ShutdownMode.OnMainWindowClose;
 
         // Opt-in binding diagnostics for manual/automated UI checks:
         //   set NETPETRA_BINDING_TRACE=<log path> before starting the shell.
@@ -33,6 +47,9 @@ public partial class App : Application
         var useService = e.Args.Any(argument =>
             string.Equals(argument, "--service", StringComparison.OrdinalIgnoreCase));
 
+        _serviceHost = new BundledServiceHost();
+        useService = useService || _serviceHost.TryStart();
+
         IConnectionSnapshotSource source = useService
             ? new ServiceSnapshotSource(new ServicePipeClient())
             : new IpHelperConnectionSource();
@@ -49,6 +66,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _serviceHost?.Dispose();
+
         foreach (TraceListener listener in PresentationTraceSources.DataBindingSource.Listeners)
         {
             listener.Flush();
