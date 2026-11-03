@@ -64,9 +64,15 @@ Compare it with `SHA256SUMS.txt` from the same release.
 .\scripts\build-release.ps1
 ```
 
-This publishes the standalone build, packs `Netrigil.Desktop.exe` with `LICENSE`, `NOTICE` and
-`THIRD_PARTY_NOTICES.md` into `artifacts\release\Netrigil-<version>-win-x64.zip`, and writes
-`SHA256SUMS.txt`. Nothing is uploaded.
+This publishes the standalone build, packs `Netrigil.Desktop.exe` with `LICENSE`, `NOTICE`,
+`THIRD_PARTY_NOTICES.md` and the portable install/uninstall scripts into
+`artifacts\release\Netrigil-<version>-win-x64.zip`, and writes `SHA256SUMS.txt`. Nothing is uploaded.
+
+From an extracted release archive:
+
+```powershell
+.\install-portable.ps1 -Source .\Netrigil.Desktop.exe
+```
 
 ## What the portable install does not do
 
