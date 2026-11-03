@@ -32,6 +32,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     private readonly OptionalModuleInstaller _installer = new();
 
+    private readonly BoundedHistory<ModuleActivity> _activityHistory = new(30);
+
     private readonly DispatcherTimer _activityTimer;
 
     public SecurityViewModel()
@@ -106,13 +108,15 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             Rebuild(dkgTask.Result, blackboxTask.Result);
             LastCheckedText = $"Checked {DateTimeOffset.Now:HH:mm:ss}";
 
-            Activity.Add(new ModuleActivity(
+            _activityHistory.Add(new ModuleActivity(
                 DateTimeOffset.Now,
                 dkgTask.Result.IsConnected,
                 blackboxTask.Result.IsConnected));
-            while (Activity.Count > 30)
+
+            Activity.Clear();
+            foreach (var sample in _activityHistory.Items)
             {
-                Activity.RemoveAt(0);
+                Activity.Add(sample);
             }
         }
         finally
