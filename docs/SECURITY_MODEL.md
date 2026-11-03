@@ -1,67 +1,68 @@
-# Bezbednosni model — LocalFirewall (FND-005)
+# Security model — LocalFirewall (FND-005)
 
-## 1. Trenutna granica poverenja
+## 1. Current trust boundary
 
-| Proces | Prava | Šta radi |
+| Process | Rights | What it does |
 |---|---|---|
-| `LocalFirewall.Desktop.exe` | `asInvoker` | UI; čita IP Helper ili zove pipe |
-| `LocalFirewall.Service.exe` | `asInvoker` (konzolni režim) | anketa IP Helper, SQLite upis, pipe server |
+| `LocalFirewall.Desktop.exe` | `asInvoker` | UI; reads IP Helper or calls the pipe |
+| `LocalFirewall.Service.exe` | `asInvoker` (console mode) | polls IP Helper, writes SQLite, serves the pipe |
 
-U produkciji servis bi radio kao servisni nalog (FND-009); UI ostaje neprivilegovan. Nema
-COM/WFP/ETW/netsh poziva, nema firewall upisa i nema odlazne mrežne komunikacije.
+In production the service would run under a service account (FND-009); the UI stays unprivileged.
+There are no COM/WFP/ETW/netsh calls, no firewall writes and no outbound network communication.
 
-ETW (FND-004) nije implementiran; kada dođe, zahteva `SeSystemProfilePrivilege` i biće u servisu.
+ETW (FND-004) is not implemented; when it arrives it requires `SeSystemProfilePrivilege` and belongs
+in the service.
 
-## 2. Named Pipe zaštita
+## 2. Named Pipe protection
 
 - `\\.\pipe\LocalFirewall.Service.v1`.
-- Eksplicitni DACL: allow servisni nalog + jedan SID; deny `Network`/`Anonymous`/`Guests`.
-- SID klijentskog procesa se čita iz tokena posle konekcije; nepoklapanje → zatvaranje.
-- Limiti: zahtev 256 KiB, odgovor 4 MiB, 100 zahteva/s, 30 s idle, 4 instance.
-- Samo imenovane komande; nema `exec`; firewall/history/config/diagnostics/`live.events` →
-  `not_supported` (history.query je podržan).
-- Greške se vraćaju kao kod + poruka, bez stack trace-a.
+- Explicit DACL: allow the service account + one SID; deny `Network`/`Anonymous`/`Guests`.
+- The client process SID is read from its token after connect; a mismatch closes the connection.
+- Limits: request 256 KiB, response 4 MiB, 100 requests/s, 30 s idle, 4 instances.
+- Named commands only; no `exec`; firewall/history/config/diagnostics/`live.events` →
+  `not_supported` (`history.query` is supported).
+- Errors return a code and message, without a stack trace.
 
-## 3. Podaci na disku (FND-005)
+## 3. Data at rest (FND-005)
 
-- Baza: `%LOCALAPPDATA%\LocalFirewall\localfirewall.db` (per-user/konzolni režim) ili
-  `%ProgramData%\LocalFirewall\` (instalirani servis). `LOCALFIREWALL_DATA_DIR` menja putanju.
-- Čuva se **samo metapodatak konekcije**: ime/putanja procesa, PID, protokol, lokalni/udaljeni
-  endpoint, stanje, smer, kvalitet, prvi/poslednji put viđenja.
-- Ne čuvaju se payload, TLS sadržaj, DNS upiti, tokeni ni akreditivi.
-- Retencija: 30 dana; brisanje starih flows i aplikacija bez flows.
-- SQLite WAL; `foreign_keys=ON`; `integrity_check` na startu.
-- Korumpiran fajl se premešta u `.corrupt-<timestamp>` (ne briše) i baza se rekreira.
-- CSV izvoz piše na putanju koju korisnik eksplicitno izabere; UTF-8 BOM; escapovanje.
-- Installer (FND-009) mora postaviti eksplicitan ACL na `%ProgramData%\LocalFirewall\`; sada je to
-  per-user LocalAppData u razvoju.
+- Database: `%LOCALAPPDATA%\LocalFirewall\localfirewall.db` (per-user/console mode) or
+  `%ProgramData%\LocalFirewall\` (installed service). `LOCALFIREWALL_DATA_DIR` overrides the path.
+- Only **connection metadata** is stored: process name/path, PID, protocol, local/remote endpoint,
+  state, direction, quality, first/last seen.
+- No payload, TLS content, DNS queries, tokens or credentials are stored.
+- Retention: 30 days; old flows and apps without flows are deleted.
+- SQLite WAL; `foreign_keys=ON`; `integrity_check` at startup.
+- A corrupt file is moved to `.corrupt-<timestamp>` (not deleted) and the database is recreated.
+- CSV export writes to a path the user explicitly selects; UTF-8 BOM; escaping.
+- The installer (FND-009) must set an explicit ACL on `%ProgramData%\LocalFirewall\`; development
+  uses per-user LocalAppData.
 
-## 4. Model pretnji
+## 4. Threat model
 
-| Pretnja | FND-005 | Kontrola |
+| Threat | FND-005 | Control |
 |---|---|---|
-| Drugi lokalni korisnik zove servis | DACL + SID provera | Testirano odbijanje stranog SID-a |
-| Udaljeni pristup pipe-u | Deny `Network`/`Anonymous`/`Guests` | Lokalni pipe |
-| Čitanje tuđe istorije | Baza u per-user LocalAppData; ProgramData ACL u FND-009 | Per-user putanja |
-| Curenje sadržaja u bazu | Čuva se samo metapodatak | Nema payload-a/DNS-a |
-| Preveliki odgovor / DoS | 4 MiB response cap, 256 KiB request, 100/s | Buffered reader + limiti |
-| Korumpirana baza | `integrity_check` + backup `.corrupt-*` | Testirano |
-| Neograničen rast baze | Retencija 30 dana, satna provera | Testirano |
-| SQL injection kroz pretragu | Parametrizovani upiti + `LIKE ... ESCAPE` | Testirano |
-| Lažni PID/putanja | `partial`, `unknown path` | FND-010 |
-| Firewall izmena | Nema write komandi | FND-006 |
-| Servis padne | UI `Service unavailable`, reconnect | E2E testirano |
+| Another local user calls the service | DACL + SID check | Foreign SID rejection tested |
+| Remote pipe access | Deny `Network`/`Anonymous`/`Guests` | Local pipe |
+| Reading someone else's history | Per-user LocalAppData; ProgramData ACL in FND-009 | Per-user path |
+| Sensitive content in the database | Only metadata | No payload/DNS |
+| Oversized response / DoS | 4 MiB response cap, 256 KiB request, 100/s | Buffered reader + limits |
+| Corrupt database | `integrity_check` + `.corrupt-*` backup | Tested |
+| Unbounded database growth | 30-day retention, hourly check | Tested |
+| SQL injection through search | Parameterized queries + `LIKE ... ESCAPE` | Tested |
+| Fake PID/path | `partial`, `unknown path` | FND-010 |
+| Firewall change | No write commands | FND-006 |
+| Service crash | UI `Service unavailable`, reconnect | E2E tested |
 
-## 5. Ograničenja i neizvršene provere
+## 5. Limitations and checks not run
 
-- Servis nije instaliran (nema admin/VM); testiran je konzolni host i pipe.
-- Stvarni drugi Windows nalog nije testiran; ACL/SID odbijanje jesu.
-- Nema instalacionog ACL-a ni potpisa (FND-009).
-- Nema audit traga IPC komandi; biće potreban pre firewall komandi (FND-006).
-- ETW/bajtovi nisu implementirani; FND-004 zahteva elevaciju.
-- Nema šifrovanja baze; podaci su per-user i metapodaci, ali to je odluka za FND-009.
+- The service is not installed (no admin/VM); the console host and pipe were tested.
+- A real second Windows account was not tested; ACL/SID rejection were.
+- No installation ACL or signing (FND-009).
+- No IPC command audit trail; required before firewall commands (FND-006).
+- ETW/bytes are not implemented; FND-004 requires elevation.
+- The database is not encrypted; data is per-user metadata. This is a decision for FND-009.
 
-## 6. Prijava ranjivosti
+## 6. Reporting vulnerabilities
 
-Do javnog kanala, prijava ide direktno vlasniku projekta. Ne objavljivati stvarne SID-ove, putanje ili
-sadržaj baze u reprodukciji.
+Until a public channel exists, report directly to the project owner. Do not publish real SIDs,
+paths or database content in a reproduction.

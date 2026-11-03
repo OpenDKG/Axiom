@@ -1,80 +1,79 @@
-# ADR 0005 — Licenca GPL-3.0-or-later i model open-source distribucije
+# ADR 0005 — GPL-3.0-or-later and the open-source distribution model
 
-- **Status:** prihvaćeno
-- **Datum:** 2026-11-03
-- **Milestone:** pre FND-001 UI usklađivanja (licencna osnova)
-- **Nadovezuje se na:** ADR 0001–0004, Handoff V2 §Q
+- **Status:** accepted
+- **Date:** 2026-11-03
+- **Milestone:** licensing baseline
+- **Builds on:** ADR 0001–0004, Handoff V2 §Q
 
-## Kontekst
+## Context
 
-Handoff V2 traži **pravi open-source projekat, potpuno besplatan**, bez plaćenih funkcija, reklama,
-praćenja i obaveznog naloga. Predlog u V2 je GPL-3.0-or-later za desktop i servis, uz odvojene
-MIT/Apache-2.0 pakete za opcione integracije. Repo `VigilMesh` je privatan i korisnik je odobrio
-licencu.
+Handoff V2 requires a **true open-source project, completely free**, with no paid features,
+advertising, tracking or mandatory account. V2 proposes GPL-3.0-or-later for the desktop and service,
+with separate MIT/Apache-2.0 packages for optional integrations. The `VigilMesh` repository is
+private and the owner approved the license.
 
-Do sada projekat nije imao izabranu licencu; README je govorio „licenca nije izabrana“. To je
-blokiralo javnu distribuciju i pravilo nesigurnost za doprinose.
+Until now the project had no chosen license; the README said "license not selected". That blocked
+public distribution and made contribution terms unclear.
 
-## Odluke
+## Decisions
 
-### 1. GPL-3.0-or-later za desktop, servis i core biblioteke
+### 1. GPL-3.0-or-later for desktop, service and core libraries
 
-Svi proizvodni projekti (`Contracts`, `Core`, `Infrastructure.Windows`, `Persistence`, `Service`,
-`UI`, `Desktop`) i testovi su pod GPL-3.0-or-later. Time derivati moraju ostati open source, a
-korisnici zadržavaju slobodu korišćenja, izmene i redistribucije. Komercijalna distribucija i
-naplata podrške ostaju dozvoljeni.
+All production projects (`Contracts`, `Core`, `Infrastructure.Windows`, `Persistence`, `Service`,
+`UI`, `Desktop`) and the tests are GPL-3.0-or-later. Derivatives must remain open source; users keep
+the freedom to use, modify and redistribute. Commercial distribution and paid support remain allowed.
 
-### 2. SPDX identifikator u svakom izvornom fajlu
+### 2. SPDX identifier in every source file
 
-`SPDX-License-Identifier: GPL-3.0-or-later` u `.cs` i `.xaml` fajlovima; `LICENSE`, `NOTICE` i
-`THIRD_PARTY_NOTICES.md` u korenu. Time je licenca vidljiva i u pojedinačnim fajlovima, ne samo u
-README-u.
+`SPDX-License-Identifier: GPL-3.0-or-later` in `.cs` and `.xaml` files; `LICENSE`, `NOTICE` and
+`THIRD_PARTY_NOTICES.md` at the root. The license is visible per file, not only in the README.
 
-### 3. Odvojeni MIT/Apache-2.0 paketi za integracije
+### 3. Separate MIT/Apache-2.0 packages for integrations
 
-`integrations/agent-security-memory` i slični moduli mogu biti permissive, ali ne smeju sadržati
-GPL-only kod i moraju imati sopstvene notice fajlove. Ovo omogućava DKG registry ekosistem bez
-mešanja licencnih režima.
+`integrations/agent-security-memory` and similar modules may be permissive, but must not contain
+GPL-only code and must keep their own notice files. This allows DKG registry ecosystems without
+mixing license regimes.
 
-### 4. DCO umesto CLA
+### 4. DCO instead of a CLA
 
-Doprinosi se prihvataju uz `Signed-off-by` (Developer Certificate of Origin), bez prenosa autorskih
-prava. Time se izbegava CLA koji odbija deo open-source zajednice.
+Contributions are accepted with `Signed-off-by` (Developer Certificate of Origin), without copyright
+assignment. This avoids a CLA that discourages part of the open-source community.
 
-### 5. Automatska evidencija third-party licenci
+### 5. Generated third-party license inventory
 
-`THIRD_PARTY_NOTICES.md` se generiše iz `packages.lock.json` i nuspec metapodataka. Sve zavisnosti su
-MIT ili Apache-2.0; nema GPL/AGPL trećeg koda. .NET runtime u self-contained buildu je MIT.
+`THIRD_PARTY_NOTICES.md` is generated from `packages.lock.json` and nuspec metadata. All dependencies
+are MIT or Apache-2.0; no GPL/AGPL third-party code is included. The .NET runtime in the
+self-contained build is MIT.
 
-## Posledice
+## Consequences
 
-Pozitivne:
+Positive:
 
-- Jasna, proverljiva licenca i mogućnost javnog release-a.
-- GPL sprečava zatvorene derivate, ali dozvoljava komercijalnu distribuciju i podršku.
-- Permissive integracije ostaju dostupne drugim ekosistemima.
-- DCO i SPDX smanjuju pravnu nesigurnost doprinosa.
+- A clear, verifiable license and a path to a public release.
+- GPL prevents closed derivatives while allowing commercial distribution and support.
+- Permissive integrations remain usable by other ecosystems.
+- DCO and SPDX reduce legal uncertainty around contributions.
 
-Negativne / rizici:
+Negative / risks:
 
-- Distribucija binarnog fajla zahteva dostupan odgovarajući izvorni kod.
-- GPL kod se ne može kopirati u MIT/Apache module; potrebna je disciplina pri refaktorisanju.
-- Neke kompanije izbegavaju GPL; to je prihvaćena posledica izbora.
-- Licence eksternih feedova (VT, Blackbox, DKG, GeoIP) i dalje zahtevaju odvojenu proveru.
-- Ovo nije pravni savet; pravna provera pre javnog release-a je obavezna.
+- Distributing a binary requires making the corresponding source available.
+- GPL code cannot be copied into MIT/Apache modules; discipline is required when refactoring.
+- Some companies avoid GPL; this is an accepted consequence of the choice.
+- External feed licenses (VT, Blackbox, DKG, GeoIP) still require separate review.
+- This is not legal advice; a legal review is required before the first public release.
 
-## Razmatrane alternative
+## Alternatives considered
 
-| Alternativa | Zašto nije izabrana |
+| Alternative | Why not |
 |---|---|
-| MIT/Apache-2.0 | Dozvoljava zatvorene derivate; V2 traži copyleft i pravi open source |
-| AGPL-3.0 | Namenjena hostovanom servisu; desktop alat ne zahteva mrežni copyleft |
-| Dual license (GPL + komercijalna) | Nema komercijalnog izdavaoca ni potrebe u ovoj fazi |
-| Bez licence (all rights reserved) | Nije open source; blokira doprinose i distribuciju |
-| GPL-2.0 | Apache-2.0 zavisnosti nisu kompatibilne sa GPLv2 |
+| MIT/Apache-2.0 | Allows closed derivatives; V2 requires copyleft and true open source |
+| AGPL-3.0 | Intended for hosted services; a desktop tool does not need network copyleft |
+| Dual license (GPL + commercial) | No commercial publisher or need at this stage |
+| No license (all rights reserved) | Not open source; blocks contributions and distribution |
+| GPL-2.0 | Apache-2.0 dependencies are incompatible with GPLv2 |
 
-## Sledeće odluke
+## Follow-up decisions
 
-- Pravna provera pre prvog javnog release-a.
-- Pravila za signed release i izvorni tarball (FND-009).
-- Licencna politika za GeoIP bazu i threat feedove (FND-010/012).
+- Legal review before the first public release.
+- Signed-release and source-tarball rules (FND-009).
+- License policy for the GeoIP database and threat feeds (FND-010/012).

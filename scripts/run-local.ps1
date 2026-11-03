@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Pokreće LocalFirewall demo shell.
+    Starts the LocalFirewall desktop shell.
 
 .DESCRIPTION
-    Bez parametara: pokreće najnoviji kod preko `dotnet run` (potreban .NET SDK).
-    -Standalone:   pokreće već publikovan single-file EXE (bez SDK-a); ako ne postoji, prvo ga publikuje.
+    Without parameters: runs the latest source with `dotnet run` (requires the .NET SDK).
+    -Standalone: starts the published single-file EXE (no SDK needed); publishes it first if missing.
 
 .EXAMPLE
     .\scripts\run-local.ps1
@@ -26,7 +26,7 @@ if ($Standalone) {
     }
 
     Start-Process -FilePath $exe
-    Write-Host "Pokrenuto: $exe" -ForegroundColor Green
+    Write-Host "Started: $exe" -ForegroundColor Green
     return
 }
 
@@ -41,6 +41,6 @@ if (-not $dotnet) {
     if (Test-Path $perUser) { $dotnet = $perUser }
 }
 
-if (-not $dotnet) { throw "dotnet CLI nije na PATH. Instaliraj .NET 10 SDK (global.json) ili koristi -Standalone." }
+if (-not $dotnet) { throw "dotnet CLI not found on PATH. Install the .NET 10 SDK (global.json) or use -Standalone." }
 
 & $dotnet run --project (Join-Path $root "src\LocalFirewall.Desktop\LocalFirewall.Desktop.csproj") -c Release

@@ -1,11 +1,12 @@
 <#
 .SYNOPSIS
-    Pokreće servis u konzolnom (development) režimu i UI preko Named Pipe-a.
+    Starts the service in console (development) mode and the UI over the Named Pipe.
 
 .DESCRIPTION
-    Ne instalira Windows servis i ne traži administratora. Servis se pokreće kao običan proces
-    (allowed SID = trenutni korisnik), UI se pokreće sa --service i čita snapshot preko pipe-a.
-    Kada se UI zatvori, servis se zaustavlja (osim uz -KeepServiceRunning).
+    Does not install a Windows service and does not require administrator rights. The service runs
+    as a normal process (allowed SID = current user), the UI starts with --service and reads
+    snapshots over the pipe. When the UI closes, the service is stopped unless -KeepServiceRunning
+    is used.
 
 .EXAMPLE
     .\scripts\run-service.ps1
@@ -32,7 +33,7 @@ function Resolve-Dotnet {
         if (Test-Path $perUser) { $dotnet = $perUser }
     }
 
-    if (-not $dotnet) { throw "dotnet CLI nije pronađen. Instaliraj .NET 10 SDK." }
+    if (-not $dotnet) { throw "dotnet CLI not found. Install the .NET 10 SDK." }
     return $dotnet
 }
 
@@ -42,7 +43,7 @@ $desktopProject = Join-Path $root "src\LocalFirewall.Desktop\LocalFirewall.Deskt
 $serviceLog = Join-Path $env:TEMP "localfirewall-service.log"
 $serviceError = Join-Path $env:TEMP "localfirewall-service.err.log"
 
-Write-Host "Pokrećem servis (konzolni režim)..." -ForegroundColor Cyan
+Write-Host "Starting the service (console mode)..." -ForegroundColor Cyan
 $service = Start-Process -FilePath $dotnet `
     -ArgumentList @("run", "--project", $serviceProject, "-c", "Release", "--no-build") `
     -PassThru -RedirectStandardOutput $serviceLog -RedirectStandardError $serviceError
@@ -56,18 +57,18 @@ try {
     }
 
     if (-not $ready) {
-        Write-Host "Servis nije podigao pipe. Log:" -ForegroundColor Red
+        Write-Host "The service did not create the pipe. Log:" -ForegroundColor Red
         Get-Content $serviceLog -ErrorAction SilentlyContinue | Select-Object -Last 20
         Get-Content $serviceError -ErrorAction SilentlyContinue | Select-Object -Last 20
-        throw "Servis nije spreman."
+        throw "The service is not ready."
     }
 
-    Write-Host "Servis radi. Pokrećem UI sa --service..." -ForegroundColor Cyan
+    Write-Host "Service is running. Starting the UI with --service..." -ForegroundColor Cyan
     & $dotnet run --project $desktopProject -c Release --no-build -- --service
 }
 finally {
     if (-not $KeepServiceRunning -and -not $service.HasExited) {
-        Write-Host "Zaustavljam servis..." -ForegroundColor Cyan
+        Write-Host "Stopping the service..." -ForegroundColor Cyan
         $service | Stop-Process -Force -ErrorAction SilentlyContinue
     }
 }

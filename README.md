@@ -5,83 +5,93 @@
 
 *Intelligent protection. Open by design.*
 
-Lokalna Windows aplikacija za praćenje mrežnog saobraćaja po aplikaciji i upravljanje pravilima
-ugrađenog Windows Firewall-a. Originalan kod i vizuelni identitet; bez GlassWire brendinga i bez
-preuzetog GPL koda.
+LocalFirewall is a local, offline Windows network monitor and firewall policy manager. It shows
+which applications use the network, which endpoints they talk to, and what happened over time. It
+manages only its own rules in the built-in Windows Firewall; Windows remains the enforcement
+authority. There is no account, no cloud, no advertising and no telemetry.
 
-> **Status: FND-005 — lokalna SQLite istorija.**
-> `Live Connections` i `Apps` čitaju stvarne TCP/UDP sokete; servis ih upisuje u lokalnu bazu i
-> `History` stranica prikazuje pretragu po vremenu, aplikaciji, udaljenoj adresi i PID-u, sa CSV
-> izvozom. Grafik propusnosti je i dalje demo serija: **FND-004 (ETW bajtovi) je odložen** jer ETW
-> kernel sesija zahteva elevaciju, koju ova razvojna sesija nema (`logman` → Access denied).
-> Nijedno Windows Firewall pravilo se ne čita, ne kreira i ne menja.
+## What it covers
 
-## Šta trenutno radi
+### Per-application network visibility
 
-| Oblast | Stanje |
-|---|---|
-| .NET 10 solution, 7 projekata + 4 test projekta | ✅ build prolazi |
-| Stvarni TCP/UDP inventar (IPv4/IPv6), polling 1 s | ✅ IP Helper owner tabele |
-| Windows servis (konzolni režim) + Named Pipe IPC | ✅ ACL + SID provera + limiti |
-| UI preko servisa (`--service`) sa reconnect-om | ✅ |
-| SQLite istorija: schema, WAL, upsert, retencija | ✅ FND-005 |
-| `History`: vremenski opseg, pretraga, CSV izvoz | ✅ |
-| Oporavak od korumpirane baze | ✅ backup `.corrupt-*` + rekreacija |
-| `Live Connections` / `Apps` / Overview | ✅ stvarni podaci |
-| Grafik propusnosti / bajtovi po aplikaciji | ⚠️ demo serija (FND-004 odložen) |
-| Testovi | ✅ 87 |
-| Standalone (self-contained, single-file) build | ✅ `artifacts\publish\win-x64\LocalFirewall.Desktop.exe` |
-| Instalacija servisa / MSI | ❌ FND-009 |
-| Windows Firewall pravila | ❌ adapter `Unavailable` (FND-006) |
+- TCP and UDP sockets for IPv4 and IPv6, read from the Windows IP Helper owner tables.
+- Process attribution by PID, executable name and resolved path; unresolved or protected processes
+  are marked as partial instead of being guessed.
+- Local and remote endpoints, connection state, direction, loopback detection and the first time a
+  flow was observed.
+- A sortable, filterable, virtualized table that stays responsive with hundreds of processes and
+  thousands of rows.
 
-## Šta namerno ne radi
+### Local history
 
-- Ne zahteva administratora u UI/konzolnom režimu; servis se ne instalira.
-- Ne otvara HTTP port; samo lokalni Named Pipe sa DACL-om.
-- Ne poziva COM `INetFwPolicy2`, `netsh`, WFP ni firewall API.
-- Ne pravi odlazne mrežne zahteve.
-- Ne čuva payload, TLS sadržaj ni DNS upite — samo metapodatke konekcije.
-- Ne tvrdi da meri bajtove; grafik je označen `DEMO SERIES`.
+- A local SQLite database stores connection metadata with UTC timestamps.
+- Search by application, path, remote endpoint or PID, with time ranges from minutes to days.
+- Paging, retention limits and CSV export to a path the user chooses.
+- Database corruption is detected and the damaged file is preserved before a clean database is
+  created.
 
-## Zahtevi
+### Firewall policy management
 
-- **Podržan target:** Windows 11 x64; Windows 10 je best-effort (razvojna mašina: Windows 10 IoT
-  Enterprise LTSC 2021, 10.0.19044).
-- **.NET SDK 10.0.403** (`global.json`) za build; objavljena verzija ne traži runtime.
-- **ETW (FND-004) zahteva elevaciju** ili servisni nalog; ova sesija je UAC-filtered.
+- Rules are path-scoped and bound to a direction and Windows network profile.
+- Every rule owned by the application has a deterministic name,
+  `LocalFirewall::{rule-id}::{OUT|IN}`, so it can be found and removed without touching anyone
+  else's rules.
+- A rule is reported as applied only after an OS read-back of the created rule; an external block or
+  Group Policy remains authoritative.
+- The application never performs wildcard deletes, never resets the Windows Firewall and never
+  disables Defender, BFE or another product's filters.
 
-## Pokretanje
+### Privacy by default
 
-```powershell
-# servisni režim (istorija radi samo ovako)
-.\scripts\run-service.ps1
+- All processing is local. The standard build has no outbound network calls.
+- No accounts, cloud sync, analytics, advertising or data sales.
+- Only connection metadata is stored: no packet payload, TLS content, DNS queries, credentials or
+  tokens.
+- Optional intelligence modules (file reputation, threat feeds, DKG/Blackbox) are separate, off by
+  default, and never sit on the per-connection enforcement path.
 
-# ili ručno
-dotnet run --project src\LocalFirewall.Service -c Release
-dotnet run --project src\LocalFirewall.Desktop -c Release -- --service
+## How it works
 
-# in-process (bez istorije)
-.\artifacts\publish\win-x64\LocalFirewall.Desktop.exe
+```text
+Unprivileged WPF UI
+   │  local Named Pipe (explicit ACL, client SID check)
+   ▼
+Windows Service
+   ├─ IP Helper inventory and process attribution
+   ├─ bounded aggregation and local SQLite history
+   └─ owned-rule coordinator → Windows Firewall
 ```
 
-`--service` koristi Named Pipe i servisnu bazu; bez njega UI čita IP Helper direktno i `History`
-prikazuje da je potreban servis.
+- The UI never runs as administrator and never receives a generic shell or "execute" command.
+- The service is the privileged boundary. It validates every request, enforces message limits and
+  keeps monitoring running when the UI is closed.
+- The local pipe is not reachable over SMB: network, anonymous and guest logons are denied.
+- Byte accounting uses platform counters where they exist; values carry a source and a quality flag,
+  and partial data is shown as partial rather than as an exact measurement.
 
-## Istorija (FND-005)
+## Security and privacy
 
-- Baza: `%LOCALAPPDATA%\LocalFirewall\localfirewall.db` u konzolnom/per-user režimu;
-  `%ProgramData%\LocalFirewall\` za instalirani servis (FND-009). `LOCALFIREWALL_DATA_DIR` menja putanju.
-- SQLite `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`.
-- Tabele: `schema_migrations`, `apps`, `flows`, `traffic_buckets` (pripremljena za FND-004), `settings`.
-- Upis: servis grupiše snimke na **2 s** (ne po pollu); upsert po
-  `(app, protocol, local, remote, pid)`; `first_seen` se ne menja, `last_seen` se ažurira.
-- Retencija: 30 dana (`DefaultRetention`), pokreće se na startu i svakih sat vremena.
-- Query: UTC opseg + pretraga po imenu/putanji/udaljenom endpointu/PID-u, limit i offset.
-- CSV izvoz: korisnik bira putanju; UTF-8 sa BOM; escapovanje zareza, navodnika i novih redova.
-- Korumpiran fajl: detektuje se (`integrity_check`/SQLite 26), premešta u
-  `localfirewall.db.corrupt-<timestamp>` i baza se rekreira.
+- **Least privilege:** the UI is `asInvoker`; only the service can eventually change firewall state.
+- **IPC:** explicit pipe DACL, client SID verification, typed commands, request size limit, rate
+  limit, idle timeout and no generic execution endpoint.
+- **Firewall safety:** only owned rules, deterministic names, read-back verification, targeted
+  removal and a documented recovery path.
+- **Data at rest:** per-user local database by default; only metadata; retention limits; no payload
+  or secrets.
+- **Honest status:** the interface distinguishes observed data, estimates, partial attribution,
+  unavailable adapters and external policy conflicts. It never shows "Protected" unless the OS
+  result is verified.
+- **Supply chain:** pinned NuGet versions, committed lock files, warnings-as-errors and a generated
+  third-party license inventory.
 
-## Build, testovi, standalone
+## Platform and requirements
+
+- Windows 11 x64 is the supported target. Windows 10 x64 is best-effort.
+- .NET 10 SDK for building; the published self-contained build needs no .NET runtime.
+- No administrator rights are required for the UI or for read-only console development.
+- Firewall rule writes and ETW kernel tracing require an elevated service or an isolated test VM.
+
+## Building and running
 
 ```powershell
 dotnet restore LocalFirewall.sln --locked-mode
@@ -90,53 +100,55 @@ dotnet test LocalFirewall.sln -c Release --no-build
 .\scripts\publish-standalone.ps1
 ```
 
-Testovi: Core 38, Contracts 10, Persistence 11 (uključujući istoriju), Infrastructure 28.
+```powershell
+# service mode (local history is available)
+.\scripts\run-service.ps1
 
-## IPC ugovor
+# in-process read-only mode
+.\artifacts\publish\win-x64\LocalFirewall.Desktop.exe
+```
 
-- Pipe `\\.\pipe\LocalFirewall.Service.v1`, NDJSON, zahtev max **256 KiB**, odgovor max **4 MiB**
-  (snapshot sa više hiljada soketa prelazi limit zahteva).
-- Komande: `serviceHealth`, `capabilities`, `snapshot`, `history.query`.
-- `rule.*`, `config.*`, `diagnostics.*`, `live.events` → `not_supported`.
-- DACL: allow servisni nalog + jedan SID; deny `Network`/`Anonymous`/`Guests`; SID klijenta se
-  proverava posle konekcije.
+The standalone build produces one self-contained `LocalFirewall.Desktop.exe` in
+`artifacts\publish\win-x64`.
 
-## Struktura
+## Repository layout
 
 ```text
 src/
-  Contracts/ · Core/ · Infrastructure.Windows/ · Persistence/
-  Service/        # Worker host, monitoring, history writer, pipe
-  UI/             # WPF biblioteka (Views/ViewModels/tema)
-  Desktop/        # composition root / jedini UI EXE
-tests/
-  Core (38) · Contracts (10) · Persistence (11) · Infrastructure.Windows (28)
-docs/
-  ARCHITECTURE.md / SECURITY_MODEL.md / TEST_MATRIX.md / ADR/
-scripts/
-  run-local.ps1 / run-service.ps1 / publish-standalone.ps1
+  LocalFirewall.Contracts/              # DTOs, IPC and history contracts
+  LocalFirewall.Core/                   # domain rules and firewall port
+  LocalFirewall.Infrastructure.Windows/ # IP Helper, process identity, Named Pipe server
+  LocalFirewall.Persistence/            # SQLite schema, queries, retention
+  LocalFirewall.Service/                # Worker host, monitoring, history writer, pipe
+  LocalFirewall.UI/                     # WPF library: views, view models, theme
+  LocalFirewall.Desktop/                # composition root / the only UI executable
+tests/                                  # unit and Windows integration tests
+docs/                                   # architecture, security, test matrix, licensing, ADRs
+scripts/                                # local run, service mode, standalone publish
 ```
 
-## Sledeći korak — FND-004 (ETW bajtovi)
+## Documentation
 
-1. ETW kernel network sesija (`Microsoft-Windows-Kernel-Network`), send/receive po PID-u.
-2. Agregacija u `traffic_buckets`, event-loss metrika, `partial` kvalitet.
-3. Pravi Up/Down po aplikaciji i grafik umesto demo serije.
-4. Provera na eleviranoj sesiji ili VM-u: `logman`/`TraceEventSession` zahteva
-   `SeSystemProfilePrivilege`, koji UAC-filtered token nema.
+- [Architecture](docs/ARCHITECTURE.md)
+- [Security model](docs/SECURITY_MODEL.md)
+- [Test matrix](docs/TEST_MATRIX.md)
+- [Licensing](docs/LICENSING.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Architecture decision records](docs/ADR/)
 
-## Verifikacija
+## License and copyright
 
-[docs/TEST_MATRIX.md](docs/TEST_MATRIX.md); snimci `artifacts/screenshots/fnd005-*.png`.
+Copyright (C) 2026 The VigilMesh/LocalFirewall contributors.
 
-## Licenca
+The desktop application, the Windows service and the core libraries are licensed under
+**GNU GPL v3.0 or later**. See [`LICENSE`](LICENSE) for the full text and [`NOTICE`](NOTICE) for the
+copyright and grant. Third-party components and their licenses are listed in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md); names and logos are covered by
+[`TRADEMARKS.md`](TRADEMARKS.md).
 
-Projekat je licenciran pod **GPL-3.0-or-later**. Pun tekst: [`LICENSE`](LICENSE); autorska prava i
-grant: [`NOTICE`](NOTICE); third-party komponente: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md);
-imena i logotipi: [`TRADEMARKS.md`](TRADEMARKS.md). Licencne odluke i kompatibilnost zavisnosti:
-[`docs/LICENSING.md`](docs/LICENSING.md) i
+Contributions are accepted under the same license with a Developer Certificate of Origin
+(`git commit -s`); see [`CONTRIBUTING.md`](CONTRIBUTING.md). Security reports go through the private
+advisory process described in [`SECURITY.md`](SECURITY.md). Licensing decisions, dependency
+compatibility and the rules for optional integration modules are documented in
+[`docs/LICENSING.md`](docs/LICENSING.md) and
 [`docs/ADR/0005-license-gpl-3.0-or-later.md`](docs/ADR/0005-license-gpl-3.0-or-later.md).
-
-Doprinosi se prihvataju pod istom licencom uz DCO (`git commit -s`); vidi
-[`CONTRIBUTING.md`](CONTRIBUTING.md). Svi pinovani paketi su MIT ili Apache-2.0 i kompatibilni su sa
-GPLv3. Ne dodavati GPL-inkompatibilan kod niti tuđe feedove bez licence i pravne provere.

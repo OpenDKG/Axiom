@@ -1,115 +1,107 @@
-# ADR 0004 — FND-005: lokalna SQLite istorija i odlaganje FND-004
+# ADR 0004 — Local SQLite history and the FND-004 deferral
 
-- **Status:** prihvaćeno
-- **Datum:** 2026-11-03
-- **Milestone:** FND-005 (FND-004 odložen)
-- **Nadovezuje se na:** ADR 0001–0003
+- **Status:** accepted
+- **Date:** 2026-11-03
+- **Milestone:** FND-005 (FND-004 deferred)
+- **Builds on:** ADR 0001–0003
 
-## Kontekst
+## Context
 
-Sledeći milestone po handoff-u je FND-004 (ETW merenje bajtova). ETW kernel network sesija traži
-`SeSystemProfilePrivilege`. Na razvojnoj mašini proces je UAC-filtered: `BUILTIN\Administrators` je
-„deny only“, `whoami /priv` ne prikazuje `SeSystemProfilePrivilege`, a
-`logman create trace -p Microsoft-Windows-Kernel-Network` vraća **Access is denied**. Nema VM-a ni
-mogućnosti da se podigne elevirana sesija iz agenta.
+The next milestone in the handoff is FND-004 (ETW byte accounting). An ETW kernel network session
+requires `SeSystemProfilePrivilege`. The development process is UAC-filtered: `BUILTIN\Administrators`
+is deny-only, `whoami /priv` does not list `SeSystemProfilePrivilege`, and
+`logman create trace -p Microsoft-Windows-Kernel-Network` returns **Access is denied**. No VM or
+elevated session is available to the agent.
 
-Implementirati ETW bez mogućnosti da se provere event ID-jevi, polja i semantika bajtova bilo bi
-upravo ono što handoff zabranjuje („ne izmišljati P/Invoke/ETW polja“). Zato je FND-004 odložen, a
-radi se FND-005 (istorija), koji je potpuno proverljiv bez elevacije i ne zavisi od bajtova.
+Implementing ETW without being able to verify event IDs, fields and byte semantics would violate the
+handoff rule against inventing ETW fields. FND-004 is therefore deferred, and FND-005 (history) is
+implemented because it is fully verifiable without elevation and does not depend on bytes.
 
-## Odluke
+## Decisions
 
-### 1. SQLite schema v1 sa `flows` i `apps`
+### 1. SQLite schema v1 with `flows` and `apps`
 
-Tabele: `schema_migrations`, `apps`, `flows`, `traffic_buckets`, `settings`. Flow je jedinstven po
-`(app_id, protocol, local_endpoint, remote_endpoint, process_id)`; `first_seen_utc` se ne menja,
-`last_seen_utc`, `state`, `direction`, `quality` se ažuriraju.
+Tables: `schema_migrations`, `apps`, `flows`, `traffic_buckets`, `settings`. A flow is unique by
+`(app_id, protocol, local_endpoint, remote_endpoint, process_id)`. `first_seen_utc` is preserved;
+`last_seen_utc`, `state`, `direction` and `quality` are updated.
 
-**Posledica:** ponovljeni poll ne duplira redove; istorija raste samo sa novim flowovima.
+**Consequence:** repeated polls do not duplicate rows; history grows only with new flows.
 
-### 2. Batch upis na 2 s, ne po pollu
+### 2. Batch writes every 2 s, not per poll
 
-`HistoryWriter` uzima najnoviji snapshot iz keša i upisuje ga u jednoj transakciji svake 2 s.
-Retencija se primenjuje na startu i svakih sat vremena.
+`HistoryWriter` takes the latest snapshot from the cache and writes it in one transaction every two
+seconds. Retention runs at startup and hourly.
 
-**Posledica:** ~30 upisa u minuti umesto 60+, WAL ostaje mali; UI i dalje dobija 1 s svežinu preko
-pipe-a, istorija je do 2 s „iza“.
+**Consequence:** ~30 writes per minute instead of 60+; WAL stays small. The UI still gets 1 s
+freshness through the pipe; history is up to 2 s behind.
 
-### 3. UTC u bazi, lokalno u UI
+### 3. UTC in storage, local time in the UI
 
-Sve vremenske kolone su ISO-8601 UTC stringovi (`O`), pa su leksikografsko sortiranje i opsezi
-tačni. UI konvertuje u lokalno vreme samo za prikaz.
+All time columns are ISO-8601 UTC strings (`O`), so lexicographic ordering and ranges are correct.
+The UI converts to local time for display only.
 
-**Posledica:** DST i promene zone ne kvare upite.
+**Consequence:** DST and time-zone changes do not corrupt queries.
 
-### 4. Istorija samo kroz servis
+### 4. History only through the service
 
-UI ne referencira `Persistence`; `history.query` ide preko pipe-a. U in-process režimu `History`
-eksplicitno kaže da je potreban servis.
+The UI does not reference `Persistence`; `history.query` goes over the pipe. In in-process mode the
+`History` page states that the service is required.
 
-**Posledica:** nema dve istine o bazi i nema SQLite fajla koji UI može da zaključa.
+**Consequence:** one source of truth for the database and no SQLite file locked by the UI.
 
-### 5. Retencija 30 dana i korumpirana baza
+### 5. 30-day retention and corrupt-database recovery
 
-Podrazumevano 30 dana; brišu se flows stariji od granice i apps bez flows. Ako `integrity_check`
-padne ili SQLite vrati „not a database“, fajl se premešta u `.corrupt-<timestamp>` i baza se
-rekreira; ništa se ne briše tiho.
+Default retention is 30 days; flows older than the boundary and apps without flows are deleted. If
+`integrity_check` fails or SQLite reports "not a database", the file is moved to
+`.corrupt-<timestamp>` and the database is recreated. Nothing is silently deleted.
 
-**Posledica:** ograničen rast baze i predvidiv oporavak; korisnik može da sačuva korumpirani fajl.
+### 6. Separate request and response limits
 
-### 6. Odvojeni limiti za zahtev i odgovor
+The NDJSON request limit stays 256 KiB; responses may be up to 4 MiB. A snapshot with 3000 sockets is
+~1.5 MB and legitimately exceeds the request limit. The reader is buffered (16 KiB), not byte-by-byte.
 
-NDJSON zahtev ostaje 256 KiB; odgovor je do 4 MiB. Snapshot sa 3000 soketa ima ~1.5 MB i legalno
-prelazi limit zahteva. Čitač je buffered (16 KiB), ne bajt-po-bajt.
+**Consequence:** large snapshots work; the `Snapshot_larger_than_the_request_limit_is_returned` test
+guards against regression. The 4 MiB cap still requires pagination for extreme hosts in the future.
 
-**Posledica:** veliki snapshoti rade; test `Snapshot_larger_than_the_request_limit_is_returned` čuva
-regresiju. Rizik: 4 MiB je i dalje ograničen, pa ekstremne mašine mogu zahtevati paginaciju
-(budući rad).
+### 7. PID 0 and unknown paths are stored as they are
 
-### 7. PID 0 i nepoznate putanje se čuvaju kao takvi
+Rows with PID 0 (`TIME_WAIT`/kernel) and unreadable paths are stored with `quality=Partial` and an
+app key derived from the PID. No application is invented.
 
-Redovi sa PID 0 (`TIME_WAIT`/kernel) i nečitljivim putanjama upisuju se sa `quality=Partial` i
-`app_key` iz PID-a. Ne izmišlja se aplikacija.
+**Consequence:** history is truthful but may contain many `System · unowned (PID 0)` rows; this is
+visible in the UI and searchable.
 
-**Posledica:** istorija je vernа, ali može imati mnogo `System · unowned (PID 0)` redova; to je
-vidljivo u UI-ju i može se filtrirati pretragom.
+### 8. CSV export from the UI
 
-### 8. CSV izvoz iz UI-ja
+The UI requests up to 5000 rows with the current filter and writes CSV to a user-selected path
+(UTF-8 BOM, escaping). No new IPC file endpoint is added.
 
-UI traži do 5000 redova istim filterom i piše CSV na korisnički izabranu putanju (UTF-8 BOM,
-escapovanje). Nema novog IPC endpointa za fajlove.
+**Consequence:** the service gets no right to write outside its database; export is an explicit user
+action.
 
-**Posledica:** servis ne dobija pravo pisanja van svoje baze; izvoz je eksplicitna korisnička akcija.
+## Consequences
 
-## Posledice
+Positive:
 
-Pozitivne:
+- Real, searchable history that survives a service restart (verified: 4229 flows after restart).
+- Every FND-005 requirement is verifiable without admin (except the CSV dialog).
+- The database is per-user in development; the installer adds a ProgramData ACL.
 
-- Istorija je stvarna, pretraživa i preživljava restart servisa (provereno: 4229 flows posle restarta).
-- Sve DoD stavke FND-005 su proverljive bez admina (osim CSV dijaloga).
-- Baza je per-user u razvoju; installer će dodati ProgramData ACL.
+Negative / risks:
 
-Negativne / rizici:
+- FND-004 remains undone; the chart is demo and there are no bytes.
+- The database grows with unique flows; 30-day retention is fixed in code.
+- No database encryption; metadata (paths, endpoints) is stored, not content.
+- CSV export is limited to 5000 rows per action.
+- `traffic_buckets` is an empty table until FND-004.
 
-- FND-004 ostaje neurađen; grafik je demo i nema bajtova.
-- Baza raste sa brojem jedinstvenih flowova; 30 dana retencije je fiksno u kodu.
-- Nema šifrovanja baze; čuvaju se metapodaci (putanje, endpointi), ne sadržaj.
-- CSV izvoz je ograničen na 5000 redova po akciji.
-- `traffic_buckets` je prazna tabela do FND-004.
+## Alternatives considered
 
-## Razmatrane alternative
-
-| Alternativa | Zašto nije izabrana |
+| Alternative | Why not |
 |---|---|
-| ETW sada, bez provere | Zabranjeno handoff-om; neproverena semantika bajtova |
-| In-memory istorija | Ne preživljava restart; DoD FND-005 pada |
-| CSV kao primarni store | Nema upita, indeksa, retencije |
-| Upis svakog polla | Nepotrebno opterećenje WAL-a |
-| Baza u UI procesu | Krši granicu UI → Contracts |
-| Paginacija snapshota odmah | Veći protokol; 4 MiB pokriva realne slučajeve |
-
-## Sledeće odluke
-
-- FND-004: ETW sesija, event-loss, `traffic_buckets`, pravi grafik (elevirana sesija/VM).
-- FND-009: installer, ProgramData ACL, servisni nalog, potpis.
-- FND-006: firewall komande + audit trag u bazi.
+| ETW now, without verification | Forbidden by the handoff; unverified byte semantics |
+| In-memory history | Does not survive restart; FND-005 DoD fails |
+| CSV as the primary store | No queries, indexes or retention |
+| Write every poll | Unnecessary WAL load |
+| Database in the UI process | Breaks the UI → Contracts boundary |
+| Snapshot pagination now | Larger protocol; 4 MiB covers real cases |

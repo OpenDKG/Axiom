@@ -2,17 +2,18 @@
 bin/
 obj/
 artifacts/
+publish/
 TestResults/
 *.binlog
 
 # Visual Studio / Rider / VS Code
 .vs/
 .idea/
+.vscode/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
-.vscode/
 
 # NuGet
 *.nupkg
@@ -24,12 +25,27 @@ project.lock.json
 # Test / coverage
 coverage*.xml
 coverage*.json
+coverage*.coverage
+*.coverage
 *.trx
+
+# Local runtime data and diagnostics
+*.db
+*.db-wal
+*.db-shm
+*.corrupt-*
+*.etl
+*.dmp
+*.log
 
 # OS junk
 Thumbs.db
 desktop.ini
 .DS_Store
 
-# Local diagnostics produced while running the demo shell
-*.log
+# Internal planning documents (kept local, not published)
+LocalFirewall_AGENT_START_PROMPT_SR.md
+LocalFirewall_START_DEEPSEEK_V4_1_FLASH_SR.md
+LocalFirewall_FND_TASKS_V2_SR.md
+LocalFirewall_HANDOFF_V1_SR.md
+LocalFirewall_HANDOFF_V2_SR.md

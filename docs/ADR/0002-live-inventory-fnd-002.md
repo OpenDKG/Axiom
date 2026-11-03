@@ -1,125 +1,101 @@
-# ADR 0002 — FND-002: stvarni read-only inventar soketa kroz Desktop composition root
+# ADR 0002 — Live read-only inventory through a Desktop composition root
 
-- **Status:** prihvaćeno
-- **Datum:** 2026-11-03
+- **Status:** accepted
+- **Date:** 2026-11-03
 - **Milestone:** FND-002
-- **Nadovezuje se na:** ADR 0001
+- **Builds on:** ADR 0001
 
-## Kontekst
+## Context
 
-Korisnik mora da vidi **stvarne** procese i konekcije, ne demo redove. Handoff FND-002 traži IP Helper
-adapter za IPv4/IPv6 TCP/UDP, identitet procesa, polling 1–2 s, deduplikaciju i UI `Live Connections`,
-uz tačne PID-ove i endpointe za kontrolisani test.
+The product must show real processes and connections. FND-002 requires an IP Helper adapter for
+IPv4/IPv6 TCP/UDP, process identity, 1–2 s polling, deduplication and a live `Live Connections`
+table.
 
-Istovremeno važi pravilo iz handoff-a: **UI zavisi samo od Contracts** i ne sme da sadrži Win32/COM
-kod. `LocalFirewall.UI` je do sada bio izvršni projekat (WPF shell), pa nije bilo mesta za Windows
-adapter bez kršenja granice.
+The architecture rule says the UI depends only on `Contracts` and contains no Win32/COM code.
+`LocalFirewall.UI` was an executable WPF shell, so there was no place for a Windows adapter without
+breaking the boundary. In addition, .NET does not allow a self-contained executable to reference
+another executable (`NETSDK1150`), and a WPF library cannot contain an `ApplicationDefinition`
+(`MC1002`).
 
-Dodatno, .NET SDK ne dozvoljava da self-contained izvršni projekat referencira drugi izvršni projekat
-(`NETSDK1150`), a WPF biblioteka ne može da sadrži `ApplicationDefinition` (`MC1002`).
+## Decisions
 
-## Odluke
+### 1. UI becomes a WPF library; Desktop becomes the only executable
 
-### 1. `LocalFirewall.UI` postaje WPF biblioteka, `LocalFirewall.Desktop` je jedini EXE
+- `LocalFirewall.UI` keeps views, view models, themes and the pipe client and references only
+  `Contracts`.
+- `LocalFirewall.Desktop` is the composition root: it registers the real source, builds the monitor
+  and the main view model, and starts the WPF application.
+- `App.xaml` (resources, data templates, theme) lives in Desktop and uses absolute pack URIs into the
+  UI assembly.
 
-- UI zadržava Views/ViewModels/temu i **samo** `Contracts` referencu.
-- Desktop je composition root: registruje `IpHelperConnectionSource`, pravi `ConnectionMonitor` i
-  `MainViewModel`, pa pokreće WPF aplikaciju.
-- `App.xaml` (resursi, DataTemplate-ovi, tema) živi u Desktop-u i koristi apsolutne pack URI-jeve ka
-  `LocalFirewall.UI` assembly-ju.
-- Standalone publish ima jedan ulazni assembly i ne referencira drugi EXE.
+**Consequence:** the dependency rule is preserved and the UI cannot compile a call to IP Helper or
+the firewall. The cost is one extra project and pack URIs in `App.xaml`.
 
-**Posledica:** dependency pravilo je sačuvano; UI se ne može kompajlirati ako pokuša da pozove
-IP Helper ili firewall. Cena je jedan dodatni projekat i pack URI-ji u `App.xaml`.
+### 2. IP Helper owner tables for both families with two-call buffers
 
-### 2. IP Helper owner tabele, obe familije, two-call buffer
+`GetExtendedTcpTable`/`GetExtendedUdpTable` with `OWNER_PID` for `AF_INET` and `AF_INET6`. Buffers are
+allocated with the documented two-call pattern; rows are read with exact struct sizes
+(24/56/12/28 bytes). Ports are byte-swapped; IPv4 addresses are read in network order; IPv6 uses
+`IPAddress(bytes, scopeId)`.
 
-Koriste se `GetExtendedTcpTable`/`GetExtendedUdpTable` sa `OWNER_PID` klasom za `AF_INET` i `AF_INET6`.
-Buffer se alocira u dva poziva; redovi se čitaju `PtrToStructure` sa tačnim veličinama (24/56/12/28).
-Portovi se byte-swap-uju, IPv4 adrese čitaju kao mrežni redosled, IPv6 preko `IPAddress(bytes, scopeId)`.
+### 3. Process identity with the minimum handle
 
-**Posledica:** nema admina, nema drajvera, nema packet capture-a; čita se tabela koju Windows već drži.
+`OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` + `QueryFullProcessImageName`, cached for 30 s.
+Access denied or protected processes become `unknown path` with `Partial` quality; a path is never
+invented.
 
-### 3. Identitet procesa preko minimalnog handle-a
+### 4. Direction, first-seen and quality are explicit heuristics
 
-`OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` + `QueryFullProcessImageName`, keš 30 s. Pristup
-odbijen ili zaštićen proces → `unknown path`, kvalitet `Partial`, nikada izmišljena putanja.
+- IP Helper has no direction field. TCP: `Listen` or a matching local listener below the ephemeral
+  range (49152) is inbound; everything else is outbound. UDP is `Unknown`.
+- IP Helper has no connection start time. `FirstObservedUtc` is the first poll that saw the flow;
+  `IsNew` lasts 60 s.
+- Quality is `Observed` only when PID > 4 and the path is resolved; otherwise `Partial`.
 
-**Posledica:** sistemski procesi (npr. `svchost` pod SYSTEM nalogom) često nemaju čitljivu putanju bez
-elevacije; UI to prikazuje pošteno i broji takve redove u ograničenjima.
+### 5. PID 0 is not an application
 
-### 4. Smer, `first seen` i kvalitet su eksplicitno izvedeni
+PID 0 rows are `TIME_WAIT`/kernel leftovers. They appear in the socket table as
+`System · unowned (PID 0)`, are excluded from `Apps` grouping and are counted in the summary.
 
-- IP Helper nema polje smera. TCP: `Listen` ili lokalni listener ispod efemernog opsega (49152) →
-  inbound; ostalo outbound. UDP: `Unknown`.
-- IP Helper nema vreme nastanka veze. `FirstObservedUtc` je prvi poll u kojem je veza viđena, a
-  `IsNew` traje 60 s od tada.
-- Kvalitet: `Observed` samo kada su PID > 4 i putanja pouzdani; inače `Partial`.
+### 6. One-second polling with in-place diff and live sorting
 
-**Posledica:** nema lažne preciznosti; korisnik vidi `?` za UDP i `partial` za nepotpune redove.
+`ConnectionMonitor` polls on the UI dispatcher; `CaptureAsync` runs on the thread pool. Rows are
+updated in place by key `protocol|local|remote|pid`; new rows are added and stale rows removed.
+`DataGrid` sorts by `StateRank`; `Apps` uses `ListCollectionView.IsLiveSorting`.
 
-### 5. PID 0 nije aplikacija
+### 7. Demo remains only for the throughput chart
 
-Redovi sa PID 0 su `TIME_WAIT`/kernel ostaci. Prikazuju se u tabeli kao
-`System · unowned (PID 0)`, ne ulaze u `Apps` grupisanje, a broj se prikazuje u rezimeu.
+Bytes are not available from the owner tables. `DemoTrafficEngine` draws a labelled `DEMO SERIES`;
+`Live Connections` and `Apps` contain no demo rows. `DemoConnectionSnapshotSource` remains a design
+fallback but is not registered by the published Desktop.
 
-**Posledica:** top liste prikazuju stvarne procese, ali se ne krije da postoji veliki broj neowned
-soketa.
+### 8. `netstat -ano` is the reference oracle, not `Get-Net*` cmdlets
 
-### 6. Polling 1 s sa diff ažuriranjem i live sortiranjem
+On the test host `Get-NetTCPConnection` shows ~100 extra `Bound` rows and `Get-NetUDPEndpoint` misses
+endpoints. Comparison with `netstat -ano` produced TCP 223 vs 225 and UDP 114 vs 114.
 
-`ConnectionMonitor` anketira izvor na UI dispatcher-u, a `CaptureAsync` radi na thread pool-u. Redovi
-se ažuriraju u mestu po ključu `protocol|local|remote|pid`; novi se dodaju, nestali uklanjaju.
-`DataGrid` sortira po `StateRank`, a `Apps` koristi `ListCollectionView.IsLiveSorting`.
+## Consequences
 
-**Posledica:** sortiranje i selekcija preživljavaju polling; nema treperenja tabele svake sekunde.
-Kratke veze između pollova se propuštaju i to je dokumentovano.
+Positive:
 
-### 7. Demo ostaje samo za grafik propusnosti
+- Real data without admin rights or a service; the architectural boundary is preserved.
+- Deterministic integration tests for TCP/UDP and process identity.
+- Standalone publishing remains a single executable.
 
-Bajtovi nisu dostupni iz owner tabela. `DemoTrafficEngine` i dalje crta demo seriju, jasno označenu
-`DEMO SERIES`; `Live Connections` i `Apps` više ne sadrže demo redove. `DemoConnectionSnapshotSource`
-ostaje kao fallback za dizajn/test, ali ga objavljeni Desktop ne registruje.
+Negative / risks:
 
-**Posledica:** nema mešanja izmišljenih konekcija sa stvarnim; merenje dolazi u FND-004.
+- Poll-only misses short connections and provides no bytes.
+- Paths of SYSTEM processes are often unreadable without elevation.
+- Direction and first-seen are heuristics and must stay labelled.
+- An extra project and pack URIs add initial WPF resource complexity.
+- No persistence: a restart loses history and first-seen.
 
-### 8. `netstat -ano` je referentni oracle, ne `Get-Net*` cmdleti
+## Alternatives considered
 
-Na test mašini `Get-NetTCPConnection` prikazuje ~100 dodatnih redova u stanju `Bound`, a
-`Get-NetUDPEndpoint` ne prikazuje sve UDP endpointe. Poređenje sa `netstat -ano` (iste tabele) dalo je
-TCP 223 vs 225 i UDP 114 vs 114.
-
-**Posledica:** verifikacija je reproduktivna i objašnjava razliku; `Get-Net*` se ne koristi kao dokaz.
-
-## Posledice
-
-Pozitivne:
-
-- Stvarni podaci bez admina i bez servisa; arhitektonska granica je sačuvana.
-- Deterministički integracioni testovi za TCP/UDP i identitet procesa.
-- Standalone publish je ponovo moguć i ostaje jedan EXE.
-
-Negativne / rizici:
-
-- Poll-only pristup propušta kratke veze i ne daje bajtove.
-- Putanje sistemskih procesa su često nedostupne bez elevacije.
-- Smer i `first seen` su heuristike; moraju ostati označene.
-- Dodatni projekat i pack URI-ji povećavaju inicijalnu složenost WPF resursa.
-- Nema perzistencije: restart gubi istoriju i `first seen`.
-
-## Razmatrane alternative
-
-| Alternativa | Zašto nije izabrana |
+| Alternative | Why not |
 |---|---|
-| UI direktno referencira `Infrastructure.Windows` | Krši pravilo „UI → Contracts“ i otvara put ka firewall kodu iz UI-ja |
-| Odmah servis + IPC (FND-003) | Veći bezbednosni dizajn; FND-002 je read-only i ne zahteva ga |
-| ETW pre inventara | ETW ne daje PID/endpoint tabelu; IP Helper je pravi prvi korak |
-| WFP eventi za konekcije | Zahteva WFP pretplatu i privilegije; FND-007 |
-| UI kao EXE sa `InternalsVisibleTo` trikom | Ne rešava `NETSDK1150` za self-contained publish |
-| Demo redovi pomešani sa stvarnim | Nedopustivo: korisnik ne bi znao šta je merenje |
-
-## Sledeće odluke
-
-- FND-003: servisni nalog, ACL pipe-a, reconnect i premeštanje kolektora u servis.
-- FND-004: ETW metrika (payload vs. wire), event-loss budžet, pravi grafik.
-- FND-010: hash/potpis identiteta i PID start time.
+| UI references Infrastructure.Windows directly | Breaks the UI → Contracts rule and opens a path to firewall code from the UI |
+| Service + IPC immediately | Larger security design; FND-002 is read-only |
+| ETW before inventory | ETW does not provide the PID/endpoint table |
+| WFP events for connections | Requires WFP subscription and privileges (FND-007) |
+| Demo rows mixed with real rows | Unacceptable: the user could not tell measurement from sample |
