@@ -215,6 +215,7 @@ scripts/                                # local run, service mode, standalone pu
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security model](docs/SECURITY_MODEL.md)
 - [Test matrix](docs/TEST_MATRIX.md)
+- [Accessibility and keyboard](docs/ACCESSIBILITY.md)
 - [Licensing](docs/LICENSING.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Architecture decision records](docs/ADR/)
