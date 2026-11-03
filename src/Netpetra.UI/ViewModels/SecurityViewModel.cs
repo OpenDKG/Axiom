@@ -28,7 +28,8 @@ public sealed record SecurityModule(
     string Glyph,
     bool IsConnected = false,
     bool CanAct = false,
-    string ActionLabel = "Install");
+    string ActionLabel = "Install",
+    bool CanUninstall = false);
 
 public sealed partial class FileScanRow : ObservableObject
 {
@@ -74,6 +75,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly OptionalModuleProbe _probe = new();
 
     private readonly OptionalModuleInstaller _installer = new();
+
+    private readonly OptionalModuleUninstaller _uninstaller = new();
 
     private readonly BoundedHistory<ModuleActivity> _activityHistory = new(30);
 
@@ -439,6 +442,69 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     }
 
     [RelayCommand]
+    private async Task UninstallModuleAsync(string? module)
+    {
+        if (string.IsNullOrWhiteSpace(module))
+        {
+            return;
+        }
+
+        var message = module switch
+        {
+            "Blackbox" =>
+                "Remove the Blackbox folder, its shortcut, .hermes\\blackbox and the Agent Blackbox DKG scheduled task? Other Hermes data and global packages are kept.",
+            "OriginTrail DKG" =>
+                "Remove the local DKG package and its testnet home? No global npm package is removed.",
+            "Reputation provider" =>
+                "Delete the stored VirusTotal API key and disable the provider?",
+            "Community feed" =>
+                "Delete the stored community feed URL and token?",
+            _ => null,
+        };
+
+        if (message is null)
+        {
+            return;
+        }
+
+        var confirmation = MessageBox.Show(
+            message,
+            "Uninstall optional module",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        switch (module)
+        {
+            case "Blackbox":
+                _uninstaller.UninstallBlackbox();
+                InstallStatusText = "Blackbox uninstall started in PowerShell.";
+                break;
+            case "OriginTrail DKG":
+                _uninstaller.UninstallDkg();
+                InstallStatusText = "DKG uninstall started in PowerShell.";
+                break;
+            case "Reputation provider":
+                _uninstaller.RemoveReputationSettings();
+                _reputationSettings = new ReputationSettings(false, string.Empty);
+                InstallStatusText = "VirusTotal key removed.";
+                break;
+            case "Community feed":
+                _uninstaller.RemoveCommunitySettings();
+                _communitySettings = new CommunityFeedSettings(false, string.Empty, string.Empty);
+                InstallStatusText = "Community feed settings removed.";
+                break;
+        }
+
+        await Task.Delay(500).ConfigureAwait(true);
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private void Restart()
     {
         var executable = Environment.ProcessPath;
@@ -468,21 +534,26 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "\uE9D9",
             false,
             true,
-            "Setup"));
+            "Setup",
+            _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)));
         Modules.Add(new SecurityModule(
             "Blackbox",
             "CHECKING",
             "Looking for a local Blackbox dashboard on 127.0.0.1:9700.",
             "\uE7BA",
             false,
-            true));
+            true,
+            "Install",
+            _uninstaller.IsBlackboxInstalled));
         Modules.Add(new SecurityModule(
             "OriginTrail DKG",
             "CHECKING",
             "Looking for a local DKG node on 127.0.0.1:9200.",
             "\uE968",
             false,
-            true));
+            true,
+            "Install",
+            _uninstaller.IsDkgInstalled));
         Modules.Add(new SecurityModule(
             "Community feed",
             CommunityStatus,
@@ -490,7 +561,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "\uE774",
             false,
             true,
-            "Setup"));
+            "Setup",
+            _communitySettings.Enabled || !string.IsNullOrWhiteSpace(_communitySettings.Url)));
         Modules.Add(new SecurityModule(
             "File scanning",
             "NOT ENABLED",
@@ -511,7 +583,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "\uE9D9",
             false,
             true,
-            "Setup"));
+            "Setup",
+            _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)));
         Modules.Add(new SecurityModule(
             "Blackbox",
             blackbox.Status,
@@ -519,7 +592,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "\uE7BA",
             blackbox.IsConnected,
             !blackbox.IsConnected,
-            "Install"));
+            "Install",
+            _uninstaller.IsBlackboxInstalled));
         Modules.Add(new SecurityModule(
             "OriginTrail DKG",
             dkg.Status,
@@ -527,7 +601,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "\uE968",
             dkg.IsConnected,
             !dkg.IsConnected,
-            "Install"));
+            "Install",
+            _uninstaller.IsDkgInstalled));
         Modules.Add(new SecurityModule(
             "Community feed",
             CommunityStatus,
@@ -535,7 +610,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "\uE774",
             false,
             true,
-            "Setup"));
+            "Setup",
+            _communitySettings.Enabled || !string.IsNullOrWhiteSpace(_communitySettings.Url)));
         Modules.Add(new SecurityModule(
             "File scanning",
             "NOT ENABLED",
