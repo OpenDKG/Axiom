@@ -27,12 +27,12 @@ public sealed class SecurityViewModel : PageViewModel
             new SecurityModule(
                 "Blackbox",
                 "NOT INSTALLED",
-                "No Blackbox process is started, queried or controlled.",
+                "Requires an already installed Umanitek Blackbox. This build does not bundle, start or query it.",
                 "\uE7BA"),
             new SecurityModule(
                 "OriginTrail DKG",
-                "NOT CONNECTED",
-                "No DKG node, wallet, token or feed is used by the standard build.",
+                "NOT CONFIGURED",
+                "Requires a separately installed OriginTrail Edge Node. No node, wallet, token or feed is bundled.",
                 "\uE968"),
             new SecurityModule(
                 "Community feed",
@@ -49,9 +49,9 @@ public sealed class SecurityViewModel : PageViewModel
 
     public IReadOnlyList<SecurityModule> Modules { get; }
 
-    public string StatusTitle => "All optional modules are off";
+    public string StatusTitle => "Optional modules are off by design";
 
     public string StatusText =>
-        "The standard build works fully offline. No background module, account, wallet or external " +
-        "service is active. Enabling one later is an explicit, separate choice.";
+        "The standard build is the local firewall and network monitor. Blackbox and OriginTrail DKG " +
+        "are optional third-party integrations; neither is bundled, started or connected.";
 }

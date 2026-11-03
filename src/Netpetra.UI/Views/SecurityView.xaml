@@ -82,7 +82,7 @@
       <TextBlock Style="{StaticResource Caption}"
                  Margin="2,12,0,0"
                  TextWrapping="Wrap"
-                 Text="Nothing on this page is connected. The application starts no optional process and sends no data to any service." />
+                 Text="Blackbox and DKG require separately installed third-party software. The standard build never starts or connects to them." />
     </StackPanel>
   </ScrollViewer>
 </UserControl>
