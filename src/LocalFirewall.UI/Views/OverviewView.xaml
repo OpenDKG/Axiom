@@ -246,7 +246,7 @@
               <TextBlock Grid.Row="3" Grid.Column="1" Text="not implemented" Style="{StaticResource BodyMuted}" Margin="0,0,0,8" />
 
               <TextBlock Grid.Row="4" Text="Database" Style="{StaticResource BodyMuted}" Margin="0,0,0,8" />
-              <TextBlock Grid.Row="4" Grid.Column="1" Text="not connected" Style="{StaticResource BodyMuted}" Margin="0,0,0,8" />
+              <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding DatabaseText}" Style="{StaticResource BodyMuted}" Margin="0,0,0,8" />
 
               <TextBlock Grid.Row="5" Text="Service install" Style="{StaticResource BodyMuted}" />
               <TextBlock Grid.Row="5" Grid.Column="1" Text="not installed" Style="{StaticResource BodyMuted}" />
