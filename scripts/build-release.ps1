@@ -18,7 +18,7 @@
     .\scripts\build-release.ps1
 
 .EXAMPLE
-    .\scripts\build-release.ps1 -Version 0.3.2
+    .\scripts\build-release.ps1 -Version 0.3.3
 #>
 param(
     [string]$Version = "",
