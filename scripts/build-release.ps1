@@ -4,8 +4,9 @@
     Builds the portable Netpetra release archive and checksum file.
 
 .DESCRIPTION
-    Publishes the standalone Windows x64 build, packs Netpetra.Desktop.exe with the license and
-    notice files, and writes SHA256SUMS.txt. No network upload, signing or installer is performed.
+    Publishes the standalone Windows x64 desktop and service builds, packs both executables with the
+    license and notice files, and writes SHA256SUMS.txt. No network upload, signing or installer is
+    performed.
 
 .PARAMETER Version
     Release version. Defaults to the Version property in Directory.Build.props.
@@ -17,7 +18,7 @@
     .\scripts\build-release.ps1
 
 .EXAMPLE
-    .\scripts\build-release.ps1 -Version 0.2.1
+    .\scripts\build-release.ps1 -Version 0.3.0
 #>
 param(
     [string]$Version = "",
@@ -56,13 +57,25 @@ if (-not $OutputDir) {
 
 $dotnet = Resolve-Dotnet
 $project = Join-Path $root "src\Netpetra.Desktop\Netpetra.Desktop.csproj"
+$serviceProject = Join-Path $root "src\Netpetra.Service\Netpetra.Service.csproj"
 
 Write-Host "Publishing Netpetra $Version (win-x64)..." -ForegroundColor Cyan
 & $dotnet publish $project -c Release -p:PublishProfile=win-x64-selfcontained
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
 
+Write-Host "Publishing Netpetra service $Version (win-x64, self-contained)..." -ForegroundColor Cyan
+$serviceOutput = Join-Path $root "artifacts\publish\service"
+Remove-Item $serviceOutput -Recurse -Force -ErrorAction SilentlyContinue
+& $dotnet publish $serviceProject -c Release -r win-x64 --self-contained true `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None `
+    -o $serviceOutput
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish (service) failed with exit code $LASTEXITCODE." }
+
 $exe = Join-Path $root "artifacts\publish\win-x64\Netpetra.Desktop.exe"
 if (-not (Test-Path $exe)) { throw "Published executable not found: $exe" }
+
+$serviceExe = Join-Path $serviceOutput "Netpetra.Service.exe"
+if (-not (Test-Path $serviceExe)) { throw "Published service not found: $serviceExe" }
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $zipName = "Netpetra-$Version-win-x64.zip"
@@ -70,6 +83,7 @@ $zipPath = Join-Path $OutputDir $zipName
 
 $files = @(
     $exe,
+    $serviceExe,
     (Join-Path $root "LICENSE"),
     (Join-Path $root "NOTICE"),
     (Join-Path $root "THIRD_PARTY_NOTICES.md"),

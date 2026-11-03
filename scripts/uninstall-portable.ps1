@@ -4,9 +4,10 @@
     Removes the per-user portable Netpetra installation.
 
 .DESCRIPTION
-    Removes only the files installed by install-portable.ps1 (Netpetra.Desktop.exe, install.json)
-    and the Start Menu shortcut. User data is kept unless -RemoveData is specified. No administrator
-    rights are required and no Windows service or firewall rule is touched.
+    Removes only the files installed by install-portable.ps1 (Netpetra.Desktop.exe,
+    Netpetra.Service.exe, install.json) and the Start Menu shortcut. User data is kept unless
+    -RemoveData is specified. No administrator rights are required and no Windows service or firewall
+    rule is touched.
 
 .PARAMETER InstallDir
     Installation directory. Defaults to %LOCALAPPDATA%\Programs\Netpetra.
@@ -27,7 +28,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (Get-Process -Name "Netpetra.Desktop" -ErrorAction SilentlyContinue) {
+if (Get-Process -Name "Netpetra.Desktop","Netpetra.Service" -ErrorAction SilentlyContinue) {
     throw "Netpetra is running. Close it before uninstalling."
 }
 
@@ -40,6 +41,7 @@ if (Test-Path $shortcutPath) {
 
 $installedFiles = @(
     (Join-Path $InstallDir "Netpetra.Desktop.exe"),
+    (Join-Path $InstallDir "Netpetra.Service.exe"),
     (Join-Path $InstallDir "install.json")
 )
 
