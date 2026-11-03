@@ -77,6 +77,10 @@ if (-not (Test-Path $exe)) { throw "Published executable not found: $exe" }
 $serviceExe = Join-Path $serviceOutput "Netpetra.Service.exe"
 if (-not (Test-Path $serviceExe)) { throw "Published service not found: $serviceExe" }
 
+$communityDir = Join-Path $root "artifacts\publish\win-x64\community"
+$communityFeed = Join-Path $communityDir "feed.json"
+if (-not (Test-Path $communityFeed)) { throw "Bundled community feed not found: $communityFeed" }
+
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $zipName = "Netpetra-$Version-win-x64.zip"
 $zipPath = Join-Path $OutputDir $zipName
@@ -84,6 +88,7 @@ $zipPath = Join-Path $OutputDir $zipName
 $files = @(
     $exe,
     $serviceExe,
+    $communityDir,
     (Join-Path $root "LICENSE"),
     (Join-Path $root "NOTICE"),
     (Join-Path $root "THIRD_PARTY_NOTICES.md"),

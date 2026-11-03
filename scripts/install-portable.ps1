@@ -75,6 +75,11 @@ New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 $target = Join-Path $InstallDir "Netpetra.Desktop.exe"
 Copy-Item $sourceItem.FullName $target -Force
 
+$communitySource = Join-Path (Split-Path -Parent $sourceItem.FullName) "community"
+if (Test-Path (Join-Path $communitySource "feed.json")) {
+    Copy-Item $communitySource $InstallDir -Recurse -Force
+}
+
 $serviceHash = $null
 $serviceTarget = Join-Path $InstallDir "Netpetra.Service.exe"
 if ($hasService) {
