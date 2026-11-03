@@ -31,6 +31,8 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
 
     public IReadOnlyList<string> Ranges { get; } = ["5m", "1h", "24h", "7d"];
 
+    public IReadOnlyList<string> RateUnits { get; } = ["Auto", "KB/s", "MB/s", "GB/s"];
+
     /// <summary>Demo marker positions on the time axis; real event markers arrive with FND-010.</summary>
     public IReadOnlyList<double> EventMarkers { get; } = [0.18, 0.52, 0.77];
 
@@ -61,6 +63,9 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private string _selectedRange = "5m";
+
+    [ObservableProperty]
+    private string _selectedRateUnit = "Auto";
 
     [ObservableProperty]
     private string _uploadRateText = "—";
@@ -97,6 +102,8 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
         OnTrafficUpdated(this, EventArgs.Empty);
     }
 
+    partial void OnSelectedRateUnitChanged(string value) => UpdateMetrics();
+
     private void OnMonitorUpdated(object? sender, EventArgs e) => UpdateLiveCounters();
 
     private void UpdateLiveCounters()
@@ -125,8 +132,8 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
 
     private void UpdateMetrics()
     {
-        UploadRateText = ByteFormatter.Rate(_traffic.LatestUpload);
-        DownloadRateText = ByteFormatter.Rate(_traffic.LatestDownload);
+        UploadRateText = ByteFormatter.Rate(_traffic.LatestUpload, SelectedRateUnit);
+        DownloadRateText = ByteFormatter.Rate(_traffic.LatestDownload, SelectedRateUnit);
         RangeNote = _traffic.Range == DemoTimerRange.LastMinute
             ? "Updates once per second from a local generator."
             : "Fixed demo shape; live history arrives with FND-005.";

@@ -30,6 +30,30 @@ public static class ByteFormatter
             $"{value.ToString(unit == 0 ? "0" : "0.0", CultureInfo.InvariantCulture)} {RateUnits[unit]}");
     }
 
+    public static string Rate(double bytesPerSecond, string selectedUnit)
+    {
+        if (double.IsNaN(bytesPerSecond) || double.IsInfinity(bytesPerSecond) || bytesPerSecond < 0)
+        {
+            return "—";
+        }
+
+        if (selectedUnit is not ("KB/s" or "MB/s" or "GB/s"))
+        {
+            return Rate(bytesPerSecond);
+        }
+
+        var divisor = selectedUnit switch
+        {
+            "KB/s" => 1024d,
+            "MB/s" => 1024d * 1024d,
+            _ => 1024d * 1024d * 1024d,
+        };
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{(bytesPerSecond / divisor).ToString("0.0", CultureInfo.InvariantCulture)} {selectedUnit}");
+    }
+
     public static string Total(long bytes)
     {
         if (bytes <= 0)
