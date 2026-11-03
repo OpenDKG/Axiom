@@ -51,6 +51,9 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     [ObservableProperty]
     private string _unownedText = "0";
 
+    [ObservableProperty]
+    private string _newConnectionsText = "0 new in the last 60 s";
+
     public string DatabaseText => ConnectionSourceRegistry.IsServiceMode
         ? "service-managed"
         : "not connected";
@@ -112,6 +115,7 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
         ProcessesText = _monitor.ProcessCount.ToString(CultureInfo.InvariantCulture);
         LoopbackText = _monitor.Connections.Count(connection => connection.IsLoopback).ToString(CultureInfo.InvariantCulture);
         UnownedText = AppGrouping.CountUnowned(_monitor.Connections).ToString(CultureInfo.InvariantCulture);
+        NewConnectionsText = $"{_monitor.Connections.Count(connection => connection.IsNew)} new in the last 60 s";
         SourceText = _monitor.SourceName;
         CaptureText = _monitor.LastCaptureUtc is { } captured
             ? captured.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)

@@ -106,6 +106,11 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         Modules = [];
         SeedCheckingState();
 
+        if (_communitySettings.Enabled && !string.IsNullOrWhiteSpace(_communitySettings.Url))
+        {
+            _ = RefreshCommunityAsync();
+        }
+
         _activityTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         _activityTimer.Tick += (_, _) => _ = RefreshAsync();
         _activityTimer.Start();

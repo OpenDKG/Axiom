@@ -31,6 +31,14 @@ public partial class FirstRunWindow : Window
 
         OnboardingStore.Save(settings);
 
+        if (CommunityCheck.IsChecked == true)
+        {
+            new CommunityFeedSettingsStore().Save(new CommunityFeedSettings(
+                Enabled: true,
+                Url: CommunityFeedSettingsStore.StarterFeedUrl,
+                Token: string.Empty));
+        }
+
         if (settings.Dkg)
         {
             _installer.InstallDkg();

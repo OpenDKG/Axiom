@@ -15,7 +15,9 @@ public sealed partial class AppRow : ObservableObject
         Name = group.Name;
         Path = group.Path;
         ProcessIds = group.ProcessIds;
-        Initial = group.Name.Length == 0 ? "?" : group.Name[..1].ToUpperInvariant();
+        Initial = group.Name.StartsWith("OpenCode", StringComparison.OrdinalIgnoreCase)
+            ? "OC"
+            : group.Name.Length == 0 ? "?" : group.Name[..1].ToUpperInvariant();
 
         Update(group, barWidth);
     }

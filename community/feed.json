@@ -1,0 +1,11 @@
+{
+  "entries": [
+    {
+      "sha256": "275A021BBFB6489E54D471899F7DB9D1663FC695EC2FE2A2C4538AABF651FD0F",
+      "name": "EICAR anti-malware test file",
+      "verdict": "test",
+      "source": "Netpetra starter feed",
+      "updatedUtc": "2026-11-04T00:00:00Z"
+    }
+  ]
+}

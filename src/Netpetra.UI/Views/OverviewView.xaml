@@ -29,6 +29,10 @@
             <TextBlock Style="{StaticResource BodyMuted}"
                        Margin="0,3,0,0"
                        Text="Socket rows and process identities are read from this Windows host with IP Helper. Byte rates are not measured yet, so the throughput chart below is a generated demo series (FND-004). No firewall rule is read or changed." />
+            <TextBlock Text="{Binding NewConnectionsText}"
+                       Style="{StaticResource Caption}"
+                       Foreground="{DynamicResource Brush.Success}"
+                       Margin="0,5,0,0" />
           </StackPanel>
         </Grid>
       </Border>

@@ -48,7 +48,20 @@
       <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,10,0">
         <StackPanel>
           <TextBlock Text="CAPABILITY" Style="{StaticResource MetricLabel}" />
-          <TextBlock Text="{Binding CapabilityStatusText}" Style="{StaticResource MetricValue}" />
+          <TextBlock Text="{Binding CapabilityStatusText}">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock" BasedOn="{StaticResource MetricValue}">
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding CapabilityStatusText}" Value="Available">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding CapabilityStatusText}" Value="Unavailable">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
           <TextBlock Text="{Binding CapabilityDetail}"
                      Style="{StaticResource Caption}"
                      Margin="0,4,0,0"
@@ -67,7 +80,20 @@
       <Border Grid.Column="2" Style="{StaticResource Card}">
         <StackPanel>
           <TextBlock Text="WRITE PATH" Style="{StaticResource MetricLabel}" />
-          <TextBlock Text="{Binding WritePathText}" Style="{StaticResource MetricValue}" />
+          <TextBlock Text="{Binding WritePathText}">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock" BasedOn="{StaticResource MetricValue}">
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding WritePathText}" Value="disabled">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding WritePathText}" Value="enabled (test VM only)">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
           <TextBlock Text="no rule can be created without the explicit gate" Style="{StaticResource Caption}" Margin="0,4,0,0" />
         </StackPanel>
       </Border>
