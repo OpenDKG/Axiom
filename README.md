@@ -89,7 +89,8 @@ installer only after an explicit confirmation; nothing runs silently. Setup step
   replacement for its configuration.
 - The Standard build starts no Blackbox, Hermes, OpenClaw, Python, Node or Docker process.
 - If Blackbox is not installed, the UI says `not installed`; it never claims protection from a
-  component that is absent.
+  component that is absent. Once installed, **Audit** and **Block** buttons switch the mode in
+  `~/.hermes/config.yaml` without reinstalling.
 - The difference between `audit` and `block`, and the fail-open limits of a third-party agent guard,
   are stated explicitly. No official partnership is implied.
 
