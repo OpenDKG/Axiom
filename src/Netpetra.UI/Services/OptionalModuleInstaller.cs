@@ -53,6 +53,9 @@ public sealed class OptionalModuleInstaller
               npm install --prefix $dkgRoot --ignore-scripts --no-fund --no-audit '{{DkgPackage}}'
               if ($LASTEXITCODE -ne 0) { throw "npm install failed with exit code $LASTEXITCODE" }
             }
+            Write-Host 'Building the better-sqlite3 native module for this Node version...' -ForegroundColor Cyan
+            npm rebuild better-sqlite3 --prefix $dkgRoot
+            if ($LASTEXITCODE -ne 0) { throw "better-sqlite3 rebuild failed with exit code $LASTEXITCODE" }
             $env:DKG_HOME = $dkgHome
             Write-Host 'Starting the official DKG testnet setup. Answer the prompts in this window.' -ForegroundColor Cyan
             & $dkg init --network testnet --role edge --store oxigraph
@@ -84,6 +87,15 @@ public sealed class OptionalModuleInstaller
             Write-Host "Installer SHA256: $hash" -ForegroundColor Yellow
             Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
             & $installer -StoreBackend oxigraph
+            $venv = Join-Path $dir 'agent-blackbox\venv\Scripts\python.exe'
+            if (Test-Path $venv) {
+              Write-Host 'Repairing missing Blackbox Python dependencies...' -ForegroundColor Cyan
+              & $venv -m pip install ruamel.yaml python-dotenv rich pyyaml aiohttp
+              $hermes = Join-Path $dir 'agent-blackbox\venv\Scripts\hermes.exe'
+              if (Test-Path $hermes) {
+                & $hermes plugins enable blackbox --no-allow-tool-override
+              }
+            }
             Write-Host 'Blackbox setup finished. Return to Netpetra and click Check again.' -ForegroundColor Green
             """;
 
