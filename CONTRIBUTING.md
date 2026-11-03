@@ -52,6 +52,19 @@ For bugs and feature work, open an issue with: version/commit, Windows version, 
 actual, and relevant logs with secrets removed. Security issues go through `SECURITY.md`, not public
 issues.
 
+## Pull requests are mandatory
+
+Every change, including documentation, scripts, version bumps and release preparation, must go
+through a pull request. Never commit directly to `main`.
+
+1. Create a short branch from the current `main`.
+2. Make small, signed commits (`git commit -s`).
+3. Open a PR, link it in the working session, and state the exact build/test results.
+4. Wait for the relevant checks and review; merge through the PR.
+5. Create tags and releases only from a merged `main` commit.
+
+Direct pushes to `main` are not accepted, even for one-line fixes.
+
 ## Review and merge
 
 - Maintainers review for correctness, security and scope.
