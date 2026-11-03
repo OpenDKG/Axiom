@@ -216,6 +216,7 @@ scripts/                                # local run, service mode, standalone pu
 - [Security model](docs/SECURITY_MODEL.md)
 - [Test matrix](docs/TEST_MATRIX.md)
 - [Accessibility and keyboard](docs/ACCESSIBILITY.md)
+- [Performance budget](docs/PERFORMANCE_BUDGET.md)
 - [Licensing](docs/LICENSING.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Architecture decision records](docs/ADR/)
