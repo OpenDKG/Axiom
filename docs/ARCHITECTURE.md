@@ -87,7 +87,25 @@ Infrastructure/Service/Desktop.
   recreate.
 - Indexes: `last_seen_utc`, `remote_endpoint`, `app_id`.
 
-## 6. UI
+## 6. Firewall (FND-006)
+
+- `IFirewallPolicyAdapter` (Core) is implemented by `WindowsFirewallPolicyAdapter`, which uses the
+  documented `INetFwPolicy2`/`INetFwRule` COM objects on a dedicated STA thread.
+- Read-only operations: capability probe, owned-rule listing and verification. They need no admin
+  on a normal host.
+- Write operations: apply and remove, limited to exact `Netrigil::{id}::{OUT|IN}` names. They are
+  refused unless `NETRIGIL_ENABLE_FIREWALL_WRITES=1` and
+  `NETRIGIL_FIREWALL_WRITE_CONFIRM=yes` are both set on the service.
+- `FirewallRuleCoordinator` serialises changes and runs
+  validate → pending + audit → apply → read-back → applied/failed + audit.
+- SQLite schema v2 adds `firewall_rules` and `rule_audit`; the audit actor is the verified pipe
+  client SID.
+- The UI reads capability/rules through `rules.query`; block actions live on Applications, remove on
+  Firewall, and both require `WritesEnabled=true`.
+- Real enforcement is not verified on the development host. The VM checklist is in ADR 0007 and
+  `docs/FIREWALL_RECOVERY.md` documents targeted recovery.
+
+## 7. UI
 
 - Navigation follows the V2 set: Overview, Connections, Applications, Events, Firewall, Files,
   Security, Settings.
@@ -105,7 +123,7 @@ Infrastructure/Service/Desktop.
 - The throughput chart is still a demo series (`DEMO SERIES`) with three labelled demo event
   markers; real markers and bytes are FND-010/FND-004.
 
-## 7. Deferred
+## 8. Deferred
 
 - **FND-004 (ETW)**: a kernel network session requires `SeSystemProfilePrivilege`; this session is
   UAC-filtered (`logman` → Access denied). Implementation and verification move to an elevated
@@ -113,4 +131,4 @@ Infrastructure/Service/Desktop.
 - FND-006 firewall writes, FND-007 alerts, FND-009 installer/signing.
 - Service account and installation ACL; filling `traffic_buckets`.
 
-Decisions: ADR 0001–0006.
+Decisions: ADR 0001–0007.

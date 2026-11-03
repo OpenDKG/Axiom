@@ -37,7 +37,21 @@ in the service.
 - The installer (FND-009) must set an explicit ACL on `%ProgramData%\Netrigil\`; development
   uses per-user LocalAppData.
 
-## 4. Threat model
+## 4. Firewall write gate (FND-006)
+
+- `WindowsFirewallPolicyAdapter` uses the documented COM policy/rule objects on a dedicated STA
+  thread. Read-only listing and verification are enabled; writes are gated.
+- Both variables must be present on the service process: `NETRIGIL_ENABLE_FIREWALL_WRITES=1` and
+  `NETRIGIL_FIREWALL_WRITE_CONFIRM=yes`. A normal build starts with both unset.
+- Only exact `Netrigil::{id}::{OUT|IN}` names are created or removed; no wildcard, prefix or group
+  deletion exists.
+- The coordinator writes pending/applied/failed state and an audit row (actor SID, time, action,
+  result, spec, error) in the same SQLite transaction as the rule state.
+- The UI disables block/remove unless the service reports `FirewallWrites=true`.
+- The development host has not had any rule applied. Real enforcement, external-rule conflicts and
+  rollback remain VM checks (ADR 0007).
+
+## 5. Threat model
 
 | Threat | FND-005 | Control |
 |---|---|---|
@@ -53,7 +67,7 @@ in the service.
 | Firewall change | No write commands | FND-006 |
 | Service crash | UI `Service unavailable`, reconnect | E2E tested |
 
-## 5. Limitations and checks not run
+## 6. Limitations and checks not run
 
 - The service is not installed (no admin/VM); the console host and pipe were tested.
 - A real second Windows account was not tested; ACL/SID rejection were.
@@ -62,7 +76,7 @@ in the service.
 - ETW/bytes are not implemented; FND-004 requires elevation.
 - The database is not encrypted; data is per-user metadata. This is a decision for FND-009.
 
-## 6. Reporting vulnerabilities
+## 7. Reporting vulnerabilities
 
 Until a public channel exists, report directly to the project owner. Do not publish real SIDs,
 paths or database content in a reproduction.
