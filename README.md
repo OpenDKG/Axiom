@@ -183,6 +183,17 @@ dotnet test Netrigil.sln -c Release --no-build
 The standalone build produces one self-contained `Netrigil.Desktop.exe` in
 `artifacts\publish\win-x64`.
 
+### Portable installation (no administrator)
+
+```powershell
+.\scripts\install-portable.ps1
+```
+
+Installs the executable to `%LOCALAPPDATA%\Programs\Netrigil`, verifies its SHA-256 and creates a
+Start Menu shortcut. Remove it with `.\scripts\uninstall-portable.ps1`; local data stays unless
+`-RemoveData` is used. No service, no firewall rule and no elevation are involved. Details:
+[`docs/INSTALL.md`](docs/INSTALL.md).
+
 ## Repository layout
 
 ```text

@@ -15,7 +15,7 @@ is kept outside the public repository; this page is the public, English roadmap.
 | FND-006 | Click-to-block through Windows Firewall COM | ⏳ next write phase, VM only |
 | FND-007 | Alerts and WFP/5157 blocked-event evidence | ⏳ |
 | FND-008 | Scope rules, profiles, import/export | ⏳ |
-| FND-009 | Installer, service hardening, recovery, QA | ⏳ |
+| FND-009 | Installer, service hardening, recovery, QA | ⏳ portable per-user install script available; MSI/service pending |
 | FND-010 | GeoIP, DNS hints, timeline polish, performance | ⏳ |
 
 ## Optional modules (after a stable core)
