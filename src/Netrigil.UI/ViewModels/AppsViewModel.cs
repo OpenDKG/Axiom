@@ -62,6 +62,26 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
 
     public string ModeBadgeText => _client is null ? "LIVE · READ-ONLY" : "LIVE · SERVICE";
 
+    public IReadOnlyList<string> ProtocolOptions { get; } = ["Any", "TCP", "UDP"];
+
+    [ObservableProperty]
+    private string _selectedProtocolText = "Any";
+
+    [ObservableProperty]
+    private string _remotePortsText = string.Empty;
+
+    [ObservableProperty]
+    private string _remoteAddressesText = string.Empty;
+
+    [ObservableProperty]
+    private bool _blockDomain = true;
+
+    [ObservableProperty]
+    private bool _blockPrivate = true;
+
+    [ObservableProperty]
+    private bool _blockPublic = true;
+
     [ObservableProperty]
     private string _writeStatusText = "Firewall writes are disabled.";
 
@@ -138,16 +158,11 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
             return;
         }
 
-        var spec = new RuleSpec
+        var spec = BuildSpec(direction);
+        if (spec is null)
         {
-            ManagedRuleId = RuleIdentity.ForApp(SelectedApp.Path, direction),
-            AppPath = SelectedApp.Path,
-            Direction = direction,
-            Action = FirewallAction.Block,
-            Profiles = FirewallProfile.All,
-            CreatedBy = Environment.UserName,
-            Description = $"Netrigil block for {SelectedApp.Name} ({directionText})",
-        };
+            return;
+        }
 
         try
         {
@@ -169,6 +184,62 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
         {
             WriteStatusText = $"Block failed: {exception.Message}";
         }
+    }
+
+    private RuleSpec? BuildSpec(FirewallDirection direction)
+    {
+        var profiles = FirewallProfile.None;
+
+        if (BlockDomain)
+        {
+            profiles |= FirewallProfile.Domain;
+        }
+
+        if (BlockPrivate)
+        {
+            profiles |= FirewallProfile.Private;
+        }
+
+        if (BlockPublic)
+        {
+            profiles |= FirewallProfile.Public;
+        }
+
+        if (profiles == FirewallProfile.None)
+        {
+            WriteStatusText = "Select at least one network profile (Domain, Private or Public).";
+            return null;
+        }
+
+        if (SelectedApp is null)
+        {
+            return null;
+        }
+
+        var protocol = SelectedProtocolText switch
+        {
+            "TCP" => NetworkProtocol.Tcp,
+            "UDP" => NetworkProtocol.Udp,
+            _ => NetworkProtocol.Any,
+        };
+
+        var addresses = RemoteAddressesText.Split(
+            [',', ';', ' '],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        return new RuleSpec
+        {
+            ManagedRuleId = RuleIdentity.ForApp(SelectedApp.Path, direction),
+            AppPath = SelectedApp.Path,
+            Direction = direction,
+            Action = FirewallAction.Block,
+            Profiles = profiles,
+            Protocol = protocol,
+            RemoteAddresses = addresses,
+            RemotePorts = string.IsNullOrWhiteSpace(RemotePortsText) ? null : RemotePortsText.Trim(),
+            CreatedBy = Environment.UserName,
+            Description = $"Netrigil block for {SelectedApp.Name}",
+        };
     }
 
     private void OnMonitorUpdated(object? sender, EventArgs e) => Rebuild();
