@@ -566,7 +566,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "Looking for a local Blackbox dashboard on 127.0.0.1:9700.",
             "\uE7BA",
             false,
-            true,
+            !_uninstaller.IsBlackboxInstalled,
             "Install",
             _uninstaller.IsBlackboxInstalled,
             _blackboxMode.IsAvailable));
@@ -576,7 +576,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "Looking for a local DKG node on 127.0.0.1:9200.",
             "\uE968",
             false,
-            true,
+            !_uninstaller.IsDkgInstalled,
             "Install",
             _uninstaller.IsDkgInstalled));
         Modules.Add(new SecurityModule(
@@ -616,7 +616,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             $"{blackbox.Detail} Mode: {BlackboxModeText}.",
             "\uE7BA",
             blackbox.IsConnected,
-            !blackbox.IsConnected,
+            !_uninstaller.IsBlackboxInstalled,
             "Install",
             _uninstaller.IsBlackboxInstalled,
             _blackboxMode.IsAvailable));
@@ -626,7 +626,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             dkg.Detail,
             "\uE968",
             dkg.IsConnected,
-            !dkg.IsConnected,
+            !_uninstaller.IsDkgInstalled,
             "Install",
             _uninstaller.IsDkgInstalled));
         Modules.Add(new SecurityModule(

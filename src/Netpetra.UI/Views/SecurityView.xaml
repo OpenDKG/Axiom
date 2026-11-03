@@ -31,8 +31,27 @@
                       Command="{Binding RestartCommand}"
                       Margin="0,0,8,0"
                       ToolTip="Restart the desktop after installing a module." />
-              <Border Style="{StaticResource StatusPill}">
-                <TextBlock Text="{Binding StatusBadge}" Style="{StaticResource StatusPillText}" />
+              <Border>
+                <Border.Style>
+                  <Style TargetType="Border" BasedOn="{StaticResource StatusPill}">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding StatusBadge}" Value="CONNECTED">
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Success}" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding StatusBadge}">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding StatusBadge}" Value="CONNECTED">
+                          <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
               </Border>
             </StackPanel>
           </Grid>
@@ -120,9 +139,18 @@
                             Visibility="{Binding CanUninstall, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="Remove only the files and settings owned by Netpetra for this module." />
                     <Border Style="{StaticResource StatusPill}">
-                      <TextBlock Text="{Binding Status}"
-                                 Style="{StaticResource StatusPillText}"
-                                 Foreground="{DynamicResource Brush.TextMuted}" />
+                      <TextBlock Text="{Binding Status}">
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
                     </Border>
                   </StackPanel>
                 </Grid>
@@ -135,7 +163,7 @@
       <Border Style="{StaticResource Card}" Margin="0,14,0,0">
         <StackPanel>
           <TextBlock Text="Module activity" Style="{StaticResource SectionTitle}" />
-          <TextBlock Text="Last 30 loopback checks; accent = connected, muted = not running."
+          <TextBlock Text="Last 30 loopback checks; green = connected, muted = not running."
                      Style="{StaticResource Caption}"
                      Margin="0,2,0,0" />
 
@@ -159,7 +187,7 @@
                         <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding DkgConnected}" Value="True">
-                            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
                           </DataTrigger>
                         </Style.Triggers>
                       </Style>
@@ -190,7 +218,7 @@
                         <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding BlackboxConnected}" Value="True">
-                            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
                           </DataTrigger>
                         </Style.Triggers>
                       </Style>
