@@ -22,8 +22,8 @@ is kept outside the public repository; this page is the public, English roadmap.
 
 - FND-015 — File Tracker + local reputation.
 - FND-016 — Provider-neutral reputation gate / manual VirusTotal hash lookup.
-- FND-011 — Blackbox compatibility adapter.
-- FND-012 — OriginTrail DKG adapter and signed bundles.
+- FND-011 — Blackbox compatibility adapter | 🟡 loopback status probe done; full adapter pending.
+- FND-012 — OriginTrail DKG adapter and signed bundles | 🟡 loopback status probe done; full adapter/bundles pending.
 - FND-013 — Separate agent security research memory package.
 - FND-014 — Optional TRAC publishing / grants (testnet first, explicit approval).
 - FND-017 — Wallet-protection browser extension R&D.

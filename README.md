@@ -57,6 +57,10 @@ The Standard build is the local monitor and firewall policy manager. Everything 
 an optional, separately enabled module: none of it is required, none of it starts a background
 process while disabled, and none of it sits on the per-connection firewall path.
 
+The Security page probes a running Blackbox dashboard or DKG node on loopback and reports
+`CONNECTED`, `NOT RUNNING` or `UNAVAILABLE`; it never installs or starts them. Setup steps are in
+[Optional integrations](docs/INTEGRATIONS.md).
+
 ### File tracker and local reputation
 
 - Watches only the folders the user selects (for example Downloads, optionally Desktop), never the
@@ -220,6 +224,7 @@ scripts/                                # local run, service mode, standalone pu
 - [Accessibility and keyboard](docs/ACCESSIBILITY.md)
 - [Performance budget](docs/PERFORMANCE_BUDGET.md)
 - [Firewall recovery](docs/FIREWALL_RECOVERY.md)
+- [Optional integrations](docs/INTEGRATIONS.md)
 - [Licensing](docs/LICENSING.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Architecture decision records](docs/ADR/)
