@@ -200,4 +200,121 @@ public sealed class RuleSpecValidatorTests
         Assert.False(result.IsValid);
         Assert.True(result.Errors.Count >= 3);
     }
+
+    [Fact]
+    public void Valid_cidr_and_port_scope_is_accepted()
+    {
+        var spec = ValidSpec() with
+        {
+            Protocol = NetworkProtocol.Tcp,
+            RemoteAddresses = ["192.168.1.0/24", "2001:db8::/32"],
+            RemotePorts = "443,8000-8100",
+        };
+
+        var result = RuleSpecValidator.Validate(spec);
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void Wildcard_address_alone_is_accepted()
+    {
+        var spec = ValidSpec() with { RemoteAddresses = ["*"] };
+
+        var result = RuleSpecValidator.Validate(spec);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
+    [InlineData("example.com")]
+    [InlineData("999.1.1.1")]
+    [InlineData("1.2.3.4/33")]
+    [InlineData("2001:db8::/129")]
+    [InlineData("1.2.3.4/")]
+    [InlineData("/24")]
+    [InlineData("1.2.3.4-1.2.3.5")]
+    public void Invalid_remote_address_is_rejected(string address)
+    {
+        var spec = ValidSpec() with { RemoteAddresses = [address] };
+
+        var result = RuleSpecValidator.Validate(spec);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Code == "rule.addresses.invalid");
+    }
+
+    [Fact]
+    public void Wildcard_mixed_with_other_addresses_is_rejected()
+    {
+        var spec = ValidSpec() with { RemoteAddresses = ["*", "192.168.1.1"] };
+
+        var result = RuleSpecValidator.Validate(spec);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Code == "rule.addresses.any_mixed");
+    }
+
+    [Fact]
+    public void Too_many_remote_addresses_are_rejected()
+    {
+        var addresses = Enumerable
+            .Range(0, RuleSpecValidator.MaxRemoteAddresses + 1)
+            .Select(index => $"10.0.0.{index % 255}")
+            .ToArray();
+
+        var spec = ValidSpec() with { RemoteAddresses = addresses };
+
+        var result = RuleSpecValidator.Validate(spec);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Code == "rule.addresses.too_many");
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("65536")]
+    [InlineData("100-50")]
+    [InlineData("443,")]
+    [InlineData("abc")]
+    [InlineData("1-2-3")]
+    public void Invalid_remote_port_is_rejected(string ports)
+    {
+        var spec = ValidSpec() with
+        {
+            Protocol = NetworkProtocol.Tcp,
+            RemotePorts = ports,
+        };
+
+        var result = RuleSpecValidator.Validate(spec);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Code.StartsWith("rule.ports.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Ports_with_any_protocol_are_rejected()
+    {
+        var spec = ValidSpec() with { Protocol = NetworkProtocol.Any, RemotePorts = "443" };
+
+        var result = RuleSpecValidator.Validate(spec);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Code == "rule.ports.protocol_required");
+    }
+
+    [Fact]
+    public void Valid_udp_port_range_is_accepted()
+    {
+        var spec = ValidSpec() with
+        {
+            Protocol = NetworkProtocol.Udp,
+            RemotePorts = "53,123-124",
+        };
+
+        var result = RuleSpecValidator.Validate(spec);
+
+        Assert.True(result.IsValid);
+    }
 }
