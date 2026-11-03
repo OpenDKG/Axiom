@@ -1,11 +1,11 @@
-# Security model — LocalFirewall (FND-005)
+# Security model — Netrigil (FND-005)
 
 ## 1. Current trust boundary
 
 | Process | Rights | What it does |
 |---|---|---|
-| `LocalFirewall.Desktop.exe` | `asInvoker` | UI; reads IP Helper or calls the pipe |
-| `LocalFirewall.Service.exe` | `asInvoker` (console mode) | polls IP Helper, writes SQLite, serves the pipe |
+| `Netrigil.Desktop.exe` | `asInvoker` | UI; reads IP Helper or calls the pipe |
+| `Netrigil.Service.exe` | `asInvoker` (console mode) | polls IP Helper, writes SQLite, serves the pipe |
 
 In production the service would run under a service account (FND-009); the UI stays unprivileged.
 There are no COM/WFP/ETW/netsh calls, no firewall writes and no outbound network communication.
@@ -15,7 +15,7 @@ in the service.
 
 ## 2. Named Pipe protection
 
-- `\\.\pipe\LocalFirewall.Service.v1`.
+- `\\.\pipe\Netrigil.Service.v1`.
 - Explicit DACL: allow the service account + one SID; deny `Network`/`Anonymous`/`Guests`.
 - The client process SID is read from its token after connect; a mismatch closes the connection.
 - Limits: request 256 KiB, response 4 MiB, 100 requests/s, 30 s idle, 4 instances.
@@ -25,8 +25,8 @@ in the service.
 
 ## 3. Data at rest (FND-005)
 
-- Database: `%LOCALAPPDATA%\LocalFirewall\localfirewall.db` (per-user/console mode) or
-  `%ProgramData%\LocalFirewall\` (installed service). `LOCALFIREWALL_DATA_DIR` overrides the path.
+- Database: `%LOCALAPPDATA%\Netrigil\netrigil.db` (per-user/console mode) or
+  `%ProgramData%\Netrigil\` (installed service). `NETRIGIL_DATA_DIR` overrides the path.
 - Only **connection metadata** is stored: process name/path, PID, protocol, local/remote endpoint,
   state, direction, quality, first/last seen.
 - No payload, TLS content, DNS queries, tokens or credentials are stored.
@@ -34,7 +34,7 @@ in the service.
 - SQLite WAL; `foreign_keys=ON`; `integrity_check` at startup.
 - A corrupt file is moved to `.corrupt-<timestamp>` (not deleted) and the database is recreated.
 - CSV export writes to a path the user explicitly selects; UTF-8 BOM; escaping.
-- The installer (FND-009) must set an explicit ACL on `%ProgramData%\LocalFirewall\`; development
+- The installer (FND-009) must set an explicit ACL on `%ProgramData%\Netrigil\`; development
   uses per-user LocalAppData.
 
 ## 4. Threat model

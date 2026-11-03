@@ -1,4 +1,4 @@
-# Architecture — LocalFirewall (FND-005)
+# Architecture — Netrigil (FND-005)
 
 Current state: read-only inventory in the service, a local Named Pipe, SQLite history, and a UI that
 runs either in-process or through the service. FND-004 (ETW bytes) is deferred because it requires
@@ -8,21 +8,21 @@ elevation.
 
 ```text
 ┌────────────────────────────────────────────────────────┐
-│ LocalFirewall.Desktop (WinExe, asInvoker)              │
+│ Netrigil.Desktop (WinExe, asInvoker)              │
 │ chooses the source: in-process or service              │
 └───────────────┬────────────────────────────────────────┘
                 │
 ┌───────────────▼────────────────────────────────────────┐
-│ LocalFirewall.UI (WPF library, Contracts only)         │
+│ Netrigil.UI (WPF library, Contracts only)         │
 │ Live/Apps/History/Overview · ConnectionMonitor         │
 └───────┬──────────────────────────────┬─────────────────┘
         │ IConnectionSnapshotSource    │ ServicePipeClient
 ┌───────▼──────────────────┐    ┌──────▼──────────────────────┐
-│ Infrastructure.Windows   │    │ \\.\pipe\LocalFirewall.…    │
+│ Infrastructure.Windows   │    │ \\.\pipe\Netrigil.…    │
 │ IP Helper · process      │    └──────┬──────────────────────┘
 │ identity · PipeServer    │           │
 └──────────────────────────┘    ┌──────▼──────────────────────┐
-                                │ LocalFirewall.Service       │
+                                │ Netrigil.Service       │
                                 │ MonitoringWorker → cache    │
                                 │ HistoryWriter → SQLite      │
                                 │ PipeServerWorker            │
@@ -70,7 +70,7 @@ Infrastructure/Service/Desktop.
 
 ## 5. SQLite history (FND-005)
 
-- Path: `LOCALFIREWALL_DATA_DIR` → otherwise `%LOCALAPPDATA%` (interactive process) or
+- Path: `NETRIGIL_DATA_DIR` → otherwise `%LOCALAPPDATA%` (interactive process) or
   `%ProgramData%` (service).
 - WAL, `foreign_keys=ON`, `busy_timeout=5000`, `synchronous=NORMAL`.
 - Tables:

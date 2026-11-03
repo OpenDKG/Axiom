@@ -1,11 +1,10 @@
-# LocalFirewall
+# Netrigil
 
-**Repository:** https://github.com/a-51-50/VigilMesh · **License:** GPL-3.0-or-later ·
-**Working name:** LocalFirewall (repository brand: VigilMesh)
+**Open-Source Firewall & Security Monitor**
 
-*Intelligent protection. Open by design.*
+**Repository:** https://github.com/a-51-50/netrigil · **License:** GPL-3.0-or-later
 
-LocalFirewall is a local, offline Windows network monitor and firewall policy manager. It shows
+Netrigil is a local, offline Windows network monitor and firewall policy manager. It shows
 which applications use the network, which endpoints they talk to, and what happened over time. It
 manages only its own rules in the built-in Windows Firewall; Windows remains the enforcement
 authority. There is no account, no cloud, no advertising and no telemetry.
@@ -34,7 +33,7 @@ authority. There is no account, no cloud, no advertising and no telemetry.
 
 - Rules are path-scoped and bound to a direction and Windows network profile.
 - Every rule owned by the application has a deterministic name,
-  `LocalFirewall::{rule-id}::{OUT|IN}`, so it can be found and removed without touching anyone
+  `Netrigil::{rule-id}::{OUT|IN}`, so it can be found and removed without touching anyone
   else's rules.
 - A rule is reported as applied only after an OS read-back of the created rule; an external block or
   Group Policy remains authoritative.
@@ -167,9 +166,9 @@ Windows Service
 ## Building and running
 
 ```powershell
-dotnet restore LocalFirewall.sln --locked-mode
-dotnet build LocalFirewall.sln -c Release --no-restore
-dotnet test LocalFirewall.sln -c Release --no-build
+dotnet restore Netrigil.sln --locked-mode
+dotnet build Netrigil.sln -c Release --no-restore
+dotnet test Netrigil.sln -c Release --no-build
 .\scripts\publish-standalone.ps1
 ```
 
@@ -178,23 +177,23 @@ dotnet test LocalFirewall.sln -c Release --no-build
 .\scripts\run-service.ps1
 
 # in-process read-only mode
-.\artifacts\publish\win-x64\LocalFirewall.Desktop.exe
+.\artifacts\publish\win-x64\Netrigil.Desktop.exe
 ```
 
-The standalone build produces one self-contained `LocalFirewall.Desktop.exe` in
+The standalone build produces one self-contained `Netrigil.Desktop.exe` in
 `artifacts\publish\win-x64`.
 
 ## Repository layout
 
 ```text
 src/
-  LocalFirewall.Contracts/              # DTOs, IPC and history contracts
-  LocalFirewall.Core/                   # domain rules and firewall port
-  LocalFirewall.Infrastructure.Windows/ # IP Helper, process identity, Named Pipe server
-  LocalFirewall.Persistence/            # SQLite schema, queries, retention
-  LocalFirewall.Service/                # Worker host, monitoring, history writer, pipe
-  LocalFirewall.UI/                     # WPF library: views, view models, theme
-  LocalFirewall.Desktop/                # composition root / the only UI executable
+  Netrigil.Contracts/              # DTOs, IPC and history contracts
+  Netrigil.Core/                   # domain rules and firewall port
+  Netrigil.Infrastructure.Windows/ # IP Helper, process identity, Named Pipe server
+  Netrigil.Persistence/            # SQLite schema, queries, retention
+  Netrigil.Service/                # Worker host, monitoring, history writer, pipe
+  Netrigil.UI/                     # WPF library: views, view models, theme
+  Netrigil.Desktop/                # composition root / the only UI executable
 tests/                                  # unit and Windows integration tests
 docs/                                   # architecture, security, test matrix, licensing, ADRs
 scripts/                                # local run, service mode, standalone publish
@@ -211,7 +210,7 @@ scripts/                                # local run, service mode, standalone pu
 
 ## License and copyright
 
-Copyright (C) 2026 The VigilMesh/LocalFirewall contributors.
+Copyright (C) 2026 The Netrigil/Netrigil contributors.
 
 The desktop application, the Windows service and the core libraries are licensed under
 **GNU GPL v3.0 or later**. See [`LICENSE`](LICENSE) for the full text and [`NOTICE`](NOTICE) for the

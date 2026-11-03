@@ -1,4 +1,4 @@
-# Test matrix — LocalFirewall (FND-005)
+# Test matrix — Netrigil (FND-005)
 
 Date: 2026-11-03. Host: Windows 10 IoT Enterprise LTSC 2021, 10.0.19044, x64.
 SDK: 10.0.403. Configuration: `Release`.
@@ -7,10 +7,10 @@ SDK: 10.0.403. Configuration: `Release`.
 
 | Command | Result |
 |---|---|
-| `dotnet restore LocalFirewall.sln --locked-mode` | passed (also after standalone publish) |
-| `dotnet build LocalFirewall.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test LocalFirewall.sln -c Release --no-build` | **87/87 passed** |
-| `dotnet publish src\LocalFirewall.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
+| `dotnet restore Netrigil.sln --locked-mode` | passed (also after standalone publish) |
+| `dotnet build Netrigil.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
+| `dotnet test Netrigil.sln -c Release --no-build` | **87/87 passed** |
+| `dotnet publish src\Netrigil.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
 
 | Test project | Count | Added in FND-005 |
 |---|---|---|
@@ -116,8 +116,8 @@ Therefore:
 ## 7. Reproduction
 
 ```powershell
-dotnet restore LocalFirewall.sln --locked-mode
-dotnet build LocalFirewall.sln -c Release --no-restore
-dotnet test LocalFirewall.sln -c Release --no-build
+dotnet restore Netrigil.sln --locked-mode
+dotnet build Netrigil.sln -c Release --no-restore
+dotnet test Netrigil.sln -c Release --no-build
 .\scripts\run-service.ps1
 ```
