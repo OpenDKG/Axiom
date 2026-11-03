@@ -29,7 +29,8 @@ public sealed record SecurityModule(
     bool IsConnected = false,
     bool CanAct = false,
     string ActionLabel = "Install",
-    bool CanUninstall = false);
+    bool CanUninstall = false,
+    bool CanSetMode = false);
 
 public sealed partial class FileScanRow : ObservableObject
 {
@@ -78,6 +79,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     private readonly OptionalModuleUninstaller _uninstaller = new();
 
+    private readonly BlackboxModeStore _blackboxMode = new();
+
     private readonly BoundedHistory<ModuleActivity> _activityHistory = new(30);
 
     private readonly ReputationSettingsStore _reputationStore = new();
@@ -99,6 +102,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     {
         _reputationSettings = _reputationStore.Load();
         _communitySettings = _communityStore.Load();
+        _blackboxModeText = _blackboxMode.GetMode();
         Modules = [];
         SeedCheckingState();
 
@@ -156,6 +160,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private string _installStatusText = string.Empty;
+
+    [ObservableProperty]
+    private string _blackboxModeText = "audit";
 
     public string StatusTitle
     {
@@ -505,6 +512,23 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     }
 
     [RelayCommand]
+    private async Task SetBlackboxModeAsync(string? mode)
+    {
+        if (mode is not ("audit" or "block"))
+        {
+            return;
+        }
+
+        var success = _blackboxMode.SetMode(mode);
+        BlackboxModeText = mode;
+        InstallStatusText = success
+            ? $"Blackbox mode set to {mode}."
+            : "Could not update the Blackbox mode. Is the Blackbox venv present?";
+
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private void Restart()
     {
         var executable = Environment.ProcessPath;
@@ -544,7 +568,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             false,
             true,
             "Install",
-            _uninstaller.IsBlackboxInstalled));
+            _uninstaller.IsBlackboxInstalled,
+            _blackboxMode.IsAvailable));
         Modules.Add(new SecurityModule(
             "OriginTrail DKG",
             "CHECKING",
@@ -588,12 +613,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         Modules.Add(new SecurityModule(
             "Blackbox",
             blackbox.Status,
-            blackbox.Detail,
+            $"{blackbox.Detail} Mode: {BlackboxModeText}.",
             "\uE7BA",
             blackbox.IsConnected,
             !blackbox.IsConnected,
             "Install",
-            _uninstaller.IsBlackboxInstalled));
+            _uninstaller.IsBlackboxInstalled,
+            _blackboxMode.IsAvailable));
         Modules.Add(new SecurityModule(
             "OriginTrail DKG",
             dkg.Status,

@@ -112,6 +112,19 @@ $env:NETPETRA_BLACKBOX_URL = "http://127.0.0.1:9700"
 
 Official documentation: <https://github.com/umanitek/agent-blackbox>
 
+## Blackbox mode
+
+After Blackbox is installed, the Security page shows **Audit** and **Block** buttons next to it.
+They update only `~/.hermes/config.yaml` -> `plugins.entries.blackbox.mode`; no reinstall or admin is
+needed.
+
+- **Audit** logs and reports findings without stopping agent actions. Recommended for first use.
+- **Block** stops confirmed threats at or above the configured `block_severity` (default `critical`).
+  Use it only after the ruleset is synced and false positives have been reviewed.
+
+The current mode is shown in the Blackbox detail text. A missing config is created with `audit` as
+the default when a mode is selected.
+
 ## Uninstall
 
 An **Uninstall** button appears when Netpetra detects an installed/configured module:
