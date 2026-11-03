@@ -40,6 +40,20 @@ public sealed class CommunityFeedClient : IDisposable
         string? token,
         CancellationToken cancellationToken)
     {
+        string body;
+
+        if (string.Equals(url, "netpetra://starter", StringComparison.OrdinalIgnoreCase))
+        {
+            var starter = Path.Combine(AppContext.BaseDirectory, "community", "feed.json");
+            if (!File.Exists(starter))
+            {
+                throw new FileNotFoundException("Bundled starter community feed is missing.", starter);
+            }
+
+            body = await File.ReadAllTextAsync(starter, cancellationToken).ConfigureAwait(false);
+            return Parse(body);
+        }
+
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
         {
             throw new ArgumentException("Community feed URL must be an absolute HTTPS URL.", nameof(url));
@@ -56,7 +70,12 @@ public sealed class CommunityFeedClient : IDisposable
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        return Parse(body);
+    }
+
+    private static CommunityFeedResult Parse(string body)
+    {
         using var document = JsonDocument.Parse(body);
 
         if (!document.RootElement.TryGetProperty("entries", out var entries) ||

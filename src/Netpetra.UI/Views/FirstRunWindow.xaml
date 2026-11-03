@@ -53,7 +53,7 @@
                   Style="{StaticResource AppCheckBox}"
                   IsChecked="True"
                   Margin="0,10,0,0"
-                  Content="Netpetra starter community feed — HTTPS JSON with one EICAR test entry; replace with your own source later" />
+                  Content="Netpetra starter community feed — bundled offline EICAR test entry; replace with your own HTTPS source later" />
       </StackPanel>
     </Border>
 
