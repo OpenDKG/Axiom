@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Win32;
+using Netpetra.Contracts.Files;
 using Netpetra.Contracts.Modules;
 using Netpetra.UI.Services;
 
@@ -20,7 +23,22 @@ public sealed record SecurityModule(
     string Detail,
     string Glyph,
     bool IsConnected = false,
-    bool CanInstall = false);
+    bool CanAct = false,
+    string ActionLabel = "Install");
+
+public sealed record FileScanRow(
+    string Path,
+    string Name,
+    long SizeBytes,
+    string? Sha256,
+    string? SkippedReason)
+{
+    public string SizeText => $"{SizeBytes:N0} B";
+
+    public string HashText => Sha256 ?? SkippedReason ?? "—";
+
+    public string StatusText => Sha256 is null ? "SKIPPED" : "HASHED";
+}
 
 /// <summary>
 /// Security page. Optional modules are read-only status probes; install buttons launch the official
@@ -52,6 +70,14 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     public ObservableCollection<SecurityModule> Modules { get; }
 
     public ObservableCollection<ModuleActivity> Activity { get; } = [];
+
+    public ObservableCollection<FileScanRow> FileScanResults { get; } = [];
+
+    [ObservableProperty]
+    private string _fileScanStatus = "No folder scanned.";
+
+    [ObservableProperty]
+    private bool _isScanning;
 
     [ObservableProperty]
     private bool _isBusy;
@@ -129,10 +155,16 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     }
 
     [RelayCommand]
-    private void InstallModule(string? module)
+    private async Task ActOnModuleAsync(string? module)
     {
         if (string.IsNullOrWhiteSpace(module))
         {
+            return;
+        }
+
+        if (module.Equals("File scanning", StringComparison.Ordinal))
+        {
+            await ScanFilesAsync().ConfigureAwait(true);
             return;
         }
 
@@ -172,6 +204,51 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
             _installer.InstallDkg();
             InstallStatusText = "DKG installer opened in PowerShell. Complete the prompts, then click Check again.";
+        }
+    }
+
+    [RelayCommand]
+    private async Task ScanFilesAsync()
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Select a folder to hash locally",
+            Multiselect = false,
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        IsScanning = true;
+        FileScanStatus = "Scanning selected folder…";
+        FileScanResults.Clear();
+
+        try
+        {
+            var entries = await FileScanner.ScanAsync(dialog.FolderName).ConfigureAwait(true);
+            foreach (var entry in entries)
+            {
+                FileScanResults.Add(new FileScanRow(
+                    entry.Path,
+                    Path.GetFileName(entry.Path),
+                    entry.SizeBytes,
+                    entry.Sha256,
+                    entry.SkippedReason));
+            }
+
+            FileScanStatus = $"{entries.Count} file(s) scanned locally. Hashes are not uploaded.";
+        }
+#pragma warning disable CA1031 // The UI must show a scan failure instead of crashing.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            FileScanStatus = $"Scan failed: {exception.Message}";
+        }
+        finally
+        {
+            IsScanning = false;
         }
     }
 
@@ -226,7 +303,10 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "File scanning",
             "NOT ENABLED",
             "No file is scanned, uploaded, quarantined or deleted.",
-            "\uE8A5"));
+            "\uE8A5",
+            false,
+            true,
+            "Scan"));
     }
 
     private void Rebuild(OptionalModuleStatus dkg, OptionalModuleStatus blackbox)
@@ -243,14 +323,16 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             blackbox.Detail,
             "\uE7BA",
             blackbox.IsConnected,
-            !blackbox.IsConnected));
+            !blackbox.IsConnected,
+            "Install"));
         Modules.Add(new SecurityModule(
             "OriginTrail DKG",
             dkg.Status,
             dkg.Detail,
             "\uE968",
             dkg.IsConnected,
-            !dkg.IsConnected));
+            !dkg.IsConnected,
+            "Install"));
         Modules.Add(new SecurityModule(
             "Community feed",
             "NOT CONFIGURED",
@@ -260,6 +342,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             "File scanning",
             "NOT ENABLED",
             "No file is scanned, uploaded, quarantined or deleted.",
-            "\uE8A5"));
+            "\uE8A5",
+            false,
+            true,
+            "Scan"));
     }
 }

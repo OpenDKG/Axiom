@@ -65,7 +65,8 @@ installer only after an explicit confirmation; nothing runs silently. Setup step
 ### File tracker and local reputation
 
 - Watches only the folders the user selects (for example Downloads, optionally Desktop), never the
-  whole disk.
+  whole disk. The Security page also has an on-demand **Scan** action that hashes a chosen folder
+  locally with SHA-256.
 - Debounces file events, computes SHA-256 in the background with size and I/O limits, and reads
   Authenticode signer metadata for PE files.
 - Shows local provenance, first/last seen and an explicit `unknown` result. It never uploads,
