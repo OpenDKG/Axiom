@@ -49,6 +49,11 @@
                   Style="{StaticResource AppCheckBox}"
                   Margin="0,6,0,0"
                   Content="Blackbox — runs Umanitek's official installer (Python/Node/Git, Oxigraph; large download; third-party terms)" />
+        <CheckBox x:Name="CommunityCheck"
+                  Style="{StaticResource AppCheckBox}"
+                  IsChecked="True"
+                  Margin="0,10,0,0"
+                  Content="Netpetra starter community feed — HTTPS JSON with one EICAR test entry; replace with your own source later" />
       </StackPanel>
     </Border>
 
@@ -58,7 +63,7 @@
         <TextBlock Style="{StaticResource BodyMuted}"
                    Margin="0,6,0,0"
                    TextWrapping="Wrap"
-                   Text="Selected installers run in a visible PowerShell window. They may download hundreds of MB, create a local testnet wallet/config and a scheduled task, and may ask for UAC or third-party terms. Netpetra does not hide, bundle or vouch for third-party code. VirusTotal and community feed are configured later on Security; they are not installed here." />
+                   Text="Selected installers run in a visible PowerShell window. They may download hundreds of MB, create a local testnet wallet/config and a scheduled task, and may ask for UAC or third-party terms. Netpetra does not hide, bundle or vouch for third-party code. VirusTotal is configured later on Security; the starter community feed is optional below." />
       </StackPanel>
     </Border>
 

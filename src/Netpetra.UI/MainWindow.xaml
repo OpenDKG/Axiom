@@ -136,11 +136,32 @@
           <TextBlock Text="{Binding StatusStorageText}" Style="{StaticResource StatusPillText}" Margin="0,0,14,0" />
           <TextBlock Text="{Binding StatusDataSourceText}" Style="{StaticResource StatusPillText}" Foreground="{DynamicResource Brush.DemoBadgeText}" />
         </StackPanel>
-        <TextBlock Grid.Column="1"
-                   HorizontalAlignment="Right"
-                   VerticalAlignment="Center"
-                   Style="{StaticResource Caption}"
-                   Text="{Binding StatusIpcText}" />
+        <StackPanel Grid.Column="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center">
+          <TextBlock Text="&#xE9D9;"
+                     FontFamily="Segoe MDL2 Assets"
+                     FontSize="11"
+                     Foreground="{DynamicResource Brush.Accent}"
+                     VerticalAlignment="Center" />
+          <TextBlock Text="Powered by OriginTrail"
+                     Style="{StaticResource Caption}"
+                     Margin="4,0,12,0"
+                     VerticalAlignment="Center" />
+          <TextBlock Text="&#xE83D;"
+                     FontFamily="Segoe MDL2 Assets"
+                     FontSize="11"
+                     Foreground="{DynamicResource Brush.Success}"
+                     VerticalAlignment="Center" />
+          <TextBlock Text="Protected by Umanitek"
+                     Style="{StaticResource Caption}"
+                     Margin="4,0,12,0"
+                     VerticalAlignment="Center" />
+          <TextBlock Text="{Binding StatusIpcText}"
+                     Style="{StaticResource Caption}"
+                     VerticalAlignment="Center" />
+        </StackPanel>
       </Grid>
     </Border>
   </Grid>
