@@ -51,7 +51,7 @@ files in the installation directory are never deleted.
 
 The service, Named Pipe, data directory and owned-rule prefix changed with the Netpetra rename.
 Stop the old build before starting Netpetra. The old database is not migrated automatically; to keep
-its history, copy `%LOCALAPPDATA%\Netrigil\netrigil.db` to
+its history, copy the previous build's database into
 `%LOCALAPPDATA%\Netpetra\netpetra.db` before the first start. Previously owned firewall rules use
 the old prefix and are not renamed; remove them with the old build before enabling writes.
 
