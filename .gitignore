@@ -44,8 +44,4 @@ desktop.ini
 .DS_Store
 
 # Internal planning documents (kept local, not published)
-LocalFirewall_AGENT_START_PROMPT_SR.md
-LocalFirewall_START_DEEPSEEK_V4_1_FLASH_SR.md
-LocalFirewall_FND_TASKS_V2_SR.md
-LocalFirewall_HANDOFF_V1_SR.md
-LocalFirewall_HANDOFF_V2_SR.md
+*_SR.md
