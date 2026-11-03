@@ -83,6 +83,7 @@ Service in console mode + published standalone UI with `--service`.
 | E15 | Advanced scope panel: protocol, ports, CIDR/addresses and profile checkboxes; block buttons disabled with the gate closed | ✅ no rule written | `netpetra-applications-scope-expanded.png` |
 | E16 | Security page probes a mock DKG node on loopback and shows `CONNECTED` with version/peer/role; Blackbox stays `NOT RUNNING`; no module started | ✅ loopback-only | `netpetra-security-connected.png` |
 | E17 | Security page shows Install for a non-connected module, Restart Netpetra, and the last-30-checks activity strip; installer not clicked | ✅ no installer run | `netpetra-security-install-activity.png` |
+| E19 | Uninstall button visible for an installed Blackbox; cleanup is scoped to its folder/shortcut/`.hermes\blackbox`/scheduled task | ✅ no uninstall clicked | `netpetra-uninstall-button.png` |
 
 ## 3. FND-005 definition of done
 

@@ -112,6 +112,23 @@ $env:NETPETRA_BLACKBOX_URL = "http://127.0.0.1:9700"
 
 Official documentation: <https://github.com/umanitek/agent-blackbox>
 
+## Uninstall
+
+An **Uninstall** button appears when Netpetra detects an installed/configured module:
+
+- **Blackbox**: stops processes whose command line points into
+  `%LOCALAPPDATA%\Netpetra\modules\blackbox`, removes that folder, the
+  `%USERPROFILE%\.local\bin\blackbox.cmd` shortcut, `.hermes\blackbox` and the
+  `Agent Blackbox DKG node` scheduled task if present. Other Hermes profiles, logs and global
+  Python/npm packages are kept.
+- **DKG**: stops local processes under the Netpetra DKG folders and removes
+  `%LOCALAPPDATA%\Netpetra\modules\dkg` and `dkg-home`. No global npm package is removed.
+- **Reputation provider**: deletes the stored VirusTotal key and disables the provider.
+- **Community feed**: deletes the stored URL/token.
+
+The cleanup runs in a visible PowerShell window after a confirmation. It never touches Windows
+Firewall rules, other applications or unrelated user data.
+
 ## Status meanings
 
 | Status | Meaning |
@@ -125,7 +142,9 @@ Official documentation: <https://github.com/umanitek/agent-blackbox>
 
 - Install buttons launch the official installer only after explicit confirmation; nothing runs
   silently.
-- Netpetra does not stop, configure or control a module after installation; it only reads status.
+- Uninstall stops only processes whose command line points into the Netpetra module folder; it does
+  not stop unrelated agents or global services.
+- Netpetra does not configure or control a module after installation; it only reads status.
 - No remote endpoint, cloud lookup, token display or credential storage.
 - No DKG wallet or token is required for the status probe.
 - Neither module is on the per-connection firewall enforcement path.
