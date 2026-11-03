@@ -69,6 +69,7 @@ Service in console mode + published standalone UI with `--service`.
 | E12 | Throughput chart shows three labelled demo event markers | ✅ | `fnd006-overview.png` |
 | E13 | Firewall page reads capability `Available`, 0 owned rules and write path `disabled` | ✅ no rule changed | `netrigil-firewall.png` |
 | E14 | Gate-open service: Applications block buttons enabled, Firewall shows `TEST VM` and write path enabled; no click | ✅ 0 owned rules after | `netrigil-applications-writes-enabled.png`, `netrigil-firewall-writes-enabled.png` |
+| E15 | Advanced scope panel: protocol, ports, CIDR/addresses and profile checkboxes; block buttons disabled with the gate closed | ✅ no rule written | `netrigil-applications-scope-expanded.png` |
 
 ## 3. FND-005 definition of done
 

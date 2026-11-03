@@ -101,7 +101,8 @@ Infrastructure/Service/Desktop.
 - SQLite schema v2 adds `firewall_rules` and `rule_audit`; the audit actor is the verified pipe
   client SID.
 - The UI reads capability/rules through `rules.query`; block actions live on Applications, remove on
-  Firewall, and both require `WritesEnabled=true`.
+  Firewall, and both require `WritesEnabled=true`. An optional advanced scope covers protocol,
+  remote ports, IPv4/IPv6 or CIDR addresses and network profiles.
 - Real enforcement is not verified on the development host. The VM checklist is in ADR 0007 and
   `docs/FIREWALL_RECOVERY.md` documents targeted recovery.
 

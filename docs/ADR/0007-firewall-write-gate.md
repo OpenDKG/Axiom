@@ -88,7 +88,7 @@ Negative / risks:
   it with a proper installation-time opt-in.
 - The service runs as the current user in console mode; a real service account and its COM rights
   are unverified.
-- The UI blocks an entire executable path, not a port/CIDR scope (FND-008).
+- The UI supports an optional protocol/port/CIDR/profile scope; import/export and profile-aware policy editing remain FND-008 work.
 - External rules and Group Policy can still win; the page reports only owned rules.
 
 ## Alternatives considered
