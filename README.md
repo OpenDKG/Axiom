@@ -39,6 +39,8 @@ authority. There is no account, no cloud, no advertising and no telemetry.
   Group Policy remains authoritative.
 - The application never performs wildcard deletes, never resets the Windows Firewall and never
   disables Defender, BFE or another product's filters.
+- Write operations are disabled by default. They require an explicit test-VM gate on the service and
+  are audited locally; a normal install remains read-only.
 
 ### Privacy by default
 
@@ -217,6 +219,7 @@ scripts/                                # local run, service mode, standalone pu
 - [Test matrix](docs/TEST_MATRIX.md)
 - [Accessibility and keyboard](docs/ACCESSIBILITY.md)
 - [Performance budget](docs/PERFORMANCE_BUDGET.md)
+- [Firewall recovery](docs/FIREWALL_RECOVERY.md)
 - [Licensing](docs/LICENSING.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Architecture decision records](docs/ADR/)

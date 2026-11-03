@@ -12,7 +12,7 @@ is kept outside the public repository; this page is the public, English roadmap.
 | FND-003 | Windows service + secure local Named Pipe IPC | ✅ implemented (console mode; installer pending) |
 | FND-004 | ETW traffic estimate, real-time charts | ⛔ deferred: requires elevation/VM |
 | FND-005 | SQLite history, retention, query, export | ✅ implemented (bytes/JSON export pending) |
-| FND-006 | Click-to-block through Windows Firewall COM | ⏳ next write phase, VM only |
+| FND-006 | Click-to-block through Windows Firewall COM | 🟡 code complete and gated; real VM block test pending |
 | FND-007 | Alerts and WFP/5157 blocked-event evidence | ⏳ |
 | FND-008 | Scope rules, profiles, import/export | ⏳ |
 | FND-009 | Installer, service hardening, recovery, QA | ⏳ portable per-user install script available; MSI/service pending |
