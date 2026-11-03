@@ -78,6 +78,7 @@ Service in console mode + published standalone UI with `--service`.
 | E14 | Gate-open service: Applications block buttons enabled, Firewall shows `TEST VM` and write path enabled; no click | ✅ 0 owned rules after | `netpetra-applications-writes-enabled.png`, `netpetra-firewall-writes-enabled.png` |
 | E15 | Advanced scope panel: protocol, ports, CIDR/addresses and profile checkboxes; block buttons disabled with the gate closed | ✅ no rule written | `netpetra-applications-scope-expanded.png` |
 | E16 | Security page probes a mock DKG node on loopback and shows `CONNECTED` with version/peer/role; Blackbox stays `NOT RUNNING`; no module started | ✅ loopback-only | `netpetra-security-connected.png` |
+| E17 | Security page shows Install for a non-connected module, Restart Netpetra, and the last-30-checks activity strip; installer not clicked | ✅ no installer run | `netpetra-security-install-activity.png` |
 
 ## 3. FND-005 definition of done
 
