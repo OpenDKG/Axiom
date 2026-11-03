@@ -75,6 +75,8 @@ installer only after an explicit confirmation; nothing runs silently. Setup step
 ### External reputation (VirusTotal gate)
 
 - The default build sends no file, URL, hash or IP to VirusTotal.
+- The Security page has a **Setup** action for an opt-in, hash-only provider. The API key is stored
+  with Windows DPAPI for the current user; only a SHA-256 is sent when you press **Check**.
 - The safe fallback is manual: copy the SHA-256 or open the VirusTotal website in the browser.
 - A provider-neutral adapter may be added only after the concrete use is confirmed to be allowed by
   the provider. Such an adapter would be opt-in, use the user's own key, perform hash-only lookups,

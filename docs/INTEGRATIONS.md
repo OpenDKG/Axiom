@@ -25,6 +25,18 @@ click **Check again**. **Restart Netpetra** is available for a clean restart aft
 The activity strip shows the last 30 loopback checks; it is a health indicator, not module event
 content.
 
+## Reputation provider (VirusTotal, opt-in)
+
+The **Reputation provider** row has a **Setup** action. Enter your own VirusTotal API key and enable
+hash-only lookups. The key is stored with Windows DPAPI for the current user and is never written in
+plaintext or logged.
+
+- Only the 64-character SHA-256 is sent to `https://www.virustotal.com/api/v3/files/{hash}`.
+- Files, paths, URLs and names are never uploaded.
+- A result is one source with a timestamp, not a verdict; provider rate limits and terms apply.
+- Leave the key empty or disable the checkbox to keep the provider off.
+- After scanning a folder, use **Check** on a row to perform the lookup.
+
 ## OriginTrail DKG V10
 
 Requirements: Node.js and npm, per the official DKG V10 documentation.
