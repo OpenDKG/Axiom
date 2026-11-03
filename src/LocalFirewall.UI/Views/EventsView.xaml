@@ -118,8 +118,7 @@
                                   Width="70"
                                   Binding="{Binding TypeText}"
                                   ElementStyle="{StaticResource TableText}" />
-              <DataGridTextColumn Header="APP"
-                                  Width="1.2*"
+              <DataGridTextColumn Header="APP" Width="1.15*"
                                   Binding="{Binding AppDisplayName}"
                                   ElementStyle="{StaticResource TableText}" />
               <DataGridTextColumn Header="PID"
@@ -130,12 +129,10 @@
                                   Width="56"
                                   Binding="{Binding Protocol}"
                                   ElementStyle="{StaticResource TableText}" />
-              <DataGridTextColumn Header="LOCAL"
-                                  Width="1.1*"
+              <DataGridTextColumn Header="LOCAL" Width="1.05*"
                                   Binding="{Binding LocalEndpoint}"
                                   ElementStyle="{StaticResource TableText}" />
-              <DataGridTextColumn Header="REMOTE"
-                                  Width="1.2*"
+              <DataGridTextColumn Header="REMOTE" Width="1.15*"
                                   Binding="{Binding RemoteEndpoint}"
                                   ElementStyle="{StaticResource TableText}" />
               <DataGridTextColumn Header="DIR"
@@ -146,16 +143,13 @@
                                   Width="84"
                                   Binding="{Binding State}"
                                   ElementStyle="{StaticResource TableText}" />
-              <DataGridTextColumn Header="QUALITY"
-                                  Width="66"
+              <DataGridTextColumn Header="QUALITY" Width="78"
                                   Binding="{Binding Quality}"
                                   ElementStyle="{StaticResource TableText}" />
-              <DataGridTextColumn Header="FIRST SEEN"
-                                  Width="78"
+              <DataGridTextColumn Header="FIRST SEEN" Width="80"
                                   Binding="{Binding FirstSeenText}"
                                   ElementStyle="{StaticResource TableText}" />
-              <DataGridTextColumn Header="LAST SEEN"
-                                  Width="78"
+              <DataGridTextColumn Header="LAST SEEN" Width="80"
                                   SortMemberPath="LastSeenUtc"
                                   Binding="{Binding LastSeenText}"
                                   ElementStyle="{StaticResource TableText}" />
