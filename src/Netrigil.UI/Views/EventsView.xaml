@@ -1,7 +1,8 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <UserControl x:Class="Netrigil.UI.Views.EventsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             PreviewKeyDown="OnPreviewKeyDown">
 
   <Grid Margin="24,18,24,14">
     <Grid.RowDefinitions>
@@ -27,20 +28,24 @@
           <TextBlock Text="Range" Style="{StaticResource Caption}" Margin="0,0,0,5" />
           <ListBox Style="{StaticResource SegmentList}"
                    ItemsSource="{Binding Ranges}"
-                   SelectedItem="{Binding SelectedRange}" />
+                   SelectedItem="{Binding SelectedRange}"
+                   AutomationProperties.Name="Event time range" />
         </StackPanel>
 
         <StackPanel Grid.Column="1" Margin="0,0,14,0">
           <TextBlock Text="Category" Style="{StaticResource Caption}" Margin="0,0,0,5" />
           <ListBox Style="{StaticResource SegmentList}"
                    ItemsSource="{Binding Categories}"
-                   SelectedItem="{Binding SelectedCategory}" />
+                   SelectedItem="{Binding SelectedCategory}"
+                   AutomationProperties.Name="Event category" />
         </StackPanel>
 
         <StackPanel Grid.Column="2" Margin="0,0,14,0">
           <TextBlock Text="Search app, path, remote or PID" Style="{StaticResource Caption}" Margin="0,0,0,5" />
-          <TextBox Width="250"
+          <TextBox x:Name="SearchBox"
+                   Width="250"
                    Style="{StaticResource FilterTextBox}"
+                   AutomationProperties.Name="Search events by app, path, remote or PID"
                    Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
         </StackPanel>
 
@@ -107,6 +112,7 @@
         <Grid>
           <DataGrid Style="{StaticResource TableDataGrid}"
                     ItemsSource="{Binding Rows}"
+                    AutomationProperties.Name="Event timeline"
                     Margin="0,0,0,6">
             <DataGrid.RowStyle>
               <Style TargetType="DataGridRow" BasedOn="{StaticResource TableRow}">
