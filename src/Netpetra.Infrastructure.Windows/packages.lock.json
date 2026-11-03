@@ -14,10 +14,9 @@
       "netpetra.core": {
         "type": "Project",
         "dependencies": {
-          "Netpetra.Contracts": "[0.3.0, )"
+          "Netpetra.Contracts": "[0.3.1, )"
         }
       }
-    },
-    "net10.0-windows7.0/win-x64": {}
+    }
   }
 }
