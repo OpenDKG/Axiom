@@ -26,6 +26,8 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
+    <!-- Keeps the setup project's single-file publish graph valid under central package management. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

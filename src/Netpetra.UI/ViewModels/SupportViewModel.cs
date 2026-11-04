@@ -26,6 +26,7 @@ public sealed partial class SupportViewModel : PageViewModel
             _config.GithubSponsorsUrl, DonationPlatform.GitHubSponsors);
 
         CryptoOptions = (_config.Crypto ?? [])
+            .OfType<CryptoDonationConfig>()
             .Where(DonationDestinations.IsValidCrypto)
             .Select(option => new CryptoDonationRow(
                 option.Currency.ToUpperInvariant(), option.Network, option.Address))

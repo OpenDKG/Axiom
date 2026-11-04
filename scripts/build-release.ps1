@@ -36,8 +36,12 @@ function Resolve-Dotnet {
     }
 
     if (-not $dotnet) {
-        $perUser = Join-Path $env:USERPROFILE ".dotnet\dotnet.exe"
-        if (Test-Path $perUser) { $dotnet = $perUser }
+        foreach ($candidate in @(
+            (Join-Path $env:USERPROFILE ".dotnet-sdk\dotnet.exe"),
+            (Join-Path $env:USERPROFILE ".dotnet\dotnet.exe")
+        )) {
+            if (Test-Path $candidate) { $dotnet = $candidate; break }
+        }
     }
 
     if (-not $dotnet) { throw "dotnet CLI not found. Install the .NET 10 SDK." }
@@ -77,6 +81,15 @@ if (-not (Test-Path $exe)) { throw "Published executable not found: $exe" }
 $serviceExe = Join-Path $serviceOutput "Netpetra.Service.exe"
 if (-not (Test-Path $serviceExe)) { throw "Published service not found: $serviceExe" }
 
+Write-Host "Publishing single-file Netpetra Setup..." -ForegroundColor Cyan
+$setupScript = Join-Path $PSScriptRoot "publish-setup.ps1"
+$setupOutput = Join-Path $root "artifacts\publish\setup"
+& powershell -NoProfile -ExecutionPolicy Bypass -File $setupScript -OutputDir $setupOutput
+if ($LASTEXITCODE -ne 0) { throw "Setup publish failed with exit code $LASTEXITCODE." }
+
+$setupExe = Join-Path $setupOutput "Netpetra.Setup.exe"
+if (-not (Test-Path $setupExe)) { throw "Published setup not found: $setupExe" }
+
 $communityDir = Join-Path $root "artifacts\publish\win-x64\community"
 $communityFeed = Join-Path $communityDir "feed.json"
 if (-not (Test-Path $communityFeed)) { throw "Bundled community feed not found: $communityFeed" }
@@ -86,6 +99,7 @@ $zipName = "Netpetra-$Version-win-x64.zip"
 $zipPath = Join-Path $OutputDir $zipName
 
 $files = @(
+    $setupExe,
     $exe,
     $serviceExe,
     $communityDir,

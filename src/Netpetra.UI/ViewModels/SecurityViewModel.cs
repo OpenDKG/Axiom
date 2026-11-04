@@ -272,8 +272,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         : "OFFLINE";
 
     public string AgentStatusText =>
-        "DKG and Blackbox status, install actions and the workspaces they protect. " +
-        "OpenCode, OpenChamber, Codex and Hermes are listed below.";
+        "DKG and Blackbox status, install actions and the workspaces they report. " +
+        "OpenCode, OpenChamber, Codex and Hermes are listed below; an installed hook is not proof of runtime blocking.";
+
+    public string AgentHookInstallHint =>
+        "Status refresh is read-only. Agent hooks are installed only when you choose Install/Repair hooks and select " +
+        "Complete installation; Partial installation leaves all agent hook files unchanged.";
 
     public string SecurityStatusTitle
     {
@@ -667,23 +671,29 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private async Task InstallAgentHooksAsync()
     {
-        var confirmation = MessageBox.Show(
-            "Install or repair the Netpetra hooks for OpenCode/OpenChamber and Codex?\n\n" +
-            "This writes only Netpetra-owned plugin/hook files, backs up an existing managed file, " +
-            "and preserves unrelated agent settings and storage junctions. It does not touch sessions, " +
-            "projects, history databases or OpenChamber config.",
-            "Install agent protection hooks",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-        if (confirmation != MessageBoxResult.Yes)
+        var dialog = new AgentHookInstallWindow();
+        if (Application.Current?.MainWindow is { } owner)
         {
+            dialog.Owner = owner;
+        }
+
+        if (dialog.ShowDialog() != true)
+        {
+            InstallStatusText = "Agent hook installation cancelled. No agent files were changed.";
+            return;
+        }
+
+        if (!dialog.CompleteInstallation)
+        {
+            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber or Codex hook files were changed.";
             return;
         }
 
         var openCode = _openCodeProtection.EnsureInstalled();
         var codex = _codexProtection.EnsureInstalled();
-        InstallStatusText = $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
-                            $"Codex {(codex ? "installed" : "skipped")}.";
+        InstallStatusText =
+            $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
+            $"Codex {(codex ? "installed" : "skipped")}. Existing managed hook files are backed up beside the originals.";
         await RefreshAsync().ConfigureAwait(true);
     }
 
@@ -833,9 +843,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 ProtectedAgents.Add(new ProtectedAgent(kind, path, status, detail));
             }
 
+            var runtimeObserved = ProtectedAgents.Count(agent =>
+                agent.Status is "VERIFIED BLOCKING" or "HOOK LOADED" or "AUDIT ONLY");
             AgentsStatusText = ProtectedAgents.Count == 0
                 ? "No agent workspace was reported."
-                : $"{ProtectedAgents.Count(agent => agent.IsProtected)} of {ProtectedAgents.Count} recognized agent workspace(s) protected.";
+                : $"{runtimeObserved} of {ProtectedAgents.Count} recognized agent workspace(s) have observed hook " +
+                  "activity. Installed hooks alone are not proof of runtime blocking.";
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)

@@ -45,6 +45,7 @@ elevation.
 | Service | Contracts, Core, Infrastructure, Persistence | host, monitoring, history writer, pipe |
 | UI | **Contracts only** | Views/ViewModels/theme, pipe client |
 | MCP server | Contracts | local stdio MCP adapter; read-only pipe client, no host APIs |
+| Setup | UI | single-file per-user installer with embedded desktop/service payload |
 | Desktop | UI, Infrastructure | composition root / the only desktop EXE |
 
 `UI` has no Windows reference; `System.IO.Pipes` is BCL. Windows API code lives in

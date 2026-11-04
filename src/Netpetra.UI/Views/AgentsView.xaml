@@ -68,6 +68,10 @@
               <TextBlock Text="{Binding Security.AgentStatusText}"
                          Style="{StaticResource BodyMuted}"
                          Margin="0,6,0,0" />
+              <TextBlock Text="{Binding Security.AgentHookInstallHint}"
+                         Style="{StaticResource Caption}"
+                         TextWrapping="Wrap"
+                         Margin="0,7,0,0" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
               <Button Style="{StaticResource PrimaryButton}"
@@ -469,16 +473,16 @@
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
               <TextBlock Text="Recognized agents" Style="{StaticResource SectionTitle}" />
-              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber and Codex workspaces protected through Blackbox."
+              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber and Codex workspaces reported by Blackbox. Installed hooks are not proof of runtime blocking."
                          Style="{StaticResource Caption}"
                          Margin="0,2,0,0" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
               <Button Style="{StaticResource GhostButton}"
-                      Content="Install/Repair hooks"
+                      Content="Install/repair agent hooks..."
                       Command="{Binding InstallHooksCommand}"
                       Margin="0,0,8,0"
-                      ToolTip="Explicitly install or repair Netpetra-owned agent hooks. Existing hooks and storage are preserved." />
+                      ToolTip="Choose Complete installation with agent hooks or Partial installation without changing agent hook files. Existing managed hooks are backed up." />
               <Border Style="{StaticResource StatusPill}">
                 <TextBlock Text="BLACKBOX" Style="{StaticResource StatusPillText}" />
               </Border>
@@ -538,6 +542,9 @@
                               </DataTrigger>
                               <DataTrigger Binding="{Binding Status}" Value="DETECTED">
                                 <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding Status}" Value="HOOK INSTALLED">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
                               </DataTrigger>
                             </Style.Triggers>
                           </Style>

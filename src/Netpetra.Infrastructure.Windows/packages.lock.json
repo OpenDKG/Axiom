@@ -14,7 +14,7 @@
       "netpetra.core": {
         "type": "Project",
         "dependencies": {
-          "Netpetra.Contracts": "[0.3.1, )"
+          "Netpetra.Contracts": "[0.4.21, )"
         }
       }
     }

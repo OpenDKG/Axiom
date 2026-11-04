@@ -203,16 +203,27 @@ WPF software rendering is enabled by default because some GPU drivers leave the 
 after a driver reset. Set `NETPETRA_HARDWARE_RENDER=1` before starting the app to opt in to hardware
 acceleration on a machine where it is known to work.
 
-### Portable installation (no administrator)
+### Installation (no administrator)
+
+The release ZIP contains **`Netpetra.Setup.exe`**. Double-click it, choose the agent-hook scope
+(Complete or Partial) and click **Install Netpetra**. The setup is a single self-contained
+executable with the desktop and local service payload embedded; it installs under
+`%LOCALAPPDATA%\Programs\Netpetra`, creates a Start Menu shortcut and starts the app. No .NET
+runtime, Windows service registration, firewall change or elevation is involved.
+
+The desktop starts the bundled local service automatically. VirusTotal remains optional; its API
+key is configured later on the Security page. Agent hooks are written only for an explicit Complete
+installation; Partial leaves OpenCode, OpenChamber and Codex hook files unchanged.
+
+You can also install from a shell:
 
 ```powershell
 irm https://raw.githubusercontent.com/a-51-50/Netpetra/main/scripts/install-from-github.ps1 | iex
 ```
 
 The bootstrap downloads the latest release, verifies `SHA256SUMS.txt`, installs under
-`%LOCALAPPDATA%\Programs\Netpetra` and starts the app. The desktop starts the bundled local service
-automatically; no Windows service registration, firewall change or elevation is involved. The first
-run shows a setup wizard with component checkboxes, a warning and an explicit Apply/terms step.
+`%LOCALAPPDATA%\Programs\Netpetra` and starts the app. The first run shows the optional module
+wizard.
 
 For the private repository, authenticate with `gh auth login` first and pass the token to the
 bootstrap:

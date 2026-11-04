@@ -135,7 +135,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Data.Sqlite": "[10.0.14, )",
-          "Netpetra.Contracts": "[0.1.0, )"
+          "Netpetra.Contracts": "[0.4.21, )"
         }
       },
       "Microsoft.Data.Sqlite": {
