@@ -321,6 +321,22 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (module.StartsWith("OriginTrail", StringComparison.Ordinal))
         {
+            if (_uninstaller.IsDkgInstalled)
+            {
+                var started = _installer.StartDkg();
+                InstallStatusText = started
+                    ? "DKG start requested. Checking again in a few seconds."
+                    : "DKG CLI is missing. Reinstall DKG to repair it.";
+
+                if (started)
+                {
+                    await Task.Delay(5000).ConfigureAwait(true);
+                    await RefreshAsync().ConfigureAwait(true);
+                }
+
+                return;
+            }
+
             var confirmation = MessageBox.Show(
                 "This installs @origintrail-official/dkg into %LOCALAPPDATA%\\Netpetra\\modules, " +
                 "opens the official testnet setup and starts the node.\n\nIt needs Node.js/npm. Continue?",
@@ -689,15 +705,16 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             blackboxInstalled ? "Start" : "Install",
             blackboxInstalled,
             _blackboxMode.IsAvailable));
+        var dkgInstalled = _uninstaller.IsDkgInstalled;
         Modules.Add(new SecurityModule(
             "OriginTrail DKG",
             dkg.Status,
             dkg.Detail,
             "\uE968",
             dkg.IsConnected,
-            !_uninstaller.IsDkgInstalled,
-            "Install",
-            _uninstaller.IsDkgInstalled));
+            !dkgInstalled || !dkg.IsConnected,
+            dkgInstalled ? "Start" : "Install",
+            dkgInstalled));
         Modules.Add(CreateCommunityModule());
         Modules.Add(new SecurityModule(
             "File scanning",
