@@ -104,16 +104,16 @@ public sealed class TrafficEngine : IDisposable
     {
         // Continue collecting the real 5m window even if the user selects an unavailable
         // historical range, so switching back does not erase measured data.
+        var current = ReadCounters();
         var now = Stopwatch.GetTimestamp();
         var elapsed = (now - _lastTimestamp) / (double)Stopwatch.Frequency;
-        var current = ReadCounters();
         double upload = double.NaN;
         double download = double.NaN;
         long sent = 0;
         long received = 0;
         var matched = 0;
 
-        if (elapsed > 0 && elapsed < 10)
+        if (elapsed > 0 && elapsed < 1.5)
         {
             foreach (var (id, counters) in current)
             {
@@ -129,16 +129,35 @@ public sealed class TrafficEngine : IDisposable
                 matched++;
             }
 
-            if (matched > 0)
+            // A changed adapter set means a partial sum, not a trustworthy total.
+            if (matched > 0 && matched == current.Count && current.Count == _previous.Count)
             {
                 upload = sent / elapsed;
                 download = received / elapsed;
             }
         }
 
-        // A missing interface, counter reset or long sampling gap is unknown, not zero.
+        // Missing interfaces, counter resets or delayed UI ticks are gaps, not zero.
         _previous = current;
         _lastTimestamp = now;
+
+        // A delayed dispatcher tick (sleep/hibernation/UI stall) must not stretch
+        // stale samples across the five-minute time axis.
+        if (elapsed >= 1.5)
+        {
+            var missingSeconds = (int)Math.Clamp(Math.Round(elapsed) - 1, 0, BucketCount);
+            for (var i = 0; i < missingSeconds; i++)
+            {
+                Push(double.NaN, double.NaN);
+            }
+        }
+
+        Push(upload, download);
+        Updated?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void Push(double upload, double download)
+    {
         if (UploadSeries.Count == BucketCount)
         {
             UploadSeries.RemoveAt(0);
@@ -147,7 +166,6 @@ public sealed class TrafficEngine : IDisposable
 
         UploadSeries.Add(upload);
         DownloadSeries.Add(download);
-        Updated?.Invoke(this, EventArgs.Empty);
     }
 
     private static Dictionary<string, (long Sent, long Received)> ReadCounters()
