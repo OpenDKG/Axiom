@@ -910,7 +910,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             ? "Powered by OriginTrail · DKG connected"
             : "OriginTrail DKG · not connected";
         BlackboxBrandLabel = blackbox.IsConnected
-            ? "Protected by Blackbox · Umanitek module connected"
+            ? "Blackbox by Umanitek · dashboard connected"
             : "Umanitek Blackbox · not connected";
         Modules.Clear();
         Modules.Add(new SecurityModule(
