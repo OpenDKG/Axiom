@@ -424,9 +424,16 @@
                          Style="{StaticResource Caption}"
                          Margin="0,2,0,0" />
             </StackPanel>
-            <Border Grid.Column="1" Style="{StaticResource StatusPill}" VerticalAlignment="Top">
-              <TextBlock Text="BLACKBOX" Style="{StaticResource StatusPillText}" />
-            </Border>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Install/Repair hooks"
+                      Command="{Binding InstallHooksCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Explicitly install or repair Netpetra-owned agent hooks. Existing hooks and storage are preserved." />
+              <Border Style="{StaticResource StatusPill}">
+                <TextBlock Text="BLACKBOX" Style="{StaticResource StatusPillText}" />
+              </Border>
+            </StackPanel>
           </Grid>
 
           <TextBlock Text="{Binding Security.AgentsStatusText}"

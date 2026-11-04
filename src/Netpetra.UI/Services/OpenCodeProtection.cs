@@ -48,10 +48,22 @@ public sealed class OpenCodeProtection
         File.Exists(OpenChamberPath) ||
         Directory.Exists(Path.Combine(_roamingAppData, "openchamber"));
 
-    public bool IsInstalled =>
-        File.Exists(PluginPath) &&
-        File.ReadAllText(PluginPath).Contains("Managed by Netpetra", StringComparison.Ordinal) &&
-        File.Exists(BridgePath);
+    public bool IsInstalled
+    {
+        get
+        {
+            try
+            {
+                return File.Exists(PluginPath) &&
+                       File.ReadAllText(PluginPath).Contains("Managed by Netpetra", StringComparison.Ordinal) &&
+                       File.Exists(BridgePath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+    }
 
     /// <summary>Writes the bridge and plugin when OpenCode and the Blackbox venv are present.</summary>
     public bool EnsureInstalled()
@@ -63,6 +75,13 @@ public sealed class OpenCodeProtection
 
         try
         {
+            if (StorageSafety.IsReparsePoint(ConfigDirectory) ||
+                StorageSafety.IsReparsePoint(Path.GetDirectoryName(PluginPath)!))
+            {
+                // Never write through a junction/symlink in a user-managed agent configuration.
+                return false;
+            }
+
             Directory.CreateDirectory(Path.GetDirectoryName(PluginPath)!);
 
             if (File.Exists(PluginPath) &&
@@ -87,6 +106,7 @@ public sealed class OpenCodeProtection
             var plugin = BuildPlugin();
             if (!File.Exists(PluginPath) || File.ReadAllText(PluginPath) != plugin)
             {
+                StorageSafety.BackupFile(PluginPath);
                 File.WriteAllText(PluginPath, plugin, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             }
 

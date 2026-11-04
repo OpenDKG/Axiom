@@ -659,6 +659,29 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     }
 
     [RelayCommand]
+    private async Task InstallAgentHooksAsync()
+    {
+        var confirmation = MessageBox.Show(
+            "Install or repair the Netpetra hooks for OpenCode/OpenChamber and Codex?\n\n" +
+            "This writes only Netpetra-owned plugin/hook files, backs up an existing managed file, " +
+            "and preserves unrelated agent settings and storage junctions. It does not touch sessions, " +
+            "projects, history databases or OpenChamber config.",
+            "Install agent protection hooks",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var openCode = _openCodeProtection.EnsureInstalled();
+        var codex = _codexProtection.EnsureInstalled();
+        InstallStatusText = $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
+                            $"Codex {(codex ? "installed" : "skipped")}.";
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private async Task SetBlackboxModeAsync(string? mode)
     {
         if (mode is not ("audit" or "block"))
@@ -751,12 +774,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     {
         ProtectedAgents.Clear();
 
-        if (blackboxConnected)
-        {
-            _openCodeProtection.EnsureInstalled();
-            _codexProtection.EnsureInstalled();
-        }
-
+        // Status refresh is read-only. Hook installation is an explicit, confirmed action.
         AddCodexAgents(blackboxConnected);
         AddOpenCodeAgents(blackboxConnected);
 

@@ -365,6 +365,13 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     }
 
     [RelayCommand]
+    private async Task InstallHooksAsync()
+    {
+        await Security.InstallAgentHooksCommand.ExecuteAsync(null).ConfigureAwait(true);
+        await RefreshAllAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private async Task ConfigureAsync()
     {
         var window = new BlackboxSettingsWindow(_client)

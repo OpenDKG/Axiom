@@ -46,6 +46,11 @@ public sealed class CodexProtection
 
         try
         {
+            if (StorageSafety.IsReparsePoint(ConfigDirectory) || StorageSafety.IsReparsePoint(HooksPath))
+            {
+                return false;
+            }
+
             var script = BuildHookScript();
             if (!File.Exists(HookScriptPath) || File.ReadAllText(HookScriptPath) != script)
             {
@@ -114,6 +119,7 @@ public sealed class CodexProtection
                 root.Remove("hooks");
             }
 
+            StorageSafety.BackupFile(HooksPath);
             File.WriteAllText(
                 HooksPath,
                 root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
@@ -171,23 +177,26 @@ public sealed class CodexProtection
             hooks["PreToolUse"] = groups;
         }
 
-        if (!HasHookEntry())
+        if (HasHookEntry())
         {
-            groups.Add(new JsonObject
-            {
-                ["matcher"] = ".*",
-                ["hooks"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["type"] = "command",
-                        ["command"] = $"\"{PythonPath}\" \"{HookScriptPath}\"",
-                        ["timeout"] = 10,
-                    },
-                },
-            });
+            return true;
         }
 
+        groups.Add(new JsonObject
+        {
+            ["matcher"] = ".*",
+            ["hooks"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "command",
+                    ["command"] = $"\"{PythonPath}\" \"{HookScriptPath}\"",
+                    ["timeout"] = 10,
+                },
+            },
+        });
+
+        StorageSafety.BackupFile(HooksPath);
         File.WriteAllText(
             HooksPath,
             root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
