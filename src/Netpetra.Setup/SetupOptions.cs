@@ -7,7 +7,7 @@ public sealed record SetupOptions(
     string InstallDir,
     bool CreateShortcut,
     bool StartAfterInstall,
-    bool InstallAgentHooks,
+    bool CompleteInstallation,
     bool Silent = false)
 {
     public static SetupOptions Parse(string[] args)
@@ -19,7 +19,7 @@ public sealed record SetupOptions(
 
         var createShortcut = true;
         var startAfterInstall = true;
-        var installAgentHooks = true;
+        var completeInstallation = true;
         var silent = false;
 
         for (var index = 0; index < args.Length; index++)
@@ -36,7 +36,8 @@ public sealed record SetupOptions(
                     startAfterInstall = false;
                     break;
                 case "--no-hooks":
-                    installAgentHooks = false;
+                case "--partial":
+                    completeInstallation = false;
                     break;
                 case "--silent":
                     silent = true;
@@ -44,6 +45,6 @@ public sealed record SetupOptions(
             }
         }
 
-        return new SetupOptions(installDir, createShortcut, startAfterInstall, installAgentHooks, silent);
+        return new SetupOptions(installDir, createShortcut, startAfterInstall, completeInstallation, silent);
     }
 }

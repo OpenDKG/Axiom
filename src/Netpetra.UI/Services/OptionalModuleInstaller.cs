@@ -40,9 +40,14 @@ public sealed class OptionalModuleInstaller
     /// Installs the DKG CLI into a per-user folder, then opens the official interactive setup on
     /// testnet and starts the node. The user answers the official prompts; nothing is hidden.
     /// </summary>
-    public void InstallDkg()
+    public void InstallDkg() => StartPowerShell(BuildDkgScript());
+
+    public bool InstallDkgAndWait(Action<string>? log = null) =>
+        RunPowerShellScript(BuildDkgScript(), log);
+
+    private string BuildDkgScript()
     {
-        var script = $$"""
+        return $$"""
             $ErrorActionPreference = 'Stop'
             $dkgRoot = '{{Escape(DkgRoot)}}'
             $dkgHome = '{{Escape(DkgHome)}}'
@@ -65,17 +70,20 @@ public sealed class OptionalModuleInstaller
             }
             Write-Host 'DKG setup finished. Return to Netpetra and click Check again.' -ForegroundColor Green
             """;
-
-        StartPowerShell(script);
     }
 
     /// <summary>
     /// Downloads Umanitek's official Windows installer to a local file, prints its SHA-256 and runs
     /// it with the Oxigraph backend (no Docker). The caller must have shown a warning first.
     /// </summary>
-    public void InstallBlackbox()
+    public void InstallBlackbox() => StartPowerShell(BuildBlackboxScript());
+
+    public bool InstallBlackboxAndWait(Action<string>? log = null) =>
+        RunPowerShellScript(BuildBlackboxScript(), log);
+
+    private string BuildBlackboxScript()
     {
-        var script = $$"""
+        return $$"""
             $ErrorActionPreference = 'Stop'
             $dir = '{{Escape(BlackboxRoot)}}'
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -117,8 +125,6 @@ public sealed class OptionalModuleInstaller
             }
             Write-Host 'Blackbox setup finished. Return to Netpetra and click Check again.' -ForegroundColor Green
             """;
-
-        StartPowerShell(script);
     }
 
     /// <summary>
@@ -176,6 +182,31 @@ public sealed class OptionalModuleInstaller
 
         Process.Start(startInfo);
         return true;
+    }
+
+    private static bool RunPowerShellScript(string script, Action<string>? log)
+    {
+        var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+        var startInfo = new ProcessStartInfo(
+            "powershell.exe",
+            $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}")
+        {
+            UseShellExecute = true,
+            WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            WindowStyle = ProcessWindowStyle.Normal,
+        };
+
+        log?.Invoke("A third-party installer window is opening. Follow its prompts and terms.");
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            log?.Invoke("Could not start PowerShell.");
+            return false;
+        }
+
+        process.WaitForExit();
+        log?.Invoke($"Installer window finished with exit code {process.ExitCode}.");
+        return process.ExitCode == 0;
     }
 
     private static void StartPowerShell(string script)

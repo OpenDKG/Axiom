@@ -7,9 +7,11 @@ and click **Install Netpetra**. It installs for the current user, creates a Star
 and starts the application. No .NET runtime, administrator rights, service registration or
 firewall change is required.
 
-The setup's **Complete installation** option installs agent hooks when Blackbox and a supported
-agent are already present. Uncheck it for **Partial installation**; no OpenCode, OpenChamber or
-Codex hook file will be created or changed. VirusTotal is optional and its API key is configured
+The setup's **Complete installation** option runs the official Blackbox and DKG installers, starts
+their loopback services and installs agent hooks after Blackbox is ready. The third-party installers
+may show their own prompts/terms, download large packages and require network access. Uncheck it for
+**Partial installation**: only core Netpetra is installed; no Blackbox, DKG, OpenCode, OpenChamber
+or Codex files will be created or changed. VirusTotal is optional and its API key is configured
 later on the Security page.
 
 The portable installer copies two

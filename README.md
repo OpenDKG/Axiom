@@ -212,8 +212,13 @@ executable with the desktop and local service payload embedded; it installs unde
 runtime, Windows service registration, firewall change or elevation is involved.
 
 The desktop starts the bundled local service automatically. VirusTotal remains optional; its API
-key is configured later on the Security page. Agent hooks are written only for an explicit Complete
-installation; Partial leaves OpenCode, OpenChamber and Codex hook files unchanged.
+key is configured later on the Security page.
+
+**Complete installation** also runs the official Blackbox and DKG installers, starts their local
+services and installs agent hooks after Blackbox is ready. Those third-party installers may download
+large packages, require network access and show their own prompts/terms. **Partial installation**
+installs only core Netpetra and leaves Blackbox, DKG, OpenCode, OpenChamber and Codex files
+unchanged.
 
 You can also install from a shell:
 
