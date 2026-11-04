@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
+using Netpetra.Contracts.Blackbox;
 using Netpetra.Contracts.Community;
 using Netpetra.Contracts.Files;
 using Netpetra.Contracts.Modules;
@@ -828,15 +829,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         var installed = _openCodeProtection.IsInstalled;
         var evidence = _agentEvidence.Latest("opencode");
-        var status = !installed
-            ? "DETECTED"
-            : !blackboxConnected
-                ? "OFFLINE"
-                : evidence?.IsFailure == true
-                    ? "DEGRADED"
-                    : evidence is null
-                        ? "HOOK INSTALLED"
-                        : "HOOK LOADED";
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected);
         var detail = !installed
             ? "OpenCode config detected; guard plugin not installed or a user plugin occupies the path."
             : evidence is null
@@ -853,7 +851,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (_openCodeProtection.IsOpenChamberDetected)
         {
-            var openChamberStatus = installed ? "HOOK INSTALLED" : "DETECTED";
+            var openChamberStatus = AgentProtectionClassifier.Classify(
+                detected: true,
+                hookConfigured: installed,
+                runtimeObserved: false,
+                failureObserved: false,
+                blackboxAvailable: blackboxConnected);
             ProtectedAgents.Add(new ProtectedAgent(
                 "openchamber",
                 _openCodeProtection.OpenChamberPath,
@@ -872,15 +875,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         var installed = _codexProtection.IsInstalled;
         var evidence = _agentEvidence.Latest("codex");
-        var status = !installed
-            ? "DETECTED"
-            : !blackboxConnected
-                ? "OFFLINE"
-                : evidence?.IsFailure == true
-                    ? "DEGRADED"
-                    : evidence is null
-                        ? "HOOK INSTALLED"
-                        : "HOOK LOADED";
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected);
         var detail = !installed
             ? "Codex config detected; PreToolUse hook is missing or malformed."
             : evidence is null
