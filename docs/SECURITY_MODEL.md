@@ -6,6 +6,7 @@
 |---|---|---|
 | `Netpetra.Desktop.exe` | `asInvoker` | UI; reads IP Helper or calls the pipe |
 | `Netpetra.Service.exe` | `asInvoker` (console mode) | polls IP Helper, writes SQLite, serves the pipe |
+| `Netpetra.McpServer.exe` | `asInvoker`, same user | read-only MCP tools; calls the authenticated pipe only |
 
 In production the service would run under a service account (FND-009); the UI stays unprivileged.
 There are no COM/WFP/ETW/netsh calls, no firewall writes and no outbound network communication.
@@ -19,9 +20,11 @@ in the service.
 - Explicit DACL: allow the service account + one SID; deny `Network`/`Anonymous`/`Guests`.
 - The client process SID is read from its token after connect; a mismatch closes the connection.
 - Limits: request 256 KiB, response 4 MiB, 100 requests/s, 30 s idle, 4 instances.
-- Named commands only; no `exec`; firewall/history/config/diagnostics/`live.events` →
-  `not_supported` (`history.query` is supported).
+- Named commands only; no `exec`; firewall writes/config/diagnostics/`live.events` →
+  `not_supported` (`history.query` and read-only `rules.query` are supported).
 - Errors return a code and message, without a stack trace.
+- The MCP adapter uses the same DACL/SID-checked pipe. It has no direct database, firewall COM,
+  registry or filesystem API, and exposes no write tool.
 
 ## 3. Data at rest (FND-005)
 
@@ -66,13 +69,17 @@ in the service.
 | Fake PID/path | `partial`, `unknown path` | FND-010 |
 | Firewall change | No write commands | FND-006 |
 | Service crash | UI `Service unavailable`, reconnect | E2E tested |
+| Malicious prompt induces MCP tool abuse | Read-only tools only; no path input, shell, exec, rule or config command | PR A; no model-driven adversarial test yet |
+| MCP process reads data directly | Pipe-only adapter; no SQLite/COM/registry access | Code review; service SID check remains |
 
 ## 6. Limitations and checks not run
 
 - The service is not installed (no admin/VM); the console host and pipe were tested.
 - A real second Windows account was not tested; ACL/SID rejection were.
 - No installation ACL or signing (FND-009).
-- No IPC command audit trail; required before firewall commands (FND-006).
+- No IPC command audit trail; required before firewall commands (FND-006). MCP calls are therefore
+  not separately audited yet.
+- No real MCP client or prompt-injection exercise has been run; only raw JSON-RPC and unit tests.
 - ETW/bytes are not implemented; FND-004 requires elevation.
 - The database is not encrypted; data is per-user metadata. This is a decision for FND-009.
 

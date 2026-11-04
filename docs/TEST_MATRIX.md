@@ -1,6 +1,6 @@
 # Test matrix — Netpetra (FND-005)
 
-Date: 2026-11-03. Host: Windows 10 IoT Enterprise LTSC 2021, 10.0.19044, x64.
+Date: 2026-11-04. Host: Windows 10 IoT Enterprise LTSC 2021, 10.0.19044, x64.
 SDK: 10.0.403. Configuration: `Release`.
 
 ## 1. Automated checks (executed)
@@ -9,7 +9,7 @@ SDK: 10.0.403. Configuration: `Release`.
 |---|---|
 | `dotnet restore Netpetra.sln --locked-mode` | passed (also after standalone publish) |
 | `dotnet build Netpetra.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Netpetra.sln -c Release --no-build` | **140/140 passed** |
+| `dotnet test Netpetra.sln -c Release --no-build` | **172/172 passed** |
 | `dotnet publish src\Netpetra.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
 
 | Test project | Count | Notes |
@@ -19,6 +19,7 @@ SDK: 10.0.403. Configuration: `Release`.
 | Persistence | 12 | schema v2, history, firewall state and audit |
 | Infrastructure.Windows | 34 | IP Helper, pipe, COM read-only adapter |
 | Service | 5 | coordinator with a fake adapter |
+| MCP server | 32 | endpoint parsing, private IPv4/IPv6, indicator type, invalid-input handling, truthful unavailable states |
 
 ### History coverage
 
@@ -59,6 +60,22 @@ SDK: 10.0.403. Configuration: `Release`.
 - Local file scan: known SHA-256 value and oversized-file skip are tested; hashes never leave the process.
 - VirusTotal client: hash-only URL, `x-apikey` header, stats parsing, 404 and invalid-hash rejection are tested.
 - Community feed: HTTPS-only URL, bearer header, valid SHA-256 entries and invalid-entry filtering are tested.
+
+### MCP foundation coverage (PR A)
+
+- MCP over stdio: `initialize` and `tools/list` were executed against the built server; nine
+  read-only tools were advertised.
+- `tools/call` for `netpetra_get_threat_alerts`, `netpetra_get_reputation`, `netpetra_get_status` and
+  `netpetra_list_connections` returned structured JSON. With the service stopped, status and
+  connections returned `UNAVAILABLE`; the process did not crash and stdout stayed JSON-RPC only.
+- A raw JSON-RPC harness was run against a temporary console service (separate
+  `NETPETRA_DATA_DIR`, stopped afterwards): status, current connections, history and report returned
+  real observations with limitations attached.
+- Unit tests cover endpoint host/port parsing (IPv4 and bracketed IPv6), private/loopback/ULA
+  classification, SHA-256 indicator inference, invalid date rejection, missing-selector rejection,
+  and truthful `UNAVAILABLE` alert/reputation responses.
+- **NOT RUN:** a real MCP client (OpenCode/another agent), a full model-driven investigation, or any
+  action against a live protected host. No MCP client configuration was written.
 
 ## 2. End-to-end checks (executed)
 
