@@ -255,6 +255,7 @@ scripts/                                # local run, service mode, standalone pu
 - [Accessibility and keyboard](docs/ACCESSIBILITY.md)
 - [Performance budget](docs/PERFORMANCE_BUDGET.md)
 - [Firewall recovery](docs/FIREWALL_RECOVERY.md)
+- [MCP server foundation](docs/MCP.md)
 - [Optional integrations](docs/INTEGRATIONS.md)
 - [Licensing](docs/LICENSING.md)
 - [Roadmap](docs/ROADMAP.md)
