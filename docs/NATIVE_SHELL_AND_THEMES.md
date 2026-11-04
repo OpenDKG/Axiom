@@ -5,7 +5,7 @@ This Draft branch stacks on PR #97, which stacks on PR #96. Do **not** merge dir
 ## Current implementation
 
 - Four local-only WPF palettes: Dark (graphite), DarkMidnight (navy/violet), Light (cool/neutral) and LightWarm (ivory/terracotta). All reference the same ResourceDictionary keys. Selection persists in `%LOCALAPPDATA%\Netpetra\theme.txt`.
-- Existing dark/light header toggle still works; the Settings view exposes all four variants.
+- The header has a theme dropdown with all four variants; the Settings view exposes the same choices.
 - Custom visible caption within WPF WindowChrome with Minimize, Maximize/Restore and Close buttons; native resizable window behavior should remain available.
 - Removed 900px width caps on Agents, Security and Settings; Apps gains a splitter to resize app list versus details.
 - Agent cards describe OriginTrail DKG and Umanitek Guardian Agent Blackbox with measured loopback connection status, including explicit disconnected states.
