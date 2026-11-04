@@ -8,6 +8,10 @@ namespace Netpetra.UI;
 
 public partial class MainWindow : Window
 {
+    private Point _titleBarDragStart;
+    private bool _titleBarPressed;
+    private bool _dragging;
+
     public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();
@@ -18,15 +22,47 @@ public partial class MainWindow : Window
     {
         if (e.ClickCount == 2)
         {
+            _titleBarPressed = false;
             ToggleMaximize();
+            e.Handled = true;
             return;
         }
 
         if (e.LeftButton == MouseButtonState.Pressed)
         {
-            DragMove();
+            _titleBarPressed = true;
+            _titleBarDragStart = e.GetPosition(this);
         }
     }
+
+    private void OnTitleBarMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_titleBarPressed || _dragging || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        var position = e.GetPosition(this);
+        if (Math.Abs(position.X - _titleBarDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(position.Y - _titleBarDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        _dragging = true;
+        _titleBarPressed = false;
+        try
+        {
+            DragMove();
+        }
+        finally
+        {
+            _dragging = false;
+        }
+    }
+
+    private void OnTitleBarMouseLeftButtonUp(object sender, MouseButtonEventArgs e) =>
+        _titleBarPressed = false;
 
     private void OnMinimizeClicked(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 

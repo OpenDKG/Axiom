@@ -290,7 +290,7 @@
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
               <TextBlock Text="Recognized agents" Style="{StaticResource SectionTitle}" />
-              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber and Codex workspaces protected through Blackbox."
+              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber and Codex workspaces reported by Blackbox. Installed hooks are not proof of runtime blocking."
                          Style="{StaticResource Caption}"
                          Margin="0,2,0,0" />
             </StackPanel>
@@ -352,6 +352,9 @@
                               </DataTrigger>
                               <DataTrigger Binding="{Binding Status}" Value="DETECTED">
                                 <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding Status}" Value="HOOK INSTALLED">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
                               </DataTrigger>
                             </Style.Triggers>
                           </Style>

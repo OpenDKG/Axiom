@@ -269,8 +269,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         : "OFFLINE";
 
     public string AgentStatusText =>
-        "DKG and Blackbox status, install actions and the workspaces they protect. " +
-        "OpenCode, OpenChamber, Codex and Hermes are listed below.";
+        "DKG and Blackbox status, install actions and the agent workspaces they report. " +
+        "OpenCode, OpenChamber, Codex and Hermes are listed below; an installed hook is not proof of runtime blocking.";
 
     public string SecurityStatusTitle
     {
@@ -760,8 +760,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             _codexProtection.EnsureInstalled();
         }
 
-        AddCodexAgents(blackboxConnected);
-        AddOpenCodeAgents(blackboxConnected);
+        AddCodexAgents();
+        AddOpenCodeAgents();
 
         if (!blackboxConnected)
         {
@@ -812,9 +812,11 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 ProtectedAgents.Add(new ProtectedAgent(kind, path, status, detail));
             }
 
+            var installed = ProtectedAgents.Count(agent => agent.Status == "HOOK INSTALLED");
             AgentsStatusText = ProtectedAgents.Count == 0
                 ? "No agent workspace was reported."
-                : $"{ProtectedAgents.Count(agent => agent.IsProtected)} of {ProtectedAgents.Count} recognized agent workspace(s) protected.";
+                : $"{installed} of {ProtectedAgents.Count} recognized agent workspace(s) have hook files installed. " +
+                  "Runtime loading and blocking are not verified.";
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
@@ -823,7 +825,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
     }
 
-    private void AddOpenCodeAgents(bool blackboxConnected)
+    private void AddOpenCodeAgents()
     {
         if (!_openCodeProtection.IsOpenCodeDetected)
         {
@@ -831,10 +833,10 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _openCodeProtection.IsInstalled;
-        var status = installed && blackboxConnected ? "PROTECTED" : "DETECTED";
+        var status = installed ? "HOOK INSTALLED" : "DETECTED";
         var detail = installed
-            ? "Blackbox guard plugin installed; restart OpenCode/OpenChamber to activate."
-            : "OpenCode config detected; guard plugin not installed.";
+            ? "Guard hook files are present. Runtime loading and blocking are not verified from the dashboard."
+            : "OpenCode config detected; guard hook files are not installed.";
 
         ProtectedAgents.Add(new ProtectedAgent(
             "opencode",
@@ -848,11 +850,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 "openchamber",
                 _openCodeProtection.OpenChamberPath,
                 status,
-                detail));
+                installed
+                    ? "Shared OpenCode hook files are present. OpenChamber runtime loading and blocking are not independently verified."
+                    : "OpenChamber detected; guard hook files are not installed."));
         }
     }
 
-    private void AddCodexAgents(bool blackboxConnected)
+    private void AddCodexAgents()
     {
         if (!_codexProtection.IsCodexDetected)
         {
@@ -860,10 +864,10 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _codexProtection.IsInstalled;
-        var status = installed && blackboxConnected ? "PROTECTED" : "DETECTED";
+        var status = installed ? "HOOK INSTALLED" : "DETECTED";
         var detail = installed
-            ? "Blackbox PreToolUse hook installed; approve/restart Codex if prompted."
-            : "Codex config detected; PreToolUse hook not installed.";
+            ? "PreToolUse hook files are present. Approval, runtime loading and blocking are not verified."
+            : "Codex config detected; PreToolUse hook files are not installed.";
 
         ProtectedAgents.Add(new ProtectedAgent(
             "codex",
