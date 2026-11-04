@@ -10,7 +10,7 @@ namespace Netpetra.UI.ViewModels;
 public sealed partial class SettingsViewModel : PageViewModel, IDisposable
 {
     public SettingsViewModel(ConnectionMonitor monitor)
-        : base("Settings", "Appearance and build information · settings are not persisted yet", "\uE713")
+        : base("Settings", "Appearance and build information", "\uE713")
     {
         ArgumentNullException.ThrowIfNull(monitor);
 
@@ -33,7 +33,7 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
 
     public string PollText { get; }
 
-    public string StorageText => @"%ProgramData%\Netpetra\netpetra.db (not created in this build)";
+    public string StorageText => @"%LOCALAPPDATA%\Netpetra\netpetra.db (service mode; ProgramData for a service account)";
 
     public string OsText => Environment.OSVersion.VersionString;
 

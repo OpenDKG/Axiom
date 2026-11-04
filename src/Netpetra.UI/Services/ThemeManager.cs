@@ -51,6 +51,7 @@ public static class ThemeManager
         }
 
         Current = theme;
+        ThemeSettingsStore.Save(theme);
         Changed?.Invoke(null, EventArgs.Empty);
     }
 

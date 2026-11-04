@@ -13,18 +13,40 @@
                      Style="{StaticResource Caption}"
                      Margin="0,3,0,10" />
           <StackPanel Orientation="Horizontal">
-            <Button Style="{StaticResource PrimaryButton}"
-                    Content="Dark"
+            <Button Content="Dark"
                     Command="{Binding UseDarkThemeCommand}"
-                    Margin="0,0,8,0" />
-            <Button Style="{StaticResource GhostButton}"
-                    Content="Light"
-                    Command="{Binding UseLightThemeCommand}" />
+                    Margin="0,0,8,0">
+              <Button.Style>
+                <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding CurrentThemeText}" Value="Dark">
+                      <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+                      <Setter Property="Foreground" Value="{DynamicResource Brush.AccentContrast}" />
+                      <Setter Property="FontWeight" Value="SemiBold" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Button.Style>
+            </Button>
+            <Button Content="Light"
+                    Command="{Binding UseLightThemeCommand}">
+              <Button.Style>
+                <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding CurrentThemeText}" Value="Light">
+                      <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+                      <Setter Property="Foreground" Value="{DynamicResource Brush.AccentContrast}" />
+                      <Setter Property="FontWeight" Value="SemiBold" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Button.Style>
+            </Button>
           </StackPanel>
           <TextBlock Style="{StaticResource Caption}"
                      Margin="0,10,0,0"
                      TextWrapping="Wrap"
-                     Text="The theme is applied at runtime and is not stored between runs yet." />
+                     Text="The theme is saved for the next launch." />
         </StackPanel>
       </Border>
 
@@ -62,7 +84,7 @@
             <TextBlock Grid.Row="4" Text="IPC contract" Style="{StaticResource Caption}" Margin="0,0,0,9" />
             <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding ProtocolText}" Style="{StaticResource BodyMuted}" Margin="0,0,0,9" />
 
-            <TextBlock Grid.Row="5" Text="Planned database" Style="{StaticResource Caption}" Margin="0,0,0,9" />
+            <TextBlock Grid.Row="5" Text="History database" Style="{StaticResource Caption}" Margin="0,0,0,9" />
             <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding StorageText}" Style="{StaticResource BodyMuted}" FontFamily="{StaticResource Font.Mono}" FontSize="11.5" Margin="0,0,0,9" />
 
             <TextBlock Grid.Row="6" Text="Operating system" Style="{StaticResource Caption}" Margin="0,0,0,9" />
