@@ -214,6 +214,10 @@ The bootstrap downloads the latest release, verifies `SHA256SUMS.txt`, installs 
 automatically; no Windows service registration, firewall change or elevation is involved. The first
 run shows a setup wizard with component checkboxes, a warning and an explicit Apply/terms step.
 
+> The one-line `irm` installer needs a **public** repository. For a private checkout, build from
+> source and run `.\scripts\install-portable.ps1`; the same release archive can be installed with
+> `.\scripts\install-from-github.ps1` after the repository is made public.
+
 You can also run `.\scripts\install-portable.ps1` from a checkout. Remove with
 `.\scripts\uninstall-portable.ps1`; local data stays unless `-RemoveData` is used. Details:
 [`docs/INSTALL.md`](docs/INSTALL.md).
