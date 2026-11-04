@@ -38,6 +38,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             new FirewallRulesViewModel(ConnectionSourceRegistry.IsServiceMode),
             new FilesViewModel(() => SelectedPage = security),
             security,
+            new SupportViewModel(),
             new SettingsViewModel(monitor),
         ];
 
