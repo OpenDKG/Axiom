@@ -169,7 +169,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void OnThemeChanged(object? sender, EventArgs e) => UpdateThemeToggleLabel();
 
     private void UpdateThemeToggleLabel() =>
-        ThemeToggleLabel = ThemeManager.Current == AppTheme.Dark
+        ThemeToggleLabel = ThemeManager.Current is AppTheme.Dark or AppTheme.DarkMidnight
             ? "Switch to light theme"
             : "Switch to dark theme";
 }

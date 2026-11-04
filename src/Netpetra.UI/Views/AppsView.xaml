@@ -6,8 +6,9 @@
 
   <Grid Margin="24,18,24,18">
     <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="1.55*" />
-      <ColumnDefinition Width="*" />
+      <ColumnDefinition Width="1.55*" MinWidth="320" />
+      <ColumnDefinition Width="7" />
+      <ColumnDefinition Width="*" MinWidth="300" />
     </Grid.ColumnDefinitions>
 
     <!-- App list -->
@@ -150,8 +151,14 @@
       </DockPanel>
     </Border>
 
+    <!-- Adjustable split: expand either the app table or its details without a fixed 900px viewport. -->
+    <GridSplitter Grid.Column="1" Width="7" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                  Background="{DynamicResource Brush.Border}" ShowsPreview="True"
+                  ResizeDirection="Columns" ResizeBehavior="PreviousAndNext"
+                  AutomationProperties.Name="Resize app list and detail panels" />
+
     <!-- Detail -->
-    <Border Grid.Column="1" Style="{StaticResource Card}">
+    <Border Grid.Column="2" Style="{StaticResource Card}">
       <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel>
           <Grid>
@@ -214,10 +221,13 @@
             <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedApp.RuleText}" Style="{StaticResource BodyMuted}" />
           </Grid>
 
-          <Expander Header="Advanced scope (protocol, ports, addresses, profiles)"
-                    Margin="0,14,0,0"
+          <Expander Margin="0,14,0,0"
                     Foreground="{DynamicResource Brush.TextPrimary}"
                     IsExpanded="False">
+            <Expander.Header>
+              <TextBlock Text="Advanced scope (protocol, ports, addresses, profiles)"
+                         TextWrapping="Wrap" />
+            </Expander.Header>
             <StackPanel Margin="0,8,0,0">
               <TextBlock Text="Protocol" Style="{StaticResource Caption}" />
               <ListBox Style="{StaticResource SegmentList}"
@@ -255,19 +265,20 @@
             </StackPanel>
           </Expander>
 
-          <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+          <WrapPanel Margin="0,16,0,0">
             <Button Style="{StaticResource GhostButton}"
                     Content="Block outbound"
                     IsEnabled="{Binding CanWrite}"
                     Command="{Binding BlockOutboundCommand}"
-                    Margin="0,0,8,0"
+                    Margin="0,0,8,8"
                     ToolTip="Creates an owned Windows Firewall block rule. Requires the explicit write gate on an isolated test VM." />
             <Button Style="{StaticResource GhostButton}"
                     Content="Block inbound"
                     IsEnabled="{Binding CanWrite}"
                     Command="{Binding BlockInboundCommand}"
+                    Margin="0,0,0,8"
                     ToolTip="Creates an owned Windows Firewall block rule. Requires the explicit write gate on an isolated test VM." />
-          </StackPanel>
+          </WrapPanel>
 
           <TextBlock Text="{Binding WriteStatusText}"
                      Style="{StaticResource Caption}"

@@ -52,10 +52,16 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private static void UseLightTheme() => ThemeManager.Apply(AppTheme.Light);
 
+    [RelayCommand]
+    private static void UseDarkMidnightTheme() => ThemeManager.Apply(AppTheme.DarkMidnight);
+
+    [RelayCommand]
+    private static void UseLightWarmTheme() => ThemeManager.Apply(AppTheme.LightWarm);
+
     public void Dispose() => ThemeManager.Changed -= OnThemeChanged;
 
     private void OnThemeChanged(object? sender, EventArgs e) => UpdateThemeText();
 
     private void UpdateThemeText() =>
-        CurrentThemeText = ThemeManager.Current == AppTheme.Dark ? "Dark" : "Light";
+        CurrentThemeText = ThemeManager.Current.ToString();
 }
