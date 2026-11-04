@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.Diagnostics;
+using System.IO;
 using CommunityToolkit.Mvvm.Input;
 
 namespace Netpetra.UI.ViewModels;
@@ -34,4 +36,28 @@ public sealed partial class FilesViewModel : PageViewModel
 
     [RelayCommand]
     private void OpenSecurity() => _openSecurity();
+
+    [RelayCommand]
+    private static void OpenDownloads()
+    {
+        var downloads = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Downloads");
+
+        if (!Directory.Exists(downloads))
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(downloads) { UseShellExecute = true });
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
 }

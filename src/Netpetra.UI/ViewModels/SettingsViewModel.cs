@@ -23,7 +23,9 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
 
     public string MilestoneText => ProductMilestone.Current;
 
-    public string ProtocolText => $"IPC contract v{IpcProtocol.CurrentVersion} (not connected)";
+    public string ProtocolText => ConnectionSourceRegistry.IsServiceMode
+        ? $"IPC contract v{IpcProtocol.CurrentVersion} (service connected)"
+        : $"IPC contract v{IpcProtocol.CurrentVersion} (not connected)";
 
     public string DataModeText => ConnectionSourceRegistry.IsLive
         ? "LIVE — local socket inventory, no telemetry"
