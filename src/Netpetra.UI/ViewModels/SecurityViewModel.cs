@@ -151,6 +151,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         _ = RefreshAsync();
     }
 
+    [ObservableProperty]
+    private string _dkgBrandLabel = "OriginTrail DKG · checking";
+
+    [ObservableProperty]
+    private string _blackboxBrandLabel = "Umanitek Blackbox · checking";
+
     public ObservableCollection<SecurityModule> Modules { get; }
 
     public ObservableCollection<ModuleActivity> Activity { get; } = [];
@@ -900,6 +906,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     private void Rebuild(OptionalModuleStatus dkg, OptionalModuleStatus blackbox)
     {
+        DkgBrandLabel = dkg.IsConnected
+            ? "Powered by OriginTrail · DKG connected"
+            : "OriginTrail DKG · not connected";
+        BlackboxBrandLabel = blackbox.IsConnected
+            ? "Protected by Blackbox · Umanitek module connected"
+            : "Umanitek Blackbox · not connected";
         Modules.Clear();
         Modules.Add(new SecurityModule(
             "Reputation provider",
