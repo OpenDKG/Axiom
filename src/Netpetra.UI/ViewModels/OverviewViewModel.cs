@@ -39,6 +39,8 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
 
     public string TrafficBadgeText => _traffic.IsLive ? "LIVE COUNTERS" : "NO BYTE HISTORY";
 
+    public bool IsTrafficLive => _traffic.IsLive;
+
     public string UploadLegendText => "Upload";
 
     public string DownloadLegendText => "Download";
@@ -120,7 +122,7 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     private string _downloadRateText = "—";
 
     [ObservableProperty]
-    private string _bucketLabel = "1 s buckets · last 60 s";
+    private string _bucketLabel = "1 s samples · rolling 5m · system-wide";
 
     [ObservableProperty]
     private string _rangeNote = "Real system-wide interface counters.";
@@ -148,6 +150,7 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
         BucketLabel = _traffic.BucketLabel;
         RangeNote = _traffic.RangeNote;
         OnPropertyChanged(nameof(TrafficBadgeText));
+        OnPropertyChanged(nameof(IsTrafficLive));
         OnPropertyChanged(nameof(UploadLegendText));
         OnPropertyChanged(nameof(DownloadLegendText));
         OnPropertyChanged(nameof(ThroughputNote));
