@@ -5,7 +5,7 @@
              xmlns:vm="clr-namespace:Netpetra.UI.ViewModels">
 
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-    <StackPanel Margin="24,18,24,24" MaxWidth="900" HorizontalAlignment="Left">
+    <StackPanel Margin="24,18,24,24" HorizontalAlignment="Stretch">
 
       <Border Style="{StaticResource Card}">
         <StackPanel>
