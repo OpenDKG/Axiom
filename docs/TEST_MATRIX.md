@@ -75,9 +75,9 @@ Service in console mode + published standalone UI with `--service`.
 | E07 | Standalone EXE (no SDK) | ✅ | all screenshots |
 | E08 | CSV export | ⚠️ code + escaping; dialog not automated | — |
 | E09 | Eight-page V2 navigation (Overview, Connections, Applications, Events, Firewall, Files, Security, Settings) | ✅ | `fnd006-*.png` |
-| E10 | Files and Security pages state that modules are disabled | ✅ no fake scanner/feed | `fnd006-files.png`, `fnd006-security.png` |
+| E10 | Files points at the working local scan on Security; background tracking is explicitly disabled | ✅ no fake scanner | `files-open-security.png` |
 | E11 | Connections shows the unknown country placeholder | ✅ | `fnd006-connections.png` |
-| E12 | Throughput chart shows three labelled demo event markers | ✅ | `fnd006-overview.png` |
+| E12 | Overview 5m chart shows `LIVE COUNTERS` from system-wide interface counters; longer ranges show `DEMO SERIES`; markers use first-seen time | ✅ | `traffic-live2.png` |
 | E13 | Firewall page reads capability `Available`, 0 owned rules and write path `disabled` | ✅ no rule changed | `netpetra-firewall.png` |
 | E14 | Gate-open service: Applications block buttons enabled, Firewall shows `TEST VM` and write path enabled; no click | ✅ 0 owned rules after | `netpetra-applications-writes-enabled.png`, `netpetra-firewall-writes-enabled.png` |
 | E15 | Advanced scope panel: protocol, ports, CIDR/addresses and profile checkboxes; block buttons disabled with the gate closed | ✅ no rule written | `netpetra-applications-scope-expanded.png` |
@@ -120,9 +120,10 @@ Service in console mode + published standalone UI with `--service`.
 is UAC-filtered (`BUILTIN\Administrators` is deny-only) and has no `SeSystemProfilePrivilege`.
 Therefore:
 
-- No ETW collector is implemented; there are no claims about bytes.
-- The chart remains `DEMO SERIES`.
-- Verification moves to an elevated session or a VM.
+- No ETW collector is implemented; there are no per-process byte claims.
+- The 5m chart uses system-wide interface counters (`LIVE COUNTERS`); longer ranges remain
+  `DEMO SERIES`.
+- Per-process verification moves to an elevated session or a VM.
 
 ## 6. Scenario matrix (§13)
 
