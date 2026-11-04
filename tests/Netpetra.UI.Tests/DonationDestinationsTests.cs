@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.IO;
 using Netpetra.UI.Services;
 using Netpetra.UI.ViewModels;
 using Xunit;
@@ -94,6 +95,115 @@ public sealed class DonationDestinationsTests
     }
 
     [Fact]
+    public void OpenCodeHookInstallBacksUpManagedPluginAndPreservesUserPlugin()
+    {
+        var root = CreateTempRoot();
+
+        try
+        {
+            var user = Path.Combine(root, "user");
+            var local = Path.Combine(root, "local");
+            var config = Path.Combine(user, ".config", "opencode");
+            Directory.CreateDirectory(Path.Combine(config, "plugins"));
+            CreateFakePython(local);
+
+            var protection = new OpenCodeProtection(user, local, Path.Combine(root, "roaming"));
+            Directory.CreateDirectory(Path.GetDirectoryName(protection.PluginPath)!);
+            File.WriteAllText(protection.PluginPath, "// Managed by Netpetra\nold plugin");
+
+            Assert.True(protection.EnsureInstalled());
+            Assert.Contains("Managed by Netpetra", File.ReadAllText(protection.PluginPath));
+            Assert.Contains("netpetra-blackbox", File.ReadAllText(protection.PluginPath));
+            Assert.Single(Directory.GetFiles(Path.GetDirectoryName(protection.PluginPath)!, "*.netpetra-backup-*"));
+
+            File.WriteAllText(protection.PluginPath, "// user-authored plugin at Netpetra path");
+            var userProtection = new OpenCodeProtection(user, local, Path.Combine(root, "roaming"));
+
+            Assert.False(userProtection.EnsureInstalled());
+            Assert.Equal("// user-authored plugin at Netpetra path", File.ReadAllText(protection.PluginPath));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void CodexHookInstallMergesAndBacksUpExistingHooks()
+    {
+        var root = CreateTempRoot();
+
+        try
+        {
+            var user = Path.Combine(root, "user");
+            var local = Path.Combine(root, "local");
+            var codex = Path.Combine(user, ".codex");
+            Directory.CreateDirectory(codex);
+            CreateFakePython(local);
+
+            const string original = """
+                {
+                  "hooks": {
+                    "PreToolUse": [
+                      { "matcher": "keep", "hooks": [ { "type": "command", "command": "keep.exe" } ] }
+                    ]
+                  }
+                }
+                """;
+            var hooksPath = Path.Combine(codex, "hooks.json");
+            File.WriteAllText(hooksPath, original);
+
+            var protection = new CodexProtection(user, local);
+            Assert.True(protection.EnsureInstalled());
+            Assert.True(protection.IsInstalled);
+
+            var merged = File.ReadAllText(hooksPath);
+            Assert.Contains("keep.exe", merged);
+            Assert.Contains("netpetra-codex-hook.py", merged);
+            Assert.Single(Directory.GetFiles(codex, "*.netpetra-backup-*"));
+            Assert.Equal(original, File.ReadAllText(Directory.GetFiles(codex, "*.netpetra-backup-*").Single()));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void AgentConfigBackupPreservesExistingContent()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "netpetra-ui-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            var original = Path.Combine(directory, "hooks.json");
+            File.WriteAllText(original, "{\"hooks\":{\"keep\":true}}");
+
+            var backup = StorageSafety.BackupFile(original);
+
+            Assert.NotNull(backup);
+            Assert.True(File.Exists(backup));
+            Assert.Equal(File.ReadAllText(original), File.ReadAllText(backup!));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void AgentConfigBackupIsNoOpForMissingFile()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "netpetra-ui-tests", Guid.NewGuid().ToString("N"), "missing.json");
+
+        Assert.Null(StorageSafety.BackupFile(missing));
+    }
+
+    [Fact]
     public void SupportPageRemainsUsableWithoutConfiguredDestinations()
     {
         var viewModel = new SupportViewModel();
@@ -104,5 +214,34 @@ public sealed class DonationDestinationsTests
         Assert.False(viewModel.HasCrypto);
         Assert.Empty(viewModel.CryptoOptions);
         Assert.Contains("not yet configured", viewModel.SetupNote);
+    }
+
+    private static string CreateTempRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "netpetra-ui-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        return root;
+    }
+
+    private static void CreateFakePython(string localAppData)
+    {
+        var directory = Path.Combine(
+            localAppData,
+            "Netpetra",
+            "modules",
+            "blackbox",
+            "agent-blackbox",
+            "venv",
+            "Scripts");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "python.exe"), string.Empty);
+    }
+
+    private static void DeleteTempRoot(string root)
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 }

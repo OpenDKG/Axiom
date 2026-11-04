@@ -1,0 +1,82 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<Window x:Class="Netpetra.UI.Views.AgentHookInstallWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Install agent hooks"
+        Width="580"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{DynamicResource Brush.WindowBackground}"
+        Foreground="{DynamicResource Brush.TextPrimary}"
+        FontFamily="{DynamicResource Font.Ui}"
+        FontSize="13">
+  <StackPanel Margin="24">
+    <TextBlock Text="Choose installation scope" FontSize="18" FontWeight="SemiBold" />
+    <TextBlock Text="Agent hooks are never installed automatically during status refresh. Select exactly what Netpetra may change."
+               Style="{StaticResource BodyMuted}"
+               TextWrapping="Wrap"
+               Margin="0,7,0,0" />
+
+    <Border Background="{DynamicResource Brush.SurfaceAlt}"
+            BorderBrush="{DynamicResource Brush.Border}"
+            BorderThickness="1"
+            CornerRadius="6"
+            Padding="12,10"
+            Margin="0,18,0,0">
+      <StackPanel>
+        <TextBlock Text="Partial installation" FontWeight="SemiBold" />
+        <TextBlock Text="Install no agent hooks now. Do not create, replace or delete OpenCode, OpenChamber or Codex hook files."
+                   Style="{StaticResource Caption}"
+                   TextWrapping="Wrap"
+                   Margin="0,3,0,0" />
+      </StackPanel>
+    </Border>
+
+    <Border Background="{DynamicResource Brush.SurfaceAlt}"
+            BorderBrush="{DynamicResource Brush.Border}"
+            BorderThickness="1"
+            CornerRadius="6"
+            Padding="12,10"
+            Margin="0,10,0,0">
+      <StackPanel>
+        <TextBlock Text="Complete installation" FontWeight="SemiBold" />
+        <TextBlock Text="Install or repair Netpetra guard hooks for detected OpenCode/OpenChamber and Codex. Existing Netpetra-managed files are backed up first."
+                   Style="{StaticResource Caption}"
+                   TextWrapping="Wrap"
+                   Margin="0,3,0,0" />
+      </StackPanel>
+    </Border>
+
+    <Border Background="{DynamicResource Brush.SurfaceAlt}"
+            BorderBrush="{DynamicResource Brush.Border}"
+            BorderThickness="1"
+            CornerRadius="6"
+            Padding="12,10"
+            Margin="0,14,0,0">
+      <TextBlock Text="Sessions, projects, databases, storage junctions and user-authored hooks are preserved. Codex may ask you to approve its hook. An installed hook file does not prove runtime loading or blocking."
+                 Style="{StaticResource Caption}"
+                 TextWrapping="Wrap" />
+    </Border>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+      <Button Content="Partial installation"
+              Style="{StaticResource GhostButton}"
+              MinWidth="136"
+              Click="OnPartial"
+              Margin="0,0,8,0"
+              ToolTip="Continue without creating or changing any agent hook files." />
+      <Button Content="Complete installation"
+              Style="{StaticResource GhostButton}"
+              MinWidth="144"
+              Click="OnComplete"
+              Margin="0,0,8,0"
+              ToolTip="Install or repair agent hooks after backing up existing Netpetra-managed files." />
+      <Button Content="Cancel"
+              Style="{StaticResource GhostButton}"
+              MinWidth="90"
+              IsCancel="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

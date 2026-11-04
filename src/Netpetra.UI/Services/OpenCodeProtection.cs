@@ -11,11 +11,21 @@ namespace Netpetra.UI.Services;
 /// </summary>
 public sealed class OpenCodeProtection
 {
-    private readonly string _userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private readonly string _userProfile;
 
-    private readonly string _localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    private readonly string _localAppData;
 
-    private readonly string _roamingAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+    private readonly string _roamingAppData;
+
+    public OpenCodeProtection(
+        string? userProfile = null,
+        string? localAppData = null,
+        string? roamingAppData = null)
+    {
+        _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        _localAppData = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        _roamingAppData = roamingAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+    }
 
     public string ConfigDirectory => Path.Combine(_userProfile, ".config", "opencode");
 
@@ -58,23 +68,40 @@ public sealed class OpenCodeProtection
 
         try
         {
+            if (StorageSafety.IsReparsePoint(ConfigDirectory) ||
+                StorageSafety.IsReparsePoint(Path.GetDirectoryName(PluginPath)!))
+            {
+                // Never write through a junction or symbolic link in a user-managed config.
+                return false;
+            }
+
             Directory.CreateDirectory(Path.GetDirectoryName(PluginPath)!);
+
+            if (File.Exists(PluginPath) &&
+                !File.ReadAllText(PluginPath).Contains("Managed by Netpetra", StringComparison.Ordinal))
+            {
+                // Never overwrite a user-authored plugin at the same path.
+                return false;
+            }
 
             if (File.Exists(LegacyPluginPath) &&
                 File.ReadAllText(LegacyPluginPath).Contains("Managed by Netpetra", StringComparison.Ordinal))
             {
+                StorageSafety.BackupFile(LegacyPluginPath);
                 File.Delete(LegacyPluginPath);
             }
 
             var bridge = BuildBridge();
             if (!File.Exists(BridgePath) || File.ReadAllText(BridgePath) != bridge)
             {
+                StorageSafety.BackupFile(BridgePath);
                 File.WriteAllText(BridgePath, bridge, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             }
 
             var plugin = BuildPlugin();
             if (!File.Exists(PluginPath) || File.ReadAllText(PluginPath) != plugin)
             {
+                StorageSafety.BackupFile(PluginPath);
                 File.WriteAllText(PluginPath, plugin, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             }
 

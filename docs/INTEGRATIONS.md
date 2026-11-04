@@ -32,25 +32,36 @@ content.
 ### OpenCode and OpenChamber
 
 OpenCode is protected through its native plugin API; OpenChamber uses the same
-`~/.config/opencode` plugin directory. When Blackbox is connected and that directory exists,
-Netpetra writes:
+`~/.config/opencode` plugin directory. Agent hooks are **not installed automatically** when the
+Blackbox dashboard connects. On the Agents page, choose **Install agent hooks...** and select:
 
-- `~/.config/opencode/plugin/netpetra-blackbox.ts`, a `tool.execute.before` hook;
+- **Complete installation** to add/repair the Netpetra guard hooks for detected agents;
+- **Partial installation** to leave every OpenCode/OpenChamber/Codex hook file unchanged.
+
+A complete OpenCode/OpenChamber installation writes:
+
+- `~/.config/opencode/plugins/netpetra-blackbox.ts`, a `tool.execute.before` hook;
 - `%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py`, which calls
   Blackbox's Python guard with the tool name and arguments.
 
-The current Blackbox mode applies: `audit` records findings, `block` rejects confirmed threats.
-Bridge or Blackbox failures fail open, like the Hermes hooks. Restart OpenCode/OpenChamber after the
-first install so the plugin is loaded. Uninstalling Blackbox removes the plugin; the bridge lives
-inside the Blackbox folder. This is a Netpetra adapter, not an official Blackbox attachment kind.
+Existing Netpetra-managed files are backed up beside the originals before replacement. User-authored
+plugins at the same path, reparse points/junctions and unrelated settings are never overwritten.
+Status refresh remains read-only. The current Blackbox mode applies: `audit` records findings,
+`block` rejects confirmed threats. Bridge or Blackbox failures fail open, like the Hermes hooks.
+Restart OpenCode/OpenChamber after the first install so the plugin is loaded. Uninstalling Blackbox
+removes the plugin; the bridge lives inside the Blackbox folder. This is a Netpetra adapter, not an
+official Blackbox attachment kind.
 
 ### Codex
 
-Codex user hooks are read from `~/.codex/hooks.json`. Netpetra merges a `PreToolUse` command hook
-and installs `netpetra-codex-hook.py` in the Blackbox folder. The hook receives Codex's
-`tool_name`/`tool_input`, calls the same Blackbox guard, and returns a `permissionDecision: deny`
-only when Blackbox blocks. Codex may ask you to approve/trust the hook once; approve it and restart
-Codex. Uninstalling Blackbox removes the Netpetra hook entry and script.
+Codex user hooks are read from `~/.codex/hooks.json`. Only after **Complete installation** on the
+Agents page does Netpetra merge a `PreToolUse` command hook and install
+`netpetra-codex-hook.py` in the Blackbox folder. The existing `hooks.json` is copied to a
+timestamped `.netpetra-backup-*` file before it is changed; unrelated hooks are preserved. The hook
+receives Codex's `tool_name`/`tool_input`, calls the same Blackbox guard, and returns a
+`permissionDecision: deny` only when Blackbox blocks. **Partial installation** leaves Codex hook
+files unchanged. Codex may ask you to approve/trust the hook once; approve it and restart Codex.
+Uninstalling Blackbox removes the Netpetra hook entry and script.
 
 ## Reputation provider (VirusTotal, opt-in)
 

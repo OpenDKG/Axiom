@@ -272,6 +272,10 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         "DKG and Blackbox status, install actions and the agent workspaces they report. " +
         "OpenCode, OpenChamber, Codex and Hermes are listed below; an installed hook is not proof of runtime blocking.";
 
+    public string AgentHookInstallHint =>
+        "Status refresh is read-only. Agent hooks are installed only when you choose Install agent hooks and select " +
+        "Complete installation; Partial installation leaves all agent hook files unchanged.";
+
     public string SecurityStatusTitle
     {
         get
@@ -388,7 +392,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             var confirmation = MessageBox.Show(
                 "This downloads and runs Umanitek's official Windows installer with the Oxigraph " +
                 "backend (no Docker).\n\nIt installs Python packages, clones the repository and may " +
-                "register a scheduled task. Review the installer; continue only if you trust it.",
+                "register a scheduled task. Agent hooks are not installed automatically; after the dashboard " +
+                "starts, use Install agent hooks to choose Complete or Partial installation.\n\n" +
+                "Review the installer; continue only if you trust it.",
                 "Install Blackbox",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
@@ -436,6 +442,35 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             _installer.InstallDkg();
             InstallStatusText = "DKG installer opened in PowerShell. Complete the prompts, then click Check again.";
         }
+    }
+
+    [RelayCommand]
+    private async Task InstallAgentHooksAsync()
+    {
+        var dialog = new AgentHookInstallWindow();
+        if (Application.Current?.MainWindow is { } owner)
+        {
+            dialog.Owner = owner;
+        }
+
+        if (dialog.ShowDialog() != true)
+        {
+            InstallStatusText = "Agent hook installation cancelled. No agent files were changed.";
+            return;
+        }
+
+        if (!dialog.CompleteInstallation)
+        {
+            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber or Codex hook files were changed.";
+            return;
+        }
+
+        var openCode = _openCodeProtection.EnsureInstalled();
+        var codex = _codexProtection.EnsureInstalled();
+        InstallStatusText =
+            $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
+            $"Codex {(codex ? "installed" : "skipped")}. Existing managed hook files are backed up beside the originals.";
+        await RefreshAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -754,12 +789,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     {
         ProtectedAgents.Clear();
 
-        if (blackboxConnected)
-        {
-            _openCodeProtection.EnsureInstalled();
-            _codexProtection.EnsureInstalled();
-        }
-
+        // Status refresh is read-only. Hook installation is an explicit, confirmed action.
         AddCodexAgents();
         AddOpenCodeAgents();
 

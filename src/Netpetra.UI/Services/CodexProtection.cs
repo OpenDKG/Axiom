@@ -14,9 +14,15 @@ public sealed class CodexProtection
 {
     private const string Marker = "netpetra-codex-hook.py";
 
-    private readonly string _userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private readonly string _userProfile;
 
-    private readonly string _localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    private readonly string _localAppData;
+
+    public CodexProtection(string? userProfile = null, string? localAppData = null)
+    {
+        _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        _localAppData = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    }
 
     public string ConfigDirectory => Path.Combine(_userProfile, ".codex");
 
@@ -46,9 +52,16 @@ public sealed class CodexProtection
 
         try
         {
+            if (StorageSafety.IsReparsePoint(ConfigDirectory) || StorageSafety.IsReparsePoint(HooksPath))
+            {
+                // Never write through a junction or symbolic link in a user-managed config.
+                return false;
+            }
+
             var script = BuildHookScript();
             if (!File.Exists(HookScriptPath) || File.ReadAllText(HookScriptPath) != script)
             {
+                StorageSafety.BackupFile(HookScriptPath);
                 File.WriteAllText(HookScriptPath, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             }
 
@@ -114,6 +127,7 @@ public sealed class CodexProtection
                 root.Remove("hooks");
             }
 
+            StorageSafety.BackupFile(HooksPath);
             File.WriteAllText(
                 HooksPath,
                 root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
@@ -188,6 +202,7 @@ public sealed class CodexProtection
             });
         }
 
+        StorageSafety.BackupFile(HooksPath);
         File.WriteAllText(
             HooksPath,
             root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
