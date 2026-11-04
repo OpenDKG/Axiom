@@ -42,7 +42,9 @@
             Background="{DynamicResource Brush.NavBackground}"
             BorderBrush="{DynamicResource Brush.Border}"
             BorderThickness="0,0,0,1"
-            MouseLeftButtonDown="OnTitleBarMouseLeftButtonDown">
+            MouseLeftButtonDown="OnTitleBarMouseLeftButtonDown"
+            MouseMove="OnTitleBarMouseMove"
+            MouseLeftButtonUp="OnTitleBarMouseLeftButtonUp">
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" />
