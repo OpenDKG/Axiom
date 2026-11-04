@@ -78,7 +78,7 @@ listener and never sends data off the machine.
   Remove (with confirmation). Existing defaults are preserved unless explicitly removed. These are
   Blackbox path rules, not Windows Firewall rules.
 - **Agent activity** reads `GET /api/audit?limit=100&offset=0` and
-  `GET /api/findings?limit=100&offset=0` every four seconds while the Agents page is selected. It
+  `GET /api/findings?limit=100&offset=0` every four seconds while the Overview page is selected. It
   shows recorded sessions, API calls, tool calls, package installs, file access and threats, with
   filter buttons for each category. A Security column labels each event `PASSED` (green) or
   `BLOCKED`/`FLAGGED` (red), with audit-mode flags kept distinct from actual blocks. Selecting a

@@ -7,7 +7,7 @@ using Netpetra.UI.Services;
 
 namespace Netpetra.UI.ViewModels;
 
-public sealed partial class OverviewViewModel : PageViewModel, IDisposable
+public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage, IDisposable
 {
     private readonly TrafficEngine _traffic = new();
 
@@ -18,16 +18,19 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     private readonly HashSet<string> _seenEventKeys = new(StringComparer.Ordinal);
     private string? _selectedEventKey;
 
-    public OverviewViewModel(ConnectionMonitor monitor)
+    public OverviewViewModel(ConnectionMonitor monitor, AgentsViewModel agentActivity)
         : base("Overview", "Live sockets from this host · system-wide throughput counters", "\uE80F")
     {
         _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
+        AgentActivity = agentActivity ?? throw new ArgumentNullException(nameof(agentActivity));
         monitor.Updated += OnMonitorUpdated;
         _traffic.Updated += OnTrafficUpdated;
 
         UpdateLiveCounters();
         UpdateMetrics();
     }
+
+    public AgentsViewModel AgentActivity { get; }
 
     public ObservableCollection<double> UploadSeries => _traffic.UploadSeries;
 
@@ -90,6 +93,25 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     private string _newConnectionEventsEmptyText = "No new connections in the selected range.";
 
     public ObservableCollection<NewConnectionMarkerEvent> NewConnectionEvents { get; } = [];
+
+    [ObservableProperty]
+    private bool _isNewConnectionEventsExpanded;
+
+    public string NewConnectionEventsToggleText =>
+        IsNewConnectionEventsExpanded ? "Hide details" : "Show details";
+
+    public string NewConnectionEventsChevron =>
+        IsNewConnectionEventsExpanded ? "▲" : "▼";
+
+    [RelayCommand]
+    private void ToggleNewConnectionEvents() =>
+        IsNewConnectionEventsExpanded = !IsNewConnectionEventsExpanded;
+
+    partial void OnIsNewConnectionEventsExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(NewConnectionEventsToggleText));
+        OnPropertyChanged(nameof(NewConnectionEventsChevron));
+    }
 
     // A 5-minute session-only time cursor. This does not claim persisted historical flows.
     [ObservableProperty]
@@ -162,8 +184,13 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
 
     public void Start() => _traffic.Start();
 
+    public void Activate() => AgentActivity.Activate();
+
+    public void Deactivate() => AgentActivity.Deactivate();
+
     public void Dispose()
     {
+        AgentActivity.Deactivate();
         _monitor.Updated -= OnMonitorUpdated;
         _traffic.Updated -= OnTrafficUpdated;
         _traffic.Dispose();

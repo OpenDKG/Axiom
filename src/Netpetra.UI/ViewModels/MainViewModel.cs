@@ -22,7 +22,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public MainViewModel(ConnectionMonitor monitor)
     {
         _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
-        _overview = new OverviewViewModel(monitor);
         Themes =
         [
             new ThemeOption(AppTheme.Dark, "Dark · Graphite"),
@@ -39,6 +38,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         var security = new SecurityViewModel();
+        var agents = new AgentsViewModel(security);
+        _overview = new OverviewViewModel(monitor, agents);
 
         Pages =
         [
@@ -46,7 +47,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             new LiveConnectionsViewModel(monitor),
             new AppsViewModel(monitor, ConnectionSourceRegistry.IsServiceMode),
             new EventsViewModel(ConnectionSourceRegistry.IsServiceMode),
-            new AgentsViewModel(security),
+            agents,
             new FirewallRulesViewModel(ConnectionSourceRegistry.IsServiceMode),
             new FilesViewModel(() => SelectedPage = security),
             security,
@@ -57,6 +58,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _selectedPage = _overview;
         _overview.TrafficSampled += OnOverviewTrafficSampled;
         _overview.Start();
+        _overview.Activate();
 
         monitor.Updated += OnMonitorUpdated;
         monitor.Start();

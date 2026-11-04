@@ -8,6 +8,7 @@ This change is deliberately based on `fix/traffic-chart-truthful-live-interactio
 - A selected local time shown under the slider, with an accessible "Jump to now" button.
 - Only connections first observed within ±10 seconds of the cursor appear as an application/remote-endpoint list.
 - Items show application name, PID, protocol, endpoint and count of observed socket starts; details are available as tooltips.
+- The chart is kept compact; the session **New connection events** list is collapsed by default and expands on click.
 - Session event browsing does not infer security threats, countries or per-app bytes.
 - Historical range selections explicitly disable the 5-minute scrubber instead of simulating data.
 
