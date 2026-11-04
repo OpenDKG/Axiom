@@ -243,14 +243,34 @@
               <TextBlock Text="Community feed" Style="{StaticResource SectionTitle}" />
               <TextBlock Text="{Binding CommunityStatusText}" Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap" />
             </StackPanel>
-            <Button Grid.Column="1"
-                    Style="{StaticResource GhostButton}"
-                    Content="Refresh feed"
-                    Command="{Binding RefreshCommunityCommand}"
-                    VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Test feed"
+                      Command="{Binding TestCommunityCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Fetch and validate the configured feed without replacing the visible entries."
+                      AutomationProperties.Name="Test community feed" />
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Refresh feed"
+                      Command="{Binding RefreshCommunityCommand}"
+                      ToolTip="Fetch the configured feed and replace the visible entries."
+                      AutomationProperties.Name="Refresh community feed" />
+            </StackPanel>
           </Grid>
 
-          <ScrollViewer MaxHeight="180" Margin="0,10,0,0" VerticalScrollBarVisibility="Auto">
+          <Grid Margin="0,10,0,2">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="190" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="100" />
+              <ColumnDefinition Width="100" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="SHA-256" Style="{StaticResource Caption}" />
+            <TextBlock Grid.Column="1" Text="NAME" Style="{StaticResource Caption}" />
+            <TextBlock Grid.Column="2" Text="VERDICT" Style="{StaticResource Caption}" />
+            <TextBlock Grid.Column="3" Text="SOURCE" Style="{StaticResource Caption}" />
+          </Grid>
+          <ScrollViewer MaxHeight="180" Margin="0,0,0,0" VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{Binding CommunityEntries}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:CommunityFeedRow}">

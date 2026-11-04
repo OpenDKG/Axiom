@@ -549,7 +549,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     }
 
     [RelayCommand]
-    private async Task RefreshCommunityAsync()
+    private Task RefreshCommunityAsync() => LoadCommunityAsync(updateEntries: true);
+
+    [RelayCommand]
+    private Task TestCommunityAsync() => LoadCommunityAsync(updateEntries: false);
+
+    private async Task LoadCommunityAsync(bool updateEntries)
     {
         if (!IsCommunityConfigured)
         {
@@ -560,7 +565,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         IsFetchingCommunity = true;
-        CommunityStatusText = "Fetching feed…";
+        CommunityStatusText = updateEntries ? "Fetching feed…" : "Testing feed…";
 
         try
         {
@@ -568,19 +573,24 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 .FetchAsync(_communitySettings.Url, _communitySettings.Token, CancellationToken.None)
                 .ConfigureAwait(true);
 
-            CommunityEntries.Clear();
-            foreach (var entry in result.Entries)
+            if (updateEntries)
             {
-                CommunityEntries.Add(new CommunityFeedRow(
-                    entry.Sha256,
-                    entry.Name ?? "—",
-                    entry.Verdict ?? "—",
-                    entry.Source ?? "—"));
+                CommunityEntries.Clear();
+                foreach (var entry in result.Entries)
+                {
+                    CommunityEntries.Add(new CommunityFeedRow(
+                        entry.Sha256,
+                        entry.Name ?? "—",
+                        entry.Verdict ?? "—",
+                        entry.Source ?? "—"));
+                }
             }
 
             _communityConnected = true;
             ReplaceCommunityModule();
-            CommunityStatusText = $"{result.Entries.Count} entries fetched at {result.FetchedUtc:HH:mm:ss}.";
+            CommunityStatusText = updateEntries
+                ? $"{result.Entries.Count} entries fetched at {result.FetchedUtc:HH:mm:ss}."
+                : $"Feed test passed: {result.Entries.Count} entries at {result.FetchedUtc:HH:mm:ss}.";
         }
         catch (Exception exception) when (exception is
             HttpRequestException or InvalidDataException or System.Text.Json.JsonException or
@@ -588,7 +598,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         {
             _communityConnected = false;
             ReplaceCommunityModule();
-            CommunityStatusText = $"Feed failed: {exception.Message}";
+            CommunityStatusText = updateEntries
+                ? $"Feed failed: {exception.Message}"
+                : $"Feed test failed: {exception.Message}";
         }
         finally
         {
