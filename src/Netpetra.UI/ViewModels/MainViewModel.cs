@@ -26,6 +26,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             _ = LoadCapabilitiesAsync();
         }
 
+        var security = new SecurityViewModel();
+
         Pages =
         [
             _overview,
@@ -33,8 +35,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             new AppsViewModel(monitor, ConnectionSourceRegistry.IsServiceMode),
             new EventsViewModel(ConnectionSourceRegistry.IsServiceMode),
             new FirewallRulesViewModel(ConnectionSourceRegistry.IsServiceMode),
-            new FilesViewModel(),
-            new SecurityViewModel(),
+            new FilesViewModel(() => SelectedPage = security),
+            security,
             new SettingsViewModel(monitor),
         ];
 

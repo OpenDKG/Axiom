@@ -31,7 +31,7 @@
 
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
               <TextBlock Text="{Binding StatusTitle}" Style="{StaticResource EmptyStateTitle}" />
-              <TextBlock Text="Optional module · disabled by default"
+              <TextBlock Text="Local SHA-256 scan · no upload"
                          Style="{StaticResource Caption}"
                          Margin="0,2,0,0" />
             </StackPanel>
@@ -39,7 +39,7 @@
             <Border Grid.Column="2"
                     Style="{StaticResource StatusPill}"
                     VerticalAlignment="Top">
-              <TextBlock Text="COMING LATER" Style="{StaticResource StatusPillText}" />
+              <TextBlock Text="SCAN ON SECURITY" Style="{StaticResource StatusPillText}" />
             </Border>
           </Grid>
 
@@ -70,21 +70,20 @@
           </ItemsControl>
 
           <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-            <Button Style="{StaticResource GhostButton}"
-                    Content="Choose folders"
-                    IsEnabled="False"
-                    Margin="0,0,8,0"
-                    ToolTip="Disabled: file tracking is not part of this build." />
+            <Button Style="{StaticResource PrimaryButton}"
+                    Content="Open Security"
+                    Command="{Binding OpenSecurityCommand}"
+                    Margin="0,0,8,0" />
             <Button Style="{StaticResource GhostButton}"
                     Content="Open Downloads"
                     IsEnabled="False"
-                    ToolTip="Disabled: file tracking is not part of this build." />
+                    ToolTip="Background folder watching is not part of this build." />
           </StackPanel>
 
           <TextBlock Style="{StaticResource Caption}"
                      Margin="0,14,0,0"
                      TextWrapping="Wrap"
-                     Text="Nothing on this page is a scan result. No file is read, hashed or sent anywhere while the module is disabled." />
+                     Text="Security opens a folder picker; files are hashed locally and never uploaded. Background watching and quarantine are not enabled." />
         </StackPanel>
       </Border>
     </StackPanel>
