@@ -90,6 +90,10 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
     public string TargetText => string.IsNullOrWhiteSpace(Target) ? "No workspace detected" : Target;
 
     public bool IsProtected => Status == "PROTECTED";
+
+    public bool CanTest => Kind is "opencode" or "openchamber" or "codex";
+
+    public string TestResult { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -121,6 +125,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly OpenCodeProtection _openCodeProtection = new();
 
     private readonly CodexProtection _codexProtection = new();
+
+    private readonly AgentHookProbe _agentHookProbe = new();
 
     private readonly AgentEvidenceStore _agentEvidence = new();
 
@@ -442,6 +448,33 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
             _installer.InstallDkg();
             InstallStatusText = "DKG installer opened in PowerShell. Complete the prompts, then click Check again.";
+        }
+    }
+
+    [RelayCommand]
+    private async Task TestAgentAsync(ProtectedAgent? agent)
+    {
+        if (agent is null || !agent.CanTest)
+        {
+            return;
+        }
+
+        var index = ProtectedAgents.IndexOf(agent);
+        if (index < 0)
+        {
+            return;
+        }
+
+        ProtectedAgents[index] = agent with { TestResult = "Testing hook adapter…" };
+        var result = await _agentHookProbe.TestAsync(agent.Kind, CancellationToken.None).ConfigureAwait(true);
+        index = ProtectedAgents.IndexOf(ProtectedAgents.FirstOrDefault(item =>
+            item.Kind == agent.Kind && item.Target == agent.Target) ?? agent);
+        if (index >= 0)
+        {
+            ProtectedAgents[index] = ProtectedAgents[index] with
+            {
+                TestResult = $"{result.Status}: {result.Detail}",
+            };
         }
     }
 

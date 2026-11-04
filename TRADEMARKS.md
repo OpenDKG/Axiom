@@ -18,3 +18,10 @@ listed in the release notes. A build produced by anyone else is not an official 
 
 Questions about name or logo usage: open an issue in the repository before publishing a derivative
 that uses a confusingly similar name.
+
+## Third-party marks
+
+**OriginTrail** and its logo are trademarks of OriginTrail. **Umanitek**, **Guardian Agent Blackbox**
+and their logos are trademarks of Umanitek. They are shown in Netpetra only to identify the local,
+optional modules and their status. Their use does not imply partnership or endorsement, and the
+assets remain subject to the owners' trademark policies.

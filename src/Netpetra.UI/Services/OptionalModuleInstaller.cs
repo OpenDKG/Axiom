@@ -65,8 +65,8 @@ public sealed class OptionalModuleInstaller
             Write-Host 'Starting the official DKG testnet setup. Answer the prompts in this window.' -ForegroundColor Cyan
             & $dkg init --network testnet --role edge --store oxigraph
             if ($LASTEXITCODE -eq 0) {
-              Write-Host 'Starting the DKG node...' -ForegroundColor Cyan
-              & $dkg start
+              Write-Host 'Starting the DKG node in the background...' -ForegroundColor Cyan
+              Start-Process -FilePath $dkg -WorkingDirectory $dkgRoot -WindowStyle Hidden -ArgumentList @('start')
             }
             Write-Host 'DKG setup finished. Return to Netpetra and click Check again.' -ForegroundColor Green
             """;

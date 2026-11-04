@@ -24,6 +24,9 @@
                       LogicalName="Netpetra.UI.Resources.support-links.json" />
     <Resource Include="Resources\\netpetra-icon.png" />
     <Resource Include="Resources\\netpetra.ico" />
+    <Resource Include="Resources\\origintrail-logo.png" />
+    <Resource Include="Resources\\umanitek-logo.png" />
+    <Resource Include="Resources\\blackbox-logo.png" />
   </ItemGroup>
 
   <ItemGroup>
