@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
+using Netpetra.Contracts.Blackbox;
 using Netpetra.Contracts.Community;
 using Netpetra.Contracts.Files;
 using Netpetra.Contracts.Modules;
@@ -120,6 +121,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly OpenCodeProtection _openCodeProtection = new();
 
     private readonly CodexProtection _codexProtection = new();
+
+    private readonly AgentEvidenceStore _agentEvidence = new();
 
     private ReputationSettings _reputationSettings = new(false, string.Empty);
 
@@ -269,11 +272,11 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         : "OFFLINE";
 
     public string AgentStatusText =>
-        "DKG and Blackbox status, install actions and the agent workspaces they report. " +
+        "DKG and Blackbox status, install actions and the workspaces they report. " +
         "OpenCode, OpenChamber, Codex and Hermes are listed below; an installed hook is not proof of runtime blocking.";
 
     public string AgentHookInstallHint =>
-        "Status refresh is read-only. Agent hooks are installed only when you choose Install agent hooks and select " +
+        "Status refresh is read-only. Agent hooks are installed only when you choose Install/Repair hooks and select " +
         "Complete installation; Partial installation leaves all agent hook files unchanged.";
 
     public string SecurityStatusTitle
@@ -392,9 +395,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             var confirmation = MessageBox.Show(
                 "This downloads and runs Umanitek's official Windows installer with the Oxigraph " +
                 "backend (no Docker).\n\nIt installs Python packages, clones the repository and may " +
-                "register a scheduled task. Agent hooks are not installed automatically; after the dashboard " +
-                "starts, use Install agent hooks to choose Complete or Partial installation.\n\n" +
-                "Review the installer; continue only if you trust it.",
+                "register a scheduled task. Review the installer; continue only if you trust it.",
                 "Install Blackbox",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
@@ -442,35 +443,6 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             _installer.InstallDkg();
             InstallStatusText = "DKG installer opened in PowerShell. Complete the prompts, then click Check again.";
         }
-    }
-
-    [RelayCommand]
-    private async Task InstallAgentHooksAsync()
-    {
-        var dialog = new AgentHookInstallWindow();
-        if (Application.Current?.MainWindow is { } owner)
-        {
-            dialog.Owner = owner;
-        }
-
-        if (dialog.ShowDialog() != true)
-        {
-            InstallStatusText = "Agent hook installation cancelled. No agent files were changed.";
-            return;
-        }
-
-        if (!dialog.CompleteInstallation)
-        {
-            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber or Codex hook files were changed.";
-            return;
-        }
-
-        var openCode = _openCodeProtection.EnsureInstalled();
-        var codex = _codexProtection.EnsureInstalled();
-        InstallStatusText =
-            $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
-            $"Codex {(codex ? "installed" : "skipped")}. Existing managed hook files are backed up beside the originals.";
-        await RefreshAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -697,6 +669,35 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     }
 
     [RelayCommand]
+    private async Task InstallAgentHooksAsync()
+    {
+        var dialog = new AgentHookInstallWindow();
+        if (Application.Current?.MainWindow is { } owner)
+        {
+            dialog.Owner = owner;
+        }
+
+        if (dialog.ShowDialog() != true)
+        {
+            InstallStatusText = "Agent hook installation cancelled. No agent files were changed.";
+            return;
+        }
+
+        if (!dialog.CompleteInstallation)
+        {
+            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber or Codex hook files were changed.";
+            return;
+        }
+
+        var openCode = _openCodeProtection.EnsureInstalled();
+        var codex = _codexProtection.EnsureInstalled();
+        InstallStatusText =
+            $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
+            $"Codex {(codex ? "installed" : "skipped")}. Existing managed hook files are backed up beside the originals.";
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private async Task SetBlackboxModeAsync(string? mode)
     {
         if (mode is not ("audit" or "block"))
@@ -790,8 +791,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         ProtectedAgents.Clear();
 
         // Status refresh is read-only. Hook installation is an explicit, confirmed action.
-        AddCodexAgents();
-        AddOpenCodeAgents();
+        AddCodexAgents(blackboxConnected);
+        AddOpenCodeAgents(blackboxConnected);
 
         if (!blackboxConnected)
         {
@@ -842,11 +843,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 ProtectedAgents.Add(new ProtectedAgent(kind, path, status, detail));
             }
 
-            var installed = ProtectedAgents.Count(agent => agent.Status == "HOOK INSTALLED");
+            var runtimeObserved = ProtectedAgents.Count(agent =>
+                agent.Status is "VERIFIED BLOCKING" or "HOOK LOADED" or "AUDIT ONLY");
             AgentsStatusText = ProtectedAgents.Count == 0
                 ? "No agent workspace was reported."
-                : $"{installed} of {ProtectedAgents.Count} recognized agent workspace(s) have hook files installed. " +
-                  "Runtime loading and blocking are not verified.";
+                : $"{runtimeObserved} of {ProtectedAgents.Count} recognized agent workspace(s) have observed hook " +
+                  "activity. Installed hooks alone are not proof of runtime blocking.";
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
@@ -855,7 +857,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
     }
 
-    private void AddOpenCodeAgents()
+    private void AddOpenCodeAgents(bool blackboxConnected)
     {
         if (!_openCodeProtection.IsOpenCodeDetected)
         {
@@ -863,10 +865,20 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _openCodeProtection.IsInstalled;
-        var status = installed ? "HOOK INSTALLED" : "DETECTED";
-        var detail = installed
-            ? "Guard hook files are present. Runtime loading and blocking are not verified from the dashboard."
-            : "OpenCode config detected; guard hook files are not installed.";
+        var evidence = _agentEvidence.Latest("opencode");
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected);
+        var detail = !installed
+            ? "OpenCode config detected; guard plugin not installed or a user plugin occupies the path."
+            : evidence is null
+                ? "Guard plugin installed; no hook invocation has been observed yet."
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
             "opencode",
@@ -876,17 +888,22 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (_openCodeProtection.IsOpenChamberDetected)
         {
+            var openChamberStatus = AgentProtectionClassifier.Classify(
+                detected: true,
+                hookConfigured: installed,
+                runtimeObserved: false,
+                failureObserved: false,
+                blackboxAvailable: blackboxConnected);
             ProtectedAgents.Add(new ProtectedAgent(
                 "openchamber",
                 _openCodeProtection.OpenChamberPath,
-                status,
-                installed
-                    ? "Shared OpenCode hook files are present. OpenChamber runtime loading and blocking are not independently verified."
-                    : "OpenChamber detected; guard hook files are not installed."));
+                openChamberStatus,
+                "OpenChamber detected, but no OpenChamber-specific runtime evidence exists. " +
+                "It shares the OpenCode backend; protection is not verified until a test runs in OpenChamber itself."));
         }
     }
 
-    private void AddCodexAgents()
+    private void AddCodexAgents(bool blackboxConnected)
     {
         if (!_codexProtection.IsCodexDetected)
         {
@@ -894,10 +911,20 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _codexProtection.IsInstalled;
-        var status = installed ? "HOOK INSTALLED" : "DETECTED";
-        var detail = installed
-            ? "PreToolUse hook files are present. Approval, runtime loading and blocking are not verified."
-            : "Codex config detected; PreToolUse hook files are not installed.";
+        var evidence = _agentEvidence.Latest("codex");
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected);
+        var detail = !installed
+            ? "Codex config detected; PreToolUse hook is missing or malformed."
+            : evidence is null
+                ? "Hook configuration detected; runtime not verified. Codex may require approval before the hook runs."
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
             "codex",
@@ -960,7 +987,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         Modules.Add(new SecurityModule(
             "Blackbox",
             blackbox.Status,
-            $"{blackbox.Detail} Mode: {BlackboxModeText}.",
+            blackbox.Detail,
             "\uE7BA",
             blackbox.IsConnected,
             !blackboxInstalled || !blackbox.IsConnected,

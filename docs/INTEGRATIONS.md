@@ -63,6 +63,31 @@ receives Codex's `tool_name`/`tool_input`, calls the same Blackbox guard, and re
 files unchanged. Codex may ask you to approve/trust the hook once; approve it and restart Codex.
 Uninstalling Blackbox removes the Netpetra hook entry and script.
 
+## Blackbox control center
+
+The Agents page reads the local dashboard at `http://127.0.0.1:9700`. It never opens a public
+listener and never sends data off the machine.
+
+- **Configure** opens a native settings dialog. It reads `GET /api/settings`, edits only requested
+  fields, and posts a patch to `POST /api/settings` with the per-process `X-Blackbox-Token` from
+  `GET /api/session`. It then reads the settings back and verifies mode, severity, protected paths,
+  detection toggles and sharing state before reporting success.
+- **Protected paths** from the Blackbox settings are editable with Add file/folder/pattern and
+  Remove (with confirmation). Existing defaults are preserved unless explicitly removed. These are
+  Blackbox path rules, not Windows Firewall rules.
+- **Agent activity** reads `GET /api/audit?limit=100&offset=0` and
+  `GET /api/findings?limit=100&offset=0` every four seconds while the Agents page is selected. It
+  shows redacted action summaries, agent, session, decision, severity and details. Only an explicit
+  `decision: block` is counted as blocked; high severity alone is not proof of blocking.
+- **Health** reads `GET /api/graph-status`, distinguishes the dashboard's configured DKG node from
+  Netpetra's standalone DKG, and shows verified/community rule counts and last sync. A running
+  dashboard is never presented as proof that the verified graph is synchronized.
+- **Test Protection** creates a temporary harmless canary, adds it to protected paths, requires
+  Block mode, calls the local guard, restores the original paths and removes the canary. Its result
+  is explicitly labelled guard-level; it does not claim that an agent hook was executed.
+- The OpenCode/OpenChamber/Codex rows show `HOOK INSTALLED` until a real protection test verifies
+  activation; a hook file alone is not presented as `PROTECTED`.
+
 ## Reputation provider (VirusTotal, opt-in)
 
 The **Reputation provider** row has a **Setup** action. Enter your own VirusTotal API key and enable

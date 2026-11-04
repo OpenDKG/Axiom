@@ -3,7 +3,7 @@ using System.IO;
 
 namespace Netpetra.UI.Services;
 
-/// <summary>Filesystem safety checks used before an explicitly approved agent-hook write.</summary>
+/// <summary>Read-only filesystem safety checks used before an explicitly approved agent-hook write.</summary>
 public static class StorageSafety
 {
     public static bool IsReparsePoint(string path)
@@ -16,7 +16,6 @@ public static class StorageSafety
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // If the location cannot be inspected, never write through it.
             return true;
         }
     }
