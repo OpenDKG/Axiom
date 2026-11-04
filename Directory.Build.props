@@ -23,7 +23,7 @@
     <Company>Netpetra</Company>
     <Product>Netpetra</Product>
     <Copyright>Copyright (C) 2026 The Netpetra contributors</Copyright>
-    <Version>0.4.17</Version>
+    <Version>0.4.18</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <NeutralLanguage>en</NeutralLanguage>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
