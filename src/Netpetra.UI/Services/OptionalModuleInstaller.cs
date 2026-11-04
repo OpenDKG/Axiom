@@ -90,16 +90,68 @@ public sealed class OptionalModuleInstaller
             $venv = Join-Path $dir 'agent-blackbox\venv\Scripts\python.exe'
             if (Test-Path $venv) {
               Write-Host 'Repairing missing Blackbox Python dependencies...' -ForegroundColor Cyan
-              & $venv -m pip install ruamel.yaml python-dotenv rich pyyaml aiohttp
+              & $venv -m pip install ruamel.yaml python-dotenv rich pyyaml aiohttp cryptography psutil fastapi uvicorn
+              if ($LASTEXITCODE -ne 0) { throw "Blackbox dependency repair failed with exit code $LASTEXITCODE" }
               $hermes = Join-Path $dir 'agent-blackbox\venv\Scripts\hermes.exe'
               if (Test-Path $hermes) {
                 & $hermes plugins enable blackbox --no-allow-tool-override
+              }
+              $agent = Join-Path $dir 'agent-blackbox'
+              $launcher = Join-Path $agent 'start-dashboard.py'
+              $code = "import argparse`nfrom plugins.blackbox.dashboard import cmd_dashboard`nraise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))`n"
+              [System.IO.File]::WriteAllText($launcher, $code, (New-Object System.Text.UTF8Encoding($false)))
+              $dashboard = 'http://127.0.0.1:9700'
+              $running = $false
+              try { Invoke-WebRequest $dashboard -UseBasicParsing -TimeoutSec 2 | Out-Null; $running = $true } catch { }
+              if (-not $running) {
+                Write-Host 'Starting the Blackbox dashboard...' -ForegroundColor Cyan
+                Start-Process -FilePath $venv -ArgumentList @($launcher) -WorkingDirectory $agent -WindowStyle Hidden
+                Start-Sleep -Seconds 8
+              }
+              try {
+                Invoke-WebRequest $dashboard -UseBasicParsing -TimeoutSec 5 | Out-Null
+                Write-Host 'Blackbox dashboard is up at http://127.0.0.1:9700.' -ForegroundColor Green
+              } catch {
+                Write-Warning "Blackbox dashboard did not answer yet. Start it from Netpetra with the Start button."
               }
             }
             Write-Host 'Blackbox setup finished. Return to Netpetra and click Check again.' -ForegroundColor Green
             """;
 
         StartPowerShell(script);
+    }
+
+    /// <summary>
+    /// Starts the installed Blackbox dashboard without reinstalling it. Returns false when the
+    /// per-user virtual environment is missing.
+    /// </summary>
+    public bool StartBlackboxDashboard()
+    {
+        var agent = Path.Combine(BlackboxRoot, "agent-blackbox");
+        var venv = Path.Combine(agent, "venv", "Scripts", "python.exe");
+        if (!File.Exists(venv))
+        {
+            return false;
+        }
+
+        var launcher = Path.Combine(agent, "start-dashboard.py");
+        File.WriteAllText(
+            launcher,
+            "import argparse\n" +
+            "from plugins.blackbox.dashboard import cmd_dashboard\n" +
+            "raise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))\n",
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        var startInfo = new ProcessStartInfo(venv, $"\"{launcher}\"")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            WorkingDirectory = agent,
+        };
+
+        Process.Start(startInfo);
+        return true;
     }
 
     private static void StartPowerShell(string script)
