@@ -1,21 +1,27 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using CommunityToolkit.Mvvm.Input;
+
 namespace Netpetra.UI.ViewModels;
 
 /// <summary>
-/// File tracking page. The module is not enabled: no folder is watched, no file is hashed and no
-/// file is uploaded. The page states that explicitly instead of showing a fake scanner.
+/// File tracking page. Background folder watching is not enabled in this build; the working local
+/// SHA-256 scan lives on the Security page. The page states that explicitly and links there.
 /// </summary>
-public sealed class FilesViewModel : PageViewModel
+public sealed partial class FilesViewModel : PageViewModel
 {
-    public FilesViewModel()
-        : base("Files", "File tracking · optional module, not enabled", "\uE8A5")
+    private readonly Action _openSecurity;
+
+    public FilesViewModel(Action openSecurity)
+        : base("Files", "File tracking · local scan lives on Security", "\uE8A5")
     {
+        _openSecurity = openSecurity ?? throw new ArgumentNullException(nameof(openSecurity));
     }
 
-    public string StatusTitle => "File tracking is not enabled";
+    public string StatusTitle => "Local file scan is on Security";
 
     public string StatusText =>
-        "No folder is watched, no SHA-256 is calculated and no file is scanned, uploaded or quarantined.";
+        "Use Security → Local file scan to choose a folder and calculate SHA-256 locally. " +
+        "Background folder watching, quarantine and automatic upload are not enabled in this build.";
 
     public IReadOnlyList<string> PlannedCapabilities { get; } =
     [
@@ -26,5 +32,6 @@ public sealed class FilesViewModel : PageViewModel
         "Never delete, quarantine or upload a file automatically.",
     ];
 
-    public bool IsAvailable => false;
+    [RelayCommand]
+    private void OpenSecurity() => _openSecurity();
 }
