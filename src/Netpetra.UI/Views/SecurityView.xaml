@@ -240,7 +240,7 @@
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
               <TextBlock Text="Recognized agents" Style="{StaticResource SectionTitle}" />
-              <TextBlock Text="Hermes, OpenClaw, OpenCode and OpenChamber workspaces protected through Blackbox."
+              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber and Codex workspaces protected through Blackbox."
                          Style="{StaticResource Caption}"
                          Margin="0,2,0,0" />
             </StackPanel>

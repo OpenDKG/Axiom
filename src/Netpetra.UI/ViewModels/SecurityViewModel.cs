@@ -708,8 +708,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             _codexProtection.EnsureInstalled();
         }
 
-        AddOpenCodeAgents(blackboxConnected);
         AddCodexAgents(blackboxConnected);
+        AddOpenCodeAgents(blackboxConnected);
 
         if (!blackboxConnected)
         {
