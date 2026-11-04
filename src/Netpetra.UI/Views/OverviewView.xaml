@@ -33,6 +33,9 @@
                        Style="{StaticResource Caption}"
                        Foreground="{DynamicResource Brush.Success}"
                        Margin="0,5,0,0" />
+            <TextBlock Text="{Binding UptimeText, StringFormat=Computer uptime: {0}}"
+                       Style="{StaticResource Caption}"
+                       Margin="0,2,0,0" />
           </StackPanel>
         </Grid>
       </Border>
@@ -162,6 +165,7 @@
                                     DownloadBrush="{DynamicResource Brush.Download}"
                                     GridBrush="{DynamicResource Brush.GridLine}"
                                     MarkerPositions="{Binding NewConnectionMarkers}"
+                                    MarkerLabels="{Binding NewConnectionMarkerLabels}"
                                     MarkerBrush="{DynamicResource Brush.Warning}"
                                     AutomationProperties.Name="Throughput chart"
                                     AutomationProperties.HelpText="{Binding ChartHelpText}" />
@@ -186,6 +190,45 @@
                      Margin="0,10,0,0"
                      TextWrapping="Wrap"
                      Text="System-wide IPv4/IPv6 interface counters are measured once per second. Per-process upload/download needs ETW (FND-004). New connection markers use the observed first-seen time; they are not traffic events." />
+
+          <Border Height="1" Background="{DynamicResource Brush.Border}" Margin="0,12,0,10" />
+          <Grid>
+            <TextBlock Text="New connection events" Style="{StaticResource SectionTitle}" />
+            <TextBlock Text="Numbered markers match the chart"
+                       Style="{StaticResource Caption}"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Center" />
+          </Grid>
+          <TextBlock Text="{Binding NewConnectionEventsEmptyText}"
+                     Style="{StaticResource BodyMuted}"
+                     Margin="0,4,0,0" />
+          <ItemsControl ItemsSource="{Binding NewConnectionEvents}" Margin="0,4,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid Margin="0,2">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="{Binding Number}"
+                             Foreground="{DynamicResource Brush.Accent}"
+                             FontWeight="SemiBold"
+                             VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1"
+                             Text="{Binding TimeText}"
+                             Style="{StaticResource Caption}"
+                             VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2"
+                             Text="{Binding Summary}"
+                             Style="{StaticResource BodyMuted}"
+                             TextTrimming="CharacterEllipsis"
+                             ToolTip="{Binding Summary}"
+                             VerticalAlignment="Center" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
         </StackPanel>
       </Border>
 
@@ -262,6 +305,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
               </Grid.RowDefinitions>
 
               <TextBlock Grid.Row="0" Text="Source" Style="{StaticResource BodyMuted}" Margin="0,0,0,8" />
@@ -279,8 +323,11 @@
               <TextBlock Grid.Row="4" Text="Database" Style="{StaticResource BodyMuted}" Margin="0,0,0,8" />
               <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding DatabaseText}" Style="{StaticResource BodyMuted}" Margin="0,0,0,8" />
 
-              <TextBlock Grid.Row="5" Text="Service install" Style="{StaticResource BodyMuted}" />
-              <TextBlock Grid.Row="5" Grid.Column="1" Text="not installed" Style="{StaticResource BodyMuted}" />
+              <TextBlock Grid.Row="5" Text="Service install" Style="{StaticResource BodyMuted}" Margin="0,0,0,8" />
+              <TextBlock Grid.Row="5" Grid.Column="1" Text="not installed" Style="{StaticResource BodyMuted}" Margin="0,0,0,8" />
+
+              <TextBlock Grid.Row="6" Text="Computer uptime" Style="{StaticResource BodyMuted}" />
+              <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding UptimeText}" Style="{StaticResource BodyMuted}" />
             </Grid>
 
             <TextBlock Style="{StaticResource Caption}"

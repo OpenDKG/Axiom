@@ -239,6 +239,91 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
+              <TextBlock Text="Recognized agents" Style="{StaticResource SectionTitle}" />
+              <TextBlock Text="Hermes and OpenClaw workspaces reported by the local Blackbox dashboard."
+                         Style="{StaticResource Caption}"
+                         Margin="0,2,0,0" />
+            </StackPanel>
+            <Border Grid.Column="1" Style="{StaticResource StatusPill}" VerticalAlignment="Top">
+              <TextBlock Text="BLACKBOX" Style="{StaticResource StatusPillText}" />
+            </Border>
+          </Grid>
+
+          <TextBlock Text="{Binding AgentsStatusText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,8,0,0"
+                     TextWrapping="Wrap" />
+
+          <ItemsControl ItemsSource="{Binding ProtectedAgents}" Margin="0,6,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:ProtectedAgent}">
+                <Border Padding="0,7"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="0,0,0,1">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="84" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Background="{DynamicResource Brush.AccentSoft}"
+                            CornerRadius="4"
+                            Padding="6,2"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top">
+                      <TextBlock Text="{Binding KindText}"
+                                 FontSize="10"
+                                 FontWeight="SemiBold"
+                                 Foreground="{DynamicResource Brush.Accent}" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="10,0,10,0">
+                      <TextBlock Text="{Binding TargetText}"
+                                 Style="{StaticResource Caption}"
+                                 FontFamily="{StaticResource Font.Mono}"
+                                 TextTrimming="CharacterEllipsis"
+                                 ToolTip="{Binding TargetText}" />
+                      <TextBlock Text="{Binding Detail}"
+                                 Style="{StaticResource Caption}"
+                                 Foreground="{DynamicResource Brush.TextMuted}"
+                                 Margin="0,2,0,0"
+                                 TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <Border Grid.Column="2" Style="{StaticResource StatusPill}" VerticalAlignment="Top">
+                      <TextBlock Text="{Binding Status}">
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding IsProtected}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding Status}" Value="DETECTED">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                    </Border>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
               <TextBlock Text="Local file scan" Style="{StaticResource SectionTitle}" />
               <TextBlock Text="SHA-256 only; files are never uploaded, deleted or quarantined."
                          Style="{StaticResource Caption}"
