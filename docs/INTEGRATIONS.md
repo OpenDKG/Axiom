@@ -22,8 +22,8 @@ visible PowerShell window only after a confirmation dialog:
   needs (`aiohttp`, `cryptography`, `psutil`, FastAPI, uvicorn) and starts the dashboard at
   `http://127.0.0.1:9700`.
 
-If Blackbox is installed but not running, its action changes to **Start**; it starts the installed
-dashboard without reinstalling. Nothing is installed silently. Close the PowerShell window only
+If Blackbox or DKG is installed but not running, its action changes to **Start**; it starts the
+existing dashboard/node without reinstalling. Nothing is installed silently. Close the PowerShell window only
 after it reports success, then click **Check again**. **Restart Netpetra** is available for a clean
 restart after installation.
 The activity strip shows the last 30 loopback checks; it is a health indicator, not module event

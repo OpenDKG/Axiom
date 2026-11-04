@@ -122,6 +122,30 @@ public sealed class OptionalModuleInstaller
     }
 
     /// <summary>
+    /// Starts an installed DKG node without reinstalling it. Returns false when the local CLI is
+    /// missing.
+    /// </summary>
+    public bool StartDkg()
+    {
+        if (!File.Exists(DkgCommand))
+        {
+            return false;
+        }
+
+        var startInfo = new ProcessStartInfo("cmd.exe", $"/c \"\"{DkgCommand}\" start\"")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            WorkingDirectory = DkgRoot,
+        };
+        startInfo.Environment["DKG_HOME"] = DkgHome;
+
+        Process.Start(startInfo);
+        return true;
+    }
+
+    /// <summary>
     /// Starts the installed Blackbox dashboard without reinstalling it. Returns false when the
     /// per-user virtual environment is missing.
     /// </summary>
