@@ -174,21 +174,12 @@
         <StackPanel Grid.Column="1"
                     Orientation="Horizontal"
                     VerticalAlignment="Center">
-          <Border Style="{StaticResource StatusPill}" Margin="0,0,8,0">
-            <StackPanel Orientation="Horizontal">
-              <Ellipse Width="6" Height="6" Fill="{DynamicResource Brush.Accent}" Margin="0,0,6,0" VerticalAlignment="Center" />
-              <TextBlock Text="{Binding StatusModeText}" Style="{StaticResource StatusPillText}" />
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource StatusPill}" Margin="0,0,8,0">
-            <StackPanel Orientation="Horizontal">
-              <Ellipse Width="6" Height="6" Fill="{DynamicResource Brush.Warning}" Margin="0,0,6,0" VerticalAlignment="Center" />
-              <TextBlock Text="{Binding StatusFirewallBadgeText}" Style="{StaticResource StatusPillText}" />
-            </StackPanel>
-          </Border>
-          <Button Style="{StaticResource GhostButton}"
-                  Content="{Binding ThemeToggleLabel}"
-                  Command="{Binding ToggleThemeCommand}" />
+          <ComboBox Width="172"
+                    ItemsSource="{Binding Themes}"
+                    SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
+                    DisplayMemberPath="Label"
+                    ToolTip="Choose a theme."
+                    AutomationProperties.Name="Theme" />
         </StackPanel>
       </Grid>
     </Border>
@@ -220,24 +211,18 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Center">
-          <TextBlock Text="&#xE9D9;"
-                     FontFamily="Segoe MDL2 Assets"
-                     FontSize="11"
-                     Foreground="{DynamicResource Brush.Accent}"
-                     VerticalAlignment="Center" />
-          <TextBlock Text="OriginTrail DKG · optional"
-                     Style="{StaticResource Caption}"
-                     Margin="4,0,12,0"
-                     VerticalAlignment="Center" />
-          <TextBlock Text="&#xE83D;"
-                     FontFamily="Segoe MDL2 Assets"
-                     FontSize="11"
-                     Foreground="{DynamicResource Brush.Success}"
-                     VerticalAlignment="Center" />
-          <TextBlock Text="Umanitek Blackbox · optional"
-                     Style="{StaticResource Caption}"
-                     Margin="4,0,12,0"
-                     VerticalAlignment="Center" />
+          <Border Style="{StaticResource StatusPill}" Margin="0,0,8,0">
+            <StackPanel Orientation="Horizontal">
+              <Ellipse Width="6" Height="6" Fill="{DynamicResource Brush.Accent}" Margin="0,0,6,0" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding StatusModeText}" Style="{StaticResource StatusPillText}" />
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource StatusPill}" Margin="0,0,8,0">
+            <StackPanel Orientation="Horizontal">
+              <Ellipse Width="6" Height="6" Fill="{DynamicResource Brush.Warning}" Margin="0,0,6,0" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding StatusFirewallBadgeText}" Style="{StaticResource StatusPillText}" />
+            </StackPanel>
+          </Border>
           <TextBlock Text="{Binding StatusIpcText}"
                      Style="{StaticResource Caption}"
                      VerticalAlignment="Center" />

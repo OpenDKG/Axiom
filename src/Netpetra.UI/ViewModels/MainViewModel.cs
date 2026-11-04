@@ -17,10 +17,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private readonly ServicePipeClient? _client;
 
+    private bool _syncingTheme;
+
     public MainViewModel(ConnectionMonitor monitor)
     {
         _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
         _overview = new OverviewViewModel(monitor);
+        Themes =
+        [
+            new ThemeOption(AppTheme.Dark, "Dark · Graphite"),
+            new ThemeOption(AppTheme.DarkMidnight, "Dark · Midnight"),
+            new ThemeOption(AppTheme.Light, "Light · Clean"),
+            new ThemeOption(AppTheme.LightWarm, "Light · Warm"),
+        ];
+        _selectedTheme = Themes.First(theme => theme.Value == ThemeManager.Current);
 
         if (ConnectionSourceRegistry.IsServiceMode)
         {
@@ -52,7 +62,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         monitor.Start();
 
         ThemeManager.Changed += OnThemeChanged;
-        UpdateThemeToggleLabel();
     }
 
     public double CurrentUploadBytesPerSecond => _overview.LatestMeasuredUploadBytesPerSecond;
@@ -79,8 +88,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    public IReadOnlyList<ThemeOption> Themes { get; }
+
     [ObservableProperty]
-    private string _themeToggleLabel = "Switch to light theme";
+    private ThemeOption? _selectedTheme;
 
     [ObservableProperty]
     private bool _firewallWritesEnabled;
@@ -123,9 +134,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public string StatusDataSourceText => ConnectionSourceRegistry.IsLive
         ? "Data source: LIVE (read-only)"
         : "Data source: DEMO";
-
-    [RelayCommand]
-    private void ToggleTheme() => ThemeManager.Toggle();
 
     [RelayCommand]
     private void OpenGitHub()
@@ -211,10 +219,39 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TrayStatusUpdated?.Invoke(this, EventArgs.Empty);
     }
 
-    private void OnThemeChanged(object? sender, EventArgs e) => UpdateThemeToggleLabel();
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
+        _syncingTheme = true;
+        try
+        {
+            SelectedTheme = Themes.FirstOrDefault(theme => theme.Value == ThemeManager.Current) ?? Themes[0];
+        }
+        finally
+        {
+            _syncingTheme = false;
+        }
+    }
 
-    private void UpdateThemeToggleLabel() =>
-        ThemeToggleLabel = ThemeManager.Current is AppTheme.Dark or AppTheme.DarkMidnight
-            ? "Switch to light theme"
-            : "Switch to dark theme";
+    partial void OnSelectedThemeChanged(ThemeOption? value)
+    {
+        if (_syncingTheme || value is null || value.Value == ThemeManager.Current)
+        {
+            return;
+        }
+
+        _syncingTheme = true;
+        try
+        {
+            ThemeManager.Apply(value.Value);
+        }
+        finally
+        {
+            _syncingTheme = false;
+        }
+    }
+}
+
+public sealed record ThemeOption(AppTheme Value, string Label)
+{
+    public override string ToString() => Label;
 }
