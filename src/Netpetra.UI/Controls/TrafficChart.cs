@@ -192,8 +192,8 @@ public sealed class TrafficChart : FrameworkElement
 
         var plotWidth = width - PlotLeft - PlotRight;
         var bottom = height - PlotBottom;
-        var uploadValues = IsLive ? Materialize(Upload) : [];
-        var downloadValues = IsLive ? Materialize(Download) : [];
+        IReadOnlyList<double> uploadValues = IsLive ? Materialize(Upload) : Array.Empty<double>();
+        IReadOnlyList<double> downloadValues = IsLive ? Materialize(Download) : Array.Empty<double>();
         var valid = uploadValues.Concat(downloadValues)
             .Where(value => double.IsFinite(value) && value >= 0)
             .ToList();
