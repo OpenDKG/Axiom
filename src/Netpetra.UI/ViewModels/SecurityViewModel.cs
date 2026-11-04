@@ -77,6 +77,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
         "openclaw" => "OpenClaw",
         "opencode" => "OpenCode",
         "openchamber" => "OpenChamber",
+        "codex" => "Codex",
         _ => Kind,
     };
 
@@ -112,6 +113,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly HttpClient _blackboxClient = new() { Timeout = TimeSpan.FromSeconds(4) };
 
     private readonly OpenCodeProtection _openCodeProtection = new();
+
+    private readonly CodexProtection _codexProtection = new();
 
     private ReputationSettings _reputationSettings = new(false, string.Empty);
 
@@ -702,9 +705,11 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         if (blackboxConnected)
         {
             _openCodeProtection.EnsureInstalled();
+            _codexProtection.EnsureInstalled();
         }
 
         AddOpenCodeAgents(blackboxConnected);
+        AddCodexAgents(blackboxConnected);
 
         if (!blackboxConnected)
         {
@@ -793,6 +798,26 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 status,
                 detail));
         }
+    }
+
+    private void AddCodexAgents(bool blackboxConnected)
+    {
+        if (!_codexProtection.IsCodexDetected)
+        {
+            return;
+        }
+
+        var installed = _codexProtection.IsInstalled;
+        var status = installed && blackboxConnected ? "PROTECTED" : "DETECTED";
+        var detail = installed
+            ? "Blackbox PreToolUse hook installed; approve/restart Codex if prompted."
+            : "Codex config detected; PreToolUse hook not installed.";
+
+        ProtectedAgents.Add(new ProtectedAgent(
+            "codex",
+            _codexProtection.HooksPath,
+            status,
+            detail));
     }
 
     private static string? ReadString(JsonElement element, string propertyName) =>
