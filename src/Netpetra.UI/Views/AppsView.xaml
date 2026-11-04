@@ -6,8 +6,9 @@
 
   <Grid Margin="24,18,24,18">
     <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="1.55*" />
-      <ColumnDefinition Width="*" />
+      <ColumnDefinition Width="1.55*" MinWidth="320" />
+      <ColumnDefinition Width="7" />
+      <ColumnDefinition Width="*" MinWidth="300" />
     </Grid.ColumnDefinitions>
 
     <!-- App list -->
@@ -150,8 +151,14 @@
       </DockPanel>
     </Border>
 
+    <!-- Adjustable split: expand either the app table or its details without a fixed 900px viewport. -->
+    <GridSplitter Grid.Column="1" Width="7" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                  Background="{DynamicResource Brush.Border}" ShowsPreview="True"
+                  ResizeDirection="Columns" ResizeBehavior="PreviousAndNext"
+                  AutomationProperties.Name="Resize app list and detail panels" />
+
     <!-- Detail -->
-    <Border Grid.Column="1" Style="{StaticResource Card}">
+    <Border Grid.Column="2" Style="{StaticResource Card}">
       <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel>
           <Grid>
