@@ -1,0 +1,10 @@
+{
+  "buyMeACoffeeUrl": "",
+  "paypalUrl": "",
+  "githubSponsorsUrl": "",
+  "crypto": [
+    { "currency": "BTC", "network": "Bitcoin mainnet", "address": "" },
+    { "currency": "ETH", "network": "Ethereum mainnet", "address": "" },
+    { "currency": "USDC", "network": "Ethereum mainnet", "address": "" }
+  ]
+}
