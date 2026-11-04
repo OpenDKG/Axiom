@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -30,6 +30,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Netpetra.Persistence.Tests", "tests\Netpetra.Persistence.Tests\Netpetra.Persistence.Tests.csproj", "{5E0E12EE-76A4-4307-B2F2-EE46E311F015}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Netpetra.Service.Tests", "tests\Netpetra.Service.Tests\Netpetra.Service.Tests.csproj", "{D363EE7B-06AD-4832-BCF9-E848C024C65A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Netpetra.UI.Tests", "tests\Netpetra.UI.Tests\Netpetra.UI.Tests.csproj", "{7DD28EE1-041C-4652-8F59-717C746DE189}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -185,6 +187,18 @@ Global
 		{D363EE7B-06AD-4832-BCF9-E848C024C65A}.Release|x64.Build.0 = Release|Any CPU
 		{D363EE7B-06AD-4832-BCF9-E848C024C65A}.Release|x86.ActiveCfg = Release|Any CPU
 		{D363EE7B-06AD-4832-BCF9-E848C024C65A}.Release|x86.Build.0 = Release|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Debug|x64.Build.0 = Debug|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Debug|x86.Build.0 = Debug|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Release|x64.ActiveCfg = Release|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Release|x64.Build.0 = Release|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Release|x86.ActiveCfg = Release|Any CPU
+		{7DD28EE1-041C-4652-8F59-717C746DE189}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -202,5 +216,6 @@ Global
 		{8803996E-CE2B-467D-9551-C6B89D2FAC2A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{5E0E12EE-76A4-4307-B2F2-EE46E311F015} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{D363EE7B-06AD-4832-BCF9-E848C024C65A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{7DD28EE1-041C-4652-8F59-717C746DE189} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

@@ -11,11 +11,21 @@ namespace Netpetra.UI.Services;
 /// </summary>
 public sealed class OpenCodeProtection
 {
-    private readonly string _userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private readonly string _userProfile;
 
-    private readonly string _localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    private readonly string _localAppData;
 
-    private readonly string _roamingAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+    private readonly string _roamingAppData;
+
+    public OpenCodeProtection(
+        string? userProfile = null,
+        string? localAppData = null,
+        string? roamingAppData = null)
+    {
+        _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        _localAppData = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        _roamingAppData = roamingAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+    }
 
     public string ConfigDirectory => Path.Combine(_userProfile, ".config", "opencode");
 

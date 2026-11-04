@@ -14,9 +14,15 @@ public sealed class CodexProtection
 {
     private const string Marker = "netpetra-codex-hook.py";
 
-    private readonly string _userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private readonly string _userProfile;
 
-    private readonly string _localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    private readonly string _localAppData;
+
+    public CodexProtection(string? userProfile = null, string? localAppData = null)
+    {
+        _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        _localAppData = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    }
 
     public string ConfigDirectory => Path.Combine(_userProfile, ".codex");
 
