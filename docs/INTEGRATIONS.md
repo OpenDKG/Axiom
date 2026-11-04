@@ -95,7 +95,9 @@ listener and never sends data off the machine.
   Block mode, calls the local guard, restores the original paths and removes the canary. Its result
   is explicitly labelled guard-level; it does not claim that an agent hook was executed.
 - The OpenCode/OpenChamber/Codex rows show `HOOK INSTALLED` until a real protection test verifies
-  activation; a hook file alone is not presented as `PROTECTED`.
+  activation; a hook file alone is not presented as `PROTECTED`. Connected/configured states
+  (`HOOK INSTALLED`, `HOOK LOADED`) are green, while `AUDIT ONLY` is amber and `DEGRADED`/`OFFLINE`
+  are red.
 
 ## Reputation provider (VirusTotal, opt-in)
 
