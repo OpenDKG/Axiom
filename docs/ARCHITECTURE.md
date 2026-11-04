@@ -108,8 +108,8 @@ Infrastructure/Service/Desktop.
 
 ## 7. UI
 
-- Navigation follows the V2 set: Overview, Connections, Applications, Events, Firewall, Files,
-  Security, Settings.
+- Navigation follows the V2 set plus the Agents page: Overview, Connections, Applications, Events,
+  Agents, Firewall, Files, Security, Settings. Agents sits immediately above Firewall.
 - `ConnectionMonitor`: 1 s polling, keyed diff, raises `Updated` on success and on error (offline
   banner).
 - `Connections` includes an explicit `COUNTRY` placeholder. No GeoIP database is loaded, so every
@@ -119,7 +119,8 @@ Infrastructure/Service/Desktop.
   `Agents` and `System` are present as filters but report that no events of that type exist in this
   build.
 - `Files` points at the working local SHA-256 scan on `Security`; background folder watching and
-  quarantine remain disabled. `Security` lists optional modules and their real probe state.
+  quarantine remain disabled. `Agents` owns DKG, Blackbox, module activity and the recognized
+  workspace list. `Security` owns reputation, community feed and local file scan.
 - `HistoryViewModel`/`Alerts` were replaced by `EventsViewModel`; the database still stores flows.
 - The 5m throughput view is `LIVE COUNTERS`: it samples real system-wide IPv4/IPv6 interface byte
   counters once per second. Longer ranges are labelled `DEMO SERIES` until byte history is stored;

@@ -15,53 +15,34 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
-              <TextBlock Text="{Binding StatusTitle}" Style="{StaticResource EmptyStateTitle}" />
-              <TextBlock Text="{Binding StatusText}"
+              <TextBlock Text="{Binding SecurityStatusTitle}" Style="{StaticResource EmptyStateTitle}" />
+              <TextBlock Text="{Binding SecurityStatusText}"
                          Style="{StaticResource BodyMuted}"
                          Margin="0,6,0,0" />
             </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-              <Button Style="{StaticResource GhostButton}"
-                      Content="Check again"
-                      Command="{Binding RefreshCommand}"
-                      Margin="0,0,8,0"
-                      ToolTip="Re-read the local loopback status. Does not start or control a module." />
-              <Button Style="{StaticResource GhostButton}"
-                      Content="Restart Netpetra"
-                      Command="{Binding RestartCommand}"
-                      Margin="0,0,8,0"
-                      ToolTip="Restart the desktop after installing a module." />
-              <Border>
-                <Border.Style>
-                  <Style TargetType="Border" BasedOn="{StaticResource StatusPill}">
+            <Border Grid.Column="1" VerticalAlignment="Top">
+              <Border.Style>
+                <Style TargetType="Border" BasedOn="{StaticResource StatusPill}">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding SecurityStatusBadge}" Value="CONFIGURED">
+                      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Success}" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Border.Style>
+              <TextBlock Text="{Binding SecurityStatusBadge}">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
                     <Style.Triggers>
-                      <DataTrigger Binding="{Binding StatusBadge}" Value="CONNECTED">
-                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Success}" />
+                      <DataTrigger Binding="{Binding SecurityStatusBadge}" Value="CONFIGURED">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
                       </DataTrigger>
                     </Style.Triggers>
                   </Style>
-                </Border.Style>
-                <TextBlock Text="{Binding StatusBadge}">
-                  <TextBlock.Style>
-                    <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
-                      <Style.Triggers>
-                        <DataTrigger Binding="{Binding StatusBadge}" Value="CONNECTED">
-                          <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
-                        </DataTrigger>
-                      </Style.Triggers>
-                    </Style>
-                  </TextBlock.Style>
-                </TextBlock>
-              </Border>
-            </StackPanel>
+                </TextBlock.Style>
+              </TextBlock>
+            </Border>
           </Grid>
-          <TextBlock Text="{Binding LastCheckedText}"
-                     Style="{StaticResource Caption}"
-                     Margin="0,8,0,0" />
-          <TextBlock Text="{Binding InstallStatusText}"
-                     Style="{StaticResource Caption}"
-                     Margin="0,4,0,0"
-                     TextWrapping="Wrap" />
         </StackPanel>
       </Border>
 
@@ -71,7 +52,8 @@
             <DataTemplate DataType="{x:Type vm:SecurityModule}">
               <Border Padding="16,12"
                       BorderBrush="{DynamicResource Brush.Border}"
-                      BorderThickness="0,0,0,1">
+                      BorderThickness="0,0,0,1"
+                      Visibility="{Binding IsSecurityModule, Converter={StaticResource BoolToVisibility}}">
                 <Grid>
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -158,162 +140,6 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
-      </Border>
-
-      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
-        <StackPanel>
-          <TextBlock Text="Module activity" Style="{StaticResource SectionTitle}" />
-          <TextBlock Text="Last 30 loopback checks; green = connected, muted = not running."
-                     Style="{StaticResource Caption}"
-                     Margin="0,2,0,0" />
-
-          <Grid Margin="0,10,0,0">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="64" />
-              <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="DKG" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-            <ItemsControl Grid.Column="1" ItemsSource="{Binding Activity}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <StackPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type vm:ModuleActivity}">
-                  <TextBlock Text="▮" FontSize="15" Margin="1,0">
-                    <TextBlock.Style>
-                      <Style TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
-                        <Style.Triggers>
-                          <DataTrigger Binding="{Binding DkgConnected}" Value="True">
-                            <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
-                          </DataTrigger>
-                        </Style.Triggers>
-                      </Style>
-                    </TextBlock.Style>
-                  </TextBlock>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </Grid>
-
-          <Grid Margin="0,4,0,0">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="64" />
-              <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="Blackbox" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-            <ItemsControl Grid.Column="1" ItemsSource="{Binding Activity}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <StackPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type vm:ModuleActivity}">
-                  <TextBlock Text="▮" FontSize="15" Margin="1,0">
-                    <TextBlock.Style>
-                      <Style TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
-                        <Style.Triggers>
-                          <DataTrigger Binding="{Binding BlackboxConnected}" Value="True">
-                            <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
-                          </DataTrigger>
-                        </Style.Triggers>
-                      </Style>
-                    </TextBlock.Style>
-                  </TextBlock>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </Grid>
-        </StackPanel>
-      </Border>
-
-      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
-        <StackPanel>
-          <Grid>
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0">
-              <TextBlock Text="Recognized agents" Style="{StaticResource SectionTitle}" />
-              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber and Codex workspaces protected through Blackbox."
-                         Style="{StaticResource Caption}"
-                         Margin="0,2,0,0" />
-            </StackPanel>
-            <Border Grid.Column="1" Style="{StaticResource StatusPill}" VerticalAlignment="Top">
-              <TextBlock Text="BLACKBOX" Style="{StaticResource StatusPillText}" />
-            </Border>
-          </Grid>
-
-          <TextBlock Text="{Binding AgentsStatusText}"
-                     Style="{StaticResource Caption}"
-                     Margin="0,8,0,0"
-                     TextWrapping="Wrap" />
-
-          <ItemsControl ItemsSource="{Binding ProtectedAgents}" Margin="0,6,0,0">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="{x:Type vm:ProtectedAgent}">
-                <Border Padding="0,7"
-                        BorderBrush="{DynamicResource Brush.Border}"
-                        BorderThickness="0,0,0,1">
-                  <Grid>
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="84" />
-                      <ColumnDefinition Width="*" />
-                      <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <Border Background="{DynamicResource Brush.AccentSoft}"
-                            CornerRadius="4"
-                            Padding="6,2"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Top">
-                      <TextBlock Text="{Binding KindText}"
-                                 FontSize="10"
-                                 FontWeight="SemiBold"
-                                 Foreground="{DynamicResource Brush.Accent}" />
-                    </Border>
-
-                    <StackPanel Grid.Column="1" Margin="10,0,10,0">
-                      <TextBlock Text="{Binding TargetText}"
-                                 Style="{StaticResource Caption}"
-                                 FontFamily="{StaticResource Font.Mono}"
-                                 TextTrimming="CharacterEllipsis"
-                                 ToolTip="{Binding TargetText}" />
-                      <TextBlock Text="{Binding Detail}"
-                                 Style="{StaticResource Caption}"
-                                 Foreground="{DynamicResource Brush.TextMuted}"
-                                 Margin="0,2,0,0"
-                                 TextWrapping="Wrap" />
-                    </StackPanel>
-
-                    <Border Grid.Column="2" Style="{StaticResource StatusPill}" VerticalAlignment="Top">
-                      <TextBlock Text="{Binding Status}">
-                        <TextBlock.Style>
-                          <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
-                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
-                            <Style.Triggers>
-                              <DataTrigger Binding="{Binding IsProtected}" Value="True">
-                                <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
-                              </DataTrigger>
-                              <DataTrigger Binding="{Binding Status}" Value="DETECTED">
-                                <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
-                              </DataTrigger>
-                            </Style.Triggers>
-                          </Style>
-                        </TextBlock.Style>
-                      </TextBlock>
-                    </Border>
-                  </Grid>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </StackPanel>
       </Border>
 
       <Border Style="{StaticResource Card}" Margin="0,14,0,0">
@@ -428,7 +254,7 @@
       <TextBlock Style="{StaticResource Caption}"
                  Margin="2,12,0,0"
                  TextWrapping="Wrap"
-                 Text="Netpetra reads loopback status only. Install opens the official third-party installer after confirmation; nothing runs silently." />
+                 Text="Reputation and community lookups are opt-in; the local file scan never uploads files. Agent installers and protection live on the Agents page." />
     </StackPanel>
   </ScrollViewer>
 </UserControl>
