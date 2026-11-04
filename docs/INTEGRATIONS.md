@@ -29,6 +29,21 @@ restart after installation.
 The activity strip shows the last 30 loopback checks; it is a health indicator, not module event
 content.
 
+### OpenCode and OpenChamber
+
+OpenCode is protected through its native plugin API; OpenChamber uses the same
+`~/.config/opencode` plugin directory. When Blackbox is connected and that directory exists,
+Netpetra writes:
+
+- `~/.config/opencode/plugin/netpetra-blackbox.ts`, a `tool.execute.before` hook;
+- `%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py`, which calls
+  Blackbox's Python guard with the tool name and arguments.
+
+The current Blackbox mode applies: `audit` records findings, `block` rejects confirmed threats.
+Bridge or Blackbox failures fail open, like the Hermes hooks. Restart OpenCode/OpenChamber after the
+first install so the plugin is loaded. Uninstalling Blackbox removes the plugin; the bridge lives
+inside the Blackbox folder. This is a Netpetra adapter, not an official Blackbox attachment kind.
+
 ## Reputation provider (VirusTotal, opt-in)
 
 The **Reputation provider** row has a **Setup** action. Enter your own VirusTotal API key and enable

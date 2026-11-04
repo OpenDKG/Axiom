@@ -75,6 +75,8 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
     {
         "hermes" => "Hermes",
         "openclaw" => "OpenClaw",
+        "opencode" => "OpenCode",
+        "openchamber" => "OpenChamber",
         _ => Kind,
     };
 
@@ -108,6 +110,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly CommunityFeedClient _communityClient = new();
 
     private readonly HttpClient _blackboxClient = new() { Timeout = TimeSpan.FromSeconds(4) };
+
+    private readonly OpenCodeProtection _openCodeProtection = new();
 
     private ReputationSettings _reputationSettings = new(false, string.Empty);
 
@@ -695,9 +699,18 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     {
         ProtectedAgents.Clear();
 
+        if (blackboxConnected)
+        {
+            _openCodeProtection.EnsureInstalled();
+        }
+
+        AddOpenCodeAgents(blackboxConnected);
+
         if (!blackboxConnected)
         {
-            AgentsStatusText = "Blackbox is not connected; no agent protection status is available.";
+            AgentsStatusText = ProtectedAgents.Count == 0
+                ? "Blackbox is not connected; no agent protection status is available."
+                : "Blackbox is not connected; detected agents are not protected.";
             return;
         }
 
@@ -722,7 +735,6 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 return;
             }
 
-            var protectedCount = 0;
             foreach (var target in targets.EnumerateArray())
             {
                 var kind = ReadString(target, "kind") ?? "agent";
@@ -741,20 +753,45 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                     : available ? "Workspace detected; not attached" : "Not detected on this machine");
 
                 ProtectedAgents.Add(new ProtectedAgent(kind, path, status, detail));
-                if (isProtected)
-                {
-                    protectedCount++;
-                }
             }
 
             AgentsStatusText = ProtectedAgents.Count == 0
-                ? "No Hermes or OpenClaw workspace was reported."
-                : $"{protectedCount} of {ProtectedAgents.Count} recognized agent workspace(s) protected.";
+                ? "No agent workspace was reported."
+                : $"{ProtectedAgents.Count(agent => agent.IsProtected)} of {ProtectedAgents.Count} recognized agent workspace(s) protected.";
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
         {
             AgentsStatusText = $"Could not read Blackbox agent targets: {exception.Message}";
+        }
+    }
+
+    private void AddOpenCodeAgents(bool blackboxConnected)
+    {
+        if (!_openCodeProtection.IsOpenCodeDetected)
+        {
+            return;
+        }
+
+        var installed = _openCodeProtection.IsInstalled;
+        var status = installed && blackboxConnected ? "PROTECTED" : "DETECTED";
+        var detail = installed
+            ? "Blackbox guard plugin installed; restart OpenCode/OpenChamber to activate."
+            : "OpenCode config detected; guard plugin not installed.";
+
+        ProtectedAgents.Add(new ProtectedAgent(
+            "opencode",
+            _openCodeProtection.ConfigDirectory,
+            status,
+            detail));
+
+        if (_openCodeProtection.IsOpenChamberDetected)
+        {
+            ProtectedAgents.Add(new ProtectedAgent(
+                "openchamber",
+                _openCodeProtection.OpenChamberPath,
+                status,
+                detail));
         }
     }
 
