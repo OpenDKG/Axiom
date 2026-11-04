@@ -18,6 +18,7 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
         PollText = $"{monitor.PollInterval.TotalSeconds:0} s · read-only";
 
         ThemeManager.Changed += OnThemeChanged;
+        TraySettingsStore.Changed += OnTraySettingsChanged;
         UpdateThemeText();
     }
 
@@ -46,16 +47,34 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
     [ObservableProperty]
     private string _currentThemeText = "Dark";
 
+    [ObservableProperty]
+    private bool _trayNotificationsEnabled = TraySettingsStore.Enabled;
+
+    partial void OnTrayNotificationsEnabledChanged(bool value) => TraySettingsStore.SetEnabled(value);
+
     [RelayCommand]
     private static void UseDarkTheme() => ThemeManager.Apply(AppTheme.Dark);
 
     [RelayCommand]
     private static void UseLightTheme() => ThemeManager.Apply(AppTheme.Light);
 
-    public void Dispose() => ThemeManager.Changed -= OnThemeChanged;
+    [RelayCommand]
+    private static void UseDarkMidnightTheme() => ThemeManager.Apply(AppTheme.DarkMidnight);
+
+    [RelayCommand]
+    private static void UseLightWarmTheme() => ThemeManager.Apply(AppTheme.LightWarm);
+
+    public void Dispose()
+    {
+        ThemeManager.Changed -= OnThemeChanged;
+        TraySettingsStore.Changed -= OnTraySettingsChanged;
+    }
+
+    private void OnTraySettingsChanged(object? sender, EventArgs e) =>
+        TrayNotificationsEnabled = TraySettingsStore.Enabled;
 
     private void OnThemeChanged(object? sender, EventArgs e) => UpdateThemeText();
 
     private void UpdateThemeText() =>
-        CurrentThemeText = ThemeManager.Current == AppTheme.Dark ? "Dark" : "Light";
+        CurrentThemeText = ThemeManager.Current.ToString();
 }

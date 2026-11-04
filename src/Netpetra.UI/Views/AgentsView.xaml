@@ -5,7 +5,56 @@
              xmlns:vm="clr-namespace:Netpetra.UI.ViewModels">
 
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-    <StackPanel Margin="24,18,24,24" MaxWidth="900" HorizontalAlignment="Left">
+    <StackPanel Margin="24,18,24,24" HorizontalAlignment="Stretch">
+
+      <!-- Product identity cards; symbolic initials are NOT third-party official logos. -->
+      <Grid Margin="0,0,0,14">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="14" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Style="{StaticResource Card}">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="42" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Width="34" Height="34" CornerRadius="9" Background="#3E2B78" VerticalAlignment="Top">
+              <TextBlock Text="OT" Foreground="#F4ECFF" FontSize="11" FontWeight="Bold"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         ToolTip="Symbolic OriginTrail initials; official logo asset pending clearance." />
+            </Border>
+            <StackPanel Grid.Column="1">
+              <TextBlock Text="{Binding Security.DkgBrandLabel}" Style="{StaticResource SectionTitle}"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="Decentralized Knowledge Graph (DKG): optional local knowledge infrastructure and provenance. This status reflects a local node probe."
+                         Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,5,0,0" />
+              <TextBlock Text="origintrail.io" Style="{StaticResource Caption}" Margin="0,7,0,0" />
+            </StackPanel>
+          </Grid>
+        </Border>
+        <Border Grid.Column="2" Style="{StaticResource Card}">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="42" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Width="34" Height="34" CornerRadius="9" Background="#1D3644" VerticalAlignment="Top">
+              <TextBlock Text="B" Foreground="#C4F4EF" FontSize="17" FontWeight="Bold"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         ToolTip="Symbolic Blackbox initial; official Umanitek logo asset pending clearance." />
+            </Border>
+            <StackPanel Grid.Column="1">
+              <TextBlock Text="{Binding Security.BlackboxBrandLabel}" Style="{StaticResource SectionTitle}"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="Guardian Agent Blackbox by Umanitek: optional local agent-safety module. Connection alone does not prove every agent is protected."
+                         Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,5,0,0" />
+              <TextBlock Text="umanitek.ai" Style="{StaticResource Caption}" Margin="0,7,0,0" />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
 
       <Border Style="{StaticResource Card}">
         <StackPanel>
@@ -21,16 +70,26 @@
                          Margin="0,6,0,0" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-              <Button Style="{StaticResource GhostButton}"
-                      Content="Check again"
-                      Command="{Binding Security.RefreshCommand}"
+              <Button Style="{StaticResource PrimaryButton}"
+                      Content="Configure"
+                      Command="{Binding ConfigureCommand}"
                       Margin="0,0,8,0"
-                      ToolTip="Re-read the local loopback status. Does not start or control a module." />
+                      ToolTip="Open native Blackbox settings." />
               <Button Style="{StaticResource GhostButton}"
-                      Content="Restart Netpetra"
-                      Command="{Binding Security.RestartCommand}"
+                      Content="Test Protection"
+                      Command="{Binding TestProtectionCommand}"
                       Margin="0,0,8,0"
-                      ToolTip="Restart the desktop after installing a module." />
+                      ToolTip="Run a harmless canary test against the local Blackbox guard." />
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Refresh"
+                      Command="{Binding RefreshAllCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Refresh module probes, health and activity." />
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Open Dashboard"
+                      Command="{Binding OpenDashboardCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Open the local Blackbox web dashboard." />
               <Border>
                 <Border.Style>
                   <Style TargetType="Border" BasedOn="{StaticResource StatusPill}">
@@ -62,6 +121,40 @@
                      Style="{StaticResource Caption}"
                      Margin="0,4,0,0"
                      TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <TextBlock Text="Blackbox health" Style="{StaticResource SectionTitle}" />
+          <TextBlock Text="{Binding HealthStatusText}"
+                     Style="{StaticResource BodyMuted}"
+                     Margin="0,4,0,0"
+                     TextWrapping="Wrap" />
+          <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding BlackboxHealthText}" Style="{StaticResource Caption}" Margin="0,0,12,6" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DkgHealthText}" Style="{StaticResource Caption}" Margin="0,0,0,6" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding NetpetraDkgHealthText}" Style="{StaticResource Caption}" Margin="0,0,12,0" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GraphHealthText}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+          </Grid>
+          <TextBlock Text="{Binding ProtectionTestText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,8,0,0"
+                     TextWrapping="Wrap" />
+          <Button Style="{StaticResource GhostButton}"
+                  Content="View DKG log"
+                  Command="{Binding ViewDkgLogCommand}"
+                  HorizontalAlignment="Left"
+                  Margin="0,8,0,0"
+                  ToolTip="Show a bounded, redacted tail of the local DKG daemon log." />
         </StackPanel>
       </Border>
 
@@ -117,7 +210,7 @@
                             Padding="6,2"
                             FontSize="10"
                             Margin="0,0,4,0"
-                            Command="{Binding DataContext.Security.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            Command="{Binding DataContext.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                             CommandParameter="audit"
                             Visibility="{Binding CanSetMode, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="Log and report Blackbox findings without blocking." />
@@ -126,7 +219,7 @@
                             Padding="6,2"
                             FontSize="10"
                             Margin="0,0,8,0"
-                            Command="{Binding DataContext.Security.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            Command="{Binding DataContext.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                             CommandParameter="block"
                             Visibility="{Binding CanSetMode, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="Stop confirmed Blackbox threats at the configured severity." />
@@ -239,15 +332,157 @@
               <ColumnDefinition Width="*" />
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Agent activity" Style="{StaticResource SectionTitle}" />
+            <TextBlock Grid.Column="1"
+                       Text="Local audit · redacted"
+                       Style="{StaticResource Caption}"
+                       VerticalAlignment="Center" />
+          </Grid>
+
+          <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+            <ListBox Style="{StaticResource SegmentList}"
+                     ItemsSource="{Binding ActivityFilters}"
+                     SelectedItem="{Binding SelectedActivityFilter, Mode=TwoWay}"
+                     Margin="0,0,8,0"
+                     AutomationProperties.Name="Activity filter" />
+            <ComboBox Width="130"
+                      ItemsSource="{Binding AgentFilters}"
+                      SelectedItem="{Binding SelectedAgentFilter, Mode=TwoWay}"
+                      Margin="0,0,8,0"
+                      ToolTip="Filter by agent." />
+            <ComboBox Width="140"
+                      ItemsSource="{Binding SeverityFilters}"
+                      SelectedItem="{Binding SelectedSeverityFilter, Mode=TwoWay}"
+                      ToolTip="Filter by severity." />
+          </StackPanel>
+
+          <TextBlock Text="{Binding ActivityStatusText}" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+          <TextBlock Text="{Binding LastBlockedText}" Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding ProtectedPathViolationsText}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+          <TextBlock Text="{Binding UnresolvedText}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+
+          <DataGrid ItemsSource="{Binding Activity}"
+                    Style="{StaticResource TableDataGrid}"
+                    AutoGenerateColumns="False"
+                    IsReadOnly="True"
+                    MaxHeight="300"
+                    Margin="0,10,0,0"
+                    EnableRowVirtualization="True"
+                    HeadersVisibility="Column"
+                    RowHeight="28">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="TIME" Binding="{Binding TimeText}" Width="70" />
+              <DataGridTextColumn Header="AGENT" Binding="{Binding Agent}" Width="90" />
+              <DataGridTextColumn Header="SESSION" Binding="{Binding Session}" Width="85" />
+              <DataGridTextColumn Header="TOOL" Binding="{Binding Tool}" Width="90" />
+              <DataGridTextColumn Header="ACTION" Binding="{Binding Action}" Width="180" />
+              <DataGridTextColumn Header="DECISION" Binding="{Binding Decision}" Width="80" />
+              <DataGridTextColumn Header="SEVERITY" Binding="{Binding Severity}" Width="75" />
+              <DataGridTextColumn Header="DETAILS" Binding="{Binding Details}" Width="*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Security findings" Style="{StaticResource SectionTitle}" />
+            <TextBlock Grid.Column="1"
+                       Text="blocked ≠ merely flagged"
+                       Style="{StaticResource Caption}"
+                       VerticalAlignment="Center" />
+          </Grid>
+          <TextBlock Text="Only a finding with an explicit decision of block is counted as blocked."
+                     Style="{StaticResource Caption}"
+                     Margin="0,2,0,0" />
+          <DataGrid ItemsSource="{Binding Findings}"
+                    Style="{StaticResource TableDataGrid}"
+                    AutoGenerateColumns="False"
+                    IsReadOnly="True"
+                    MaxHeight="180"
+                    Margin="0,10,0,0"
+                    EnableRowVirtualization="True"
+                    HeadersVisibility="Column"
+                    RowHeight="28">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="TIME" Binding="{Binding TimeText}" Width="70" />
+              <DataGridTextColumn Header="AGENT" Binding="{Binding Agent}" Width="90" />
+              <DataGridTextColumn Header="CATEGORY" Binding="{Binding Category}" Width="110" />
+              <DataGridTextColumn Header="SEVERITY" Binding="{Binding Severity}" Width="75" />
+              <DataGridTextColumn Header="IDENTIFIER" Binding="{Binding Identifier}" Width="*" />
+              <DataGridTextColumn Header="DECISION" Binding="{Binding Decision}" Width="80" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Netpetra hook evidence" Style="{StaticResource SectionTitle}" />
+            <TextBlock Grid.Column="1"
+                       Text="bounded · no arguments"
+                       Style="{StaticResource Caption}"
+                       VerticalAlignment="Center" />
+          </Grid>
+          <TextBlock Text="OpenCode/Codex adapter events may not appear in the native Blackbox dashboard. This local feed records hook load, guard decisions and errors without prompts, paths or tool arguments."
+                     Style="{StaticResource Caption}"
+                     Margin="0,2,0,0"
+                     TextWrapping="Wrap" />
+          <DataGrid ItemsSource="{Binding HookEvidence}"
+                    Style="{StaticResource TableDataGrid}"
+                    AutoGenerateColumns="False"
+                    IsReadOnly="True"
+                    MaxHeight="180"
+                    Margin="0,10,0,0"
+                    EnableRowVirtualization="True"
+                    HeadersVisibility="Column"
+                    RowHeight="28">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="TIME" Binding="{Binding TimeText}" Width="70" />
+              <DataGridTextColumn Header="FRAMEWORK" Binding="{Binding Framework}" Width="100" />
+              <DataGridTextColumn Header="EVENT" Binding="{Binding EventType}" Width="120" />
+              <DataGridTextColumn Header="TOOL" Binding="{Binding Tool}" Width="100" />
+              <DataGridTextColumn Header="DECISION" Binding="{Binding Decision}" Width="90" />
+              <DataGridTextColumn Header="ERROR" Binding="{Binding ErrorCode}" Width="*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
               <TextBlock Text="Recognized agents" Style="{StaticResource SectionTitle}" />
               <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber and Codex workspaces protected through Blackbox."
                          Style="{StaticResource Caption}"
                          Margin="0,2,0,0" />
             </StackPanel>
-            <Border Grid.Column="1" Style="{StaticResource StatusPill}" VerticalAlignment="Top">
-              <TextBlock Text="BLACKBOX" Style="{StaticResource StatusPillText}" />
-            </Border>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Install/Repair hooks"
+                      Command="{Binding InstallHooksCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Explicitly install or repair Netpetra-owned agent hooks. Existing hooks and storage are preserved." />
+              <Border Style="{StaticResource StatusPill}">
+                <TextBlock Text="BLACKBOX" Style="{StaticResource StatusPillText}" />
+              </Border>
+            </StackPanel>
           </Grid>
 
           <TextBlock Text="{Binding Security.AgentsStatusText}"

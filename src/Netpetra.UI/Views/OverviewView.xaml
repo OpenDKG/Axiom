@@ -102,7 +102,7 @@
         </Border>
       </Grid>
 
-      <!-- Throughput (demo) -->
+      <!-- Measured throughput (historical data deliberately unavailable until service capture exists) -->
       <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="18,16,18,14">
         <StackPanel>
           <Grid>
@@ -160,16 +160,27 @@
                   CornerRadius="8"
                   Padding="10,8,10,10">
             <controls:TrafficChart Upload="{Binding UploadSeries}"
+                                    IsLive="{Binding IsTrafficLive}"
+                                    RateUnit="{Binding SelectedRateUnit}"
                                     Download="{Binding DownloadSeries}"
                                     UploadBrush="{DynamicResource Brush.Upload}"
                                     DownloadBrush="{DynamicResource Brush.Download}"
                                     GridBrush="{DynamicResource Brush.GridLine}"
                                     MarkerPositions="{Binding NewConnectionMarkers}"
                                     MarkerLabels="{Binding NewConnectionMarkerLabels}"
+                                    MarkerDetails="{Binding NewConnectionMarkerDetails}"
+                                    SelectedMarkerIndex="{Binding SelectedMarkerIndex, Mode=TwoWay}"
                                     MarkerBrush="{DynamicResource Brush.Warning}"
                                     AutomationProperties.Name="Throughput chart"
                                     AutomationProperties.HelpText="{Binding ChartHelpText}" />
           </Border>
+
+          <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <TextBlock Text="Current upload: " Style="{StaticResource Caption}" />
+            <TextBlock Text="{Binding UploadRateText}" FontFamily="{StaticResource Font.Mono}" FontWeight="SemiBold" Margin="0,0,20,0" />
+            <TextBlock Text="Current download: " Style="{StaticResource Caption}" />
+            <TextBlock Text="{Binding DownloadRateText}" FontFamily="{StaticResource Font.Mono}" FontWeight="SemiBold" />
+          </StackPanel>
 
           <DockPanel Margin="0,10,0,0">
             <StackPanel Orientation="Horizontal">
@@ -189,7 +200,7 @@
           <TextBlock Style="{StaticResource Caption}"
                      Margin="0,10,0,0"
                      TextWrapping="Wrap"
-                     Text="System-wide IPv4/IPv6 interface counters are measured once per second. Per-process upload/download needs ETW (FND-004). New connection markers use the observed first-seen time; they are not traffic events." />
+                     Text="Measured interface-level rates only; per-application rates are not available. Historical throughput requires persistent service-side measurement. Yellow markers are newly observed sockets from this UI session, not evidence of malware." />
 
           <Border Height="1" Background="{DynamicResource Brush.Border}" Margin="0,12,0,10" />
           <Grid>
@@ -202,6 +213,11 @@
           <TextBlock Text="{Binding NewConnectionEventsEmptyText}"
                      Style="{StaticResource BodyMuted}"
                      Margin="0,4,0,0" />
+          <Border Margin="0,8,0,6" Padding="10,8" BorderThickness="1"
+                  BorderBrush="{DynamicResource Brush.Border}" CornerRadius="5">
+            <TextBlock Text="{Binding SelectedConnectionDetails}" TextWrapping="Wrap"
+                       Style="{StaticResource BodyMuted}" />
+          </Border>
           <ItemsControl ItemsSource="{Binding NewConnectionEvents}" Margin="0,4,0,0">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
@@ -229,6 +245,81 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!-- Session-only time navigator. Historical coverage requires service persistence. -->
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="18,14,18,14">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Connection time explorer" Style="{StaticResource SectionTitle}" />
+              <TextBlock Text="Inspect first-observed applications and remote endpoints near a moment in the live 5-minute window."
+                         Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Jump to now" Margin="12,0,0,0"
+                    Command="{Binding JumpToNowCommand}" IsEnabled="{Binding IsTrafficLive}"
+                    AutomationProperties.Name="Jump timeline cursor to now" />
+          </Grid>
+
+          <Grid Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="40" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="40" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="-5m" Style="{StaticResource Caption}"
+                       VerticalAlignment="Center" />
+            <Slider Grid.Column="1" Minimum="0" Maximum="300" Value="{Binding TimelineCursorPosition, Mode=TwoWay}"
+                    SmallChange="1" LargeChange="15" TickFrequency="30"
+                    IsSnapToTickEnabled="False" IsEnabled="{Binding IsTrafficLive}"
+                    AutomationProperties.Name="Observed connection time cursor in five-minute window"
+                    ToolTip="Select a point in the last five minutes to inspect newly observed socket events." />
+            <TextBlock Grid.Column="2" Text="Now" Style="{StaticResource Caption}"
+                       VerticalAlignment="Center" HorizontalAlignment="Right" />
+          </Grid>
+          <TextBlock Text="{Binding TimelineCursorTimeText}" Style="{StaticResource Caption}" Margin="0,5,0,0" />
+          <TextBlock Text="{Binding TimelineFocusText}" Style="{StaticResource BodyMuted}"
+                     TextWrapping="Wrap" Margin="0,7,0,0" />
+          <Border Height="1" Background="{DynamicResource Brush.Border}" Margin="0,12,0,10" />
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Applications &amp; remote endpoints" Style="{StaticResource SectionTitle}" />
+            <TextBlock Grid.Column="1" Text="{Binding TimelineEndpointCountText}"
+                       Style="{StaticResource Caption}" HorizontalAlignment="Right" />
+          </Grid>
+          <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding TimelineEndpoints}" Margin="0,5,0,0">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1"
+                          Padding="0,8,0,8" ToolTip="{Binding Detail}">
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.2*" />
+                        <ColumnDefinition Width="1.3*" />
+                        <ColumnDefinition Width="Auto" />
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Grid.Column="0" Text="{Binding AppText}" Style="{StaticResource BodyMuted}"
+                                 TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+                      <TextBlock Grid.Column="1" Text="{Binding Remote}" Style="{StaticResource Caption}"
+                                 TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+                      <TextBlock Grid.Column="2" Text="{Binding ObservationsText}" Style="{StaticResource Caption}" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+          <TextBlock Text="Observed socket starts only: not a record of all active connections, traffic volume, IP geolocation, or verified alerts."
+                     Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" />
         </StackPanel>
       </Border>
 

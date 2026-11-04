@@ -4,7 +4,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-    <StackPanel Margin="24,18,24,24" MaxWidth="900" HorizontalAlignment="Left">
+    <StackPanel Margin="24,18,24,24" HorizontalAlignment="Stretch">
 
       <Border Style="{StaticResource Card}">
         <StackPanel>
@@ -12,10 +12,8 @@
           <TextBlock Text="{Binding CurrentThemeText, StringFormat=Active theme: {0}}"
                      Style="{StaticResource Caption}"
                      Margin="0,3,0,10" />
-          <StackPanel Orientation="Horizontal">
-            <Button Content="Dark"
-                    Command="{Binding UseDarkThemeCommand}"
-                    Margin="0,0,8,0">
+          <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
+            <Button Content="Dark · Graphite" Command="{Binding UseDarkThemeCommand}" Margin="0,0,8,8" MinWidth="126">
               <Button.Style>
                 <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
                   <Style.Triggers>
@@ -28,8 +26,20 @@
                 </Style>
               </Button.Style>
             </Button>
-            <Button Content="Light"
-                    Command="{Binding UseLightThemeCommand}">
+            <Button Content="Dark · Midnight" Command="{Binding UseDarkMidnightThemeCommand}" Margin="0,0,8,8" MinWidth="126">
+              <Button.Style>
+                <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding CurrentThemeText}" Value="DarkMidnight">
+                      <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+                      <Setter Property="Foreground" Value="{DynamicResource Brush.AccentContrast}" />
+                      <Setter Property="FontWeight" Value="SemiBold" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Button.Style>
+            </Button>
+            <Button Content="Light · Clean" Command="{Binding UseLightThemeCommand}" Margin="0,0,8,8" MinWidth="126">
               <Button.Style>
                 <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
                   <Style.Triggers>
@@ -42,11 +52,37 @@
                 </Style>
               </Button.Style>
             </Button>
-          </StackPanel>
+            <Button Content="Light · Warm" Command="{Binding UseLightWarmThemeCommand}" Margin="0,0,8,8" MinWidth="126">
+              <Button.Style>
+                <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding CurrentThemeText}" Value="LightWarm">
+                      <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+                      <Setter Property="Foreground" Value="{DynamicResource Brush.AccentContrast}" />
+                      <Setter Property="FontWeight" Value="SemiBold" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Button.Style>
+            </Button>
+          </WrapPanel>
           <TextBlock Style="{StaticResource Caption}"
                      Margin="0,10,0,0"
                      TextWrapping="Wrap"
                      Text="The theme is saved for the next launch." />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <TextBlock Text="System tray &amp; notifications" Style="{StaticResource SectionTitle}" />
+          <CheckBox Style="{StaticResource AppCheckBox}"
+                    Content="Show Windows notifications when network monitoring fails"
+                    IsChecked="{Binding TrayNotificationsEnabled, Mode=TwoWay}"
+                    Margin="0,12,0,0"
+                    AutomationProperties.Name="Enable monitoring problem notifications" />
+          <TextBlock Text="The icon next to the Windows clock shows measured upload/download on hover and in its menu. A red exclamation warns about an actual monitoring failure, even with pop-up notifications disabled. This does not assert malware detection."
+                     Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,9,0,0" />
         </StackPanel>
       </Border>
 
