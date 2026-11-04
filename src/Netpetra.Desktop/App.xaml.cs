@@ -18,6 +18,7 @@ namespace Netpetra.Desktop;
 public partial class App : Application
 {
     private BundledServiceHost? _serviceHost;
+    private TrayStatusController? _trayStatus;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -76,10 +77,12 @@ public partial class App : Application
 
         MainWindow = window;
         window.Show();
+        _trayStatus = new TrayStatusController(window, viewModel, monitor);
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _trayStatus?.Dispose();
         _serviceHost?.Dispose();
 
         foreach (TraceListener listener in PresentationTraceSources.DataBindingSource.Listeners)
