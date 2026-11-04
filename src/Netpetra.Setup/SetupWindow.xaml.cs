@@ -15,7 +15,7 @@ public partial class SetupWindow : Window
         InstallDirText.Text = options.InstallDir;
         ShortcutCheck.IsChecked = options.CreateShortcut;
         LaunchCheck.IsChecked = options.StartAfterInstall;
-        HooksCheck.IsChecked = options.InstallAgentHooks;
+        HooksCheck.IsChecked = options.CompleteInstallation;
     }
 
     private async void OnInstall(object sender, RoutedEventArgs e)
@@ -34,7 +34,7 @@ public partial class SetupWindow : Window
         {
             CreateShortcut = ShortcutCheck.IsChecked == true,
             StartAfterInstall = LaunchCheck.IsChecked == true,
-            InstallAgentHooks = HooksCheck.IsChecked == true,
+            CompleteInstallation = HooksCheck.IsChecked == true,
         };
 
         var progress = new Progress<string>(message =>

@@ -4,7 +4,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Netpetra Setup"
         Width="640"
-        Height="650"
+        Height="700"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="{DynamicResource Brush.WindowBackground}"
@@ -48,10 +48,14 @@
                   Margin="0,8,0,0" />
         <CheckBox x:Name="HooksCheck"
                   Style="{StaticResource AppCheckBox}"
-                  Content="Complete installation: install agent hooks when Blackbox and a supported agent are present"
+                  Content="Complete installation: install Netpetra, agent hooks, Blackbox and DKG"
                   IsChecked="True"
                   Margin="0,14,0,0" />
-        <TextBlock Text="Uncheck agent hooks for a Partial installation. No OpenCode, OpenChamber or Codex hook file will be created or changed. Existing Netpetra-managed files are backed up before replacement."
+        <TextBlock Text="Blackbox and DKG use their official third-party installers. They may download large packages, show prompts/terms and require network access. Netpetra starts them and installs agent hooks after the Blackbox runtime is ready."
+                   Style="{StaticResource Caption}"
+                   TextWrapping="Wrap"
+                   Margin="0,6,0,0" />
+        <TextBlock Text="Uncheck for Partial installation: core Netpetra only. No Blackbox, DKG, OpenCode, OpenChamber or Codex files will be installed or changed."
                    Style="{StaticResource Caption}"
                    TextWrapping="Wrap"
                    Margin="0,6,0,0" />
@@ -61,7 +65,7 @@
     <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,12,0,0">
       <StackPanel>
         <TextBlock Text="What is included" Style="{StaticResource SectionTitle}" />
-        <TextBlock Text="Desktop application, local history service, system monitor, tray, four themes, Support page and the bundled community feed. VirusTotal is optional and its API key is configured later on the Security page."
+        <TextBlock Text="Core: desktop application, local history service, system monitor, tray, four themes, Support page and the bundled community feed. Complete installation also runs the official Blackbox and DKG installers and starts their local services. VirusTotal is optional and its API key is configured later on the Security page."
                    Style="{StaticResource Caption}"
                    TextWrapping="Wrap"
                    Margin="0,7,0,0" />

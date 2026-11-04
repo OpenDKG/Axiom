@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -19,6 +20,11 @@ internal static class SetupInstaller
     private static readonly JsonSerializerOptions ManifestJsonOptions = new()
     {
         WriteIndented = true,
+    };
+
+    private static readonly HttpClient ProbeClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(3),
     };
 
     public static async Task<SetupInstallResult> InstallAsync(
@@ -84,13 +90,50 @@ internal static class SetupInstaller
                     cancellationToken).ConfigureAwait(false);
                 Report($"Installed Netpetra {version}");
 
+                var blackboxInstalled = false;
+                var dkgInstalled = false;
+                if (options.CompleteInstallation)
+                {
+                    Report("Complete installation selected: Blackbox, DKG and agent hooks will be configured.");
+                    var moduleInstaller = new OptionalModuleInstaller();
+
+                    Report("Starting the official Blackbox installer. Follow its prompts and terms.");
+                    var blackboxExit = await Task.Run(
+                        () => moduleInstaller.InstallBlackboxAndWait(Report),
+                        cancellationToken).ConfigureAwait(false);
+                    Report($"Blackbox installer exit code: {(blackboxExit ? "0" : "non-zero")}.");
+
+                    Report("Starting the official DKG installer. Follow its prompts and terms.");
+                    var dkgExit = await Task.Run(
+                        () => moduleInstaller.InstallDkgAndWait(Report),
+                        cancellationToken).ConfigureAwait(false);
+                    Report($"DKG installer exit code: {(dkgExit ? "0" : "non-zero")}.");
+
+                    blackboxInstalled = await WaitForEndpointAsync(
+                        "http://127.0.0.1:9700/api/graph-status", cancellationToken).ConfigureAwait(false);
+                    dkgInstalled = await WaitForEndpointAsync(
+                        "http://127.0.0.1:9200/api/status", cancellationToken).ConfigureAwait(false);
+                    Report($"Blackbox endpoint: {(blackboxInstalled ? "connected" : "not verified")}; " +
+                           $"DKG endpoint: {(dkgInstalled ? "connected" : "not verified")}.");
+
+                    Report("Installing agent hooks after the Blackbox runtime is prepared.");
+                    var openCode = new OpenCodeProtection().EnsureInstalled();
+                    var codex = new CodexProtection().EnsureInstalled();
+                    Report($"Agent hooks: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
+                           $"Codex {(codex ? "installed" : "skipped")}.");
+                }
+                else
+                {
+                    Report("Partial installation selected: no Blackbox, DKG or agent hook files were changed.");
+                }
+
                 if (!OnboardingStore.IsCompleted)
                 {
                     OnboardingStore.Save(new OnboardingSettings(
                         Completed: true,
                         Skipped: true,
-                        Dkg: false,
-                        Blackbox: false));
+                        Dkg: dkgInstalled,
+                        Blackbox: blackboxInstalled));
                     Report("First-run configuration completed; optional modules remain available on Security.");
                 }
 
@@ -104,23 +147,6 @@ internal static class SetupInstaller
                     {
                         Report("Could not create the Start Menu shortcut; the application is still installed.");
                     }
-                }
-
-                if (options.InstallAgentHooks)
-                {
-                    Report("Installing agent hooks (Complete installation)…");
-                    var openCode = new OpenCodeProtection().EnsureInstalled();
-                    var codex = new CodexProtection().EnsureInstalled();
-                    Report($"Agent hooks: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
-                           $"Codex {(codex ? "installed" : "skipped")}.");
-                    if (!openCode && !codex)
-                    {
-                        Report("No supported agent hook was installed. Blackbox or the agent config may be absent.");
-                    }
-                }
-                else
-                {
-                    Report("Partial installation selected: no agent hook files were changed.");
                 }
 
                 if (options.StartAfterInstall)
@@ -211,6 +237,28 @@ internal static class SetupInstaller
     {
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private static async Task<bool> WaitForEndpointAsync(string url, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            try
+            {
+                using var response = await ProbeClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
+                if (response.IsSuccessStatusCode)
+                {
+                    return true;
+                }
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+            {
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+        }
+
+        return false;
     }
 
     private static bool CreateStartMenuShortcut(string target, string workingDirectory)

@@ -33,7 +33,9 @@ content.
 
 OpenCode is protected through its native plugin API; OpenChamber uses the same
 `~/.config/opencode` plugin directory. Agent hooks are **not installed automatically** when the
-Blackbox dashboard connects. On the Agents page, choose **Install agent hooks...** and select:
+Blackbox dashboard connects. The single-file setup's **Complete installation** runs the official
+Blackbox and DKG installers, starts both local services and then installs the hooks. On the Agents
+page, choose **Install/repair agent hooks...** and select:
 
 - **Complete installation** to add/repair the Netpetra guard hooks for detected agents;
 - **Partial installation** to leave every OpenCode/OpenChamber/Codex hook file unchanged.
