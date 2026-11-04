@@ -44,6 +44,14 @@ Bridge or Blackbox failures fail open, like the Hermes hooks. Restart OpenCode/O
 first install so the plugin is loaded. Uninstalling Blackbox removes the plugin; the bridge lives
 inside the Blackbox folder. This is a Netpetra adapter, not an official Blackbox attachment kind.
 
+### Codex
+
+Codex user hooks are read from `~/.codex/hooks.json`. Netpetra merges a `PreToolUse` command hook
+and installs `netpetra-codex-hook.py` in the Blackbox folder. The hook receives Codex's
+`tool_name`/`tool_input`, calls the same Blackbox guard, and returns a `permissionDecision: deny`
+only when Blackbox blocks. Codex may ask you to approve/trust the hook once; approve it and restart
+Codex. Uninstalling Blackbox removes the Netpetra hook entry and script.
+
 ## Reputation provider (VirusTotal, opt-in)
 
 The **Reputation provider** row has a **Setup** action. Enter your own VirusTotal API key and enable

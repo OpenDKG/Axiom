@@ -48,6 +48,8 @@ public sealed class OptionalModuleUninstaller
 
     public void UninstallBlackbox()
     {
+        new CodexProtection().Remove();
+
         var hermes = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".hermes");
