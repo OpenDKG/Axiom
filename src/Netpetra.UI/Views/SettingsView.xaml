@@ -101,10 +101,10 @@
           <TextBlock Text="Privacy" Style="{StaticResource SectionTitle}" />
           <TextBlock Style="{StaticResource BodyMuted}"
                      Margin="0,8,0,0"
-                     Text="No account, no cloud, no telemetry. Socket rows are read locally from this machine; only the overview throughput chart is a generated demo series. Nothing is uploaded anywhere." />
+                     Text="No account, no cloud, no telemetry. Socket rows are read locally from this machine; the 5m throughput view samples system-wide interface counters, and longer ranges remain a demo series. Nothing is uploaded anywhere." />
           <TextBlock Style="{StaticResource BodyMuted}"
                      Margin="0,8,0,0"
-                     Text="External lookups (GeoIP, reverse DNS, reputation) do not exist in this build. When they arrive they stay off by default and require an explicit opt-in." />
+                     Text="External lookups are opt-in. VirusTotal hash lookup requires your own API key; the community feed can be the bundled local starter file or an HTTPS source. No file content is uploaded." />
         </StackPanel>
       </Border>
 
