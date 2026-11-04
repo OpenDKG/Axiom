@@ -52,6 +52,16 @@ foreach ($file in $installedFiles) {
     }
 }
 
+$communityDir = Join-Path $InstallDir "community"
+$communityFeed = Join-Path $communityDir "feed.json"
+if (Test-Path $communityFeed) {
+    Remove-Item $communityFeed -Force
+    Write-Host "Removed: $communityFeed"
+}
+if ((Test-Path $communityDir) -and -not (Get-ChildItem $communityDir -Force)) {
+    Remove-Item $communityDir -Force
+}
+
 if (Test-Path $InstallDir) {
     $remaining = @(Get-ChildItem $InstallDir -Force)
     if ($remaining.Count -eq 0) {
