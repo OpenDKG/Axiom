@@ -1,0 +1,38 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Warm light variant: ivory surfaces and terracotta accents. -->
+  <SolidColorBrush x:Key="Brush.WindowBackground" Color="#F8F5F0" />
+  <SolidColorBrush x:Key="Brush.Surface" Color="#FFFDF9" />
+  <SolidColorBrush x:Key="Brush.SurfaceAlt" Color="#F5EFE7" />
+  <SolidColorBrush x:Key="Brush.Border" Color="#E7DCCF" />
+  <SolidColorBrush x:Key="Brush.BorderStrong" Color="#D0C1B1" />
+
+  <SolidColorBrush x:Key="Brush.TextPrimary" Color="#2D2927" />
+  <SolidColorBrush x:Key="Brush.TextSecondary" Color="#6D5B51" />
+  <SolidColorBrush x:Key="Brush.TextMuted" Color="#82756A" />
+
+  <SolidColorBrush x:Key="Brush.Accent" Color="#A54D39" />
+  <SolidColorBrush x:Key="Brush.AccentSoft" Color="#F8E1D6" />
+  <SolidColorBrush x:Key="Brush.AccentContrast" Color="#FFFDF9" />
+
+  <SolidColorBrush x:Key="Brush.Upload" Color="#A54D39" />
+  <SolidColorBrush x:Key="Brush.Download" Color="#2F6F9F" />
+
+  <SolidColorBrush x:Key="Brush.Success" Color="#32794D" />
+  <SolidColorBrush x:Key="Brush.Warning" Color="#A56521" />
+  <SolidColorBrush x:Key="Brush.Critical" Color="#B63B3F" />
+
+  <SolidColorBrush x:Key="Brush.NavBackground" Color="#FFFDF9" />
+  <SolidColorBrush x:Key="Brush.NavHover" Color="#F7F1E9" />
+  <SolidColorBrush x:Key="Brush.NavSelected" Color="#F5E4DA" />
+
+  <SolidColorBrush x:Key="Brush.GridLine" Color="#EDE4D8" />
+  <SolidColorBrush x:Key="Brush.DemoBadgeBackground" Color="#FFF0D8" />
+  <SolidColorBrush x:Key="Brush.DemoBadgeText" Color="#8A501D" />
+
+  <SolidColorBrush x:Key="Brush.ScrollThumb" Color="#CDC0B0" />
+  <SolidColorBrush x:Key="Brush.ScrollThumbHover" Color="#AB9984" />
+
+</ResourceDictionary>
