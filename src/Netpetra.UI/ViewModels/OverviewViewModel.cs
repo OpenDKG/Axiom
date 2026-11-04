@@ -33,6 +33,17 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
 
     public ObservableCollection<double> DownloadSeries => _traffic.DownloadSeries;
 
+    /// <summary>Latest physically measured interface sample, irrespective of the selected chart range.</summary>
+    public double LatestMeasuredUploadBytesPerSecond => _traffic.UploadSeries.Count > 0
+        ? _traffic.UploadSeries[^1]
+        : double.NaN;
+
+    public double LatestMeasuredDownloadBytesPerSecond => _traffic.DownloadSeries.Count > 0
+        ? _traffic.DownloadSeries[^1]
+        : double.NaN;
+
+    public event EventHandler? TrafficSampled;
+
     public ObservableCollection<AppRow> TopApps { get; } = [];
 
     public IReadOnlyList<string> Ranges { get; } = ["5m", "1h", "24h", "7d", "30d"];
@@ -360,7 +371,11 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
             : $"{TimelineEndpoints.Count} app/remote groups at cursor";
     }
 
-    private void OnTrafficUpdated(object? sender, EventArgs e) => UpdateMetrics();
+    private void OnTrafficUpdated(object? sender, EventArgs e)
+    {
+        UpdateMetrics();
+        TrafficSampled?.Invoke(this, EventArgs.Empty);
+    }
 
     private void UpdateMetrics()
     {

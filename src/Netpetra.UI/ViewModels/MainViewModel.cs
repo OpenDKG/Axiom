@@ -42,6 +42,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ];
 
         _selectedPage = _overview;
+        _overview.TrafficSampled += OnOverviewTrafficSampled;
         _overview.Start();
 
         monitor.Updated += OnMonitorUpdated;
@@ -50,6 +51,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ThemeManager.Changed += OnThemeChanged;
         UpdateThemeToggleLabel();
     }
+
+    public double CurrentUploadBytesPerSecond => _overview.LatestMeasuredUploadBytesPerSecond;
+
+    public double CurrentDownloadBytesPerSecond => _overview.LatestMeasuredDownloadBytesPerSecond;
+
+    public event EventHandler? TrayStatusUpdated;
 
     public IReadOnlyList<PageViewModel> Pages { get; }
 
@@ -120,6 +127,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         ThemeManager.Changed -= OnThemeChanged;
+        _overview.TrafficSampled -= OnOverviewTrafficSampled;
         _monitor.Updated -= OnMonitorUpdated;
 
         foreach (var disposable in Pages.OfType<IDisposable>())
@@ -163,8 +171,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(StatusFirewallText));
     }
 
-    private void OnMonitorUpdated(object? sender, EventArgs e) =>
+    private void OnOverviewTrafficSampled(object? sender, EventArgs e) =>
+        TrayStatusUpdated?.Invoke(this, EventArgs.Empty);
+
+    private void OnMonitorUpdated(object? sender, EventArgs e)
+    {
         OnPropertyChanged(nameof(StatusMonitoringText));
+        TrayStatusUpdated?.Invoke(this, EventArgs.Empty);
+    }
 
     private void OnThemeChanged(object? sender, EventArgs e) => UpdateThemeToggleLabel();
 
