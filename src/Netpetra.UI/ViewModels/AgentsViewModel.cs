@@ -728,6 +728,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             AddActivityDetail("Duration", FormatDuration(entry.Detail.DurationMs.Value));
         }
 
+        AddActivityDetail("Security", entry.SecurityOutcomeDetail);
         AddActivityDetail("Decision", entry.Decision);
         AddActivityDetail("Severity", entry.Severity);
         AddActivityDetail("Identifier", entry.Identifier);

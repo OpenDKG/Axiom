@@ -442,7 +442,28 @@
                 <DataGridTextColumn Header="EVENT" Binding="{Binding EventLabel}" Width="112" />
                 <DataGridTextColumn Header="DETAILS" Binding="{Binding ActionSummary}" Width="*" />
                 <DataGridTextColumn Header="SESSION" Binding="{Binding Session}" Width="78" />
-                <DataGridTextColumn Header="DECISION" Binding="{Binding Decision}" Width="76" />
+                <DataGridTemplateColumn Header="SECURITY" Width="94">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding SecurityOutcome}"
+                                 FontSize="10"
+                                 FontWeight="SemiBold"
+                                 VerticalAlignment="Center"
+                                 ToolTip="{Binding SecurityOutcomeDetail}">
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding IsSecurityThreat}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="SEVERITY" Binding="{Binding Severity}" Width="70" />
               </DataGrid.Columns>
             </DataGrid>
