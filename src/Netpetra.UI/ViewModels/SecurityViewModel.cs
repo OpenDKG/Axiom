@@ -163,11 +163,11 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         IsStarterFeed &&
         File.Exists(Path.Combine(AppContext.BaseDirectory, "community", "feed.json"));
 
-    private string CommunityStatus => _communityConnected
+    private string CommunityStatus => IsCommunityConfigured && _communityConnected
         ? "CONNECTED"
         : IsCommunityConfigured ? "CONFIGURED" : "NOT CONFIGURED";
 
-    private string CommunityDetail => _communityConnected
+    private string CommunityDetail => IsCommunityConfigured && _communityConnected
         ? IsStarterFeed
             ? "Bundled starter feed loaded; entries are evidence, not a verdict."
             : "HTTPS feed loaded; entries are evidence, not a verdict."
@@ -403,6 +403,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         _communitySettings = window.Settings;
+        _communityConnected = false;
         _communityStore.Save(_communitySettings);
         await RefreshCommunityAsync().ConfigureAwait(true);
     }
@@ -550,6 +551,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             case "Community feed":
                 _uninstaller.RemoveCommunitySettings();
                 _communitySettings = new CommunityFeedSettings(false, string.Empty, string.Empty);
+                _communityConnected = false;
+                CommunityEntries.Clear();
                 InstallStatusText = "Community feed settings removed.";
                 break;
         }
