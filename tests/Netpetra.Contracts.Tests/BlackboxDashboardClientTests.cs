@@ -112,10 +112,114 @@ public sealed class BlackboxDashboardClientTests
         Assert.Equal(2, page.Total);
         Assert.True(page.Entries[0].IsBlocked);
         Assert.Equal("codex", page.Entries[0].Agent);
-        Assert.Equal("Shell command (redacted)", page.Entries[0].Action);
-        Assert.DoesNotContain("do-not-display-this", page.Entries[0].Action);
+        Assert.Equal("do-not-display-this", page.Entries[0].Action);
+        Assert.Equal("do-not-display-this", page.Entries[0].Detail!.Command);
+        Assert.Equal("Tool call", page.Entries[0].EventLabel);
+        Assert.Equal("tools", page.Entries[0].Category);
+        Assert.Equal("ses_123456789", page.Entries[0].SessionFull);
         Assert.True(page.Entries[1].IsFlagged);
         Assert.Contains(".env", page.Entries[1].Action, StringComparison.Ordinal);
+        Assert.Equal("C:\\secret\\.env", page.Entries[1].Detail!.Path);
+    }
+
+    [Fact]
+    public async Task Audit_parser_keeps_session_api_and_install_details()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {
+              "total": 4,
+              "entries": [
+                {
+                  "iso": "2026-11-04T08:23:31Z",
+                  "event": "session_start",
+                  "framework": "opencode",
+                  "detail": { "session_id": "ses_session_1" }
+                },
+                {
+                  "iso": "2026-11-04T08:23:30Z",
+                  "event": "pre_api_request",
+                  "framework": "codex",
+                  "detail": {
+                    "session_id": "ses_session_2",
+                    "provider": "openai",
+                    "model": "gpt-5"
+                  }
+                },
+                {
+                  "iso": "2026-11-04T08:23:29Z",
+                  "event": "dependency_install",
+                  "framework": "hermes",
+                  "ecosystem": "npm",
+                  "name": "left-pad",
+                  "version": "1.3.0",
+                  "tool": "shell"
+                },
+                {
+                  "iso": "2026-11-04T08:23:28Z",
+                  "event": "post_tool_call",
+                  "framework": "hermes",
+                  "detail": {
+                    "tool_name": "shell",
+                    "session_id": "ses_session_3",
+                    "tool_call_id": "call_1",
+                    "result": { "exit_code": 0 },
+                    "duration_ms": 1250
+                  }
+                }
+              ]
+            }
+            """));
+
+        using var http = new HttpClient(handler);
+        using var client = new BlackboxDashboardClient(http);
+        var page = await client.GetAuditAsync(100, 0, CancellationToken.None);
+
+        Assert.Equal("sessions", page.Entries[0].Category);
+        Assert.Equal("Session started", page.Entries[0].EventLabel);
+        Assert.Equal("ses_session_1", page.Entries[0].Detail!.SessionId);
+
+        Assert.Equal("api", page.Entries[1].Category);
+        Assert.Equal("API request", page.Entries[1].EventLabel);
+        Assert.Equal("openai gpt-5", page.Entries[1].Action);
+        Assert.Equal("openai", page.Entries[1].Detail!.Provider);
+        Assert.Equal("gpt-5", page.Entries[1].Detail!.Model);
+
+        Assert.Equal("installs", page.Entries[2].Category);
+        Assert.Equal("Package install", page.Entries[2].EventLabel);
+        Assert.Equal("npm:left-pad@1.3.0", page.Entries[2].Action);
+        Assert.Equal("npm", page.Entries[2].Detail!.Ecosystem);
+
+        Assert.Equal("tools", page.Entries[3].Category);
+        Assert.Equal("exit 0", page.Entries[3].Detail!.ResultStatus);
+        Assert.Equal(1250L, page.Entries[3].Detail!.DurationMs!.Value);
+    }
+
+    [Fact]
+    public async Task Audit_action_summary_masks_secret_values()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {
+              "total": 1,
+              "entries": [
+                {
+                  "iso": "2026-11-04T08:23:31Z",
+                  "event": "pre_tool_call",
+                  "framework": "hermes",
+                  "detail": {
+                    "tool_name": "shell",
+                    "args": { "command": "tool --api_key=supersecretvalue" }
+                  }
+                }
+              ]
+            }
+            """));
+
+        using var http = new HttpClient(handler);
+        using var client = new BlackboxDashboardClient(http);
+        var page = await client.GetAuditAsync(100, 0, CancellationToken.None);
+
+        Assert.DoesNotContain("supersecretvalue", page.Entries[0].ActionSummary, StringComparison.Ordinal);
+        Assert.Contains("[redacted]", page.Entries[0].ActionSummary, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -23,6 +23,22 @@ namespace Netpetra.UI.ViewModels;
 /// </summary>
 public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, IDisposable
 {
+    private const int ActivityPageSize = 100;
+
+    private const int ActivityMax = 500;
+
+    private static readonly Regex SecretPattern = new(
+        @"(?i)\b(token|secret|password|passwd|api[_-]?key|authorization)\b\s*[:=]\s*(""[^""]*""|'[^']*'|[^\s,}\]]+)",
+        RegexOptions.Compiled);
+
+    private static readonly Regex BearerPattern = new(
+        @"(?i)\bBearer\s+[A-Za-z0-9._~+/\-]+=*",
+        RegexOptions.Compiled);
+
+    private static readonly Regex LongHexPattern = new(
+        @"\b[A-Fa-f0-9]{32,}\b",
+        RegexOptions.Compiled);
+
     private readonly BlackboxDashboardClient _client = new();
 
     private readonly AgentEvidenceStore _agentEvidence = new();
@@ -35,6 +51,12 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private bool _refreshing;
 
+    private bool _preservingActivitySelection;
+
+    private string? _selectedActivityIdentity;
+
+    private int _activityLimit = ActivityPageSize;
+
     public AgentsViewModel(SecurityViewModel security)
         : base("Agents", "DKG, Blackbox and the workspaces they protect", "\uE99A")
     {
@@ -46,7 +68,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     public SecurityViewModel Security { get; }
 
-    public IReadOnlyList<string> ActivityFilters { get; } = ["All Activity", "Threats", "Blocked"];
+    public IReadOnlyList<string> ActivityFilters { get; } =
+        ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
 
     public IReadOnlyList<string> AgentFilters { get; } =
         ["All agents", "Hermes", "OpenClaw", "OpenCode", "OpenChamber", "Codex", "Unknown"];
@@ -59,6 +82,26 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     public ObservableCollection<BlackboxFinding> Findings { get; } = [];
 
     public ObservableCollection<AgentEvidenceEvent> HookEvidence { get; } = [];
+
+    public ObservableCollection<ActivityDetailRow> SelectedActivityDetails { get; } = [];
+
+    [ObservableProperty]
+    private BlackboxAuditEntry? _selectedActivity;
+
+    [ObservableProperty]
+    private string _selectedActivityTitle = "Select an activity row to see details.";
+
+    [ObservableProperty]
+    private string _selectedActivityRawText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasSelectedActivity;
+
+    [ObservableProperty]
+    private bool _canLoadMoreActivity;
+
+    [ObservableProperty]
+    private string _activityBreakdownText = "No activity loaded.";
 
     [ObservableProperty]
     private string _selectedActivityFilter = "All Activity";
@@ -129,7 +172,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         {
             var settingsTask = _client.GetSettingsAsync(CancellationToken.None);
             var graphTask = _client.GetGraphStatusAsync(CancellationToken.None);
-            var auditTask = _client.GetAuditAsync(100, 0, CancellationToken.None);
+            var auditTask = _client.GetAuditAsync(_activityLimit, 0, CancellationToken.None);
             var findingsTask = _client.GetFindingsAsync(100, 0, CancellationToken.None);
 
             await Task.WhenAll(settingsTask, graphTask, auditTask, findingsTask).ConfigureAwait(true);
@@ -156,6 +199,18 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     private async Task RefreshAllAsync()
     {
         await Security.RefreshCommand.ExecuteAsync(null).ConfigureAwait(true);
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task LoadMoreActivityAsync()
+    {
+        if (!CanLoadMoreActivity || _activityLimit >= ActivityMax)
+        {
+            return;
+        }
+
+        _activityLimit = Math.Min(ActivityMax, _activityLimit + ActivityPageSize);
         await RefreshAsync().ConfigureAwait(true);
     }
 
@@ -478,26 +533,46 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private void ApplyActivity(BlackboxAuditPage page)
     {
+        var toolActions = page.Entries
+            .Where(entry => entry.Event == "pre_tool_call" &&
+                            entry.Detail?.ToolCallId is { Length: > 0 } &&
+                            entry.Action.Length > 0)
+            .GroupBy(entry => entry.Detail!.ToolCallId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Action, StringComparer.Ordinal);
+
         _allActivity.Clear();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var entry in page.Entries)
+        foreach (var original in page.Entries)
         {
-            var key = string.Join(
-                '|',
-                entry.Timestamp?.ToUnixTimeSeconds(),
-                entry.Event,
-                entry.Agent,
-                entry.Session,
-                entry.Tool,
-                entry.Identifier,
-                entry.Decision);
+            var entry = original;
+            if (entry.Event == "post_tool_call" &&
+                entry.Detail?.ToolCallId is { Length: > 0 } toolCallId &&
+                toolActions.TryGetValue(toolCallId, out var toolAction))
+            {
+                entry = entry with { Action = toolAction };
+            }
+
+            var key = ActivityIdentity(entry);
             if (seen.Add(key))
             {
                 _allActivity.Add(entry);
             }
         }
 
-        ActivityStatusText = $"{page.Total} audit event(s); showing the newest {_allActivity.Count}.";
+        var sessions = _allActivity.Count(entry => entry.Category == "sessions");
+        var apiCalls = _allActivity.Count(entry => entry.Category == "api");
+        var toolCalls = _allActivity.Count(entry => entry.Category == "tools");
+        var installs = _allActivity.Count(entry => entry.Category == "installs");
+        var files = _allActivity.Count(entry => entry.Category == "file");
+        var threats = _allActivity.Count(entry => entry.IsThreat);
+
+        ActivityBreakdownText =
+            $"{sessions} sessions · {apiCalls} API calls · {toolCalls} tool calls · " +
+            $"{installs} installs · {files} file accesses · {threats} threats";
+        CanLoadMoreActivity = page.Total > page.Entries.Count && _activityLimit < ActivityMax;
+        ActivityStatusText = _allActivity.Count == 0
+            ? "No recorded agent activity yet."
+            : $"Showing the newest {_allActivity.Count} of {page.Total} recorded event(s).";
         ApplyFilters();
     }
 
@@ -564,8 +639,27 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         }
     }
 
+    partial void OnSelectedActivityChanged(BlackboxAuditEntry? value)
+    {
+        if (value is null && _preservingActivitySelection)
+        {
+            return;
+        }
+
+        var identity = value is null ? null : ActivityIdentity(value);
+        if (value is not null && identity == _selectedActivityIdentity)
+        {
+            return;
+        }
+
+        _selectedActivityIdentity = identity;
+        UpdateSelectedActivityDetails();
+    }
+
     private void ApplyFilters()
     {
+        var selectedKey = SelectedActivity is null ? null : ActivityIdentity(SelectedActivity);
+        _preservingActivitySelection = true;
         Activity.Clear();
         var severityFilter = SelectedSeverityFilter == "All severities"
             ? null
@@ -573,12 +667,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
         foreach (var entry in _allActivity)
         {
-            if (SelectedActivityFilter == "Threats" && !entry.IsThreat)
-            {
-                continue;
-            }
-
-            if (SelectedActivityFilter == "Blocked" && !entry.IsBlocked)
+            if (!MatchesActivityFilter(entry, SelectedActivityFilter))
             {
                 continue;
             }
@@ -597,7 +686,107 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
             Activity.Add(entry);
         }
+
+        _preservingActivitySelection = false;
+        SelectedActivity = selectedKey is null
+            ? null
+            : Activity.FirstOrDefault(entry => ActivityIdentity(entry) == selectedKey);
     }
+
+    private void UpdateSelectedActivityDetails()
+    {
+        SelectedActivityDetails.Clear();
+        if (SelectedActivity is not { } entry)
+        {
+            HasSelectedActivity = false;
+            SelectedActivityTitle = "Select an activity row to see details.";
+            SelectedActivityRawText = string.Empty;
+            return;
+        }
+
+        HasSelectedActivity = true;
+        SelectedActivityTitle = $"{entry.EventLabel} · {entry.Agent}";
+        AddActivityDetail("Agent", entry.Agent);
+        AddActivityDetail("Event", $"{entry.EventLabel} ({entry.Event})");
+        AddActivityDetail("Time", entry.DateTimeText);
+        AddActivityDetail("Workspace", entry.Detail?.Workspace);
+        AddActivityDetail("Session", entry.SessionFull);
+        AddActivityDetail("Task", entry.Detail?.TaskId);
+        AddActivityDetail("Tool", entry.Tool);
+        AddActivityDetail("Command", entry.Detail?.Command);
+        AddActivityDetail("Path", entry.Detail?.Path);
+        AddActivityDetail("Mode", entry.Detail?.Mode);
+        AddActivityDetail("URL", entry.Detail?.Url);
+        AddActivityDetail("Query", entry.Detail?.Query);
+        AddActivityDetail("Provider", entry.Detail?.Provider);
+        AddActivityDetail("Model", entry.Detail?.Model);
+        AddActivityDetail("Package", entry.Detail?.PackageText);
+        AddActivityDetail("Result", entry.Detail?.ResultStatus);
+        AddActivityDetail("Output", entry.Detail?.ResultText);
+        if (entry.Detail?.DurationMs is > 0)
+        {
+            AddActivityDetail("Duration", FormatDuration(entry.Detail.DurationMs.Value));
+        }
+
+        AddActivityDetail("Decision", entry.Decision);
+        AddActivityDetail("Severity", entry.Severity);
+        AddActivityDetail("Identifier", entry.Identifier);
+        AddActivityDetail("Finding", entry.Detail?.FindingTitle);
+        AddActivityDetail("Category", entry.Detail?.FindingCategory);
+        AddActivityDetail("Evidence", entry.Detail?.FindingEvidence);
+        AddActivityDetail("Summary", entry.Details);
+        SelectedActivityRawText = RedactAndClamp(entry.RawJson, 20_000);
+    }
+
+    private void AddActivityDetail(string label, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        SelectedActivityDetails.Add(new ActivityDetailRow(label, RedactAndClamp(value, 8_000)));
+    }
+
+    private static bool MatchesActivityFilter(BlackboxAuditEntry entry, string filter) =>
+        filter switch
+        {
+            "Sessions" => entry.Category == "sessions",
+            "API calls" => entry.Category == "api",
+            "Tool calls" => entry.Category == "tools",
+            "Installs" => entry.Category == "installs",
+            "File access" => entry.Category == "file",
+            "Threats" => entry.IsThreat,
+            _ => true,
+        };
+
+    private static string ActivityIdentity(BlackboxAuditEntry entry) =>
+        entry.RawJson.Length > 0
+            ? entry.RawJson
+            : string.Join(
+                '|',
+                entry.Timestamp?.ToUnixTimeMilliseconds(),
+                entry.Event,
+                entry.Agent,
+                entry.Session,
+                entry.Tool,
+                entry.Identifier,
+                entry.Action);
+
+    private static string RedactAndClamp(string value, int limit)
+    {
+        var redacted = SecretPattern.Replace(value, "$1=[redacted]");
+        redacted = BearerPattern.Replace(redacted, "Bearer [redacted]");
+        redacted = LongHexPattern.Replace(redacted, "[redacted-hex]");
+        return redacted.Length <= limit ? redacted : redacted[..limit] + "\n… (truncated)";
+    }
+
+    private static string FormatDuration(long milliseconds) => milliseconds switch
+    {
+        < 1000 => $"{milliseconds} ms",
+        < 60_000 => $"{milliseconds / 1000.0:0.0} s",
+        _ => $"{milliseconds / 60_000.0:0.0} min",
+    };
 
     private static string? ReadString(JsonObject? element, string propertyName) =>
         element?[propertyName] is JsonValue value && value.TryGetValue<string>(out var text)
@@ -614,3 +803,5 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             ? result
             : 0;
 }
+
+public sealed record ActivityDetailRow(string Label, string Value);

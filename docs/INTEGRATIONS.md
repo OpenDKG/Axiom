@@ -79,8 +79,13 @@ listener and never sends data off the machine.
   Blackbox path rules, not Windows Firewall rules.
 - **Agent activity** reads `GET /api/audit?limit=100&offset=0` and
   `GET /api/findings?limit=100&offset=0` every four seconds while the Agents page is selected. It
-  shows redacted action summaries, agent, session, decision, severity and details. Only an explicit
-  `decision: block` is counted as blocked; high severity alone is not proof of blocking.
+  shows recorded sessions, API calls, tool calls, package installs, file access and threats, with
+  filter buttons for each category. Selecting a row opens a native detail pane with the session,
+  tool, command/path, model/provider, package, result, duration, decision, severity and a redacted
+  raw event. **Load more** raises the audit window in 100-row steps up to Blackbox's 500-row limit.
+  Obvious tokens, passwords and long hex values are masked in the UI; the local dashboard may expose
+  more raw data. Only an explicit `decision: block` is counted as blocked; high severity alone is not
+  proof of blocking.
 - **Health** reads `GET /api/graph-status`, distinguishes the dashboard's configured DKG node from
   Netpetra's standalone DKG, and shows verified/community rule counts and last sync. A running
   dashboard is never presented as proof that the verified graph is synchronized.
