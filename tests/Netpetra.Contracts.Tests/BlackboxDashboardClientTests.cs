@@ -117,7 +117,10 @@ public sealed class BlackboxDashboardClientTests
         Assert.Equal("Tool call", page.Entries[0].EventLabel);
         Assert.Equal("tools", page.Entries[0].Category);
         Assert.Equal("ses_123456789", page.Entries[0].SessionFull);
+        Assert.Equal("BLOCKED", page.Entries[0].SecurityOutcome);
+        Assert.True(page.Entries[0].IsSecurityThreat);
         Assert.True(page.Entries[1].IsFlagged);
+        Assert.Equal("FLAGGED", page.Entries[1].SecurityOutcome);
         Assert.Contains(".env", page.Entries[1].Action, StringComparison.Ordinal);
         Assert.Equal("C:\\secret\\.env", page.Entries[1].Detail!.Path);
     }
@@ -177,6 +180,8 @@ public sealed class BlackboxDashboardClientTests
         Assert.Equal("sessions", page.Entries[0].Category);
         Assert.Equal("Session started", page.Entries[0].EventLabel);
         Assert.Equal("ses_session_1", page.Entries[0].Detail!.SessionId);
+        Assert.Equal("PASSED", page.Entries[0].SecurityOutcome);
+        Assert.False(page.Entries[0].IsSecurityThreat);
 
         Assert.Equal("api", page.Entries[1].Category);
         Assert.Equal("API request", page.Entries[1].EventLabel);

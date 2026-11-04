@@ -80,7 +80,9 @@ listener and never sends data off the machine.
 - **Agent activity** reads `GET /api/audit?limit=100&offset=0` and
   `GET /api/findings?limit=100&offset=0` every four seconds while the Agents page is selected. It
   shows recorded sessions, API calls, tool calls, package installs, file access and threats, with
-  filter buttons for each category. Selecting a row opens a native detail pane with the session,
+  filter buttons for each category. A Security column labels each event `PASSED` (green) or
+  `BLOCKED`/`FLAGGED` (red), with audit-mode flags kept distinct from actual blocks. Selecting a
+  row opens a native detail pane with the session,
   tool, command/path, model/provider, package, result, duration, decision, severity and a redacted
   raw event. **Load more** raises the audit window in 100-row steps up to Blackbox's 500-row limit.
   Obvious tokens, passwords and long hex values are masked in the UI; the local dashboard may expose

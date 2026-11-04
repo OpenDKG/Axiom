@@ -122,6 +122,22 @@ public sealed record BlackboxAuditEntry(
     public bool IsThreat => IsBlocked || IsFlagged ||
                             string.Equals(Event, "flagged", StringComparison.OrdinalIgnoreCase) ||
                             string.Equals(Event, "blocked", StringComparison.OrdinalIgnoreCase);
+
+    public string SecurityOutcome =>
+        string.Equals(Event, "blocked", StringComparison.OrdinalIgnoreCase) || IsBlocked
+            ? "BLOCKED"
+            : string.Equals(Event, "flagged", StringComparison.OrdinalIgnoreCase) || IsFlagged
+                ? "FLAGGED"
+                : "PASSED";
+
+    public bool IsSecurityThreat => SecurityOutcome != "PASSED";
+
+    public string SecurityOutcomeDetail => SecurityOutcome switch
+    {
+        "BLOCKED" => "Blackbox blocked this action.",
+        "FLAGGED" => "Blackbox flagged this action as a threat.",
+        _ => "No block or threat flag was recorded for this event.",
+    };
 }
 
 /// <summary>One finding from Blackbox's local findings API.</summary>
