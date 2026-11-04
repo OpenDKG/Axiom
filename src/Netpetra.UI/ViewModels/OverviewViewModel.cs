@@ -33,8 +33,9 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
 
     public IReadOnlyList<string> RateUnits { get; } = ["Auto", "KB/s", "MB/s", "GB/s"];
 
-    /// <summary>Demo marker positions on the time axis; real event markers arrive with FND-010.</summary>
-    public IReadOnlyList<double> EventMarkers { get; } = [0.18, 0.52, 0.77];
+    /// <summary>Normalised positions of connections first observed in the selected range.</summary>
+    [ObservableProperty]
+    private IReadOnlyList<double> _newConnectionMarkers = [];
 
     [ObservableProperty]
     private string _connectionsText = "0";
@@ -102,6 +103,7 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
         });
 
         BucketLabel = _traffic.BucketLabel;
+        UpdateLiveCounters();
         OnTrafficUpdated(this, EventArgs.Empty);
     }
 
@@ -116,6 +118,21 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
         LoopbackText = _monitor.Connections.Count(connection => connection.IsLoopback).ToString(CultureInfo.InvariantCulture);
         UnownedText = AppGrouping.CountUnowned(_monitor.Connections).ToString(CultureInfo.InvariantCulture);
         NewConnectionsText = $"{_monitor.Connections.Count(connection => connection.IsNew)} new in the last 60 s";
+
+        var windowSeconds = SelectedRange switch
+        {
+            "1h" => 3600d,
+            "24h" => 86400d,
+            "7d" => 604800d,
+            _ => 60d,
+        };
+        var now = DateTimeOffset.UtcNow;
+        NewConnectionMarkers = _monitor.Connections
+            .Where(connection => connection.IsNew)
+            .Select(connection => 1d - Math.Clamp((now - connection.FirstObservedUtc).TotalSeconds / windowSeconds, 0d, 1d))
+            .OrderBy(position => position)
+            .Take(30)
+            .ToArray();
         SourceText = _monitor.SourceName;
         CaptureText = _monitor.LastCaptureUtc is { } captured
             ? captured.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)
