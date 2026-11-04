@@ -121,6 +121,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     private readonly CodexProtection _codexProtection = new();
 
+    private readonly AgentEvidenceStore _agentEvidence = new();
+
     private ReputationSettings _reputationSettings = new(false, string.Empty);
 
     private CommunityFeedSettings _communitySettings = new(false, string.Empty, string.Empty);
@@ -825,10 +827,23 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _openCodeProtection.IsInstalled;
-        var status = installed && blackboxConnected ? "HOOK INSTALLED" : "DETECTED";
-        var detail = installed
-            ? "Guard plugin installed; activation and blocking are not verified until a protection test runs."
-            : "OpenCode config detected; guard plugin not installed.";
+        var evidence = _agentEvidence.Latest("opencode");
+        var status = !installed
+            ? "DETECTED"
+            : !blackboxConnected
+                ? "OFFLINE"
+                : evidence?.IsFailure == true
+                    ? "DEGRADED"
+                    : evidence is null
+                        ? "HOOK INSTALLED"
+                        : "HOOK LOADED";
+        var detail = !installed
+            ? "OpenCode config detected; guard plugin not installed or a user plugin occupies the path."
+            : evidence is null
+                ? "Guard plugin installed; no hook invocation has been observed yet."
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
             "opencode",
@@ -842,7 +857,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 "openchamber",
                 _openCodeProtection.OpenChamberPath,
                 status,
-                detail));
+                $"OpenChamber shares the OpenCode backend. {detail} OpenChamber attribution is not independently verified."));
         }
     }
 
@@ -854,10 +869,23 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _codexProtection.IsInstalled;
-        var status = installed && blackboxConnected ? "HOOK INSTALLED" : "DETECTED";
-        var detail = installed
-            ? "PreToolUse hook installed; activation and blocking are not verified until a protection test runs."
-            : "Codex config detected; PreToolUse hook not installed.";
+        var evidence = _agentEvidence.Latest("codex");
+        var status = !installed
+            ? "DETECTED"
+            : !blackboxConnected
+                ? "OFFLINE"
+                : evidence?.IsFailure == true
+                    ? "DEGRADED"
+                    : evidence is null
+                        ? "AWAITING APPROVAL"
+                        : "HOOK LOADED";
+        var detail = !installed
+            ? "Codex config detected; PreToolUse hook is missing or malformed."
+            : evidence is null
+                ? "Hook configured; no Codex runtime invocation observed. Approve/trust the hook once and run a tool call."
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
             "codex",

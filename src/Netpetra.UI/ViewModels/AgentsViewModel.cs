@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Netpetra.Contracts.Blackbox;
+using Netpetra.UI.Services;
 using Netpetra.UI.Views;
 
 namespace Netpetra.UI.ViewModels;
@@ -23,6 +24,8 @@ namespace Netpetra.UI.ViewModels;
 public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, IDisposable
 {
     private readonly BlackboxDashboardClient _client = new();
+
+    private readonly AgentEvidenceStore _agentEvidence = new();
 
     private readonly DispatcherTimer _timer;
 
@@ -54,6 +57,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     public ObservableCollection<BlackboxAuditEntry> Activity { get; } = [];
 
     public ObservableCollection<BlackboxFinding> Findings { get; } = [];
+
+    public ObservableCollection<AgentEvidenceEvent> HookEvidence { get; } = [];
 
     [ObservableProperty]
     private string _selectedActivityFilter = "All Activity";
@@ -132,6 +137,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             ApplyActivity(auditTask.Result);
             ApplyFindings(findingsTask.Result);
             ApplyHealth(settingsTask.Result, graphTask.Result);
+            ApplyHookEvidence();
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
@@ -265,6 +271,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
                             throw new InvalidOperationException("Could not start the Blackbox guard bridge.");
         await process.StandardInput.WriteAsync(new JsonObject
         {
+            ["framework"] = "netpetra-test",
             ["tool"] = "read",
             ["args"] = new JsonObject { ["path"] = path },
             ["session"] = "netpetra-protection-test",
@@ -502,6 +509,17 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         HealthStatusText = reachable
             ? $"Blackbox dashboard and DKG are reachable. Last sync: {lastSync ?? "not reported"}."
             : "Dashboard is online, but its configured DKG node is offline. Local rules may still protect; verified graph coverage is not synchronized.";
+    }
+
+    private void ApplyHookEvidence()
+    {
+        HookEvidence.Clear();
+        foreach (var item in _agentEvidence.ReadRecent(60)
+                     .OrderByDescending(entry => entry.Timestamp)
+                     .Take(30))
+        {
+            HookEvidence.Add(item);
+        }
     }
 
     private void ApplyFilters()

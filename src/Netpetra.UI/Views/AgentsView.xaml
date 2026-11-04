@@ -380,6 +380,44 @@
               <ColumnDefinition Width="*" />
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Netpetra hook evidence" Style="{StaticResource SectionTitle}" />
+            <TextBlock Grid.Column="1"
+                       Text="bounded · no arguments"
+                       Style="{StaticResource Caption}"
+                       VerticalAlignment="Center" />
+          </Grid>
+          <TextBlock Text="OpenCode/Codex adapter events may not appear in the native Blackbox dashboard. This local feed records hook load, guard decisions and errors without prompts, paths or tool arguments."
+                     Style="{StaticResource Caption}"
+                     Margin="0,2,0,0"
+                     TextWrapping="Wrap" />
+          <DataGrid ItemsSource="{Binding HookEvidence}"
+                    Style="{StaticResource TableDataGrid}"
+                    AutoGenerateColumns="False"
+                    IsReadOnly="True"
+                    MaxHeight="180"
+                    Margin="0,10,0,0"
+                    EnableRowVirtualization="True"
+                    HeadersVisibility="Column"
+                    RowHeight="28">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="TIME" Binding="{Binding TimeText}" Width="70" />
+              <DataGridTextColumn Header="FRAMEWORK" Binding="{Binding Framework}" Width="100" />
+              <DataGridTextColumn Header="EVENT" Binding="{Binding EventType}" Width="120" />
+              <DataGridTextColumn Header="TOOL" Binding="{Binding Tool}" Width="100" />
+              <DataGridTextColumn Header="DECISION" Binding="{Binding Decision}" Width="90" />
+              <DataGridTextColumn Header="ERROR" Binding="{Binding ErrorCode}" Width="*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
               <TextBlock Text="Recognized agents" Style="{StaticResource SectionTitle}" />
               <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber and Codex workspaces protected through Blackbox."
