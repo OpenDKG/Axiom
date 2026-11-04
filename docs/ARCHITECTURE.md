@@ -118,11 +118,12 @@ Infrastructure/Service/Desktop.
 - `Events` is a unified timeline. Network events come from the service database; `Blocked`, `Files`,
   `Agents` and `System` are present as filters but report that no events of that type exist in this
   build.
-- `Files` and `Security` are gated pages: they list planned scope and disabled optional modules
-  instead of showing a fake scanner, feed or agent connection.
+- `Files` points at the working local SHA-256 scan on `Security`; background folder watching and
+  quarantine remain disabled. `Security` lists optional modules and their real probe state.
 - `HistoryViewModel`/`Alerts` were replaced by `EventsViewModel`; the database still stores flows.
-- The throughput chart is still a demo series (`DEMO SERIES`) with three labelled demo event
-  markers; real markers and bytes are FND-010/FND-004.
+- The 5m throughput view is `LIVE COUNTERS`: it samples real system-wide IPv4/IPv6 interface byte
+  counters once per second. Longer ranges are labelled `DEMO SERIES` until byte history is stored;
+  per-process bytes still need ETW (FND-004). New-connection markers use observed first-seen time.
 
 ## 8. Deferred
 

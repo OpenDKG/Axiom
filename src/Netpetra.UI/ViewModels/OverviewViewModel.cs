@@ -8,12 +8,12 @@ namespace Netpetra.UI.ViewModels;
 
 public sealed partial class OverviewViewModel : PageViewModel, IDisposable
 {
-    private readonly DemoTrafficEngine _traffic = new();
+    private readonly TrafficEngine _traffic = new();
 
     private readonly ConnectionMonitor _monitor;
 
     public OverviewViewModel(ConnectionMonitor monitor)
-        : base("Overview", "Live sockets from this host · throughput series is demo (FND-004)", "\uE80F")
+        : base("Overview", "Live sockets from this host · system-wide throughput counters", "\uE80F")
     {
         _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
         monitor.Updated += OnMonitorUpdated;
@@ -32,6 +32,24 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     public IReadOnlyList<string> Ranges { get; } = ["5m", "1h", "24h", "7d"];
 
     public IReadOnlyList<string> RateUnits { get; } = ["Auto", "KB/s", "MB/s", "GB/s"];
+
+    public string TrafficBadgeText => _traffic.IsLive ? "LIVE COUNTERS" : "DEMO SERIES";
+
+    public string UploadLegendText => _traffic.IsLive ? "Upload" : "Upload (demo)";
+
+    public string DownloadLegendText => _traffic.IsLive ? "Download" : "Download (demo)";
+
+    public string ThroughputNote => _traffic.IsLive
+        ? "System-wide IPv4/IPv6 interface counters are sampled once per second. Per-process bytes need ETW (FND-004)."
+        : "This historical range is a demo shape until byte history is stored. Switch to 5m for real system-wide counters.";
+
+    public string ChartHelpText => _traffic.IsLive
+        ? "System-wide upload and download counters with markers for newly observed connections."
+        : "Demo upload and download series with markers for newly observed connections.";
+
+    public string ByteMeasurementText => _traffic.IsLive
+        ? "system-wide counters (per-process pending)"
+        : "system-wide live view; demo history";
 
     /// <summary>Normalised positions of connections first observed in the selected range.</summary>
     [ObservableProperty]
@@ -81,7 +99,7 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     private string _bucketLabel = "1 s buckets · last 60 s";
 
     [ObservableProperty]
-    private string _rangeNote = "Latest demo bucket; not a measurement.";
+    private string _rangeNote = "Real system-wide interface counters.";
 
     public void Start() => _traffic.Start();
 
@@ -96,13 +114,20 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     {
         _traffic.SetRange(value switch
         {
-            "1h" => DemoTimerRange.LastHour,
-            "24h" => DemoTimerRange.LastDay,
-            "7d" => DemoTimerRange.LastWeek,
-            _ => DemoTimerRange.LastMinute,
+            "1h" => TrafficRange.LastHour,
+            "24h" => TrafficRange.LastDay,
+            "7d" => TrafficRange.LastWeek,
+            _ => TrafficRange.LastMinute,
         });
 
         BucketLabel = _traffic.BucketLabel;
+        RangeNote = _traffic.RangeNote;
+        OnPropertyChanged(nameof(TrafficBadgeText));
+        OnPropertyChanged(nameof(UploadLegendText));
+        OnPropertyChanged(nameof(DownloadLegendText));
+        OnPropertyChanged(nameof(ThroughputNote));
+        OnPropertyChanged(nameof(ChartHelpText));
+        OnPropertyChanged(nameof(ByteMeasurementText));
         UpdateLiveCounters();
         OnTrafficUpdated(this, EventArgs.Empty);
     }
@@ -155,8 +180,6 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     {
         UploadRateText = ByteFormatter.Rate(_traffic.LatestUpload, SelectedRateUnit);
         DownloadRateText = ByteFormatter.Rate(_traffic.LatestDownload, SelectedRateUnit);
-        RangeNote = _traffic.Range == DemoTimerRange.LastMinute
-            ? "Updates once per second from a local generator."
-            : "Fixed demo shape; live history arrives with FND-005.";
+        RangeNote = _traffic.RangeNote;
     }
 }
