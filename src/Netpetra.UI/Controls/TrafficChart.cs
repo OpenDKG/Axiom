@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.Specialized;
+using System.Windows.Controls;
 using System.Windows.Input;
 using Netpetra.UI.Services;
 using System.Windows;
@@ -114,6 +115,11 @@ public sealed class TrafficChart : FrameworkElement
 
     public TrafficChart()
     {
+        // Keep a tooltip object present from the start. WPF starts its hover timer when the
+        // pointer enters; assigning a different ToolTip only from OnMouseMove can therefore
+        // leave the dynamically generated rate tooltip invisible.
+        ToolTip = new ToolTip { Content = "Hover over the chart for measured rates." };
+
         Loaded += (_, _) =>
         {
             Attach(Upload, ref _uploadSource);
@@ -270,8 +276,8 @@ public sealed class TrafficChart : FrameworkElement
         if (marker >= 0)
         {
             Cursor = Cursors.Hand;
-            ToolTip = MarkerDetails is { } details && marker < details.Count
-                ? details[marker] : "Newly observed connection (not a threat determination)";
+            SetHoverText(MarkerDetails is { } details && marker < details.Count
+                ? details[marker] : "Newly observed connection (not a threat determination)");
             _hoverSeriesIndex = -1;
         }
         else
@@ -288,14 +294,14 @@ public sealed class TrafficChart : FrameworkElement
                 var up = upload[_hoverSeriesIndex];
                 var down = _hoverSeriesIndex < download.Count ? download[_hoverSeriesIndex] : double.NaN;
                 var secondsAgo = upload.Count - 1 - _hoverSeriesIndex;
-                ToolTip = $"≈{secondsAgo} s ago · system-wide" +
+                SetHoverText($"≈{secondsAgo} s ago · system-wide" +
                     $"\nUpload: {ByteFormatter.Rate(up, RateUnit)}" +
-                    $"\nDownload: {ByteFormatter.Rate(down, RateUnit)}";
+                    $"\nDownload: {ByteFormatter.Rate(down, RateUnit)}");
             }
             else
             {
                 _hoverSeriesIndex = -1;
-                ToolTip = "No recorded throughput for this range.";
+                SetHoverText("No recorded throughput for this range.");
             }
         }
 
@@ -307,8 +313,18 @@ public sealed class TrafficChart : FrameworkElement
         base.OnMouseLeave(e);
         _hoverSeriesIndex = -1;
         Cursor = null;
-        ToolTip = null;
         InvalidateVisual();
+    }
+
+    private void SetHoverText(string text)
+    {
+        if (ToolTip is ToolTip toolTip)
+        {
+            toolTip.Content = text;
+            return;
+        }
+
+        ToolTip = new ToolTip { Content = text };
     }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
