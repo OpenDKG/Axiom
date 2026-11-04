@@ -15,7 +15,7 @@ public sealed partial class SupportViewModel : PageViewModel
     private readonly DonationConfig _config;
 
     public SupportViewModel()
-        : base("Support", "Help sustain the free, open-source Netpetra project", "\uE8D7")
+        : base("Support", "Help sustain the free, open-source Netpetra project", "\uE897")
     {
         _config = DonationDestinations.Load();
 

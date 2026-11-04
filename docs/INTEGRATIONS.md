@@ -111,6 +111,8 @@ plaintext or logged.
 - Leave the key empty or disable the checkbox to keep the provider off.
 - After scanning a folder, use **Check** on a row to perform the lookup.
 
+The Community feed card provides **Test feed** (validates the configured URL/token and reports the entry count without replacing the visible list) and **Refresh feed** (fetches and replaces the visible entries). Neither action uploads local files, paths or connection data.
+
 ## Community feed (opt-in)
 
 The **Community feed** row has a **Setup** action. Enter an HTTPS URL and an optional bearer token;
