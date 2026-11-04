@@ -28,6 +28,20 @@ public sealed class OptionalModuleUninstaller
         "bin",
         "blackbox.cmd");
 
+    public string OpenCodePlugin => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".config",
+        "opencode",
+        "plugins",
+        "netpetra-blackbox.ts");
+
+    public string OpenCodeLegacyPlugin => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".config",
+        "opencode",
+        "plugin",
+        "netpetra-blackbox.ts");
+
     public bool IsBlackboxInstalled => Directory.Exists(BlackboxRoot) || File.Exists(BlackboxCommand);
 
     public bool IsDkgInstalled => Directory.Exists(DkgRoot) || Directory.Exists(DkgHome);
@@ -43,6 +57,8 @@ public sealed class OptionalModuleUninstaller
             $root = '{{Escape(BlackboxRoot)}}'
             $hermes = '{{Escape(hermes)}}'
             $command = '{{Escape(BlackboxCommand)}}'
+            $openCodePlugin = '{{Escape(OpenCodePlugin)}}'
+            $openCodeLegacyPlugin = '{{Escape(OpenCodeLegacyPlugin)}}'
             Write-Host 'Stopping Blackbox/DKG processes owned by this installation...' -ForegroundColor Cyan
             Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
               Where-Object { $_.CommandLine -and $_.CommandLine.Contains($root) } |
@@ -54,6 +70,8 @@ public sealed class OptionalModuleUninstaller
             }
             if (Test-Path $root) { Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue }
             if (Test-Path $command) { Remove-Item $command -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $openCodePlugin) { Remove-Item $openCodePlugin -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $openCodeLegacyPlugin) { Remove-Item $openCodeLegacyPlugin -Force -ErrorAction SilentlyContinue }
             $blackboxHome = Join-Path $hermes 'blackbox'
             if (Test-Path $blackboxHome) { Remove-Item $blackboxHome -Recurse -Force -ErrorAction SilentlyContinue }
             Get-ChildItem (Join-Path $hermes 'logs') -Filter 'blackbox-*' -ErrorAction SilentlyContinue |
