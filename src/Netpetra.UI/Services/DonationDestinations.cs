@@ -14,6 +14,11 @@ public static partial class DonationDestinations
 {
     private const string ResourceName = "Netpetra.UI.Resources.support-links.json";
 
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
     public static DonationConfig Load()
     {
         using var stream = typeof(DonationDestinations).Assembly.GetManifestResourceStream(ResourceName);
@@ -24,8 +29,7 @@ public static partial class DonationDestinations
 
         try
         {
-            return JsonSerializer.Deserialize<DonationConfig>(stream,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new DonationConfig();
+            return JsonSerializer.Deserialize<DonationConfig>(stream, JsonOptions) ?? new DonationConfig();
         }
         catch (JsonException)
         {
