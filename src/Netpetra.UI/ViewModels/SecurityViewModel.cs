@@ -853,11 +853,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (_openCodeProtection.IsOpenChamberDetected)
         {
+            var openChamberStatus = installed ? "HOOK INSTALLED" : "DETECTED";
             ProtectedAgents.Add(new ProtectedAgent(
                 "openchamber",
                 _openCodeProtection.OpenChamberPath,
-                status,
-                $"OpenChamber shares the OpenCode backend. {detail} OpenChamber attribution is not independently verified."));
+                openChamberStatus,
+                "OpenChamber detected, but no OpenChamber-specific runtime evidence exists. " +
+                "It shares the OpenCode backend; protection is not verified until a test runs in OpenChamber itself."));
         }
     }
 
@@ -877,12 +879,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 : evidence?.IsFailure == true
                     ? "DEGRADED"
                     : evidence is null
-                        ? "AWAITING APPROVAL"
+                        ? "HOOK INSTALLED"
                         : "HOOK LOADED";
         var detail = !installed
             ? "Codex config detected; PreToolUse hook is missing or malformed."
             : evidence is null
-                ? "Hook configured; no Codex runtime invocation observed. Approve/trust the hook once and run a tool call."
+                ? "Hook configuration detected; runtime not verified. Codex may require approval before the hook runs."
                 : evidence.IsFailure
                     ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
                     : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
