@@ -748,12 +748,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     {
         ProtectedAgents.Clear();
 
-        if (blackboxConnected)
-        {
-            _openCodeProtection.EnsureInstalled();
-            _codexProtection.EnsureInstalled();
-        }
-
+        // Status refresh is read-only. Hook installation belongs to an explicit approved action.
         AddCodexAgents(blackboxConnected);
         AddOpenCodeAgents(blackboxConnected);
 
