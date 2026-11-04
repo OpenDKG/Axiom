@@ -579,7 +579,13 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     private void ApplyFindings(BlackboxFindingPage page)
     {
         _allFindings.Clear();
-        _allFindings.AddRange(page.Findings);
+        _allFindings.AddRange(page.Findings.OrderByDescending(finding => finding.Timestamp));
+
+        Findings.Clear();
+        foreach (var finding in _allFindings)
+        {
+            Findings.Add(finding);
+        }
 
         var blocked = _allFindings.Count(finding => finding.IsBlocked);
         var flagged = _allFindings.Count(finding => finding.IsFlagged);

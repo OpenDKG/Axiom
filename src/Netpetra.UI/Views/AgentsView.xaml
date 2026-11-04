@@ -562,7 +562,30 @@
               <DataGridTextColumn Header="CATEGORY" Binding="{Binding Category}" Width="110" />
               <DataGridTextColumn Header="SEVERITY" Binding="{Binding Severity}" Width="75" />
               <DataGridTextColumn Header="IDENTIFIER" Binding="{Binding Identifier}" Width="*" />
-              <DataGridTextColumn Header="DECISION" Binding="{Binding Decision}" Width="80" />
+              <DataGridTemplateColumn Header="SECURITY" Width="94">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding SecurityOutcome}"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsBlocked}" Value="True">
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsFlagged}" Value="True">
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
             </DataGrid.Columns>
           </DataGrid>
         </StackPanel>

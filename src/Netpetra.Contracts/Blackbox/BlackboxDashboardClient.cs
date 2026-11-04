@@ -159,6 +159,10 @@ public sealed record BlackboxFinding(
     public bool IsBlocked => string.Equals(Decision, "block", StringComparison.OrdinalIgnoreCase);
 
     public bool IsFlagged => string.Equals(Decision, "flag", StringComparison.OrdinalIgnoreCase);
+
+    public string SecurityOutcome => IsBlocked ? "BLOCKED" : IsFlagged ? "FLAGGED" : "OBSERVED";
+
+    public bool IsSecurityThreat => IsBlocked || IsFlagged;
 }
 
 public sealed record BlackboxAuditPage(IReadOnlyList<BlackboxAuditEntry> Entries, int Total);
