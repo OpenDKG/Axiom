@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Netpetra.UI.Services;
 
 namespace Netpetra.UI.ViewModels;
@@ -78,6 +79,26 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     private string _newConnectionEventsEmptyText = "No new connections in the selected range.";
 
     public ObservableCollection<NewConnectionMarkerEvent> NewConnectionEvents { get; } = [];
+
+    // A 5-minute session-only time cursor. This does not claim persisted historical flows.
+    [ObservableProperty]
+    private double _timelineCursorPosition = 300;
+
+    [ObservableProperty]
+    private string _timelineCursorTimeText = "Now";
+
+    [ObservableProperty]
+    private string _timelineFocusText = "Waiting for first-observed connection events.";
+
+    [ObservableProperty]
+    private string _timelineEndpointCountText = "0 observed endpoints";
+
+    public ObservableCollection<TimelineEndpointRow> TimelineEndpoints { get; } = [];
+
+    [RelayCommand]
+    private void JumpToNow() => TimelineCursorPosition = 300;
+
+    partial void OnTimelineCursorPositionChanged(double value) => UpdateTimelineFocus();
 
     [ObservableProperty]
     private string _connectionsText = "0";
@@ -274,6 +295,7 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
         NewConnectionEventsEmptyText = events.Count == 0
             ? "No first-observed connections retained for this period in this UI session."
             : "Markers reflect first-observed connections in this UI session, not verified threats.";
+        UpdateTimelineFocus();
         SourceText = _monitor.SourceName;
         CaptureText = _monitor.LastCaptureUtc is { } captured
             ? captured.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)
@@ -288,6 +310,54 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
             var width = largest == 0 ? 0 : Math.Max(4, group.SocketCount / (double)largest * 200);
             TopApps.Add(new AppRow(group, width));
         }
+    }
+
+    private void UpdateTimelineFocus()
+    {
+        TimelineEndpoints.Clear();
+
+        if (!IsTrafficLive)
+        {
+            TimelineCursorTimeText = "No recorded historical throughput";
+            TimelineFocusText = "The time cursor currently supports only the locally observed 5-minute session. Persistent history will be delivered separately.";
+            TimelineEndpointCountText = "Historical connection events not loaded";
+            return;
+        }
+
+        var secondsAgo = 300 - Math.Clamp(TimelineCursorPosition, 0, 300);
+        var selectedTime = DateTimeOffset.UtcNow.AddSeconds(-secondsAgo);
+        TimelineCursorTimeText = string.Format(
+            CultureInfo.InvariantCulture, "{0:HH:mm:ss} local · {1:0} s ago",
+            selectedTime.ToLocalTime(), secondsAgo);
+
+        // This is a first-observed event explorer, not a snapshot of all sockets active
+        // at the selected time. Events can be missed by polling or app restarts.
+        var near = _sessionEvents
+            .Where(item => Math.Abs((selectedTime - item.FirstSeenUtc).TotalSeconds) <= 10)
+            .OrderByDescending(item => item.FirstSeenUtc)
+            .ToList();
+
+        TimelineFocusText = near.Count == 0
+            ? "No first-observed sockets in this ±10-second window. This does not mean there was no network traffic."
+            : string.Format(CultureInfo.InvariantCulture,
+                "{0} first-observed sockets within ±10 s (session-only; not a threat verdict).", near.Count);
+
+        var grouped = near
+            .GroupBy(item => (item.App, item.ProcessId, item.Remote, item.Protocol))
+            .Select(group => new TimelineEndpointRow(
+                group.Key.App, group.Key.ProcessId, group.Key.Protocol,
+                group.Key.Remote, group.Count(), group.Max(item => item.FirstSeenUtc)))
+            .OrderByDescending(item => item.LastObservedUtc)
+            .Take(12);
+
+        foreach (var endpoint in grouped)
+        {
+            TimelineEndpoints.Add(endpoint);
+        }
+
+        TimelineEndpointCountText = TimelineEndpoints.Count == 0
+            ? "No observed endpoints at cursor"
+            : $"{TimelineEndpoints.Count} app/remote groups at cursor";
     }
 
     private void OnTrafficUpdated(object? sender, EventArgs e) => UpdateMetrics();
@@ -323,4 +393,22 @@ public sealed record NewConnectionMarkerEvent(
         $"\n{Protocol} {Direction}: {Local} → {Remote}" +
         $"\nState: {State} · Executable: {(string.IsNullOrEmpty(AppPath) ? "unresolved" : AppPath)}" +
         "\nCountry: unknown (GeoIP not configured) · Security: not assessed";
+}
+
+/// <summary>Aggregate of first-observed session events at the selected time cursor.</summary>
+public sealed record TimelineEndpointRow(
+    string App,
+    int ProcessId,
+    string Protocol,
+    string Remote,
+    int ObservedCount,
+    DateTimeOffset LastObservedUtc)
+{
+    public string AppText => $"{App} · PID {ProcessId} · {Protocol}";
+
+    public string ObservationsText => ObservedCount == 1
+        ? "1 observed socket"
+        : $"{ObservedCount} observed sockets";
+
+    public string Detail => $"{AppText}\nRemote: {Remote}\nLast first-seen: {LastObservedUtc.ToLocalTime():yyyy-MM-dd HH:mm:ss}\nCountry: not resolved · Security: not assessed";
 }
