@@ -8,6 +8,8 @@ public enum AppTheme
 {
     Dark,
     Light,
+    DarkMidnight,
+    LightWarm,
 }
 
 /// <summary>
@@ -16,14 +18,21 @@ public enum AppTheme
 /// </summary>
 public static class ThemeManager
 {
-    private static readonly string[] PaletteFiles = ["Dark.xaml", "Light.xaml"];
+    private static readonly string[] PaletteFiles = ["Dark.xaml", "Light.xaml", "DarkMidnight.xaml", "LightWarm.xaml"];
 
     public static AppTheme Current { get; private set; } = AppTheme.Dark;
 
     public static event EventHandler? Changed;
 
     public static void Toggle() =>
-        Apply(Current == AppTheme.Dark ? AppTheme.Light : AppTheme.Dark);
+        Apply(Current switch
+        {
+            AppTheme.Dark => AppTheme.Light,
+            AppTheme.DarkMidnight => AppTheme.LightWarm,
+            AppTheme.Light => AppTheme.Dark,
+            AppTheme.LightWarm => AppTheme.DarkMidnight,
+            _ => AppTheme.Dark,
+        });
 
     public static void Apply(AppTheme theme)
     {
