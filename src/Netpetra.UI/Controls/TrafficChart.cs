@@ -54,6 +54,12 @@ public sealed class TrafficChart : FrameworkElement
         typeof(TrafficChart),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public static readonly DependencyProperty MarkerLabelsProperty = DependencyProperty.Register(
+        nameof(MarkerLabels),
+        typeof(IReadOnlyList<string>),
+        typeof(TrafficChart),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
     private INotifyCollectionChanged? _uploadSource;
     private INotifyCollectionChanged? _downloadSource;
 
@@ -114,6 +120,13 @@ public sealed class TrafficChart : FrameworkElement
         set => SetValue(MarkerBrushProperty, value);
     }
 
+    /// <summary>Optional short labels drawn on top of each marker (for example 1, 2, 3).</summary>
+    public IReadOnlyList<string>? MarkerLabels
+    {
+        get => (IReadOnlyList<string>?)GetValue(MarkerLabelsProperty);
+        set => SetValue(MarkerLabelsProperty, value);
+    }
+
     protected override void OnRender(DrawingContext drawingContext)
     {
         ArgumentNullException.ThrowIfNull(drawingContext);
@@ -163,22 +176,52 @@ public sealed class TrafficChart : FrameworkElement
         };
         linePen.Freeze();
 
-        foreach (var position in positions)
+        var labels = MarkerLabels;
+        var lastLabelX = double.NaN;
+        var labelRow = 0;
+        for (var index = 0; index < positions.Count; index++)
         {
-            var x = Math.Clamp(position, 0, 1) * width;
+            var x = Math.Clamp(positions[index], 0, 1) * width;
+            var label = labels is not null && index < labels.Count ? labels[index] : null;
 
-            drawingContext.DrawLine(linePen, new Point(x, 8), new Point(x, height));
-
-            var triangle = new StreamGeometry();
-            using (var context = triangle.Open())
+            if (label is null)
             {
-                context.BeginFigure(new Point(x - 3, 0), isFilled: true, isClosed: true);
-                context.LineTo(new Point(x + 3, 0), isStroked: false, isSmoothJoin: false);
-                context.LineTo(new Point(x, 5), isStroked: false, isSmoothJoin: false);
+                drawingContext.DrawLine(linePen, new Point(x, 8), new Point(x, height));
+
+                var triangle = new StreamGeometry();
+                using (var context = triangle.Open())
+                {
+                    context.BeginFigure(new Point(x - 3, 0), isFilled: true, isClosed: true);
+                    context.LineTo(new Point(x + 3, 0), isStroked: false, isSmoothJoin: false);
+                    context.LineTo(new Point(x, 5), isStroked: false, isSmoothJoin: false);
+                }
+
+                triangle.Freeze();
+                drawingContext.DrawGeometry(MarkerBrush, null, triangle);
+                continue;
             }
 
-            triangle.Freeze();
-            drawingContext.DrawGeometry(MarkerBrush, null, triangle);
+            var badgeX = Math.Clamp(x, 9, width - 9);
+            labelRow = !double.IsNaN(lastLabelX) && Math.Abs(badgeX - lastLabelX) < 14
+                ? labelRow + 1
+                : 0;
+            lastLabelX = badgeX;
+            var badgeY = 14 + (labelRow * 19);
+            const double radius = 9;
+            drawingContext.DrawLine(linePen, new Point(x, badgeY + radius), new Point(x, height));
+            drawingContext.DrawEllipse(MarkerBrush, null, new Point(badgeX, badgeY), radius, radius);
+
+            var text = new FormattedText(
+                label,
+                System.Globalization.CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Segoe UI"),
+                10,
+                Brushes.White,
+                VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            drawingContext.DrawText(
+                text,
+                new Point(badgeX - (text.Width / 2), badgeY - (text.Height / 2)));
         }
     }
 

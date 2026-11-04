@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -67,6 +68,21 @@ public sealed partial class FileScanRow : ObservableObject
 
 public sealed record CommunityFeedRow(string Sha256, string Name, string Verdict, string Source);
 
+/// <summary>One Hermes/OpenClaw workspace reported by the local Blackbox dashboard.</summary>
+public sealed record ProtectedAgent(string Kind, string Target, string Status, string Detail)
+{
+    public string KindText => Kind.ToLowerInvariant() switch
+    {
+        "hermes" => "Hermes",
+        "openclaw" => "OpenClaw",
+        _ => Kind,
+    };
+
+    public string TargetText => string.IsNullOrWhiteSpace(Target) ? "No workspace detected" : Target;
+
+    public bool IsProtected => Status == "PROTECTED";
+}
+
 /// <summary>
 /// Security page. Optional modules are read-only status probes; install buttons launch the official
 /// third-party installer only after an explicit warning. Netpetra does not stop or control a module.
@@ -90,6 +106,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly CommunityFeedSettingsStore _communityStore = new();
 
     private readonly CommunityFeedClient _communityClient = new();
+
+    private readonly HttpClient _blackboxClient = new() { Timeout = TimeSpan.FromSeconds(4) };
 
     private ReputationSettings _reputationSettings = new(false, string.Empty);
 
@@ -129,11 +147,16 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     public ObservableCollection<CommunityFeedRow> CommunityEntries { get; } = [];
 
+    public ObservableCollection<ProtectedAgent> ProtectedAgents { get; } = [];
+
     [ObservableProperty]
     private string _fileScanStatus = "No folder scanned.";
 
     [ObservableProperty]
     private string _communityStatusText = "Not configured.";
+
+    [ObservableProperty]
+    private string _agentsStatusText = "Blackbox is not connected; no agent protection status is available.";
 
     [ObservableProperty]
     private bool _isScanning;
@@ -215,6 +238,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         _probe.Dispose();
         _virusTotal.Dispose();
         _communityClient.Dispose();
+        _blackboxClient.Dispose();
     }
 
     [RelayCommand]
@@ -236,6 +260,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
             Rebuild(dkgTask.Result, blackboxTask.Result);
             LastCheckedText = $"Checked {DateTimeOffset.Now:HH:mm:ss}";
+            await RefreshAgentsAsync(blackboxTask.Result.IsConnected).ConfigureAwait(true);
 
             _activityHistory.Add(new ModuleActivity(
                 DateTimeOffset.Now,
@@ -665,6 +690,78 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         true,
         "Setup",
         IsCommunityConfigured);
+
+    private async Task RefreshAgentsAsync(bool blackboxConnected)
+    {
+        ProtectedAgents.Clear();
+
+        if (!blackboxConnected)
+        {
+            AgentsStatusText = "Blackbox is not connected; no agent protection status is available.";
+            return;
+        }
+
+        try
+        {
+            using var response = await _blackboxClient
+                .GetAsync("http://127.0.0.1:9700/api/attach-targets", CancellationToken.None)
+                .ConfigureAwait(true);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content
+                .ReadAsStreamAsync(CancellationToken.None)
+                .ConfigureAwait(true);
+            using var document = await JsonDocument
+                .ParseAsync(stream, cancellationToken: CancellationToken.None)
+                .ConfigureAwait(true);
+
+            if (!document.RootElement.TryGetProperty("targets", out var targets) ||
+                targets.ValueKind != JsonValueKind.Array)
+            {
+                AgentsStatusText = "Blackbox did not return an agent target list.";
+                return;
+            }
+
+            var protectedCount = 0;
+            foreach (var target in targets.EnumerateArray())
+            {
+                var kind = ReadString(target, "kind") ?? "agent";
+                var path = ReadString(target, "target") ?? string.Empty;
+                var isProtected = target.TryGetProperty("protected", out var protectedElement) &&
+                                  protectedElement.ValueKind == JsonValueKind.True;
+                var available = !target.TryGetProperty("available", out var availableElement) ||
+                                availableElement.ValueKind != JsonValueKind.False;
+                var reason = ReadString(target, "disabled_reason");
+
+                var status = isProtected
+                    ? "PROTECTED"
+                    : available ? "DETECTED" : "NOT DETECTED";
+                var detail = reason ?? (isProtected
+                    ? "Workspace attached"
+                    : available ? "Workspace detected; not attached" : "Not detected on this machine");
+
+                ProtectedAgents.Add(new ProtectedAgent(kind, path, status, detail));
+                if (isProtected)
+                {
+                    protectedCount++;
+                }
+            }
+
+            AgentsStatusText = ProtectedAgents.Count == 0
+                ? "No Hermes or OpenClaw workspace was reported."
+                : $"{protectedCount} of {ProtectedAgents.Count} recognized agent workspace(s) protected.";
+        }
+        catch (Exception exception) when (exception is
+            HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
+        {
+            AgentsStatusText = $"Could not read Blackbox agent targets: {exception.Message}";
+        }
+    }
+
+    private static string? ReadString(JsonElement element, string propertyName) =>
+        element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
 
     private void ReplaceCommunityModule()
     {

@@ -56,6 +56,14 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     private IReadOnlyList<double> _newConnectionMarkers = [];
 
     [ObservableProperty]
+    private IReadOnlyList<string> _newConnectionMarkerLabels = [];
+
+    [ObservableProperty]
+    private string _newConnectionEventsEmptyText = "No new connections in the selected range.";
+
+    public ObservableCollection<NewConnectionMarkerEvent> NewConnectionEvents { get; } = [];
+
+    [ObservableProperty]
     private string _connectionsText = "0";
 
     [ObservableProperty]
@@ -72,6 +80,9 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private string _newConnectionsText = "0 new in the last 60 s";
+
+    [ObservableProperty]
+    private string _uptimeText = "—";
 
     public string DatabaseText => ConnectionSourceRegistry.IsServiceMode
         ? "service-managed"
@@ -144,6 +155,11 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
         UnownedText = AppGrouping.CountUnowned(_monitor.Connections).ToString(CultureInfo.InvariantCulture);
         NewConnectionsText = $"{_monitor.Connections.Count(connection => connection.IsNew)} new in the last 60 s";
 
+        var uptime = TimeSpan.FromMilliseconds(Environment.TickCount64);
+        UptimeText = uptime.Days > 0
+            ? $"{uptime.Days}d {uptime.Hours}h {uptime.Minutes}m"
+            : $"{uptime.Hours}h {uptime.Minutes}m";
+
         var windowSeconds = SelectedRange switch
         {
             "1h" => 3600d,
@@ -152,12 +168,40 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
             _ => 60d,
         };
         var now = DateTimeOffset.UtcNow;
-        NewConnectionMarkers = _monitor.Connections
+        var events = _monitor.Connections
             .Where(connection => connection.IsNew)
-            .Select(connection => 1d - Math.Clamp((now - connection.FirstObservedUtc).TotalSeconds / windowSeconds, 0d, 1d))
-            .OrderBy(position => position)
-            .Take(30)
-            .ToArray();
+            .Select(connection => new
+            {
+                Connection = connection,
+                Position = 1d - Math.Clamp((now - connection.FirstObservedUtc).TotalSeconds / windowSeconds, 0d, 1d),
+            })
+            .OrderBy(item => item.Position)
+            .Take(8)
+            .ToList();
+
+        NewConnectionEvents.Clear();
+        var positions = new double[events.Count];
+        var labels = new string[events.Count];
+        for (var index = 0; index < events.Count; index++)
+        {
+            var item = events[index];
+            positions[index] = item.Position;
+            labels[index] = (index + 1).ToString(CultureInfo.InvariantCulture);
+            NewConnectionEvents.Add(new NewConnectionMarkerEvent(
+                index + 1,
+                item.Connection.FirstObservedUtc,
+                item.Connection.AppDisplayName,
+                item.Connection.RemoteEndpoint,
+                item.Connection.DirectionText,
+                item.Connection.State,
+                item.Position));
+        }
+
+        NewConnectionMarkers = positions;
+        NewConnectionMarkerLabels = labels;
+        NewConnectionEventsEmptyText = events.Count == 0
+            ? "No new connections in the selected range."
+            : string.Empty;
         SourceText = _monitor.SourceName;
         CaptureText = _monitor.LastCaptureUtc is { } captured
             ? captured.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)
@@ -182,4 +226,19 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
         DownloadRateText = ByteFormatter.Rate(_traffic.LatestDownload, SelectedRateUnit);
         RangeNote = _traffic.RangeNote;
     }
+}
+
+/// <summary>One numbered marker in the chart and its human-readable event description.</summary>
+public sealed record NewConnectionMarkerEvent(
+    int Number,
+    DateTimeOffset FirstSeenUtc,
+    string App,
+    string Remote,
+    string Direction,
+    string State,
+    double Position)
+{
+    public string TimeText => FirstSeenUtc.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+
+    public string Summary => $"{App} · {Direction} · {Remote} · {State}";
 }
