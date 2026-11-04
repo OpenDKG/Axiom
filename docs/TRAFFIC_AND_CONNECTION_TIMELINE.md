@@ -27,6 +27,32 @@ Baseline inspected: `main`, November 4, 2026. Keep all work in reviewable draft 
 **Unverified:** This WPF/.NET 10 branch needs Windows CI build and an interactive
 Windows smoke test before merging. Do not present it as fully delivered.
 
+## Netpetra-specific visual direction (not a GlassWire copy)
+
+- A spacious, resizable dark/light chart with two distinguishable but restrained
+  filled curves for **upload** and **download**. Always show actual B/s, KB/s,
+  MB/s or GB/s readouts and dynamic, legible Y-axis tick labels.
+- A synchronized, compact **event ribbon** under the plot: yellow for
+  first-observed sockets, amber for independently assessed suspicious anomalies,
+  red only for high-confidence threat indicators. Never imply that a new
+  destination is malicious solely because its country is unfamiliar.
+- A bottom time-brush (overview minimap) for panning/zooming real persisted
+  24h/7d/30d data, with keyboard equivalents and clear UTC/local time handling.
+  The active window, actual capture coverage and gaps remain visible.
+- Hover over a data point: time, upload/download rates, measured duration.
+  Click/keyboard-select a point: freeze the selection and reveal the processes
+  and destinations observable at that time. Do not fabricate per-app byte
+  totals from the system-level curve.
+- Hover/click an event: a detail panel with executable name and path, PID,
+  remote IP/port and protocol, first-observed timestamp, country flag **only
+  when supported by offline GeoIP**, evidence/confidence and any available
+  user-approved actions. Handle multiple events at the same pixel as a list.
+- Small summary cards: current up/down rate, data transferred in selected
+  window (only from measured counters), new destinations, unassessed
+  connections and actionable alerts; display `N/A` when unsupported.
+- Keep the same identity and typography as the existing Netpetra WPF theme.
+  Do not reuse GlassWire assets, icons, gradients or proprietary visuals.
+
 ## PR 2: Durable throughput and time windows
 
 Use the existing service and authenticated Named Pipe. Do **not** start a second
