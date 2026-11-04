@@ -44,7 +44,8 @@ elevation.
 | Persistence | Contracts | SQLite schema, upsert, query, retention |
 | Service | Contracts, Core, Infrastructure, Persistence | host, monitoring, history writer, pipe |
 | UI | **Contracts only** | Views/ViewModels/theme, pipe client |
-| Desktop | UI, Infrastructure | composition root / the only EXE |
+| MCP server | Contracts | local stdio MCP adapter; read-only pipe client, no host APIs |
+| Desktop | UI, Infrastructure | composition root / the only desktop EXE |
 
 `UI` has no Windows reference; `System.IO.Pipes` is BCL. Windows API code lives in
 Infrastructure/Service/Desktop.
@@ -63,8 +64,9 @@ Infrastructure/Service/Desktop.
 - Request max **256 KiB**; response max **4 MiB** (a snapshot with thousands of sockets exceeds the
   request limit).
 - Buffered `IpcLineReader` (16 KiB reads, growing output) — no byte-by-byte reading.
-- Commands: `serviceHealth`, `capabilities`, `snapshot`, `history.query`.
-- `rule.*`, `config.*`, `diagnostics.*`, `live.events` → `not_supported`.
+- Commands: `serviceHealth`, `capabilities`, `snapshot`, `history.query`, `rules.query`.
+- `rule.*`, `config.*`, `diagnostics.*`, `live.events` → `not_supported` unless the firewall write
+  gate and an explicit command contract allow it.
 - DACL: allow the service account + one SID; deny `Network`/`Anonymous`/`Guests`; the client SID is
   read from the process token after connect.
 
@@ -126,7 +128,17 @@ Infrastructure/Service/Desktop.
   counters once per second. Longer ranges are labelled `DEMO SERIES` until byte history is stored;
   per-process bytes still need ETW (FND-004). New-connection markers use observed first-seen time.
 
-## 8. Deferred
+## 8. MCP server (read-only foundation)
+
+- `Netpetra.McpServer` is a separate local process using the official `ModelContextProtocol` SDK
+  over **stdio**. stdout is JSON-RPC; logs go to stderr.
+- It calls the existing authenticated Named Pipe for status, snapshots, history and read-only rule
+  state. It does not open SQLite, Windows Firewall COM, the registry or arbitrary files.
+- The tool surface is read-only: no rule apply/remove, process kill, file read, shell or
+  configuration write. See `docs/MCP.md` for the tool list and unverified claims.
+- No client configuration is installed and no MCP process is started by the desktop application.
+
+## 9. Deferred
 
 - **FND-004 (ETW)**: a kernel network session requires `SeSystemProfilePrivilege`; this session is
   UAC-filtered (`logman` → Access denied). Implementation and verification move to an elevated

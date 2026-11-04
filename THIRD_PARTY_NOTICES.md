@@ -1,7 +1,7 @@
 # Third-party notices
 
 This file lists the NuGet packages in the locked dependency graph (packages.lock.json) of
-Netpetra, generated on 2026-11-03. Licenses were read from each package's
+Netpetra, generated on 2026-11-04. Licenses were read from each package's
 .nuspec on NuGet.org at that date.
 
 The project itself is licensed under **GPL-3.0-or-later** (see LICENSE and NOTICE). All listed
@@ -18,6 +18,8 @@ runtime, which are MIT licensed (https://github.com/dotnet/runtime/blob/main/LIC
 | CommunityToolkit.Mvvm | 8.4.2 | MIT |
 | Microsoft.Data.Sqlite | 10.0.14 | MIT |
 | Microsoft.Data.Sqlite.Core | 10.0.14 | MIT |
+| Microsoft.Extensions.AI.Abstractions | 10.11.0 | MIT |
+| Microsoft.Extensions.Caching.Abstractions | 10.0.13 | MIT |
 | Microsoft.Extensions.Configuration | 10.0.14 | MIT |
 | Microsoft.Extensions.Configuration.Abstractions | 10.0.14 | MIT |
 | Microsoft.Extensions.Configuration.Binder | 10.0.14 | MIT |
@@ -46,6 +48,8 @@ runtime, which are MIT licensed (https://github.com/dotnet/runtime/blob/main/LIC
 | Microsoft.Extensions.Options | 10.0.14 | MIT |
 | Microsoft.Extensions.Options.ConfigurationExtensions | 10.0.14 | MIT |
 | Microsoft.Extensions.Primitives | 10.0.14 | MIT |
+| ModelContextProtocol | 2.3.1 | Apache-2.0 |
+| ModelContextProtocol.Core | 2.3.1 | Apache-2.0 |
 | SQLitePCLRaw.bundle_e_sqlite3 | 2.1.13 | Apache-2.0 |
 | SQLitePCLRaw.core | 2.1.13 | Apache-2.0 |
 | SQLitePCLRaw.lib.e_sqlite3 | 2.1.13 | Apache-2.0 |
