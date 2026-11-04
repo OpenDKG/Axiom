@@ -17,13 +17,13 @@
         <Border Grid.Column="0" Style="{StaticResource Card}">
           <Grid>
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="42" />
+              <ColumnDefinition Width="Auto" />
               <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Border Width="34" Height="34" CornerRadius="9" Background="#3E2B78" VerticalAlignment="Top">
-              <TextBlock Text="OT" Foreground="#F4ECFF" FontSize="11" FontWeight="Bold"
-                         HorizontalAlignment="Center" VerticalAlignment="Center"
-                         ToolTip="Symbolic OriginTrail initials; official logo asset pending clearance." />
+            <Border Background="#0B1024" CornerRadius="9" Padding="8,6" VerticalAlignment="Top">
+              <Image Source="/Netpetra.UI;component/Resources/origintrail-logo.png"
+                     Width="104" Height="23" Stretch="Uniform"
+                     RenderOptions.BitmapScalingMode="HighQuality" />
             </Border>
             <StackPanel Grid.Column="1">
               <TextBlock Text="{Binding Security.DkgBrandLabel}" Style="{StaticResource SectionTitle}"
@@ -37,20 +37,24 @@
         <Border Grid.Column="2" Style="{StaticResource Card}">
           <Grid>
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="42" />
+              <ColumnDefinition Width="Auto" />
               <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Border Width="34" Height="34" CornerRadius="9" Background="#1D3644" VerticalAlignment="Top">
-              <TextBlock Text="B" Foreground="#C4F4EF" FontSize="17" FontWeight="Bold"
-                         HorizontalAlignment="Center" VerticalAlignment="Center"
-                         ToolTip="Symbolic Blackbox initial; official Umanitek logo asset pending clearance." />
+            <Border Background="#0B1024" CornerRadius="9" Padding="8,6" VerticalAlignment="Top">
+              <Image Source="/Netpetra.UI;component/Resources/blackbox-logo.png"
+                     Width="104" Height="18" Stretch="Uniform"
+                     RenderOptions.BitmapScalingMode="HighQuality" />
             </Border>
             <StackPanel Grid.Column="1">
               <TextBlock Text="{Binding Security.BlackboxBrandLabel}" Style="{StaticResource SectionTitle}"
                          TextWrapping="Wrap" />
               <TextBlock Text="Guardian Agent Blackbox by Umanitek: optional local agent-safety module. Connection alone does not prove every agent is protected."
                          Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,5,0,0" />
-              <TextBlock Text="umanitek.ai" Style="{StaticResource Caption}" Margin="0,7,0,0" />
+              <Image Source="/Netpetra.UI;component/Resources/umanitek-logo.png"
+                     Width="92" Height="20" Stretch="Uniform"
+                     RenderOptions.BitmapScalingMode="HighQuality"
+                     HorizontalAlignment="Left" Margin="0,7,0,0"
+                     ToolTip="Umanitek" />
             </StackPanel>
           </Grid>
         </Border>
@@ -209,24 +213,46 @@
                             CommandParameter="{Binding Name}"
                             Visibility="{Binding CanAct, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="Run the setup action for this optional module." />
-                    <Button Style="{StaticResource GhostButton}"
-                            Content="Audit"
+                    <Button Content="Audit"
                             Padding="6,2"
                             FontSize="10"
                             Margin="0,0,4,0"
                             Command="{Binding DataContext.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                             CommandParameter="audit"
                             Visibility="{Binding CanSetMode, Converter={StaticResource BoolToVisibility}}"
-                            ToolTip="Log and report Blackbox findings without blocking." />
-                    <Button Style="{StaticResource GhostButton}"
-                            Content="Block"
+                            ToolTip="Log and report Blackbox findings without blocking.">
+                      <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding DataContext.Security.BlackboxModeText, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="audit">
+                              <Setter Property="Background" Value="{DynamicResource Brush.AccentSoft}" />
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                              <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Button.Style>
+                    </Button>
+                    <Button Content="Block"
                             Padding="6,2"
                             FontSize="10"
                             Margin="0,0,8,0"
                             Command="{Binding DataContext.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                             CommandParameter="block"
                             Visibility="{Binding CanSetMode, Converter={StaticResource BoolToVisibility}}"
-                            ToolTip="Stop confirmed Blackbox threats at the configured severity." />
+                            ToolTip="Stop confirmed Blackbox threats at the configured severity.">
+                      <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding DataContext.Security.BlackboxModeText, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="block">
+                              <Setter Property="Background" Value="{DynamicResource Brush.AccentSoft}" />
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                              <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Button.Style>
+                    </Button>
                     <Button Style="{StaticResource GhostButton}"
                             Content="Uninstall"
                             Padding="8,3"
@@ -531,26 +557,51 @@
                                  TextWrapping="Wrap" />
                     </StackPanel>
 
-                    <Border Grid.Column="2" Style="{StaticResource StatusPill}" VerticalAlignment="Top">
-                      <TextBlock Text="{Binding Status}">
-                        <TextBlock.Style>
-                          <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
-                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
-                            <Style.Triggers>
-                              <DataTrigger Binding="{Binding IsProtected}" Value="True">
-                                <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
-                              </DataTrigger>
-                              <DataTrigger Binding="{Binding Status}" Value="DETECTED">
-                                <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
-                              </DataTrigger>
-                              <DataTrigger Binding="{Binding Status}" Value="HOOK INSTALLED">
-                                <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-                              </DataTrigger>
-                            </Style.Triggers>
-                          </Style>
-                        </TextBlock.Style>
-                      </TextBlock>
-                    </Border>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                      <StackPanel Margin="0,0,8,0">
+                        <Button Style="{StaticResource GhostButton}"
+                                Content="Test hook"
+                                Padding="7,3"
+                                FontSize="10"
+                                HorizontalAlignment="Left"
+                                IsEnabled="{Binding CanTest}"
+                                Command="{Binding DataContext.Security.TestAgentCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding}"
+                                ToolTip="Run the installed hook adapter with a benign simulated tool call. This does not run the full agent process." />
+                        <TextBlock Text="{Binding TestResult}"
+                                   Style="{StaticResource Caption}"
+                                   Foreground="{DynamicResource Brush.TextMuted}"
+                                   MaxWidth="240"
+                                   TextWrapping="Wrap"
+                                   Margin="0,3,0,0" />
+                      </StackPanel>
+                      <Border Style="{StaticResource StatusPill}" VerticalAlignment="Top">
+                        <TextBlock Text="{Binding Status}">
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsProtected}" Value="True">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="DETECTED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="HOOK INSTALLED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="HOOK LOADED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="VERIFIED BLOCKING">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
+                      </Border>
+                    </StackPanel>
                   </Grid>
                 </Border>
               </DataTemplate>

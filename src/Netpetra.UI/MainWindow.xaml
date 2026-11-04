@@ -53,7 +53,8 @@
         </Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
           <Image Source="/Netpetra.UI;component/Resources/netpetra-icon.png"
-                 Width="22" Height="22" Stretch="Uniform" />
+                 Width="22" Height="22" Stretch="Uniform"
+                 RenderOptions.BitmapScalingMode="HighQuality" />
           <TextBlock Text="NETPETRA" FontWeight="SemiBold" FontSize="11"
                      Margin="10,0,10,0" VerticalAlignment="Center" />
           <TextBlock Text="Network activity &amp; security" Style="{StaticResource Caption}"
@@ -83,7 +84,8 @@
         <StackPanel DockPanel.Dock="Top" Margin="20,0,20,18">
           <StackPanel Orientation="Horizontal">
             <Image Source="/Netpetra.UI;component/Resources/netpetra-icon.png"
-                   Width="30" Height="30" Stretch="Uniform" />
+                   Width="30" Height="30" Stretch="Uniform"
+                   RenderOptions.BitmapScalingMode="HighQuality" />
             <TextBlock Text="Netpetra" FontSize="16" FontWeight="SemiBold"
                        Margin="10,0,0,0" VerticalAlignment="Center" />
           </StackPanel>
@@ -103,7 +105,8 @@
               <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Image Source="/Netpetra.UI;component/Resources/netpetra-icon.png"
-                   Width="38" Height="38" Stretch="Uniform" />
+                   Width="40" Height="40" Stretch="Uniform"
+                   RenderOptions.BitmapScalingMode="HighQuality" />
             <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
               <TextBlock Text="NetPetra" FontWeight="SemiBold" FontSize="13" />
               <TextBlock Text="{Binding VersionText}" Style="{StaticResource Caption}" Margin="0,2,0,0" />

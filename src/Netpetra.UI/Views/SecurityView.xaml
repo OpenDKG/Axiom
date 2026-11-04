@@ -93,24 +93,46 @@
                             CommandParameter="{Binding Name}"
                             Visibility="{Binding CanAct, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="Run the setup action for this optional module." />
-                    <Button Style="{StaticResource GhostButton}"
-                            Content="Audit"
+                    <Button Content="Audit"
                             Padding="6,2"
                             FontSize="10"
                             Margin="0,0,4,0"
                             Command="{Binding DataContext.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                             CommandParameter="audit"
                             Visibility="{Binding CanSetMode, Converter={StaticResource BoolToVisibility}}"
-                            ToolTip="Log and report Blackbox findings without blocking." />
-                    <Button Style="{StaticResource GhostButton}"
-                            Content="Block"
+                            ToolTip="Log and report Blackbox findings without blocking.">
+                      <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding DataContext.BlackboxModeText, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="audit">
+                              <Setter Property="Background" Value="{DynamicResource Brush.AccentSoft}" />
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                              <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Button.Style>
+                    </Button>
+                    <Button Content="Block"
                             Padding="6,2"
                             FontSize="10"
                             Margin="0,0,8,0"
                             Command="{Binding DataContext.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                             CommandParameter="block"
                             Visibility="{Binding CanSetMode, Converter={StaticResource BoolToVisibility}}"
-                            ToolTip="Stop confirmed Blackbox threats at the configured severity." />
+                            ToolTip="Stop confirmed Blackbox threats at the configured severity.">
+                      <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding DataContext.BlackboxModeText, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="block">
+                              <Setter Property="Background" Value="{DynamicResource Brush.AccentSoft}" />
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                              <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Button.Style>
+                    </Button>
                     <Button Style="{StaticResource GhostButton}"
                             Content="Uninstall"
                             Padding="8,3"
