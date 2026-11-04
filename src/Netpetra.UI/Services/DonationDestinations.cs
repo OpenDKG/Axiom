@@ -61,10 +61,10 @@ public static partial class DonationDestinations
         return platform switch
         {
             DonationPlatform.BuyMeACoffee =>
-                host is "buymeacoffee.com" or "www.buymeacoffee.com" &&
+                (host is "buymeacoffee.com" or "www.buymeacoffee.com") &&
                 segments.Length == 1 && IsSafeSegment(segments[0]),
             DonationPlatform.PayPal =>
-                host is "paypal.me" or "www.paypal.me" &&
+                (host is "paypal.me" or "www.paypal.me") &&
                 segments.Length == 1 && IsSafeSegment(segments[0]),
             DonationPlatform.GitHubSponsors =>
                 host == "github.com" && segments.Length == 2 &&
@@ -91,14 +91,19 @@ public static partial class DonationDestinations
 
         if (string.Equals(currency, "BTC", StringComparison.OrdinalIgnoreCase))
         {
-            return string.Equals(network, "Bitcoin mainnet", StringComparison.OrdinalIgnoreCase) &&
+            var bech32 = address.StartsWith("bc1", StringComparison.OrdinalIgnoreCase);
+            var consistentCase = !bech32 ||
+                string.Equals(address, address.ToLowerInvariant(), StringComparison.Ordinal) ||
+                string.Equals(address, address.ToUpperInvariant(), StringComparison.Ordinal);
+            return consistentCase &&
+                string.Equals(network, "Bitcoin mainnet", StringComparison.OrdinalIgnoreCase) &&
                 BitcoinAddressRegex().IsMatch(address);
         }
 
         if (string.Equals(currency, "ETH", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(currency, "USDC", StringComparison.OrdinalIgnoreCase))
         {
-            return network is "Ethereum mainnet" or "Base mainnet" or "Polygon PoS" &&
+            return (network is "Ethereum mainnet" or "Base mainnet" or "Polygon PoS") &&
                 EvmAddressRegex().IsMatch(address);
         }
 
