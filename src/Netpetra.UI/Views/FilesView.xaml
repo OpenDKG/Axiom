@@ -76,8 +76,8 @@
                     Margin="0,0,8,0" />
             <Button Style="{StaticResource GhostButton}"
                     Content="Open Downloads"
-                    IsEnabled="False"
-                    ToolTip="Background folder watching is not part of this build." />
+                    Command="{Binding OpenDownloadsCommand}"
+                    ToolTip="Open the Downloads folder in Explorer." />
           </StackPanel>
 
           <TextBlock Style="{StaticResource Caption}"
