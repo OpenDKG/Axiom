@@ -4,8 +4,41 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace Netpetra.Contracts.Blackbox;
+
+/// <summary>Structured fields retained from one Blackbox audit event for the detail pane.</summary>
+public sealed record BlackboxActivityDetail(
+    string SessionId,
+    string ToolCallId,
+    string TaskId,
+    string Workspace,
+    string Model,
+    string Provider,
+    string Command,
+    string Path,
+    string Mode,
+    string Url,
+    string Query,
+    string Ecosystem,
+    string Package,
+    string Version,
+    string ResultStatus,
+    string ResultText,
+    long? DurationMs,
+    string FindingTitle,
+    string FindingIdentifier,
+    string FindingCategory,
+    string FindingEvidence,
+    string FindingSource,
+    bool Confirmed)
+{
+    public string PackageText => string.Join(
+        ":",
+        new[] { Ecosystem, Package }.Where(value => value.Length > 0)) +
+        (Version.Length > 0 ? "@" + Version : string.Empty);
+}
 
 /// <summary>One audit row from Blackbox's local dashboard.</summary>
 public sealed record BlackboxAuditEntry(
@@ -22,11 +55,73 @@ public sealed record BlackboxAuditEntry(
 {
     public string TimeText => Timestamp?.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "—";
 
+    public string DateTimeText => Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? "—";
+
+    public string EventLabel => Event.ToLowerInvariant() switch
+    {
+        "session_start" => "Session started",
+        "session_end" => "Session ended",
+        "message_received" => "Message received",
+        "pre_api_request" => "API request",
+        "pre_tool_call" => "Tool call",
+        "post_tool_call" => "Tool result",
+        "file_access" => "File access",
+        "dependency_install" => "Package install",
+        "flagged" => "Threat flagged",
+        "blocked" => "Threat blocked",
+        _ => string.IsNullOrWhiteSpace(Event)
+            ? "Event"
+            : char.ToUpperInvariant(Event[0]) + Event[1..].Replace('_', ' '),
+    };
+
+    public string Category => Event.ToLowerInvariant() switch
+    {
+        "session_start" or "session_end" or "message_received" => "sessions",
+        "pre_api_request" => "api",
+        "pre_tool_call" or "post_tool_call" => "tools",
+        "dependency_install" => "installs",
+        "file_access" => "file",
+        "flagged" or "blocked" => "threats",
+        _ => "other",
+    };
+
+    public string CategoryLabel => Category switch
+    {
+        "sessions" => "Session",
+        "api" => "API call",
+        "tools" => "Tool call",
+        "installs" => "Install",
+        "file" => "File access",
+        "threats" => "Threat",
+        _ => "Activity",
+    };
+
+    private static readonly Regex SensitivePattern = new(
+        @"(?i)\b(token|secret|password|passwd|api[_-]?key|authorization)\b\s*[:=]\s*(""[^""]*""|'[^']*'|[^\s,}\]]+)",
+        RegexOptions.Compiled);
+
+    public string SessionFull => Detail?.SessionId is { Length: > 0 } session ? session : Session;
+
+    public string ActionSummary
+    {
+        get
+        {
+            var redacted = SensitivePattern.Replace(Action, "$1=[redacted]");
+            return redacted.Length <= 180 ? redacted : redacted[..177] + "...";
+        }
+    }
+
+    public BlackboxActivityDetail? Detail { get; init; }
+
+    public string RawJson { get; init; } = string.Empty;
+
     public bool IsBlocked => string.Equals(Decision, "block", StringComparison.OrdinalIgnoreCase);
 
     public bool IsFlagged => string.Equals(Decision, "flag", StringComparison.OrdinalIgnoreCase);
 
-    public bool IsThreat => IsBlocked || IsFlagged;
+    public bool IsThreat => IsBlocked || IsFlagged ||
+                            string.Equals(Event, "flagged", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(Event, "blocked", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>One finding from Blackbox's local findings API.</summary>
@@ -43,7 +138,7 @@ public sealed record BlackboxFinding(
     string Source,
     bool Confirmed)
 {
-    public string TimeText => Timestamp?.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "—";
+    public string TimeText => Timestamp?.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "ΓÇö";
 
     public bool IsBlocked => string.Equals(Decision, "block", StringComparison.OrdinalIgnoreCase);
 
@@ -281,16 +376,25 @@ public sealed class BlackboxDashboardClient : IDisposable
 
     private static BlackboxAuditEntry ParseAuditEntry(JsonElement root)
     {
-        var detail = root.TryGetProperty("detail", out var detailElement) &&
-                     detailElement.ValueKind == JsonValueKind.Object
-            ? detailElement
-            : default;
-
+        var detail = ReadObject(root, "detail");
+        var finding = ReadObject(root, "finding");
+        var args = ReadObject(detail, "args");
         var eventName = ReadString(root, "event") ?? "event";
-        var agent = ReadString(root, "framework") ?? "Unknown";
-        var session = ReadString(detail, "session_id") ?? string.Empty;
-        var tool = ReadString(detail, "tool_name") ?? ReadString(root, "tool") ?? eventName;
-        var decision = ReadString(detail, "decision")?.ToLowerInvariant() ?? "observed";
+        var agent = ReadString(root, "framework") ?? ReadString(detail, "framework") ?? "Unknown";
+        var session = ReadString(detail, "session_id") ?? ReadString(root, "session_id") ?? string.Empty;
+        var toolCallId = ReadString(detail, "tool_call_id") ?? string.Empty;
+        var taskId = ReadString(detail, "task_id") ?? string.Empty;
+        var workspace = ReadString(root, "workspace") ?? ReadString(detail, "workspace") ?? string.Empty;
+        var tool = FirstNonEmpty(
+            ReadString(detail, "tool_name"),
+            ReadString(root, "tool"),
+            ReadString(finding, "tool_name"),
+            eventName);
+        var decision = FirstNonEmpty(
+            ReadString(detail, "decision"),
+            ReadString(finding, "decision"),
+            eventName == "blocked" ? "block" : eventName == "flagged" ? "flag" : "observed")
+            .ToLowerInvariant();
         if (detail.ValueKind == JsonValueKind.Object &&
             detail.TryGetProperty("blocked", out var blocked) &&
             blocked.ValueKind == JsonValueKind.Array &&
@@ -299,20 +403,67 @@ public sealed class BlackboxDashboardClient : IDisposable
             decision = "block";
         }
 
-        var severity = (ReadString(root, "severity") ?? ReadString(detail, "severity") ?? "info").ToLowerInvariant();
-        var identifier = ReadString(detail, "identifier") ?? string.Empty;
+        var severity = FirstNonEmpty(
+            ReadString(root, "severity"),
+            ReadString(finding, "severity"),
+            ReadString(detail, "severity"),
+            "info").ToLowerInvariant();
+        var identifier = FirstNonEmpty(ReadString(detail, "identifier"), ReadString(finding, "identifier"));
+        var model = FirstNonEmpty(ReadString(detail, "model"), ReadString(root, "model"));
+        var provider = FirstNonEmpty(ReadString(detail, "provider"), ReadString(root, "provider"));
+        var command = FirstNonEmpty(
+            ReadArgString(args, "command"),
+            ReadArgString(args, "cmd"),
+            ReadArgString(args, "script"));
+        var path = FirstNonEmpty(
+            ReadArgString(args, "path"),
+            ReadArgString(args, "file"),
+            ReadArgString(args, "filename"),
+            ReadString(root, "path"));
+        var mode = FirstNonEmpty(ReadString(root, "mode"), ReadString(detail, "mode"));
+        var url = ReadArgString(args, "url");
+        var query = ReadArgString(args, "query");
+        var ecosystem = FirstNonEmpty(ReadString(root, "ecosystem"), ReadString(detail, "ecosystem"));
+        var packageName = FirstNonEmpty(ReadString(root, "name"), ReadString(detail, "name"));
+        var version = FirstNonEmpty(ReadString(root, "version"), ReadString(detail, "version"));
+        var resultStatus = ReadResultStatus(detail);
+        var resultText = ReadResultText(detail);
+        var durationMs = ReadLong(detail, "duration_ms");
+        var findingTitle = FirstNonEmpty(ReadString(finding, "title"), ReadString(finding, "evidence"));
+        var findingEvidence = ReadString(finding, "evidence") ?? string.Empty;
+        var findingCategory = ReadString(finding, "category") ?? string.Empty;
+        var findingSource = ReadString(finding, "source") ?? string.Empty;
+        var confirmed = ReadBool(finding, "confirmed");
         var timestamp = ReadTimestamp(root, "iso", "ts");
-        var action = SummarizeAction(eventName, tool, detail);
-        var details = string.Join(
-            " · ",
-            new[]
-            {
-                $"event {eventName}",
-                string.IsNullOrWhiteSpace(session) ? null : $"session {Shorten(session)}",
-                $"decision {decision}",
-                string.IsNullOrWhiteSpace(identifier) ? null : $"finding {Shorten(identifier, 48)}",
-                $"severity {severity}",
-            }.Where(item => item is not null));
+        var action = SummarizeAction(
+            eventName, tool, detail, finding, session, tool, command, path, mode, url, query,
+            ecosystem, packageName, version, model, provider, resultStatus);
+        var details = BuildActivityDetails(
+            eventName, session, decision, severity, identifier, resultStatus, durationMs);
+        var detailRecord = new BlackboxActivityDetail(
+            session,
+            toolCallId,
+            taskId,
+            workspace,
+            model,
+            provider,
+            command,
+            path,
+            mode,
+            url,
+            query,
+            ecosystem,
+            packageName,
+            version,
+            resultStatus,
+            resultText,
+            durationMs,
+            findingTitle,
+            identifier,
+            findingCategory,
+            findingEvidence,
+            findingSource,
+            confirmed);
 
         return new BlackboxAuditEntry(
             timestamp,
@@ -324,7 +475,11 @@ public sealed class BlackboxDashboardClient : IDisposable
             decision,
             severity,
             identifier,
-            details);
+            details)
+        {
+            Detail = detailRecord,
+            RawJson = root.GetRawText(),
+        };
     }
 
     private static BlackboxFinding ParseFinding(JsonElement root)
@@ -344,35 +499,255 @@ public sealed class BlackboxDashboardClient : IDisposable
             root.TryGetProperty("confirmed", out var confirmed) && confirmed.ValueKind == JsonValueKind.True);
     }
 
-    private static string SummarizeAction(string eventName, string tool, JsonElement detail)
+    private static string SummarizeAction(
+        string eventName,
+        string tool,
+        JsonElement detail,
+        JsonElement finding,
+        string session,
+        string toolName,
+        string command,
+        string path,
+        string mode,
+        string url,
+        string query,
+        string ecosystem,
+        string packageName,
+        string version,
+        string model,
+        string provider,
+        string resultStatus)
+    {
+        var lower = eventName.ToLowerInvariant();
+        if (lower is "flagged" or "blocked")
+        {
+            return FirstNonEmpty(
+                ReadString(finding, "title"),
+                ReadString(finding, "identifier"),
+                "Threat");
+        }
+
+        if (lower == "dependency_install")
+        {
+            var package = string.Join(
+                ":",
+                new[] { ecosystem, packageName }.Where(value => value.Length > 0)) +
+                (version.Length > 0 ? "@" + version : string.Empty);
+            return FirstNonEmpty(package, "Package install");
+        }
+
+        if (lower == "file_access")
+        {
+            return FirstNonEmpty(
+                string.Join(" ", new[] { mode, path }.Where(value => value.Length > 0)),
+                "File access");
+        }
+
+        if (lower == "pre_tool_call" || lower == "post_tool_call")
+        {
+            var action = ToolActionText(toolName, ReadObject(detail, "args"));
+            if (action.Length > 0)
+            {
+                return action;
+            }
+
+            return FirstNonEmpty(resultStatus, lower == "post_tool_call" ? "Tool result" : tool);
+        }
+
+        if (lower == "pre_api_request")
+        {
+            return FirstNonEmpty(
+                string.Join(" ", new[] { provider, model }.Where(value => value.Length > 0)),
+                "API request");
+        }
+
+        if (lower == "session_start")
+        {
+            return "Session " + Shorten(session) + " started";
+        }
+
+        if (lower == "session_end")
+        {
+            var interrupted = ReadBool(detail, "interrupted");
+            return "Session " + Shorten(session) + " ended" + (interrupted ? " (interrupted)" : string.Empty);
+        }
+
+        if (lower == "message_received")
+        {
+            return "Message received";
+        }
+
+        return FirstNonEmpty(command, path, url, query, tool);
+    }
+
+    private static string BuildActivityDetails(
+        string eventName,
+        string session,
+        string decision,
+        string severity,
+        string identifier,
+        string resultStatus,
+        long? durationMs)
+    {
+        var parts = new List<string> { $"event {eventName}" };
+        if (session.Length > 0)
+        {
+            parts.Add($"session {Shorten(session)}");
+        }
+
+        if (!string.Equals(decision, "observed", StringComparison.OrdinalIgnoreCase))
+        {
+            parts.Add($"decision {decision}");
+        }
+
+        if (!string.Equals(severity, "info", StringComparison.OrdinalIgnoreCase))
+        {
+            parts.Add($"severity {severity}");
+        }
+
+        if (identifier.Length > 0)
+        {
+            parts.Add($"finding {Shorten(identifier, 48)}");
+        }
+
+        if (resultStatus.Length > 0)
+        {
+            parts.Add(resultStatus);
+        }
+
+        if (durationMs is > 0)
+        {
+            parts.Add(FormatDuration(durationMs.Value));
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private static string ReadResultStatus(JsonElement detail)
     {
         if (detail.ValueKind != JsonValueKind.Object ||
-            !detail.TryGetProperty("args", out var args) ||
-            args.ValueKind != JsonValueKind.Object)
+            !detail.TryGetProperty("result", out var result))
         {
-            return eventName == "file_access" ? "File access" : tool;
+            return string.Empty;
         }
 
-        if (args.TryGetProperty("command", out _))
+        if (result.ValueKind == JsonValueKind.String)
         {
-            return "Shell command (redacted)";
+            var text = result.GetString() ?? string.Empty;
+            return text.StartsWith("BLOCKED", StringComparison.OrdinalIgnoreCase)
+                ? "blocked"
+                : text.Length > 0 ? "result" : string.Empty;
         }
 
-        if (args.TryGetProperty("path", out var path) && path.ValueKind == JsonValueKind.String)
+        if (result.ValueKind != JsonValueKind.Object)
         {
-            var extension = Path.GetExtension(path.GetString() ?? string.Empty);
-            return string.IsNullOrWhiteSpace(extension)
-                ? "File access (redacted)"
-                : $"File access {extension} (redacted)";
+            return string.Empty;
         }
 
-        if (args.TryGetProperty("url", out _))
+        if (result.TryGetProperty("error", out var error) &&
+            error.ValueKind == JsonValueKind.String &&
+            error.GetString() is { Length: > 0 } errorText)
         {
-            return "Network access (redacted)";
+            return errorText.StartsWith("BLOCKED", StringComparison.OrdinalIgnoreCase)
+                ? "blocked"
+                : "error";
         }
 
-        return $"{tool} (redacted)";
+        if (result.TryGetProperty("exit_code", out var exitCode))
+        {
+            return exitCode.ValueKind == JsonValueKind.Number && exitCode.TryGetInt32(out var code)
+                ? code == 0 ? "exit 0" : $"exit {code}"
+                : "exit";
+        }
+
+        return string.Empty;
     }
+
+    private static string ReadResultText(JsonElement detail)
+    {
+        if (detail.ValueKind != JsonValueKind.Object ||
+            !detail.TryGetProperty("result", out var result))
+        {
+            return string.Empty;
+        }
+
+        return result.ValueKind == JsonValueKind.String
+            ? result.GetString() ?? string.Empty
+            : result.GetRawText();
+    }
+
+    private static string ToolActionText(string toolName, JsonElement args)
+    {
+        if (args.ValueKind != JsonValueKind.Object)
+        {
+            return string.Empty;
+        }
+
+        foreach (var name in new[] { "command", "cmd", "script", "path", "file", "filename", "url", "query" })
+        {
+            var value = ReadArgString(args, name);
+            if (value.Length > 0)
+            {
+                return value;
+            }
+        }
+
+        foreach (var property in args.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.String &&
+                property.Value.GetString() is { Length: > 0 } value)
+            {
+                return property.Name + "=" + value;
+            }
+        }
+
+        return toolName;
+    }
+
+    private static JsonElement ReadObject(JsonElement element, string propertyName) =>
+        element.ValueKind == JsonValueKind.Object &&
+        element.TryGetProperty(propertyName, out var property) &&
+        property.ValueKind == JsonValueKind.Object
+            ? property
+            : default;
+
+    private static string ReadArgString(JsonElement args, string propertyName) =>
+        args.ValueKind == JsonValueKind.Object &&
+        args.TryGetProperty(propertyName, out var property) &&
+        property.ValueKind == JsonValueKind.String
+            ? property.GetString() ?? string.Empty
+            : string.Empty;
+
+    private static bool ReadBool(JsonElement element, string propertyName) =>
+        element.ValueKind == JsonValueKind.Object &&
+        element.TryGetProperty(propertyName, out var property) &&
+        property.ValueKind == JsonValueKind.True;
+
+    private static long? ReadLong(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        if (property.ValueKind == JsonValueKind.Number && property.TryGetInt64(out var number))
+        {
+            return number;
+        }
+
+        return null;
+    }
+
+    private static string FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+
+    private static string FormatDuration(long milliseconds) => milliseconds switch
+    {
+        < 1000 => $"{milliseconds} ms",
+        < 60_000 => $"{milliseconds / 1000.0:0.0} s",
+        _ => $"{milliseconds / 60_000.0:0.0} min",
+    };
 
     private static string? ReadString(JsonElement element, string propertyName) =>
         element.ValueKind == JsonValueKind.Object &&

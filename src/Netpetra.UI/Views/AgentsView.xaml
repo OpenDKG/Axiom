@@ -355,16 +355,22 @@
         </StackPanel>
       </Border>
 
-      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
         <StackPanel>
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*" />
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="Agent activity" Style="{StaticResource SectionTitle}" />
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="Agent activity" Style="{StaticResource SectionTitle}" />
+              <TextBlock Text="Recorded sessions, API calls, tool calls and installs from the local Blackbox audit."
+                         Style="{StaticResource Caption}"
+                         Margin="0,2,0,0"
+                         TextWrapping="Wrap" />
+            </StackPanel>
             <TextBlock Grid.Column="1"
-                       Text="Local audit · redacted"
+                       Text="Local audit ? secrets masked"
                        Style="{StaticResource Caption}"
                        VerticalAlignment="Center" />
           </Grid>
@@ -374,6 +380,7 @@
                      ItemsSource="{Binding ActivityFilters}"
                      SelectedItem="{Binding SelectedActivityFilter, Mode=TwoWay}"
                      Margin="0,0,8,0"
+                     ToolTip="Filter by recorded sessions, API calls, tool calls, installs, file access or threats."
                      AutomationProperties.Name="Activity filter" />
             <ComboBox Width="130"
                       ItemsSource="{Binding AgentFilters}"
@@ -386,36 +393,124 @@
                       ToolTip="Filter by severity." />
           </StackPanel>
 
-          <TextBlock Text="{Binding ActivityStatusText}" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap" />
-          <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
-          <TextBlock Text="{Binding LastBlockedText}" Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap" />
-          <TextBlock Text="{Binding ProtectedPathViolationsText}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
-          <TextBlock Text="{Binding UnresolvedText}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+          <Grid Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="{Binding ActivityStatusText}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding ActivityBreakdownText}" Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+              <TextBlock Text="{Binding LastBlockedText}" Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding ProtectedPathViolationsText}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+              <TextBlock Text="{Binding UnresolvedText}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+            </StackPanel>
+            <Button Grid.Column="1"
+                    Style="{StaticResource GhostButton}"
+                    Content="Load more"
+                    Padding="9,4"
+                    FontSize="11"
+                    Margin="8,0,0,0"
+                    VerticalAlignment="Top"
+                    Command="{Binding LoadMoreActivityCommand}"
+                    Visibility="{Binding CanLoadMoreActivity, Converter={StaticResource BoolToVisibility}}"
+                    ToolTip="Load the next 100 recorded events, up to the Blackbox dashboard limit." />
+          </Grid>
 
-          <DataGrid ItemsSource="{Binding Activity}"
-                    Style="{StaticResource TableDataGrid}"
-                    AutoGenerateColumns="False"
-                    IsReadOnly="True"
-                    MaxHeight="300"
-                    Margin="0,10,0,0"
-                    EnableRowVirtualization="True"
-                    HeadersVisibility="Column"
-                    RowHeight="28">
-            <DataGrid.Columns>
-              <DataGridTextColumn Header="TIME" Binding="{Binding TimeText}" Width="70" />
-              <DataGridTextColumn Header="AGENT" Binding="{Binding Agent}" Width="90" />
-              <DataGridTextColumn Header="SESSION" Binding="{Binding Session}" Width="85" />
-              <DataGridTextColumn Header="TOOL" Binding="{Binding Tool}" Width="90" />
-              <DataGridTextColumn Header="ACTION" Binding="{Binding Action}" Width="180" />
-              <DataGridTextColumn Header="DECISION" Binding="{Binding Decision}" Width="80" />
-              <DataGridTextColumn Header="SEVERITY" Binding="{Binding Severity}" Width="75" />
-              <DataGridTextColumn Header="DETAILS" Binding="{Binding Details}" Width="*" />
-            </DataGrid.Columns>
-          </DataGrid>
+          <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="360" />
+            </Grid.ColumnDefinitions>
+
+            <DataGrid Grid.Column="0"
+                      ItemsSource="{Binding Activity}"
+                      SelectedItem="{Binding SelectedActivity, Mode=TwoWay}"
+                      Style="{StaticResource TableDataGrid}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      SelectionMode="Single"
+                      SelectionUnit="FullRow"
+                      MaxHeight="360"
+                      EnableRowVirtualization="True"
+                      HeadersVisibility="Column"
+                      RowHeight="28">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="TIME" Binding="{Binding TimeText}" Width="68" />
+                <DataGridTextColumn Header="AGENT" Binding="{Binding Agent}" Width="88" />
+                <DataGridTextColumn Header="EVENT" Binding="{Binding EventLabel}" Width="112" />
+                <DataGridTextColumn Header="DETAILS" Binding="{Binding ActionSummary}" Width="*" />
+                <DataGridTextColumn Header="SESSION" Binding="{Binding Session}" Width="78" />
+                <DataGridTextColumn Header="DECISION" Binding="{Binding Decision}" Width="76" />
+                <DataGridTextColumn Header="SEVERITY" Binding="{Binding Severity}" Width="70" />
+              </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Grid.Column="1"
+                    Margin="12,0,0,0"
+                    MaxHeight="360"
+                    Background="{DynamicResource Brush.SurfaceAlt}"
+                    BorderBrush="{DynamicResource Brush.Border}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12">
+              <ScrollViewer VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                  <TextBlock Text="Activity details" Style="{StaticResource SectionTitle}" FontSize="13" />
+                  <TextBlock Text="{Binding SelectedActivityTitle}"
+                             Style="{StaticResource Caption}"
+                             Margin="0,3,0,0"
+                             TextWrapping="Wrap" />
+                  <ItemsControl ItemsSource="{Binding SelectedActivityDetails}" Margin="0,9,0,0">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Grid Margin="0,0,0,6">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="78" />
+                            <ColumnDefinition Width="*" />
+                          </Grid.ColumnDefinitions>
+                          <TextBlock Grid.Column="0"
+                                     Text="{Binding Label}"
+                                     Style="{StaticResource Caption}"
+                                     VerticalAlignment="Top" />
+                          <TextBlock Grid.Column="1"
+                                     Text="{Binding Value}"
+                                     Foreground="{DynamicResource Brush.TextPrimary}"
+                                     FontSize="11.5"
+                                     TextWrapping="Wrap" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <StackPanel Visibility="{Binding HasSelectedActivity, Converter={StaticResource BoolToVisibility}}"
+                              Margin="0,8,0,0">
+                    <TextBlock Text="RAW EVENT ? SECRETS MASKED"
+                               Style="{StaticResource Caption}"
+                               FontSize="9.5"
+                               Margin="0,0,0,4" />
+                    <TextBox Text="{Binding SelectedActivityRawText}"
+                             IsReadOnly="True"
+                             AcceptsReturn="True"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto"
+                             FontFamily="{StaticResource Font.Mono}"
+                             FontSize="10.5"
+                             Foreground="{DynamicResource Brush.TextPrimary}"
+                             Background="{DynamicResource Brush.WindowBackground}"
+                             BorderBrush="{DynamicResource Brush.Border}"
+                             Height="150" />
+                  </StackPanel>
+                </StackPanel>
+              </ScrollViewer>
+            </Border>
+          </Grid>
         </StackPanel>
       </Border>
 
-      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+<Border Style="{StaticResource Card}" Margin="0,14,0,0">
         <StackPanel>
           <Grid>
             <Grid.ColumnDefinitions>
