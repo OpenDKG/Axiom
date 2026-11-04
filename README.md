@@ -214,9 +214,18 @@ The bootstrap downloads the latest release, verifies `SHA256SUMS.txt`, installs 
 automatically; no Windows service registration, firewall change or elevation is involved. The first
 run shows a setup wizard with component checkboxes, a warning and an explicit Apply/terms step.
 
-> The one-line `irm` installer needs a **public** repository. For a private checkout, build from
-> source and run `.\scripts\install-portable.ps1`; the same release archive can be installed with
-> `.\scripts\install-from-github.ps1` after the repository is made public.
+For the private repository, authenticate with `gh auth login` first and pass the token to the
+bootstrap:
+
+```powershell
+$env:NETPETRA_GITHUB_TOKEN = gh auth token
+$headers = @{ Authorization = "Bearer $env:NETPETRA_GITHUB_TOKEN" }
+irm -Headers $headers https://raw.githubusercontent.com/a-51-50/Netpetra/main/scripts/install-from-github.ps1 | iex
+```
+
+The installer uses the token for release metadata and asset downloads; a public repository needs
+only the plain `irm` command. A token is read from `NETPETRA_GITHUB_TOKEN`, `GH_TOKEN` or
+`GITHUB_TOKEN` and is never written to disk by the installer.
 
 You can also run `.\scripts\install-portable.ps1` from a checkout. Remove with
 `.\scripts\uninstall-portable.ps1`; local data stays unless `-RemoveData` is used. Details:

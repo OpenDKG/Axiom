@@ -17,21 +17,52 @@
 .PARAMETER NoLaunch
     Install without starting the desktop.
 
+.PARAMETER Token
+    Optional GitHub token for a private repository. When omitted, the installer reads
+    NETPETRA_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN. Never pass a token on a shared command line.
+
 .EXAMPLE
     irm https://raw.githubusercontent.com/a-51-50/Netpetra/main/scripts/install-from-github.ps1 | iex
 
 .EXAMPLE
     .\install-from-github.ps1 -Version 0.4.0 -NoLaunch
+
+.EXAMPLE
+    # Private repository: reuse an authenticated GitHub CLI session.
+    $env:NETPETRA_GITHUB_TOKEN = gh auth token
+    .\install-from-github.ps1
 #>
 param(
     [string]$Version = "",
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Netpetra"),
-    [switch]$NoLaunch
+    [switch]$NoLaunch,
+    [string]$Token = ""
 )
 
 $ErrorActionPreference = "Stop"
 $repo = "a-51-50/Netpetra"
-$headers = @{ "User-Agent" = "Netpetra-Installer" }
+$headers = @{
+    "User-Agent" = "Netpetra-Installer"
+    "Accept" = "application/vnd.github+json"
+}
+
+$tokenValue = if (-not [string]::IsNullOrWhiteSpace($Token)) {
+    $Token
+}
+elseif (-not [string]::IsNullOrWhiteSpace($env:NETPETRA_GITHUB_TOKEN)) {
+    $env:NETPETRA_GITHUB_TOKEN
+}
+elseif (-not [string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+    $env:GH_TOKEN
+}
+else {
+    $env:GITHUB_TOKEN
+}
+
+$usingToken = -not [string]::IsNullOrWhiteSpace($tokenValue)
+if ($usingToken) {
+    $headers["Authorization"] = "Bearer $tokenValue"
+}
 
 $releaseUri = if ($Version) {
     "https://api.github.com/repos/$repo/releases/tags/v$Version"
@@ -41,7 +72,12 @@ else {
 }
 
 Write-Host "Reading Netpetra release metadata..." -ForegroundColor Cyan
-$release = Invoke-RestMethod -Uri $releaseUri -Headers $headers
+try {
+    $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers
+}
+catch {
+    throw "Could not read release metadata. If the repository is private, set NETPETRA_GITHUB_TOKEN (for example: `$env:NETPETRA_GITHUB_TOKEN = gh auth token). $($_.Exception.Message)"
+}
 
 $zipAsset = $release.assets | Where-Object { $_.name -like "Netpetra-*-win-x64.zip" } | Select-Object -First 1
 $sumAsset = $release.assets | Where-Object { $_.name -eq "SHA256SUMS.txt" } | Select-Object -First 1
@@ -56,9 +92,18 @@ try {
     $zipPath = Join-Path $temp $zipAsset.name
     $sumPath = Join-Path $temp "SHA256SUMS.txt"
 
+    $assetHeaders = $headers.Clone()
+    if ($usingToken) {
+        # Private release assets are downloaded through the API asset URL.
+        $assetHeaders["Accept"] = "application/octet-stream"
+    }
+
+    $zipUri = if ($usingToken) { $zipAsset.url } else { $zipAsset.browser_download_url }
+    $sumUri = if ($usingToken) { $sumAsset.url } else { $sumAsset.browser_download_url }
+
     Write-Host "Downloading $($zipAsset.name)..." -ForegroundColor Cyan
-    Invoke-WebRequest -UseBasicParsing -Uri $zipAsset.browser_download_url -OutFile $zipPath
-    Invoke-WebRequest -UseBasicParsing -Uri $sumAsset.browser_download_url -OutFile $sumPath
+    Invoke-WebRequest -UseBasicParsing -Uri $zipUri -Headers $assetHeaders -OutFile $zipPath
+    Invoke-WebRequest -UseBasicParsing -Uri $sumUri -Headers $assetHeaders -OutFile $sumPath
 
     $line = Get-Content $sumPath | Where-Object { $_ -match [regex]::Escape($zipAsset.name) } | Select-Object -First 1
     if (-not $line) {
