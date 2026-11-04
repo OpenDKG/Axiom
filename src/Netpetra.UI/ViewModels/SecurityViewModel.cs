@@ -825,9 +825,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _openCodeProtection.IsInstalled;
-        var status = installed && blackboxConnected ? "PROTECTED" : "DETECTED";
+        var status = installed && blackboxConnected ? "HOOK INSTALLED" : "DETECTED";
         var detail = installed
-            ? "Blackbox guard plugin installed; restart OpenCode/OpenChamber to activate."
+            ? "Guard plugin installed; activation and blocking are not verified until a protection test runs."
             : "OpenCode config detected; guard plugin not installed.";
 
         ProtectedAgents.Add(new ProtectedAgent(
@@ -854,9 +854,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _codexProtection.IsInstalled;
-        var status = installed && blackboxConnected ? "PROTECTED" : "DETECTED";
+        var status = installed && blackboxConnected ? "HOOK INSTALLED" : "DETECTED";
         var detail = installed
-            ? "Blackbox PreToolUse hook installed; approve/restart Codex if prompted."
+            ? "PreToolUse hook installed; activation and blocking are not verified until a protection test runs."
             : "Codex config detected; PreToolUse hook not installed.";
 
         ProtectedAgents.Add(new ProtectedAgent(
@@ -914,7 +914,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         Modules.Add(new SecurityModule(
             "Blackbox",
             blackbox.Status,
-            $"{blackbox.Detail} Mode: {BlackboxModeText}.",
+            blackbox.Detail,
             "\uE7BA",
             blackbox.IsConnected,
             !blackboxInstalled || !blackbox.IsConnected,

@@ -56,6 +56,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private PageViewModel _selectedPage;
 
+    partial void OnSelectedPageChanged(PageViewModel value)
+    {
+        foreach (var page in Pages.OfType<IActivatablePage>())
+        {
+            page.Deactivate();
+        }
+
+        if (value is IActivatablePage active)
+        {
+            active.Activate();
+        }
+    }
+
     [ObservableProperty]
     private string _themeToggleLabel = "Switch to light theme";
 
