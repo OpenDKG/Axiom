@@ -285,6 +285,22 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (module.Equals("Blackbox", StringComparison.Ordinal))
         {
+            if (_uninstaller.IsBlackboxInstalled)
+            {
+                var started = _installer.StartBlackboxDashboard();
+                InstallStatusText = started
+                    ? "Blackbox dashboard start requested. Checking again in a few seconds."
+                    : "Blackbox venv is missing. Reinstall Blackbox to repair it.";
+
+                if (started)
+                {
+                    await Task.Delay(3000).ConfigureAwait(true);
+                    await RefreshAsync().ConfigureAwait(true);
+                }
+
+                return;
+            }
+
             var confirmation = MessageBox.Show(
                 "This downloads and runs Umanitek's official Windows installer with the Oxigraph " +
                 "backend (no Docker).\n\nIt installs Python packages, clones the repository and may " +
@@ -659,15 +675,16 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             true,
             "Setup",
             _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)));
+        var blackboxInstalled = _uninstaller.IsBlackboxInstalled;
         Modules.Add(new SecurityModule(
             "Blackbox",
             blackbox.Status,
             $"{blackbox.Detail} Mode: {BlackboxModeText}.",
             "\uE7BA",
             blackbox.IsConnected,
-            !_uninstaller.IsBlackboxInstalled,
-            "Install",
-            _uninstaller.IsBlackboxInstalled,
+            !blackboxInstalled || !blackbox.IsConnected,
+            blackboxInstalled ? "Start" : "Install",
+            blackboxInstalled,
             _blackboxMode.IsAvailable));
         Modules.Add(new SecurityModule(
             "OriginTrail DKG",

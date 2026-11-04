@@ -18,10 +18,14 @@ visible PowerShell window only after a confirmation dialog:
   starts the node.
 - **Blackbox**: downloads the official Umanitek Windows installer to
   `%LOCALAPPDATA%\Netpetra\modules\blackbox`, prints its SHA-256 and runs it with
-  `-StoreBackend oxigraph` (no Docker).
+  `-StoreBackend oxigraph` (no Docker). It then repairs the Python dependencies the dashboard
+  needs (`aiohttp`, `cryptography`, `psutil`, FastAPI, uvicorn) and starts the dashboard at
+  `http://127.0.0.1:9700`.
 
-Nothing is installed silently. Close the PowerShell window only after it reports success, then
-click **Check again**. **Restart Netpetra** is available for a clean restart after installation.
+If Blackbox is installed but not running, its action changes to **Start**; it starts the installed
+dashboard without reinstalling. Nothing is installed silently. Close the PowerShell window only
+after it reports success, then click **Check again**. **Restart Netpetra** is available for a clean
+restart after installation.
 The activity strip shows the last 30 loopback checks; it is a health indicator, not module event
 content.
 
