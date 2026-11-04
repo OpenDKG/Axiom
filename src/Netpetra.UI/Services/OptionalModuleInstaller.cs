@@ -98,11 +98,8 @@ public sealed class OptionalModuleInstaller
               }
               $agent = Join-Path $dir 'agent-blackbox'
               $launcher = Join-Path $agent 'start-dashboard.py'
-            @'
-            import argparse
-            from plugins.blackbox.dashboard import cmd_dashboard
-            raise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))
-            '@ | Set-Content -Path $launcher -Encoding UTF8
+              $code = "import argparse`nfrom plugins.blackbox.dashboard import cmd_dashboard`nraise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))`n"
+              [System.IO.File]::WriteAllText($launcher, $code, (New-Object System.Text.UTF8Encoding($false)))
               $dashboard = 'http://127.0.0.1:9700'
               $running = $false
               try { Invoke-WebRequest $dashboard -UseBasicParsing -TimeoutSec 2 | Out-Null; $running = $true } catch { }
