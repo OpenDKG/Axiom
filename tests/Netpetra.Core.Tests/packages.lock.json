@@ -99,7 +99,7 @@
       "netpetra.core": {
         "type": "Project",
         "dependencies": {
-          "Netpetra.Contracts": "[0.1.0, )"
+          "Netpetra.Contracts": "[0.4.21, )"
         }
       }
     }

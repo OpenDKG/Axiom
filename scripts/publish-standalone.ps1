@@ -42,8 +42,12 @@ if ($dotnet) {
 }
 
 if (-not $dotnet) {
-    $perUser = Join-Path $env:USERPROFILE ".dotnet\dotnet.exe"
-    if (Test-Path $perUser) { $dotnet = $perUser }
+    foreach ($candidate in @(
+        (Join-Path $env:USERPROFILE ".dotnet-sdk\dotnet.exe"),
+        (Join-Path $env:USERPROFILE ".dotnet\dotnet.exe")
+    )) {
+        if (Test-Path $candidate) { $dotnet = $candidate; break }
+    }
 }
 
 if (-not $dotnet) { throw "dotnet CLI not found. Install the .NET 10 SDK pinned in global.json." }

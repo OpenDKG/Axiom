@@ -99,14 +99,14 @@
       "netpetra.core": {
         "type": "Project",
         "dependencies": {
-          "Netpetra.Contracts": "[0.1.0, )"
+          "Netpetra.Contracts": "[0.4.21, )"
         }
       },
       "netpetra.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
-          "Netpetra.Contracts": "[0.1.0, )",
-          "Netpetra.Core": "[0.1.0, )"
+          "Netpetra.Contracts": "[0.4.21, )",
+          "Netpetra.Core": "[0.4.21, )"
         }
       }
     }

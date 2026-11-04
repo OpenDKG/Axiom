@@ -1,7 +1,18 @@
 # Installing Netpetra (portable, per-user)
 
 Netpetra can be installed for the current Windows user without administrator rights, a Windows
-service registration, a driver or any firewall change. The portable installer copies two
+service registration, a driver or any firewall change. The recommended release asset is `Netpetra.Setup.exe`: a single self-contained setup executable
+with the desktop and service payload embedded. Double-click it, keep or change the two options,
+and click **Install Netpetra**. It installs for the current user, creates a Start Menu shortcut,
+and starts the application. No .NET runtime, administrator rights, service registration or
+firewall change is required.
+
+The setup's **Complete installation** option installs agent hooks when Blackbox and a supported
+agent are already present. Uncheck it for **Partial installation**; no OpenCode, OpenChamber or
+Codex hook file will be created or changed. VirusTotal is optional and its API key is configured
+later on the Security page.
+
+The portable installer copies two
 self-contained executables (desktop and optional service), verifies their SHA-256 and creates a
 Start Menu shortcut.
 
