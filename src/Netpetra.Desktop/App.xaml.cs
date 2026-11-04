@@ -34,7 +34,7 @@ public partial class App : Application
             RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
         }
 
-        ThemeManager.Apply(AppTheme.Dark);
+        ThemeManager.Apply(ThemeSettingsStore.Load());
 
         ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
         if (!OnboardingStore.IsCompleted)
