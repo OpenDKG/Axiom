@@ -1,0 +1,321 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<UserControl x:Class="Netpetra.UI.Views.AgentsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Netpetra.UI.ViewModels">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="24,18,24,24" MaxWidth="900" HorizontalAlignment="Left">
+
+      <Border Style="{StaticResource Card}">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="{Binding Security.AgentStatusTitle}" Style="{StaticResource EmptyStateTitle}" />
+              <TextBlock Text="{Binding Security.AgentStatusText}"
+                         Style="{StaticResource BodyMuted}"
+                         Margin="0,6,0,0" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Check again"
+                      Command="{Binding Security.RefreshCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Re-read the local loopback status. Does not start or control a module." />
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Restart Netpetra"
+                      Command="{Binding Security.RestartCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Restart the desktop after installing a module." />
+              <Border>
+                <Border.Style>
+                  <Style TargetType="Border" BasedOn="{StaticResource StatusPill}">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding Security.AgentStatusBadge}" Value="CONNECTED">
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Success}" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding Security.AgentStatusBadge}">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding Security.AgentStatusBadge}" Value="CONNECTED">
+                          <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
+              </Border>
+            </StackPanel>
+          </Grid>
+          <TextBlock Text="{Binding Security.LastCheckedText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,8,0,0" />
+          <TextBlock Text="{Binding Security.InstallStatusText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,4,0,0"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="0">
+        <ItemsControl ItemsSource="{Binding Security.Modules}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="{x:Type vm:SecurityModule}">
+              <Border Padding="16,12"
+                      BorderBrush="{DynamicResource Brush.Border}"
+                      BorderThickness="0,0,0,1"
+                      Visibility="{Binding IsAgentModule, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+
+                  <Border Grid.Column="0"
+                          Width="32"
+                          Height="32"
+                          CornerRadius="8"
+                          Background="{DynamicResource Brush.SurfaceAlt}"
+                          Margin="0,0,12,0">
+                    <TextBlock Text="{Binding Glyph}"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="14"
+                               Foreground="{DynamicResource Brush.TextSecondary}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                  </Border>
+
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Detail}"
+                               Style="{StaticResource Caption}"
+                               Margin="0,2,0,0"
+                               TextWrapping="Wrap" />
+                  </StackPanel>
+
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource GhostButton}"
+                            Content="{Binding ActionLabel}"
+                            Padding="8,3"
+                            FontSize="11"
+                            Margin="0,0,8,0"
+                            Command="{Binding DataContext.Security.ActOnModuleCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="{Binding Name}"
+                            Visibility="{Binding CanAct, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Run the setup action for this optional module." />
+                    <Button Style="{StaticResource GhostButton}"
+                            Content="Audit"
+                            Padding="6,2"
+                            FontSize="10"
+                            Margin="0,0,4,0"
+                            Command="{Binding DataContext.Security.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="audit"
+                            Visibility="{Binding CanSetMode, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Log and report Blackbox findings without blocking." />
+                    <Button Style="{StaticResource GhostButton}"
+                            Content="Block"
+                            Padding="6,2"
+                            FontSize="10"
+                            Margin="0,0,8,0"
+                            Command="{Binding DataContext.Security.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="block"
+                            Visibility="{Binding CanSetMode, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Stop confirmed Blackbox threats at the configured severity." />
+                    <Button Style="{StaticResource GhostButton}"
+                            Content="Uninstall"
+                            Padding="8,3"
+                            FontSize="11"
+                            Margin="0,0,8,0"
+                            Command="{Binding DataContext.Security.UninstallModuleCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="{Binding Name}"
+                            Visibility="{Binding CanUninstall, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Remove only the files and settings owned by Netpetra for this module." />
+                    <Border Style="{StaticResource StatusPill}">
+                      <TextBlock Text="{Binding Status}">
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                    </Border>
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <TextBlock Text="Module activity" Style="{StaticResource SectionTitle}" />
+          <TextBlock Text="Last 30 loopback checks; green = connected, muted = not running."
+                     Style="{StaticResource Caption}"
+                     Margin="0,2,0,0" />
+
+          <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="64" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="DKG" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+            <ItemsControl Grid.Column="1" ItemsSource="{Binding Security.Activity}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:ModuleActivity}">
+                  <TextBlock Text="▮" FontSize="15" Margin="1,0">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DkgConnected}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Grid>
+
+          <Grid Margin="0,4,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="64" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Blackbox" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+            <ItemsControl Grid.Column="1" ItemsSource="{Binding Security.Activity}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:ModuleActivity}">
+                  <TextBlock Text="▮" FontSize="15" Margin="1,0">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding BlackboxConnected}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="Recognized agents" Style="{StaticResource SectionTitle}" />
+              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber and Codex workspaces protected through Blackbox."
+                         Style="{StaticResource Caption}"
+                         Margin="0,2,0,0" />
+            </StackPanel>
+            <Border Grid.Column="1" Style="{StaticResource StatusPill}" VerticalAlignment="Top">
+              <TextBlock Text="BLACKBOX" Style="{StaticResource StatusPillText}" />
+            </Border>
+          </Grid>
+
+          <TextBlock Text="{Binding Security.AgentsStatusText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,8,0,0"
+                     TextWrapping="Wrap" />
+
+          <ItemsControl ItemsSource="{Binding Security.ProtectedAgents}" Margin="0,6,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:ProtectedAgent}">
+                <Border Padding="0,7"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="0,0,0,1">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="84" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Background="{DynamicResource Brush.AccentSoft}"
+                            CornerRadius="4"
+                            Padding="6,2"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top">
+                      <TextBlock Text="{Binding KindText}"
+                                 FontSize="10"
+                                 FontWeight="SemiBold"
+                                 Foreground="{DynamicResource Brush.Accent}" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="10,0,10,0">
+                      <TextBlock Text="{Binding TargetText}"
+                                 Style="{StaticResource Caption}"
+                                 FontFamily="{StaticResource Font.Mono}"
+                                 TextTrimming="CharacterEllipsis"
+                                 ToolTip="{Binding TargetText}" />
+                      <TextBlock Text="{Binding Detail}"
+                                 Style="{StaticResource Caption}"
+                                 Foreground="{DynamicResource Brush.TextMuted}"
+                                 Margin="0,2,0,0"
+                                 TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <Border Grid.Column="2" Style="{StaticResource StatusPill}" VerticalAlignment="Top">
+                      <TextBlock Text="{Binding Status}">
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding IsProtected}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding Status}" Value="DETECTED">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                    </Border>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

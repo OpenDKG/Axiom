@@ -74,7 +74,7 @@ Service in console mode + published standalone UI with `--service`.
 | E06 | Reconnect without restarting the UI | ✅ | `fnd003-service-recovered.png` |
 | E07 | Standalone EXE (no SDK) | ✅ | all screenshots |
 | E08 | CSV export | ⚠️ code + escaping; dialog not automated | — |
-| E09 | Eight-page V2 navigation (Overview, Connections, Applications, Events, Firewall, Files, Security, Settings) | ✅ | `fnd006-*.png` |
+| E09 | Nine-page navigation (Overview, Connections, Applications, Events, Agents, Firewall, Files, Security, Settings); Agents sits above Firewall | ✅ | `agents-nav.png`, `agents-page.png`, `security-no-agents.png` |
 | E10 | Files points at the working local scan on Security; background tracking is explicitly disabled | ✅ no fake scanner | `files-open-security.png` |
 | E11 | Connections shows the unknown country placeholder | ✅ | `fnd006-connections.png` |
 | E12 | Overview 5m chart shows `LIVE COUNTERS` from system-wide interface counters; longer ranges show `DEMO SERIES`; markers use first-seen time | ✅ | `traffic-live2.png` |

@@ -34,6 +34,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             new LiveConnectionsViewModel(monitor),
             new AppsViewModel(monitor, ConnectionSourceRegistry.IsServiceMode),
             new EventsViewModel(ConnectionSourceRegistry.IsServiceMode),
+            new AgentsViewModel(security),
             new FirewallRulesViewModel(ConnectionSourceRegistry.IsServiceMode),
             new FilesViewModel(() => SelectedPage = security),
             security,

@@ -31,7 +31,12 @@ public sealed record SecurityModule(
     bool CanAct = false,
     string ActionLabel = "Install",
     bool CanUninstall = false,
-    bool CanSetMode = false);
+    bool CanSetMode = false)
+{
+    public bool IsAgentModule => Name is "Blackbox" or "OriginTrail DKG";
+
+    public bool IsSecurityModule => Name is "Reputation provider" or "Community feed" or "File scanning";
+}
 
 public sealed partial class FileScanRow : ObservableObject
 {
@@ -239,6 +244,49 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         ? "Netpetra reads loopback status. Install buttons open the official third-party installer only after confirmation."
         : "The standard build is local and offline. Use Install to open the official third-party installer after confirmation.";
 
+    public string AgentStatusTitle
+    {
+        get
+        {
+            var connected = Modules.Count(module => module.IsAgentModule && module.IsConnected);
+            return connected switch
+            {
+                0 => "No agents connected",
+                1 => "1 agent connected",
+                _ => $"{connected} agents connected",
+            };
+        }
+    }
+
+    public string AgentStatusBadge => Modules.Any(module => module.IsAgentModule && module.IsConnected)
+        ? "CONNECTED"
+        : "OFFLINE";
+
+    public string AgentStatusText =>
+        "DKG and Blackbox status, install actions and the workspaces they protect. " +
+        "OpenCode, OpenChamber, Codex and Hermes are listed below.";
+
+    public string SecurityStatusTitle
+    {
+        get
+        {
+            var configured = Modules.Count(module => module.IsSecurityModule && module.IsConnected);
+            return configured switch
+            {
+                0 => "Security modules are not configured",
+                1 => "1 security module configured",
+                _ => $"{configured} security modules configured",
+            };
+        }
+    }
+
+    public string SecurityStatusBadge => Modules.Any(module => module.IsSecurityModule && module.IsConnected)
+        ? "CONFIGURED"
+        : "OFFLINE";
+
+    public string SecurityStatusText =>
+        "Reputation, community feed and local file scan. Agent protection lives on the Agents page.";
+
     public void Dispose()
     {
         _activityTimer.Stop();
@@ -283,9 +331,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         finally
         {
             IsBusy = false;
-            OnPropertyChanged(nameof(StatusTitle));
-            OnPropertyChanged(nameof(StatusBadge));
-            OnPropertyChanged(nameof(StatusText));
+            NotifyStatusProperties();
         }
     }
 
@@ -836,9 +882,20 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             }
         }
 
+        NotifyStatusProperties();
+    }
+
+    private void NotifyStatusProperties()
+    {
         OnPropertyChanged(nameof(StatusTitle));
         OnPropertyChanged(nameof(StatusBadge));
         OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(AgentStatusTitle));
+        OnPropertyChanged(nameof(AgentStatusBadge));
+        OnPropertyChanged(nameof(AgentStatusText));
+        OnPropertyChanged(nameof(SecurityStatusTitle));
+        OnPropertyChanged(nameof(SecurityStatusBadge));
+        OnPropertyChanged(nameof(SecurityStatusText));
     }
 
     private void Rebuild(OptionalModuleStatus dkg, OptionalModuleStatus blackbox)
