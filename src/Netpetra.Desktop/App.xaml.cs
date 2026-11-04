@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
+using Application = System.Windows.Application;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Netpetra.Contracts.Monitoring;
