@@ -231,10 +231,10 @@ internal sealed class TrayStatusController : IDisposable
         }
     }
 
-    private static partial class NativeMethods
+    private static class NativeMethods
     {
-        [LibraryImport("user32.dll", SetLastError = true)]
+        [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool DestroyIcon(nint handle);
+        internal static extern bool DestroyIcon(nint handle);
     }
 }
