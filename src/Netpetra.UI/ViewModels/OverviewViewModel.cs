@@ -15,6 +15,7 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
     // Session-only events; historical investigations require an indexed service query.
     private readonly List<NewConnectionMarkerEvent> _sessionEvents = [];
     private readonly HashSet<string> _seenEventKeys = new(StringComparer.Ordinal);
+    private string? _selectedEventKey;
 
     public OverviewViewModel(ConnectionMonitor monitor)
         : base("Overview", "Live sockets from this host · system-wide throughput counters", "\uE80F")
@@ -162,7 +163,17 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
 
     partial void OnSelectedRateUnitChanged(string value) => UpdateMetrics();
 
-    partial void OnSelectedMarkerIndexChanged(int value) => UpdateSelectedConnectionDetails();
+    partial void OnSelectedMarkerIndexChanged(int value)
+    {
+        _selectedEventKey = value >= 0 && value < NewConnectionEvents.Count
+            ? EventKey(NewConnectionEvents[value])
+            : null;
+        UpdateSelectedConnectionDetails();
+    }
+
+    private static string EventKey(NewConnectionMarkerEvent item) =>
+        string.Join("|", item.Protocol, item.ProcessId,
+            item.Local, item.Remote, item.FirstSeenUtc.UtcTicks);
 
     private void UpdateSelectedConnectionDetails()
     {
@@ -220,8 +231,7 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
             _seenEventKeys.Clear();
             foreach (var item in _sessionEvents)
             {
-                _seenEventKeys.Add(string.Join("|", item.Protocol, item.ProcessId,
-                    item.Local, item.Remote, item.FirstSeenUtc.UtcTicks));
+                _seenEventKeys.Add(EventKey(item));
             }
         }
 
@@ -249,6 +259,17 @@ public sealed partial class OverviewViewModel : PageViewModel, IDisposable
         NewConnectionMarkers = positions;
         NewConnectionMarkerLabels = labels;
         NewConnectionMarkerDetails = details;
+        if (_selectedEventKey is not null)
+        {
+            var matchingIndex = NewConnectionEvents
+                .Select((item, index) => (Item: item, Index: index))
+                .Where(entry => EventKey(entry.Item) == _selectedEventKey)
+                .Select(entry => entry.Index)
+                .DefaultIfEmpty(-1)
+                .First();
+            SelectedMarkerIndex = matchingIndex;
+        }
+
         UpdateSelectedConnectionDetails();
         NewConnectionEventsEmptyText = events.Count == 0
             ? "No first-observed connections retained for this period in this UI session."
