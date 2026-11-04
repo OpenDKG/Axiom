@@ -214,12 +214,12 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             }
             finally
             {
-                var original = new JsonArray(
-                    originalPaths.Select(path => (JsonNode?)JsonValue.Create(path)).ToArray());
-                await _client.SaveSettingsAsync(
-                    new JsonObject { ["protected_paths"] = original },
-                    CancellationToken.None).ConfigureAwait(true);
+                var cleanupError = await RemoveCanaryPathAsync(canary).ConfigureAwait(true);
                 File.Delete(canary);
+                if (cleanupError is not null)
+                {
+                    ProtectionTestText += $" Cleanup issue: {cleanupError}";
+                }
             }
         }
         catch (Exception exception) when (exception is
@@ -232,6 +232,41 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         finally
         {
             await RefreshAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task<string?> RemoveCanaryPathAsync(string canary)
+    {
+        try
+        {
+            // Re-read immediately before cleanup so a concurrent user edit is preserved.
+            var current = await _client.GetSettingsAsync(CancellationToken.None).ConfigureAwait(true);
+            var currentPaths = (current["protected_paths"] as JsonArray)?
+                .Select(node => node?.GetValue<string>() ?? string.Empty)
+                .Where(path => path.Length > 0)
+                .ToArray() ?? [];
+
+            var remaining = currentPaths
+                .Where(path => !string.Equals(path, canary, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            if (remaining.Length == currentPaths.Length)
+            {
+                return null;
+            }
+
+            var patch = new JsonObject
+            {
+                ["protected_paths"] = new JsonArray(
+                    remaining.Select(path => (JsonNode?)JsonValue.Create(path)).ToArray()),
+            };
+            var result = await _client.SaveSettingsAsync(patch, CancellationToken.None).ConfigureAwait(true);
+            return result.Ok ? null : string.Join("; ", result.Errors);
+        }
+        catch (Exception exception) when (exception is
+            HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            return $"could not remove the canary path: {exception.Message}";
         }
     }
 
