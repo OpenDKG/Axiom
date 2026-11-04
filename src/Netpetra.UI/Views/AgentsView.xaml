@@ -704,13 +704,22 @@
                                   <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Status}" Value="HOOK INSTALLED">
-                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Status}" Value="HOOK LOADED">
                                   <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Status}" Value="VERIFIED BLOCKING">
                                   <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="AUDIT ONLY">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="DEGRADED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="OFFLINE">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
                                 </DataTrigger>
                               </Style.Triggers>
                             </Style>
