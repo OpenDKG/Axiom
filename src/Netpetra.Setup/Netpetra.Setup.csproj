@@ -6,6 +6,7 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>Netpetra.Setup</RootNamespace>
     <AssemblyName>Netpetra.Setup</AssemblyName>
+    <ApplicationIcon>..\Netpetra.UI\Resources\netpetra.ico</ApplicationIcon>
     <StartupObject>Netpetra.Setup.Program</StartupObject>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>

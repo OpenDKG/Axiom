@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -124,6 +126,34 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void ToggleTheme() => ThemeManager.Toggle();
+
+    [RelayCommand]
+    private void OpenGitHub()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("https://github.com/a-51-50/Netpetra")
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Win32Exception)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    [RelayCommand]
+    private void OpenSupport()
+    {
+        var support = Pages.OfType<SupportViewModel>().FirstOrDefault();
+        if (support is not null)
+        {
+            SelectedPage = support;
+        }
+    }
 
     public void Dispose()
     {

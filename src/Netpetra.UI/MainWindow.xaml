@@ -5,6 +5,7 @@
         xmlns:vm="clr-namespace:Netpetra.UI.ViewModels"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Netpetra — Open-Source Firewall &amp; Security Monitor"
+        Icon="/Netpetra.UI;component/Resources/netpetra.ico"
         Height="900"
         Width="1460"
         MinHeight="720"
@@ -51,10 +52,8 @@
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
-          <Border Background="{DynamicResource Brush.AccentSoft}" CornerRadius="5" Width="22" Height="22">
-            <TextBlock Text="N" FontWeight="Bold" Foreground="{DynamicResource Brush.Accent}"
-                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-          </Border>
+          <Image Source="/Netpetra.UI;component/Resources/netpetra-icon.png"
+                 Width="22" Height="22" Stretch="Uniform" />
           <TextBlock Text="NETPETRA" FontWeight="SemiBold" FontSize="11"
                      Margin="10,0,10,0" VerticalAlignment="Center" />
           <TextBlock Text="Network activity &amp; security" Style="{StaticResource Caption}"
@@ -82,11 +81,12 @@
             BorderThickness="0,0,1,0">
       <DockPanel Margin="0,18,0,10">
         <StackPanel DockPanel.Dock="Top" Margin="20,0,20,18">
-          <TextBlock Text="Netpetra" FontSize="16" FontWeight="SemiBold" />
-          <TextBlock Text="Open-source firewall &amp; network monitor"
-                     Style="{StaticResource Caption}"
-                     Margin="0,3,0,0"
-                     TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal">
+            <Image Source="/Netpetra.UI;component/Resources/netpetra-icon.png"
+                   Width="30" Height="30" Stretch="Uniform" />
+            <TextBlock Text="Netpetra" FontSize="16" FontWeight="SemiBold"
+                       Margin="10,0,0,0" VerticalAlignment="Center" />
+          </StackPanel>
           <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
             <Border Style="{StaticResource LiveBadge}">
               <TextBlock Style="{StaticResource LiveBadgeText}" Text="{Binding StatusLiveText}" />
@@ -95,11 +95,41 @@
           </StackPanel>
         </StackPanel>
 
-          <TextBlock DockPanel.Dock="Bottom"
-                   Margin="20,12,20,4"
-                   Style="{StaticResource Caption}"
-                   TextWrapping="Wrap"
-                   Text="{Binding FooterText}" />
+        <StackPanel DockPanel.Dock="Bottom" Margin="16,0,16,10">
+          <Border Height="1" Background="{DynamicResource Brush.Border}" Margin="0,0,0,10" />
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Image Source="/Netpetra.UI;component/Resources/netpetra-icon.png"
+                   Width="38" Height="38" Stretch="Uniform" />
+            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+              <TextBlock Text="NetPetra" FontWeight="SemiBold" FontSize="13" />
+              <TextBlock Text="{Binding VersionText}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+            </StackPanel>
+          </Grid>
+          <TextBlock Text="Open-source firewall &amp; network monitor"
+                     Style="{StaticResource Caption}"
+                     TextWrapping="Wrap"
+                     Margin="0,8,0,0" />
+          <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+            <Button Style="{StaticResource GhostButton}"
+                    Content="GitHub"
+                    Command="{Binding OpenGitHubCommand}"
+                    Padding="10,4"
+                    Height="27"
+                    Margin="0,0,6,0"
+                    ToolTip="Open the Netpetra GitHub repository." />
+            <Button Style="{StaticResource GhostButton}"
+                    Command="{Binding OpenSupportCommand}"
+                    Padding="9,4"
+                    Height="27"
+                    ToolTip="Support Netpetra">
+              <TextBlock Text="♥ Donate" Foreground="{DynamicResource Brush.Accent}" FontSize="12" />
+            </Button>
+          </StackPanel>
+        </StackPanel>
 
         <ListBox ItemsSource="{Binding Pages}"
                  SelectedItem="{Binding SelectedPage}"
