@@ -8,72 +8,77 @@ namespace Netpetra.UI.Services;
 
 public enum TrafficRange
 {
-    LastMinute = 0,
+    LastFiveMinutes = 0,
     LastHour = 1,
     LastDay = 2,
     LastWeek = 3,
+    LastMonth = 4,
 }
 
 /// <summary>
-/// Builds the overview throughput series. The 5-minute view samples real system-wide IPv4/IPv6
-/// interface byte counters once per second. Longer ranges keep the deterministic demo shape until
-/// byte history is stored; per-process byte accounting still needs ETW (FND-004).
+/// Genuine local, system-wide interface throughput for a rolling five-minute window.
+/// Persistent history is not yet available; never synthesize older traffic.
+/// Rates are derived only from consecutive samples of the same operational interface.
 /// </summary>
 public sealed class TrafficEngine : IDisposable
 {
-    public const int BucketCount = 60;
-
-    private const int Seed = 20261101;
+    public const int BucketCount = 300;
 
     private readonly DispatcherTimer _timer;
-
-    private TrafficRange _range = TrafficRange.LastMinute;
-
-    private (long Sent, long Received)? _lastSample;
-
+    private Dictionary<string, (long Sent, long Received)> _previous = new(StringComparer.Ordinal);
     private long _lastTimestamp;
+    private TrafficRange _range = TrafficRange.LastFiveMinutes;
 
     public TrafficEngine()
     {
-        _timer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(1),
-        };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += OnTimerTick;
     }
 
     public ObservableCollection<double> UploadSeries { get; } = [];
-
     public ObservableCollection<double> DownloadSeries { get; } = [];
 
-    /// <summary>Raised after a series update so the view model can refresh its labels.</summary>
     public event EventHandler? Updated;
 
     public TrafficRange Range => _range;
-
-    public bool IsLive => _range == TrafficRange.LastMinute;
-
-    public double LatestUpload => UploadSeries.Count == 0 ? 0 : UploadSeries[^1];
-
-    public double LatestDownload => DownloadSeries.Count == 0 ? 0 : DownloadSeries[^1];
+    public bool IsLive => _range == TrafficRange.LastFiveMinutes;
+    public double LatestUpload => IsLive && UploadSeries.Count > 0 ? UploadSeries[^1] : double.NaN;
+    public double LatestDownload => IsLive && DownloadSeries.Count > 0 ? DownloadSeries[^1] : double.NaN;
 
     public string BucketLabel => _range switch
     {
-        TrafficRange.LastMinute => "1 s buckets · last 60 s · system-wide",
-        TrafficRange.LastHour => "60 s buckets · last hour · demo",
-        TrafficRange.LastDay => "24 min buckets · last day · demo",
-        TrafficRange.LastWeek => "2.8 h buckets · last week · demo",
-        _ => "demo buckets",
+        TrafficRange.LastFiveMinutes => "1 s samples · rolling 5m · system-wide",
+        TrafficRange.LastHour => "1h · historical byte samples not recorded",
+        TrafficRange.LastDay => "24h · historical byte samples not recorded",
+        TrafficRange.LastWeek => "7d · historical byte samples not recorded",
+        TrafficRange.LastMonth => "30d · historical byte samples not recorded",
+        _ => "No historical data",
     };
 
     public string RangeNote => IsLive
-        ? "Real system-wide interface counters; per-process bytes need ETW (FND-004)."
-        : "Fixed demo shape; switch to 5m for real system-wide counters.";
+        ? "Measured on active network interfaces. Per-app rates require separate telemetry."
+        : "No historical byte data yet. Showing no data instead of simulated traffic.";
 
     public void Start()
     {
-        ResetSeries();
+        if (_timer.IsEnabled)
+        {
+            return;
+        }
+
+        if (UploadSeries.Count == 0)
+        {
+            for (var i = 0; i < BucketCount; i++)
+            {
+                UploadSeries.Add(double.NaN);
+                DownloadSeries.Add(double.NaN);
+            }
+        }
+
+        _previous = ReadCounters();
+        _lastTimestamp = Stopwatch.GetTimestamp();
         _timer.Start();
+        Updated?.Invoke(this, EventArgs.Empty);
     }
 
     public void Stop() => _timer.Stop();
@@ -86,7 +91,6 @@ public sealed class TrafficEngine : IDisposable
         }
 
         _range = range;
-        ResetSeries();
         Updated?.Invoke(this, EventArgs.Empty);
     }
 
@@ -98,104 +102,75 @@ public sealed class TrafficEngine : IDisposable
 
     private void OnTimerTick(object? sender, EventArgs e)
     {
-        if (!IsLive)
+        // Continue collecting the real 5m window even if the user selects an unavailable
+        // historical range, so switching back does not erase measured data.
+        var now = Stopwatch.GetTimestamp();
+        var elapsed = (now - _lastTimestamp) / (double)Stopwatch.Frequency;
+        var current = ReadCounters();
+        double upload = double.NaN;
+        double download = double.NaN;
+        long sent = 0;
+        long received = 0;
+        var matched = 0;
+
+        if (elapsed > 0 && elapsed < 10)
         {
-            return;
-        }
-
-        var sample = ReadCounters();
-        if (_lastSample is not { } previous)
-        {
-            _lastSample = sample;
-            _lastTimestamp = Stopwatch.GetTimestamp();
-            return;
-        }
-
-        var elapsed = (Stopwatch.GetTimestamp() - _lastTimestamp) / (double)Stopwatch.Frequency;
-        if (elapsed <= 0)
-        {
-            elapsed = 1;
-        }
-
-        var sent = Math.Max(0, sample.Sent - previous.Sent);
-        var received = Math.Max(0, sample.Received - previous.Received);
-        _lastSample = sample;
-        _lastTimestamp = Stopwatch.GetTimestamp();
-
-        Push(sent / elapsed, received / elapsed);
-    }
-
-    private void ResetSeries()
-    {
-        UploadSeries.Clear();
-        DownloadSeries.Clear();
-
-        if (IsLive)
-        {
-            for (var i = 0; i < BucketCount; i++)
+            foreach (var (id, counters) in current)
             {
-                UploadSeries.Add(0);
-                DownloadSeries.Add(0);
+                if (!_previous.TryGetValue(id, out var prior) ||
+                    counters.Sent < prior.Sent ||
+                    counters.Received < prior.Received)
+                {
+                    continue;
+                }
+
+                sent += counters.Sent - prior.Sent;
+                received += counters.Received - prior.Received;
+                matched++;
             }
 
-            _lastSample = ReadCounters();
-            _lastTimestamp = Stopwatch.GetTimestamp();
-            return;
+            if (matched > 0)
+            {
+                upload = sent / elapsed;
+                download = received / elapsed;
+            }
         }
 
-        RegenerateDemo();
-    }
+        // A missing interface, counter reset or long sampling gap is unknown, not zero.
+        _previous = current;
+        _lastTimestamp = now;
+        if (UploadSeries.Count == BucketCount)
+        {
+            UploadSeries.RemoveAt(0);
+            DownloadSeries.RemoveAt(0);
+        }
 
-    private void Push(double upload, double download)
-    {
-        UploadSeries.RemoveAt(0);
         UploadSeries.Add(upload);
-        DownloadSeries.RemoveAt(0);
         DownloadSeries.Add(download);
         Updated?.Invoke(this, EventArgs.Empty);
     }
 
-    private void RegenerateDemo()
+    private static Dictionary<string, (long Sent, long Received)> ReadCounters()
     {
-        UploadSeries.Clear();
-        DownloadSeries.Clear();
-
-        var random = new Random(Seed + ((int)_range * 7919));
-        var upload = InitialUpload(random);
-        var download = InitialDownload(random);
-
-        for (var i = 0; i < BucketCount; i++)
-        {
-            upload = NextUploadSample(random, upload, i);
-            download = NextDownloadSample(random, download, i);
-            UploadSeries.Add(upload);
-            DownloadSeries.Add(download);
-        }
-    }
-
-    private static (long Sent, long Received) ReadCounters()
-    {
-        long sent = 0;
-        long received = 0;
-
+        var counters = new Dictionary<string, (long, long)>(StringComparer.Ordinal);
         try
         {
-            foreach (var networkInterface in NetworkInterface.GetAllNetworkInterfaces())
+            foreach (var adapter in NetworkInterface.GetAllNetworkInterfaces())
             {
-                if (networkInterface.OperationalStatus != OperationalStatus.Up ||
-                    networkInterface.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
+                if (adapter.OperationalStatus != OperationalStatus.Up ||
+                    adapter.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
                 {
                     continue;
                 }
 
                 try
                 {
-                    var statistics = networkInterface.GetIPStatistics();
-                    sent += statistics.BytesSent;
-                    received += statistics.BytesReceived;
+                    var stats = adapter.GetIPStatistics();
+                    counters[adapter.Id] = (stats.BytesSent, stats.BytesReceived);
                 }
                 catch (NetworkInformationException)
                 {
+                    // No data from this adapter: do not invent a zero-byte sample.
                 }
                 catch (InvalidOperationException)
                 {
@@ -204,32 +179,11 @@ public sealed class TrafficEngine : IDisposable
         }
         catch (NetworkInformationException)
         {
-            return (0, 0);
         }
         catch (PlatformNotSupportedException)
         {
-            return (0, 0);
         }
 
-        return (sent, received);
-    }
-
-    private static double InitialUpload(Random random) => 90_000 + (random.NextDouble() * 60_000);
-
-    private static double InitialDownload(Random random) => 900_000 + (random.NextDouble() * 700_000);
-
-    private static double NextUploadSample(Random random, double previous, int index)
-    {
-        var wave = Math.Sin((index / (double)BucketCount) * Math.PI * 2) * 60_000;
-        var noise = (random.NextDouble() - 0.5) * 26_000;
-        return Math.Max(20_000, previous * 0.82 + wave * 0.45 + noise);
-    }
-
-    private static double NextDownloadSample(Random random, double previous, int index)
-    {
-        var wave = Math.Sin((index / (double)BucketCount) * Math.PI * 4) * 300_000;
-        var noise = (random.NextDouble() - 0.5) * 220_000;
-        var spike = index % 17 == 0 ? 900_000 : 0;
-        return Math.Max(120_000, previous * 0.8 + wave + noise + spike);
+        return counters;
     }
 }
