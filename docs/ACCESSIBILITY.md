@@ -25,6 +25,14 @@ visible keyboard focus and screen-reader names for the main controls.
   measured and markers are demo positions.
 - Status bar: monitoring, firewall, database and data-source states are plain text.
 
+## Contrast
+
+All normal text roles use at least WCAG AA 4.5:1 on the window, surface, alternate surface,
+navigation and soft-accent backgrounds in Dark, DarkMidnight, Light and LightWarm. The muted text
+roles are `#8A98A8` (Dark), `#8F9EBE` (DarkMidnight), `#5A6977` (Light) and `#6F6258` (LightWarm).
+Dark structural borders use at least 3:1 against the main surfaces. `ThemeContrastTests` parses the
+theme XAML and fails if a future palette change drops below these thresholds.
+
 ## Focus
 
 Buttons, navigation items and segmented filters use a dashed accent focus rectangle. The default
