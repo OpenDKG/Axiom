@@ -85,6 +85,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
         "openchamber" => "OpenChamber",
         "codex" => "Codex",
         "claude" => "Claude Code",
+        "cursor" => "Cursor",
         _ => Kind,
     };
 
@@ -92,7 +93,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
 
     public bool IsProtected => Status == "PROTECTED";
 
-    public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude";
+    public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude" or "cursor";
 
     public string TestResult { get; init; } = string.Empty;
 }
@@ -128,6 +129,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly CodexProtection _codexProtection = new();
 
     private readonly ClaudeProtection _claudeProtection = new();
+
+    private readonly CursorProtection _cursorProtection = new();
 
     private readonly AgentHookProbe _agentHookProbe = new();
 
@@ -284,7 +287,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     public string AgentStatusText =>
         "DKG and Blackbox status, install actions and the workspaces they report. " +
-        "OpenCode, OpenChamber, Codex, Claude Code and Hermes are listed below; an installed hook is not proof of runtime blocking.";
+        "OpenCode, OpenChamber, Codex, Claude Code, Cursor and Hermes are listed below; an installed hook is not proof of runtime blocking.";
 
     public string AgentHookInstallHint =>
         "Status refresh is read-only. Agent hooks are installed only when you choose Install/Repair hooks and select " +
@@ -699,6 +702,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             case "Blackbox":
                 allowedChanges.Add(_codexProtection.HooksPath);
                 allowedChanges.Add(_claudeProtection.SettingsPath);
+                allowedChanges.Add(_cursorProtection.HooksPath);
                 allowedChanges.Add(_uninstaller.OpenCodePlugin);
                 allowedChanges.Add(_uninstaller.OpenCodeV1Plugin);
                 allowedChanges.Add(_uninstaller.OpenCodeLegacyPlugin);
@@ -764,7 +768,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (!dialog.CompleteInstallation)
         {
-            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber, Codex or Claude Code hook files were changed.";
+            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber, Codex, Claude Code or Cursor hook files were changed.";
             return;
         }
 
@@ -772,6 +776,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         var openCode = _openCodeProtection.EnsureInstalled();
         var codex = _codexProtection.EnsureInstalled();
         var claude = _claudeProtection.EnsureInstalled();
+        var cursor = _cursorProtection.EnsureInstalled();
 
         var allowedHookChanges = new[]
         {
@@ -783,6 +788,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             _codexProtection.HookScriptPath,
             _claudeProtection.SettingsPath,
             _claudeProtection.HookScriptPath,
+            _cursorProtection.HooksPath,
+            _cursorProtection.HookScriptPath,
         };
         var unexpectedChanges = await Task.Run(
             () => _userStateProtection.Verify(snapshot, allowedHookChanges)).ConfigureAwait(true);
@@ -800,7 +807,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         InstallStatusText =
             $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
-            $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}. " +
+            $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}, " +
+            $"Cursor {(cursor ? "installed" : "skipped")}. " +
             "Existing managed hook files are backed up beside the originals. " +
             "MCP server definitions, selected models, favorites, sessions and Antigravity history were not changed.";
         await RefreshAsync().ConfigureAwait(true);
@@ -902,6 +910,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         // Status refresh is read-only. Hook installation is an explicit, confirmed action.
         AddCodexAgents(blackboxConnected);
         AddClaudeAgents(blackboxConnected);
+        AddCursorAgents(blackboxConnected);
         AddOpenCodeAgents(blackboxConnected);
 
         if (!blackboxConnected)
@@ -1069,6 +1078,36 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         ProtectedAgents.Add(new ProtectedAgent(
             "claude",
             _claudeProtection.SettingsPath,
+            status,
+            detail));
+    }
+
+    private void AddCursorAgents(bool blackboxConnected)
+    {
+        if (!_cursorProtection.IsCursorDetected)
+        {
+            return;
+        }
+
+        var installed = _cursorProtection.IsInstalled;
+        var evidence = _agentEvidence.Latest("cursor");
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected);
+        var detail = !installed
+            ? "Cursor config detected; preToolUse hook is missing or malformed."
+            : evidence is null
+                ? "Hook configuration detected; runtime not verified. Restart Cursor if it was already running."
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
+
+        ProtectedAgents.Add(new ProtectedAgent(
+            "cursor",
+            _cursorProtection.HooksPath,
             status,
             detail));
     }

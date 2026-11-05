@@ -180,9 +180,11 @@ internal static class SetupInstaller
                     var openCodeProtection = new OpenCodeProtection();
                     var codexProtection = new CodexProtection();
                     var claudeProtection = new ClaudeProtection();
+                    var cursorProtection = new CursorProtection();
                     var openCode = openCodeProtection.EnsureInstalled();
                     var codex = codexProtection.EnsureInstalled();
                     var claude = claudeProtection.EnsureInstalled();
+                    var cursor = cursorProtection.EnsureInstalled();
                     var unexpectedChanges = await Task.Run(
                         () => protection.Verify(
                             protectedBefore,
@@ -195,6 +197,8 @@ internal static class SetupInstaller
                                 codexProtection.HookScriptPath,
                                 claudeProtection.SettingsPath,
                                 claudeProtection.HookScriptPath,
+                                cursorProtection.HooksPath,
+                                cursorProtection.HookScriptPath,
                             ]),
                         cancellationToken).ConfigureAwait(false);
                     if (unexpectedChanges.Count > 0)
@@ -218,7 +222,8 @@ internal static class SetupInstaller
                     }
 
                     Report($"Agent hooks: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
-                           $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}.");
+                           $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}, " +
+                           $"Cursor {(cursor ? "installed" : "skipped")}.");
                 }
                 else
                 {

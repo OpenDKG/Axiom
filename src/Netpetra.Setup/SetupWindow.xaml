@@ -63,13 +63,13 @@
                    Style="{StaticResource Caption}"
                    FontWeight="SemiBold"
                    Margin="0,8,0,0" />
-        <TextBlock Text="%USERPROFILE%\.config\opencode\plugins\netpetra-blackbox.ts&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py&#x0a;%USERPROFILE%\.codex\hooks.json (netpetra-codex-hook.py entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-codex-hook.py&#x0a;%USERPROFILE%\.claude\settings.json (netpetra-claude-hook.py PreToolUse entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-claude-hook.py&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox, dkg and dkg-home&#x0a;%USERPROFILE%\.local\bin\blackbox.cmd&#x0a;%USERPROFILE%\.hermes\config.yaml, .hermes\blackbox and .hermes\plugins\blackbox (Blackbox mode/plugin only)&#x0a;%LOCALAPPDATA%\hermes\config.yaml, plugins, blackbox, bin, installs, cache, logs, backups and image/audio caches (official installer)&#x0a;Scheduled task: Agent Blackbox DKG node"
+        <TextBlock Text="%USERPROFILE%\.config\opencode\plugins\netpetra-blackbox.ts&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py&#x0a;%USERPROFILE%\.codex\hooks.json (netpetra-codex-hook.py entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-codex-hook.py&#x0a;%USERPROFILE%\.claude\settings.json (netpetra-claude-hook.py PreToolUse entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-claude-hook.py&#x0a;%USERPROFILE%\.cursor\hooks.json (netpetra-cursor-hook.py preToolUse entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-cursor-hook.py&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox, dkg and dkg-home&#x0a;%USERPROFILE%\.local\bin\blackbox.cmd&#x0a;%USERPROFILE%\.hermes\config.yaml, .hermes\blackbox and .hermes\plugins\blackbox (Blackbox mode/plugin only)&#x0a;%LOCALAPPDATA%\hermes\config.yaml, plugins, blackbox, bin, installs, cache, logs, backups and image/audio caches (official installer)&#x0a;Scheduled task: Agent Blackbox DKG node"
                    Style="{StaticResource Caption}"
                    FontFamily="Consolas"
                    FontSize="11"
                    TextWrapping="Wrap"
                    Margin="0,3,0,0" />
-        <TextBlock Text="Uncheck for Partial installation: core Netpetra only. No Blackbox, DKG, OpenCode, OpenChamber, Codex or Claude Code files will be installed or changed."
+        <TextBlock Text="Uncheck for Partial installation: core Netpetra only. No Blackbox, DKG, OpenCode, OpenChamber, Codex, Claude Code or Cursor files will be installed or changed."
                    Style="{StaticResource Caption}"
                    TextWrapping="Wrap"
                    Margin="0,6,0,0" />
