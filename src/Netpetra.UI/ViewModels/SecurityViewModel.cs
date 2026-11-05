@@ -687,28 +687,55 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             return;
         }
 
+        var protectedBefore = await Task.Run(() => _userStateProtection.Capture()).ConfigureAwait(true);
+        var allowedChanges = new List<string>();
+        var uninstallSucceeded = true;
+
         switch (module)
         {
             case "Blackbox":
-                _uninstaller.UninstallBlackbox();
-                InstallStatusText = "Blackbox uninstall started in PowerShell.";
+                allowedChanges.Add(_codexProtection.HooksPath);
+                allowedChanges.Add(_uninstaller.OpenCodePlugin);
+                allowedChanges.Add(_uninstaller.OpenCodeLegacyPlugin);
+                uninstallSucceeded = await Task.Run(
+                    () => _uninstaller.UninstallBlackboxAndWait()).ConfigureAwait(true);
+                InstallStatusText = uninstallSucceeded
+                    ? "Blackbox uninstall finished."
+                    : "Blackbox uninstall window finished with an error; check the log.";
                 break;
             case "OriginTrail DKG":
-                _uninstaller.UninstallDkg();
-                InstallStatusText = "DKG uninstall started in PowerShell.";
+                uninstallSucceeded = await Task.Run(
+                    () => _uninstaller.UninstallDkgAndWait()).ConfigureAwait(true);
+                InstallStatusText = uninstallSucceeded
+                    ? "DKG uninstall finished."
+                    : "DKG uninstall window finished with an error; check the log.";
                 break;
             case "Reputation provider":
-                _uninstaller.RemoveReputationSettings();
+                allowedChanges.Add(_uninstaller.ReputationSettingsPath);
+                await Task.Run(_uninstaller.RemoveReputationSettings).ConfigureAwait(true);
                 _reputationSettings = new ReputationSettings(false, string.Empty);
                 InstallStatusText = "VirusTotal key removed.";
                 break;
             case "Community feed":
-                _uninstaller.RemoveCommunitySettings();
+                allowedChanges.Add(_uninstaller.CommunitySettingsPath);
+                await Task.Run(_uninstaller.RemoveCommunitySettings).ConfigureAwait(true);
                 _communitySettings = new CommunityFeedSettings(false, string.Empty, string.Empty);
                 _communityConnected = false;
                 CommunityEntries.Clear();
                 InstallStatusText = "Community feed settings removed.";
                 break;
+        }
+
+        var unexpectedChanges = await Task.Run(
+            () => _userStateProtection.Verify(protectedBefore, allowedChanges)).ConfigureAwait(true);
+        if (unexpectedChanges.Count > 0)
+        {
+            var restoreFailures = await Task.Run(
+                () => _userStateProtection.Restore(protectedBefore, unexpectedChanges)).ConfigureAwait(true);
+            InstallStatusText = restoreFailures.Count == 0
+                ? $"Uninstall detected {unexpectedChanges.Count} protected user-state change(s) and restored them."
+                : $"Uninstall detected {unexpectedChanges.Count} protected user-state change(s); " +
+                  $"{restoreFailures.Count} could not be restored. Review agent sessions, projects, credentials and Antigravity history.";
         }
 
         await Task.Delay(500).ConfigureAwait(true);
@@ -736,21 +763,24 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             return;
         }
 
-        var snapshot = _userStateProtection.Capture();
+        var snapshot = await Task.Run(() => _userStateProtection.Capture()).ConfigureAwait(true);
         var openCode = _openCodeProtection.EnsureInstalled();
         var codex = _codexProtection.EnsureInstalled();
 
-        var unexpectedChanges = _userStateProtection.Verify(
-            snapshot,
-            [
-                _openCodeProtection.PluginPath,
-                _openCodeProtection.BridgePath,
-                _codexProtection.HooksPath,
-                _codexProtection.HookScriptPath,
-            ]);
+        var allowedHookChanges = new[]
+        {
+            _openCodeProtection.PluginPath,
+            _openCodeProtection.LegacyPluginPath,
+            _openCodeProtection.BridgePath,
+            _codexProtection.HooksPath,
+            _codexProtection.HookScriptPath,
+        };
+        var unexpectedChanges = await Task.Run(
+            () => _userStateProtection.Verify(snapshot, allowedHookChanges)).ConfigureAwait(true);
         if (unexpectedChanges.Count > 0)
         {
-            var restoreFailures = _userStateProtection.Restore(snapshot, unexpectedChanges);
+            var restoreFailures = await Task.Run(
+                () => _userStateProtection.Restore(snapshot, unexpectedChanges)).ConfigureAwait(true);
             InstallStatusText = restoreFailures.Count == 0
                 ? $"Hook installation aborted: {unexpectedChanges.Count} protected user-state file(s) changed unexpectedly and were restored."
                 : $"Hook installation aborted: {unexpectedChanges.Count} protected user-state change(s) detected; " +

@@ -97,6 +97,163 @@ public sealed class UserStateProtectionTests
         Assert.Contains(changes, change => change.Path == database);
     }
 
+    [Fact]
+    public void Protection_inventory_covers_sessions_projects_credentials_and_databases()
+    {
+        using var temp = new TempTree();
+        var protection = new UserStateProtection(temp.Root, temp.Root, temp.Root);
+        var files = protection.ProtectedFiles.Select(spec => spec.Path).ToArray();
+        var directories = protection.ProtectedDirectories.Select(spec => spec.Path).ToArray();
+
+        Assert.Contains(Path.Combine(temp.Root, ".local", "share", "opencode", "auth.json"), files);
+        Assert.Contains(Path.Combine(temp.Root, ".local", "share", "opencode", "opencode.db"), files);
+        Assert.Contains(Path.Combine(temp.Root, ".codex", "auth.json"), files);
+        Assert.Contains(Path.Combine(temp.Root, ".codex", "thread_history_1.sqlite"), files);
+        Assert.Contains(Path.Combine(temp.Root, ".config", "openchamber", "projects"), directories);
+        Assert.Contains(Path.Combine(temp.Root, ".codex", "sessions"), directories);
+        Assert.Contains(Path.Combine(temp.Root, ".claude"), directories);
+        Assert.Contains(Path.Combine(temp.Root, ".gemini", "antigravity", "conversations"), directories);
+        Assert.Contains(Path.Combine(temp.LocalAppData, "hermes", "sessions"), directories);
+        Assert.Contains(Path.Combine(temp.RoamingAppData, "Cursor", "User", "globalStorage", "state.vscdb"), files);
+    }
+
+    [Fact]
+    public void Metadata_only_database_change_is_detected()
+    {
+        using var temp = new TempTree();
+        var database = Path.Combine(temp.Root, ".local", "share", "opencode", "opencode.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(database)!);
+        File.WriteAllText(database, "database");
+
+        var protection = new UserStateProtection(temp.Root, temp.Root, temp.Root);
+        var snapshot = protection.Capture();
+        File.AppendAllText(database, " changed");
+
+        var changes = protection.Verify(snapshot, []);
+        Assert.Contains(changes, change => change.Path == database);
+    }
+
+    [Fact]
+    public void Unchanged_protected_state_has_no_changes()
+    {
+        using var temp = new TempTree();
+        var files = new[]
+        {
+            Path.Combine(temp.Root, ".config", "opencode", "opencode.json"),
+            Path.Combine(temp.Root, ".local", "share", "opencode", "opencode.db"),
+            Path.Combine(temp.Root, ".gemini", "antigravity", "conversations", "session.db"),
+            Path.Combine(temp.Root, "hermes", "sessions", "session.json"),
+            Path.Combine(temp.Root, "Netpetra", "reputation.json"),
+        };
+        foreach (var file in files)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, "unchanged");
+        }
+
+        var protection = new UserStateProtection(temp.Root, temp.Root, temp.Root);
+        var snapshot = protection.Capture();
+
+        Assert.Empty(protection.Verify(snapshot, []));
+    }
+
+    [Fact]
+    public void OpenCode_first_install_creates_only_allowed_hook_changes()
+    {
+        using var temp = new TempTree();
+        Directory.CreateDirectory(Path.Combine(temp.Root, ".config", "opencode"));
+        var python = Path.Combine(
+            temp.Root,
+            "Netpetra",
+            "modules",
+            "blackbox",
+            "agent-blackbox",
+            "venv",
+            "Scripts",
+            "python.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(python)!);
+        File.WriteAllText(python, string.Empty);
+
+        var protection = new UserStateProtection(temp.Root, temp.Root, temp.Root);
+        var snapshot = protection.Capture();
+        var openCode = new OpenCodeProtection(temp.Root, temp.Root, temp.Root);
+        Assert.True(openCode.EnsureInstalled());
+
+        Assert.Empty(protection.Verify(
+            snapshot,
+            [openCode.PluginPath, openCode.LegacyPluginPath, openCode.BridgePath]));
+    }
+
+    [Fact]
+    public void Codex_hook_install_creates_only_the_allowed_hook_change()
+    {
+        using var temp = new TempTree();
+        Directory.CreateDirectory(Path.Combine(temp.Root, ".codex"));
+        var python = Path.Combine(
+            temp.Root,
+            "Netpetra",
+            "modules",
+            "blackbox",
+            "agent-blackbox",
+            "venv",
+            "Scripts",
+            "python.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(python)!);
+        File.WriteAllText(python, string.Empty);
+
+        var protection = new UserStateProtection(temp.Root, temp.Root, temp.Root);
+        var snapshot = protection.Capture();
+        var codex = new CodexProtection(temp.Root, temp.Root);
+        Assert.True(codex.EnsureInstalled());
+
+        Assert.Empty(protection.Verify(snapshot, [codex.HooksPath]));
+    }
+
+    [Fact]
+    public void Explicitly_allowed_uninstall_deletion_is_ignored()
+    {
+        using var temp = new TempTree();
+        var settings = Path.Combine(temp.Root, "Netpetra", "reputation.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settings)!);
+        File.WriteAllText(settings, "secret");
+
+        var protection = new UserStateProtection(temp.Root, temp.Root, temp.Root);
+        var snapshot = protection.Capture();
+        File.Delete(settings);
+
+        Assert.Empty(protection.Verify(snapshot, [settings]));
+    }
+
+    [Fact]
+    public void Netpetra_backup_files_are_not_treated_as_user_state_changes()
+    {
+        using var temp = new TempTree();
+        var hooks = Path.Combine(temp.Root, ".codex", "hooks.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(hooks)!);
+        File.WriteAllText(hooks, "{}");
+
+        var protection = new UserStateProtection(temp.Root, temp.Root, temp.Root);
+        var snapshot = protection.Capture();
+        File.WriteAllText(hooks + ".netpetra-backup-20261105", "{}");
+
+        Assert.Empty(protection.Verify(snapshot, []));
+    }
+
+    [Fact]
+    public void Explicit_installer_owned_paths_can_be_allowed()
+    {
+        using var temp = new TempTree();
+        var config = Path.Combine(temp.LocalAppData, "hermes", "config.yaml");
+        Directory.CreateDirectory(Path.GetDirectoryName(config)!);
+        File.WriteAllText(config, "plugins: {}\n");
+
+        var protection = new UserStateProtection(temp.Root, temp.Root, temp.Root);
+        var snapshot = protection.Capture();
+        File.WriteAllText(config, "plugins: {entries: {blackbox: {mode: block}}}\n");
+
+        Assert.Empty(protection.Verify(snapshot, [config]));
+    }
+
     private sealed class TempTree : IDisposable
     {
         public TempTree()
@@ -106,6 +263,10 @@ public sealed class UserStateProtectionTests
         }
 
         public string Root { get; }
+
+        public string LocalAppData => Root;
+
+        public string RoamingAppData => Root;
 
         public void Dispose()
         {
