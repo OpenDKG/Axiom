@@ -34,6 +34,7 @@ public sealed class AgentHookProbe
             {
                 "codex" => await TestCodexAsync(cancellationToken).ConfigureAwait(false),
                 "claude" => await TestClaudeAsync(cancellationToken).ConfigureAwait(false),
+                "cursor" => await TestCursorAsync(cancellationToken).ConfigureAwait(false),
                 "opencode" => await TestOpenCodeAsync("OpenCode", cancellationToken).ConfigureAwait(false),
                 "openchamber" => await TestOpenCodeAsync("OpenChamber", cancellationToken).ConfigureAwait(false),
                 _ => new AgentHookTestResult(
@@ -173,6 +174,76 @@ public sealed class AgentHookProbe
         return new AgentHookTestResult(
             "HOOK RAN",
             "Claude Code hook executed and reached the local guard without a block. The real Claude Code process was not exercised.");
+    }
+
+    private async Task<AgentHookTestResult> TestCursorAsync(CancellationToken cancellationToken)
+    {
+        var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
+        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var hook = Path.Combine(root, "netpetra-cursor-hook.py");
+        if (!File.Exists(python) || !File.Exists(hook))
+        {
+            return new AgentHookTestResult("FAIL", "Cursor hook or Blackbox Python runtime is missing.");
+        }
+
+        var startInfo = new ProcessStartInfo(python)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = root,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        startInfo.ArgumentList.Add(hook);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Could not start the Cursor hook.");
+        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
+        {
+            tool_name = "Read",
+            tool_input = new { path = Path.Combine(Path.GetTempPath(), "netpetra-hook-test.txt") },
+            conversation_id = "netpetra-hook-test",
+            tool_use_id = Guid.NewGuid().ToString("N"),
+        })).ConfigureAwait(false);
+        process.StandardInput.Close();
+
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var output = await outputTask.ConfigureAwait(false);
+        _ = await errorTask.ConfigureAwait(false);
+
+        if (process.ExitCode != 0)
+        {
+            return new AgentHookTestResult("FAIL", $"Cursor hook exited with {process.ExitCode}.");
+        }
+
+        if (IsDeniedCursorOutput(output))
+        {
+            return new AgentHookTestResult(
+                "BLOCKED",
+                "Cursor hook executed and returned permission: deny for the benign test call. " +
+                "The real Cursor process was not exercised.");
+        }
+
+        return new AgentHookTestResult(
+            "HOOK RAN",
+            "Cursor hook executed and reached the local guard without a block. The real Cursor process was not exercised.");
+    }
+
+    private static bool IsDeniedCursorOutput(string output)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(output);
+            return document.RootElement.TryGetProperty("permission", out var permission) &&
+                   string.Equals(permission.GetString(), "deny", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private async Task<AgentHookTestResult> TestOpenCodeAsync(string label, CancellationToken cancellationToken)

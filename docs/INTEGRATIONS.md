@@ -80,6 +80,16 @@ Blackbox guard, and returns `hookSpecificOutput.permissionDecision: deny` only w
 or restart; an installed hook is not proof of runtime blocking. Uninstalling Blackbox removes only
 the Netpetra hook entry and script.
 
+### Cursor
+
+Cursor user hooks are read from `~/.cursor/hooks.json`. Only after **Complete installation** does
+Netpetra merge a marker-owned `preToolUse` entry and install `netpetra-cursor-hook.py` in the
+Blackbox folder. Existing hooks and unrelated keys are preserved; the file is backed up before a
+change. The hook maps Cursor's `tool_name`/`tool_input` to the same Blackbox guard and returns
+`permission: deny` only when Blackbox blocks. **Partial installation** leaves Cursor files unchanged.
+Restart Cursor or reload hooks after installation; an installed hook is not proof of runtime
+blocking. Uninstalling Blackbox removes only the Netpetra hook entry and script.
+
 ### User-state protection
 
 Installation, hook repair, complete setup and uninstall are scoped to Netpetra-owned files and the
