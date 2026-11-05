@@ -16,9 +16,15 @@ public sealed record AgentHookTestResult(string Status, string Detail);
 /// </summary>
 public sealed class AgentHookProbe
 {
-    private readonly string _userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private readonly string _userProfile;
 
-    private readonly string _localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    private readonly string _localAppData;
+
+    public AgentHookProbe(string? userProfile = null, string? localAppData = null)
+    {
+        _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        _localAppData = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    }
 
     public async Task<AgentHookTestResult> TestAsync(string kind, CancellationToken cancellationToken)
     {
@@ -116,7 +122,13 @@ public sealed class AgentHookProbe
     {
         var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
         var python = Path.Combine(root, "venv", "Scripts", "python.exe");
-        var plugin = Path.Combine(_userProfile, ".config", "opencode", "plugins", "netpetra-blackbox.ts");
+        var plugin = Path.Combine(
+            _userProfile,
+            ".config",
+            "opencode",
+            "plugins",
+            "netpetra-blackbox",
+            "index.ts");
         if (!File.Exists(python) || !File.Exists(plugin))
         {
             return new AgentHookTestResult("FAIL", $"{label} hook files or Blackbox Python runtime are missing.");
@@ -126,6 +138,17 @@ public sealed class AgentHookProbe
         Directory.CreateDirectory(temp);
         try
         {
+            var shimDirectory = Path.Combine(temp, "node_modules", "@opencode", "plugin");
+            Directory.CreateDirectory(shimDirectory);
+            await File.WriteAllTextAsync(
+                Path.Combine(shimDirectory, "package.json"),
+                """{"name":"@opencode/plugin","type":"module","exports":{".":"./index.js"}}""",
+                cancellationToken).ConfigureAwait(false);
+            await File.WriteAllTextAsync(
+                Path.Combine(shimDirectory, "index.js"),
+                "export const Plugin = { define: (definition) => definition };\n",
+                cancellationToken).ConfigureAwait(false);
+
             var pluginCopy = Path.Combine(temp, "plugin.mjs");
             File.Copy(plugin, pluginCopy);
             var harness = Path.Combine(temp, "test.mjs");

@@ -29,8 +29,16 @@ public sealed class OpenCodeProtection
 
     public string ConfigDirectory => Path.Combine(_userProfile, ".config", "opencode");
 
-    public string PluginPath => Path.Combine(ConfigDirectory, "plugins", "netpetra-blackbox.ts");
+    /// <summary>OpenCode V2 directory plugin; this is the entrypoint V2 loads.</summary>
+    public string PluginDirectory => Path.Combine(ConfigDirectory, "plugins", "netpetra-blackbox");
 
+    /// <summary>OpenCode V2 entrypoint. V2 requires a directory package with index.ts.</summary>
+    public string PluginPath => Path.Combine(PluginDirectory, "index.ts");
+
+    /// <summary>OpenCode V1 flat-file fallback. Its setup is a no-op under V2.</summary>
+    public string V1PluginPath => Path.Combine(ConfigDirectory, "plugins", "netpetra-blackbox.ts");
+
+    /// <summary>Older V1 singular plugin file, removed only when Netpetra-owned.</summary>
     public string LegacyPluginPath => Path.Combine(ConfigDirectory, "plugin", "netpetra-blackbox.ts");
 
     public string OpenChamberPath => Path.Combine(
@@ -64,9 +72,15 @@ public sealed class OpenCodeProtection
         {
             try
             {
-                return File.Exists(PluginPath) &&
-                       File.ReadAllText(PluginPath).Contains("Managed by Netpetra", StringComparison.Ordinal) &&
-                       File.Exists(BridgePath);
+                if (!File.Exists(PluginPath) || !File.Exists(BridgePath))
+                {
+                    return false;
+                }
+
+                var source = File.ReadAllText(PluginPath);
+                return source.Contains("Managed by Netpetra", StringComparison.Ordinal) &&
+                       source.Contains("Plugin.define", StringComparison.Ordinal) &&
+                       source.Contains("ctx.tool.hook", StringComparison.Ordinal);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
@@ -75,7 +89,7 @@ public sealed class OpenCodeProtection
         }
     }
 
-    /// <summary>Writes the bridge and plugin when OpenCode and the Blackbox venv are present.</summary>
+    /// <summary>Writes the bridge, V2 directory plugin and V1 fallback when OpenCode and the Blackbox venv are present.</summary>
     public bool EnsureInstalled()
     {
         if (!IsOpenCodeDetected || !File.Exists(PythonPath))
@@ -86,25 +100,26 @@ public sealed class OpenCodeProtection
         try
         {
             if (StorageSafety.IsReparsePointInPath(ConfigDirectory) ||
-                StorageSafety.IsReparsePointInPath(Path.GetDirectoryName(PluginPath)!))
+                StorageSafety.IsReparsePointInPath(PluginDirectory) ||
+                StorageSafety.IsReparsePointInPath(PluginPath) ||
+                StorageSafety.IsReparsePointInPath(V1PluginPath) ||
+                StorageSafety.IsReparsePointInPath(LegacyPluginPath))
             {
                 // Never write through a junction/symlink in a user-managed agent configuration.
                 return false;
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(PluginPath)!);
+            Directory.CreateDirectory(PluginDirectory);
 
-            if (File.Exists(PluginPath) &&
-                !File.ReadAllText(PluginPath).Contains("Managed by Netpetra", StringComparison.Ordinal))
+            if (File.Exists(PluginPath) && !IsManaged(PluginPath))
             {
-                // Never overwrite a user-authored plugin at the same path.
+                // Never overwrite a user-authored V2 plugin at the Netpetra path.
                 return false;
             }
 
-            if (File.Exists(LegacyPluginPath) &&
-                !StorageSafety.IsReparsePointInPath(LegacyPluginPath) &&
-                File.ReadAllText(LegacyPluginPath).Contains("Managed by Netpetra", StringComparison.Ordinal))
+            if (File.Exists(LegacyPluginPath) && IsManaged(LegacyPluginPath))
             {
+                StorageSafety.BackupFile(LegacyPluginPath);
                 File.Delete(LegacyPluginPath);
             }
 
@@ -114,11 +129,18 @@ public sealed class OpenCodeProtection
                 File.WriteAllText(BridgePath, bridge, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             }
 
-            var plugin = BuildPlugin();
-            if (!File.Exists(PluginPath) || File.ReadAllText(PluginPath) != plugin)
+            WriteManagedFile(PluginPath, BuildV2Plugin());
+
+            try
             {
-                StorageSafety.BackupFile(PluginPath);
-                File.WriteAllText(PluginPath, plugin, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                if (!File.Exists(V1PluginPath) || IsManaged(V1PluginPath))
+                {
+                    WriteManagedFile(V1PluginPath, BuildV1Plugin());
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // The V2 directory plugin is already installed; a blocked V1 fallback is not fatal.
             }
 
             return true;
@@ -129,7 +151,21 @@ public sealed class OpenCodeProtection
         }
     }
 
-    private string BuildPlugin()
+    private static bool IsManaged(string path) =>
+        File.ReadAllText(path).Contains("Managed by Netpetra", StringComparison.Ordinal);
+
+    private static void WriteManagedFile(string path, string content)
+    {
+        if (File.Exists(path) && File.ReadAllText(path) == content)
+        {
+            return;
+        }
+
+        StorageSafety.BackupFile(path);
+        File.WriteAllText(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    private string BuildV1Plugin()
     {
         var python = JsPath(PythonPath);
         var bridge = JsPath(BridgePath);
@@ -137,7 +173,7 @@ public sealed class OpenCodeProtection
         var evidence = JsPath(EvidencePath);
 
         return $$"""
-            // Managed by Netpetra. Installed only when Blackbox is present.
+            // Managed by Netpetra. OpenCode V1 fallback; V2 is handled by the directory plugin.
             import { spawnSync } from "node:child_process"
             import { appendFileSync } from "node:fs"
 
@@ -163,8 +199,10 @@ public sealed class OpenCodeProtection
             }
 
             export default {
-              id: "netpetra-blackbox",
+              id: "netpetra-blackbox-v1",
               async setup(context) {
+                // V2 loads the directory plugin and passes ctx.app.version. Do not register twice.
+                if (context?.app?.version?.startsWith("2.")) return
                 record("HOOK_LOADED", "", "", "loaded", 0, "")
                 context.tool.hook("execute.before", async (event) => {
                   const started = Date.now()
@@ -207,6 +245,88 @@ public sealed class OpenCodeProtection
                 })
               },
             }
+            """;
+    }
+
+    private string BuildV2Plugin()
+    {
+        var python = JsPath(PythonPath);
+        var bridge = JsPath(BridgePath);
+        var workingDirectory = JsPath(BlackboxAgentRoot);
+        var evidence = JsPath(EvidencePath);
+
+        return $$"""
+            // Managed by Netpetra. OpenCode V2 directory plugin.
+            import { Plugin } from "@opencode/plugin"
+            import { spawnSync } from "node:child_process"
+            import { appendFileSync } from "node:fs"
+
+            const python = "{{python}}"
+            const bridge = "{{bridge}}"
+            const workingDirectory = "{{workingDirectory}}"
+            const evidence = "{{evidence}}"
+
+            function record(eventType, tool, decision, guardStatus, durationMs, errorCode) {
+              try {
+                appendFileSync(evidence, JSON.stringify({
+                  timestampUtc: new Date().toISOString(),
+                  framework: "opencode",
+                  eventType,
+                  tool: tool || "",
+                  decision: decision || "",
+                  guardStatus: guardStatus || "",
+                  durationMs: durationMs || 0,
+                  errorCode: errorCode || "",
+                }) + "\n")
+              } catch {
+              }
+            }
+
+            export default Plugin.define({
+              id: "netpetra-blackbox-v2",
+              async setup(ctx) {
+                record("HOOK_LOADED", "", "", "loaded", 0, "")
+                await ctx.tool.hook("execute.before", async (event) => {
+                  const started = Date.now()
+                  let decision
+                  try {
+                    const result = spawnSync(python, [bridge], {
+                      input: JSON.stringify({
+                        framework: "opencode",
+                        tool: event.tool,
+                        args: event.input,
+                        session: event.sessionID,
+                        call: event.id,
+                      }),
+                      cwd: workingDirectory,
+                      encoding: "utf8",
+                      timeout: 8000,
+                      windowsHide: true,
+                    })
+                    if (result.status !== 0 || !result.stdout) {
+                      record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "bridge")
+                      return
+                    }
+                    decision = JSON.parse(result.stdout)
+                  } catch {
+                    record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "spawn")
+                    return
+                  }
+
+                  const blocked = decision && decision.action === "block"
+                  record(
+                    blocked ? "GUARD_BLOCKED" : "GUARD_ALLOWED",
+                    event.tool,
+                    blocked ? "block" : "allowed",
+                    blocked ? "blocked" : "allowed",
+                    Date.now() - started,
+                    "")
+                  if (blocked) {
+                    throw new Error(decision.message || "Blocked by Netpetra/Blackbox")
+                  }
+                })
+              },
+            })
             """;
     }
 

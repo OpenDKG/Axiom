@@ -11,7 +11,13 @@ public sealed class OptionalModuleUninstallerTests
     public void Unmanaged_opencode_plugin_is_never_deleted()
     {
         using var temp = new TempTree();
-        var plugin = Path.Combine(temp.Root, ".config", "opencode", "plugins", "netpetra-blackbox.ts");
+        var plugin = Path.Combine(
+            temp.Root,
+            ".config",
+            "opencode",
+            "plugins",
+            "netpetra-blackbox",
+            "index.ts");
         Directory.CreateDirectory(Path.GetDirectoryName(plugin)!);
         File.WriteAllText(plugin, "// user-authored plugin\n");
 
@@ -23,7 +29,28 @@ public sealed class OptionalModuleUninstallerTests
     }
 
     [Fact]
-    public void Managed_opencode_plugin_is_removed_and_backed_up()
+    public void Managed_opencode_v2_plugin_is_removed_and_backed_up()
+    {
+        using var temp = new TempTree();
+        var plugin = Path.Combine(
+            temp.Root,
+            ".config",
+            "opencode",
+            "plugins",
+            "netpetra-blackbox",
+            "index.ts");
+        Directory.CreateDirectory(Path.GetDirectoryName(plugin)!);
+        File.WriteAllText(plugin, "// Managed by Netpetra. test\n");
+
+        var uninstaller = new OptionalModuleUninstaller(temp.Root, temp.Root);
+
+        Assert.True(uninstaller.RemoveManagedOpenCodePlugin());
+        Assert.False(File.Exists(plugin));
+        Assert.NotEmpty(Directory.GetFiles(Path.GetDirectoryName(plugin)!, "index.ts.netpetra-backup-*"));
+    }
+
+    [Fact]
+    public void Managed_opencode_v1_fallback_is_removed()
     {
         using var temp = new TempTree();
         var plugin = Path.Combine(temp.Root, ".config", "opencode", "plugins", "netpetra-blackbox.ts");
@@ -34,7 +61,6 @@ public sealed class OptionalModuleUninstallerTests
 
         Assert.True(uninstaller.RemoveManagedOpenCodePlugin());
         Assert.False(File.Exists(plugin));
-        Assert.NotEmpty(Directory.GetFiles(Path.GetDirectoryName(plugin)!, "netpetra-blackbox.ts.netpetra-backup-*"));
     }
 
     private sealed class TempTree : IDisposable

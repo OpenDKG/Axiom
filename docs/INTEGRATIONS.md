@@ -42,12 +42,16 @@ page, choose **Install/repair agent hooks...** and select:
 
 A complete OpenCode/OpenChamber installation writes:
 
-- `~/.config/opencode/plugins/netpetra-blackbox.ts`, a `tool.execute.before` hook;
+- `~/.config/opencode/plugins/netpetra-blackbox/index.ts`, a V2 directory plugin using
+  `Plugin.define` and `ctx.tool.hook("execute.before", ...)`;
+- `~/.config/opencode/plugins/netpetra-blackbox.ts`, a V1 flat-file fallback that is a no-op when
+  OpenCode V2 loads it;
 - `%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py`, which calls
   Blackbox's Python guard with the tool name and arguments.
 
 Existing Netpetra-managed files are backed up beside the originals before replacement. User-authored
-plugins at the same path, reparse points/junctions and unrelated settings are never overwritten.
+plugins at the same paths, reparse points/junctions and unrelated settings are never overwritten.
+`IsInstalled` requires the V2 `Plugin.define`/`ctx.tool.hook` entrypoint, not just a marker string.
 Status refresh remains read-only. The current Blackbox mode applies: `audit` records findings,
 `block` rejects confirmed threats. Bridge or Blackbox failures fail open, like the Hermes hooks.
 Restart OpenCode/OpenChamber after the first install so the plugin is loaded. Uninstalling Blackbox

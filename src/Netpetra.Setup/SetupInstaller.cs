@@ -186,6 +186,7 @@ internal static class SetupInstaller
                             protectedBefore,
                             [
                                 openCodeProtection.PluginPath,
+                                openCodeProtection.V1PluginPath,
                                 openCodeProtection.LegacyPluginPath,
                                 openCodeProtection.BridgePath,
                                 codexProtection.HooksPath,
