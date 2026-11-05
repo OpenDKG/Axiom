@@ -696,6 +696,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             case "Blackbox":
                 allowedChanges.Add(_codexProtection.HooksPath);
                 allowedChanges.Add(_uninstaller.OpenCodePlugin);
+                allowedChanges.Add(_uninstaller.OpenCodeV1Plugin);
                 allowedChanges.Add(_uninstaller.OpenCodeLegacyPlugin);
                 uninstallSucceeded = await Task.Run(
                     () => _uninstaller.UninstallBlackboxAndWait()).ConfigureAwait(true);
@@ -770,6 +771,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         var allowedHookChanges = new[]
         {
             _openCodeProtection.PluginPath,
+            _openCodeProtection.V1PluginPath,
             _openCodeProtection.LegacyPluginPath,
             _openCodeProtection.BridgePath,
             _codexProtection.HooksPath,

@@ -36,7 +36,16 @@ public sealed class OptionalModuleUninstaller
         "bin",
         "blackbox.cmd");
 
-    public string OpenCodePlugin => Path.Combine(
+    public string OpenCodePluginDirectory => Path.Combine(
+        _userProfile,
+        ".config",
+        "opencode",
+        "plugins",
+        "netpetra-blackbox");
+
+    public string OpenCodePlugin => Path.Combine(OpenCodePluginDirectory, "index.ts");
+
+    public string OpenCodeV1Plugin => Path.Combine(
         _userProfile,
         ".config",
         "opencode",
@@ -59,15 +68,33 @@ public sealed class OptionalModuleUninstaller
     public bool IsDkgInstalled => Directory.Exists(DkgRoot) || Directory.Exists(DkgHome);
 
     /// <summary>
-    /// Removes only the Netpetra-managed OpenCode plugin. A user-authored plugin at either the
-    /// current or legacy path is never deleted.
+    /// Removes only Netpetra-managed OpenCode V2/V1 plugins. A user-authored plugin at any current
+    /// or legacy path is never deleted.
     /// </summary>
     public bool RemoveManagedOpenCodePlugin()
     {
         var removed = false;
         removed |= RemoveManagedFile(OpenCodePlugin);
+        removed |= RemoveManagedFile(OpenCodeV1Plugin);
         removed |= RemoveManagedFile(OpenCodeLegacyPlugin);
+        TryRemoveEmptyDirectory(OpenCodePluginDirectory);
         return removed;
+    }
+
+    private static void TryRemoveEmptyDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path) &&
+                !StorageSafety.IsReparsePointInPath(path) &&
+                !Directory.EnumerateFileSystemEntries(path).Any())
+            {
+                Directory.Delete(path);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     public void UninstallBlackbox()

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.Diagnostics;
 using System.IO;
 using Netpetra.UI.Services;
 using Xunit;
@@ -53,9 +54,14 @@ public sealed class AgentStorageSafetyTests
     public void Approved_plugin_write_backs_up_an_existing_managed_plugin()
     {
         using var temp = new TempTree();
-        var pluginDirectory = Path.Combine(temp.Root, ".config", "opencode", "plugins");
+        var pluginDirectory = Path.Combine(
+            temp.Root,
+            ".config",
+            "opencode",
+            "plugins",
+            "netpetra-blackbox");
         Directory.CreateDirectory(pluginDirectory);
-        var plugin = Path.Combine(pluginDirectory, "netpetra-blackbox.ts");
+        var plugin = Path.Combine(pluginDirectory, "index.ts");
         File.WriteAllText(plugin, "// Managed by Netpetra. old version\n");
 
         var python = Path.Combine(
@@ -73,8 +79,102 @@ public sealed class AgentStorageSafetyTests
         var openCode = new OpenCodeProtection(temp.Root, temp.Root, temp.Root);
         Assert.True(openCode.EnsureInstalled());
 
-        Assert.True(File.ReadAllText(plugin).Contains("Managed by Netpetra", StringComparison.Ordinal));
-        Assert.NotEmpty(Directory.GetFiles(pluginDirectory, "netpetra-blackbox.ts.netpetra-backup-*"));
+        Assert.True(File.ReadAllText(plugin).Contains("Plugin.define", StringComparison.Ordinal));
+        Assert.True(File.ReadAllText(plugin).Contains("ctx.tool.hook", StringComparison.Ordinal));
+        Assert.True(File.Exists(openCode.V1PluginPath));
+        Assert.Contains(
+            "startsWith(\"2.\")",
+            File.ReadAllText(openCode.V1PluginPath),
+            StringComparison.Ordinal);
+        Assert.True(openCode.IsInstalled);
+        Assert.NotEmpty(Directory.GetFiles(pluginDirectory, "index.ts.netpetra-backup-*"));
+    }
+
+    [Fact]
+    public async Task OpenCode_v2_plugin_registers_and_runs_the_guard_hook()
+    {
+        if (!IsNodeAvailable())
+        {
+            return;
+        }
+
+        using var temp = new TempTree();
+        Directory.CreateDirectory(Path.Combine(temp.Root, ".config", "opencode"));
+        var python = Path.Combine(
+            temp.Root,
+            "Netpetra",
+            "modules",
+            "blackbox",
+            "agent-blackbox",
+            "venv",
+            "Scripts",
+            "python.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(python)!);
+        File.WriteAllText(python, string.Empty);
+
+        var protection = new OpenCodeProtection(temp.Root, temp.Root, temp.Root);
+        Assert.True(protection.EnsureInstalled());
+
+        var probe = new AgentHookProbe(temp.Root, temp.Root);
+        var result = await probe.TestAsync("opencode", CancellationToken.None);
+
+        Assert.Equal("HOOK RAN", result.Status);
+    }
+
+    private static bool IsNodeAvailable()
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo("node", "--version")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+            if (process is null)
+            {
+                return false;
+            }
+
+            process.WaitForExit(3000);
+            return process.HasExited && process.ExitCode == 0;
+        }
+        catch (Exception exception) when (exception is
+            System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    [Fact]
+    public void Old_flat_v1_plugin_is_not_reported_as_installed()
+    {
+        using var temp = new TempTree();
+        var pluginDirectory = Path.Combine(temp.Root, ".config", "opencode", "plugins");
+        Directory.CreateDirectory(pluginDirectory);
+        File.WriteAllText(
+            Path.Combine(pluginDirectory, "netpetra-blackbox.ts"),
+            "// Managed by Netpetra. old V1 file\n");
+
+        var python = Path.Combine(
+            temp.Root,
+            "Netpetra",
+            "modules",
+            "blackbox",
+            "agent-blackbox",
+            "venv",
+            "Scripts",
+            "python.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(python)!);
+        File.WriteAllText(python, string.Empty);
+
+        var openCode = new OpenCodeProtection(temp.Root, temp.Root, temp.Root);
+        Assert.False(openCode.IsInstalled);
+        Assert.True(openCode.EnsureInstalled());
+        Assert.True(openCode.IsInstalled);
+        Assert.True(File.Exists(openCode.PluginPath));
+        Assert.Contains("Plugin.define", File.ReadAllText(openCode.PluginPath), StringComparison.Ordinal);
     }
 
     [Fact]

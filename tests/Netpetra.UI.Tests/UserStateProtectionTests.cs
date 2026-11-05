@@ -181,7 +181,7 @@ public sealed class UserStateProtectionTests
 
         Assert.Empty(protection.Verify(
             snapshot,
-            [openCode.PluginPath, openCode.LegacyPluginPath, openCode.BridgePath]));
+            [openCode.PluginPath, openCode.V1PluginPath, openCode.LegacyPluginPath, openCode.BridgePath]));
     }
 
     [Fact]
