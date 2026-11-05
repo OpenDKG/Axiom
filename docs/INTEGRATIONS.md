@@ -90,6 +90,17 @@ change. The hook maps Cursor's `tool_name`/`tool_input` to the same Blackbox gua
 Restart Cursor or reload hooks after installation; an installed hook is not proof of runtime
 blocking. Uninstalling Blackbox removes only the Netpetra hook entry and script.
 
+### GitHub Copilot CLI
+
+Copilot CLI user hooks are read from `~/.copilot/hooks/*.json`. Only after **Complete installation**
+does Netpetra create its own `~/.copilot/hooks/netpetra.json` and install
+`netpetra-copilot-hook.py`; other hook files are never rewritten. The hook maps Copilot's
+`toolName`/`toolArgs` to the Blackbox guard and returns `permissionDecision: deny` only when
+Blackbox blocks. **Partial installation** leaves Copilot files unchanged. Copilot `preToolUse`
+command hooks are fail-closed on crashes/non-zero exits, so the Netpetra script always emits one
+valid JSON decision. Restart Copilot CLI if it was already running. Uninstalling Blackbox removes
+only the Netpetra hook file and script.
+
 ### User-state protection
 
 Installation, hook repair, complete setup and uninstall are scoped to Netpetra-owned files and the

@@ -140,6 +140,7 @@ public sealed class UserStateProtection
                 HomeFile(".cursor/mcp.json", "Cursor MCP config"),
                 HomeFile(".copilot/config.json", "Copilot config"),
                 HomeFile(".copilot/mcp-config.json", "Copilot MCP config"),
+                HomeFile(".copilot/hooks/netpetra.json", "Copilot hooks"),
 
                 // Hermes user state and Blackbox-managed Hermes configuration.
                 LocalFile("hermes/config.yaml", "Hermes config"),

@@ -35,6 +35,7 @@ public sealed class AgentHookProbe
                 "codex" => await TestCodexAsync(cancellationToken).ConfigureAwait(false),
                 "claude" => await TestClaudeAsync(cancellationToken).ConfigureAwait(false),
                 "cursor" => await TestCursorAsync(cancellationToken).ConfigureAwait(false),
+                "copilot" => await TestCopilotAsync(cancellationToken).ConfigureAwait(false),
                 "opencode" => await TestOpenCodeAsync("OpenCode", cancellationToken).ConfigureAwait(false),
                 "openchamber" => await TestOpenCodeAsync("OpenChamber", cancellationToken).ConfigureAwait(false),
                 _ => new AgentHookTestResult(
@@ -239,6 +240,76 @@ public sealed class AgentHookProbe
             using var document = JsonDocument.Parse(output);
             return document.RootElement.TryGetProperty("permission", out var permission) &&
                    string.Equals(permission.GetString(), "deny", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private async Task<AgentHookTestResult> TestCopilotAsync(CancellationToken cancellationToken)
+    {
+        var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
+        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var hook = Path.Combine(root, "netpetra-copilot-hook.py");
+        if (!File.Exists(python) || !File.Exists(hook))
+        {
+            return new AgentHookTestResult("FAIL", "Copilot hook or Blackbox Python runtime is missing.");
+        }
+
+        var startInfo = new ProcessStartInfo(python)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = root,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        startInfo.ArgumentList.Add(hook);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Could not start the Copilot hook.");
+        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
+        {
+            toolName = "read",
+            toolArgs = new { path = Path.Combine(Path.GetTempPath(), "netpetra-hook-test.txt") },
+            sessionId = "netpetra-hook-test",
+            toolCallId = Guid.NewGuid().ToString("N"),
+        })).ConfigureAwait(false);
+        process.StandardInput.Close();
+
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var output = await outputTask.ConfigureAwait(false);
+        _ = await errorTask.ConfigureAwait(false);
+
+        if (process.ExitCode != 0)
+        {
+            return new AgentHookTestResult("FAIL", $"Copilot hook exited with {process.ExitCode}.");
+        }
+
+        if (IsDeniedCopilotOutput(output))
+        {
+            return new AgentHookTestResult(
+                "BLOCKED",
+                "Copilot hook executed and returned permissionDecision: deny for the benign test call. " +
+                "The real Copilot CLI process was not exercised.");
+        }
+
+        return new AgentHookTestResult(
+            "HOOK RAN",
+            "Copilot hook executed and reached the local guard without a block. The real Copilot CLI process was not exercised.");
+    }
+
+    private static bool IsDeniedCopilotOutput(string output)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(output);
+            return document.RootElement.TryGetProperty("permissionDecision", out var decision) &&
+                   string.Equals(decision.GetString(), "deny", StringComparison.OrdinalIgnoreCase);
         }
         catch (JsonException)
         {
