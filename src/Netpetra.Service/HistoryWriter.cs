@@ -48,13 +48,17 @@ public sealed partial class HistoryWriter(
 
         do
         {
+            // Capture the revision before the snapshot. If a newer snapshot arrives while the
+            // write is in progress, the next tick must still see a revision greater than the one
+            // recorded here; reading Revision after the write could silently skip that snapshot.
+            var revision = cache.Revision;
             var snapshot = cache.Latest;
-            if (snapshot is not null && cache.Revision != lastRevision)
+            if (snapshot is not null && revision != lastRevision)
             {
                 try
                 {
                     await store.UpsertAsync(snapshot, stoppingToken).ConfigureAwait(false);
-                    lastRevision = cache.Revision;
+                    lastRevision = revision;
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {

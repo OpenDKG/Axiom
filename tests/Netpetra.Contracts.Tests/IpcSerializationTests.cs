@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.IO.Pipes;
+using System.Text;
 using System.Text.Json;
 using Netpetra.Contracts.Firewall;
 using Netpetra.Contracts.Ipc;
@@ -81,5 +83,36 @@ public sealed class IpcSerializationTests
         Assert.Contains("\"direction\":\"outbound\"", json, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"action\":\"block\"", json, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"createdBy\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Malformed_service_response_is_reported_as_ipc_error()
+    {
+        var pipeName = "netpetra-contract-test-" + Guid.NewGuid().ToString("N");
+        await using var server = new NamedPipeServerStream(
+            pipeName,
+            PipeDirection.InOut,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous);
+        var accept = server.WaitForConnectionAsync();
+        var client = new IpcPipeClient(
+            pipeName,
+            connectTimeout: TimeSpan.FromSeconds(2),
+            requestTimeout: TimeSpan.FromSeconds(2));
+
+        var request = client.SendAsync<object>(
+            IpcCommandTypes.ServiceHealth,
+            payload: null,
+            CancellationToken.None);
+
+        await accept;
+        var reader = new IpcLineReader(server);
+        await reader.ReadLineAsync(IpcProtocol.MaxMessageBytes, CancellationToken.None);
+        await server.WriteAsync(Encoding.UTF8.GetBytes("{not-json\n"));
+        await server.FlushAsync();
+
+        var exception = await Assert.ThrowsAsync<IpcClientException>(() => request);
+        Assert.Equal(IpcErrorCodes.InvalidRequest, exception.Code);
     }
 }

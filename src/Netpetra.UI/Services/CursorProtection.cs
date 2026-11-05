@@ -183,7 +183,9 @@ public sealed class CursorProtection
         }
 
         if (root["version"] is JsonNode version &&
-            (version.GetValueKind() != JsonValueKind.Number || version.GetValue<int>() != 1))
+            (version is not JsonValue value ||
+             !value.TryGetValue<int>(out var versionNumber) ||
+             versionNumber != 1))
         {
             return false;
         }

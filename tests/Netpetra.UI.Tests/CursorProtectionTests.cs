@@ -84,6 +84,10 @@ public sealed class CursorProtectionTests
         File.WriteAllText(hooksPath, """{"version":2,"hooks":{}}""");
         Assert.False(protection.EnsureInstalled());
         Assert.Equal("""{"version":2,"hooks":{}}""", File.ReadAllText(hooksPath));
+
+        File.WriteAllText(hooksPath, """{"version":1.5,"hooks":{}}""");
+        Assert.False(protection.EnsureInstalled());
+        Assert.Equal("""{"version":1.5,"hooks":{}}""", File.ReadAllText(hooksPath));
     }
 
     private static void CreateFakePython(string root)

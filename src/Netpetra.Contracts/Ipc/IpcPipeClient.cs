@@ -97,6 +97,13 @@ public sealed class IpcPipeClient(
                 "The service did not respond in time.",
                 exception);
         }
+        catch (JsonException exception)
+        {
+            throw new IpcClientException(
+                IpcErrorCodes.InvalidRequest,
+                "The service returned malformed JSON.",
+                exception);
+        }
         catch (IOException exception)
         {
             throw new IpcClientException(

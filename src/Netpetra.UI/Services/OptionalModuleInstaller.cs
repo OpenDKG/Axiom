@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -207,8 +208,16 @@ public sealed class OptionalModuleInstaller
         };
         startInfo.Environment["DKG_HOME"] = DkgHome;
 
-        Process.Start(startInfo);
-        return true;
+        try
+        {
+            using var process = Process.Start(startInfo);
+            return process is not null;
+        }
+        catch (Exception exception) when (exception is
+                     Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -229,24 +238,32 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        var launcher = Path.Combine(agent, "start-dashboard.py");
-        File.WriteAllText(
-            launcher,
-            "import argparse\n" +
-            "from plugins.blackbox.dashboard import cmd_dashboard\n" +
-            "raise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))\n",
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-
-        var startInfo = new ProcessStartInfo(venv, $"\"{launcher}\"")
+        try
         {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden,
-            WorkingDirectory = agent,
-        };
+            var launcher = Path.Combine(agent, "start-dashboard.py");
+            File.WriteAllText(
+                launcher,
+                "import argparse\n" +
+                "from plugins.blackbox.dashboard import cmd_dashboard\n" +
+                "raise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))\n",
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
-        Process.Start(startInfo);
-        return true;
+            var startInfo = new ProcessStartInfo(venv, $"\"{launcher}\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                WorkingDirectory = agent,
+            };
+
+            using var process = Process.Start(startInfo);
+            return process is not null;
+        }
+        catch (Exception exception) when (exception is
+                     Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static bool IsUnsafeInstallRoot(params string[] paths) =>

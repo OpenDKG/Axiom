@@ -103,7 +103,8 @@ public sealed class OpenCodeProtection
                 StorageSafety.IsReparsePointInPath(PluginDirectory) ||
                 StorageSafety.IsReparsePointInPath(PluginPath) ||
                 StorageSafety.IsReparsePointInPath(V1PluginPath) ||
-                StorageSafety.IsReparsePointInPath(LegacyPluginPath))
+                StorageSafety.IsReparsePointInPath(LegacyPluginPath) ||
+                StorageSafety.IsReparsePointInPath(BridgePath))
             {
                 // Never write through a junction/symlink in a user-managed agent configuration.
                 return false;

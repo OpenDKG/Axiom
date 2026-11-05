@@ -8,6 +8,23 @@ namespace Netpetra.UI.Tests;
 public sealed class ClineProtectionTests
 {
     [Fact]
+    public async Task Probe_refuses_a_user_authored_Cline_hook()
+    {
+        using var temp = new TempTree();
+        var hooksDirectory = Path.Combine(temp.Root, "Documents", "Cline", "Hooks");
+        Directory.CreateDirectory(hooksDirectory);
+        var hook = Path.Combine(hooksDirectory, "PreToolUse.py");
+        File.WriteAllText(hook, "# user-authored hook\n");
+        CreateFakePython(temp.Root);
+
+        var result = await new AgentHookProbe(temp.Root, temp.Root)
+            .TestAsync("cline", CancellationToken.None);
+
+        Assert.Equal("FAIL", result.Status);
+        Assert.Contains("not Netpetra-managed", result.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Install_writes_marker_owned_PreToolUse()
     {
         using var temp = new TempTree();
