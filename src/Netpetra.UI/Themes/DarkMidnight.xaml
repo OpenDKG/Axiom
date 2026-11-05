@@ -6,12 +6,12 @@
   <SolidColorBrush x:Key="Brush.WindowBackground" Color="#0B1024" />
   <SolidColorBrush x:Key="Brush.Surface" Color="#121A32" />
   <SolidColorBrush x:Key="Brush.SurfaceAlt" Color="#18223C" />
-  <SolidColorBrush x:Key="Brush.Border" Color="#293451" />
-  <SolidColorBrush x:Key="Brush.BorderStrong" Color="#384B68" />
+  <SolidColorBrush x:Key="Brush.Border" Color="#3A4868" />
+  <SolidColorBrush x:Key="Brush.BorderStrong" Color="#5C75A0" />
 
   <SolidColorBrush x:Key="Brush.TextPrimary" Color="#EFF3FF" />
   <SolidColorBrush x:Key="Brush.TextSecondary" Color="#B1BCD6" />
-  <SolidColorBrush x:Key="Brush.TextMuted" Color="#8494B4" />
+  <SolidColorBrush x:Key="Brush.TextMuted" Color="#8F9EBE" />
 
   <SolidColorBrush x:Key="Brush.Accent" Color="#A5A6FF" />
   <SolidColorBrush x:Key="Brush.AccentSoft" Color="#24224A" />
