@@ -94,7 +94,7 @@ Service in console mode + published standalone UI with `--service`.
 | E09 | Nine-page navigation (Overview, Connections, Applications, Events, Agents, Firewall, Files, Security, Settings); Agents sits above Firewall | ✅ | `agents-nav.png`, `agents-page.png`, `security-no-agents.png` |
 | E10 | Files points at the working local scan on Security; background tracking is explicitly disabled | ✅ no fake scanner | `files-open-security.png` |
 | E11 | Connections shows the unknown country placeholder | ✅ | `fnd006-connections.png` |
-| E12 | Overview 5m chart shows `LIVE COUNTERS` from system-wide interface counters; longer ranges show `DEMO SERIES`; markers use first-seen time | ✅ | `traffic-live2.png` |
+| E12 | Overview 5m chart shows `LIVE COUNTERS` from timestamped system-wide interface samples; longer ranges show an explicit unavailable state; markers use first-seen time | ✅ | `traffic-live2.png` |
 | E13 | Firewall page reads capability `Available`, 0 owned rules and write path `disabled` | ✅ no rule changed | `netpetra-firewall.png` |
 | E14 | Gate-open service: Applications block buttons enabled, Firewall shows `TEST VM` and write path enabled; no click | ✅ 0 owned rules after | `netpetra-applications-writes-enabled.png`, `netpetra-firewall-writes-enabled.png` |
 | E15 | Advanced scope panel: protocol, ports, CIDR/addresses and profile checkboxes; block buttons disabled with the gate closed | ✅ no rule written | `netpetra-applications-scope-expanded.png` |
@@ -138,8 +138,8 @@ is UAC-filtered (`BUILTIN\Administrators` is deny-only) and has no `SeSystemProf
 Therefore:
 
 - No ETW collector is implemented; there are no per-process byte claims.
-- The 5m chart uses system-wide interface counters (`LIVE COUNTERS`); longer ranges remain
-  `DEMO SERIES`.
+- The 5m chart uses timestamped system-wide interface counters (`LIVE COUNTERS`); longer ranges
+  show an explicit unavailable state, never simulated history.
 - Per-process verification moves to an elevated session or a VM.
 
 ## 6. Scenario matrix (§13)
