@@ -116,6 +116,7 @@ public sealed class OptionalModuleUninstaller
     private void PrepareBlackboxRemoval()
     {
         new CodexProtection().Remove();
+        new ClaudeProtection().Remove();
         RemoveManagedOpenCodePlugin();
     }
 

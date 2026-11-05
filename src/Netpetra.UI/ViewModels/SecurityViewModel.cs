@@ -84,6 +84,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
         "opencode" => "OpenCode",
         "openchamber" => "OpenChamber",
         "codex" => "Codex",
+        "claude" => "Claude Code",
         _ => Kind,
     };
 
@@ -91,7 +92,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
 
     public bool IsProtected => Status == "PROTECTED";
 
-    public bool CanTest => Kind is "opencode" or "openchamber" or "codex";
+    public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude";
 
     public string TestResult { get; init; } = string.Empty;
 }
@@ -125,6 +126,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly OpenCodeProtection _openCodeProtection = new();
 
     private readonly CodexProtection _codexProtection = new();
+
+    private readonly ClaudeProtection _claudeProtection = new();
 
     private readonly AgentHookProbe _agentHookProbe = new();
 
@@ -281,7 +284,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     public string AgentStatusText =>
         "DKG and Blackbox status, install actions and the workspaces they report. " +
-        "OpenCode, OpenChamber, Codex and Hermes are listed below; an installed hook is not proof of runtime blocking.";
+        "OpenCode, OpenChamber, Codex, Claude Code and Hermes are listed below; an installed hook is not proof of runtime blocking.";
 
     public string AgentHookInstallHint =>
         "Status refresh is read-only. Agent hooks are installed only when you choose Install/Repair hooks and select " +
@@ -695,6 +698,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         {
             case "Blackbox":
                 allowedChanges.Add(_codexProtection.HooksPath);
+                allowedChanges.Add(_claudeProtection.SettingsPath);
                 allowedChanges.Add(_uninstaller.OpenCodePlugin);
                 allowedChanges.Add(_uninstaller.OpenCodeV1Plugin);
                 allowedChanges.Add(_uninstaller.OpenCodeLegacyPlugin);
@@ -760,13 +764,14 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (!dialog.CompleteInstallation)
         {
-            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber or Codex hook files were changed.";
+            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber, Codex or Claude Code hook files were changed.";
             return;
         }
 
         var snapshot = await Task.Run(() => _userStateProtection.Capture()).ConfigureAwait(true);
         var openCode = _openCodeProtection.EnsureInstalled();
         var codex = _codexProtection.EnsureInstalled();
+        var claude = _claudeProtection.EnsureInstalled();
 
         var allowedHookChanges = new[]
         {
@@ -776,6 +781,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             _openCodeProtection.BridgePath,
             _codexProtection.HooksPath,
             _codexProtection.HookScriptPath,
+            _claudeProtection.SettingsPath,
+            _claudeProtection.HookScriptPath,
         };
         var unexpectedChanges = await Task.Run(
             () => _userStateProtection.Verify(snapshot, allowedHookChanges)).ConfigureAwait(true);
@@ -793,7 +800,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         InstallStatusText =
             $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
-            $"Codex {(codex ? "installed" : "skipped")}. Existing managed hook files are backed up beside the originals. " +
+            $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}. " +
+            "Existing managed hook files are backed up beside the originals. " +
             "MCP server definitions, selected models, favorites, sessions and Antigravity history were not changed.";
         await RefreshAsync().ConfigureAwait(true);
     }
@@ -893,6 +901,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         // Status refresh is read-only. Hook installation is an explicit, confirmed action.
         AddCodexAgents(blackboxConnected);
+        AddClaudeAgents(blackboxConnected);
         AddOpenCodeAgents(blackboxConnected);
 
         if (!blackboxConnected)
@@ -1030,6 +1039,36 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         ProtectedAgents.Add(new ProtectedAgent(
             "codex",
             _codexProtection.HooksPath,
+            status,
+            detail));
+    }
+
+    private void AddClaudeAgents(bool blackboxConnected)
+    {
+        if (!_claudeProtection.IsClaudeDetected)
+        {
+            return;
+        }
+
+        var installed = _claudeProtection.IsInstalled;
+        var evidence = _agentEvidence.Latest("claude");
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected);
+        var detail = !installed
+            ? "Claude Code config detected; PreToolUse hook is missing or malformed."
+            : evidence is null
+                ? "Hook configuration detected; runtime not verified. Claude Code may require approval before the hook runs."
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
+
+        ProtectedAgents.Add(new ProtectedAgent(
+            "claude",
+            _claudeProtection.SettingsPath,
             status,
             detail));
     }

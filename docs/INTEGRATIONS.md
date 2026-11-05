@@ -69,6 +69,17 @@ receives Codex's `tool_name`/`tool_input`, calls the same Blackbox guard, and re
 files unchanged. Codex may ask you to approve/trust the hook once; approve it and restart Codex.
 Uninstalling Blackbox removes the Netpetra hook entry and script.
 
+### Claude Code
+
+Claude Code user hooks are read from `~/.claude/settings.json`. Only after **Complete installation**
+does Netpetra merge a marker-owned `PreToolUse` entry and install `netpetra-claude-hook.py` in the
+Blackbox folder. The existing settings file is backed up beside the original; unrelated settings and
+hooks are preserved. The hook receives Claude Code's `tool_name`/`tool_input`, calls the same
+Blackbox guard, and returns `hookSpecificOutput.permissionDecision: deny` only when Blackbox blocks.
+**Partial installation** leaves Claude settings unchanged. Claude Code may require a hook approval
+or restart; an installed hook is not proof of runtime blocking. Uninstalling Blackbox removes only
+the Netpetra hook entry and script.
+
 ### User-state protection
 
 Installation, hook repair, complete setup and uninstall are scoped to Netpetra-owned files and the
