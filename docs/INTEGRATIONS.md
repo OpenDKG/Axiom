@@ -7,6 +7,9 @@ Install buttons launch the official installers only after an explicit confirmati
 Both probes accept only loopback URLs. A non-loopback endpoint is rejected, and no request leaves
 the machine.
 
+The Microsoft Store MSIX build is **core-only**. It does not include these integrations, the
+Blackbox/DKG installers or any agent-hook adapter. See [STORE.md](STORE.md).
+
 ## Install buttons
 
 The Security page has an **Install** button next to each module that is not connected. It opens a

@@ -1,11 +1,15 @@
 # Installing Netpetra (portable, per-user)
 
 Netpetra can be installed for the current Windows user without administrator rights, a Windows
-service registration, a driver or any firewall change. The recommended release asset is `Netpetra.Setup.exe`: a single self-contained setup executable
-with the desktop and service payload embedded. Double-click it, keep or change the two options,
-and click **Install Netpetra**. It installs for the current user, creates a Start Menu shortcut,
-and starts the application. No .NET runtime, administrator rights, service registration or
+service registration, a driver or any firewall change. The recommended GitHub release asset is `Netpetra.Setup.exe`: a single self-contained setup
+executable with the desktop and service payload embedded. Double-click it, keep or change the two
+options, and click **Install Netpetra**. It installs for the current user, creates a Start Menu
+shortcut, and starts the application. No .NET runtime, administrator rights, service registration or
 firewall change is required.
+
+A core-only Microsoft Store (MSIX) build is also available for Store distribution. It excludes the
+optional DKG/Blackbox installers and agent hooks. See [STORE.md](STORE.md) for the package build,
+Partner Center identity, submission and local test procedure.
 
 The setup's **Complete installation** option runs the official Blackbox and DKG installers, starts
 their loopback services and installs agent hooks after Blackbox is ready. The third-party installers
@@ -101,8 +105,10 @@ the old prefix and are not renamed; remove them with the old build before enabli
 
 ## Code signing and SmartScreen
 
-The current release is not code-signed. Windows SmartScreen may warn on first launch. Verify the
-published SHA-256 before running an archive downloaded from the internet:
+The portable GitHub release is not code-signed. Windows SmartScreen may warn on first launch. The
+Microsoft Store package is signed by Microsoft as part of Store submission; see [STORE.md](STORE.md).
+
+Verify the published SHA-256 before running an archive downloaded from the internet:
 
 ```powershell
 Get-FileHash .\Netpetra-<version>-win-x64.zip -Algorithm SHA256

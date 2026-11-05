@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using Netpetra.Contracts;
 
 namespace Netpetra.UI.Services;
 
@@ -42,6 +43,11 @@ public sealed class OptionalModuleInstaller
     /// </summary>
     public void InstallDkg()
     {
+        if (DistributionContext.IsStorePackage)
+        {
+            return;
+        }
+
         if (IsUnsafeInstallRoot(DkgRoot, DkgHome))
         {
             return;
@@ -52,6 +58,12 @@ public sealed class OptionalModuleInstaller
 
     public bool InstallDkgAndWait(Action<string>? log = null)
     {
+        if (DistributionContext.IsStorePackage)
+        {
+            log?.Invoke("DKG is not available in the Microsoft Store build.");
+            return false;
+        }
+
         if (IsUnsafeInstallRoot(DkgRoot, DkgHome))
         {
             log?.Invoke("DKG install refused: its target path contains a junction or symbolic link.");
@@ -94,6 +106,11 @@ public sealed class OptionalModuleInstaller
     /// </summary>
     public void InstallBlackbox()
     {
+        if (DistributionContext.IsStorePackage)
+        {
+            return;
+        }
+
         if (IsUnsafeInstallRoot(BlackboxRoot))
         {
             return;
@@ -104,6 +121,12 @@ public sealed class OptionalModuleInstaller
 
     public bool InstallBlackboxAndWait(Action<string>? log = null)
     {
+        if (DistributionContext.IsStorePackage)
+        {
+            log?.Invoke("Blackbox is not available in the Microsoft Store build.");
+            return false;
+        }
+
         if (IsUnsafeInstallRoot(BlackboxRoot))
         {
             log?.Invoke("Blackbox install refused: its target path contains a junction or symbolic link.");
@@ -165,6 +188,11 @@ public sealed class OptionalModuleInstaller
     /// </summary>
     public bool StartDkg()
     {
+        if (DistributionContext.IsStorePackage)
+        {
+            return false;
+        }
+
         if (!File.Exists(DkgCommand) || IsUnsafeInstallRoot(DkgRoot, DkgHome, DkgCommand))
         {
             return false;
@@ -189,6 +217,11 @@ public sealed class OptionalModuleInstaller
     /// </summary>
     public bool StartBlackboxDashboard()
     {
+        if (DistributionContext.IsStorePackage)
+        {
+            return false;
+        }
+
         var agent = Path.Combine(BlackboxRoot, "agent-blackbox");
         var venv = Path.Combine(agent, "venv", "Scripts", "python.exe");
         if (!File.Exists(venv) || IsUnsafeInstallRoot(BlackboxRoot, agent, venv))

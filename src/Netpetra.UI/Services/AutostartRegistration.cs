@@ -2,6 +2,7 @@
 using System.IO;
 using System.Security;
 using Microsoft.Win32;
+using Netpetra.Contracts;
 
 namespace Netpetra.UI.Services;
 
@@ -41,6 +42,14 @@ public sealed class AutostartRegistration
 
     public AutostartStatus Read()
     {
+        if (DistributionContext.IsStorePackage)
+        {
+            return new AutostartStatus(
+                AutostartState.Unavailable,
+                null,
+                "The Microsoft Store package uses package activation; HKCU Run autostart is disabled.");
+        }
+
         if (string.IsNullOrWhiteSpace(_executablePath))
         {
             return new AutostartStatus(
@@ -83,7 +92,7 @@ public sealed class AutostartRegistration
 
     public bool Enable()
     {
-        if (string.IsNullOrWhiteSpace(_executablePath))
+        if (DistributionContext.IsStorePackage || string.IsNullOrWhiteSpace(_executablePath))
         {
             return false;
         }
@@ -108,6 +117,11 @@ public sealed class AutostartRegistration
 
     public bool Disable()
     {
+        if (DistributionContext.IsStorePackage)
+        {
+            return true;
+        }
+
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);

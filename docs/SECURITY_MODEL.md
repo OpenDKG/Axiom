@@ -83,7 +83,22 @@ in the service.
 - ETW/bytes are not implemented; FND-004 requires elevation.
 - The database is not encrypted; data is per-user metadata. This is a decision for FND-009.
 
-## 7. Reporting vulnerabilities
+## 7. Microsoft Store (MSIX) mode
+
+The Store package is core-only. At process start the Desktop host asks Windows for package identity
+and sets `DistributionContext.IsStorePackage`. In that mode:
+
+- DKG/Blackbox module entries and the Agents page are hidden;
+- optional installer/uninstaller methods return without launching PowerShell;
+- agent hook installation and hook probes are disabled;
+- HKCU `Run` autostart is disabled; Store packages use package activation instead;
+- no optional module file or agent configuration is created or removed.
+
+The package is a full-trust MSIX with `runFullTrust`, `internetClient` and
+`privateNetworkClientServer`. It is unsigned locally and signed by Microsoft during Store
+submission. See [STORE.md](STORE.md).
+
+## 8. Reporting vulnerabilities
 
 Until a public channel exists, report directly to the project owner. Do not publish real SIDs,
 paths or database content in a reproduction.

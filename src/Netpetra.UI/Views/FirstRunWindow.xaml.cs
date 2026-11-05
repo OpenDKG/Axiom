@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Windows;
+using Netpetra.Contracts;
 using Netpetra.UI.Services;
 
 namespace Netpetra.UI.Views;
@@ -11,6 +12,20 @@ public partial class FirstRunWindow : Window
     public FirstRunWindow()
     {
         InitializeComponent();
+
+        if (DistributionContext.IsStorePackage)
+        {
+            DkgCheck.IsChecked = false;
+            DkgCheck.Visibility = Visibility.Collapsed;
+            BlackboxCheck.IsChecked = false;
+            BlackboxCheck.Visibility = Visibility.Collapsed;
+            ComponentsHeader.Text = "Built-in core components";
+            AcceptCheck.Content = "I understand this Store package contains core Netpetra only.";
+            IntroText.Text =
+                "The Microsoft Store package contains Netpetra core: local monitoring, history, " +
+                "firewall inventory, reputation, community feed and local file scanning. Optional " +
+                "third-party installers and agent hooks are not included in this package.";
+        }
     }
 
     private void Accept_Changed(object sender, RoutedEventArgs e) =>
@@ -26,8 +41,8 @@ public partial class FirstRunWindow : Window
         var settings = new OnboardingSettings(
             Completed: true,
             Skipped: false,
-            Dkg: DkgCheck.IsChecked == true,
-            Blackbox: BlackboxCheck.IsChecked == true);
+            Dkg: !DistributionContext.IsStorePackage && DkgCheck.IsChecked == true,
+            Blackbox: !DistributionContext.IsStorePackage && BlackboxCheck.IsChecked == true);
 
         OnboardingStore.Save(settings);
 

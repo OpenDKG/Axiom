@@ -101,7 +101,10 @@
         </Grid>
       </Border>
 
-      <Border Style="{StaticResource Card}" Margin="0,14,0,0" DataContext="{Binding AgentActivity}">
+      <Border Style="{StaticResource Card}"
+              Margin="0,14,0,0"
+              DataContext="{Binding AgentActivity}"
+              Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVisibility}}">
         <StackPanel>
           <Grid>
             <Grid.ColumnDefinitions>

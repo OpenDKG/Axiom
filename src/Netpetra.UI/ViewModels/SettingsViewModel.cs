@@ -23,11 +23,15 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
 
         var startup = _startupSettings.Load();
         _updatingStartup = true;
-        StartWithWindows = _autostart.Read().State is AutostartState.Enabled or AutostartState.Stale;
+        IsAutostartSupported = !DistributionContext.IsStorePackage;
+        StartWithWindows = IsAutostartSupported &&
+                           _autostart.Read().State is AutostartState.Enabled or AutostartState.Stale;
         StartMinimized = startup.StartMinimized;
         _updatingStartup = false;
         UpdateStartupStatus();
     }
+
+    public bool IsAutostartSupported { get; }
 
     public string MilestoneText => ProductMilestone.Current;
 
@@ -43,7 +47,9 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
 
     public string PollText { get; }
 
-    public string StorageText => @"%LOCALAPPDATA%\Netpetra\netpetra.db (service mode; ProgramData for a service account)";
+    public string StorageText => DistributionContext.IsStorePackage
+        ? "Package-local application data managed by Windows for this Store package"
+        : @"%LOCALAPPDATA%\Netpetra\netpetra.db (service mode; ProgramData for a service account)";
 
     public string OsText => Environment.OSVersion.VersionString;
 
@@ -80,7 +86,7 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
 
     partial void OnStartWithWindowsChanged(bool value)
     {
-        if (_updatingStartup)
+        if (_updatingStartup || !IsAutostartSupported)
         {
             return;
         }
@@ -110,6 +116,11 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private void RepairStartup()
     {
+        if (!IsAutostartSupported)
+        {
+            return;
+        }
+
         var success = _autostart.Enable();
         _updatingStartup = true;
         StartWithWindows = success;
@@ -127,6 +138,13 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
 
     private void UpdateStartupStatus()
     {
+        if (!IsAutostartSupported)
+        {
+            CanRepairStartup = false;
+            StartupStatusText = "Autostart: managed by Windows for Store packages";
+            return;
+        }
+
         var status = _autostart.Read();
         CanRepairStartup = status.State == AutostartState.Stale;
         StartupStatusText = status.State switch

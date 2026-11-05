@@ -20,7 +20,8 @@
 
     <StackPanel Grid.Row="0">
       <TextBlock Text="Set up Netpetra" FontSize="22" FontWeight="SemiBold" />
-      <TextBlock Style="{StaticResource BodyMuted}"
+      <TextBlock x:Name="IntroText"
+                 Style="{StaticResource BodyMuted}"
                  Margin="0,6,0,0"
                  TextWrapping="Wrap"
                  Text="Netpetra core is already installed. Choose optional components below. Nothing is downloaded or installed until you click Apply and accept the terms." />
@@ -28,7 +29,7 @@
 
     <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,16,0,0">
       <StackPanel>
-        <TextBlock Text="Components (Modify)" Style="{StaticResource SectionTitle}" />
+        <TextBlock x:Name="ComponentsHeader" Text="Components (Modify)" Style="{StaticResource SectionTitle}" />
         <CheckBox x:Name="ServiceCheck"
                   Style="{StaticResource AppCheckBox}"
                   IsChecked="True"
