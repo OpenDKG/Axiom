@@ -132,7 +132,7 @@ From an extracted release archive:
 - It copies `Netpetra.Service.exe` and the desktop starts it as a per-user console process; it does
   not register or start a Windows service.
 - It does not create, change or remove Windows Firewall rules.
-- It does not add itself to startup.
+- It does not add itself to startup. You can enable **Start Netpetra with Windows** later in Settings; this writes only the per-user `Netpetra` Run value.
 - It does not request administrator rights or elevation.
 - It does not download anything.
 

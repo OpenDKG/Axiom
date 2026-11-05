@@ -171,6 +171,7 @@ public sealed class UserStateProtection
                 LocalFile("Netpetra/reputation.json", "Netpetra settings"),
                 LocalFile("Netpetra/community-feed.json", "Netpetra settings"),
                 LocalFile("Netpetra/onboarding.json", "Netpetra settings"),
+                LocalFile("Netpetra/startup.json", "Netpetra settings"),
             };
 
             if (_includeHermesSettings)

@@ -78,6 +78,13 @@ if (Get-Process -Name "Netpetra.Desktop","Netpetra.Service" -ErrorAction Silentl
     throw "Netpetra is running. Close it before uninstalling."
 }
 
+$runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+$startupValue = Get-ItemProperty -Path $runKey -Name "Netpetra" -ErrorAction SilentlyContinue
+if ($null -ne $startupValue) {
+    Remove-ItemProperty -Path $runKey -Name "Netpetra" -ErrorAction SilentlyContinue
+    Write-Host "Removed Netpetra autostart entry."
+}
+
 $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
 $shortcutPath = Join-Path $startMenu "Netpetra.lnk"
 if (Test-Path $shortcutPath) {

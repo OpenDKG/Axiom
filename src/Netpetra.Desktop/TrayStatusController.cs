@@ -118,7 +118,7 @@ internal sealed class TrayStatusController : IDisposable
         }
     }
 
-    private void ShowWindow()
+    public void ShowWindow()
     {
         if (!_window.IsVisible)
         {

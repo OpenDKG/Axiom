@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using Application = System.Windows.Application;
 using System.Windows.Interop;
@@ -18,12 +19,31 @@ namespace Netpetra.Desktop;
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The WPF Application lifetime disposes the service host in OnExit.")]
 public partial class App : Application
 {
+    private const string SingleInstanceMutexName = @"Local\Netpetra.Desktop.SingleInstance";
+    private const string ShowWindowEventName = @"Local\Netpetra.Desktop.Show";
+
     private BundledServiceHost? _serviceHost;
     private TrayStatusController? _trayStatus;
+    private Mutex? _singleInstanceMutex;
+    private EventWaitHandle? _showWindowEvent;
+    private Thread? _showWindowThread;
+    private volatile bool _exiting;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        var arguments = e.Args;
+        var autostart = HasArgument(arguments, "--autostart");
+        var startMinimized = HasArgument(arguments, "--start-minimized") ||
+                             (autostart && new StartupSettingsStore().Load().StartMinimized);
+
+        if (!TryAcquireSingleInstance())
+        {
+            SignalExistingInstance();
+            Shutdown();
+            return;
+        }
 
         // Some Windows GPU drivers produce a blank WPF client area after a driver reset.
         // Software rendering is slower but always paints; hardware is opt-in for machines
@@ -39,7 +59,7 @@ public partial class App : Application
         ThemeManager.Apply(ThemeSettingsStore.Load());
 
         ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
-        if (!OnboardingStore.IsCompleted)
+        if (!OnboardingStore.IsCompleted && !autostart)
         {
             var setup = new FirstRunWindow();
             setup.ShowDialog();
@@ -77,12 +97,121 @@ public partial class App : Application
         var window = new MainWindow(viewModel);
 
         MainWindow = window;
-        window.Show();
+        if (!startMinimized)
+        {
+            window.Show();
+        }
+
         _trayStatus = new TrayStatusController(window, viewModel, monitor);
     }
 
+    private bool TryAcquireSingleInstance()
+    {
+        _singleInstanceMutex = new Mutex(
+            initiallyOwned: true,
+            name: SingleInstanceMutexName,
+            createdNew: out var createdNew);
+        if (!createdNew)
+        {
+            _singleInstanceMutex.Dispose();
+            _singleInstanceMutex = null;
+            return false;
+        }
+
+        _showWindowEvent = new EventWaitHandle(
+            initialState: false,
+            mode: EventResetMode.AutoReset,
+            name: ShowWindowEventName);
+        _showWindowThread = new Thread(ShowWindowLoop)
+        {
+            IsBackground = true,
+            Name = "Netpetra show-window signal",
+        };
+        _showWindowThread.Start();
+        return true;
+    }
+
+    private static void SignalExistingInstance()
+    {
+        try
+        {
+            if (EventWaitHandle.TryOpenExisting(ShowWindowEventName, out var existing))
+            {
+                using (existing)
+                {
+                    existing.Set();
+                }
+            }
+        }
+        catch (Exception exception) when (exception is
+                     UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)
+        {
+        }
+    }
+
+    private void ShowWindowLoop()
+    {
+        var signal = _showWindowEvent;
+        if (signal is null)
+        {
+            return;
+        }
+
+        while (!_exiting)
+        {
+            try
+            {
+                signal.WaitOne();
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+
+            if (_exiting)
+            {
+                return;
+            }
+
+            try
+            {
+                Dispatcher.Invoke(() => _trayStatus?.ShowWindow());
+            }
+            catch (Exception exception) when (exception is
+                         InvalidOperationException or TaskCanceledException)
+            {
+                // The UI thread is shutting down.
+            }
+        }
+    }
+
+    private static bool HasArgument(IEnumerable<string> arguments, string expected) =>
+        arguments.Any(argument =>
+            string.Equals(argument, expected, StringComparison.OrdinalIgnoreCase));
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _exiting = true;
+        _showWindowEvent?.Set();
+        _showWindowThread?.Join(TimeSpan.FromMilliseconds(500));
+        _showWindowEvent?.Dispose();
+        _showWindowEvent = null;
+
+        if (_singleInstanceMutex is not null)
+        {
+            try
+            {
+                _singleInstanceMutex.ReleaseMutex();
+            }
+            catch (ApplicationException)
+            {
+                // The mutex was already released or this instance never owned it.
+            }
+
+            _singleInstanceMutex.Dispose();
+            _singleInstanceMutex = null;
+        }
+
         _trayStatus?.Dispose();
         _serviceHost?.Dispose();
 
