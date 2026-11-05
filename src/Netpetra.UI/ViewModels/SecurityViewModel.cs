@@ -87,6 +87,9 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
         "claude" => "Claude Code",
         "cursor" => "Cursor",
         "copilot" => "GitHub Copilot CLI",
+        "gemini" => "Gemini CLI",
+        "windsurf" => "Windsurf Cascade",
+        "cline" => "Cline",
         _ => Kind,
     };
 
@@ -94,7 +97,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
 
     public bool IsProtected => Status == "PROTECTED";
 
-    public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude" or "cursor" or "copilot";
+    public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude" or "cursor" or "copilot" or "gemini" or "windsurf" or "cline";
 
     public string TestResult { get; init; } = string.Empty;
 }
@@ -134,6 +137,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly CursorProtection _cursorProtection = new();
 
     private readonly CopilotProtection _copilotProtection = new();
+
+    private readonly GeminiProtection _geminiProtection = new();
+
+    private readonly WindsurfProtection _windsurfProtection = new();
+
+    private readonly ClineProtection _clineProtection = new();
 
     private readonly AgentHookProbe _agentHookProbe = new();
 
@@ -290,7 +299,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     public string AgentStatusText =>
         "DKG and Blackbox status, install actions and the workspaces they report. " +
-        "OpenCode, OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI and Hermes are listed below; an installed hook is not proof of runtime blocking.";
+        "OpenCode, OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI, Gemini CLI, Windsurf Cascade, Cline and Hermes are listed below; an installed hook is not proof of runtime blocking.";
 
     public string AgentHookInstallHint =>
         "Status refresh is read-only. Agent hooks are installed only when you choose Install/Repair hooks and select " +
@@ -707,6 +716,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 allowedChanges.Add(_claudeProtection.SettingsPath);
                 allowedChanges.Add(_cursorProtection.HooksPath);
                 allowedChanges.Add(_copilotProtection.HooksPath);
+                allowedChanges.Add(_geminiProtection.SettingsPath);
+                allowedChanges.Add(_windsurfProtection.HooksPath);
+                allowedChanges.Add(_clineProtection.HookPath);
                 allowedChanges.Add(_uninstaller.OpenCodePlugin);
                 allowedChanges.Add(_uninstaller.OpenCodeV1Plugin);
                 allowedChanges.Add(_uninstaller.OpenCodeLegacyPlugin);
@@ -772,7 +784,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (!dialog.CompleteInstallation)
         {
-            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber, Codex, Claude Code, Cursor or Copilot hook files were changed.";
+            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber, Codex, Claude Code, Cursor, Copilot, Gemini, Windsurf or Cline hook files were changed.";
             return;
         }
 
@@ -782,6 +794,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         var claude = _claudeProtection.EnsureInstalled();
         var cursor = _cursorProtection.EnsureInstalled();
         var copilot = _copilotProtection.EnsureInstalled();
+        var gemini = _geminiProtection.EnsureInstalled();
+        var windsurf = _windsurfProtection.EnsureInstalled();
+        var cline = _clineProtection.EnsureInstalled();
 
         var allowedHookChanges = new[]
         {
@@ -797,6 +812,11 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             _cursorProtection.HookScriptPath,
             _copilotProtection.HooksPath,
             _copilotProtection.HookScriptPath,
+            _geminiProtection.SettingsPath,
+            _geminiProtection.HookScriptPath,
+            _windsurfProtection.HooksPath,
+            _windsurfProtection.HookScriptPath,
+            _clineProtection.HookPath,
         };
         var unexpectedChanges = await Task.Run(
             () => _userStateProtection.Verify(snapshot, allowedHookChanges)).ConfigureAwait(true);
@@ -815,7 +835,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         InstallStatusText =
             $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
             $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}, " +
-            $"Cursor {(cursor ? "installed" : "skipped")}, GitHub Copilot CLI {(copilot ? "installed" : "skipped")}. " +
+            $"Cursor {(cursor ? "installed" : "skipped")}, GitHub Copilot CLI {(copilot ? "installed" : "skipped")}, " +
+            $"Gemini CLI {(gemini ? "installed" : "skipped")}, Windsurf Cascade {(windsurf ? "installed" : "skipped")}, " +
+            $"Cline {(cline ? "installed" : "skipped")}. " +
             "Existing managed hook files are backed up beside the originals. " +
             "MCP server definitions, selected models, favorites, sessions and Antigravity history were not changed.";
         await RefreshAsync().ConfigureAwait(true);
@@ -919,6 +941,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         AddClaudeAgents(blackboxConnected);
         AddCursorAgents(blackboxConnected);
         AddCopilotAgents(blackboxConnected);
+        AddGeminiAgents(blackboxConnected);
+        AddWindsurfAgents(blackboxConnected);
+        AddClineAgents(blackboxConnected);
         AddOpenCodeAgents(blackboxConnected);
 
         if (!blackboxConnected)
@@ -1146,6 +1171,96 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         ProtectedAgents.Add(new ProtectedAgent(
             "copilot",
             _copilotProtection.HooksPath,
+            status,
+            detail));
+    }
+
+    private void AddGeminiAgents(bool blackboxConnected)
+    {
+        if (!_geminiProtection.IsGeminiDetected)
+        {
+            return;
+        }
+
+        var installed = _geminiProtection.IsInstalled;
+        var evidence = _agentEvidence.Latest("gemini");
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected);
+        var detail = !installed
+            ? "Gemini settings detected; BeforeTool hook is missing or malformed. Antigravity CLI may use a different hook surface."
+            : evidence is null
+                ? "Gemini hook configuration detected; runtime not verified. Antigravity CLI is not assumed to share this surface."
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. Antigravity history/MCP files were not modified.";
+
+        ProtectedAgents.Add(new ProtectedAgent(
+            "gemini",
+            _geminiProtection.SettingsPath,
+            status,
+            detail));
+    }
+
+    private void AddWindsurfAgents(bool blackboxConnected)
+    {
+        if (!_windsurfProtection.IsWindsurfDetected)
+        {
+            return;
+        }
+
+        var installed = _windsurfProtection.IsInstalled;
+        var evidence = _agentEvidence.Latest("windsurf");
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected);
+        var detail = !installed
+            ? "Windsurf config detected; Cascade pre-hooks are missing or malformed."
+            : evidence is null
+                ? "Hook configuration detected; runtime not verified. Restart Cascade if it was already running."
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); Cascade blocks only on exit code 2."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
+
+        ProtectedAgents.Add(new ProtectedAgent(
+            "windsurf",
+            _windsurfProtection.HooksPath,
+            status,
+            detail));
+    }
+
+    private void AddClineAgents(bool blackboxConnected)
+    {
+        if (!_clineProtection.IsClineDetected)
+        {
+            return;
+        }
+
+        var installed = _clineProtection.IsInstalled;
+        var evidence = _agentEvidence.Latest("cline");
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected);
+        var detail = !installed
+            ? "Cline directory detected; global PreToolUse.py hook is missing or user-authored."
+            : evidence is null
+                ? "Hook file detected; runtime not verified. Cline must have hooks enabled and may need a restart."
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
+
+        ProtectedAgents.Add(new ProtectedAgent(
+            "cline",
+            _clineProtection.HookPath,
             status,
             detail));
     }

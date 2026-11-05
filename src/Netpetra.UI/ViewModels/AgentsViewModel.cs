@@ -72,7 +72,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
 
     public IReadOnlyList<string> AgentFilters { get; } =
-        ["All agents", "Hermes", "OpenClaw", "OpenCode", "OpenChamber", "Codex", "Claude", "Cursor", "Copilot", "Unknown"];
+        ["All agents", "Hermes", "OpenClaw", "OpenCode", "OpenChamber", "Codex", "Claude", "Cursor", "Copilot", "Gemini", "Windsurf", "Cline", "Unknown"];
 
     public IReadOnlyList<string> SeverityFilters { get; } =
         ["All severities", "Info", "Low", "Medium", "High", "Critical"];

@@ -119,6 +119,9 @@ public sealed class OptionalModuleUninstaller
         new ClaudeProtection().Remove();
         new CursorProtection().Remove();
         new CopilotProtection().Remove();
+        new GeminiProtection().Remove();
+        new WindsurfProtection().Remove();
+        new ClineProtection().Remove();
         RemoveManagedOpenCodePlugin();
     }
 

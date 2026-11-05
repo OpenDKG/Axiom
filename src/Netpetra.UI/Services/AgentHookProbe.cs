@@ -36,6 +36,9 @@ public sealed class AgentHookProbe
                 "claude" => await TestClaudeAsync(cancellationToken).ConfigureAwait(false),
                 "cursor" => await TestCursorAsync(cancellationToken).ConfigureAwait(false),
                 "copilot" => await TestCopilotAsync(cancellationToken).ConfigureAwait(false),
+                "gemini" => await TestGeminiAsync(cancellationToken).ConfigureAwait(false),
+                "windsurf" => await TestWindsurfAsync(cancellationToken).ConfigureAwait(false),
+                "cline" => await TestClineAsync(cancellationToken).ConfigureAwait(false),
                 "opencode" => await TestOpenCodeAsync("OpenCode", cancellationToken).ConfigureAwait(false),
                 "openchamber" => await TestOpenCodeAsync("OpenChamber", cancellationToken).ConfigureAwait(false),
                 _ => new AgentHookTestResult(
@@ -310,6 +313,209 @@ public sealed class AgentHookProbe
             using var document = JsonDocument.Parse(output);
             return document.RootElement.TryGetProperty("permissionDecision", out var decision) &&
                    string.Equals(decision.GetString(), "deny", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private async Task<AgentHookTestResult> TestGeminiAsync(CancellationToken cancellationToken)
+    {
+        var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
+        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var hook = Path.Combine(root, "netpetra-gemini-hook.py");
+        if (!File.Exists(python) || !File.Exists(hook))
+        {
+            return new AgentHookTestResult("FAIL", "Gemini hook or Blackbox Python runtime is missing.");
+        }
+
+        var startInfo = new ProcessStartInfo(python)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = root,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        startInfo.ArgumentList.Add(hook);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Could not start the Gemini hook.");
+        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
+        {
+            tool_name = "read_file",
+            tool_input = new { path = Path.Combine(Path.GetTempPath(), "netpetra-hook-test.txt") },
+            session_id = "netpetra-hook-test",
+        })).ConfigureAwait(false);
+        process.StandardInput.Close();
+
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var output = await outputTask.ConfigureAwait(false);
+        _ = await errorTask.ConfigureAwait(false);
+
+        if (process.ExitCode != 0)
+        {
+            return new AgentHookTestResult("FAIL", $"Gemini hook exited with {process.ExitCode}.");
+        }
+
+        if (IsDeniedGeminiOutput(output))
+        {
+            return new AgentHookTestResult(
+                "BLOCKED",
+                "Gemini hook executed and returned decision: deny for the benign test call. " +
+                "The real Gemini CLI process was not exercised.");
+        }
+
+        return new AgentHookTestResult(
+            "HOOK RAN",
+            "Gemini hook executed and reached the local guard without a block. The real Gemini CLI process was not exercised.");
+    }
+
+    private static bool IsDeniedGeminiOutput(string output)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(output);
+            return document.RootElement.TryGetProperty("decision", out var decision) &&
+                   string.Equals(decision.GetString(), "deny", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private async Task<AgentHookTestResult> TestWindsurfAsync(CancellationToken cancellationToken)
+    {
+        var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
+        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var hook = Path.Combine(root, "netpetra-windsurf-hook.py");
+        if (!File.Exists(python) || !File.Exists(hook))
+        {
+            return new AgentHookTestResult("FAIL", "Windsurf hook or Blackbox Python runtime is missing.");
+        }
+
+        var startInfo = new ProcessStartInfo(python)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = root,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        startInfo.ArgumentList.Add(hook);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Could not start the Windsurf hook.");
+        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
+        {
+            agent_action_name = "pre_run_command",
+            trajectory_id = "netpetra-hook-test",
+            execution_id = Guid.NewGuid().ToString("N"),
+            tool_info = new
+            {
+                command_line = "read netpetra-hook-test.txt",
+                cwd = Path.GetTempPath(),
+            },
+        })).ConfigureAwait(false);
+        process.StandardInput.Close();
+
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        _ = await outputTask.ConfigureAwait(false);
+        var error = await errorTask.ConfigureAwait(false);
+
+        if (process.ExitCode == 2)
+        {
+            return new AgentHookTestResult(
+                "BLOCKED",
+                "Windsurf hook executed and returned exit code 2 for the benign test call. " +
+                (string.IsNullOrWhiteSpace(error) ? string.Empty : error.Trim() + " ") +
+                "The real Cascade process was not exercised.");
+        }
+
+        if (process.ExitCode == 0)
+        {
+            return new AgentHookTestResult(
+                "HOOK RAN",
+                "Windsurf hook executed and reached the local guard without a block. The real Cascade process was not exercised.");
+        }
+
+        return new AgentHookTestResult("FAIL", $"Windsurf hook exited with {process.ExitCode}.");
+    }
+
+    private async Task<AgentHookTestResult> TestClineAsync(CancellationToken cancellationToken)
+    {
+        var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
+        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var hook = Path.Combine(_userProfile, "Documents", "Cline", "Hooks", "PreToolUse.py");
+        if (!File.Exists(python) || !File.Exists(hook))
+        {
+            return new AgentHookTestResult("FAIL", "Cline hook or Blackbox Python runtime is missing.");
+        }
+
+        var startInfo = new ProcessStartInfo(python)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = root,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        startInfo.ArgumentList.Add(hook);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Could not start the Cline hook.");
+        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
+        {
+            taskId = "netpetra-hook-test",
+            tool_call = new
+            {
+                id = Guid.NewGuid().ToString("N"),
+                name = "read_files",
+                input = new { filePath = Path.Combine(Path.GetTempPath(), "netpetra-hook-test.txt") },
+            },
+        })).ConfigureAwait(false);
+        process.StandardInput.Close();
+
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var output = await outputTask.ConfigureAwait(false);
+        _ = await errorTask.ConfigureAwait(false);
+
+        if (process.ExitCode != 0)
+        {
+            return new AgentHookTestResult("FAIL", $"Cline hook exited with {process.ExitCode}.");
+        }
+
+        if (IsCancelledClineOutput(output))
+        {
+            return new AgentHookTestResult(
+                "BLOCKED",
+                "Cline hook executed and returned cancel: true for the benign test call. " +
+                "The real Cline process was not exercised.");
+        }
+
+        return new AgentHookTestResult(
+            "HOOK RAN",
+            "Cline hook executed and reached the local guard without a block. The real Cline process was not exercised.");
+    }
+
+    private static bool IsCancelledClineOutput(string output)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(output);
+            return document.RootElement.TryGetProperty("cancel", out var cancel) &&
+                   cancel.ValueKind == JsonValueKind.True;
         }
         catch (JsonException)
         {
