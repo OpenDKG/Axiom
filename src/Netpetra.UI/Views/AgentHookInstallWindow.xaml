@@ -46,6 +46,12 @@
                    Style="{StaticResource Caption}"
                    TextWrapping="Wrap"
                    Margin="0,3,0,0" />
+        <TextBlock Text="Will write only: %USERPROFILE%\.config\opencode\plugins\netpetra-blackbox.ts; %LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py; %USERPROFILE%\.codex\hooks.json (netpetra-codex-hook.py entry only); %LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-codex-hook.py."
+                   Style="{StaticResource Caption}"
+                   FontFamily="Consolas"
+                   FontSize="11"
+                   TextWrapping="Wrap"
+                   Margin="0,6,0,0" />
       </StackPanel>
     </Border>
 

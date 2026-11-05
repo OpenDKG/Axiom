@@ -67,12 +67,29 @@ Uninstalling Blackbox removes the Netpetra hook entry and script.
 
 ### User-state protection
 
-Installation, hook repair and uninstall are scoped to Netpetra-owned files and the marker-owned
-hook entry. MCP server definitions, selected models, favorites, sessions, projects, credentials,
-databases, user-authored hooks, junctions and Antigravity/Gemini history under `~/.gemini` are not
-modified. Netpetra takes a hash snapshot of known user configuration before hook installation and
-restores unexpected changes; uninstall deletes an OpenCode plugin only when it contains the
-`Managed by Netpetra` marker. The UI and setup explain this boundary before Complete installation.
+Installation, hook repair, complete setup and uninstall are scoped to Netpetra-owned files and the
+marker-owned hook entry. Before each operation Netpetra fingerprints user-owned state across:
+
+- OpenCode/OpenChamber config, credentials, sessions, projects, chats and state databases.
+- Codex `config.toml`, `hooks.json`, `auth.json`, sessions, sqlite databases and state files.
+- Claude, Cursor and Copilot config, credentials and session state.
+- Hermes config, memories, skills, tools, hooks, pairing data and sessions.
+- Gemini and Antigravity config, MCP files, conversations, brain, cache and history databases.
+- Netpetra theme, tray, reputation, community and onboarding settings.
+
+Small files are hashed and can be restored byte-for-byte. Large agent databases are fingerprinted
+by length and last-write time so a multi-gigabyte database is never loaded or rehashed during every
+action; small session/history files are hashed. Junctions and reparse points are recorded and never
+traversed. Unexpected changes are restored where possible; setup stops if restoration fails and
+uninstall reports any path it could not restore. Uninstall deletes an OpenCode plugin only when it
+contains the `Managed by Netpetra` marker, and leaves Codex `hooks.json` byte-identical when no
+Netpetra hook is present.
+
+Complete installation shows the exact paths and hook entry it may write. The official Blackbox/DKG
+installers are allowed to change only their documented Netpetra module paths and the Hermes plugin
+config/mode files; any other protected change is treated as out of scope. Hermes YAML is edited with
+a line-preserving editor that changes only `plugins.entries.blackbox.mode`, so comments, key order
+and quoting survive the mode update. Netpetra does not write Codex `config.toml`.
 
 ## Blackbox control center
 

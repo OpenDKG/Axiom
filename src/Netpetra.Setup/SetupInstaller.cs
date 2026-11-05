@@ -95,10 +95,13 @@ internal static class SetupInstaller
                 if (options.CompleteInstallation)
                 {
                     Report("Complete installation selected: Blackbox, DKG and agent hooks will be configured.");
-                    var setupProtection = new UserStateProtection(includeHermesSettings: false);
-                    var setupSnapshot = setupProtection.Capture();
+                    var setupProtection = new UserStateProtection();
+                    var setupSnapshot = await Task.Run(
+                        () => setupProtection.Capture(),
+                        cancellationToken).ConfigureAwait(false);
                     var moduleInstaller = new OptionalModuleInstaller();
 
+                    Report("Auditing official installer scope: Netpetra modules, Hermes plugin config/mode and scheduled task only.");
                     Report("Starting the official Blackbox installer. Follow its prompts and terms.");
                     var blackboxExit = await Task.Run(
                         () => moduleInstaller.InstallBlackboxAndWait(Report),
@@ -111,16 +114,47 @@ internal static class SetupInstaller
                         cancellationToken).ConfigureAwait(false);
                     Report($"DKG installer exit code: {(dkgExit ? "0" : "non-zero")}.");
 
-                    var setupChanges = setupProtection.Verify(setupSnapshot, []);
+                    var hermesLocal = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "hermes");
+                    var expectedInstallerPaths = new[]
+                    {
+                        Path.Combine(hermesLocal, "config.yaml"),
+                        Path.Combine(hermesLocal, "plugins"),
+                        Path.Combine(hermesLocal, "blackbox"),
+                        Path.Combine(hermesLocal, "bin"),
+                        Path.Combine(hermesLocal, "installs"),
+                        Path.Combine(hermesLocal, "cache"),
+                        Path.Combine(hermesLocal, "logs"),
+                        Path.Combine(hermesLocal, "backups"),
+                        Path.Combine(hermesLocal, "audio_cache"),
+                        Path.Combine(hermesLocal, "image_cache"),
+                        Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                            ".hermes",
+                            "config.yaml"),
+                    };
+                    var setupChanges = await Task.Run(
+                        () => setupProtection.Verify(setupSnapshot, expectedInstallerPaths),
+                        cancellationToken).ConfigureAwait(false);
                     if (setupChanges.Count > 0)
                     {
-                        var restoreFailures = setupProtection.Restore(setupSnapshot, setupChanges);
-                        Report($"Protected user-state check: {setupChanges.Count} MCP/model/favorite/Antigravity/Gemini change(s) detected; " +
+                        var restoreFailures = await Task.Run(
+                            () => setupProtection.Restore(setupSnapshot, setupChanges),
+                            cancellationToken).ConfigureAwait(false);
+                        Report($"Protected user-state check: {setupChanges.Count} out-of-scope MCP/model/favorite/session/Antigravity/Gemini change(s) detected; " +
                                $"{restoreFailures.Count} restore failure(s).");
+                        if (restoreFailures.Count > 0)
+                        {
+                            return new SetupInstallResult(
+                                false,
+                                "Optional setup stopped: a protected user-state change could not be restored.",
+                                log);
+                        }
                     }
                     else
                     {
-                        Report("Protected user-state check: MCP servers, models, favorites and Antigravity/Gemini history were unchanged.");
+                        Report("Protected user-state check: MCP servers, models, favorites, sessions and Antigravity/Gemini history were unchanged.");
                     }
 
                     blackboxInstalled = await WaitForEndpointAsync(
@@ -132,24 +166,38 @@ internal static class SetupInstaller
 
                     Report("Installing agent hooks after the Blackbox runtime is prepared.");
                     var protection = new UserStateProtection();
-                    var protectedBefore = protection.Capture();
+                    var protectedBefore = await Task.Run(
+                        () => protection.Capture(),
+                        cancellationToken).ConfigureAwait(false);
                     var openCodeProtection = new OpenCodeProtection();
                     var codexProtection = new CodexProtection();
                     var openCode = openCodeProtection.EnsureInstalled();
                     var codex = codexProtection.EnsureInstalled();
-                    var unexpectedChanges = protection.Verify(
-                        protectedBefore,
-                        [
-                            openCodeProtection.PluginPath,
-                            openCodeProtection.BridgePath,
-                            codexProtection.HooksPath,
-                            codexProtection.HookScriptPath,
-                        ]);
+                    var unexpectedChanges = await Task.Run(
+                        () => protection.Verify(
+                            protectedBefore,
+                            [
+                                openCodeProtection.PluginPath,
+                                openCodeProtection.LegacyPluginPath,
+                                openCodeProtection.BridgePath,
+                                codexProtection.HooksPath,
+                                codexProtection.HookScriptPath,
+                            ]),
+                        cancellationToken).ConfigureAwait(false);
                     if (unexpectedChanges.Count > 0)
                     {
-                        var restoreFailures = protection.Restore(protectedBefore, unexpectedChanges);
+                        var restoreFailures = await Task.Run(
+                            () => protection.Restore(protectedBefore, unexpectedChanges),
+                            cancellationToken).ConfigureAwait(false);
                         Report($"Agent hooks: protected user-state check failed ({unexpectedChanges.Count} change(s)); " +
                                $"{restoreFailures.Count} restore failure(s). MCP/model/favorite/session/Antigravity files must be reviewed.");
+                        if (restoreFailures.Count > 0)
+                        {
+                            return new SetupInstallResult(
+                                false,
+                                "Agent hook setup stopped: a protected user-state change could not be restored.",
+                                log);
+                        }
                     }
                     else
                     {

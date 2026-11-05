@@ -52,6 +52,10 @@ public sealed class OptionalModuleUninstaller
 
     public bool IsBlackboxInstalled => Directory.Exists(BlackboxRoot) || File.Exists(BlackboxCommand);
 
+    public string ReputationSettingsPath => Path.Combine(_localAppData, "Netpetra", "reputation.json");
+
+    public string CommunitySettingsPath => Path.Combine(_localAppData, "Netpetra", "community-feed.json");
+
     public bool IsDkgInstalled => Directory.Exists(DkgRoot) || Directory.Exists(DkgHome);
 
     /// <summary>
@@ -68,12 +72,30 @@ public sealed class OptionalModuleUninstaller
 
     public void UninstallBlackbox()
     {
+        PrepareBlackboxRemoval();
+        StartPowerShell(BuildBlackboxUninstallScript());
+    }
+
+    public bool UninstallBlackboxAndWait()
+    {
+        PrepareBlackboxRemoval();
+        return RunPowerShellScript(BuildBlackboxUninstallScript());
+    }
+
+    public void UninstallDkg() => StartPowerShell(BuildDkgUninstallScript());
+
+    public bool UninstallDkgAndWait() => RunPowerShellScript(BuildDkgUninstallScript());
+
+    private void PrepareBlackboxRemoval()
+    {
         new CodexProtection().Remove();
         RemoveManagedOpenCodePlugin();
+    }
 
+    private string BuildBlackboxUninstallScript()
+    {
         var hermes = Path.Combine(_userProfile, ".hermes");
-
-        var script = $$"""
+        return $$"""
             $ErrorActionPreference = 'Continue'
             $root = '{{Escape(BlackboxRoot)}}'
             $hermes = '{{Escape(hermes)}}'
@@ -95,37 +117,24 @@ public sealed class OptionalModuleUninstaller
               Remove-Item -Force -ErrorAction SilentlyContinue
             Write-Host 'Blackbox files removed. Other Hermes data and global packages were kept.' -ForegroundColor Green
             """;
-
-        StartPowerShell(script);
     }
 
-    public void UninstallDkg()
-    {
-        var script = $$"""
-            $ErrorActionPreference = 'Continue'
-            $root = '{{Escape(DkgRoot)}}'
-            $home = '{{Escape(DkgHome)}}'
-            Write-Host 'Stopping local DKG processes...' -ForegroundColor Cyan
-            Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-              Where-Object { $_.CommandLine -and ($_.CommandLine.Contains($root) -or $_.CommandLine.Contains($home)) } |
-              ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $root) { Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $home) { Remove-Item $home -Recurse -Force -ErrorAction SilentlyContinue }
-            Write-Host 'Local DKG node and its testnet home removed.' -ForegroundColor Green
-            """;
+    private string BuildDkgUninstallScript() => $$"""
+        $ErrorActionPreference = 'Continue'
+        $root = '{{Escape(DkgRoot)}}'
+        $home = '{{Escape(DkgHome)}}'
+        Write-Host 'Stopping local DKG processes...' -ForegroundColor Cyan
+        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+          Where-Object { $_.CommandLine -and ($_.CommandLine.Contains($root) -or $_.CommandLine.Contains($home)) } |
+          ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $root) { Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $home) { Remove-Item $home -Recurse -Force -ErrorAction SilentlyContinue }
+        Write-Host 'Local DKG node and its testnet home removed.' -ForegroundColor Green
+        """;
 
-        StartPowerShell(script);
-    }
+    public void RemoveReputationSettings() => DeleteFile(ReputationSettingsPath);
 
-    public void RemoveReputationSettings() => DeleteFile(Path.Combine(
-        _localAppData,
-        "Netpetra",
-        "reputation.json"));
-
-    public void RemoveCommunitySettings() => DeleteFile(Path.Combine(
-        _localAppData,
-        "Netpetra",
-        "community-feed.json"));
+    public void RemoveCommunitySettings() => DeleteFile(CommunitySettingsPath);
 
     private static bool RemoveManagedFile(string path)
     {
@@ -161,6 +170,28 @@ public sealed class OptionalModuleUninstaller
 #pragma warning restore CA1031
         {
         }
+    }
+
+    private static bool RunPowerShellScript(string script)
+    {
+        var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+        var startInfo = new ProcessStartInfo(
+            "powershell.exe",
+            $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}")
+        {
+            UseShellExecute = true,
+            WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            WindowStyle = ProcessWindowStyle.Normal,
+        };
+
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            return false;
+        }
+
+        process.WaitForExit();
+        return process.ExitCode == 0;
     }
 
     private static void StartPowerShell(string script)

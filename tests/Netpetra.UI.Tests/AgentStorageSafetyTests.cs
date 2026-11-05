@@ -78,6 +78,37 @@ public sealed class AgentStorageSafetyTests
     }
 
     [Fact]
+    public void Codex_install_does_not_modify_toml_config()
+    {
+        using var temp = new TempTree();
+        var codexDirectory = Path.Combine(temp.Root, ".codex");
+        Directory.CreateDirectory(codexDirectory);
+        var config = Path.Combine(codexDirectory, "config.toml");
+        const string userConfig = """
+            # user-owned Codex configuration
+            model = "user-model"
+            approval_policy = "on-request"
+            """;
+        File.WriteAllText(config, userConfig);
+
+        var python = Path.Combine(
+            temp.Root,
+            "Netpetra",
+            "modules",
+            "blackbox",
+            "agent-blackbox",
+            "venv",
+            "Scripts",
+            "python.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(python)!);
+        File.WriteAllText(python, string.Empty);
+
+        var codex = new CodexProtection(temp.Root, temp.Root);
+        Assert.True(codex.EnsureInstalled());
+        Assert.Equal(userConfig, File.ReadAllText(config));
+    }
+
+    [Fact]
     public void Codex_remove_without_managed_hook_leaves_user_file_unchanged()
     {
         using var temp = new TempTree();

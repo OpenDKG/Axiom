@@ -4,16 +4,32 @@ using System.Security.Cryptography;
 
 namespace Netpetra.UI.Services;
 
+public sealed record UserStateFileSpec(
+    string Path,
+    string Category,
+    bool HashContent = true);
+
+public sealed record UserStateDirectorySpec(
+    string Path,
+    string Category,
+    bool Recursive = true,
+    bool HashContent = false);
+
 public sealed record UserStateFile(
     string Path,
     bool Exists,
     long Length,
     DateTimeOffset? LastWriteUtc,
     string? Sha256,
-    byte[]? Content);
+    byte[]? Content,
+    bool IsReparsePoint,
+    string? LinkTarget);
 
 public sealed record UserStateDirectoryEntry(
     string RelativePath,
+    bool IsDirectory,
+    bool IsReparsePoint,
+    string? LinkTarget,
     long Length,
     DateTimeOffset LastWriteUtc,
     string? Sha256);
@@ -22,6 +38,8 @@ public sealed record UserStateDirectory(
     string Path,
     bool Exists,
     bool Recursive,
+    bool IsReparsePoint,
+    string? LinkTarget,
     IReadOnlyDictionary<string, UserStateDirectoryEntry> Entries);
 
 public sealed record UserStateChange(string Path, string Reason);
@@ -36,18 +54,23 @@ public sealed class UserStateSnapshot(
 }
 
 /// <summary>
-/// Captures a bounded hash snapshot of user-owned agent configuration and Netpetra settings, then
-/// verifies that hook installation changed only the explicitly allowed paths. Small file content is
-/// kept in memory so an unexpected change can be rolled back. Large files and history directories
-/// are fingerprinted without loading their full contents.
+/// Captures a bounded fingerprint of user-owned agent configuration, sessions, projects,
+/// credentials, databases, history and Netpetra settings. Hook installation, setup and uninstall
+/// must change only explicitly allowed Netpetra-owned paths; unexpected changes are detected and
+/// small files can be restored from memory. Large databases are fingerprinted by size and
+/// last-write time so a multi-gigabyte agent database is never loaded or rehashed on every action.
 /// </summary>
 public sealed class UserStateProtection
 {
     private const int MaxRestorableBytes = 1024 * 1024;
 
+    private const int MaxHashBytes = 64 * 1024 * 1024;
+
     private readonly string _userProfile;
 
     private readonly string _localAppData;
+
+    private readonly string _roamingAppData;
 
     private readonly bool _includeHermesSettings;
 
@@ -59,76 +82,196 @@ public sealed class UserStateProtection
     {
         _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _localAppData = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        _ = roamingAppData;
+        _roamingAppData = roamingAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         _includeHermesSettings = includeHermesSettings;
     }
 
-    public IReadOnlyList<string> ProtectedPaths
+    public IReadOnlyList<UserStateFileSpec> ProtectedFiles
     {
         get
         {
-            var paths = new List<string>
+            var files = new List<UserStateFileSpec>
             {
-                Path.Combine(_userProfile, ".config", "opencode", "opencode.json"),
-                Path.Combine(_userProfile, ".config", "opencode", "config.json"),
-                Path.Combine(_userProfile, ".config", "opencode", "auth.json"),
-                Path.Combine(_userProfile, ".codex", "config.toml"),
-                Path.Combine(_userProfile, ".codex", "hooks.json"),
-                Path.Combine(_userProfile, ".claude", "settings.json"),
-                Path.Combine(_userProfile, ".cursor", "hooks.json"),
-                Path.Combine(_userProfile, ".copilot", "settings.json"),
-                Path.Combine(_userProfile, ".gemini", "settings.json"),
-                Path.Combine(_userProfile, ".gemini", "config", "config.json"),
-                Path.Combine(_userProfile, ".gemini", "config", "mcp_config.json"),
-                Path.Combine(_userProfile, ".gemini", "antigravity", "conversation_summaries.db"),
-                Path.Combine(_userProfile, ".gemini", "antigravity", "antigravity_state.pbtxt"),
-                Path.Combine(_userProfile, ".gemini", "antigravity", "installation_id"),
-                Path.Combine(_userProfile, ".gemini", "antigravity-cli", "history.jsonl"),
-                Path.Combine(_userProfile, ".gemini", "antigravity-cli", "cache", "last_conversations.json"),
-                Path.Combine(_userProfile, ".gemini", "antigravity-cli", "settings.json"),
-                Path.Combine(_userProfile, ".gemini", "antigravity-cli", "mcp_config.json"),
-                Path.Combine(_localAppData, "Netpetra", "theme.txt"),
-                Path.Combine(_localAppData, "Netpetra", "tray-notifications.txt"),
-                Path.Combine(_localAppData, "Netpetra", "reputation.json"),
-                Path.Combine(_localAppData, "Netpetra", "community-feed.json"),
-                Path.Combine(_localAppData, "Netpetra", "onboarding.json"),
+                // OpenCode / OpenChamber configuration, credentials and state.
+                HomeFile(".config/opencode/opencode.json", "OpenCode config"),
+                HomeFile(".config/opencode/opencode.jsonc", "OpenCode config"),
+                HomeFile(".config/opencode/config.json", "OpenCode config"),
+                HomeFile(".config/opencode/auth.json", "OpenCode credentials"),
+                HomeFile(".config/opencode/service.json", "OpenCode service config"),
+                HomeFile(".config/openchamber/settings.json", "OpenChamber settings"),
+                HomeFile(".config/openchamber/preferences.json", "OpenChamber settings"),
+                HomeFile(".config/openchamber/relay-identity.json", "OpenChamber credentials"),
+                HomeFile(".config/openchamber/git-credential-endpoint.json", "OpenChamber credentials"),
+                HomeFile(".config/openchamber/message-queue.json", "OpenChamber sessions"),
+                HomeFile(".config/openchamber/opencode.managed.json", "OpenChamber config"),
+                HomeFile(".config/openchamber/discovered-apps.json", "OpenChamber config"),
+                HomeFile(".local/share/opencode/account.json", "OpenCode credentials"),
+                HomeFile(".local/share/opencode/auth.json", "OpenCode credentials"),
+                HomeFile(".local/share/opencode/opencode.db", "OpenCode database", HashContent: false),
+                HomeFile(".local/share/opencode/opencode.db-shm", "OpenCode database", HashContent: false),
+                HomeFile(".local/share/opencode/opencode.db-wal", "OpenCode database", HashContent: false),
+
+                // Codex configuration, credentials and databases.
+                HomeFile(".codex/config.toml", "Codex config"),
+                HomeFile(".codex/hooks.json", "Codex hooks"),
+                HomeFile(".codex/auth.json", "Codex credentials"),
+                HomeFile(".codex/auth.lock", "Codex credentials"),
+                HomeFile(".codex/installation_id", "Codex state"),
+                HomeFile(".codex/session_index.jsonl", "Codex sessions"),
+                HomeFile(".codex/.codex-global-state.json", "Codex state"),
+                HomeFile(".codex/cap_sid", "Codex state"),
+                HomeFile(".codex/models_cache.json", "Codex models"),
+                HomeFile(".codex/sqlite/codex.db", "Codex database", HashContent: false),
+                HomeFile(".codex/goals_1.sqlite", "Codex database", HashContent: false),
+                HomeFile(".codex/logs_2.sqlite", "Codex database", HashContent: false),
+                HomeFile(".codex/memories_1.sqlite", "Codex database", HashContent: false),
+                HomeFile(".codex/queue_1.sqlite", "Codex database", HashContent: false),
+                HomeFile(".codex/state_5.sqlite", "Codex database", HashContent: false),
+                HomeFile(".codex/thread_history_1.sqlite", "Codex sessions", HashContent: false),
+
+                // Claude Code.
+                HomeFile(".claude/settings.json", "Claude config"),
+                HomeFile(".claude/.credentials.json", "Claude credentials"),
+                HomeFile(".claude/history.jsonl", "Claude sessions"),
+                HomeFile(".claude.json", "Claude state"),
+
+                // Cursor and Copilot.
+                HomeFile(".cursor/hooks.json", "Cursor hooks"),
+                HomeFile(".cursor/mcp.json", "Cursor MCP config"),
+                HomeFile(".copilot/config.json", "Copilot config"),
+                HomeFile(".copilot/mcp-config.json", "Copilot MCP config"),
+
+                // Hermes user state and Blackbox-managed Hermes configuration.
+                LocalFile("hermes/config.yaml", "Hermes config"),
+                LocalFile("hermes/SOUL.md", "Hermes memory"),
+
+                // Gemini / Antigravity.
+                HomeFile(".gemini/settings.json", "Gemini config"),
+                HomeFile(".gemini/config/config.json", "Gemini config"),
+                HomeFile(".gemini/config/mcp_config.json", "Gemini MCP config"),
+                HomeFile(".gemini/antigravity/conversation_summaries.db", "Antigravity history"),
+                HomeFile(".gemini/antigravity/antigravity_state.pbtxt", "Antigravity state"),
+                HomeFile(".gemini/antigravity/installation_id", "Antigravity state"),
+                HomeFile(".gemini/antigravity-cli/history.jsonl", "Antigravity CLI history"),
+                HomeFile(".gemini/antigravity-cli/cache/last_conversations.json", "Antigravity CLI history"),
+                HomeFile(".gemini/antigravity-cli/settings.json", "Antigravity CLI config"),
+                HomeFile(".gemini/antigravity-cli/mcp_config.json", "Antigravity CLI MCP config"),
+
+                // Windows agent application credentials and session stores.
+                RoamingFile("Antigravity/app_storage.json", "Antigravity app state"),
+                RoamingFile("Antigravity/credential-user-scope", "Antigravity credentials"),
+                RoamingFile("Antigravity/Preferences", "Antigravity app state"),
+                RoamingFile("Antigravity/Local State", "Antigravity app state"),
+                RoamingFile("Cursor/User/settings.json", "Cursor settings"),
+                RoamingFile("Cursor/User/globalStorage/state.vscdb", "Cursor sessions", HashContent: false),
+
+                // Netpetra's own user settings.
+                LocalFile("Netpetra/theme.txt", "Netpetra settings"),
+                LocalFile("Netpetra/tray-notifications.txt", "Netpetra settings"),
+                LocalFile("Netpetra/reputation.json", "Netpetra settings"),
+                LocalFile("Netpetra/community-feed.json", "Netpetra settings"),
+                LocalFile("Netpetra/onboarding.json", "Netpetra settings"),
             };
 
             if (_includeHermesSettings)
             {
-                paths.Add(Path.Combine(_userProfile, ".hermes", "config.yaml"));
+                files.Add(HomeFile(".hermes/config.yaml", "Hermes/Blackbox config"));
             }
 
-            return paths;
+            return files;
         }
     }
 
-    public IReadOnlyList<(string Path, bool Recursive)> ProtectedDirectories =>
-    [
-        (Path.Combine(_userProfile, ".gemini", "antigravity"), false),
-        (Path.Combine(_userProfile, ".gemini", "antigravity", "conversations"), true),
-        (Path.Combine(_userProfile, ".gemini", "antigravity", "brain"), true),
-        (Path.Combine(_userProfile, ".gemini", "antigravity", "annotations"), true),
-        (Path.Combine(_userProfile, ".gemini", "antigravity", "chapter_titles"), true),
-        (Path.Combine(_userProfile, ".gemini", "antigravity", "cache"), true),
-        (Path.Combine(_userProfile, ".gemini", "antigravity-cli"), false),
-        (Path.Combine(_userProfile, ".gemini", "antigravity-cli", "conversations"), true),
-        (Path.Combine(_userProfile, ".gemini", "antigravity-cli", "brain"), true),
-        (Path.Combine(_userProfile, ".gemini", "antigravity-cli", "cache"), true),
-    ];
+    public IReadOnlyList<UserStateDirectorySpec> ProtectedDirectories
+    {
+        get
+        {
+            var directories = new List<UserStateDirectorySpec>
+            {
+                // OpenCode / OpenChamber sessions, projects and caches.
+                HomeDir(".config/opencode", "OpenCode config", Recursive: false),
+                HomeDir(".config/opencode/plugins", "OpenCode plugins", HashContent: true),
+                HomeDir(".config/opencode/plugin", "OpenCode plugins", HashContent: true),
+                HomeDir(".config/opencode/agents", "OpenCode agents", HashContent: true),
+                HomeDir(".config/opencode/skills", "OpenCode skills", HashContent: true),
+                HomeDir(".config/openchamber", "OpenChamber config", Recursive: false),
+                HomeDir(".config/openchamber/chats", "OpenChamber sessions"),
+                HomeDir(".config/openchamber/projects", "OpenChamber projects"),
+                HomeDir(".config/openchamber/goals", "OpenChamber projects"),
+                HomeDir(".config/openchamber/agent-tool", "OpenChamber tools"),
+                HomeDir(".local/share/opencode", "OpenCode state", Recursive: false),
+                HomeDir(".local/share/opencode/storage", "OpenCode sessions"),
+                HomeDir(".local/share/opencode/repos", "OpenCode projects"),
+                HomeDir(".local/share/opencode/snapshot", "OpenCode sessions"),
+                HomeDir(".local/share/opencode/tool-output", "OpenCode sessions"),
+                HomeDir(".cache/opencode", "OpenCode cache"),
+
+                // Codex state, sessions and databases.
+                HomeDir(".codex", "Codex state", Recursive: false),
+                HomeDir(".codex/sessions", "Codex sessions"),
+                HomeDir(".codex/sqlite", "Codex database"),
+                HomeDir(".codex/plugins", "Codex plugins", HashContent: true),
+                HomeDir(".codex/skills", "Codex skills", HashContent: true),
+                HomeDir(".codex/automations", "Codex automations"),
+                HomeDir(".codex/generated_images", "Codex generated files"),
+                HomeDir(".codex/visualizations", "Codex generated files"),
+                HomeDir(".codex/.sandbox-secrets", "Codex credentials"),
+
+                // Claude, Cursor and Copilot state.
+                HomeDir(".claude", "Claude state"),
+                HomeDir(".cursor", "Cursor state"),
+                HomeDir(".copilot", "Copilot state"),
+
+                // Hermes user state. Installer-owned plugin/bin directories are intentionally excluded.
+                LocalDir("hermes", "Hermes state", Recursive: false),
+                LocalDir("hermes/sessions", "Hermes sessions"),
+                LocalDir("hermes/memories", "Hermes memory"),
+                LocalDir("hermes/skills", "Hermes skills", HashContent: true),
+                LocalDir("hermes/tools", "Hermes tools", HashContent: true),
+                LocalDir("hermes/cron", "Hermes automation"),
+                LocalDir("hermes/hooks", "Hermes hooks", HashContent: true),
+                LocalDir("hermes/pairing", "Hermes credentials", HashContent: true),
+
+                // Gemini / Antigravity history.
+                HomeDir(".gemini", "Gemini state", Recursive: false),
+                HomeDir(".gemini/antigravity", "Antigravity history", Recursive: false),
+                HomeDir(".gemini/antigravity/conversations", "Antigravity conversations", HashContent: true),
+                HomeDir(".gemini/antigravity/brain", "Antigravity brain", HashContent: true),
+                HomeDir(".gemini/antigravity/annotations", "Antigravity history", HashContent: true),
+                HomeDir(".gemini/antigravity/chapter_titles", "Antigravity history", HashContent: true),
+                HomeDir(".gemini/antigravity/cache", "Antigravity cache", HashContent: true),
+                HomeDir(".gemini/antigravity-cli", "Antigravity CLI state", Recursive: false),
+                HomeDir(".gemini/antigravity-cli/conversations", "Antigravity CLI conversations", HashContent: true),
+                HomeDir(".gemini/antigravity-cli/brain", "Antigravity CLI brain", HashContent: true),
+                HomeDir(".gemini/antigravity-cli/cache", "Antigravity CLI cache", HashContent: true),
+
+                // Windows agent application state.
+                RoamingDir("OpenCode", "OpenCode app state", Recursive: false),
+                RoamingDir("OpenChamber", "OpenChamber app state", Recursive: false),
+                RoamingDir("Codex", "Codex app state", Recursive: false),
+                RoamingDir("Cursor", "Cursor app state", Recursive: false),
+                RoamingDir("Antigravity", "Antigravity app state", Recursive: false),
+                LocalDir("Codex", "Codex app state", Recursive: false),
+            };
+
+            return directories;
+        }
+    }
+
+    public IReadOnlyList<string> ProtectedPaths => ProtectedFiles.Select(file => file.Path).ToArray();
 
     public UserStateSnapshot Capture()
     {
         var files = new Dictionary<string, UserStateFile>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in ProtectedPaths)
+        foreach (var spec in ProtectedFiles)
         {
-            files[path] = CaptureFile(path);
+            files[spec.Path] = CaptureFile(spec);
         }
 
         var directories = new Dictionary<string, UserStateDirectory>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (path, recursive) in ProtectedDirectories)
+        foreach (var spec in ProtectedDirectories)
         {
-            directories[path] = CaptureDirectory(path, recursive);
+            directories[spec.Path] = CaptureDirectory(spec);
         }
 
         return new UserStateSnapshot(files, directories);
@@ -145,18 +288,19 @@ public sealed class UserStateProtection
 
         foreach (var (path, before) in snapshot.Files)
         {
-            if (allowed.Contains(Path.GetFullPath(path)))
+            if (allowed.Contains(Path.GetFullPath(path)) || IsNetpetraBackupPath(path))
             {
                 continue;
             }
 
-            var after = CaptureFile(path);
+            var spec = ProtectedFiles.FirstOrDefault(file =>
+                string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase));
+            var after = CaptureFile(spec ?? new UserStateFileSpec(path, "unknown"));
             if (before.Exists != after.Exists)
             {
                 changes.Add(new UserStateChange(path, before.Exists ? "removed" : "created"));
             }
-            else if (before.Exists &&
-                     !string.Equals(before.Sha256, after.Sha256, StringComparison.OrdinalIgnoreCase))
+            else if (before.Exists && FileChanged(before, after))
             {
                 changes.Add(new UserStateChange(path, "content changed"));
             }
@@ -169,9 +313,16 @@ public sealed class UserStateProtection
                 continue;
             }
 
-            var after = CaptureDirectory(path, before.Recursive);
+            var spec = ProtectedDirectories.FirstOrDefault(directory =>
+                string.Equals(directory.Path, path, StringComparison.OrdinalIgnoreCase));
+            var after = CaptureDirectory(spec ?? new UserStateDirectorySpec(path, "unknown", before.Recursive));
             if (before.Exists != after.Exists)
             {
+                if (!before.Exists && IsAllowedAncestor(path, allowed))
+                {
+                    continue;
+                }
+
                 changes.Add(new UserStateChange(path, before.Exists ? "directory removed" : "directory created"));
                 continue;
             }
@@ -181,29 +332,48 @@ public sealed class UserStateProtection
                 continue;
             }
 
+            if (before.IsReparsePoint != after.IsReparsePoint ||
+                !string.Equals(before.LinkTarget, after.LinkTarget, StringComparison.OrdinalIgnoreCase))
+            {
+                changes.Add(new UserStateChange(path, "directory link changed"));
+                continue;
+            }
+
             foreach (var (relativePath, beforeEntry) in before.Entries)
             {
+                var entryPath = Path.Combine(path, relativePath);
+                if (allowed.Contains(Path.GetFullPath(entryPath)) || IsNetpetraBackupPath(entryPath))
+                {
+                    continue;
+                }
+
                 if (!after.Entries.TryGetValue(relativePath, out var afterEntry))
                 {
                     changes.Add(new UserStateChange(
-                        Path.Combine(path, relativePath),
-                        "history file removed"));
+                        entryPath,
+                        beforeEntry.IsDirectory ? "directory removed" : "file removed"));
                 }
-                else if (beforeEntry.Length != afterEntry.Length ||
-                         beforeEntry.LastWriteUtc != afterEntry.LastWriteUtc ||
-                         !string.Equals(beforeEntry.Sha256, afterEntry.Sha256, StringComparison.OrdinalIgnoreCase))
+                else if (EntryChanged(beforeEntry, afterEntry))
                 {
                     changes.Add(new UserStateChange(
-                        Path.Combine(path, relativePath),
-                        "history file changed"));
+                        entryPath,
+                        beforeEntry.IsDirectory ? "directory changed" : "file changed"));
                 }
             }
 
             foreach (var relativePath in after.Entries.Keys.Except(before.Entries.Keys, StringComparer.OrdinalIgnoreCase))
             {
+                var entryPath = Path.Combine(path, relativePath);
+                if (allowed.Contains(Path.GetFullPath(entryPath)) ||
+                    IsNetpetraBackupPath(entryPath) ||
+                    (after.Entries[relativePath].IsDirectory && IsAllowedAncestor(entryPath, allowed)))
+                {
+                    continue;
+                }
+
                 changes.Add(new UserStateChange(
-                    Path.Combine(path, relativePath),
-                    "history file created"));
+                    entryPath,
+                    "file or directory created"));
             }
         }
 
@@ -219,14 +389,19 @@ public sealed class UserStateProtection
         {
             if (!snapshot.Files.TryGetValue(change.Path, out var before))
             {
-                // Directory manifests and nested history files are detected, not reconstructed.
-                // Report them rather than pretending a missing Antigravity history was restored.
+                // Directory manifests and nested files are detected, not reconstructed.
                 failures.Add(change.Path);
                 continue;
             }
 
             try
             {
+                if (before.IsReparsePoint)
+                {
+                    failures.Add(change.Path);
+                    continue;
+                }
+
                 if (!before.Exists)
                 {
                     if (File.Exists(change.Path))
@@ -255,22 +430,72 @@ public sealed class UserStateProtection
         return failures;
     }
 
-    private static UserStateFile CaptureFile(string path)
+    private static string Normalize(string relativePath) =>
+        relativePath.Replace('/', Path.DirectorySeparatorChar);
+
+    private UserStateFileSpec HomeFile(string relativePath, string category, bool HashContent = true) =>
+        new(Path.Combine(_userProfile, Normalize(relativePath)), category, HashContent);
+
+    private UserStateFileSpec LocalFile(string relativePath, string category, bool HashContent = true) =>
+        new(Path.Combine(_localAppData, Normalize(relativePath)), category, HashContent);
+
+    private UserStateFileSpec RoamingFile(string relativePath, string category, bool HashContent = true) =>
+        new(Path.Combine(_roamingAppData, Normalize(relativePath)), category, HashContent);
+
+    private UserStateDirectorySpec HomeDir(
+        string relativePath,
+        string category,
+        bool Recursive = true,
+        bool HashContent = false) =>
+        new(Path.Combine(_userProfile, Normalize(relativePath)), category, Recursive, HashContent);
+
+    private UserStateDirectorySpec LocalDir(
+        string relativePath,
+        string category,
+        bool Recursive = true,
+        bool HashContent = false) =>
+        new(Path.Combine(_localAppData, Normalize(relativePath)), category, Recursive, HashContent);
+
+    private UserStateDirectorySpec RoamingDir(
+        string relativePath,
+        string category,
+        bool Recursive = true,
+        bool HashContent = false) =>
+        new(Path.Combine(_roamingAppData, Normalize(relativePath)), category, Recursive, HashContent);
+
+    private static UserStateFile CaptureFile(UserStateFileSpec spec)
     {
+        var path = spec.Path;
         try
         {
-            if (!File.Exists(path))
+            var info = new FileInfo(path);
+            if (!info.Exists)
             {
-                return new UserStateFile(path, false, 0, null, null, null);
+                return new UserStateFile(path, false, 0, null, null, null, false, null);
             }
 
-            var info = new FileInfo(path);
-            var content = info.Length <= MaxRestorableBytes
+            var isReparsePoint = (info.Attributes & FileAttributes.ReparsePoint) != 0;
+            if (isReparsePoint)
+            {
+                return new UserStateFile(
+                    path,
+                    true,
+                    info.Length,
+                    info.LastWriteTimeUtc,
+                    null,
+                    null,
+                    true,
+                    info.LinkTarget);
+            }
+
+            var content = spec.HashContent && info.Length <= MaxRestorableBytes
                 ? File.ReadAllBytes(path)
                 : null;
-            var hash = content is null
-                ? ComputeFileHash(path)
-                : Convert.ToHexString(SHA256.HashData(content));
+            var hash = spec.HashContent && info.Length <= MaxHashBytes
+                ? content is null
+                    ? ComputeFileHash(path)
+                    : Convert.ToHexString(SHA256.HashData(content))
+                : null;
 
             return new UserStateFile(
                 path,
@@ -278,57 +503,150 @@ public sealed class UserStateProtection
                 info.Length,
                 info.LastWriteTimeUtc,
                 hash,
-                content);
+                content,
+                false,
+                null);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            return new UserStateFile(path, false, 0, null, null, null);
+            return new UserStateFile(path, false, 0, null, null, null, false, null);
         }
     }
 
-    private static UserStateDirectory CaptureDirectory(string path, bool recursive)
+    private static UserStateDirectory CaptureDirectory(UserStateDirectorySpec spec)
     {
-        if (!Directory.Exists(path))
-        {
-            return new UserStateDirectory(
-                path,
-                false,
-                recursive,
-                new Dictionary<string, UserStateDirectoryEntry>(StringComparer.OrdinalIgnoreCase));
-        }
-
-        var entries = new Dictionary<string, UserStateDirectoryEntry>(StringComparer.OrdinalIgnoreCase);
+        var path = spec.Path;
         try
         {
-            var options = new EnumerationOptions
+            var info = new DirectoryInfo(path);
+            if (!info.Exists)
             {
-                RecurseSubdirectories = recursive,
-                IgnoreInaccessible = true,
-                AttributesToSkip = FileAttributes.ReparsePoint,
-                ReturnSpecialDirectories = false,
-            };
-
-            foreach (var file in Directory.EnumerateFiles(path, "*", options))
-            {
-                var info = new FileInfo(file);
-                entries[Path.GetRelativePath(path, file)] = new UserStateDirectoryEntry(
-                    Path.GetRelativePath(path, file),
-                    info.Length,
-                    info.LastWriteTimeUtc,
-                    ComputeFileHash(file));
+                return new UserStateDirectory(
+                    path,
+                    false,
+                    spec.Recursive,
+                    false,
+                    null,
+                    new Dictionary<string, UserStateDirectoryEntry>(StringComparer.OrdinalIgnoreCase));
             }
+
+            var isReparsePoint = (info.Attributes & FileAttributes.ReparsePoint) != 0;
+            if (isReparsePoint)
+            {
+                return new UserStateDirectory(
+                    path,
+                    true,
+                    spec.Recursive,
+                    true,
+                    info.LinkTarget,
+                    new Dictionary<string, UserStateDirectoryEntry>(StringComparer.OrdinalIgnoreCase));
+            }
+
+            var entries = new Dictionary<string, UserStateDirectoryEntry>(StringComparer.OrdinalIgnoreCase);
+            CaptureDirectoryEntries(
+                path,
+                path,
+                spec,
+                entries,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            return new UserStateDirectory(path, true, spec.Recursive, false, null, entries);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             return new UserStateDirectory(
                 path,
                 false,
-                recursive,
+                spec.Recursive,
+                false,
+                null,
                 new Dictionary<string, UserStateDirectoryEntry>(StringComparer.OrdinalIgnoreCase));
         }
-
-        return new UserStateDirectory(path, true, recursive, entries);
     }
+
+    private static void CaptureDirectoryEntries(
+        string root,
+        string current,
+        UserStateDirectorySpec spec,
+        Dictionary<string, UserStateDirectoryEntry> entries,
+        HashSet<string> visited)
+    {
+        if (!visited.Add(current))
+        {
+            return;
+        }
+
+        foreach (var entry in new DirectoryInfo(current).EnumerateFileSystemInfos(
+                     "*",
+                     new EnumerationOptions
+                     {
+                         IgnoreInaccessible = true,
+                         AttributesToSkip = 0,
+                         RecurseSubdirectories = false,
+                         ReturnSpecialDirectories = false,
+                     }))
+        {
+            var relativePath = Path.GetRelativePath(root, entry.FullName);
+            var isReparsePoint = (entry.Attributes & FileAttributes.ReparsePoint) != 0;
+            if (entry is DirectoryInfo directory)
+            {
+                entries[relativePath] = new UserStateDirectoryEntry(
+                    relativePath,
+                    true,
+                    isReparsePoint,
+                    isReparsePoint ? directory.LinkTarget : null,
+                    0,
+                    directory.LastWriteTimeUtc,
+                    null);
+                if (spec.Recursive && !isReparsePoint)
+                {
+                    CaptureDirectoryEntries(root, directory.FullName, spec, entries, visited);
+                }
+
+                continue;
+            }
+
+            if (entry is FileInfo file)
+            {
+                var hash = spec.HashContent && file.Length <= MaxHashBytes
+                    ? ComputeFileHash(file.FullName)
+                    : null;
+                entries[relativePath] = new UserStateDirectoryEntry(
+                    relativePath,
+                    false,
+                    isReparsePoint,
+                    isReparsePoint ? file.LinkTarget : null,
+                    file.Length,
+                    file.LastWriteTimeUtc,
+                    hash);
+            }
+        }
+    }
+
+    private static bool IsNetpetraBackupPath(string path) =>
+        Path.GetFileName(path).Contains(".netpetra-backup-", StringComparison.Ordinal);
+
+    private static bool IsAllowedAncestor(string directoryPath, HashSet<string> allowed)
+    {
+        var prefix = Path.GetFullPath(directoryPath)
+            .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return allowed.Any(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool FileChanged(UserStateFile before, UserStateFile after) =>
+        before.IsReparsePoint != after.IsReparsePoint ||
+        !string.Equals(before.LinkTarget, after.LinkTarget, StringComparison.OrdinalIgnoreCase) ||
+        before.Length != after.Length ||
+        before.LastWriteUtc != after.LastWriteUtc ||
+        !string.Equals(before.Sha256, after.Sha256, StringComparison.OrdinalIgnoreCase);
+
+    private static bool EntryChanged(UserStateDirectoryEntry before, UserStateDirectoryEntry after) =>
+        before.IsDirectory != after.IsDirectory ||
+        before.IsReparsePoint != after.IsReparsePoint ||
+        !string.Equals(before.LinkTarget, after.LinkTarget, StringComparison.OrdinalIgnoreCase) ||
+        (!before.IsDirectory &&
+         (before.Length != after.Length ||
+          before.LastWriteUtc != after.LastWriteUtc ||
+          !string.Equals(before.Sha256, after.Sha256, StringComparison.OrdinalIgnoreCase)));
 
     private static string? ComputeFileHash(string path)
     {
