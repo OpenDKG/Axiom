@@ -55,6 +55,10 @@
                    Style="{StaticResource Caption}"
                    TextWrapping="Wrap"
                    Margin="0,6,0,0" />
+        <TextBlock Text="MCP server definitions, selected models, favorites, sessions and Antigravity/Gemini history are never modified by Netpetra. Only Netpetra-owned hook files and the marker-owned hook entry may change."
+                   Style="{StaticResource Caption}"
+                   TextWrapping="Wrap"
+                   Margin="0,6,0,0" />
         <TextBlock Text="Uncheck for Partial installation: core Netpetra only. No Blackbox, DKG, OpenCode, OpenChamber or Codex files will be installed or changed."
                    Style="{StaticResource Caption}"
                    TextWrapping="Wrap"

@@ -92,6 +92,7 @@ public sealed class CodexProtection
                 return;
             }
 
+            var removed = false;
             for (var index = groups.Count - 1; index >= 0; index--)
             {
                 if (groups[index] is not JsonObject group ||
@@ -106,6 +107,7 @@ public sealed class CodexProtection
                         handler["command"]?.ToString().Contains(Marker, StringComparison.Ordinal) == true)
                     {
                         handlers.RemoveAt(handlerIndex);
+                        removed = true;
                     }
                 }
 
@@ -113,6 +115,12 @@ public sealed class CodexProtection
                 {
                     groups.RemoveAt(index);
                 }
+            }
+
+            if (!removed)
+            {
+                // No Netpetra-owned hook was present; leave the user's file byte-identical.
+                return;
             }
 
             if (groups.Count == 0)

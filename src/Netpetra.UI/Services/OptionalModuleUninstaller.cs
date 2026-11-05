@@ -7,14 +7,22 @@ namespace Netpetra.UI.Services;
 
 /// <summary>
 /// Removes only Netpetra-owned optional-module files. Blackbox and DKG cleanup runs in a visible
-/// PowerShell window; unrelated Hermes profiles, global Python/npm packages and user data are kept.
+/// PowerShell window; unrelated Hermes profiles, global Python/npm packages, user data and
+/// user-authored agent files are kept.
 /// </summary>
 public sealed class OptionalModuleUninstaller
 {
-    private static string ModulesRoot => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Netpetra",
-        "modules");
+    private readonly string _userProfile;
+
+    private readonly string _localAppData;
+
+    public OptionalModuleUninstaller(string? userProfile = null, string? localAppData = null)
+    {
+        _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        _localAppData = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    }
+
+    private string ModulesRoot => Path.Combine(_localAppData, "Netpetra", "modules");
 
     public string BlackboxRoot => Path.Combine(ModulesRoot, "blackbox");
 
@@ -23,20 +31,20 @@ public sealed class OptionalModuleUninstaller
     public string DkgHome => Path.Combine(ModulesRoot, "dkg-home");
 
     public string BlackboxCommand => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        _userProfile,
         ".local",
         "bin",
         "blackbox.cmd");
 
     public string OpenCodePlugin => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        _userProfile,
         ".config",
         "opencode",
         "plugins",
         "netpetra-blackbox.ts");
 
     public string OpenCodeLegacyPlugin => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        _userProfile,
         ".config",
         "opencode",
         "plugin",
@@ -46,21 +54,30 @@ public sealed class OptionalModuleUninstaller
 
     public bool IsDkgInstalled => Directory.Exists(DkgRoot) || Directory.Exists(DkgHome);
 
+    /// <summary>
+    /// Removes only the Netpetra-managed OpenCode plugin. A user-authored plugin at either the
+    /// current or legacy path is never deleted.
+    /// </summary>
+    public bool RemoveManagedOpenCodePlugin()
+    {
+        var removed = false;
+        removed |= RemoveManagedFile(OpenCodePlugin);
+        removed |= RemoveManagedFile(OpenCodeLegacyPlugin);
+        return removed;
+    }
+
     public void UninstallBlackbox()
     {
         new CodexProtection().Remove();
+        RemoveManagedOpenCodePlugin();
 
-        var hermes = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".hermes");
+        var hermes = Path.Combine(_userProfile, ".hermes");
 
         var script = $$"""
             $ErrorActionPreference = 'Continue'
             $root = '{{Escape(BlackboxRoot)}}'
             $hermes = '{{Escape(hermes)}}'
             $command = '{{Escape(BlackboxCommand)}}'
-            $openCodePlugin = '{{Escape(OpenCodePlugin)}}'
-            $openCodeLegacyPlugin = '{{Escape(OpenCodeLegacyPlugin)}}'
             Write-Host 'Stopping Blackbox/DKG processes owned by this installation...' -ForegroundColor Cyan
             Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
               Where-Object { $_.CommandLine -and $_.CommandLine.Contains($root) } |
@@ -72,8 +89,6 @@ public sealed class OptionalModuleUninstaller
             }
             if (Test-Path $root) { Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue }
             if (Test-Path $command) { Remove-Item $command -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $openCodePlugin) { Remove-Item $openCodePlugin -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $openCodeLegacyPlugin) { Remove-Item $openCodeLegacyPlugin -Force -ErrorAction SilentlyContinue }
             $blackboxHome = Join-Path $hermes 'blackbox'
             if (Test-Path $blackboxHome) { Remove-Item $blackboxHome -Recurse -Force -ErrorAction SilentlyContinue }
             Get-ChildItem (Join-Path $hermes 'logs') -Filter 'blackbox-*' -ErrorAction SilentlyContinue |
@@ -103,14 +118,34 @@ public sealed class OptionalModuleUninstaller
     }
 
     public void RemoveReputationSettings() => DeleteFile(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        _localAppData,
         "Netpetra",
         "reputation.json"));
 
     public void RemoveCommunitySettings() => DeleteFile(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        _localAppData,
         "Netpetra",
         "community-feed.json"));
+
+    private static bool RemoveManagedFile(string path)
+    {
+        try
+        {
+            if (!File.Exists(path) ||
+                !File.ReadAllText(path).Contains("Managed by Netpetra", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            StorageSafety.BackupFile(path);
+            File.Delete(path);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     private static void DeleteFile(string path)
     {

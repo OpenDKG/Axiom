@@ -78,6 +78,77 @@ public sealed class AgentStorageSafetyTests
     }
 
     [Fact]
+    public void Codex_remove_without_managed_hook_leaves_user_file_unchanged()
+    {
+        using var temp = new TempTree();
+        var codexDirectory = Path.Combine(temp.Root, ".codex");
+        Directory.CreateDirectory(codexDirectory);
+        var hooks = Path.Combine(codexDirectory, "hooks.json");
+        const string userHooks = """
+            {
+              "hooks": {
+                "PreToolUse": [
+                  {
+                    "matcher": ".*",
+                    "hooks": [
+                      { "type": "command", "command": "user-hook.ps1" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+        File.WriteAllText(hooks, userHooks);
+
+        var codex = new CodexProtection(temp.Root, temp.Root);
+        codex.Remove();
+
+        Assert.Equal(userHooks, File.ReadAllText(hooks));
+    }
+
+    [Fact]
+    public void Codex_merge_preserves_unrelated_user_hooks()
+    {
+        using var temp = new TempTree();
+        var codexDirectory = Path.Combine(temp.Root, ".codex");
+        Directory.CreateDirectory(codexDirectory);
+        var hooks = Path.Combine(codexDirectory, "hooks.json");
+        File.WriteAllText(hooks, """
+            {
+              "hooks": {
+                "PreToolUse": [
+                  {
+                    "matcher": ".*",
+                    "hooks": [
+                      { "type": "command", "command": "user-hook.ps1" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var python = Path.Combine(
+            temp.Root,
+            "Netpetra",
+            "modules",
+            "blackbox",
+            "agent-blackbox",
+            "venv",
+            "Scripts",
+            "python.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(python)!);
+        File.WriteAllText(python, string.Empty);
+
+        var codex = new CodexProtection(temp.Root, temp.Root);
+        Assert.True(codex.EnsureInstalled());
+
+        var merged = File.ReadAllText(hooks);
+        Assert.Contains("user-hook.ps1", merged, StringComparison.Ordinal);
+        Assert.Contains("netpetra-codex-hook.py", merged, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Reparse_point_helper_returns_false_for_a_normal_file()
     {
         using var temp = new TempTree();

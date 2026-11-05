@@ -128,6 +128,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     private readonly AgentHookProbe _agentHookProbe = new();
 
+    private readonly UserStateProtection _userStateProtection = new();
+
     private readonly AgentEvidenceStore _agentEvidence = new();
 
     private ReputationSettings _reputationSettings = new(false, string.Empty);
@@ -734,11 +736,33 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             return;
         }
 
+        var snapshot = _userStateProtection.Capture();
         var openCode = _openCodeProtection.EnsureInstalled();
         var codex = _codexProtection.EnsureInstalled();
+
+        var unexpectedChanges = _userStateProtection.Verify(
+            snapshot,
+            [
+                _openCodeProtection.PluginPath,
+                _openCodeProtection.BridgePath,
+                _codexProtection.HooksPath,
+                _codexProtection.HookScriptPath,
+            ]);
+        if (unexpectedChanges.Count > 0)
+        {
+            var restoreFailures = _userStateProtection.Restore(snapshot, unexpectedChanges);
+            InstallStatusText = restoreFailures.Count == 0
+                ? $"Hook installation aborted: {unexpectedChanges.Count} protected user-state file(s) changed unexpectedly and were restored."
+                : $"Hook installation aborted: {unexpectedChanges.Count} protected user-state change(s) detected; " +
+                  $"{restoreFailures.Count} could not be restored. Review MCP, model, favorite, session and Antigravity history files.";
+            await RefreshAsync().ConfigureAwait(true);
+            return;
+        }
+
         InstallStatusText =
             $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
-            $"Codex {(codex ? "installed" : "skipped")}. Existing managed hook files are backed up beside the originals.";
+            $"Codex {(codex ? "installed" : "skipped")}. Existing managed hook files are backed up beside the originals. " +
+            "MCP server definitions, selected models, favorites, sessions and Antigravity history were not changed.";
         await RefreshAsync().ConfigureAwait(true);
     }
 

@@ -95,6 +95,8 @@ internal static class SetupInstaller
                 if (options.CompleteInstallation)
                 {
                     Report("Complete installation selected: Blackbox, DKG and agent hooks will be configured.");
+                    var setupProtection = new UserStateProtection(includeHermesSettings: false);
+                    var setupSnapshot = setupProtection.Capture();
                     var moduleInstaller = new OptionalModuleInstaller();
 
                     Report("Starting the official Blackbox installer. Follow its prompts and terms.");
@@ -109,6 +111,18 @@ internal static class SetupInstaller
                         cancellationToken).ConfigureAwait(false);
                     Report($"DKG installer exit code: {(dkgExit ? "0" : "non-zero")}.");
 
+                    var setupChanges = setupProtection.Verify(setupSnapshot, []);
+                    if (setupChanges.Count > 0)
+                    {
+                        var restoreFailures = setupProtection.Restore(setupSnapshot, setupChanges);
+                        Report($"Protected user-state check: {setupChanges.Count} MCP/model/favorite/Antigravity/Gemini change(s) detected; " +
+                               $"{restoreFailures.Count} restore failure(s).");
+                    }
+                    else
+                    {
+                        Report("Protected user-state check: MCP servers, models, favorites and Antigravity/Gemini history were unchanged.");
+                    }
+
                     blackboxInstalled = await WaitForEndpointAsync(
                         "http://127.0.0.1:9700/api/graph-status", cancellationToken).ConfigureAwait(false);
                     dkgInstalled = await WaitForEndpointAsync(
@@ -117,8 +131,31 @@ internal static class SetupInstaller
                            $"DKG endpoint: {(dkgInstalled ? "connected" : "not verified")}.");
 
                     Report("Installing agent hooks after the Blackbox runtime is prepared.");
-                    var openCode = new OpenCodeProtection().EnsureInstalled();
-                    var codex = new CodexProtection().EnsureInstalled();
+                    var protection = new UserStateProtection();
+                    var protectedBefore = protection.Capture();
+                    var openCodeProtection = new OpenCodeProtection();
+                    var codexProtection = new CodexProtection();
+                    var openCode = openCodeProtection.EnsureInstalled();
+                    var codex = codexProtection.EnsureInstalled();
+                    var unexpectedChanges = protection.Verify(
+                        protectedBefore,
+                        [
+                            openCodeProtection.PluginPath,
+                            openCodeProtection.BridgePath,
+                            codexProtection.HooksPath,
+                            codexProtection.HookScriptPath,
+                        ]);
+                    if (unexpectedChanges.Count > 0)
+                    {
+                        var restoreFailures = protection.Restore(protectedBefore, unexpectedChanges);
+                        Report($"Agent hooks: protected user-state check failed ({unexpectedChanges.Count} change(s)); " +
+                               $"{restoreFailures.Count} restore failure(s). MCP/model/favorite/session/Antigravity files must be reviewed.");
+                    }
+                    else
+                    {
+                        Report("Agent hooks: MCP server definitions, selected models, favorites, sessions and Antigravity history were not changed.");
+                    }
+
                     Report($"Agent hooks: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
                            $"Codex {(codex ? "installed" : "skipped")}.");
                 }

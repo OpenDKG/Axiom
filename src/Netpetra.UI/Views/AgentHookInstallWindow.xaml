@@ -55,7 +55,7 @@
             CornerRadius="6"
             Padding="12,10"
             Margin="0,14,0,0">
-      <TextBlock Text="Sessions, projects, databases, storage junctions and user-authored hooks are preserved. Codex may ask you to approve its hook. An installed hook file does not prove runtime loading or blocking."
+      <TextBlock Text="MCP server definitions, selected models, favorites, sessions, projects, databases, storage junctions and user-authored hooks are preserved. Only Netpetra-owned hook files and the marker-owned hook entry may change. Codex may ask you to approve its hook. An installed hook file does not prove runtime loading or blocking."
                  Style="{StaticResource Caption}"
                  TextWrapping="Wrap" />
     </Border>
