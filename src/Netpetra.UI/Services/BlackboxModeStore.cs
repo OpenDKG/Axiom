@@ -35,6 +35,11 @@ public sealed class BlackboxModeStore
             return false;
         }
 
+        if (File.Exists(ConfigPath))
+        {
+            StorageSafety.BackupFile(ConfigPath);
+        }
+
         return string.Equals(RunPython(mode), mode, StringComparison.OrdinalIgnoreCase);
     }
 

@@ -65,6 +65,15 @@ receives Codex's `tool_name`/`tool_input`, calls the same Blackbox guard, and re
 files unchanged. Codex may ask you to approve/trust the hook once; approve it and restart Codex.
 Uninstalling Blackbox removes the Netpetra hook entry and script.
 
+### User-state protection
+
+Installation, hook repair and uninstall are scoped to Netpetra-owned files and the marker-owned
+hook entry. MCP server definitions, selected models, favorites, sessions, projects, credentials,
+databases, user-authored hooks, junctions and Antigravity/Gemini history under `~/.gemini` are not
+modified. Netpetra takes a hash snapshot of known user configuration before hook installation and
+restores unexpected changes; uninstall deletes an OpenCode plugin only when it contains the
+`Managed by Netpetra` marker. The UI and setup explain this boundary before Complete installation.
+
 ## Blackbox control center
 
 The Agents page reads the local dashboard at `http://127.0.0.1:9700`. It never opens a public
