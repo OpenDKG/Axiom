@@ -59,6 +59,14 @@ internal static class SetupInstaller
                         "The setup payload is incomplete. Use the official Netpetra release.", log);
                 }
 
+                if (StorageSafety.IsReparsePointInPath(options.InstallDir))
+                {
+                    return new SetupInstallResult(
+                        false,
+                        "Install location contains a junction or symbolic link. Choose a normal directory.",
+                        log);
+                }
+
                 Directory.CreateDirectory(options.InstallDir);
                 Report($"Installing to {options.InstallDir}");
 

@@ -37,6 +37,33 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
+function Test-ReparsePath {
+    param([string]$Path)
+
+    $current = [IO.Path]::GetFullPath($Path)
+    while ($current) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+            if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                return $true
+            }
+        }
+
+        $parent = Split-Path -Parent $current
+        if (-not $parent -or $parent -eq $current) {
+            break
+        }
+
+        $current = $parent
+    }
+
+    return $false
+}
+
+if (Test-ReparsePath $InstallDir) {
+    throw "Install location contains a junction or symbolic link: $InstallDir"
+}
+
 if (-not $Source) {
     $Source = Join-Path $root "artifacts\publish\win-x64\Netpetra.Desktop.exe"
 }

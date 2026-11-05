@@ -100,6 +100,35 @@ public sealed class OptionalModuleUninstaller
             $root = '{{Escape(BlackboxRoot)}}'
             $hermes = '{{Escape(hermes)}}'
             $command = '{{Escape(BlackboxCommand)}}'
+            function Test-ReparsePath($path) {
+              $current = [IO.Path]::GetFullPath($path)
+              while ($current) {
+                if (Test-Path -LiteralPath $current) {
+                  $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+                  if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                    return $true
+                  }
+                }
+                $parent = Split-Path -Parent $current
+                if (-not $parent -or $parent -eq $current) { break }
+                $current = $parent
+              }
+              return $false
+            }
+            function Remove-SafeFile($path) {
+              if (-not (Test-Path -LiteralPath $path) -or (Test-ReparsePath $path)) {
+                if (Test-Path -LiteralPath $path) { Write-Warning "Skipped reparse point: $path" }
+                return
+              }
+              Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+            }
+            function Remove-SafeDirectory($path) {
+              if (-not (Test-Path -LiteralPath $path) -or (Test-ReparsePath $path)) {
+                if (Test-Path -LiteralPath $path) { Write-Warning "Skipped reparse point: $path" }
+                return
+              }
+              Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
+            }
             Write-Host 'Stopping Blackbox/DKG processes owned by this installation...' -ForegroundColor Cyan
             Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
               Where-Object { $_.CommandLine -and $_.CommandLine.Contains($root) } |
@@ -109,12 +138,18 @@ public sealed class OptionalModuleUninstaller
               Unregister-ScheduledTask -TaskName 'Agent Blackbox DKG node' -Confirm:$false -ErrorAction SilentlyContinue
               Write-Host 'Removed scheduled task: Agent Blackbox DKG node'
             }
-            if (Test-Path $root) { Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $command) { Remove-Item $command -Force -ErrorAction SilentlyContinue }
+            Remove-SafeDirectory $root
+            Remove-SafeFile $command
             $blackboxHome = Join-Path $hermes 'blackbox'
-            if (Test-Path $blackboxHome) { Remove-Item $blackboxHome -Recurse -Force -ErrorAction SilentlyContinue }
-            Get-ChildItem (Join-Path $hermes 'logs') -Filter 'blackbox-*' -ErrorAction SilentlyContinue |
-              Remove-Item -Force -ErrorAction SilentlyContinue
+            Remove-SafeDirectory $blackboxHome
+            $logs = Join-Path $hermes 'logs'
+            if ((Test-Path -LiteralPath $logs) -and -not (Test-ReparsePath $logs)) {
+              Get-ChildItem -LiteralPath $logs -Filter 'blackbox-*' -ErrorAction SilentlyContinue | ForEach-Object {
+                if (-not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                  Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+                }
+              }
+            }
             Write-Host 'Blackbox files removed. Other Hermes data and global packages were kept.' -ForegroundColor Green
             """;
     }
@@ -123,12 +158,34 @@ public sealed class OptionalModuleUninstaller
         $ErrorActionPreference = 'Continue'
         $root = '{{Escape(DkgRoot)}}'
         $home = '{{Escape(DkgHome)}}'
+        function Test-ReparsePath($path) {
+          $current = [IO.Path]::GetFullPath($path)
+          while ($current) {
+            if (Test-Path -LiteralPath $current) {
+              $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+              if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                return $true
+              }
+            }
+            $parent = Split-Path -Parent $current
+            if (-not $parent -or $parent -eq $current) { break }
+            $current = $parent
+          }
+          return $false
+        }
+        function Remove-SafeDirectory($path) {
+          if (-not (Test-Path -LiteralPath $path) -or (Test-ReparsePath $path)) {
+            if (Test-Path -LiteralPath $path) { Write-Warning "Skipped reparse point: $path" }
+            return
+          }
+          Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
+        }
         Write-Host 'Stopping local DKG processes...' -ForegroundColor Cyan
         Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
           Where-Object { $_.CommandLine -and ($_.CommandLine.Contains($root) -or $_.CommandLine.Contains($home)) } |
           ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-        if (Test-Path $root) { Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue }
-        if (Test-Path $home) { Remove-Item $home -Recurse -Force -ErrorAction SilentlyContinue }
+        Remove-SafeDirectory $root
+        Remove-SafeDirectory $home
         Write-Host 'Local DKG node and its testnet home removed.' -ForegroundColor Green
         """;
 
@@ -141,6 +198,7 @@ public sealed class OptionalModuleUninstaller
         try
         {
             if (!File.Exists(path) ||
+                StorageSafety.IsReparsePointInPath(path) ||
                 !File.ReadAllText(path).Contains("Managed by Netpetra", StringComparison.Ordinal))
             {
                 return false;
@@ -160,7 +218,7 @@ public sealed class OptionalModuleUninstaller
     {
         try
         {
-            if (File.Exists(path))
+            if (File.Exists(path) && !StorageSafety.IsReparsePointInPath(path))
             {
                 File.Delete(path);
             }

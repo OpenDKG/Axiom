@@ -50,7 +50,7 @@ public sealed class BlackboxModeStore
 
     public bool SetMode(string mode)
     {
-        if (mode is not ("audit" or "block") || StorageSafety.IsReparsePoint(ConfigPath))
+        if (mode is not ("audit" or "block") || StorageSafety.IsReparsePointInPath(ConfigPath))
         {
             return false;
         }
