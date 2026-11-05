@@ -26,6 +26,32 @@ public sealed class UserStateProtectionTests
     }
 
     [Fact]
+    public void Unreadable_protected_file_is_not_deleted_by_restore()
+    {
+        using var temp = new TempTree();
+        var config = Path.Combine(temp.Root, ".codex", "auth.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(config)!);
+        File.WriteAllText(config, "user-secret");
+
+        var protection = new UserStateProtection(temp.Root, temp.Root, temp.Root);
+        UserStateSnapshot snapshot;
+        using (new FileStream(config, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            snapshot = protection.Capture();
+        }
+
+        Assert.True(snapshot.Files[config].CaptureFailed);
+
+        var failures = protection.Restore(
+            snapshot,
+            [new UserStateChange(config, "content changed")]);
+
+        Assert.Contains(config, failures);
+        Assert.True(File.Exists(config));
+        Assert.Equal("user-secret", File.ReadAllText(config));
+    }
+
+    [Fact]
     public void Explicitly_allowed_hook_path_is_ignored()
     {
         using var temp = new TempTree();

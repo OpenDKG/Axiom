@@ -222,7 +222,7 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
         {
             StatusText = exception.Message;
         }
-        catch (IOException exception)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             StatusText = $"Export failed: {exception.Message}";
         }

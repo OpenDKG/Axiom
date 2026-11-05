@@ -377,13 +377,28 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         }.ToJsonString()).ConfigureAwait(true);
         process.StandardInput.Close();
 
-        var output = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(true);
-        if (!process.WaitForExit(15000))
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        var exitTask = process.WaitForExitAsync();
+        var completed = await Task.WhenAny(exitTask, Task.Delay(TimeSpan.FromSeconds(15))).ConfigureAwait(true);
+        if (completed != exitTask)
         {
-            process.Kill(entireProcessTree: true);
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+#pragma warning disable CA1031 // The timeout path must still report the timeout.
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+            }
+
             throw new TimeoutException("Blackbox guard timed out.");
         }
 
+        await exitTask.ConfigureAwait(true);
+        var output = await outputTask.ConfigureAwait(true);
+        _ = await errorTask.ConfigureAwait(true);
         return JsonNode.Parse(output) as JsonObject;
     }
 

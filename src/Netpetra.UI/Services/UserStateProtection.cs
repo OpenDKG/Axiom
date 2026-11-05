@@ -23,7 +23,8 @@ public sealed record UserStateFile(
     string? Sha256,
     byte[]? Content,
     bool IsReparsePoint,
-    string? LinkTarget);
+    string? LinkTarget,
+    bool CaptureFailed = false);
 
 public sealed record UserStateDirectoryEntry(
     string RelativePath,
@@ -40,7 +41,8 @@ public sealed record UserStateDirectory(
     bool Recursive,
     bool IsReparsePoint,
     string? LinkTarget,
-    IReadOnlyDictionary<string, UserStateDirectoryEntry> Entries);
+    IReadOnlyDictionary<string, UserStateDirectoryEntry> Entries,
+    bool CaptureFailed = false);
 
 public sealed record UserStateChange(string Path, string Reason);
 
@@ -292,7 +294,9 @@ public sealed class UserStateProtection
 
         foreach (var (path, before) in snapshot.Files)
         {
-            if (allowed.Contains(Path.GetFullPath(path)) || IsNetpetraBackupPath(path))
+            if (before.CaptureFailed ||
+                allowed.Contains(Path.GetFullPath(path)) ||
+                IsNetpetraBackupPath(path))
             {
                 continue;
             }
@@ -300,6 +304,11 @@ public sealed class UserStateProtection
             var spec = ProtectedFiles.FirstOrDefault(file =>
                 string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase));
             var after = CaptureFile(spec ?? new UserStateFileSpec(path, "unknown"));
+            if (after.CaptureFailed)
+            {
+                continue;
+            }
+
             if (before.Exists != after.Exists)
             {
                 changes.Add(new UserStateChange(path, before.Exists ? "removed" : "created"));
@@ -312,7 +321,7 @@ public sealed class UserStateProtection
 
         foreach (var (path, before) in snapshot.Directories)
         {
-            if (allowed.Contains(Path.GetFullPath(path)))
+            if (before.CaptureFailed || allowed.Contains(Path.GetFullPath(path)))
             {
                 continue;
             }
@@ -320,6 +329,11 @@ public sealed class UserStateProtection
             var spec = ProtectedDirectories.FirstOrDefault(directory =>
                 string.Equals(directory.Path, path, StringComparison.OrdinalIgnoreCase));
             var after = CaptureDirectory(spec ?? new UserStateDirectorySpec(path, "unknown", before.Recursive));
+            if (after.CaptureFailed)
+            {
+                continue;
+            }
+
             if (before.Exists != after.Exists)
             {
                 if (!before.Exists && IsAllowedAncestor(path, allowed))
@@ -400,8 +414,10 @@ public sealed class UserStateProtection
 
             try
             {
-                if (before.IsReparsePoint)
+                if (before.CaptureFailed || before.IsReparsePoint)
                 {
+                    // Never delete a path that was only assumed absent because its state could not
+                    // be read. An unreadable file may still be a user credential or session store.
                     failures.Add(change.Path);
                     continue;
                 }
@@ -472,10 +488,43 @@ public sealed class UserStateProtection
         var path = spec.Path;
         try
         {
+            try
+            {
+                _ = File.GetAttributes(path);
+            }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return new UserStateFile(path, false, 0, null, null, null, false, null);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return new UserStateFile(
+                    path,
+                    Exists: false,
+                    Length: 0,
+                    LastWriteUtc: null,
+                    Sha256: null,
+                    Content: null,
+                    IsReparsePoint: false,
+                    LinkTarget: null,
+                    CaptureFailed: true);
+            }
+
             var info = new FileInfo(path);
             if (!info.Exists)
             {
-                return new UserStateFile(path, false, 0, null, null, null, false, null);
+                // The file existed a moment ago but could not be inspected. Treat this as an
+                // unknown state, not as "absent", so restore never deletes it.
+                return new UserStateFile(
+                    path,
+                    Exists: false,
+                    Length: 0,
+                    LastWriteUtc: null,
+                    Sha256: null,
+                    Content: null,
+                    IsReparsePoint: false,
+                    LinkTarget: null,
+                    CaptureFailed: true);
             }
 
             var isReparsePoint = (info.Attributes & FileAttributes.ReparsePoint) != 0;
@@ -513,7 +562,16 @@ public sealed class UserStateProtection
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            return new UserStateFile(path, false, 0, null, null, null, false, null);
+            return new UserStateFile(
+                path,
+                Exists: false,
+                Length: 0,
+                LastWriteUtc: null,
+                Sha256: null,
+                Content: null,
+                IsReparsePoint: false,
+                LinkTarget: null,
+                CaptureFailed: true);
         }
     }
 
@@ -522,8 +580,11 @@ public sealed class UserStateProtection
         var path = spec.Path;
         try
         {
-            var info = new DirectoryInfo(path);
-            if (!info.Exists)
+            try
+            {
+                _ = File.GetAttributes(path);
+            }
+            catch (Exception exception) when (exception is DirectoryNotFoundException)
             {
                 return new UserStateDirectory(
                     path,
@@ -532,6 +593,30 @@ public sealed class UserStateProtection
                     false,
                     null,
                     new Dictionary<string, UserStateDirectoryEntry>(StringComparer.OrdinalIgnoreCase));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return new UserStateDirectory(
+                    path,
+                    Exists: false,
+                    Recursive: spec.Recursive,
+                    IsReparsePoint: false,
+                    LinkTarget: null,
+                    Entries: new Dictionary<string, UserStateDirectoryEntry>(StringComparer.OrdinalIgnoreCase),
+                    CaptureFailed: true);
+            }
+
+            var info = new DirectoryInfo(path);
+            if (!info.Exists)
+            {
+                return new UserStateDirectory(
+                    path,
+                    Exists: false,
+                    Recursive: spec.Recursive,
+                    IsReparsePoint: false,
+                    LinkTarget: null,
+                    Entries: new Dictionary<string, UserStateDirectoryEntry>(StringComparer.OrdinalIgnoreCase),
+                    CaptureFailed: true);
             }
 
             var isReparsePoint = (info.Attributes & FileAttributes.ReparsePoint) != 0;
@@ -559,11 +644,12 @@ public sealed class UserStateProtection
         {
             return new UserStateDirectory(
                 path,
-                false,
-                spec.Recursive,
-                false,
-                null,
-                new Dictionary<string, UserStateDirectoryEntry>(StringComparer.OrdinalIgnoreCase));
+                Exists: false,
+                Recursive: spec.Recursive,
+                IsReparsePoint: false,
+                LinkTarget: null,
+                Entries: new Dictionary<string, UserStateDirectoryEntry>(StringComparer.OrdinalIgnoreCase),
+                CaptureFailed: true);
         }
     }
 

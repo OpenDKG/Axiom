@@ -28,19 +28,23 @@ public sealed class AgentHookProbe
 
     public async Task<AgentHookTestResult> TestAsync(string kind, CancellationToken cancellationToken)
     {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(15));
+        var token = timeout.Token;
+
         try
         {
             return kind.ToLowerInvariant() switch
             {
-                "codex" => await TestCodexAsync(cancellationToken).ConfigureAwait(false),
-                "claude" => await TestClaudeAsync(cancellationToken).ConfigureAwait(false),
-                "cursor" => await TestCursorAsync(cancellationToken).ConfigureAwait(false),
-                "copilot" => await TestCopilotAsync(cancellationToken).ConfigureAwait(false),
-                "gemini" => await TestGeminiAsync(cancellationToken).ConfigureAwait(false),
-                "windsurf" => await TestWindsurfAsync(cancellationToken).ConfigureAwait(false),
-                "cline" => await TestClineAsync(cancellationToken).ConfigureAwait(false),
-                "opencode" => await TestOpenCodeAsync("OpenCode", cancellationToken).ConfigureAwait(false),
-                "openchamber" => await TestOpenCodeAsync("OpenChamber", cancellationToken).ConfigureAwait(false),
+                "codex" => await TestCodexAsync(token).ConfigureAwait(false),
+                "claude" => await TestClaudeAsync(token).ConfigureAwait(false),
+                "cursor" => await TestCursorAsync(token).ConfigureAwait(false),
+                "copilot" => await TestCopilotAsync(token).ConfigureAwait(false),
+                "gemini" => await TestGeminiAsync(token).ConfigureAwait(false),
+                "windsurf" => await TestWindsurfAsync(token).ConfigureAwait(false),
+                "cline" => await TestClineAsync(token).ConfigureAwait(false),
+                "opencode" => await TestOpenCodeAsync("OpenCode", token).ConfigureAwait(false),
+                "openchamber" => await TestOpenCodeAsync("OpenChamber", token).ConfigureAwait(false),
                 _ => new AgentHookTestResult(
                     "SKIPPED",
                     "Netpetra has no hook adapter for this recognized harness."),
@@ -53,12 +57,25 @@ public sealed class AgentHookProbe
         }
     }
 
+    private static bool IsManagedScript(string path)
+    {
+        try
+        {
+            return File.Exists(path) &&
+                   File.ReadAllText(path).Contains("Managed by Netpetra", StringComparison.Ordinal);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     private async Task<AgentHookTestResult> TestCodexAsync(CancellationToken cancellationToken)
     {
         var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
         var python = Path.Combine(root, "venv", "Scripts", "python.exe");
         var hook = Path.Combine(root, "netpetra-codex-hook.py");
-        if (!File.Exists(python) || !File.Exists(hook))
+        if (!File.Exists(python) || !IsManagedScript(hook))
         {
             return new AgentHookTestResult("FAIL", "Codex hook or Blackbox Python runtime is missing.");
         }
@@ -129,7 +146,7 @@ public sealed class AgentHookProbe
         var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
         var python = Path.Combine(root, "venv", "Scripts", "python.exe");
         var hook = Path.Combine(root, "netpetra-claude-hook.py");
-        if (!File.Exists(python) || !File.Exists(hook))
+        if (!File.Exists(python) || !IsManagedScript(hook))
         {
             return new AgentHookTestResult("FAIL", "Claude Code hook or Blackbox Python runtime is missing.");
         }
@@ -185,7 +202,7 @@ public sealed class AgentHookProbe
         var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
         var python = Path.Combine(root, "venv", "Scripts", "python.exe");
         var hook = Path.Combine(root, "netpetra-cursor-hook.py");
-        if (!File.Exists(python) || !File.Exists(hook))
+        if (!File.Exists(python) || !IsManagedScript(hook))
         {
             return new AgentHookTestResult("FAIL", "Cursor hook or Blackbox Python runtime is missing.");
         }
@@ -255,7 +272,7 @@ public sealed class AgentHookProbe
         var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
         var python = Path.Combine(root, "venv", "Scripts", "python.exe");
         var hook = Path.Combine(root, "netpetra-copilot-hook.py");
-        if (!File.Exists(python) || !File.Exists(hook))
+        if (!File.Exists(python) || !IsManagedScript(hook))
         {
             return new AgentHookTestResult("FAIL", "Copilot hook or Blackbox Python runtime is missing.");
         }
@@ -325,7 +342,7 @@ public sealed class AgentHookProbe
         var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
         var python = Path.Combine(root, "venv", "Scripts", "python.exe");
         var hook = Path.Combine(root, "netpetra-gemini-hook.py");
-        if (!File.Exists(python) || !File.Exists(hook))
+        if (!File.Exists(python) || !IsManagedScript(hook))
         {
             return new AgentHookTestResult("FAIL", "Gemini hook or Blackbox Python runtime is missing.");
         }
@@ -394,7 +411,7 @@ public sealed class AgentHookProbe
         var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
         var python = Path.Combine(root, "venv", "Scripts", "python.exe");
         var hook = Path.Combine(root, "netpetra-windsurf-hook.py");
-        if (!File.Exists(python) || !File.Exists(hook))
+        if (!File.Exists(python) || !IsManagedScript(hook))
         {
             return new AgentHookTestResult("FAIL", "Windsurf hook or Blackbox Python runtime is missing.");
         }
@@ -455,9 +472,11 @@ public sealed class AgentHookProbe
         var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
         var python = Path.Combine(root, "venv", "Scripts", "python.exe");
         var hook = Path.Combine(_userProfile, "Documents", "Cline", "Hooks", "PreToolUse.py");
-        if (!File.Exists(python) || !File.Exists(hook))
+        if (!File.Exists(python) || !IsManagedScript(hook))
         {
-            return new AgentHookTestResult("FAIL", "Cline hook or Blackbox Python runtime is missing.");
+            return new AgentHookTestResult(
+                "FAIL",
+                "Cline hook is missing, not Netpetra-managed, or the Blackbox Python runtime is missing.");
         }
 
         var startInfo = new ProcessStartInfo(python)
@@ -534,9 +553,11 @@ public sealed class AgentHookProbe
             "plugins",
             "netpetra-blackbox",
             "index.ts");
-        if (!File.Exists(python) || !File.Exists(plugin))
+        if (!File.Exists(python) || !IsManagedScript(plugin))
         {
-            return new AgentHookTestResult("FAIL", $"{label} hook files or Blackbox Python runtime are missing.");
+            return new AgentHookTestResult(
+                "FAIL",
+                $"{label} hook is missing, not Netpetra-managed, or the Blackbox Python runtime is missing.");
         }
 
         var temp = Path.Combine(Path.GetTempPath(), "netpetra-hook-test-" + Guid.NewGuid().ToString("N"));
@@ -607,8 +628,11 @@ public sealed class AgentHookProbe
 
             using var process = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Could not start Node for the hook test.");
-            var output = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            var output = await outputTask.ConfigureAwait(false);
+            var error = await errorTask.ConfigureAwait(false);
 
             if (output.Contains("BLOCKED:", StringComparison.Ordinal))
             {
@@ -626,7 +650,8 @@ public sealed class AgentHookProbe
 
             return new AgentHookTestResult(
                 "FAIL",
-                $"{label} hook test did not complete (exit {process.ExitCode}).");
+                $"{label} hook test did not complete (exit {process.ExitCode})." +
+                (string.IsNullOrWhiteSpace(error) ? string.Empty : " " + error.Trim()));
         }
         finally
         {
