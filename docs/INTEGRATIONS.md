@@ -80,7 +80,8 @@ marker-owned hook entry. Before each operation Netpetra fingerprints user-owned 
 Small files are hashed and can be restored byte-for-byte. Large agent databases are fingerprinted
 by length and last-write time so a multi-gigabyte database is never loaded or rehashed during every
 action; small session/history files are hashed. Junctions and reparse points are recorded and never
-traversed. Unexpected changes are restored where possible; setup stops if restoration fails and
+traversed; install and uninstall cleanup refuses to recurse through a reparse point. Unexpected
+changes are restored where possible; setup stops if restoration fails and
 uninstall reports any path it could not restore. Uninstall deletes an OpenCode plugin only when it
 contains the `Managed by Netpetra` marker, and leaves Codex `hooks.json` byte-identical when no
 Netpetra hook is present.

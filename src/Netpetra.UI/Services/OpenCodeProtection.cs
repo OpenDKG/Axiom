@@ -85,8 +85,8 @@ public sealed class OpenCodeProtection
 
         try
         {
-            if (StorageSafety.IsReparsePoint(ConfigDirectory) ||
-                StorageSafety.IsReparsePoint(Path.GetDirectoryName(PluginPath)!))
+            if (StorageSafety.IsReparsePointInPath(ConfigDirectory) ||
+                StorageSafety.IsReparsePointInPath(Path.GetDirectoryName(PluginPath)!))
             {
                 // Never write through a junction/symlink in a user-managed agent configuration.
                 return false;
@@ -102,6 +102,7 @@ public sealed class OpenCodeProtection
             }
 
             if (File.Exists(LegacyPluginPath) &&
+                !StorageSafety.IsReparsePointInPath(LegacyPluginPath) &&
                 File.ReadAllText(LegacyPluginPath).Contains("Managed by Netpetra", StringComparison.Ordinal))
             {
                 File.Delete(LegacyPluginPath);

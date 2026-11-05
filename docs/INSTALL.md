@@ -88,7 +88,8 @@ wizard.
 
 This removes only the installed executable, the manifest and the shortcut. Local data is kept by
 default; add `-RemoveData` to delete the Netpetra database (`netpetra.db` and WAL sidecars). Unknown
-files in the installation directory are never deleted.
+files in the installation directory are never deleted. Junction and symbolic-link paths are skipped
+so cleanup cannot recurse into user data outside the installation.
 
 ## Upgrading from an earlier build
 

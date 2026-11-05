@@ -52,7 +52,9 @@ public sealed class CodexProtection
 
         try
         {
-            if (StorageSafety.IsReparsePoint(ConfigDirectory) || StorageSafety.IsReparsePoint(HooksPath))
+            if (StorageSafety.IsReparsePointInPath(ConfigDirectory) ||
+                StorageSafety.IsReparsePointInPath(HooksPath) ||
+                StorageSafety.IsReparsePointInPath(HookScriptPath))
             {
                 return false;
             }
@@ -75,6 +77,12 @@ public sealed class CodexProtection
     {
         try
         {
+            if (StorageSafety.IsReparsePointInPath(HookScriptPath) ||
+                StorageSafety.IsReparsePointInPath(HooksPath))
+            {
+                return;
+            }
+
             if (File.Exists(HookScriptPath))
             {
                 File.Delete(HookScriptPath);

@@ -28,6 +28,52 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Test-ReparsePath {
+    param([string]$Path)
+
+    $current = [IO.Path]::GetFullPath($Path)
+    while ($current) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+            if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                return $true
+            }
+        }
+
+        $parent = Split-Path -Parent $current
+        if (-not $parent -or $parent -eq $current) {
+            break
+        }
+
+        $current = $parent
+    }
+
+    return $false
+}
+
+function Remove-SafeItem {
+    param(
+        [string]$Path,
+        [switch]$Recurse
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    if (Test-ReparsePath $Path) {
+        Write-Warning "Skipped reparse point: $Path"
+        return
+    }
+
+    if ($Recurse) {
+        Remove-Item -LiteralPath $Path -Recurse -Force
+    }
+    else {
+        Remove-Item -LiteralPath $Path -Force
+    }
+}
+
 if (Get-Process -Name "Netpetra.Desktop","Netpetra.Service" -ErrorAction SilentlyContinue) {
     throw "Netpetra is running. Close it before uninstalling."
 }
@@ -35,7 +81,7 @@ if (Get-Process -Name "Netpetra.Desktop","Netpetra.Service" -ErrorAction Silentl
 $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
 $shortcutPath = Join-Path $startMenu "Netpetra.lnk"
 if (Test-Path $shortcutPath) {
-    Remove-Item $shortcutPath -Force
+    Remove-SafeItem -Path $shortcutPath
     Write-Host "Removed shortcut: $shortcutPath"
 }
 
@@ -47,7 +93,7 @@ $installedFiles = @(
 
 foreach ($file in $installedFiles) {
     if (Test-Path $file) {
-        Remove-Item $file -Force
+        Remove-SafeItem -Path $file
         Write-Host "Removed: $file"
     }
 }
@@ -55,17 +101,17 @@ foreach ($file in $installedFiles) {
 $communityDir = Join-Path $InstallDir "community"
 $communityFeed = Join-Path $communityDir "feed.json"
 if (Test-Path $communityFeed) {
-    Remove-Item $communityFeed -Force
+    Remove-SafeItem -Path $communityFeed
     Write-Host "Removed: $communityFeed"
 }
 if ((Test-Path $communityDir) -and -not (Get-ChildItem $communityDir -Force)) {
-    Remove-Item $communityDir -Force
+    Remove-SafeItem -Path $communityDir
 }
 
 if (Test-Path $InstallDir) {
     $remaining = @(Get-ChildItem $InstallDir -Force)
     if ($remaining.Count -eq 0) {
-        Remove-Item $InstallDir -Force
+        Remove-SafeItem -Path $InstallDir
         Write-Host "Removed empty directory: $InstallDir"
     }
     else {
@@ -79,7 +125,7 @@ if ($RemoveData) {
     foreach ($name in @("netpetra.db", "netpetra.db-wal", "netpetra.db-shm")) {
         $path = Join-Path $dataDir $name
         if (Test-Path $path) {
-            Remove-Item $path -Force
+            Remove-SafeItem -Path $path
             Write-Host "Removed data file: $path"
         }
     }
@@ -87,7 +133,7 @@ if ($RemoveData) {
     if (Test-Path $dataDir) {
         $remainingData = @(Get-ChildItem $dataDir -Force)
         if ($remainingData.Count -eq 0) {
-            Remove-Item $dataDir -Force
+            Remove-SafeItem -Path $dataDir
             Write-Host "Removed empty data directory: $dataDir"
         }
     }

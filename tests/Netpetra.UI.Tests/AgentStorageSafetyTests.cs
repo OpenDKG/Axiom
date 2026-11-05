@@ -188,6 +188,18 @@ public sealed class AgentStorageSafetyTests
         Assert.False(StorageSafety.IsReparsePoint(file));
     }
 
+    [Fact]
+    public void Reparse_point_in_path_returns_false_for_a_normal_tree()
+    {
+        using var temp = new TempTree();
+        var file = Path.Combine(temp.Root, "normal", "nested", "file.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, "test");
+        Assert.False(StorageSafety.IsReparsePointInPath(file));
+        Assert.False(StorageSafety.IsReparsePointInPath(
+            Path.Combine(temp.Root, "missing", "file.txt")));
+    }
+
     private sealed class TempTree : IDisposable
     {
         public TempTree()

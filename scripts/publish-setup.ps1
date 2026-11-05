@@ -32,6 +32,14 @@ if (-not $OutputDir) {
     $OutputDir = Join-Path $root "artifacts\publish\setup"
 }
 
+$resolvedOutput = [IO.Path]::GetFullPath($OutputDir)
+$artifactsRoot = [IO.Path]::GetFullPath((Join-Path $root "artifacts"))
+if (-not ($resolvedOutput -eq $artifactsRoot -or
+          $resolvedOutput.StartsWith($artifactsRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase))) {
+    throw "OutputDir must stay inside $artifactsRoot."
+}
+$OutputDir = $resolvedOutput
+
 $desktopOut = Join-Path $root "artifacts\publish\win-x64"
 $serviceOut = Join-Path $root "artifacts\publish\service"
 $payloadOut = Join-Path $root "artifacts\publish\setup-payload"

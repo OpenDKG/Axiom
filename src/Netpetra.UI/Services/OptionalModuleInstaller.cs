@@ -40,10 +40,26 @@ public sealed class OptionalModuleInstaller
     /// Installs the DKG CLI into a per-user folder, then opens the official interactive setup on
     /// testnet and starts the node. The user answers the official prompts; nothing is hidden.
     /// </summary>
-    public void InstallDkg() => StartPowerShell(BuildDkgScript());
+    public void InstallDkg()
+    {
+        if (IsUnsafeInstallRoot(DkgRoot, DkgHome))
+        {
+            return;
+        }
 
-    public bool InstallDkgAndWait(Action<string>? log = null) =>
-        RunPowerShellScript(BuildDkgScript(), log);
+        StartPowerShell(BuildDkgScript());
+    }
+
+    public bool InstallDkgAndWait(Action<string>? log = null)
+    {
+        if (IsUnsafeInstallRoot(DkgRoot, DkgHome))
+        {
+            log?.Invoke("DKG install refused: its target path contains a junction or symbolic link.");
+            return false;
+        }
+
+        return RunPowerShellScript(BuildDkgScript(), log);
+    }
 
     private string BuildDkgScript()
     {
@@ -76,10 +92,26 @@ public sealed class OptionalModuleInstaller
     /// Downloads Umanitek's official Windows installer to a local file, prints its SHA-256 and runs
     /// it with the Oxigraph backend (no Docker). The caller must have shown a warning first.
     /// </summary>
-    public void InstallBlackbox() => StartPowerShell(BuildBlackboxScript());
+    public void InstallBlackbox()
+    {
+        if (IsUnsafeInstallRoot(BlackboxRoot))
+        {
+            return;
+        }
 
-    public bool InstallBlackboxAndWait(Action<string>? log = null) =>
-        RunPowerShellScript(BuildBlackboxScript(), log);
+        StartPowerShell(BuildBlackboxScript());
+    }
+
+    public bool InstallBlackboxAndWait(Action<string>? log = null)
+    {
+        if (IsUnsafeInstallRoot(BlackboxRoot))
+        {
+            log?.Invoke("Blackbox install refused: its target path contains a junction or symbolic link.");
+            return false;
+        }
+
+        return RunPowerShellScript(BuildBlackboxScript(), log);
+    }
 
     private string BuildBlackboxScript()
     {
@@ -133,7 +165,7 @@ public sealed class OptionalModuleInstaller
     /// </summary>
     public bool StartDkg()
     {
-        if (!File.Exists(DkgCommand))
+        if (!File.Exists(DkgCommand) || IsUnsafeInstallRoot(DkgRoot, DkgHome, DkgCommand))
         {
             return false;
         }
@@ -159,7 +191,7 @@ public sealed class OptionalModuleInstaller
     {
         var agent = Path.Combine(BlackboxRoot, "agent-blackbox");
         var venv = Path.Combine(agent, "venv", "Scripts", "python.exe");
-        if (!File.Exists(venv))
+        if (!File.Exists(venv) || IsUnsafeInstallRoot(BlackboxRoot, agent, venv))
         {
             return false;
         }
@@ -183,6 +215,9 @@ public sealed class OptionalModuleInstaller
         Process.Start(startInfo);
         return true;
     }
+
+    private static bool IsUnsafeInstallRoot(params string[] paths) =>
+        paths.Any(StorageSafety.IsReparsePointInPath);
 
     private static bool RunPowerShellScript(string script, Action<string>? log)
     {
