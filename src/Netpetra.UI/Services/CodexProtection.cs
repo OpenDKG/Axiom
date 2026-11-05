@@ -180,17 +180,32 @@ public sealed class CodexProtection
         JsonObject root;
         if (File.Exists(HooksPath))
         {
-            root = JsonNode.Parse(File.ReadAllText(HooksPath)) as JsonObject ?? new JsonObject();
+            if (JsonNode.Parse(File.ReadAllText(HooksPath)) is not JsonObject existing)
+            {
+                return false;
+            }
+
+            root = existing;
         }
         else
         {
             root = new JsonObject();
         }
 
+        if (root["hooks"] is not null && root["hooks"] is not JsonObject)
+        {
+            return false;
+        }
+
         if (root["hooks"] is not JsonObject hooks)
         {
             hooks = new JsonObject();
             root["hooks"] = hooks;
+        }
+
+        if (hooks["PreToolUse"] is not null && hooks["PreToolUse"] is not JsonArray)
+        {
+            return false;
         }
 
         if (hooks["PreToolUse"] is not JsonArray groups)

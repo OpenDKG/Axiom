@@ -33,6 +33,7 @@ public sealed class AgentHookProbe
             return kind.ToLowerInvariant() switch
             {
                 "codex" => await TestCodexAsync(cancellationToken).ConfigureAwait(false),
+                "claude" => await TestClaudeAsync(cancellationToken).ConfigureAwait(false),
                 "opencode" => await TestOpenCodeAsync("OpenCode", cancellationToken).ConfigureAwait(false),
                 "openchamber" => await TestOpenCodeAsync("OpenChamber", cancellationToken).ConfigureAwait(false),
                 _ => new AgentHookTestResult(
@@ -116,6 +117,62 @@ public sealed class AgentHookProbe
         {
             return false;
         }
+    }
+
+    private async Task<AgentHookTestResult> TestClaudeAsync(CancellationToken cancellationToken)
+    {
+        var root = Path.Combine(_localAppData, "Netpetra", "modules", "blackbox", "agent-blackbox");
+        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var hook = Path.Combine(root, "netpetra-claude-hook.py");
+        if (!File.Exists(python) || !File.Exists(hook))
+        {
+            return new AgentHookTestResult("FAIL", "Claude Code hook or Blackbox Python runtime is missing.");
+        }
+
+        var startInfo = new ProcessStartInfo(python)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = root,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        startInfo.ArgumentList.Add(hook);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Could not start the Claude Code hook.");
+        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
+        {
+            tool_name = "Read",
+            tool_input = new { path = Path.Combine(Path.GetTempPath(), "netpetra-hook-test.txt") },
+            session_id = "netpetra-hook-test",
+            tool_use_id = Guid.NewGuid().ToString("N"),
+        })).ConfigureAwait(false);
+        process.StandardInput.Close();
+
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var output = await outputTask.ConfigureAwait(false);
+        _ = await errorTask.ConfigureAwait(false);
+
+        if (process.ExitCode != 0)
+        {
+            return new AgentHookTestResult("FAIL", $"Claude Code hook exited with {process.ExitCode}.");
+        }
+
+        if (IsDeniedCodexOutput(output))
+        {
+            return new AgentHookTestResult(
+                "BLOCKED",
+                "Claude Code hook executed and returned permissionDecision: deny for the benign test call. " +
+                "The real Claude Code process was not exercised.");
+        }
+
+        return new AgentHookTestResult(
+            "HOOK RAN",
+            "Claude Code hook executed and reached the local guard without a block. The real Claude Code process was not exercised.");
     }
 
     private async Task<AgentHookTestResult> TestOpenCodeAsync(string label, CancellationToken cancellationToken)

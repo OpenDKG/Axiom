@@ -27,7 +27,7 @@
             Margin="0,18,0,0">
       <StackPanel>
         <TextBlock Text="Partial installation" FontWeight="SemiBold" />
-        <TextBlock Text="Install no agent hooks now. Do not create, replace or delete OpenCode, OpenChamber or Codex hook files."
+        <TextBlock Text="Install no agent hooks now. Do not create, replace or delete OpenCode, OpenChamber, Codex or Claude Code hook files."
                    Style="{StaticResource Caption}"
                    TextWrapping="Wrap"
                    Margin="0,3,0,0" />
@@ -42,11 +42,11 @@
             Margin="0,10,0,0">
       <StackPanel>
         <TextBlock Text="Complete installation" FontWeight="SemiBold" />
-        <TextBlock Text="Install or repair Netpetra guard hooks for detected OpenCode/OpenChamber and Codex. Existing Netpetra-managed files are backed up first."
+        <TextBlock Text="Install or repair Netpetra guard hooks for detected OpenCode/OpenChamber, Codex and Claude Code. Existing Netpetra-managed files are backed up first."
                    Style="{StaticResource Caption}"
                    TextWrapping="Wrap"
                    Margin="0,3,0,0" />
-        <TextBlock Text="Will write only: %USERPROFILE%\.config\opencode\plugins\netpetra-blackbox.ts; %LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py; %USERPROFILE%\.codex\hooks.json (netpetra-codex-hook.py entry only); %LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-codex-hook.py."
+        <TextBlock Text="Will write only: %USERPROFILE%\.config\opencode\plugins\netpetra-blackbox.ts; %LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py; %USERPROFILE%\.codex\hooks.json (netpetra-codex-hook.py entry only); %LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-codex-hook.py; %USERPROFILE%\.claude\settings.json (netpetra-claude-hook.py PreToolUse entry only); %LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-claude-hook.py."
                    Style="{StaticResource Caption}"
                    FontFamily="Consolas"
                    FontSize="11"
