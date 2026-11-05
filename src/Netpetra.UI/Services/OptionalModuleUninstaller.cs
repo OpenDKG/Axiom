@@ -118,6 +118,7 @@ public sealed class OptionalModuleUninstaller
         new CodexProtection().Remove();
         new ClaudeProtection().Remove();
         new CursorProtection().Remove();
+        new CopilotProtection().Remove();
         RemoveManagedOpenCodePlugin();
     }
 

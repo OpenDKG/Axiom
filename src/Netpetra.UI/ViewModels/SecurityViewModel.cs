@@ -86,6 +86,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
         "codex" => "Codex",
         "claude" => "Claude Code",
         "cursor" => "Cursor",
+        "copilot" => "GitHub Copilot CLI",
         _ => Kind,
     };
 
@@ -93,7 +94,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
 
     public bool IsProtected => Status == "PROTECTED";
 
-    public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude" or "cursor";
+    public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude" or "cursor" or "copilot";
 
     public string TestResult { get; init; } = string.Empty;
 }
@@ -131,6 +132,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly ClaudeProtection _claudeProtection = new();
 
     private readonly CursorProtection _cursorProtection = new();
+
+    private readonly CopilotProtection _copilotProtection = new();
 
     private readonly AgentHookProbe _agentHookProbe = new();
 
@@ -287,7 +290,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     public string AgentStatusText =>
         "DKG and Blackbox status, install actions and the workspaces they report. " +
-        "OpenCode, OpenChamber, Codex, Claude Code, Cursor and Hermes are listed below; an installed hook is not proof of runtime blocking.";
+        "OpenCode, OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI and Hermes are listed below; an installed hook is not proof of runtime blocking.";
 
     public string AgentHookInstallHint =>
         "Status refresh is read-only. Agent hooks are installed only when you choose Install/Repair hooks and select " +
@@ -703,6 +706,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 allowedChanges.Add(_codexProtection.HooksPath);
                 allowedChanges.Add(_claudeProtection.SettingsPath);
                 allowedChanges.Add(_cursorProtection.HooksPath);
+                allowedChanges.Add(_copilotProtection.HooksPath);
                 allowedChanges.Add(_uninstaller.OpenCodePlugin);
                 allowedChanges.Add(_uninstaller.OpenCodeV1Plugin);
                 allowedChanges.Add(_uninstaller.OpenCodeLegacyPlugin);
@@ -768,7 +772,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (!dialog.CompleteInstallation)
         {
-            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber, Codex, Claude Code or Cursor hook files were changed.";
+            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber, Codex, Claude Code, Cursor or Copilot hook files were changed.";
             return;
         }
 
@@ -777,6 +781,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         var codex = _codexProtection.EnsureInstalled();
         var claude = _claudeProtection.EnsureInstalled();
         var cursor = _cursorProtection.EnsureInstalled();
+        var copilot = _copilotProtection.EnsureInstalled();
 
         var allowedHookChanges = new[]
         {
@@ -790,6 +795,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             _claudeProtection.HookScriptPath,
             _cursorProtection.HooksPath,
             _cursorProtection.HookScriptPath,
+            _copilotProtection.HooksPath,
+            _copilotProtection.HookScriptPath,
         };
         var unexpectedChanges = await Task.Run(
             () => _userStateProtection.Verify(snapshot, allowedHookChanges)).ConfigureAwait(true);
@@ -808,7 +815,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         InstallStatusText =
             $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
             $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}, " +
-            $"Cursor {(cursor ? "installed" : "skipped")}. " +
+            $"Cursor {(cursor ? "installed" : "skipped")}, GitHub Copilot CLI {(copilot ? "installed" : "skipped")}. " +
             "Existing managed hook files are backed up beside the originals. " +
             "MCP server definitions, selected models, favorites, sessions and Antigravity history were not changed.";
         await RefreshAsync().ConfigureAwait(true);
@@ -911,6 +918,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         AddCodexAgents(blackboxConnected);
         AddClaudeAgents(blackboxConnected);
         AddCursorAgents(blackboxConnected);
+        AddCopilotAgents(blackboxConnected);
         AddOpenCodeAgents(blackboxConnected);
 
         if (!blackboxConnected)
@@ -1108,6 +1116,36 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         ProtectedAgents.Add(new ProtectedAgent(
             "cursor",
             _cursorProtection.HooksPath,
+            status,
+            detail));
+    }
+
+    private void AddCopilotAgents(bool blackboxConnected)
+    {
+        if (!_copilotProtection.IsCopilotDetected)
+        {
+            return;
+        }
+
+        var installed = _copilotProtection.IsInstalled;
+        var evidence = _agentEvidence.Latest("copilot");
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected);
+        var detail = !installed
+            ? "GitHub Copilot CLI config detected; preToolUse hook is missing or malformed."
+            : evidence is null
+                ? "Hook configuration detected; runtime not verified. Restart Copilot CLI if it was already running."
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); Copilot preToolUse is fail-closed, so check the hook."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
+
+        ProtectedAgents.Add(new ProtectedAgent(
+            "copilot",
+            _copilotProtection.HooksPath,
             status,
             detail));
     }
