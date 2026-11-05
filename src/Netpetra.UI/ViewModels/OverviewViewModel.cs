@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Netpetra.UI.Controls;
 using Netpetra.UI.Services;
 
 namespace Netpetra.UI.ViewModels;
@@ -32,17 +33,15 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
 
     public AgentsViewModel AgentActivity { get; }
 
-    public ObservableCollection<double> UploadSeries => _traffic.UploadSeries;
-
-    public ObservableCollection<double> DownloadSeries => _traffic.DownloadSeries;
+    public ObservableCollection<ThroughputSample> Samples => _traffic.Samples;
 
     /// <summary>Latest physically measured interface sample, irrespective of the selected chart range.</summary>
-    public double LatestMeasuredUploadBytesPerSecond => _traffic.UploadSeries.Count > 0
-        ? _traffic.UploadSeries[^1]
+    public double LatestMeasuredUploadBytesPerSecond => _traffic.Samples.Count > 0
+        ? _traffic.Samples[^1].Upload
         : double.NaN;
 
-    public double LatestMeasuredDownloadBytesPerSecond => _traffic.DownloadSeries.Count > 0
-        ? _traffic.DownloadSeries[^1]
+    public double LatestMeasuredDownloadBytesPerSecond => _traffic.Samples.Count > 0
+        ? _traffic.Samples[^1].Download
         : double.NaN;
 
     public event EventHandler? TrafficSampled;
@@ -73,15 +72,15 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
         ? "system-wide counters (per-process pending)"
         : "historical byte samples unavailable";
 
-    /// <summary>Normalised positions of connections first observed in the selected range.</summary>
+    /// <summary>Timestamped first-observed connection annotations for the chart.</summary>
     [ObservableProperty]
-    private IReadOnlyList<double> _newConnectionMarkers = [];
+    private IReadOnlyList<ConnectionChartMarker> _chartMarkers = [];
 
     [ObservableProperty]
-    private IReadOnlyList<string> _newConnectionMarkerLabels = [];
+    private DateTimeOffset _chartStartUtc = DateTimeOffset.UtcNow.AddMinutes(-5);
 
     [ObservableProperty]
-    private IReadOnlyList<string> _newConnectionMarkerDetails = [];
+    private DateTimeOffset _chartEndUtc = DateTimeOffset.UtcNow;
 
     [ObservableProperty]
     private int _selectedMarkerIndex = -1;
@@ -207,6 +206,8 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
             _ => TrafficRange.LastFiveMinutes,
         });
 
+        ChartEndUtc = DateTimeOffset.UtcNow;
+        ChartStartUtc = ChartEndUtc.AddSeconds(-SelectedWindowSeconds);
         BucketLabel = _traffic.BucketLabel;
         RangeNote = _traffic.RangeNote;
         OnPropertyChanged(nameof(TrafficBadgeText));
@@ -219,6 +220,15 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
         UpdateLiveCounters();
         OnTrafficUpdated(this, EventArgs.Empty);
     }
+
+    private double SelectedWindowSeconds => SelectedRange switch
+    {
+        "1h" => 3600d,
+        "24h" => 86400d,
+        "7d" => 604800d,
+        "30d" => 2592000d,
+        _ => 300d,
+    };
 
     partial void OnSelectedRateUnitChanged(string value) => UpdateMetrics();
 
@@ -237,8 +247,8 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
     private void UpdateSelectedConnectionDetails()
     {
         SelectedConnectionDetails = SelectedMarkerIndex >= 0 &&
-            SelectedMarkerIndex < NewConnectionMarkerDetails.Count
-            ? NewConnectionMarkerDetails[SelectedMarkerIndex]
+            SelectedMarkerIndex < NewConnectionEvents.Count
+            ? NewConnectionEvents[SelectedMarkerIndex].Details
             : "Click or hover over an event marker for connection details.";
     }
 
@@ -257,15 +267,10 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
             ? $"{uptime.Days}d {uptime.Hours}h {uptime.Minutes}m"
             : $"{uptime.Hours}h {uptime.Minutes}m";
 
-        var windowSeconds = SelectedRange switch
-        {
-            "1h" => 3600d,
-            "24h" => 86400d,
-            "7d" => 604800d,
-            "30d" => 2592000d,
-            _ => 300d,
-        };
+        var windowSeconds = SelectedWindowSeconds;
         var now = DateTimeOffset.UtcNow;
+        ChartEndUtc = now;
+        ChartStartUtc = now.AddSeconds(-windowSeconds);
 
         foreach (var connection in _monitor.Connections.Where(item => item.IsNew))
         {
@@ -279,7 +284,7 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
 
             _sessionEvents.Add(new NewConnectionMarkerEvent(
                 0, source.FirstObservedUtc, source.AppDisplayName, source.RemoteEndpoint,
-                connection.DirectionText, source.State, 0, source.ProcessId,
+                connection.DirectionText, source.State, source.ProcessId,
                 source.AppPath, source.Protocol.ToString(), source.LocalEndpoint));
         }
 
@@ -302,22 +307,21 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
             .ToList();
 
         NewConnectionEvents.Clear();
-        var positions = new double[events.Count];
-        var labels = new string[events.Count];
-        var details = new string[events.Count];
+        var chartMarkers = new List<ConnectionChartMarker>(events.Count);
         for (var index = 0; index < events.Count; index++)
         {
             var item = events[index];
-            positions[index] = 1d - Math.Clamp((now - item.FirstSeenUtc).TotalSeconds / windowSeconds, 0d, 1d);
-            labels[index] = (index + 1).ToString(CultureInfo.InvariantCulture);
-            var updated = item with { Number = index + 1, Position = positions[index] };
+            var label = (index + 1).ToString(CultureInfo.InvariantCulture);
+            var updated = item with { Number = index + 1 };
             NewConnectionEvents.Add(updated);
-            details[index] = updated.Details;
+            chartMarkers.Add(new ConnectionChartMarker(
+                item.FirstSeenUtc,
+                label,
+                updated.Details,
+                IsThreat: false));
         }
 
-        NewConnectionMarkers = positions;
-        NewConnectionMarkerLabels = labels;
-        NewConnectionMarkerDetails = details;
+        ChartMarkers = chartMarkers;
         if (_selectedEventKey is not null)
         {
             var matchingIndex = NewConnectionEvents
@@ -400,6 +404,8 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
 
     private void OnTrafficUpdated(object? sender, EventArgs e)
     {
+        ChartEndUtc = DateTimeOffset.UtcNow;
+        ChartStartUtc = ChartEndUtc.AddSeconds(-SelectedWindowSeconds);
         UpdateMetrics();
         TrafficSampled?.Invoke(this, EventArgs.Empty);
     }
@@ -420,7 +426,6 @@ public sealed record NewConnectionMarkerEvent(
     string Remote,
     string Direction,
     string State,
-    double Position,
     int ProcessId,
     string AppPath,
     string Protocol,

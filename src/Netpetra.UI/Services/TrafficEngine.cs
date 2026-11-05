@@ -15,6 +15,12 @@ public enum TrafficRange
     LastMonth = 4,
 }
 
+/// <summary>One timestamped system-wide throughput sample. NaN means the sample is unavailable.</summary>
+public sealed record ThroughputSample(
+    DateTimeOffset Timestamp,
+    double Upload,
+    double Download);
+
 /// <summary>
 /// Genuine local, system-wide interface throughput for a rolling five-minute window.
 /// Persistent history is not yet available; never synthesize older traffic.
@@ -38,12 +44,14 @@ public sealed class TrafficEngine : IDisposable
     public ObservableCollection<double> UploadSeries { get; } = [];
     public ObservableCollection<double> DownloadSeries { get; } = [];
 
+    public ObservableCollection<ThroughputSample> Samples { get; } = [];
+
     public event EventHandler? Updated;
 
     public TrafficRange Range => _range;
     public bool IsLive => _range == TrafficRange.LastFiveMinutes;
-    public double LatestUpload => IsLive && UploadSeries.Count > 0 ? UploadSeries[^1] : double.NaN;
-    public double LatestDownload => IsLive && DownloadSeries.Count > 0 ? DownloadSeries[^1] : double.NaN;
+    public double LatestUpload => IsLive && Samples.Count > 0 ? Samples[^1].Upload : double.NaN;
+    public double LatestDownload => IsLive && Samples.Count > 0 ? Samples[^1].Download : double.NaN;
 
     public string BucketLabel => _range switch
     {
@@ -66,12 +74,14 @@ public sealed class TrafficEngine : IDisposable
             return;
         }
 
-        if (UploadSeries.Count == 0)
+        if (Samples.Count == 0)
         {
+            var firstTimestamp = DateTimeOffset.UtcNow.AddSeconds(-(BucketCount - 1));
             for (var i = 0; i < BucketCount; i++)
             {
                 UploadSeries.Add(double.NaN);
                 DownloadSeries.Add(double.NaN);
+                Samples.Add(new ThroughputSample(firstTimestamp.AddSeconds(i), double.NaN, double.NaN));
             }
         }
 
@@ -143,29 +153,33 @@ public sealed class TrafficEngine : IDisposable
 
         // A delayed dispatcher tick (sleep/hibernation/UI stall) must not stretch
         // stale samples across the five-minute time axis.
+        var nowTimestamp = DateTimeOffset.UtcNow;
         if (elapsed >= 1.5)
         {
             var missingSeconds = (int)Math.Clamp(Math.Round(elapsed) - 1, 0, BucketCount);
+            var missingStart = nowTimestamp.AddSeconds(-missingSeconds);
             for (var i = 0; i < missingSeconds; i++)
             {
-                Push(double.NaN, double.NaN);
+                Push(double.NaN, double.NaN, missingStart.AddSeconds(i));
             }
         }
 
-        Push(upload, download);
+        Push(upload, download, nowTimestamp);
         Updated?.Invoke(this, EventArgs.Empty);
     }
 
-    private void Push(double upload, double download)
+    private void Push(double upload, double download, DateTimeOffset timestamp)
     {
-        if (UploadSeries.Count == BucketCount)
+        if (Samples.Count == BucketCount)
         {
             UploadSeries.RemoveAt(0);
             DownloadSeries.RemoveAt(0);
+            Samples.RemoveAt(0);
         }
 
         UploadSeries.Add(upload);
         DownloadSeries.Add(download);
+        Samples.Add(new ThroughputSample(timestamp, upload, download));
     }
 
     private static Dictionary<string, (long Sent, long Received)> ReadCounters()

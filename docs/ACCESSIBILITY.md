@@ -21,8 +21,8 @@ visible keyboard focus and screen-reader names for the main controls.
 - Main navigation: `Main navigation`; each item exposes the page title.
 - Connections table: `Observed connections`; the search box and protocol filter have explicit names.
 - Event timeline: `Event timeline`; time range and category filters have explicit names.
-- Throughput chart: `Throughput chart, demo series`, with help text stating that bytes are not
-  measured and markers are demo positions.
+- Throughput chart: `Throughput chart`, with measured system-wide counters and timestamped
+  first-observed connection markers. Longer ranges expose an explicit unavailable state.
 - Status bar: monitoring, firewall, database and data-source states are plain text.
 
 ## Contrast
