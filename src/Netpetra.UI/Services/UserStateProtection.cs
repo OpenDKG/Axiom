@@ -138,6 +138,8 @@ public sealed class UserStateProtection
                 // Cursor and Copilot.
                 HomeFile(".cursor/hooks.json", "Cursor hooks"),
                 HomeFile(".cursor/mcp.json", "Cursor MCP config"),
+                HomeFile(".codeium/windsurf/hooks.json", "Windsurf hooks"),
+                HomeFile("Documents/Cline/Hooks/PreToolUse.py", "Cline hooks"),
                 HomeFile(".copilot/config.json", "Copilot config"),
                 HomeFile(".copilot/mcp-config.json", "Copilot MCP config"),
                 HomeFile(".copilot/hooks/netpetra.json", "Copilot hooks"),

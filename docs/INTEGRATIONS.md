@@ -101,6 +101,33 @@ command hooks are fail-closed on crashes/non-zero exits, so the Netpetra script 
 valid JSON decision. Restart Copilot CLI if it was already running. Uninstalling Blackbox removes
 only the Netpetra hook file and script.
 
+### Gemini CLI
+
+Gemini CLI user hooks are read from `~/.gemini/settings.json`. Netpetra detects Gemini only when
+that settings file exists, not merely because the shared `~/.gemini` directory is present. Complete
+installation merges a marker-owned `BeforeTool` entry and installs `netpetra-gemini-hook.py`.
+Unrelated settings, MCP definitions, Antigravity history/conversations and other files under
+`~/.gemini` are not modified. The hook returns `decision: deny` only when Blackbox blocks; partial
+installation changes nothing. Antigravity CLI may expose a different hook surface and is not assumed
+to be Gemini-compatible.
+
+### Windsurf Cascade
+
+Windsurf user hooks are read from `~/.codeium/windsurf/hooks.json`. Complete installation merges
+marker-owned entries for `pre_run_command`, `pre_write_code` and `pre_mcp_tool_use`, and installs
+`netpetra-windsurf-hook.py`. Other hooks and settings are preserved. The script maps Cascade's
+`tool_info` to the Blackbox guard and blocks by writing the reason to stderr and exiting with code
+2; it exits 0 to allow. **Partial installation** changes nothing. Restart Cascade if it was already
+running. Antigravity/Gemini history and MCP files are never touched by this adapter.
+
+### Cline
+
+Cline user hooks use `~/Documents/Cline/Hooks/PreToolUse.py`. Complete installation writes a
+marker-owned Python hook there and never overwrites a user-authored `PreToolUse.py`; project-level
+`.cline`/`.clinerules` hooks are never touched. The hook maps Cline's `tool_call.name`/`tool_call.input`
+to the Blackbox guard and returns `cancel: true` with an `errorMessage` only when Blackbox blocks.
+**Partial installation** changes nothing. Cline hooks must be enabled and Cline may need a restart.
+
 ### User-state protection
 
 Installation, hook repair, complete setup and uninstall are scoped to Netpetra-owned files and the
