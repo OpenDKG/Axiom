@@ -86,7 +86,9 @@
         </StackPanel>
       </Border>
 
-      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+      <Border Style="{StaticResource Card}"
+              Margin="0,14,0,0"
+              Visibility="{Binding IsAutostartSupported, Converter={StaticResource BoolToVisibility}}">
         <StackPanel>
           <TextBlock Text="Startup &amp; window behavior" Style="{StaticResource SectionTitle}" />
           <CheckBox Style="{StaticResource AppCheckBox}"

@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Netpetra.Contracts;
 using Netpetra.Contracts.Blackbox;
 using Netpetra.UI.Services;
 using Netpetra.UI.Views;
@@ -67,6 +68,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     }
 
     public SecurityViewModel Security { get; }
+
+    public bool IsAvailable => !DistributionContext.IsStorePackage;
 
     public IReadOnlyList<string> ActivityFilters { get; } =
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
@@ -147,6 +150,11 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     public void Activate()
     {
+        if (!IsAvailable)
+        {
+            return;
+        }
+
         _timer.Start();
         _ = RefreshAsync();
     }
@@ -162,7 +170,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        if (_refreshing)
+        if (!IsAvailable || _refreshing)
         {
             return;
         }

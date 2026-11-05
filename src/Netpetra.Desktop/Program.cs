@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Netpetra.Contracts;
+using Netpetra.Infrastructure.Windows;
+
 namespace Netpetra.Desktop;
 
 /// <summary>
@@ -10,6 +13,8 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        DistributionContext.ConfigureForProcess(StorePackageDetector.IsPackaged);
+
         var application = new App();
         application.InitializeComponent();
         application.Run();

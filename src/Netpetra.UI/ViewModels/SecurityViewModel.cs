@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
+using Netpetra.Contracts;
 using Netpetra.Contracts.Blackbox;
 using Netpetra.Contracts.Community;
 using Netpetra.Contracts.Files;
@@ -196,6 +197,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     public ObservableCollection<ProtectedAgent> ProtectedAgents { get; } = [];
 
+    public bool IsAgentProtectionAvailable => !DistributionContext.IsStorePackage;
+
     [ObservableProperty]
     private string _fileScanStatus = "No folder scanned.";
 
@@ -275,14 +278,21 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     public string StatusBadge => Modules.Any(module => module.IsConnected) ? "CONNECTED" : "OFFLINE";
 
-    public string StatusText => Modules.Any(module => module.IsConnected)
-        ? "Netpetra reads loopback status. Install buttons open the official third-party installer only after confirmation."
-        : "The standard build is local and offline. Use Install to open the official third-party installer after confirmation.";
+    public string StatusText => DistributionContext.IsStorePackage
+        ? "Microsoft Store build: optional third-party modules and agent hooks are not included. Core local security features remain available."
+        : Modules.Any(module => module.IsConnected)
+            ? "Netpetra reads loopback status. Install buttons open the official third-party installer only after confirmation."
+            : "The standard build is local and offline. Use Install to open the official third-party installer after confirmation.";
 
     public string AgentStatusTitle
     {
         get
         {
+            if (DistributionContext.IsStorePackage)
+            {
+                return "Agent protection is not included";
+            }
+
             var connected = Modules.Count(module => module.IsAgentModule && module.IsConnected);
             return connected switch
             {
@@ -293,17 +303,21 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
     }
 
-    public string AgentStatusBadge => Modules.Any(module => module.IsAgentModule && module.IsConnected)
-        ? "CONNECTED"
-        : "OFFLINE";
+    public string AgentStatusBadge => DistributionContext.IsStorePackage
+        ? "NOT INCLUDED"
+        : Modules.Any(module => module.IsAgentModule && module.IsConnected)
+            ? "CONNECTED"
+            : "OFFLINE";
 
-    public string AgentStatusText =>
-        "DKG and Blackbox status, install actions and the workspaces they report. " +
-        "OpenCode, OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI, Gemini CLI, Windsurf Cascade, Cline and Hermes are listed below; an installed hook is not proof of runtime blocking.";
+    public string AgentStatusText => DistributionContext.IsStorePackage
+        ? "Microsoft Store build: optional DKG/Blackbox modules and agent hooks are excluded."
+        : "DKG and Blackbox status, install actions and the workspaces they report. " +
+          "OpenCode, OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI, Gemini CLI, Windsurf Cascade, Cline and Hermes are listed below; an installed hook is not proof of runtime blocking.";
 
-    public string AgentHookInstallHint =>
-        "Status refresh is read-only. Agent hooks are installed only when you choose Install/Repair hooks and select " +
-        "Complete installation; Partial installation leaves all agent hook files unchanged.";
+    public string AgentHookInstallHint => DistributionContext.IsStorePackage
+        ? "Agent hook installation is not available in the Microsoft Store build."
+        : "Status refresh is read-only. Agent hooks are installed only when you choose Install/Repair hooks and select " +
+          "Complete installation; Partial installation leaves all agent hook files unchanged.";
 
     public string SecurityStatusTitle
     {
@@ -323,8 +337,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         ? "CONFIGURED"
         : "OFFLINE";
 
-    public string SecurityStatusText =>
-        "Reputation, community feed and local file scan. Agent protection lives on the Agents page.";
+    public string SecurityStatusText => DistributionContext.IsStorePackage
+        ? "Reputation, community feed and local file scan. Agent protection is not included in the Microsoft Store build."
+        : "Reputation, community feed and local file scan. Agent protection lives on the Agents page.";
 
     public void Dispose()
     {
@@ -347,6 +362,18 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         try
         {
+            if (DistributionContext.IsStorePackage)
+            {
+                Rebuild(
+                    StoreModule("DKG is not included in the Microsoft Store build."),
+                    StoreModule("Blackbox is not included in the Microsoft Store build."));
+                ProtectedAgents.Clear();
+                AgentsStatusText = AgentStatusText;
+                LastCheckedText = $"Checked {DateTimeOffset.Now:HH:mm:ss}";
+                Activity.Clear();
+                return;
+            }
+
             var dkgTask = _probe.ProbeDkgAsync(CancellationToken.None);
             var blackboxTask = _probe.ProbeBlackboxAsync(CancellationToken.None);
 
@@ -379,6 +406,14 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     {
         if (string.IsNullOrWhiteSpace(module))
         {
+            return;
+        }
+
+        if (DistributionContext.IsStorePackage &&
+            (module.Equals("Blackbox", StringComparison.Ordinal) ||
+             module.StartsWith("OriginTrail", StringComparison.Ordinal)))
+        {
+            InstallStatusText = "This optional third-party module is not included in the Microsoft Store build.";
             return;
         }
 
@@ -676,6 +711,14 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             return;
         }
 
+        if (DistributionContext.IsStorePackage &&
+            (module.Equals("Blackbox", StringComparison.Ordinal) ||
+             module.Equals("OriginTrail DKG", StringComparison.Ordinal)))
+        {
+            InstallStatusText = "This optional third-party module is not included in the Microsoft Store build.";
+            return;
+        }
+
         var message = module switch
         {
             "Blackbox" =>
@@ -770,6 +813,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private async Task InstallAgentHooksAsync()
     {
+        if (!IsAgentProtectionAvailable)
+        {
+            InstallStatusText = "Agent hook installation is not available in the Microsoft Store build.";
+            return;
+        }
+
         var dialog = new AgentHookInstallWindow();
         if (Application.Current?.MainWindow is { } owner)
         {
@@ -881,6 +930,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private static string QuoteArgument(string value) =>
         $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
 
+    private static OptionalModuleStatus StoreModule(string detail) => new()
+    {
+        Status = "NOT INCLUDED",
+        Detail = detail,
+        IsConnected = false,
+    };
+
     private void SeedCheckingState()
     {
         Modules.Add(new SecurityModule(
@@ -892,25 +948,29 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             true,
             "Setup",
             _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)));
-        Modules.Add(new SecurityModule(
-            "Blackbox",
-            "CHECKING",
-            "Looking for a local Blackbox dashboard on 127.0.0.1:9700.",
-            "\uE7BA",
-            false,
-            !_uninstaller.IsBlackboxInstalled,
-            "Install",
-            _uninstaller.IsBlackboxInstalled,
-            _blackboxMode.IsAvailable));
-        Modules.Add(new SecurityModule(
-            "OriginTrail DKG",
-            "CHECKING",
-            "Looking for a local DKG node on 127.0.0.1:9200.",
-            "\uE968",
-            false,
-            !_uninstaller.IsDkgInstalled,
-            "Install",
-            _uninstaller.IsDkgInstalled));
+        if (!DistributionContext.IsStorePackage)
+        {
+            Modules.Add(new SecurityModule(
+                "Blackbox",
+                "CHECKING",
+                "Looking for a local Blackbox dashboard on 127.0.0.1:9700.",
+                "\uE7BA",
+                false,
+                !_uninstaller.IsBlackboxInstalled,
+                "Install",
+                _uninstaller.IsBlackboxInstalled,
+                _blackboxMode.IsAvailable));
+            Modules.Add(new SecurityModule(
+                "OriginTrail DKG",
+                "CHECKING",
+                "Looking for a local DKG node on 127.0.0.1:9200.",
+                "\uE968",
+                false,
+                !_uninstaller.IsDkgInstalled,
+                "Install",
+                _uninstaller.IsDkgInstalled));
+        }
+
         Modules.Add(CreateCommunityModule());
         Modules.Add(new SecurityModule(
             "File scanning",
@@ -935,6 +995,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private async Task RefreshAgentsAsync(bool blackboxConnected)
     {
         ProtectedAgents.Clear();
+
+        if (!IsAgentProtectionAvailable)
+        {
+            AgentsStatusText = AgentStatusText;
+            return;
+        }
 
         // Status refresh is read-only. Hook installation is an explicit, confirmed action.
         AddCodexAgents(blackboxConnected);
@@ -1315,27 +1381,31 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             true,
             "Setup",
             _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)));
-        var blackboxInstalled = _uninstaller.IsBlackboxInstalled;
-        Modules.Add(new SecurityModule(
-            "Blackbox",
-            blackbox.Status,
-            blackbox.Detail,
-            "\uE7BA",
-            blackbox.IsConnected,
-            !blackboxInstalled || !blackbox.IsConnected,
-            blackboxInstalled ? "Start" : "Install",
-            blackboxInstalled,
-            _blackboxMode.IsAvailable));
-        var dkgInstalled = _uninstaller.IsDkgInstalled;
-        Modules.Add(new SecurityModule(
-            "OriginTrail DKG",
-            dkg.Status,
-            dkg.Detail,
-            "\uE968",
-            dkg.IsConnected,
-            !dkgInstalled || !dkg.IsConnected,
-            dkgInstalled ? "Start" : "Install",
-            dkgInstalled));
+        if (!DistributionContext.IsStorePackage)
+        {
+            var blackboxInstalled = _uninstaller.IsBlackboxInstalled;
+            Modules.Add(new SecurityModule(
+                "Blackbox",
+                blackbox.Status,
+                blackbox.Detail,
+                "\uE7BA",
+                blackbox.IsConnected,
+                !blackboxInstalled || !blackbox.IsConnected,
+                blackboxInstalled ? "Start" : "Install",
+                blackboxInstalled,
+                _blackboxMode.IsAvailable));
+            var dkgInstalled = _uninstaller.IsDkgInstalled;
+            Modules.Add(new SecurityModule(
+                "OriginTrail DKG",
+                dkg.Status,
+                dkg.Detail,
+                "\uE968",
+                dkg.IsConnected,
+                !dkgInstalled || !dkg.IsConnected,
+                dkgInstalled ? "Start" : "Install",
+                dkgInstalled));
+        }
+
         Modules.Add(CreateCommunityModule());
         Modules.Add(new SecurityModule(
             "File scanning",

@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using Netpetra.Contracts;
 
 namespace Netpetra.UI.Services;
 
@@ -73,6 +74,11 @@ public sealed class OptionalModuleUninstaller
     /// </summary>
     public bool RemoveManagedOpenCodePlugin()
     {
+        if (DistributionContext.IsStorePackage)
+        {
+            return false;
+        }
+
         var removed = false;
         removed |= RemoveManagedFile(OpenCodePlugin);
         removed |= RemoveManagedFile(OpenCodeV1Plugin);
@@ -99,19 +105,38 @@ public sealed class OptionalModuleUninstaller
 
     public void UninstallBlackbox()
     {
+        if (DistributionContext.IsStorePackage)
+        {
+            return;
+        }
+
         PrepareBlackboxRemoval();
         StartPowerShell(BuildBlackboxUninstallScript());
     }
 
     public bool UninstallBlackboxAndWait()
     {
+        if (DistributionContext.IsStorePackage)
+        {
+            return false;
+        }
+
         PrepareBlackboxRemoval();
         return RunPowerShellScript(BuildBlackboxUninstallScript());
     }
 
-    public void UninstallDkg() => StartPowerShell(BuildDkgUninstallScript());
+    public void UninstallDkg()
+    {
+        if (DistributionContext.IsStorePackage)
+        {
+            return;
+        }
 
-    public bool UninstallDkgAndWait() => RunPowerShellScript(BuildDkgUninstallScript());
+        StartPowerShell(BuildDkgUninstallScript());
+    }
+
+    public bool UninstallDkgAndWait() =>
+        !DistributionContext.IsStorePackage && RunPowerShellScript(BuildDkgUninstallScript());
 
     private void PrepareBlackboxRemoval()
     {

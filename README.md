@@ -247,6 +247,19 @@ You can also run `.\scripts\install-portable.ps1` from a checkout. Remove with
 `.\scripts\uninstall-portable.ps1`; local data stays unless `-RemoveData` is used. Details:
 [`docs/INSTALL.md`](docs/INSTALL.md).
 
+### Microsoft Store (core-only MSIX)
+
+A core-only MSIX package can be built for Microsoft Store submission:
+
+```powershell
+.\scripts\build-msix.ps1
+```
+
+The Store signs the package, so no local code-signing certificate is needed for publication. The
+package excludes the optional DKG/Blackbox installers, agent hooks and HKCU autostart. Partner
+Center identity values, local test signing, submission steps and certification risks are documented
+in [`docs/STORE.md`](docs/STORE.md).
+
 ## Repository layout
 
 ```text

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Netpetra.Contracts;
 using Netpetra.Contracts.Ipc;
 using Netpetra.UI.Services;
 
@@ -41,19 +42,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var agents = new AgentsViewModel(security);
         _overview = new OverviewViewModel(monitor, agents);
 
-        Pages =
-        [
+        var pages = new List<PageViewModel>
+        {
             _overview,
             new LiveConnectionsViewModel(monitor),
             new AppsViewModel(monitor, ConnectionSourceRegistry.IsServiceMode),
             new EventsViewModel(ConnectionSourceRegistry.IsServiceMode),
-            agents,
-            new FirewallRulesViewModel(ConnectionSourceRegistry.IsServiceMode),
-            new FilesViewModel(() => SelectedPage = security),
-            security,
-            new SupportViewModel(),
-            new SettingsViewModel(monitor),
-        ];
+        };
+
+        if (!DistributionContext.IsStorePackage)
+        {
+            pages.Add(agents);
+        }
+
+        pages.Add(new FirewallRulesViewModel(ConnectionSourceRegistry.IsServiceMode));
+        pages.Add(new FilesViewModel(() => SelectedPage = security));
+        pages.Add(security);
+        pages.Add(new SupportViewModel());
+        pages.Add(new SettingsViewModel(monitor));
+        Pages = pages;
 
         _selectedPage = _overview;
         _overview.TrafficSampled += OnOverviewTrafficSampled;

@@ -7,6 +7,7 @@ using System.Windows;
 using Application = System.Windows.Application;
 using System.Windows.Interop;
 using System.Windows.Media;
+using Netpetra.Contracts;
 using Netpetra.Contracts.Monitoring;
 using Netpetra.Infrastructure.Windows.IpHelper;
 using Netpetra.UI;
@@ -19,8 +20,13 @@ namespace Netpetra.Desktop;
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The WPF Application lifetime disposes the service host in OnExit.")]
 public partial class App : Application
 {
-    private const string SingleInstanceMutexName = @"Local\Netpetra.Desktop.SingleInstance";
-    private const string ShowWindowEventName = @"Local\Netpetra.Desktop.Show";
+    private static string SingleInstanceMutexName => DistributionContext.IsStorePackage
+        ? @"Local\Netpetra.Store.Desktop.SingleInstance"
+        : @"Local\Netpetra.Desktop.SingleInstance";
+
+    private static string ShowWindowEventName => DistributionContext.IsStorePackage
+        ? @"Local\Netpetra.Store.Desktop.Show"
+        : @"Local\Netpetra.Desktop.Show";
 
     private BundledServiceHost? _serviceHost;
     private TrayStatusController? _trayStatus;
