@@ -11,7 +11,7 @@ This Draft feature stacks on PR #99, #97 and #96.
 - The optional Windows shell notification is raised **once per transition** into an observed monitoring fault (not every poll). These are best-effort `NotifyIcon.ShowBalloonTip` notifications; modern Windows may turn them into system notifications, and Windows focus-assist/policy controls can suppress them.
 - Opt out via Settings or the tray context menu. Opt-out state persists per user in `%LOCALAPPDATA%\Netpetra\tray-notifications.txt`. Disabling pop-ups does not hide the visible problem icon.
 - Status information comes from the existing UI `TrafficEngine` and `ConnectionMonitor`; no extra telemetry polling. No remote upload, no firewall changes.
-- Closing the app **exits** and disposes the tray icon. Minimize keeps the app running normally; background startup/autostart is not implemented.
+- Closing the app **exits** and disposes the tray icon. Minimize keeps the app running normally. Autostart is opt-in from Settings (off by default); the Run entry uses `--autostart`, and Start minimized uses `--start-minimized`. A second launch focuses the existing instance instead of starting another tray/service.
 
 ## What it does *not* do
 

@@ -20,6 +20,13 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
         ThemeManager.Changed += OnThemeChanged;
         TraySettingsStore.Changed += OnTraySettingsChanged;
         UpdateThemeText();
+
+        var startup = _startupSettings.Load();
+        _updatingStartup = true;
+        StartWithWindows = _autostart.Read().State is AutostartState.Enabled or AutostartState.Stale;
+        StartMinimized = startup.StartMinimized;
+        _updatingStartup = false;
+        UpdateStartupStatus();
     }
 
     public string MilestoneText => ProductMilestone.Current;
@@ -51,6 +58,85 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
     private bool _trayNotificationsEnabled = TraySettingsStore.Enabled;
 
     partial void OnTrayNotificationsEnabledChanged(bool value) => TraySettingsStore.SetEnabled(value);
+
+
+    private readonly StartupSettingsStore _startupSettings = new();
+
+    private readonly AutostartRegistration _autostart = new();
+
+    private bool _updatingStartup;
+
+    [ObservableProperty]
+    private bool _startWithWindows;
+
+    [ObservableProperty]
+    private bool _startMinimized;
+
+    [ObservableProperty]
+    private string _startupStatusText = "Autostart: off";
+
+    [ObservableProperty]
+    private bool _canRepairStartup;
+
+    partial void OnStartWithWindowsChanged(bool value)
+    {
+        if (_updatingStartup)
+        {
+            return;
+        }
+
+        var success = value ? _autostart.Enable() : _autostart.Disable();
+        if (!success)
+        {
+            _updatingStartup = true;
+            StartWithWindows = _autostart.Read().State is AutostartState.Enabled or AutostartState.Stale;
+            _updatingStartup = false;
+        }
+
+        SaveStartupPreferences();
+        UpdateStartupStatus();
+    }
+
+    partial void OnStartMinimizedChanged(bool value)
+    {
+        if (_updatingStartup)
+        {
+            return;
+        }
+
+        SaveStartupPreferences();
+    }
+
+    [RelayCommand]
+    private void RepairStartup()
+    {
+        var success = _autostart.Enable();
+        _updatingStartup = true;
+        StartWithWindows = success;
+        _updatingStartup = false;
+        SaveStartupPreferences();
+        UpdateStartupStatus();
+    }
+
+    private void SaveStartupPreferences() =>
+        _startupSettings.Save(new StartupSettings(
+            StartWithWindows,
+            StartMinimized,
+            _autostart.ExecutablePath,
+            DateTimeOffset.UtcNow));
+
+    private void UpdateStartupStatus()
+    {
+        var status = _autostart.Read();
+        CanRepairStartup = status.State == AutostartState.Stale;
+        StartupStatusText = status.State switch
+        {
+            AutostartState.Enabled => "Autostart: active",
+            AutostartState.Stale => "Autostart: path is stale; repair",
+            AutostartState.Unavailable => "Autostart: unavailable (permission/policy)",
+            _ => "Autostart: off",
+        };
+    }
 
     [RelayCommand]
     private static void UseDarkTheme() => ThemeManager.Apply(AppTheme.Dark);
