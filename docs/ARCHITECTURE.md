@@ -120,9 +120,8 @@ Infrastructure/Service/Desktop.
 - `Connections` includes an explicit `COUNTRY` placeholder. No GeoIP database is loaded, so every
   row shows an unknown country instead of inferring a flag from an IP address.
 - `Applications` groups observed executables by resolved path with live sorting by socket count.
-- `Events` is a unified timeline. Network events come from the service database; `Blocked`, `Files`,
-  `Agents` and `System` are present as filters but report that no events of that type exist in this
-  build.
+- `Events` is a persisted network-flow timeline. Only `All` and `Network` are exposed because no
+  durable file, agent, system or blocked event source exists in this build.
 - The former `Files` page was removed because it only redirected users to the working local
   SHA-256 scan on `Security`; background folder watching and quarantine remain disabled. `Agents`
   owns DKG, Blackbox, module activity and the recognized workspace list. `Security` owns
