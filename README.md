@@ -249,7 +249,9 @@ key is configured later on the Security page.
 services and installs agent hooks after Blackbox is ready. Those third-party installers may download
 large packages, require network access and show their own prompts/terms. **Partial installation**
 installs only core Axiom and leaves Blackbox, DKG, OpenCode, OpenChamber and Codex files
-unchanged.
+unchanged. Axiom also provisions Axiom-managed hooks for detected harnesses once per build at
+startup, preserving user-authored hooks. Codex still requires its own one-time `/hooks` trust
+review.
 
 You can also install from a shell:
 

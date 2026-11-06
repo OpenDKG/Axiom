@@ -225,7 +225,7 @@ public sealed class OpenCodeProtection
 
         return $$"""
             // Managed by Axiom. OpenCode V1 fallback; V2 is handled by the directory plugin.
-            import { spawnSync } from "node:child_process"
+            import { spawn, spawnSync } from "node:child_process"
             import { appendFileSync } from "node:fs"
 
             const python = "{{python}}"
@@ -251,12 +251,17 @@ public sealed class OpenCodeProtection
               }
             }
 
+            {{BuildLifecycleScript()}}
+
             export default {
               id: "axiom-blackbox-v1",
               async setup(context) {
                 // V2 loads the directory plugin and passes ctx.app.version. Do not register twice.
                 if (context?.app?.version?.startsWith("2.")) return
+                if (globalThis.__axiomBlackboxHooksInstalled) return
+                globalThis.__axiomBlackboxHooksInstalled = true
                 record("HOOK_LOADED", "", "", "loaded", 0, "")
+                startLifecycle()
                 context.tool.hook("execute.before", async (event) => {
                   const started = Date.now()
                   let decision
@@ -313,7 +318,7 @@ public sealed class OpenCodeProtection
         return $$"""
             // Managed by Axiom. OpenCode V2 directory plugin.
             import { Plugin } from "@opencode/plugin"
-            import { spawnSync } from "node:child_process"
+            import { spawn, spawnSync } from "node:child_process"
             import { appendFileSync } from "node:fs"
 
             const python = "{{python}}"
@@ -339,10 +344,15 @@ public sealed class OpenCodeProtection
               }
             }
 
+            {{BuildLifecycleScript()}}
+
             export default Plugin.define({
               id: "axiom-blackbox-v2",
               async setup(ctx) {
+                if (globalThis.__axiomBlackboxHooksInstalled) return
+                globalThis.__axiomBlackboxHooksInstalled = true
                 record("HOOK_LOADED", "", "", "loaded", 0, "")
+                startLifecycle()
                 await ctx.tool.hook("execute.before", async (event) => {
                   const started = Date.now()
                   let decision
@@ -388,6 +398,108 @@ public sealed class OpenCodeProtection
             })
             """;
     }
+
+    private static string BuildLifecycleScript() => """
+        function runLifecycleBridge(payload) {
+          try {
+            const child = spawn(python, [bridge], {
+              cwd: workingDirectory,
+              windowsHide: true,
+              stdio: ["pipe", "ignore", "ignore"],
+            })
+            child.stdin.write(JSON.stringify(payload))
+            child.stdin.end()
+          } catch {
+          }
+        }
+
+        function startLifecycle() {
+          if (globalThis.__axiomLifecycleStarted) return
+          globalThis.__axiomLifecycleStarted = true
+
+          const portIndex = process.argv.indexOf("--port")
+          const port = portIndex >= 0
+            ? process.argv[portIndex + 1]
+            : (process.env.OPENCODE_PORT || process.env.OPENCODE_SERVER_PORT)
+          if (!port) return
+
+          const password = process.env.OPENCODE_SERVER_PASSWORD || process.env.OPENCODE_PASSWORD || ""
+          const headers = password
+            ? { Authorization: "Basic " + Buffer.from("opencode:" + password).toString("base64") }
+            : {}
+          const seen = new Set()
+
+          const handle = (event) => {
+            const type = event?.type || ""
+            const data = event?.data || event?.properties || {}
+            const session = data.sessionID || data.info?.id || data.session?.id || ""
+            if (!session) return
+
+            if (!seen.has(session) &&
+                (type === "session.created" ||
+                 type === "session.step.started" ||
+                 type === "session.tool.called" ||
+                 type === "message.updated")) {
+              seen.add(session)
+              runLifecycleBridge({
+                framework: "opencode",
+                event: "session_start",
+                session,
+                workspace: data.info?.directory || "",
+              })
+            }
+
+            if (type === "session.step.started") {
+              runLifecycleBridge({
+                framework: "opencode",
+                event: "pre_api_request",
+                session,
+                model: data.model,
+                workspace: data.info?.directory || "",
+              })
+            }
+
+            if (type === "session.deleted") {
+              seen.delete(session)
+              runLifecycleBridge({
+                framework: "opencode",
+                event: "session_end",
+                session,
+              })
+            }
+          }
+
+          const connect = async () => {
+            try {
+              const response = await fetch(`http://127.0.0.1:${port}/api/event`, { headers })
+              if (!response.ok || !response.body) throw new Error("event stream unavailable")
+              const reader = response.body.getReader()
+              const decoder = new TextDecoder()
+              let buffer = ""
+              while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                buffer += decoder.decode(value, { stream: true })
+                let index
+                while ((index = buffer.indexOf("\n\n")) >= 0) {
+                  const block = buffer.slice(0, index)
+                  buffer = buffer.slice(index + 2)
+                  const line = block.split(/\r?\n/).find((item) => item.startsWith("data:"))
+                  if (!line) continue
+                  try {
+                    handle(JSON.parse(line.slice(5).trim()))
+                  } catch {
+                  }
+                }
+              }
+            } catch {
+            }
+            setTimeout(connect, 2000)
+          }
+
+          connect()
+        }
+        """;
 
     private static string BuildBridge() => """
         # Managed by Axiom. Calls the local Blackbox guard for OpenCode/OpenChamber tool calls.
@@ -442,14 +554,51 @@ public sealed class OpenCodeProtection
                 tool = str(payload.get("tool", ""))
                 session = str(payload.get("session", ""))
                 call = str(payload.get("call", ""))
+                event = str(payload.get("event", ""))
+                workspace = str(payload.get("workspace", ""))
                 with contextlib.redirect_stdout(sys.stderr):
-                    from plugins.blackbox.guard.hooks import on_pre_tool_call
+                    from plugins.blackbox.guard import hooks as guard
 
-                    decision = on_pre_tool_call(
+                    if event == "session_start":
+                        if hasattr(guard, "on_session_start"):
+                            guard.on_session_start(session_id=session, framework=framework, workspace=workspace)
+                        record(framework, "SESSION_STARTED", "", "ok", "ok", 0, session=session)
+                        print("{}")
+                        return
+
+                    if event == "pre_api_request":
+                        if hasattr(guard, "on_pre_api_request"):
+                            guard.on_pre_api_request(
+                                user_message="",
+                                request_messages=[],
+                                session_id=session,
+                                model=payload.get("model"),
+                                provider=framework,
+                                framework=framework,
+                                workspace=workspace,
+                            )
+                        record(framework, "PROMPT_SCANNED", "", "ok", "ok", 0, session=session)
+                        print("{}")
+                        return
+
+                    if event == "session_end":
+                        if hasattr(guard, "on_session_end"):
+                            guard.on_session_end(
+                                session_id=session,
+                                completed=True,
+                                interrupted=False,
+                                framework=framework,
+                                workspace=workspace,
+                            )
+                        record(framework, "SESSION_ENDED", "", "ok", "ok", 0, session=session)
+                        print("{}")
+                        return
+
+                    decision = guard.on_pre_tool_call(
                         tool_name=tool,
                         args=payload.get("args") or {},
-                        session_id=str(payload.get("session", "")),
-                        tool_call_id=str(payload.get("call", "")),
+                        session_id=session,
+                        tool_call_id=call,
                     )
                 blocked = bool(decision and decision.get("action") == "block")
                 record(

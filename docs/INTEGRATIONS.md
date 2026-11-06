@@ -60,10 +60,12 @@ discovered on `PATH`, so an installed host is detected even before it creates it
 ### OpenCode and OpenChamber
 
 OpenCode is protected through its native plugin API; OpenChamber uses the same
-`~/.config/opencode` plugin directory. Agent hooks are **not installed automatically** when the
-Blackbox dashboard connects. The single-file setup's **Complete installation** runs the official
-Blackbox and DKG installers, starts both local services and then installs the hooks. On the Agents
-page, choose **Install/repair agent hooks...** and select:
+`~/.config/opencode` plugin directory. Axiom provisions Axiom-managed hooks for every detected
+harness **once per build at startup**; no second setup dialog is required. Existing user-authored
+hooks and unrelated settings are preserved, and Codex still owns its `/hooks` trust decision.
+The setup's **Complete installation** still runs the official Blackbox and DKG installers and
+starts both local services. On the Agents page, **Install/repair agent hooks...** remains available
+to repair immediately or to choose:
 
 - **Complete installation** to add/repair the Axiom guard hooks for detected agents;
 - **Partial installation** to leave every OpenCode/OpenChamber/Codex hook file unchanged.
@@ -76,6 +78,12 @@ A complete OpenCode/OpenChamber installation writes:
   OpenCode V2 loads it;
 - `%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-guard-bridge.py`, which calls
   Blackbox's Python guard with the tool name and arguments.
+
+The plugin also observes OpenCode's native `/api/event` stream using the local server port and
+password. It emits a session-start event on the first observed session, a pre-API-request event on
+each `session.step.started`, and a session-end event when a session is deleted. This fills the
+Sessions and API-call categories without reading prompts, messages, paths or file contents. A
+process-wide guard prevents the V1 fallback and V2 directory plugin from registering twice.
 
 Existing Axiom-managed files are backed up beside the originals before replacement. User-authored
 plugins at the same paths, reparse points/junctions and unrelated settings are never overwritten.
@@ -208,14 +216,16 @@ listener and never sends data off the machine.
 - **Protected paths** from the Blackbox settings are editable with Add file/folder/pattern and
   Remove (with confirmation). Existing defaults are preserved unless explicitly removed. These are
   Blackbox path rules, not Windows Firewall rules.
-- **Agent activity** reads `GET /api/audit?limit=100&offset=0` and
-  `GET /api/findings?limit=100&offset=0` every four seconds while the Overview page is selected. It
-  shows recorded sessions, API calls, tool calls, package installs, file access and threats, with
-  filter buttons for each category. A Security column labels each event `PASSED` (green) or
+- **Agent activity** loads the complete local audit history in 500-row pages when the Overview page
+  is selected (bounded at 20,000 rows), then merges the newest page periodically. It shows recorded
+  sessions, API calls, tool calls, package installs, file access and threats, with filter buttons for
+  each category. Counts are therefore all-time, not just the newest page; **Load more** remains only
+  for histories above the bound. A Security column labels each event `PASSED` (green) or
   `BLOCKED`/`FLAGGED` (red), with audit-mode flags kept distinct from actual blocks. Selecting a
   row opens a native detail pane with the session,
   tool, command/path, model/provider, package, result, duration, decision, severity and a redacted
-  raw event. **Load more** raises the audit window in 100-row steps up to Blackbox's 500-row limit.
+  raw event. Right-click copies the selected event, all details or the raw redacted JSON; individual
+  detail values, findings, hook evidence, agents and host sessions also expose copy actions.
   Obvious tokens, passwords and long hex values are masked in the UI; the local dashboard may expose
   more raw data. Only an explicit `decision: block` is counted as blocked; high severity alone is not
   proof of blocking.

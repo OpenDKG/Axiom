@@ -5,12 +5,12 @@ using System.IO;
 namespace Axiom.UI.Services;
 
 /// <summary>
-/// Repairs only Axiom-managed hook files that are already installed. It never installs a hook
-/// for a harness that has not been opted in, and it never grants host-owned trust.
+/// Provisions Axiom-managed hooks for every detected harness once per build. It never overwrites
+/// user-authored hooks and never grants host-owned trust (Codex still owns its /hooks approval).
 /// </summary>
 public static class AgentHookMaintenance
 {
-    public static void RepairInstalledHooks()
+    public static void ProvisionDetectedHooks()
     {
         var marker = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -44,28 +44,28 @@ public static class AgentHookMaintenance
         }
 
         var openCode = new OpenCodeProtection();
-        Repair(() => openCode.IsInstalled, () => openCode.EnsureInstalled());
+        Ensure(() => openCode.EnsureInstalled());
 
         var codex = new CodexProtection();
-        Repair(() => codex.IsInstalled, () => codex.EnsureInstalled());
+        Ensure(() => codex.EnsureInstalled());
 
         var claude = new ClaudeProtection();
-        Repair(() => claude.IsInstalled, () => claude.EnsureInstalled());
+        Ensure(() => claude.EnsureInstalled());
 
         var cursor = new CursorProtection();
-        Repair(() => cursor.IsInstalled, () => cursor.EnsureInstalled());
+        Ensure(() => cursor.EnsureInstalled());
 
         var copilot = new CopilotProtection();
-        Repair(() => copilot.IsInstalled, () => copilot.EnsureInstalled());
+        Ensure(() => copilot.EnsureInstalled());
 
         var gemini = new GeminiProtection();
-        Repair(() => gemini.IsInstalled, () => gemini.EnsureInstalled());
+        Ensure(() => gemini.EnsureInstalled());
 
         var windsurf = new WindsurfProtection();
-        Repair(() => windsurf.IsInstalled, () => windsurf.EnsureInstalled());
+        Ensure(() => windsurf.EnsureInstalled());
 
         var cline = new ClineProtection();
-        Repair(() => cline.IsInstalled, () => cline.EnsureInstalled());
+        Ensure(() => cline.EnsureInstalled());
 
         try
         {
@@ -78,18 +78,15 @@ public static class AgentHookMaintenance
         }
     }
 
-    private static void Repair(Func<bool> isInstalled, Func<bool> ensureInstalled)
+    private static void Ensure(Func<bool> ensureInstalled)
     {
         try
         {
-            if (isInstalled())
-            {
-                _ = ensureInstalled();
-            }
+            _ = ensureInstalled();
         }
         catch
         {
-            // A maintenance pass must never prevent Axiom from starting.
+            // A provisioning pass must never prevent Axiom from starting.
         }
     }
 }

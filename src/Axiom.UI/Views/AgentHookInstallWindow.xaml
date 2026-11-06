@@ -14,7 +14,7 @@
         FontSize="13">
   <StackPanel Margin="24">
     <TextBlock Text="Choose installation scope" FontSize="18" FontWeight="SemiBold" />
-    <TextBlock Text="Agent hooks are never installed automatically during status refresh. Select exactly what Axiom may change."
+    <TextBlock Text="Axiom provisions Axiom-managed hooks for detected harnesses at startup once per build. Use this dialog to repair them now or to keep the current files unchanged."
                Style="{StaticResource BodyMuted}"
                TextWrapping="Wrap"
                Margin="0,7,0,0" />

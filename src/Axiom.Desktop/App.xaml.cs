@@ -42,11 +42,11 @@ public partial class App : Application
 
         Axiom.Persistence.LegacyDataMigration.Migrate(stopLegacyProcesses: true);
 
-        // Keep already-installed Axiom-managed bridges in sync with this build without
-        // touching a harness the user has not opted into. Host-owned trust stays host-owned.
+        // Provision Axiom-managed hooks for detected harnesses without a second setup dialog.
+        // Existing user-authored hooks are preserved; host-owned trust stays host-owned.
         try
         {
-            AgentHookMaintenance.RepairInstalledHooks();
+            AgentHookMaintenance.ProvisionDetectedHooks();
         }
         catch
         {

@@ -25,8 +25,10 @@ The setup's **Complete installation** option runs the official Blackbox and DKG 
 their loopback services and installs agent hooks after Blackbox is ready. The third-party installers
 may show their own prompts/terms, download large packages and require network access. Uncheck it for
 **Partial installation**: only core Axiom is installed; no Blackbox, DKG, OpenCode, OpenChamber
-or Codex files will be created or changed. VirusTotal is optional and its API key is configured
-later on the Security page.
+or Codex files will be created or changed. Axiom also provisions Axiom-managed hooks for detected
+harnesses once per build at startup, preserving user-authored hooks. Codex still requires its own
+one-time `/hooks` trust review. VirusTotal is optional and its API key is configured later on the
+Security page.
 
 The portable installer copies two
 self-contained executables (desktop and optional service), verifies their SHA-256 and creates a

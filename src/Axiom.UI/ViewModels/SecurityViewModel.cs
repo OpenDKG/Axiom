@@ -1083,7 +1083,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             return;
         }
 
-        // Status refresh is read-only. Hook installation is an explicit, confirmed action.
+        // Status refresh is read-only. Startup provisioning handles Axiom-managed hooks separately.
         AddCodexAgents(blackboxConnected);
         AddClaudeAgents(blackboxConnected);
         AddCursorAgents(blackboxConnected);
