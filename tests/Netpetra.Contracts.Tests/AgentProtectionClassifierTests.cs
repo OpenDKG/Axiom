@@ -55,6 +55,20 @@ public sealed class AgentProtectionClassifierTests
     }
 
     [Fact]
+    public void Untrusted_host_hooks_are_not_reported_as_loaded()
+    {
+        Assert.Equal(
+            "TRUST REQUIRED",
+            AgentProtectionClassifier.Classify(
+                true,
+                true,
+                true,
+                false,
+                true,
+                trustRequired: true));
+    }
+
+    [Fact]
     public void Audit_mode_is_distinct_from_blocking()
     {
         Assert.Equal(

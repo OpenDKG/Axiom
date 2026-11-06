@@ -471,7 +471,7 @@
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
               <TextBlock Text="Recognized agents" Style="{StaticResource SectionTitle}" />
-              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber and Codex workspaces reported by Blackbox. Installed hooks are not proof of runtime blocking."
+              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber, Codex and Claude Code workspaces. Codex trust state is read from Codex itself; installed hooks are not proof of runtime blocking."
                          Style="{StaticResource Caption}"
                          Margin="0,2,0,0" />
             </StackPanel>
@@ -574,6 +574,9 @@
                                 <DataTrigger Binding="{Binding DisplayStatus}" Value="AUDIT ONLY">
                                   <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="TRUST REQUIRED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding DisplayStatus}" Value="DEGRADED">
                                   <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
                                 </DataTrigger>
@@ -588,6 +591,67 @@
                     </StackPanel>
                   </Grid>
                 </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <TextBlock Text="Host sessions" Style="{StaticResource SectionTitle}" />
+          <TextBlock Text="{Binding SessionStatusText}"
+                     Style="{StaticResource Caption}"
+                     TextWrapping="Wrap"
+                     Margin="0,2,0,0" />
+          <ItemsControl ItemsSource="{Binding SessionGroups}" Margin="0,8,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:AgentSessionGroup}">
+                <StackPanel Margin="0,0,0,10">
+                  <TextBlock Text="{Binding Provider}"
+                             FontWeight="SemiBold"
+                             FontSize="11"
+                             Foreground="{DynamicResource Brush.TextMuted}"
+                             Margin="0,0,0,4" />
+                  <ItemsControl ItemsSource="{Binding Sessions}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="{x:Type vm:AgentSessionRow}">
+                        <Border Padding="0,5"
+                                BorderBrush="{DynamicResource Brush.Border}"
+                                BorderThickness="0,0,0,1">
+                          <Grid>
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="*" />
+                              <ColumnDefinition Width="Auto" />
+                              <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                              <TextBlock Text="{Binding Title}"
+                                         TextTrimming="CharacterEllipsis"
+                                         ToolTip="{Binding Title}" />
+                              <TextBlock Text="{Binding Workspace}"
+                                         Style="{StaticResource Caption}"
+                                         FontFamily="{StaticResource Font.Mono}"
+                                         TextTrimming="CharacterEllipsis"
+                                         ToolTip="{Binding Workspace}"
+                                         Margin="0,1,0,0" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding LastSeen}"
+                                       Style="{StaticResource Caption}"
+                                       Foreground="{DynamicResource Brush.TextMuted}"
+                                       Margin="0,0,8,0" />
+                            <Border Grid.Column="2"
+                                    Style="{StaticResource StatusPill}"
+                                    Visibility="{Binding Live, Converter={StaticResource BoolToVisibility}}">
+                              <TextBlock Text="LIVE" Style="{StaticResource StatusPillText}" />
+                            </Border>
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>

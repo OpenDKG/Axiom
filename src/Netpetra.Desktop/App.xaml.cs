@@ -10,6 +10,7 @@ using System.Windows.Media;
 using Netpetra.Contracts;
 using Netpetra.Contracts.Monitoring;
 using Netpetra.Infrastructure.Windows.IpHelper;
+using Netpetra.Persistence;
 using Netpetra.UI;
 using Netpetra.UI.Services;
 using Netpetra.UI.ViewModels;
@@ -99,7 +100,7 @@ public partial class App : Application
         ConnectionSourceRegistry.Source = source;
 
         var monitor = new ConnectionMonitor(source);
-        var viewModel = new MainViewModel(monitor);
+        var viewModel = new MainViewModel(monitor, new AgentSessionReader());
         var window = new MainWindow(viewModel);
 
         MainWindow = window;

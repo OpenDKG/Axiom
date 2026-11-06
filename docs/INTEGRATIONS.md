@@ -42,13 +42,20 @@ content.
 
 Agent workspace labels are deliberately not interchangeable:
 
-- **HOOKED**: the Axiom hook is installed and Blackbox is reachable, but no runtime invocation has
-  been observed yet. It is shown green because the configuration and local connection are healthy.
-- **CONNECTED**: the hook has produced runtime evidence and reached the local guard. End-to-end
-  blocking is still not claimed unless it is explicitly verified.
+- **HOOKED**: the Axiom hook is installed and Blackbox is reachable, but no recent runtime
+  invocation has been observed. Evidence older than five minutes is not treated as live.
+- **CONNECTED**: the hook has produced recent runtime evidence and reached the local guard.
+  End-to-end blocking is still not claimed unless it is explicitly verified.
+- **TRUST REQUIRED**: Codex has the hook definitions, but its own `/hooks` review has not trusted
+  the current hashes. Axiom never writes Codex trust state.
+- **AUDIT ONLY**: runtime evidence exists, but Blackbox is in `audit` mode; the hook observes
+  rather than blocks.
+- **VERIFIED**: a guard-level canary test returned a block. The real host process was not
+  exercised unless a host-level test is explicitly documented.
 - **PROTECTED**: Hermes/OpenClaw reports an attached protected workspace through Blackbox.
 
-An installed hook is never treated as proof of runtime blocking.
+An installed hook is never treated as proof of runtime blocking. Agent executables are also
+discovered on `PATH`, so an installed host is detected even before it creates its config directory.
 
 ### OpenCode and OpenChamber
 
@@ -76,30 +83,43 @@ plugins at the same paths, reparse points/junctions and unrelated settings are n
 Status refresh remains read-only. The current Blackbox mode applies: `audit` records findings,
 `block` rejects confirmed threats. Bridge or Blackbox failures fail open, like the Hermes hooks.
 Restart OpenCode/OpenChamber after the first install so the plugin is loaded. Uninstalling Blackbox
-removes the plugin; the bridge lives inside the Blackbox folder. This is a Axiom adapter, not an
+removes the plugin; the bridge lives inside the Blackbox folder. This is an Axiom adapter, not an
 official Blackbox attachment kind.
 
 ### Codex
 
-Codex user hooks are read from `~/.codex/hooks.json`. Only after **Complete installation** on the
-Agents page does Axiom merge a `PreToolUse` command hook and install
-`netpetra-codex-hook.py` in the Blackbox folder. The existing `hooks.json` is copied to a
-timestamped `.netpetra-backup-*` file before it is changed; unrelated hooks are preserved. The hook
-receives Codex's `tool_name`/`tool_input`, calls the same Blackbox guard, and returns a
-`permissionDecision: deny` only when Blackbox blocks. **Partial installation** leaves Codex hook
-files unchanged. Codex may ask you to approve/trust the hook once; approve it and restart Codex.
-Uninstalling Blackbox removes the Axiom hook entry and script.
+Codex user hooks are read from `~/.codex/hooks.json`. After **Complete installation** on the
+Agents page, Axiom merges the full lifecycle set: `SessionStart`, `UserPromptSubmit`,
+`PreToolUse`, `PostToolUse` and `Stop`. The existing file is backed up to a timestamped
+`.netpetra-backup-*` file; unrelated hooks are preserved. Each handler has a 30 second timeout and
+passes its framework/workspace identity to the same Blackbox guard. `apply_patch` input is
+normalised so the target path is visible to file-access rules.
+
+Codex still requires its own trust review. The Agents page reads Codex's `config.toml` hook-state
+hashes and reports **TRUST REQUIRED** until every current lifecycle definition is trusted. Open
+Codex, run `/hooks`, trust the Axiom hooks and restart Codex. Changing the hook command or bridge
+version invalidates trust again. Axiom never edits Codex's trust state or bypasses its review.
+**Partial installation** leaves Codex hook files unchanged. Uninstalling Blackbox removes the Axiom
+hook entries and script.
 
 ### Claude Code
 
-Claude Code user hooks are read from `~/.claude/settings.json`. Only after **Complete installation**
-does Axiom merge a marker-owned `PreToolUse` entry and install `netpetra-claude-hook.py` in the
-Blackbox folder. The existing settings file is backed up beside the original; unrelated settings and
-hooks are preserved. The hook receives Claude Code's `tool_name`/`tool_input`, calls the same
-Blackbox guard, and returns `hookSpecificOutput.permissionDecision: deny` only when Blackbox blocks.
+Claude Code user hooks are read from `~/.claude/settings.json`. After **Complete installation**,
+Axiom merges marker-owned `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse` and `Stop`
+entries and installs `netpetra-claude-hook.py` in the Blackbox folder. The existing settings file is
+backed up beside the original; unrelated settings and hooks are preserved. The hook passes prompt
+and tool-call events to the same Blackbox guard with a 30 second timeout, normalises `apply_patch`
+targets and returns `hookSpecificOutput.permissionDecision: deny` only on a block.
 **Partial installation** leaves Claude settings unchanged. Claude Code may require a hook approval
 or restart; an installed hook is not proof of runtime blocking. Uninstalling Blackbox removes only
-the Axiom hook entry and script.
+the Axiom hook entries and script.
+
+### Host sessions
+
+The Agents page reads Claude's live session descriptors and Codex's local `state_*.sqlite` thread
+metadata, groups the rows by provider and shows host-owned names instead of submitted prompts. Raw
+session ids are hashed before they reach the view model. The reader is read-only, bounded and
+fail-open; missing or locked host data never blocks hook installation or protection status.
 
 ### Cursor
 

@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Netpetra.Contracts;
+using Netpetra.Contracts.Agents;
 using Netpetra.Contracts.Blackbox;
 using Netpetra.UI.Services;
 using Netpetra.UI.Views;
@@ -44,6 +45,10 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private readonly AgentEvidenceStore _agentEvidence = new();
 
+    private readonly IAgentSessionSource? _agentSessions;
+
+    private DateTimeOffset _lastSessionRefresh = DateTimeOffset.MinValue;
+
     private readonly DispatcherTimer _timer;
 
     private readonly List<BlackboxAuditEntry> _allActivity = [];
@@ -58,10 +63,11 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private int _activityLimit = ActivityPageSize;
 
-    public AgentsViewModel(SecurityViewModel security)
+    public AgentsViewModel(SecurityViewModel security, IAgentSessionSource? agentSessions = null)
         : base("Agents", "DKG, Blackbox and the workspaces they protect", "\uE99A")
     {
         Security = security ?? throw new ArgumentNullException(nameof(security));
+        _agentSessions = agentSessions;
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
         _timer.Tick += async (_, _) => await RefreshAsync().ConfigureAwait(true);
@@ -85,6 +91,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     public ObservableCollection<BlackboxFinding> Findings { get; } = [];
 
     public ObservableCollection<AgentEvidenceEvent> HookEvidence { get; } = [];
+
+    public ObservableCollection<AgentSessionGroup> SessionGroups { get; } = [];
 
     public ObservableCollection<ActivityDetailRow> SelectedActivityDetails { get; } = [];
 
@@ -148,6 +156,9 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     [ObservableProperty]
     private string _protectionTestText = "Protection test has not run.";
 
+    [ObservableProperty]
+    private string _sessionStatusText = "No host session data loaded.";
+
     public void Activate()
     {
         if (!IsAvailable)
@@ -156,6 +167,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         }
 
         _timer.Start();
+        _lastSessionRefresh = DateTimeOffset.MinValue;
         _ = RefreshAsync();
     }
 
@@ -189,6 +201,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             ApplyFindings(findingsTask.Result);
             ApplyHealth(settingsTask.Result, graphTask.Result);
             ApplyHookEvidence();
+            await RefreshSessionsAsync().ConfigureAwait(true);
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
@@ -657,6 +670,71 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             : "Dashboard is online, but its configured DKG node is offline. Local rules may still protect; verified graph coverage is not synchronized.";
     }
 
+    private async Task RefreshSessionsAsync()
+    {
+        if (_agentSessions is null)
+        {
+            SessionStatusText = "Host session metadata is unavailable in this build.";
+            return;
+        }
+
+        if (DateTimeOffset.UtcNow - _lastSessionRefresh < TimeSpan.FromSeconds(15))
+        {
+            return;
+        }
+
+        _lastSessionRefresh = DateTimeOffset.UtcNow;
+        var sessions = await Task.Run(_agentSessions.Read).ConfigureAwait(true);
+        SessionGroups.Clear();
+        foreach (var group in sessions
+                     .GroupBy(item => item.Framework, StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var rows = group
+                .OrderByDescending(item => item.LastSeenUtc)
+                .Take(8)
+                .Select(item =>
+                {
+                    var workspace = item.Workspace.TrimEnd('\\', '/');
+                    var title = string.IsNullOrWhiteSpace(item.Title)
+                        ? Path.GetFileName(workspace)
+                        : item.Title;
+                    if (string.IsNullOrWhiteSpace(title))
+                    {
+                        title = "Untitled session";
+                    }
+
+                    var local = item.LastSeenUtc.ToLocalTime();
+                    var when = local.Date == DateTime.Today
+                        ? local.ToString("HH:mm", CultureInfo.InvariantCulture)
+                        : local.ToString("MM-dd HH:mm", CultureInfo.InvariantCulture);
+                    return new AgentSessionRow(
+                        ProviderLabel(item.Framework),
+                        title,
+                        workspace,
+                        when,
+                        item.HostLive);
+                })
+                .ToArray();
+            if (rows.Length > 0)
+            {
+                SessionGroups.Add(new AgentSessionGroup(ProviderLabel(group.Key), rows));
+            }
+        }
+
+        SessionStatusText = SessionGroups.Count == 0
+            ? "No live Claude Code or Codex session descriptors were found. Hooks can still be installed and trusted."
+            : $"{SessionGroups.Sum(group => group.Sessions.Count)} host session(s) from Claude Code/Codex metadata. Raw session ids are not displayed.";
+    }
+
+    private static string ProviderLabel(string framework) =>
+        framework.ToLowerInvariant() switch
+        {
+            "claude" or "claude-code" => "Claude Code",
+            "codex" => "Codex",
+            _ => framework,
+        };
+
     private void ApplyHookEvidence()
     {
         HookEvidence.Clear();
@@ -833,5 +911,14 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             ? result
             : 0;
 }
+
+public sealed record AgentSessionRow(
+    string Provider,
+    string Title,
+    string Workspace,
+    string LastSeen,
+    bool Live);
+
+public sealed record AgentSessionGroup(string Provider, IReadOnlyList<AgentSessionRow> Sessions);
 
 public sealed record ActivityDetailRow(string Label, string Value);

@@ -38,13 +38,29 @@ public sealed class CodexProtectionTests
 
         var installed = File.ReadAllText(hooksPath);
         Assert.Contains("/user-owned/netpetra-codex-hook.py", installed, StringComparison.Ordinal);
-        Assert.Equal(2, CountOccurrences(installed, "netpetra-codex-hook.py"));
+        using (var document = System.Text.Json.JsonDocument.Parse(installed))
+        {
+            var hooks = document.RootElement.GetProperty("hooks");
+            foreach (var eventName in new[] { "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop" })
+            {
+                Assert.True(hooks.TryGetProperty(eventName, out var groups));
+                Assert.Contains(
+                    groups.EnumerateArray().SelectMany(group => group.GetProperty("hooks").EnumerateArray()),
+                    handler =>
+                        handler.TryGetProperty("command", out var command) &&
+                        command.GetString()?.Contains("netpetra-codex-hook.py", StringComparison.Ordinal) == true &&
+                        handler.TryGetProperty("commandWindows", out var commandWindows) &&
+                        commandWindows.GetString()?.EndsWith("--bridge-version 2", StringComparison.Ordinal) == true &&
+                        handler.TryGetProperty("timeout", out var timeout) &&
+                        timeout.GetInt32() == 30);
+            }
+        }
 
         protection.Remove();
 
         var remaining = File.ReadAllText(hooksPath);
         Assert.Contains("/user-owned/netpetra-codex-hook.py", remaining, StringComparison.Ordinal);
-        Assert.Equal(1, CountOccurrences(remaining, "netpetra-codex-hook.py"));
+        Assert.DoesNotContain("--bridge-version", remaining, StringComparison.Ordinal);
         Assert.Contains("\"keep\": true", remaining, StringComparison.Ordinal);
     }
 

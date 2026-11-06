@@ -114,6 +114,10 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
     public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude" or "cursor" or "copilot" or "gemini" or "windsurf" or "cline";
 
     public string TestResult { get; init; } = string.Empty;
+
+    public bool ProcessRunning { get; init; }
+
+    public bool TrustRequired { get; init; }
 }
 
 /// <summary>
@@ -163,6 +167,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly UserStateProtection _userStateProtection = new();
 
     private readonly AgentEvidenceStore _agentEvidence = new();
+
+    private static readonly TimeSpan EvidenceLifetime = TimeSpan.FromMinutes(5);
+
+    private readonly HashSet<string> _verifiedBlockingAgents = new(StringComparer.OrdinalIgnoreCase);
+
+    private bool IsAuditOnly => string.Equals(BlackboxModeText, "audit", StringComparison.OrdinalIgnoreCase);
 
     private ReputationSettings _reputationSettings = new(false, string.Empty);
 
@@ -581,6 +591,15 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         var result = await _agentHookProbe.TestAsync(agent.Kind, CancellationToken.None).ConfigureAwait(true);
         index = ProtectedAgents.IndexOf(ProtectedAgents.FirstOrDefault(item =>
             item.Kind == agent.Kind && item.Target == agent.Target) ?? agent);
+        if (string.Equals(result.Status, "BLOCKED", StringComparison.OrdinalIgnoreCase))
+        {
+            _verifiedBlockingAgents.Add(agent.Kind);
+        }
+        else
+        {
+            _verifiedBlockingAgents.Remove(agent.Kind);
+        }
+
         if (index >= 0)
         {
             ProtectedAgents[index] = ProtectedAgents[index] with
@@ -1140,13 +1159,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _openCodeProtection.IsInstalled;
-        var evidence = _agentEvidence.Latest("opencode");
+        var evidence = _agentEvidence.Latest("opencode", EvidenceLifetime);
         var status = AgentProtectionClassifier.Classify(
             detected: true,
             hookConfigured: installed,
             runtimeObserved: evidence is not null,
             failureObserved: evidence?.IsFailure == true,
-            blackboxAvailable: blackboxConnected);
+            blackboxAvailable: blackboxConnected, auditOnly: IsAuditOnly);
         var detail = !installed
             ? "OpenCode config detected; guard plugin not installed or a user plugin occupies the path."
             : evidence is null
@@ -1168,7 +1187,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 hookConfigured: installed,
                 runtimeObserved: false,
                 failureObserved: false,
-                blackboxAvailable: blackboxConnected);
+                blackboxAvailable: blackboxConnected, auditOnly: IsAuditOnly);
             ProtectedAgents.Add(new ProtectedAgent(
                 "openchamber",
                 _openCodeProtection.OpenChamberPath,
@@ -1186,26 +1205,41 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _codexProtection.IsInstalled;
-        var evidence = _agentEvidence.Latest("codex");
+        var trust = _codexProtection.TrustState;
+        var processRunning = AgentProcessProbe.IsRunning("codex");
+        var evidence = _agentEvidence.Latest("codex", EvidenceLifetime);
         var status = AgentProtectionClassifier.Classify(
             detected: true,
             hookConfigured: installed,
             runtimeObserved: evidence is not null,
             failureObserved: evidence?.IsFailure == true,
-            blackboxAvailable: blackboxConnected);
+            blackboxAvailable: blackboxConnected,
+            auditOnly: IsAuditOnly,
+            trustRequired: trust.TrustRequired,
+            verifiedBlocking: _verifiedBlockingAgents.Contains("codex"));
         var detail = !installed
-            ? "Codex config detected; PreToolUse hook is missing or malformed."
-            : evidence is null
-                ? "Hook configuration detected; runtime not verified. Codex may require approval before the hook runs."
-                : evidence.IsFailure
-                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
-                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
+            ? "Codex config detected; lifecycle hooks are missing or malformed."
+            : trust.TrustRequired
+                ? "Lifecycle hooks are installed, but Codex has not trusted these exact definitions. Open Codex, run /hooks and trust the Axiom hooks."
+                : _verifiedBlockingAgents.Contains("codex")
+                    ? "Guard-level canary test blocked the benign read. The real Codex process was not exercised."
+                    : evidence is null
+                        ? (processRunning
+                            ? "Codex is running; the hooks are installed and trusted, but no runtime invocation has been observed yet."
+                            : "Hooks are installed and trusted; start Codex to verify runtime loading.")
+                        : evidence.IsFailure
+                            ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                            : $"Runtime observed: {evidence.EventType} at {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end host blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
             "codex",
             _codexProtection.HooksPath,
             status,
-            detail));
+            detail)
+        {
+            ProcessRunning = processRunning,
+            TrustRequired = trust.TrustRequired,
+        });
     }
 
     private void AddClaudeAgents(bool blackboxConnected)
@@ -1216,26 +1250,34 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _claudeProtection.IsInstalled;
-        var evidence = _agentEvidence.Latest("claude");
+        var processRunning = AgentProcessProbe.IsRunning("claude");
+        var evidence = _agentEvidence.Latest("claude", EvidenceLifetime);
         var status = AgentProtectionClassifier.Classify(
             detected: true,
             hookConfigured: installed,
             runtimeObserved: evidence is not null,
             failureObserved: evidence?.IsFailure == true,
-            blackboxAvailable: blackboxConnected);
+            blackboxAvailable: blackboxConnected, auditOnly: IsAuditOnly, verifiedBlocking: _verifiedBlockingAgents.Contains("claude"));
         var detail = !installed
-            ? "Claude Code config detected; PreToolUse hook is missing or malformed."
-            : evidence is null
-                ? "Hook configuration detected; runtime not verified. Claude Code may require approval before the hook runs."
-                : evidence.IsFailure
-                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
-                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
+            ? "Claude Code config detected; lifecycle hooks are missing or malformed."
+            : _verifiedBlockingAgents.Contains("claude")
+                ? "Guard-level canary test blocked the benign read. The real Claude Code process was not exercised."
+                : evidence is null
+                    ? (processRunning
+                        ? "Claude Code is running; hooks are installed, but no runtime invocation has been observed yet."
+                        : "Hooks are installed; start Claude Code to verify runtime loading.")
+                    : evidence.IsFailure
+                        ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                        : $"Runtime observed: {evidence.EventType} at {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end host blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
             "claude",
             _claudeProtection.SettingsPath,
             status,
-            detail));
+            detail)
+        {
+            ProcessRunning = processRunning,
+        });
     }
 
     private void AddCursorAgents(bool blackboxConnected)
@@ -1246,13 +1288,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _cursorProtection.IsInstalled;
-        var evidence = _agentEvidence.Latest("cursor");
+        var evidence = _agentEvidence.Latest("cursor", EvidenceLifetime);
         var status = AgentProtectionClassifier.Classify(
             detected: true,
             hookConfigured: installed,
             runtimeObserved: evidence is not null,
             failureObserved: evidence?.IsFailure == true,
-            blackboxAvailable: blackboxConnected);
+            blackboxAvailable: blackboxConnected, auditOnly: IsAuditOnly);
         var detail = !installed
             ? "Cursor config detected; preToolUse hook is missing or malformed."
             : evidence is null
@@ -1276,13 +1318,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _copilotProtection.IsInstalled;
-        var evidence = _agentEvidence.Latest("copilot");
+        var evidence = _agentEvidence.Latest("copilot", EvidenceLifetime);
         var status = AgentProtectionClassifier.Classify(
             detected: true,
             hookConfigured: installed,
             runtimeObserved: evidence is not null,
             failureObserved: evidence?.IsFailure == true,
-            blackboxAvailable: blackboxConnected);
+            blackboxAvailable: blackboxConnected, auditOnly: IsAuditOnly);
         var detail = !installed
             ? "GitHub Copilot CLI config detected; preToolUse hook is missing or malformed."
             : evidence is null
@@ -1306,13 +1348,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _geminiProtection.IsInstalled;
-        var evidence = _agentEvidence.Latest("gemini");
+        var evidence = _agentEvidence.Latest("gemini", EvidenceLifetime);
         var status = AgentProtectionClassifier.Classify(
             detected: true,
             hookConfigured: installed,
             runtimeObserved: evidence is not null,
             failureObserved: evidence?.IsFailure == true,
-            blackboxAvailable: blackboxConnected);
+            blackboxAvailable: blackboxConnected, auditOnly: IsAuditOnly);
         var detail = !installed
             ? "Gemini settings detected; BeforeTool hook is missing or malformed. Antigravity CLI may use a different hook surface."
             : evidence is null
@@ -1336,13 +1378,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _windsurfProtection.IsInstalled;
-        var evidence = _agentEvidence.Latest("windsurf");
+        var evidence = _agentEvidence.Latest("windsurf", EvidenceLifetime);
         var status = AgentProtectionClassifier.Classify(
             detected: true,
             hookConfigured: installed,
             runtimeObserved: evidence is not null,
             failureObserved: evidence?.IsFailure == true,
-            blackboxAvailable: blackboxConnected);
+            blackboxAvailable: blackboxConnected, auditOnly: IsAuditOnly);
         var detail = !installed
             ? "Windsurf config detected; Cascade pre-hooks are missing or malformed."
             : evidence is null
@@ -1366,13 +1408,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
 
         var installed = _clineProtection.IsInstalled;
-        var evidence = _agentEvidence.Latest("cline");
+        var evidence = _agentEvidence.Latest("cline", EvidenceLifetime);
         var status = AgentProtectionClassifier.Classify(
             detected: true,
             hookConfigured: installed,
             runtimeObserved: evidence is not null,
             failureObserved: evidence?.IsFailure == true,
-            blackboxAvailable: blackboxConnected);
+            blackboxAvailable: blackboxConnected, auditOnly: IsAuditOnly);
         var detail = !installed
             ? "Cline directory detected; global PreToolUse.py hook is missing or user-authored."
             : evidence is null

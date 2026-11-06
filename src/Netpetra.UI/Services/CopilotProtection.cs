@@ -43,7 +43,7 @@ public sealed class CopilotProtection
 
     public string HookScriptPath => Path.Combine(BlackboxAgentRoot, Marker);
 
-    public bool IsCopilotDetected => Directory.Exists(ConfigDirectory);
+    public bool IsCopilotDetected => Directory.Exists(ConfigDirectory) || AgentBinaryLocator.IsCopilotAvailable();
 
     public bool IsInstalled
     {
