@@ -36,6 +36,8 @@ public static class IpcCommandTypes
     public const string RuleVerify = "rule.verify";
     public const string RulesQuery = "rules.query";
     public const string HistoryQuery = "history.query";
+    public const string PrivacyStatus = "privacy.status";
+    public const string PrivacyConfigure = "privacy.configure";
     public const string ConfigGet = "config.get";
     public const string ConfigSet = "config.set";
     public const string DiagnosticsExport = "diagnostics.export";
@@ -51,6 +53,8 @@ public static class IpcCommandTypes
         RuleVerify,
         RulesQuery,
         HistoryQuery,
+        PrivacyStatus,
+        PrivacyConfigure,
         ConfigGet,
         ConfigSet,
         DiagnosticsExport,

@@ -6,6 +6,7 @@ using Netpetra.Contracts.Firewall;
 using Netpetra.Contracts.History;
 using Netpetra.Contracts.Ipc;
 using Netpetra.Contracts.Monitoring;
+using Netpetra.Contracts.Privacy;
 using Netpetra.Infrastructure.Windows.Firewall;
 
 namespace Netpetra.Infrastructure.Windows.Ipc;
@@ -42,6 +43,10 @@ public sealed class PipeServer
 
     private readonly Func<Guid, CancellationToken, Task<EffectiveRuleReport>>? _ruleVerify;
 
+    private readonly Func<CancellationToken, Task<PrivacyShieldStatus>>? _privacyStatus;
+
+    private readonly Func<PrivacyShieldSettings, CancellationToken, Task<PrivacyShieldStatus>>? _privacyConfigure;
+
     private readonly Action<string>? _log;
 
     public PipeServer(
@@ -54,6 +59,8 @@ public sealed class PipeServer
         Func<RuleSpec, string, CancellationToken, Task<RuleApplyResult>>? ruleApply = null,
         Func<Guid, string, CancellationToken, Task<RuleApplyResult>>? ruleRemove = null,
         Func<Guid, CancellationToken, Task<EffectiveRuleReport>>? ruleVerify = null,
+        Func<CancellationToken, Task<PrivacyShieldStatus>>? privacyStatus = null,
+        Func<PrivacyShieldSettings, CancellationToken, Task<PrivacyShieldStatus>>? privacyConfigure = null,
         Action<string>? log = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
@@ -68,6 +75,8 @@ public sealed class PipeServer
         _ruleApply = ruleApply;
         _ruleRemove = ruleRemove;
         _ruleVerify = ruleVerify;
+        _privacyStatus = privacyStatus;
+        _privacyConfigure = privacyConfigure;
         _log = log;
     }
 
@@ -419,6 +428,51 @@ public sealed class PipeServer
                     await WriteResultAsync(stream, envelope.Id, report, cancellationToken).ConfigureAwait(false);
                     break;
 
+                case IpcCommandTypes.PrivacyStatus:
+                    if (_privacyStatus is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Privacy Shield is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var privacyStatus = await _privacyStatus(cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, privacyStatus, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.PrivacyConfigure:
+                    if (_privacyConfigure is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Privacy Shield configuration is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var privacySettings = DeserializePayload<PrivacyShieldSettings>(envelope.Payload);
+                    if (privacySettings is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Privacy Shield settings payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var privacyResult = await _privacyConfigure(privacySettings, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, privacyResult, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.ConfigGet:
                 case IpcCommandTypes.ConfigSet:
                 case IpcCommandTypes.DiagnosticsExport:
@@ -473,6 +527,16 @@ public sealed class PipeServer
         if (_rulesQuery is not null)
         {
             commands.Add(IpcCommandTypes.RulesQuery);
+        }
+
+        if (_privacyStatus is not null)
+        {
+            commands.Add(IpcCommandTypes.PrivacyStatus);
+        }
+
+        if (_privacyConfigure is not null)
+        {
+            commands.Add(IpcCommandTypes.PrivacyConfigure);
         }
 
         if (WindowsFirewallPolicyAdapter.IsWriteGateOpen)

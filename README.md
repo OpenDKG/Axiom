@@ -62,6 +62,14 @@ The Security page probes a running Blackbox dashboard or DKG node on loopback an
 installer only after an explicit confirmation; nothing runs silently. Setup steps are in
 [Optional integrations](docs/INTEGRATIONS.md).
 
+### Privacy Shield
+
+An optional, default-disabled local DNS filter with Basic/Balanced/Strict profiles, custom allow and
+block lists and a loopback resolver. It never changes adapter DNS settings automatically; manual
+adapter configuration and rollback are documented in [Privacy Shield](docs/PRIVACY_SHIELD.md).
+Only in-memory counters are kept, not DNS query history. DoH/DoT/DoQ, hardcoded IPs and VPN traffic
+are not covered.
+
 ### File tracker and local reputation
 
 - Watches only the folders the user selects (for example Downloads, optionally Desktop), never the

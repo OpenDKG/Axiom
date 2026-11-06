@@ -10,6 +10,9 @@ the machine.
 The Microsoft Store MSIX build is **core-only**. It does not include these integrations, the
 Blackbox/DKG installers or any agent-hook adapter. See [STORE.md](STORE.md).
 
+Privacy Shield is a separate optional local DNS resolver; it is documented in
+[PRIVACY_SHIELD.md](PRIVACY_SHIELD.md) and does not change adapter DNS automatically.
+
 ## Install buttons
 
 The Security page has an **Install** button next to each module that is not connected. It opens a

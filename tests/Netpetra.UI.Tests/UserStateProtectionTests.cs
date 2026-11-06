@@ -141,6 +141,7 @@ public sealed class UserStateProtectionTests
         Assert.Contains(Path.Combine(temp.Root, ".gemini", "antigravity", "conversations"), directories);
         Assert.Contains(Path.Combine(temp.LocalAppData, "hermes", "sessions"), directories);
         Assert.Contains(Path.Combine(temp.RoamingAppData, "Cursor", "User", "globalStorage", "state.vscdb"), files);
+        Assert.Contains(Path.Combine(temp.LocalAppData, "Netpetra", "privacy-shield.json"), files);
     }
 
     [Fact]
