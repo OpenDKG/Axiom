@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.Concurrent;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using Netpetra.Contracts.Privacy;
@@ -29,6 +30,8 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private readonly IReadOnlyList<IPEndPoint> _upstreams;
 
+    private readonly Action<PrivacyShieldBlockedEvent>? _onBlocked;
+
     private readonly CancellationTokenSource _cancellation = new();
 
     private readonly Task _loop4;
@@ -55,10 +58,12 @@ public sealed class DnsProxyServer : IAsyncDisposable
     public DnsProxyServer(
         PrivacyShieldPolicy policy,
         IReadOnlyList<IPEndPoint> upstreams,
-        int port)
+        int port,
+        Action<PrivacyShieldBlockedEvent>? onBlocked = null)
     {
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _upstreams = upstreams ?? throw new ArgumentNullException(nameof(upstreams));
+        _onBlocked = onBlocked;
         if (upstreams.Count == 0)
         {
             throw new ArgumentException("At least one upstream DNS endpoint is required.", nameof(upstreams));
@@ -485,13 +490,23 @@ public sealed class DnsProxyServer : IAsyncDisposable
             _blockedDomains.AddOrUpdate(domain, 1, (_, count) => count + 1);
         }
 
-        _recentBlocked.Enqueue(new PrivacyShieldBlockedEvent(
+        var blocked = new PrivacyShieldBlockedEvent(
             domain,
             category,
-            DateTimeOffset.UtcNow));
+            DateTimeOffset.UtcNow);
+        _recentBlocked.Enqueue(blocked);
         while (_recentBlocked.Count > 50)
         {
             _recentBlocked.TryDequeue(out _);
+        }
+
+        try
+        {
+            _onBlocked?.Invoke(blocked);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // History persistence is best effort and must never fail a DNS response.
         }
     }
 }

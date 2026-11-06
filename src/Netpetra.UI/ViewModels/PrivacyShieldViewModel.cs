@@ -110,6 +110,8 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
 
     public ObservableCollection<PrivacyShieldBlockedEvent> RecentBlocked { get; } = [];
 
+    public ObservableCollection<PrivacyShieldBlockedEvent> BlockedHistory { get; } = [];
+
     public ObservableCollection<PrivacyShieldSourceRow> Sources { get; } =
         new(PrivacyShieldSourceCatalog.All.Select(source => new PrivacyShieldSourceRow(source)));
 
@@ -617,6 +619,42 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         foreach (var blocked in status.RecentBlocked)
         {
             RecentBlocked.Add(blocked);
+        }
+
+        BlockedHistory.Clear();
+        foreach (var blocked in status.BlockedHistory)
+        {
+            BlockedHistory.Add(blocked);
+        }
+    }
+
+    [RelayCommand]
+    private async Task ClearBlockedHistoryAsync()
+    {
+        if (_client is null || IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var status = await _client
+                .SendAsync<PrivacyShieldStatus>(
+                    IpcCommandTypes.PrivacyHistoryClear,
+                    null,
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyStatus(status);
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            StatusBadge = "UNAVAILABLE";
+            StatusText = exception.Message;
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 

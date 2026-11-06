@@ -166,6 +166,9 @@ public sealed record PrivacyShieldStatus
     /// <summary>Bounded in-memory recent blocks; this is not persisted DNS history.</summary>
     public IReadOnlyList<PrivacyShieldBlockedEvent> RecentBlocked { get; init; } = [];
 
+    /// <summary>Bounded local blocked-query history, newest first. Never contains allowed queries.</summary>
+    public IReadOnlyList<PrivacyShieldBlockedEvent> BlockedHistory { get; init; } = [];
+
     public string Detail { get; init; } = string.Empty;
 
     public string? LastError { get; init; }

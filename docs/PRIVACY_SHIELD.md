@@ -22,8 +22,11 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
   - keeps in-memory query/allowed/blocked/error counters and top blocked domains only.
 - A Privacy Shield page with profile/category controls, custom allow/block lists, local list import,
   verified source catalog, resolver status, **live statistics (2-second refresh while selected)** and
-  explicit UAC DNS integration. Recent blocked queries are a bounded in-memory list (last 50), not
-  persisted history.
+  explicit UAC DNS integration.
+- A bounded local **blocked-query history** (last 1,000 entries) containing only the blocked domain,
+  category and timestamp. It is stored in
+  `%LOCALAPPDATA%\Netpetra\privacy-shield-blocked.jsonl`, never includes allowed queries, and has a
+  clear action. This is the one deliberate DNS history exception; it is local and user-clearable.
 - A catalog of **HTTPS-only, license-labelled** sources (HaGeZi, OISD, WindowsSpyBlocker). A source
   update downloads with a 20 MB/45 s bound, parses and normalizes domains, then atomically replaces
   the previous ruleset only if every selected source succeeds. The previous rules file is retained.

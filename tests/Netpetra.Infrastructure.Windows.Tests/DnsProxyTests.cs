@@ -46,10 +46,12 @@ public sealed class DnsProxyTests
             BlockedDomains = ["blocked.example"],
         };
         var policy = PrivacyShieldPolicy.Create(settings);
+        var recorded = new List<PrivacyShieldBlockedEvent>();
         await using var server = new DnsProxyServer(
             policy,
             [new IPEndPoint(IPAddress.Loopback, 9)],
-            port: 0);
+            port: 0,
+            onBlocked: recorded.Add);
 
         using var client = new UdpClient(AddressFamily.InterNetwork);
         client.Connect(IPAddress.Loopback, server.Port);
@@ -64,6 +66,7 @@ public sealed class DnsProxyTests
         Assert.Equal(1, status.Blocked);
         Assert.Contains(status.TopBlocked, item => item.Domain == "ads.blocked.example");
         Assert.Contains(status.RecentBlocked, item => item.Domain == "ads.blocked.example");
+        Assert.Contains(recorded, item => item.Domain == "ads.blocked.example");
     }
 
     [Fact]
