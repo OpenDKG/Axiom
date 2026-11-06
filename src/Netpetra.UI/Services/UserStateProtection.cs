@@ -122,7 +122,6 @@ public sealed class UserStateProtection
                 HomeFile(".codex/session_index.jsonl", "Codex sessions"),
                 HomeFile(".codex/.codex-global-state.json", "Codex state"),
                 HomeFile(".codex/cap_sid", "Codex state"),
-                HomeFile(".codex/models_cache.json", "Codex models"),
                 HomeFile(".codex/sqlite/codex.db", "Codex database", HashContent: false),
                 HomeFile(".codex/goals_1.sqlite", "Codex database", HashContent: false),
                 HomeFile(".codex/logs_2.sqlite", "Codex database", HashContent: false),
