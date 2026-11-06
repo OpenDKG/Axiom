@@ -127,15 +127,17 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         $"{PrivacyShieldPolicy.StarterRulesAll.Count} starter rules (manually reviewed, not a third-party list)";
 
     public string ManualSetupText =>
-        "This page never changes adapter DNS settings. To filter this PC, use the elevated " +
-        "scripts/privacy-shield-dns.ps1 helper: Save, then Enable -InterfaceAlias, and Restore " +
-        "if resolution fails. Without the helper, set the adapter DNS to 127.0.0.1 (port 53) " +
-        "with administrator rights and keep the previous values. A resolver on any other port is " +
-        "for testing only; the Windows DNS client always uses port 53.";
+        "The Netpetra service never changes adapter DNS silently. The optional UAC helper changes " +
+        "only the selected adapter after you confirm Windows elevation; it saves the previous DNS " +
+        "and can restore it. If you do not use the helper, set the adapter DNS to 127.0.0.1 " +
+        "(port 53) manually. Until Windows DNS points at this resolver, normal traffic bypasses it " +
+        "and the counters stay at zero. This is DNS filtering only: applications still connect " +
+        "directly to destination IPs; traffic is not routed or proxied through Netpetra.";
 
     public string BypassText =>
-        "DNS filtering does not block hardcoded IPs, DoH/DoT/DoQ, VPN tunnels or answers cached " +
-        "before activation. A blocked query is not proof that a connection was prevented.";
+        "Privacy Shield is a DNS filter, not a VPN or traffic proxy. It does not block hardcoded IPs, " +
+        "DoH/DoT/DoQ, VPN tunnels or answers cached before activation. A blocked query is not proof " +
+        "that a connection was prevented.";
 
     [ObservableProperty]
     private PrivacyShieldProfileOption _selectedProfile;

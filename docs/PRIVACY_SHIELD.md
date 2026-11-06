@@ -32,6 +32,21 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
   the previous ruleset only if every selected source succeeds. The previous rules file is retained.
 - Per-user settings in `%LOCALAPPDATA%\Netpetra\privacy-shield.json`. No DNS query history is stored.
 
+## DNS-only boundary
+
+Privacy Shield is **not a VPN, proxy or network gateway**. It filters DNS name resolution:
+
+1. The optional UAC helper changes the selected adapter's DNS server to `127.0.0.1` after explicit
+   elevation approval. The service itself never changes adapter DNS silently.
+2. Applications send DNS questions to the Windows resolver, which now reaches Netpetra on port 53.
+3. Netpetra returns NXDOMAIN for blocked names and forwards allowed questions to the upstream.
+4. Applications still connect directly to the returned destination IPs; their TCP/UDP traffic does
+   not pass through Netpetra.
+
+If adapter DNS is not pointed at the resolver, normal Windows DNS bypasses Privacy Shield entirely
+and the counters remain zero. Manual queries to `127.0.0.1` still work for testing, but they do not
+prove that system-wide traffic is filtered.
+
 ## What is not implemented
 
 - A WFP callout driver, hosts-file editing or LAN-wide resolver.
