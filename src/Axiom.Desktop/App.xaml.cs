@@ -42,6 +42,17 @@ public partial class App : Application
 
         Axiom.Persistence.LegacyDataMigration.Migrate(stopLegacyProcesses: true);
 
+        // Keep already-installed Axiom-managed bridges in sync with this build without
+        // touching a harness the user has not opted into. Host-owned trust stays host-owned.
+        try
+        {
+            AgentHookMaintenance.RepairInstalledHooks();
+        }
+        catch
+        {
+            // Hook maintenance is best-effort and must not block startup.
+        }
+
         var arguments = e.Args;
         var autostart = HasArgument(arguments, "--autostart");
         var startMinimized = HasArgument(arguments, "--start-minimized") ||

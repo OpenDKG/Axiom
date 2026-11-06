@@ -185,7 +185,15 @@
                       MaxHeight="360"
                       EnableRowVirtualization="True"
                       HeadersVisibility="Column"
-                      RowHeight="28">
+                      RowHeight="28"
+                      PreviewMouseRightButtonDown="OnDataGridPreviewMouseRightButtonDown">
+              <DataGrid.ContextMenu>
+                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                  <MenuItem Header="Copy event" Command="{Binding CopyActivityEventCommand}" />
+                  <MenuItem Header="Copy details" Command="{Binding CopyActivityDetailsCommand}" />
+                  <MenuItem Header="Copy raw event JSON" Command="{Binding CopyActivityJsonCommand}" />
+                </ContextMenu>
+              </DataGrid.ContextMenu>
               <DataGrid.Columns>
                 <DataGridTextColumn Header="TIME" Binding="{Binding TimeText}" Width="68" />
                 <DataGridTextColumn Header="AGENT" Binding="{Binding Agent}" Width="88" />
@@ -229,6 +237,13 @@
                     BorderThickness="1"
                     CornerRadius="8"
                     Padding="12">
+              <Border.ContextMenu>
+                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                  <MenuItem Header="Copy event" Command="{Binding CopyActivityEventCommand}" />
+                  <MenuItem Header="Copy details" Command="{Binding CopyActivityDetailsCommand}" />
+                  <MenuItem Header="Copy raw event JSON" Command="{Binding CopyActivityJsonCommand}" />
+                </ContextMenu>
+              </Border.ContextMenu>
               <ScrollViewer VerticalScrollBarVisibility="Auto"
                             HorizontalScrollBarVisibility="Disabled">
                 <StackPanel>
@@ -253,7 +268,13 @@
                                      Text="{Binding Value}"
                                      Foreground="{DynamicResource Brush.TextPrimary}"
                                      FontSize="11.5"
-                                     TextWrapping="Wrap" />
+                                     TextWrapping="Wrap">
+                            <TextBlock.ContextMenu>
+                              <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                <MenuItem Header="Copy value" Click="OnCopyDetailValueClick" />
+                              </ContextMenu>
+                            </TextBlock.ContextMenu>
+                          </TextBlock>
                         </Grid>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>

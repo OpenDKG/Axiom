@@ -233,7 +233,7 @@ public sealed class OpenCodeProtection
             const workingDirectory = "{{workingDirectory}}"
             const evidence = "{{evidence}}"
 
-            function record(eventType, tool, decision, guardStatus, durationMs, errorCode) {
+            function record(eventType, tool, decision, guardStatus, durationMs, errorCode, session, call) {
               try {
                 appendFileSync(evidence, JSON.stringify({
                   timestampUtc: new Date().toISOString(),
@@ -244,6 +244,8 @@ public sealed class OpenCodeProtection
                   guardStatus: guardStatus || "",
                   durationMs: durationMs || 0,
                   errorCode: errorCode || "",
+                  session: session || "",
+                  call: call || "",
                 }) + "\n")
               } catch {
               }
@@ -273,12 +275,12 @@ public sealed class OpenCodeProtection
                       windowsHide: true,
                     })
                     if (result.status !== 0 || !result.stdout) {
-                      record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "bridge")
+                      record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "bridge", event.sessionID, event.id)
                       return
                     }
                     decision = JSON.parse(result.stdout)
                   } catch {
-                    record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "spawn")
+                    record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "spawn", event.sessionID, event.id)
                     return
                   }
 
@@ -289,7 +291,9 @@ public sealed class OpenCodeProtection
                     blocked ? "block" : "allowed",
                     blocked ? "blocked" : "allowed",
                     Date.now() - started,
-                    "")
+                    "",
+                    event.sessionID,
+                    event.id)
                   if (blocked) {
                     throw new Error(decision.message || "Blocked by Axiom/Blackbox")
                   }
@@ -317,7 +321,7 @@ public sealed class OpenCodeProtection
             const workingDirectory = "{{workingDirectory}}"
             const evidence = "{{evidence}}"
 
-            function record(eventType, tool, decision, guardStatus, durationMs, errorCode) {
+            function record(eventType, tool, decision, guardStatus, durationMs, errorCode, session, call) {
               try {
                 appendFileSync(evidence, JSON.stringify({
                   timestampUtc: new Date().toISOString(),
@@ -328,6 +332,8 @@ public sealed class OpenCodeProtection
                   guardStatus: guardStatus || "",
                   durationMs: durationMs || 0,
                   errorCode: errorCode || "",
+                  session: session || "",
+                  call: call || "",
                 }) + "\n")
               } catch {
               }
@@ -355,12 +361,12 @@ public sealed class OpenCodeProtection
                       windowsHide: true,
                     })
                     if (result.status !== 0 || !result.stdout) {
-                      record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "bridge")
+                      record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "bridge", event.sessionID, event.id)
                       return
                     }
                     decision = JSON.parse(result.stdout)
                   } catch {
-                    record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "spawn")
+                    record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "spawn", event.sessionID, event.id)
                     return
                   }
 
@@ -371,7 +377,9 @@ public sealed class OpenCodeProtection
                     blocked ? "block" : "allowed",
                     blocked ? "blocked" : "allowed",
                     Date.now() - started,
-                    "")
+                    "",
+                    event.sessionID,
+                    event.id)
                   if (blocked) {
                     throw new Error(decision.message || "Blocked by Axiom/Blackbox")
                   }
@@ -396,7 +404,8 @@ public sealed class OpenCodeProtection
         EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "agent-evidence.jsonl"
 
 
-        def record(framework, event_type, tool, decision, guard_status, duration_ms, error_code=""):
+        def record(framework, event_type, tool, decision, guard_status, duration_ms,
+                   error_code="", session="", call=""):
             try:
                 EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
                 if EVIDENCE.exists() and EVIDENCE.stat().st_size > 1_000_000:
@@ -411,6 +420,8 @@ public sealed class OpenCodeProtection
                     "guardStatus": guard_status,
                     "durationMs": duration_ms,
                     "errorCode": error_code,
+                    "session": session,
+                    "call": call,
                 }
                 with EVIDENCE.open("a", encoding="utf-8") as handle:
                     handle.write(json.dumps(entry) + "\n")
@@ -423,10 +434,14 @@ public sealed class OpenCodeProtection
             started = time.monotonic()
             framework = "opencode"
             tool = ""
+            session = ""
+            call = ""
             try:
                 payload = json.load(sys.stdin)
                 framework = str(payload.get("framework") or "opencode")
                 tool = str(payload.get("tool", ""))
+                session = str(payload.get("session", ""))
+                call = str(payload.get("call", ""))
                 with contextlib.redirect_stdout(sys.stderr):
                     from plugins.blackbox.guard.hooks import on_pre_tool_call
 
@@ -443,12 +458,15 @@ public sealed class OpenCodeProtection
                     tool,
                     "block" if blocked else "allowed",
                     "blocked" if blocked else "allowed",
-                    int((time.monotonic() - started) * 1000))
+                    int((time.monotonic() - started) * 1000),
+                    session=session,
+                    call=call)
                 print(json.dumps(decision or {}))
             except Exception as exc:
                 # Fail open: a Blackbox or bridge fault must not break the host agent.
                 record(framework, "GUARD_FAILED", tool, "", "error",
-                       int((time.monotonic() - started) * 1000), type(exc).__name__)
+                       int((time.monotonic() - started) * 1000), type(exc).__name__,
+                       session=session, call=call)
                 print("{}")
 
 

@@ -28,7 +28,8 @@ public static class AgentHookScript
         PATCH_PATH = re.compile(r"^\*\*\*\s+(?:Update|Add|Delete)\s+File:\s*(.+?)\s*$", re.MULTILINE)
 
 
-        def record(event_type, tool="", decision="", guard_status="ok", duration_ms=0, error_code=""):
+        def record(event_type, tool="", decision="", guard_status="ok", duration_ms=0, error_code="",
+                   session="", call=""):
             try:
                 EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
                 if EVIDENCE.exists() and EVIDENCE.stat().st_size > 1_000_000:
@@ -43,6 +44,8 @@ public static class AgentHookScript
                     "guardStatus": guard_status,
                     "durationMs": duration_ms,
                     "errorCode": error_code,
+                    "session": session,
+                    "call": call,
                 }
                 with EVIDENCE.open("a", encoding="utf-8") as handle:
                     handle.write(json.dumps(entry) + "\n")
@@ -138,6 +141,8 @@ public static class AgentHookScript
         def main():
             started = time.monotonic()
             tool = ""
+            sid = ""
+            call = ""
             try:
                 raw = sys.stdin.read()
                 payload = json.loads(raw) if raw.strip() else {}
@@ -148,13 +153,15 @@ public static class AgentHookScript
                 tid = turn_id(payload)
                 ws = workspace(payload)
                 tool = str(payload.get("tool_name") or "")
+                call = tool_call_id(payload)
                 with contextlib.redirect_stdout(sys.stderr):
                     from plugins.blackbox.guard import hooks as guard
 
                 if event in ("sessionstart", "session_start"):
                     if hasattr(guard, "on_session_start"):
                         guard.on_session_start(session_id=sid, framework=FRAMEWORK, workspace=ws)
-                    record("SESSION_STARTED", "", "", "ok", int((time.monotonic() - started) * 1000))
+                    record("SESSION_STARTED", "", "", "ok", int((time.monotonic() - started) * 1000),
+                           session=sid)
                     return
 
                 if event in ("userpromptsubmit", "user_prompt_submit"):
@@ -171,7 +178,8 @@ public static class AgentHookScript
                             framework=FRAMEWORK,
                             workspace=ws,
                         )
-                    record("PROMPT_SCANNED", "", "", "ok", int((time.monotonic() - started) * 1000))
+                    record("PROMPT_SCANNED", "", "", "ok", int((time.monotonic() - started) * 1000),
+                           session=sid)
                     return
 
                 if event in ("pretooluse", "pre_tool_use"):
@@ -191,6 +199,8 @@ public static class AgentHookScript
                         "block" if blocked else "allowed",
                         "blocked" if blocked else "allowed",
                         int((time.monotonic() - started) * 1000),
+                        session=sid,
+                        call=call,
                     )
                     if blocked:
                         message = str(decision.get("message") or "Blocked by Axiom/Blackbox")
@@ -215,12 +225,14 @@ public static class AgentHookScript
                             framework=FRAMEWORK,
                             workspace=ws,
                         )
-                    record("POST_TOOL", tool, "", "ok", int((time.monotonic() - started) * 1000))
+                    record("POST_TOOL", tool, "", "ok", int((time.monotonic() - started) * 1000),
+                           session=sid, call=call)
                     return
 
                 if event in ("stop", "turnend", "turn_end"):
                     audit_stop(sid, tid, ws)
-                    record("STOPPED", tool, "", "ok", int((time.monotonic() - started) * 1000))
+                    record("STOPPED", tool, "", "ok", int((time.monotonic() - started) * 1000),
+                           session=sid)
                     return
 
                 if event in ("sessionend", "session_end"):
@@ -232,10 +244,12 @@ public static class AgentHookScript
                             framework=FRAMEWORK,
                             workspace=ws,
                         )
-                    record("SESSION_ENDED", "", "", "ok", int((time.monotonic() - started) * 1000))
+                    record("SESSION_ENDED", "", "", "ok", int((time.monotonic() - started) * 1000),
+                           session=sid)
                     return
 
-                record("HOOK_EVENT", tool, "", "ignored", int((time.monotonic() - started) * 1000))
+                record("HOOK_EVENT", tool, "", "ignored", int((time.monotonic() - started) * 1000),
+                       session=sid, call=call)
             except Exception as exc:
                 # Fail open: a Blackbox or hook fault must not break the host agent.
                 record(
@@ -245,6 +259,8 @@ public static class AgentHookScript
                     "error",
                     int((time.monotonic() - started) * 1000),
                     type(exc).__name__,
+                    session=sid,
+                    call=call,
                 )
 
 

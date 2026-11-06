@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -25,9 +26,11 @@ namespace Axiom.UI.ViewModels;
 /// </summary>
 public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, IDisposable
 {
-    private const int ActivityPageSize = 100;
+    private const int ActivityPageSize = 500;
 
-    private const int ActivityMax = 500;
+    private const int ActivityMax = 20_000;
+
+    private static readonly TimeSpan ActivityRefreshInterval = TimeSpan.FromSeconds(15);
 
     private static readonly Regex SecretPattern = new(
         @"(?i)\b(token|secret|password|passwd|api[_-]?key|authorization)\b\s*[:=]\s*(""[^""]*""|'[^']*'|[^\s,}\]]+)",
@@ -61,7 +64,11 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private string? _selectedActivityIdentity;
 
-    private int _activityLimit = ActivityPageSize;
+    private bool _activityInitialized;
+
+    private int _activityTotal;
+
+    private DateTimeOffset _lastActivityRefresh = DateTimeOffset.MinValue;
 
     public AgentsViewModel(SecurityViewModel security, IAgentSessionSource? agentSessions = null)
         : base("Agents", "DKG, Blackbox and the workspaces they protect", "\uE99A")
@@ -98,6 +105,12 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     [ObservableProperty]
     private BlackboxAuditEntry? _selectedActivity;
+
+    [ObservableProperty]
+    private BlackboxFinding? _selectedFinding;
+
+    [ObservableProperty]
+    private AgentEvidenceEvent? _selectedHookEvidence;
 
     [ObservableProperty]
     private string _selectedActivityTitle = "Select an activity row to see details.";
@@ -168,6 +181,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
         _timer.Start();
         _lastSessionRefresh = DateTimeOffset.MinValue;
+        _activityInitialized = false;
+        _lastActivityRefresh = DateTimeOffset.MinValue;
         _ = RefreshAsync();
     }
 
@@ -188,16 +203,35 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         }
 
         _refreshing = true;
+        var now = DateTimeOffset.UtcNow;
         try
         {
+            var shouldRefreshActivity = !_activityInitialized ||
+                                       now - _lastActivityRefresh >= ActivityRefreshInterval;
             var settingsTask = _client.GetSettingsAsync(CancellationToken.None);
             var graphTask = _client.GetGraphStatusAsync(CancellationToken.None);
-            var auditTask = _client.GetAuditAsync(_activityLimit, 0, CancellationToken.None);
+            var auditTask = shouldRefreshActivity
+                ? LoadActivityAsync(full: !_activityInitialized)
+                : Task.FromResult<BlackboxAuditPage?>(null);
             var findingsTask = _client.GetFindingsAsync(100, 0, CancellationToken.None);
 
             await Task.WhenAll(settingsTask, graphTask, auditTask, findingsTask).ConfigureAwait(true);
 
-            ApplyActivity(auditTask.Result);
+            if (auditTask.Result is { } auditPage)
+            {
+                if (_activityInitialized)
+                {
+                    MergeActivity(auditPage);
+                }
+                else
+                {
+                    ApplyActivity(auditPage);
+                    _activityInitialized = true;
+                }
+
+                _lastActivityRefresh = now;
+            }
+
             ApplyFindings(findingsTask.Result);
             ApplyHealth(settingsTask.Result, graphTask.Result);
             ApplyHookEvidence();
@@ -220,19 +254,179 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     private async Task RefreshAllAsync()
     {
         await Security.RefreshCommand.ExecuteAsync(null).ConfigureAwait(true);
+        _activityInitialized = false;
+        _lastActivityRefresh = DateTimeOffset.MinValue;
         await RefreshAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
     private async Task LoadMoreActivityAsync()
     {
-        if (!CanLoadMoreActivity || _activityLimit >= ActivityMax)
+        if (!CanLoadMoreActivity || !_activityInitialized)
         {
             return;
         }
 
-        _activityLimit = Math.Min(ActivityMax, _activityLimit + ActivityPageSize);
-        await RefreshAsync().ConfigureAwait(true);
+        try
+        {
+            var page = await _client.GetAuditAsync(
+                ActivityPageSize,
+                _allActivity.Count,
+                CancellationToken.None).ConfigureAwait(true);
+            MergeActivity(page);
+        }
+        catch (Exception exception) when (exception is
+            HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            ActivityStatusText = $"Could not load older activity: {exception.Message}";
+        }
+    }
+
+    private async Task<BlackboxAuditPage?> LoadActivityAsync(bool full)
+    {
+        if (!full)
+        {
+            return await _client.GetAuditAsync(
+                ActivityPageSize,
+                0,
+                CancellationToken.None).ConfigureAwait(true);
+        }
+
+        var entries = new List<BlackboxAuditEntry>();
+        var offset = 0;
+        var total = 0;
+        while (entries.Count < ActivityMax)
+        {
+            var page = await _client.GetAuditAsync(
+                Math.Min(ActivityPageSize, ActivityMax - entries.Count),
+                offset,
+                CancellationToken.None).ConfigureAwait(true);
+            total = page.Total;
+            if (page.Entries.Count == 0)
+            {
+                break;
+            }
+
+            entries.AddRange(page.Entries);
+            offset += page.Entries.Count;
+            if (offset >= total)
+            {
+                break;
+            }
+        }
+
+        return new BlackboxAuditPage(entries, total);
+    }
+
+    [RelayCommand]
+    private void CopyActivityEvent()
+    {
+        if (SelectedActivity is not { } entry)
+        {
+            return;
+        }
+
+        CopyToClipboard(string.Join(
+            Environment.NewLine,
+            $"Time: {entry.DateTimeText}",
+            $"Agent: {entry.Agent}",
+            $"Event: {entry.EventLabel} ({entry.Event})",
+            $"Details: {entry.ActionSummary}",
+            $"Session: {entry.SessionFull}",
+            $"Severity: {entry.Severity}",
+            $"Decision: {entry.Decision}",
+            $"Security: {entry.SecurityOutcomeDetail}"));
+    }
+
+    [RelayCommand]
+    private void CopyActivityDetails()
+    {
+        if (SelectedActivity is null)
+        {
+            return;
+        }
+
+        var lines = SelectedActivityDetails
+            .Select(row => $"{row.Label}: {row.Value}")
+            .ToList();
+        if (!string.IsNullOrWhiteSpace(SelectedActivityRawText))
+        {
+            lines.Add(string.Empty);
+            lines.Add("Raw event:");
+            lines.Add(SelectedActivityRawText);
+        }
+
+        CopyToClipboard(string.Join(Environment.NewLine, lines));
+    }
+
+    [RelayCommand]
+    private void CopyActivityJson() => CopyToClipboard(SelectedActivityRawText);
+
+    [RelayCommand]
+    private void CopyFinding()
+    {
+        if (SelectedFinding is not { } finding)
+        {
+            return;
+        }
+
+        CopyToClipboard(string.Join(
+            Environment.NewLine,
+            $"Time: {finding.TimeText}",
+            $"Agent: {finding.Agent}",
+            $"Category: {finding.Category}",
+            $"Severity: {finding.Severity}",
+            $"Identifier: {finding.Identifier}",
+            $"Title: {finding.Title}",
+            $"Decision: {finding.Decision}",
+            $"Session: {finding.Session}",
+            $"Security: {finding.SecurityOutcome}"));
+    }
+
+    [RelayCommand]
+    private void CopyHookEvidence()
+    {
+        if (SelectedHookEvidence is not { } evidence)
+        {
+            return;
+        }
+
+        CopyToClipboard(string.Join(
+            Environment.NewLine,
+            $"Time: {evidence.Timestamp:O}",
+            $"Framework: {evidence.Framework}",
+            $"Event: {evidence.EventType}",
+            $"Tool: {evidence.Tool}",
+            $"Decision: {evidence.Decision}",
+            $"Guard status: {evidence.GuardStatus}",
+            $"Duration: {evidence.DurationMs} ms",
+            $"Error: {evidence.ErrorCode}",
+            $"Session: {evidence.Session}",
+            $"Call: {evidence.Call}"));
+    }
+
+    [RelayCommand]
+    private void CopyText(string? value) => CopyToClipboard(value ?? string.Empty);
+
+    private static void CopyToClipboard(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(text);
+        }
+        catch (ExternalException)
+        {
+            // Clipboard is temporarily owned by another process.
+        }
+        catch (InvalidOperationException)
+        {
+            // The UI is shutting down or the clipboard is unavailable.
+        }
     }
 
     [RelayCommand]
@@ -569,16 +763,54 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private void ApplyActivity(BlackboxAuditPage page)
     {
-        var toolActions = page.Entries
+        _allActivity.Clear();
+        _allActivity.AddRange(NormalizeActivity(page.Entries, ReadFrameworkMap()));
+        _activityTotal = Math.Max(page.Total, _allActivity.Count);
+        UpdateActivitySummary();
+        ApplyFilters();
+    }
+
+    private void MergeActivity(BlackboxAuditPage page)
+    {
+        _activityTotal = Math.Max(page.Total, _allActivity.Count);
+        var incoming = NormalizeActivity(page.Entries, ReadFrameworkMap());
+        var seen = _allActivity
+            .Select(ActivityIdentity)
+            .ToHashSet(StringComparer.Ordinal);
+        var added = incoming
+            .Where(entry => seen.Add(ActivityIdentity(entry)))
+            .ToList();
+
+        if (added.Count > 0)
+        {
+            _allActivity.AddRange(added);
+            _allActivity.Sort((left, right) =>
+                (right.Timestamp ?? DateTimeOffset.MinValue)
+                .CompareTo(left.Timestamp ?? DateTimeOffset.MinValue));
+        }
+
+        UpdateActivitySummary();
+        if (added.Count > 0)
+        {
+            ApplyFilters();
+        }
+    }
+
+    private static List<BlackboxAuditEntry> NormalizeActivity(
+        IEnumerable<BlackboxAuditEntry> entries,
+        Dictionary<string, string> frameworkBySession)
+    {
+        var source = entries.ToList();
+        var toolActions = source
             .Where(entry => entry.Event == "pre_tool_call" &&
                             entry.Detail?.ToolCallId is { Length: > 0 } &&
                             entry.Action.Length > 0)
             .GroupBy(entry => entry.Detail!.ToolCallId, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First().Action, StringComparer.Ordinal);
 
-        _allActivity.Clear();
+        var normalized = new List<BlackboxAuditEntry>(source.Count);
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var original in page.Entries)
+        foreach (var original in source)
         {
             var entry = original;
             if (entry.Event == "post_tool_call" &&
@@ -588,13 +820,39 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
                 entry = entry with { Action = toolAction };
             }
 
+            if (string.Equals(entry.Agent, "hermes", StringComparison.OrdinalIgnoreCase) &&
+                frameworkBySession.TryGetValue(entry.SessionFull, out var framework) &&
+                !string.Equals(framework, "hermes", StringComparison.OrdinalIgnoreCase))
+            {
+                entry = entry with { Agent = framework };
+            }
+
             var key = ActivityIdentity(entry);
             if (seen.Add(key))
             {
-                _allActivity.Add(entry);
+                normalized.Add(entry);
             }
         }
 
+        return normalized;
+    }
+
+    private Dictionary<string, string> ReadFrameworkMap()
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var item in _agentEvidence.ReadRecent(4000).OrderBy(item => item.Timestamp))
+        {
+            if (!string.IsNullOrWhiteSpace(item.Session) && !string.IsNullOrWhiteSpace(item.Framework))
+            {
+                map[item.Session] = item.Framework;
+            }
+        }
+
+        return map;
+    }
+
+    private void UpdateActivitySummary()
+    {
         var sessions = _allActivity.Count(entry => entry.Category == "sessions");
         var apiCalls = _allActivity.Count(entry => entry.Category == "api");
         var toolCalls = _allActivity.Count(entry => entry.Category == "tools");
@@ -605,11 +863,12 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         ActivityBreakdownText =
             $"{sessions} sessions · {apiCalls} API calls · {toolCalls} tool calls · " +
             $"{installs} installs · {files} file accesses · {threats} threats";
-        CanLoadMoreActivity = page.Total > page.Entries.Count && _activityLimit < ActivityMax;
+        CanLoadMoreActivity = _allActivity.Count < _activityTotal && _allActivity.Count < ActivityMax;
         ActivityStatusText = _allActivity.Count == 0
             ? "No recorded agent activity yet."
-            : $"Showing the newest {_allActivity.Count} of {page.Total} recorded event(s).";
-        ApplyFilters();
+            : _allActivity.Count >= _activityTotal
+                ? $"Showing all {_allActivity.Count} recorded event(s)."
+                : $"Showing {_allActivity.Count} of {_activityTotal} recorded event(s).";
     }
 
     private void ApplyFindings(BlackboxFindingPage page)
@@ -798,6 +1057,10 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         SelectedActivity = selectedKey is null
             ? null
             : Activity.FirstOrDefault(entry => ActivityIdentity(entry) == selectedKey);
+        if (SelectedActivity is null && (HasSelectedActivity || SelectedActivityDetails.Count > 0))
+        {
+            UpdateSelectedActivityDetails();
+        }
     }
 
     private void UpdateSelectedActivityDetails()

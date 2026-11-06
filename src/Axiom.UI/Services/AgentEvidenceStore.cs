@@ -16,6 +16,10 @@ public sealed record AgentEvidenceEvent(
     long DurationMs,
     string ErrorCode)
 {
+    public string Session { get; init; } = string.Empty;
+
+    public string Call { get; init; } = string.Empty;
+
     public string TimeText => Timestamp == DateTimeOffset.MinValue
         ? "—"
         : Timestamp.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
@@ -96,7 +100,11 @@ public sealed class AgentEvidenceStore
                 ReadString(root, "decision"),
                 ReadString(root, "guardStatus"),
                 root.TryGetProperty("durationMs", out var duration) && duration.TryGetInt64(out var ms) ? ms : 0,
-                ReadString(root, "errorCode"));
+                ReadString(root, "errorCode"))
+            {
+                Session = ReadString(root, "session"),
+                Call = ReadString(root, "call"),
+            };
         }
         catch (JsonException)
         {
