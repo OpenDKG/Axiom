@@ -41,7 +41,7 @@ public sealed class CursorProtection
 
     private string ManagedCommand => $"\"{PythonPath}\" \"{HookScriptPath}\"";
 
-    public bool IsCursorDetected => Directory.Exists(ConfigDirectory) || File.Exists(HooksPath);
+    public bool IsCursorDetected => Directory.Exists(ConfigDirectory) || File.Exists(HooksPath) || AgentBinaryLocator.IsCursorAvailable();
 
     public bool IsInstalled => File.Exists(HookScriptPath) && HasHookEntry();
 

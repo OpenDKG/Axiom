@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Netpetra.UI\Netpetra.UI.csproj" />
     <ProjectReference Include="..\Netpetra.Infrastructure.Windows\Netpetra.Infrastructure.Windows.csproj" />
+    <ProjectReference Include="..\Netpetra.Persistence\Netpetra.Persistence.csproj" />
   </ItemGroup>
 
   <ItemGroup>

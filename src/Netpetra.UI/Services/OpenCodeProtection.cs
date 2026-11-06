@@ -60,11 +60,12 @@ public sealed class OpenCodeProtection
 
     public string EvidencePath => Path.Combine(_localAppData, "Netpetra", "agent-evidence.jsonl");
 
-    public bool IsOpenCodeDetected => Directory.Exists(ConfigDirectory);
+    public bool IsOpenCodeDetected => Directory.Exists(ConfigDirectory) || AgentBinaryLocator.IsOpenCodeAvailable();
 
     public bool IsOpenChamberDetected =>
         File.Exists(OpenChamberPath) ||
-        Directory.Exists(Path.Combine(_roamingAppData, "openchamber"));
+        Directory.Exists(Path.Combine(_roamingAppData, "openchamber")) ||
+        AgentBinaryLocator.IsOpenChamberAvailable();
 
     public bool IsInstalled
     {

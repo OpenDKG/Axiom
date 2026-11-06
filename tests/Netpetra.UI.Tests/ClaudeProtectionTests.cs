@@ -8,7 +8,7 @@ namespace Netpetra.UI.Tests;
 public sealed class ClaudeProtectionTests
 {
     [Fact]
-    public void Install_merges_a_PreToolUse_hook_and_preserves_user_hooks()
+    public void Install_merges_lifecycle_hooks_and_preserves_user_hooks()
     {
         using var temp = new TempTree();
         var config = Path.Combine(temp.Root, ".claude");
@@ -44,7 +44,22 @@ public sealed class ClaudeProtectionTests
         Assert.NotEmpty(Directory.GetFiles(config, "settings.json.netpetra-backup-*"));
 
         Assert.True(protection.EnsureInstalled());
-        Assert.Equal(1, CountOccurrences(File.ReadAllText(settings), "netpetra-claude-hook.py"));
+        var installedAgain = File.ReadAllText(settings);
+        Assert.Equal(5, CountOccurrences(installedAgain, "netpetra-claude-hook.py"));
+        using var document = System.Text.Json.JsonDocument.Parse(installedAgain);
+        var hooks = document.RootElement.GetProperty("hooks");
+        foreach (var eventName in new[] { "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop" })
+        {
+            Assert.True(hooks.TryGetProperty(eventName, out var groups));
+            Assert.Contains(
+                groups.EnumerateArray().SelectMany(group => group.GetProperty("hooks").EnumerateArray()),
+                handler =>
+                    handler.TryGetProperty("args", out var args) &&
+                    args.GetArrayLength() > 0 &&
+                    args[0].GetString()?.Contains("netpetra-claude-hook.py", StringComparison.Ordinal) == true &&
+                    handler.TryGetProperty("timeout", out var timeout) &&
+                    timeout.GetInt32() == 30);
+        }
     }
 
     [Fact]

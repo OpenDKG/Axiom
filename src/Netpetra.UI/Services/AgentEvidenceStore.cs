@@ -29,10 +29,15 @@ public sealed record AgentEvidenceEvent(
 /// </summary>
 public sealed class AgentEvidenceStore
 {
-    public string EvidencePath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Netpetra",
-        "agent-evidence.jsonl");
+    public AgentEvidenceStore(string? path = null)
+    {
+        EvidencePath = path ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Netpetra",
+            "agent-evidence.jsonl");
+    }
+
+    public string EvidencePath { get; }
 
     public IReadOnlyList<AgentEvidenceEvent> ReadRecent(int max = 200)
     {
@@ -60,11 +65,15 @@ public sealed class AgentEvidenceStore
         }
     }
 
-    public AgentEvidenceEvent? Latest(string framework) =>
-        ReadRecent(500)
+    public AgentEvidenceEvent? Latest(string framework, TimeSpan? maxAge = null)
+    {
+        var cutoff = maxAge is null ? DateTimeOffset.MinValue : DateTimeOffset.UtcNow - maxAge.Value;
+        return ReadRecent(500)
             .Where(item => string.Equals(item.Framework, framework, StringComparison.OrdinalIgnoreCase))
+            .Where(item => item.Timestamp != DateTimeOffset.MinValue && item.Timestamp >= cutoff)
             .OrderByDescending(item => item.Timestamp)
             .FirstOrDefault();
+    }
 
     private static AgentEvidenceEvent? TryParse(string line)
     {

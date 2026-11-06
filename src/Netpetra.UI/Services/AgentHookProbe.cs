@@ -29,7 +29,7 @@ public sealed class AgentHookProbe
     public async Task<AgentHookTestResult> TestAsync(string kind, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(15));
+        timeout.CancelAfter(TimeSpan.FromSeconds(40));
         var token = timeout.Token;
 
         try
@@ -131,7 +131,14 @@ public sealed class AgentHookProbe
         try
         {
             using var document = JsonDocument.Parse(output);
-            return document.RootElement.TryGetProperty("hookSpecificOutput", out var hook) &&
+            var root = document.RootElement;
+            if (root.TryGetProperty("decision", out var legacy) &&
+                string.Equals(legacy.GetString(), "block", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return root.TryGetProperty("hookSpecificOutput", out var hook) &&
                    hook.TryGetProperty("permissionDecision", out var decision) &&
                    string.Equals(decision.GetString(), "deny", StringComparison.OrdinalIgnoreCase);
         }

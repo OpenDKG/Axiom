@@ -7,12 +7,22 @@ using System.Text.Json.Nodes;
 namespace Netpetra.UI.Services;
 
 /// <summary>
-/// Installs a Codex PreToolUse hook that calls the Blackbox guard. Codex stores user hooks in
-/// <c>~/.codex/hooks.json</c>; the existing file is merged, never replaced.
+/// Installs the Axiom five-event lifecycle bridge in <c>~/.codex/hooks.json</c>. Existing hooks are
+/// merged, never replaced. Codex still requires the user to trust the exact hook definitions; this
+/// class reports that trust state but never grants it.
 /// </summary>
 public sealed class CodexProtection
 {
     private const string Marker = "netpetra-codex-hook.py";
+
+    private static readonly (string Name, bool Matcher, string? Status)[] HookEvents =
+    [
+        ("SessionStart", true, "Starting Axiom guard"),
+        ("UserPromptSubmit", false, "Scanning prompt with Axiom"),
+        ("PreToolUse", true, "Checking tool call with Axiom"),
+        ("PostToolUse", true, null),
+        ("Stop", false, null),
+    ];
 
     private readonly string _userProfile;
 
@@ -28,6 +38,8 @@ public sealed class CodexProtection
 
     public string HooksPath => Path.Combine(ConfigDirectory, "hooks.json");
 
+    public string ConfigPath => Path.Combine(ConfigDirectory, "config.toml");
+
     private string BlackboxAgentRoot => Path.Combine(
         _localAppData,
         "Netpetra",
@@ -39,11 +51,20 @@ public sealed class CodexProtection
 
     public string HookScriptPath => Path.Combine(BlackboxAgentRoot, Marker);
 
-    private string ManagedCommand => $"\"{PythonPath}\" \"{HookScriptPath}\"";
+    private string ManagedCommand =>
+        $"\"{PythonPath}\" \"{HookScriptPath}\" --bridge-version {AgentHookScript.Version}";
 
-    public bool IsCodexDetected => Directory.Exists(ConfigDirectory);
+    private string BaseManagedCommand => $"\"{PythonPath}\" \"{HookScriptPath}\"";
 
-    public bool IsInstalled => File.Exists(HookScriptPath) && HasHookEntry();
+    public bool IsCodexDetected =>
+        Directory.Exists(ConfigDirectory) ||
+        File.Exists(HooksPath) ||
+        AgentBinaryLocator.IsCodexAvailable();
+
+    public bool IsInstalled => File.Exists(PythonPath) && File.Exists(HookScriptPath) && HasAllHookEntries();
+
+    public CodexTrustState TrustState =>
+        new CodexTrustInspector(HooksPath, ConfigPath, ManagedCommand, HookScriptPath).Inspect();
 
     public bool EnsureInstalled()
     {
@@ -61,13 +82,13 @@ public sealed class CodexProtection
                 return false;
             }
 
-            var script = BuildHookScript();
+            var script = AgentHookScript.Build("codex");
             if (!File.Exists(HookScriptPath) || File.ReadAllText(HookScriptPath) != script)
             {
                 File.WriteAllText(HookScriptPath, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             }
 
-            return MergeHookEntry();
+            return MergeHookEntries();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -96,46 +117,52 @@ public sealed class CodexProtection
             }
 
             var root = JsonNode.Parse(File.ReadAllText(HooksPath)) as JsonObject;
-            if (root?["hooks"] is not JsonObject hooks ||
-                hooks["PreToolUse"] is not JsonArray groups)
+            if (root?["hooks"] is not JsonObject hooks)
             {
                 return;
             }
 
             var removed = false;
-            for (var index = groups.Count - 1; index >= 0; index--)
+            foreach (var (eventName, _, _) in HookEvents)
             {
-                if (groups[index] is not JsonObject group ||
-                    group["hooks"] is not JsonArray handlers)
+                if (hooks[eventName] is not JsonArray groups)
                 {
                     continue;
                 }
 
-                for (var handlerIndex = handlers.Count - 1; handlerIndex >= 0; handlerIndex--)
+                for (var index = groups.Count - 1; index >= 0; index--)
                 {
-                    if (handlers[handlerIndex] is JsonObject handler &&
-                        IsOwnedHandler(handler))
+                    if (groups[index] is not JsonObject group ||
+                        group["hooks"] is not JsonArray handlers)
                     {
-                        handlers.RemoveAt(handlerIndex);
-                        removed = true;
+                        continue;
+                    }
+
+                    for (var handlerIndex = handlers.Count - 1; handlerIndex >= 0; handlerIndex--)
+                    {
+                        if (handlers[handlerIndex] is JsonObject handler && IsOwnedHandler(handler))
+                        {
+                            handlers.RemoveAt(handlerIndex);
+                            removed = true;
+                        }
+                    }
+
+                    if (handlers.Count == 0)
+                    {
+                        groups.RemoveAt(index);
                     }
                 }
 
-                if (handlers.Count == 0)
+                if (groups.Count == 0)
                 {
-                    groups.RemoveAt(index);
+                    hooks.Remove(eventName);
                 }
             }
 
             if (!removed)
             {
-                // No Netpetra-owned hook was present; leave the user's file byte-identical.
+                // No Axiom-owned hook was present; leave the user's file byte-identical.
                 return;
-            }
-
-            if (groups.Count == 0)
-            {
-                hooks.Remove("PreToolUse");
             }
 
             if (hooks.Count == 0)
@@ -154,7 +181,7 @@ public sealed class CodexProtection
         }
     }
 
-    private bool HasHookEntry()
+    private bool HasAllHookEntries()
     {
         try
         {
@@ -164,11 +191,16 @@ public sealed class CodexProtection
             }
 
             var root = JsonNode.Parse(File.ReadAllText(HooksPath)) as JsonObject;
-            return root?["hooks"] is JsonObject hooks &&
-                   hooks["PreToolUse"] is JsonArray groups &&
-                   groups.OfType<JsonObject>().Any(group =>
-                       group["hooks"] is JsonArray handlers &&
-                       handlers.OfType<JsonObject>().Any(IsOwnedHandler));
+            if (root?["hooks"] is not JsonObject hooks)
+            {
+                return false;
+            }
+
+            return HookEvents.All(hook =>
+                hooks[hook.Name] is JsonArray groups &&
+                groups.OfType<JsonObject>().Any(group =>
+                    group["hooks"] is JsonArray handlers &&
+                    handlers.OfType<JsonObject>().Any(IsCurrentHandler)));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -176,13 +208,31 @@ public sealed class CodexProtection
         }
     }
 
-    private bool IsOwnedHandler(JsonObject handler) =>
-        handler["command"] is JsonValue value &&
-        value.TryGetValue<string>(out var command) &&
-        string.Equals(command, ManagedCommand, StringComparison.OrdinalIgnoreCase);
-
-    private bool MergeHookEntry()
+    private bool IsOwnedHandler(JsonObject handler)
     {
+        var command = ReadString(handler, "command");
+        var commandWindows = ReadString(handler, "commandWindows");
+        return string.Equals(command, ManagedCommand, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(command, BaseManagedCommand, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(commandWindows, ManagedCommand, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(commandWindows, BaseManagedCommand, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsCurrentHandler(JsonObject handler) =>
+        IsOwnedHandler(handler) &&
+        handler["timeout"] is JsonValue timeoutValue &&
+        timeoutValue.TryGetValue<int>(out var timeout) &&
+        timeout == 30 &&
+        string.Equals(ReadString(handler, "commandWindows") ?? ReadString(handler, "command"),
+            ManagedCommand, StringComparison.OrdinalIgnoreCase);
+
+    private bool MergeHookEntries()
+    {
+        if (HasAllHookEntries())
+        {
+            return true;
+        }
+
         JsonObject root;
         if (File.Exists(HooksPath))
         {
@@ -209,121 +259,79 @@ public sealed class CodexProtection
             root["hooks"] = hooks;
         }
 
-        if (hooks["PreToolUse"] is not null && hooks["PreToolUse"] is not JsonArray)
+        foreach (var (eventName, matcher, status) in HookEvents)
         {
-            return false;
-        }
-
-        if (hooks["PreToolUse"] is not JsonArray groups)
-        {
-            groups = new JsonArray();
-            hooks["PreToolUse"] = groups;
-        }
-
-        if (HasHookEntry())
-        {
-            return true;
-        }
-
-        groups.Add(new JsonObject
-        {
-            ["matcher"] = ".*",
-            ["hooks"] = new JsonArray
+            if (hooks[eventName] is not null && hooks[eventName] is not JsonArray)
             {
-                new JsonObject
-                {
-                    ["type"] = "command",
-                    ["command"] = ManagedCommand,
-                    ["timeout"] = 10,
-                },
-            },
-        });
+                return false;
+            }
 
+            if (hooks[eventName] is not JsonArray groups)
+            {
+                groups = new JsonArray();
+                hooks[eventName] = groups;
+            }
+
+            for (var index = groups.Count - 1; index >= 0; index--)
+            {
+                if (groups[index] is not JsonObject group ||
+                    group["hooks"] is not JsonArray handlers)
+                {
+                    continue;
+                }
+
+                for (var handlerIndex = handlers.Count - 1; handlerIndex >= 0; handlerIndex--)
+                {
+                    if (handlers[handlerIndex] is JsonObject handler && IsOwnedHandler(handler))
+                    {
+                        handlers.RemoveAt(handlerIndex);
+                    }
+                }
+
+                if (handlers.Count == 0)
+                {
+                    groups.RemoveAt(index);
+                }
+            }
+
+            groups.Add(BuildGroup(matcher, status));
+        }
+
+        Directory.CreateDirectory(ConfigDirectory);
         StorageSafety.BackupFile(HooksPath);
         File.WriteAllText(
             HooksPath,
             root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        return true;
+        return HasAllHookEntries();
     }
 
-    private static string BuildHookScript() => """
-        # Managed by Netpetra. Calls the local Blackbox guard for Codex PreToolUse hooks.
-        import contextlib
-        import datetime
-        import json
-        import os
-        import sys
-        import time
-        from pathlib import Path
+    private JsonObject BuildGroup(bool matcher, string? status)
+    {
+        var handler = new JsonObject
+        {
+            ["type"] = "command",
+            ["command"] = ManagedCommand,
+            ["commandWindows"] = ManagedCommand,
+            ["timeout"] = 30,
+        };
+        if (status is not null)
+        {
+            handler["statusMessage"] = status;
+        }
 
-        ROOT = Path(__file__).resolve().parent
-        sys.path.insert(0, str(ROOT))
-        EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Netpetra" / "agent-evidence.jsonl"
+        var group = new JsonObject
+        {
+            ["hooks"] = new JsonArray(handler),
+        };
+        if (matcher)
+        {
+            group["matcher"] = "*";
+        }
 
+        return group;
+    }
 
-        def record(event_type, tool, decision, guard_status, duration_ms, error_code=""):
-            try:
-                EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
-                if EVIDENCE.exists() and EVIDENCE.stat().st_size > 1_000_000:
-                    lines = EVIDENCE.read_text(encoding="utf-8").splitlines()[-500:]
-                    EVIDENCE.write_text("\n".join(lines) + "\n", encoding="utf-8")
-                entry = {
-                    "timestampUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    "framework": "codex",
-                    "eventType": event_type,
-                    "tool": tool,
-                    "decision": decision,
-                    "guardStatus": guard_status,
-                    "durationMs": duration_ms,
-                    "errorCode": error_code,
-                }
-                with EVIDENCE.open("a", encoding="utf-8") as handle:
-                    handle.write(json.dumps(entry) + "\n")
-            except Exception:
-                pass
-
-
-        def main() -> None:
-            started = time.monotonic()
-            tool = ""
-            try:
-                payload = json.load(sys.stdin)
-                tool = str(payload.get("tool_name", ""))
-                with contextlib.redirect_stdout(sys.stderr):
-                    from plugins.blackbox.guard.hooks import on_pre_tool_call
-
-                    decision = on_pre_tool_call(
-                        tool_name=tool,
-                        args=payload.get("tool_input") or {},
-                        session_id=str(payload.get("session_id", "")),
-                        tool_call_id=str(payload.get("tool_use_id", "")),
-                    )
-                blocked = bool(decision and decision.get("action") == "block")
-                record(
-                    "GUARD_BLOCKED" if blocked else "GUARD_ALLOWED",
-                    tool,
-                    "block" if blocked else "allowed",
-                    "blocked" if blocked else "allowed",
-                    int((time.monotonic() - started) * 1000))
-                if blocked:
-                    print(json.dumps({
-                        "hookSpecificOutput": {
-                            "hookEventName": "PreToolUse",
-                            "permissionDecision": "deny",
-                            "permissionDecisionReason": decision.get("message") or "Blocked by Netpetra/Blackbox",
-                        }
-                    }))
-                else:
-                    print("{}")
-            except Exception as exc:
-                # Fail open: a Blackbox or hook fault must not break Codex.
-                record("GUARD_FAILED", tool, "", "error",
-                       int((time.monotonic() - started) * 1000), type(exc).__name__)
-                print("{}")
-
-
-        if __name__ == "__main__":
-            main()
-        """;
+    private static string? ReadString(JsonObject? node, string propertyName) =>
+        node?[propertyName] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 }

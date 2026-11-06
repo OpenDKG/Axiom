@@ -42,7 +42,7 @@ public sealed class GeminiProtection
 
     private string ManagedCommand => $"\"{PythonPath}\" \"{HookScriptPath}\"";
 
-    public bool IsGeminiDetected => File.Exists(SettingsPath);
+    public bool IsGeminiDetected => File.Exists(SettingsPath) || AgentBinaryLocator.IsGeminiAvailable();
 
     public bool IsInstalled => File.Exists(HookScriptPath) && HasHookEntry();
 
@@ -189,7 +189,9 @@ public sealed class GeminiProtection
 
     private bool MergeHookEntry()
     {
-        var root = JsonNode.Parse(File.ReadAllText(SettingsPath)) as JsonObject;
+        var root = File.Exists(SettingsPath)
+            ? JsonNode.Parse(File.ReadAllText(SettingsPath)) as JsonObject
+            : new JsonObject();
         if (root is null)
         {
             return false;
@@ -238,6 +240,7 @@ public sealed class GeminiProtection
         });
 
         StorageSafety.BackupFile(SettingsPath);
+        Directory.CreateDirectory(ConfigDirectory);
         File.WriteAllText(
             SettingsPath,
             root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),

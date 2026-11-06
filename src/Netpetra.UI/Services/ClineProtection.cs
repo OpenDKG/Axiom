@@ -36,7 +36,7 @@ public sealed class ClineProtection
 
     private string PythonPath => Path.Combine(BlackboxAgentRoot, "venv", "Scripts", "python.exe");
 
-    public bool IsClineDetected => Directory.Exists(Path.Combine(_userProfile, "Documents", "Cline"));
+    public bool IsClineDetected => Directory.Exists(Path.Combine(_userProfile, "Documents", "Cline")) || AgentBinaryLocator.IsClineAvailable();
 
     public bool IsInstalled
     {

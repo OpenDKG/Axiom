@@ -48,7 +48,7 @@ public sealed class WindsurfProtection
 
     private string ManagedCommand => $"& \"{PythonPath}\" \"{HookScriptPath}\"";
 
-    public bool IsWindsurfDetected => Directory.Exists(ConfigDirectory) || File.Exists(HooksPath);
+    public bool IsWindsurfDetected => Directory.Exists(ConfigDirectory) || File.Exists(HooksPath) || AgentBinaryLocator.IsWindsurfAvailable();
 
     public bool IsInstalled => File.Exists(HookScriptPath) && HasHookEntry();
 

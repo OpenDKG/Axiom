@@ -14,7 +14,8 @@ public static class AgentProtectionClassifier
         bool failureObserved,
         bool blackboxAvailable,
         bool verifiedBlocking = false,
-        bool auditOnly = false)
+        bool auditOnly = false,
+        bool trustRequired = false)
     {
         if (!detected)
         {
@@ -29,6 +30,11 @@ public static class AgentProtectionClassifier
         if (!blackboxAvailable)
         {
             return "OFFLINE";
+        }
+
+        if (trustRequired)
+        {
+            return "TRUST REQUIRED";
         }
 
         if (failureObserved)

@@ -5,6 +5,7 @@ using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Netpetra.Contracts;
+using Netpetra.Contracts.Agents;
 using Netpetra.Contracts.Ipc;
 using Netpetra.UI.Services;
 
@@ -20,7 +21,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private bool _syncingTheme;
 
-    public MainViewModel(ConnectionMonitor monitor)
+    public MainViewModel(ConnectionMonitor monitor, IAgentSessionSource? agentSessions = null)
     {
         _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
         Themes =
@@ -39,7 +40,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         var security = new SecurityViewModel();
-        var agents = new AgentsViewModel(security);
+        var agents = new AgentsViewModel(security, agentSessions);
         _overview = new OverviewViewModel(monitor, agents);
 
         var pages = new List<PageViewModel>
