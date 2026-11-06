@@ -178,6 +178,8 @@ public sealed class UserStateProtection
                 LocalFile("Netpetra/onboarding.json", "Netpetra settings"),
                 LocalFile("Netpetra/startup.json", "Netpetra settings"),
                 LocalFile("Netpetra/privacy-shield.json", "Netpetra Privacy Shield settings"),
+                LocalFile("Netpetra/ai-analyst.json", "Netpetra AI analyst settings"),
+                LocalFile("Netpetra/ai-findings.json", "Netpetra AI findings"),
             };
 
             if (_includeHermesSettings)

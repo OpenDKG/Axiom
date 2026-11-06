@@ -142,6 +142,8 @@ public sealed class UserStateProtectionTests
         Assert.Contains(Path.Combine(temp.LocalAppData, "hermes", "sessions"), directories);
         Assert.Contains(Path.Combine(temp.RoamingAppData, "Cursor", "User", "globalStorage", "state.vscdb"), files);
         Assert.Contains(Path.Combine(temp.LocalAppData, "Netpetra", "privacy-shield.json"), files);
+        Assert.Contains(Path.Combine(temp.LocalAppData, "Netpetra", "ai-analyst.json"), files);
+        Assert.Contains(Path.Combine(temp.LocalAppData, "Netpetra", "ai-findings.json"), files);
     }
 
     [Fact]

@@ -71,6 +71,14 @@ Only in-memory counters are kept, not DNS query history. DoH/DoT/DoQ, hardcoded 
 are not covered. Optional catalogued HTTPS sources are bounded and atomically updated; VM test
 coverage is tracked in [the VM test plan](docs/PRIVACY_SHIELD_VM_TEST_PLAN.md).
 
+### AI Security Analyst
+
+An optional, default-disabled read-only analyst for the current bounded connection snapshot. It
+uses an OpenAI-compatible provider (cloud HTTPS or a local loopback endpoint), protects the API key
+with Windows DPAPI, redacts local paths by default and stores only bounded structured findings. It
+cannot change firewall rules, execute commands or read arbitrary files. See
+[AI Security Analyst](docs/AI_ANALYST.md).
+
 ### File tracker and local reputation
 
 - Watches only the folders the user selects (for example Downloads, optionally Desktop), never the

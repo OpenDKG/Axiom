@@ -59,6 +59,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         pages.Add(new FilesViewModel(() => SelectedPage = security));
         pages.Add(security);
         pages.Add(new PrivacyShieldViewModel(ConnectionSourceRegistry.IsServiceMode));
+        pages.Add(new AiAnalystViewModel(monitor));
         pages.Add(new SupportViewModel());
         pages.Add(new SettingsViewModel(monitor));
         Pages = pages;
