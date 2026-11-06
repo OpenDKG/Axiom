@@ -19,11 +19,11 @@ The Security page has an **Install** button next to each module that is not conn
 visible PowerShell window only after a confirmation dialog:
 
 - **DKG**: installs `@origintrail-official/dkg` into
-  `%LOCALAPPDATA%\Netpetra\modules\dkg` with `--ignore-scripts`, sets a per-user `DKG_HOME`, runs
+  `%LOCALAPPDATA%\Axiom\modules\dkg` with `--ignore-scripts`, sets a per-user `DKG_HOME`, runs
   the official interactive testnet setup (`--network testnet --role edge --store oxigraph`) and
   starts the node.
 - **Blackbox**: downloads the official Umanitek Windows installer to
-  `%LOCALAPPDATA%\Netpetra\modules\blackbox`, verifies its SHA-256 against the pinned digest in
+  `%LOCALAPPDATA%\Axiom\modules\blackbox`, verifies its SHA-256 against the pinned digest in
   `OptionalModuleInstaller` (`261122F5E879596E88D63C30D5D36D12B4E155986F83AA3EB83ADEB406E41179`)
   and refuses to run on a mismatch, then runs it with `-StoreBackend oxigraph` (no Docker). Update
   the pin only after reviewing a new official vendor release. It then repairs the Python dependencies the dashboard
@@ -70,11 +70,11 @@ page, choose **Install/repair agent hooks...** and select:
 
 A complete OpenCode/OpenChamber installation writes:
 
-- `~/.config/opencode/plugins/netpetra-blackbox/index.ts`, a V2 directory plugin using
+- `~/.config/opencode/plugins/axiom-blackbox/index.ts`, a V2 directory plugin using
   `Plugin.define` and `ctx.tool.hook("execute.before", ...)`;
-- `~/.config/opencode/plugins/netpetra-blackbox.ts`, a V1 flat-file fallback that is a no-op when
+- `~/.config/opencode/plugins/axiom-blackbox.ts`, a V1 flat-file fallback that is a no-op when
   OpenCode V2 loads it;
-- `%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py`, which calls
+- `%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-guard-bridge.py`, which calls
   Blackbox's Python guard with the tool name and arguments.
 
 Existing Axiom-managed files are backed up beside the originals before replacement. User-authored
@@ -91,7 +91,7 @@ official Blackbox attachment kind.
 Codex user hooks are read from `~/.codex/hooks.json`. After **Complete installation** on the
 Agents page, Axiom merges the full lifecycle set: `SessionStart`, `UserPromptSubmit`,
 `PreToolUse`, `PostToolUse` and `Stop`. The existing file is backed up to a timestamped
-`.netpetra-backup-*` file; unrelated hooks are preserved. Each handler has a 30 second timeout and
+`.axiom-backup-*` file; unrelated hooks are preserved. Each handler has a 30 second timeout and
 passes its framework/workspace identity to the same Blackbox guard. `apply_patch` input is
 normalised so the target path is visible to file-access rules.
 
@@ -106,7 +106,7 @@ hook entries and script.
 
 Claude Code user hooks are read from `~/.claude/settings.json`. After **Complete installation**,
 Axiom merges marker-owned `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse` and `Stop`
-entries and installs `netpetra-claude-hook.py` in the Blackbox folder. The existing settings file is
+entries and installs `axiom-claude-hook.py` in the Blackbox folder. The existing settings file is
 backed up beside the original; unrelated settings and hooks are preserved. The hook passes prompt
 and tool-call events to the same Blackbox guard with a 30 second timeout, normalises `apply_patch`
 targets and returns `hookSpecificOutput.permissionDecision: deny` only on a block.
@@ -124,7 +124,7 @@ fail-open; missing or locked host data never blocks hook installation or protect
 ### Cursor
 
 Cursor user hooks are read from `~/.cursor/hooks.json`. Only after **Complete installation** does
-Axiom merge a marker-owned `preToolUse` entry and install `netpetra-cursor-hook.py` in the
+Axiom merge a marker-owned `preToolUse` entry and install `axiom-cursor-hook.py` in the
 Blackbox folder. Existing hooks and unrelated keys are preserved; the file is backed up before a
 change. The hook maps Cursor's `tool_name`/`tool_input` to the same Blackbox guard and returns
 `permission: deny` only when Blackbox blocks. **Partial installation** leaves Cursor files unchanged.
@@ -134,8 +134,8 @@ blocking. Uninstalling Blackbox removes only the Axiom hook entry and script.
 ### GitHub Copilot CLI
 
 Copilot CLI user hooks are read from `~/.copilot/hooks/*.json`. Only after **Complete installation**
-does Axiom create its own `~/.copilot/hooks/netpetra.json` and install
-`netpetra-copilot-hook.py`; other hook files are never rewritten. The hook maps Copilot's
+does Axiom create its own `~/.copilot/hooks/axiom.json` and install
+`axiom-copilot-hook.py`; other hook files are never rewritten. The hook maps Copilot's
 `toolName`/`toolArgs` to the Blackbox guard and returns `permissionDecision: deny` only when
 Blackbox blocks. **Partial installation** leaves Copilot files unchanged. Copilot `preToolUse`
 command hooks are fail-closed on crashes/non-zero exits, so the Axiom script always emits one
@@ -146,7 +146,7 @@ only the Axiom hook file and script.
 
 Gemini CLI user hooks are read from `~/.gemini/settings.json`. Axiom detects Gemini only when
 that settings file exists, not merely because the shared `~/.gemini` directory is present. Complete
-installation merges a marker-owned `BeforeTool` entry and installs `netpetra-gemini-hook.py`.
+installation merges a marker-owned `BeforeTool` entry and installs `axiom-gemini-hook.py`.
 Unrelated settings, MCP definitions, Antigravity history/conversations and other files under
 `~/.gemini` are not modified. The hook returns `decision: deny` only when Blackbox blocks; partial
 installation changes nothing. Antigravity CLI may expose a different hook surface and is not assumed
@@ -156,7 +156,7 @@ to be Gemini-compatible.
 
 Windsurf user hooks are read from `~/.codeium/windsurf/hooks.json`. Complete installation merges
 marker-owned entries for `pre_run_command`, `pre_write_code` and `pre_mcp_tool_use`, and installs
-`netpetra-windsurf-hook.py`. Other hooks and settings are preserved. The script maps Cascade's
+`axiom-windsurf-hook.py`. Other hooks and settings are preserved. The script maps Cascade's
 `tool_info` to the Blackbox guard and blocks by writing the reason to stderr and exiting with code
 2; it exits 0 to allow. **Partial installation** changes nothing. Restart Cascade if it was already
 running. Antigravity/Gemini history and MCP files are never touched by this adapter.
@@ -249,7 +249,7 @@ The Community feed card provides **Test feed** (validates the configured URL/tok
 The **Community feed** row has a **Setup** action. Enter an HTTPS URL and an optional bearer token;
 the token is stored with Windows DPAPI. The feed is evidence, not a verdict.
 
-First-run setup can instead enable the bundled `netpetra://starter` feed. It reads
+First-run setup can instead enable the bundled `axiom://starter` feed. It reads
 `community/feed.json` next to the executable, contains one clearly labelled EICAR test entry and
 makes no network call. Replace it with an HTTPS source when one is available; the starter feed is
 not live threat intelligence.
@@ -292,7 +292,7 @@ version, peer id and role. The default endpoint is `http://127.0.0.1:9200`; over
 loopback URL:
 
 ```powershell
-$env:NETPETRA_DKG_URL = "http://127.0.0.1:9200"
+$env:AXIOM_DKG_URL = "http://127.0.0.1:9200"
 ```
 
 DKG is not on the per-flow firewall path. If the node is offline, the local firewall keeps working.
@@ -319,7 +319,7 @@ Then open Axiom -> **Security** -> **Check again**. A running dashboard shows `C
 default endpoint is `http://127.0.0.1:9700`; override it only with a loopback URL:
 
 ```powershell
-$env:NETPETRA_BLACKBOX_URL = "http://127.0.0.1:9700"
+$env:AXIOM_BLACKBOX_URL = "http://127.0.0.1:9700"
 ```
 
 Official documentation: <https://github.com/umanitek/agent-blackbox>
@@ -342,12 +342,12 @@ the default when a mode is selected.
 An **Uninstall** button appears when Axiom detects an installed/configured module:
 
 - **Blackbox**: stops processes whose command line points into
-  `%LOCALAPPDATA%\Netpetra\modules\blackbox`, removes that folder, the
+  `%LOCALAPPDATA%\Axiom\modules\blackbox`, removes that folder, the
   `%USERPROFILE%\.local\bin\blackbox.cmd` shortcut, `.hermes\blackbox` and the
   `Agent Blackbox DKG node` scheduled task if present. Other Hermes profiles, logs and global
   Python/npm packages are kept.
 - **DKG**: stops local processes under the Axiom DKG folders and removes
-  `%LOCALAPPDATA%\Netpetra\modules\dkg` and `dkg-home`. No global npm package is removed.
+  `%LOCALAPPDATA%\Axiom\modules\dkg` and `dkg-home`. No global npm package is removed.
 - **Reputation provider**: deletes the stored VirusTotal key and disables the provider.
 - **Community feed**: deletes the stored URL/token.
 

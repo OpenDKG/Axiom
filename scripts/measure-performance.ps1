@@ -27,20 +27,20 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$serviceExe = Join-Path $root "src\Netpetra.Service\bin\Release\net10.0-windows\Netpetra.Service.exe"
-$uiExe = Join-Path $root "artifacts\publish\win-x64\Netpetra.Desktop.exe"
+$serviceExe = Join-Path $root "src\Axiom.Service\bin\Release\net10.0-windows\Axiom.Service.exe"
+$uiExe = Join-Path $root "artifacts\publish\win-x64\Axiom.Desktop.exe"
 
 if (-not (Test-Path $serviceExe)) { throw "Service build not found: $serviceExe. Run dotnet build first." }
 if (-not (Test-Path $uiExe)) { throw "Published UI not found: $uiExe. Run .\scripts\publish-standalone.ps1 first." }
-if (Get-Process -Name "Netpetra.Desktop","Netpetra.Service" -ErrorAction SilentlyContinue) {
+if (Get-Process -Name "Axiom.Desktop","Axiom.Service" -ErrorAction SilentlyContinue) {
     throw "Axiom is already running. Close it before measuring."
 }
 
 $outputDir = Join-Path $root "artifacts\performance"
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$csvPath = Join-Path $outputDir "netpetra-$stamp.csv"
-$logPath = Join-Path $env:TEMP "netpetra-performance-service.log"
+$csvPath = Join-Path $outputDir "axiom-$stamp.csv"
+$logPath = Join-Path $env:TEMP "axiom-performance-service.log"
 
 $service = $null
 $ui = $null
@@ -51,7 +51,7 @@ try {
 
     $ready = $false
     for ($i = 0; $i -lt 60; $i++) {
-        if (Test-Path "\\.\pipe\Netpetra.Service.v1") { $ready = $true; break }
+        if (Test-Path "\\.\pipe\Axiom.Service.v1") { $ready = $true; break }
         if ($service.HasExited) { break }
         Start-Sleep -Milliseconds 250
     }

@@ -12,7 +12,7 @@ IPv4/IPv6 TCP/UDP, process identity, 1–2 s polling, deduplication and a live `
 table.
 
 The architecture rule says the UI depends only on `Contracts` and contains no Win32/COM code.
-`Netpetra.UI` was an executable WPF shell, so there was no place for a Windows adapter without
+`Axiom.UI` was an executable WPF shell, so there was no place for a Windows adapter without
 breaking the boundary. In addition, .NET does not allow a self-contained executable to reference
 another executable (`NETSDK1150`), and a WPF library cannot contain an `ApplicationDefinition`
 (`MC1002`).
@@ -21,9 +21,9 @@ another executable (`NETSDK1150`), and a WPF library cannot contain an `Applicat
 
 ### 1. UI becomes a WPF library; Desktop becomes the only executable
 
-- `Netpetra.UI` keeps views, view models, themes and the pipe client and references only
+- `Axiom.UI` keeps views, view models, themes and the pipe client and references only
   `Contracts`.
-- `Netpetra.Desktop` is the composition root: it registers the real source, builds the monitor
+- `Axiom.Desktop` is the composition root: it registers the real source, builds the monitor
   and the main view model, and starts the WPF application.
 - `App.xaml` (resources, data templates, theme) lives in Desktop and uses absolute pack URIs into the
   UI assembly.

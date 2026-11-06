@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Axiom.Setup</RootNamespace>
+    <AssemblyName>Axiom.Setup</AssemblyName>
+    <AssemblyTitle>Axiom Setup</AssemblyTitle>
+    <ApplicationIcon>..\Axiom.UI\Resources\axiom.ico</ApplicationIcon>
+    <StartupObject>Axiom.Setup.Program</StartupObject>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Axiom.UI\Axiom.UI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Required for a single-file self-contained setup under central package management. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    Release publishing sets AxiomPayloadDir to a staging directory containing the already
+    published Desktop/Service executables and community feed. Normal developer builds have no
+    embedded payload; the setup then falls back to payload files next to the setup executable.
+  -->
+  <ItemGroup Condition="'$(AxiomPayloadDir)' != ''">
+    <EmbeddedResource Include="$(AxiomPayloadDir)\Axiom.Desktop.exe"
+                      LogicalName="Axiom.Setup.Payload.Axiom.Desktop.exe" />
+    <EmbeddedResource Include="$(AxiomPayloadDir)\Axiom.Service.exe"
+                      LogicalName="Axiom.Setup.Payload.Axiom.Service.exe" />
+    <EmbeddedResource Include="$(AxiomPayloadDir)\community\feed.json"
+                      LogicalName="Axiom.Setup.Payload.community.feed.json" />
+  </ItemGroup>
+
+</Project>

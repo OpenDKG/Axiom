@@ -19,7 +19,7 @@ or modify agent configuration.
   - no packet contents, credentials, cookies, agent histories or arbitrary files.
 - Structured result contract with status, severity, confidence, observations, evidence references,
   alternative explanations, missing evidence and text-only next steps.
-- Bounded local finding history in `%LOCALAPPDATA%\Netpetra\ai-findings.json`; no prompts or provider
+- Bounded local finding history in `%LOCALAPPDATA%\Axiom\ai-findings.json`; no prompts or provider
   responses are stored.
 - The model result is sanitized: unknown/SAFE-like statuses become `UNKNOWN`, list lengths are
   bounded, and no action field exists in the result contract.

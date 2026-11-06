@@ -12,10 +12,10 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $SourceIcon) {
-    $SourceIcon = Join-Path $root "src\Netpetra.UI\Resources\axiom-icon.png"
+    $SourceIcon = Join-Path $root "src\Axiom.UI\Resources\axiom-icon.png"
 }
 if (-not $SourceLockup) {
-    $SourceLockup = Join-Path $root "src\Netpetra.UI\Resources\axiom-lockup.png"
+    $SourceLockup = Join-Path $root "src\Axiom.UI\Resources\axiom-lockup.png"
 }
 if (-not $OutputDir) {
     $OutputDir = Join-Path $PSScriptRoot "Assets"

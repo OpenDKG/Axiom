@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>Axiom.Desktop</RootNamespace>
+    <AssemblyName>Axiom.Desktop</AssemblyName>
+    <AssemblyTitle>Axiom</AssemblyTitle>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\Axiom.UI\Resources\axiom.ico</ApplicationIcon>
+    <StartupObject>Axiom.Desktop.Program</StartupObject>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <!--
+    Composition root: the only executable that references Windows adapters.
+    Axiom.UI stays free of Win32/COM/P-Invoke references.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Axiom.UI\Axiom.UI.csproj" />
+    <ProjectReference Include="..\Axiom.Infrastructure.Windows\Axiom.Infrastructure.Windows.csproj" />
+    <ProjectReference Include="..\Axiom.Persistence\Axiom.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\community\feed.json"
+             Link="community\feed.json"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      PublishSingleFile adds the ILLink task package during publish restore. Referencing it here
+      keeps packages.lock.json identical for normal restore and standalone publish.
+    -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

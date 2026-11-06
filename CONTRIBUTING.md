@@ -19,7 +19,7 @@ Do not copy GPL-incompatible or unlicensed code into the repository.
 
 - Read `README.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY_MODEL.md` and the current milestone in
   `docs/TEST_MATRIX.md`.
-- Keep the dependency rules: `Netpetra.UI` references **only** `Contracts`; Windows API code
+- Keep the dependency rules: `Axiom.UI` references **only** `Contracts`; Windows API code
   belongs in `Infrastructure.Windows`; only `Service` may eventually write firewall rules.
 - Do not add telemetry, accounts, external lookups or network calls to the Standard path.
 - Do not change Windows Firewall, BFE, Defender or audit policy outside an isolated VM with explicit
@@ -28,9 +28,9 @@ Do not copy GPL-incompatible or unlicensed code into the repository.
 ## Build and test
 
 ```powershell
-dotnet restore Netpetra.sln --locked-mode
-dotnet build Netpetra.sln -c Release --no-restore
-dotnet test Netpetra.sln -c Release --no-build
+dotnet restore Axiom.sln --locked-mode
+dotnet build Axiom.sln -c Release --no-restore
+dotnet test Axiom.sln -c Release --no-build
 ```
 
 The repository builds with warnings as errors, nullable enabled and pinned package versions. If you

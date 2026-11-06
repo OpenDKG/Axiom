@@ -11,7 +11,7 @@ This Draft branch stacks on #100 → #99 → #97 → #96. It adds a **Support** 
 
 ## Where to configure recipients
 
-Edit `src/Netpetra.UI/Resources/support-links.json` **before producing a release**. This resource is embedded in `Netpetra.UI.dll` and is not a per-user destination override. All values are intentionally empty in this Draft branch; the donation CTAs are disabled until the maintainer supplies *and verifies* a real recipient.
+Edit `src/Axiom.UI/Resources/support-links.json` **before producing a release**. This resource is embedded in `Axiom.UI.dll` and is not a per-user destination override. All values are intentionally empty in this Draft branch; the donation CTAs are disabled until the maintainer supplies *and verifies* a real recipient.
 
 Example structure (illustrative only; never commit these placeholders as real receiving addresses):
 
@@ -48,7 +48,7 @@ Reference: https://docs.github.com/en/repositories/managing-your-repositorys-set
 
 ## Manual validation
 
-1. Windows `dotnet restore Netpetra.sln --locked-mode`, `dotnet build Netpetra.sln -c Release --no-restore`, `dotnet test Netpetra.sln -c Release --no-build`.
+1. Windows `dotnet restore Axiom.sln --locked-mode`, `dotnet build Axiom.sln -c Release --no-restore`, `dotnet test Axiom.sln -c Release --no-build`.
 2. Verify Support appears in the left navigation and does not break the app's existing pages.
 3. With the empty JSON, all provider buttons are disabled and no crypto addresses are shown.
 4. In an isolated test build, configure permitted links; confirm exact URL routes and browser handoff.

@@ -64,9 +64,9 @@ from **Partner Center → your app → Package identity**:
 
 The same values can be supplied through:
 
-- `NETPETRA_STORE_IDENTITY_NAME`
-- `NETPETRA_STORE_PUBLISHER`
-- `NETPETRA_STORE_PUBLISHER_DISPLAY_NAME`
+- `AXIOM_STORE_IDENTITY_NAME`
+- `AXIOM_STORE_PUBLISHER`
+- `AXIOM_STORE_PUBLISHER_DISPLAY_NAME`
 
 `Publisher` must be the complete Partner Center value, including `CN=`. The generated
 `.msixupload` is a ZIP containing the `.msix`; that is the format Partner Center accepts. The Store
@@ -88,7 +88,7 @@ Store upload.
      third-party installers and agent hooks are intentionally absent.
 6. Submit for certification.
 
-The package assets are generated from `src\Netpetra.UI\Resources\axiom-icon.png` by
+The package assets are generated from `src\Axiom.UI\Resources\axiom-icon.png` by
 `packaging\msix\generate-assets.ps1`. They are committed so a normal build does not require
 image tooling.
 

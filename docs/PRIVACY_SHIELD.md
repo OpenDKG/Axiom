@@ -1,7 +1,7 @@
 # Privacy Shield (local DNS filtering)
 
 Privacy Shield is an optional, **default-disabled** local DNS policy module. It runs inside the
-existing `Netpetra.Service` process and listens only on loopback. It does not change Windows DNS
+existing `Axiom.Service` process and listens only on loopback. It does not change Windows DNS
 settings, the hosts file, firewall rules, agent configuration or certificates.
 
 ## What is implemented
@@ -25,12 +25,12 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
   explicit UAC DNS integration.
 - A bounded local **blocked-query history** (last 1,000 entries) containing only the blocked domain,
   category and timestamp. It is stored in
-  `%LOCALAPPDATA%\Netpetra\privacy-shield-blocked.jsonl`, never includes allowed queries, and has a
+  `%LOCALAPPDATA%\Axiom\privacy-shield-blocked.jsonl`, never includes allowed queries, and has a
   clear action. This is the one deliberate DNS history exception; it is local and user-clearable.
 - A catalog of **HTTPS-only, license-labelled** sources (HaGeZi, OISD, WindowsSpyBlocker). A source
   update downloads with a 20 MB/45 s bound, parses and normalizes domains, then atomically replaces
   the previous ruleset only if every selected source succeeds. The previous rules file is retained.
-- Per-user settings in `%LOCALAPPDATA%\Netpetra\privacy-shield.json`. Settings contain no DNS query history; the separate bounded blocked-query history described above is the only DNS history.
+- Per-user settings in `%LOCALAPPDATA%\Axiom\privacy-shield.json`. Settings contain no DNS query history; the separate bounded blocked-query history described above is the only DNS history.
 
 ## DNS-only boundary
 
@@ -57,7 +57,7 @@ prove that system-wide traffic is filtered.
 
 ## Manual use
 
-1. Start Axiom in service mode (`Netpetra.Desktop.exe --service` or the bundled service).
+1. Start Axiom in service mode (`Axiom.Desktop.exe --service` or the bundled service).
 2. Open **Privacy Shield**, choose a profile and optional custom rules, then click **Apply settings**.
 3. Start the resolver on port **53**. Port 53 is required for normal Windows DNS; another port is
    useful only for local testing.

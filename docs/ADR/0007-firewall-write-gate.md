@@ -26,7 +26,7 @@ apartment state. This avoids shipping interop assemblies and keeps the COM lifec
 
 ### 2. Exact owned names only; no wildcard deletion
 
-Every rule is named `Netpetra::{rule-id:D}::{OUT|IN}`. Apply updates only that exact name; remove
+Every rule is named `Axiom::{rule-id:D}::{OUT|IN}`. Apply updates only that exact name; remove
 finds the exact name for the id and direction. There is no code path that deletes by prefix, group or
 wildcard, and no code path that changes another product's rule.
 
@@ -35,8 +35,8 @@ wildcard, and no code path that changes another product's rule.
 Writes are refused unless both environment variables are present on the service process:
 
 ```text
-NETPETRA_ENABLE_FIREWALL_WRITES=1
-NETPETRA_FIREWALL_WRITE_CONFIRM=yes
+AXIOM_ENABLE_FIREWALL_WRITES=1
+AXIOM_FIREWALL_WRITE_CONFIRM=yes
 ```
 
 The gate is checked in the adapter, in the pipe command handler and in the UI capability query. A
@@ -107,8 +107,8 @@ Negative / risks:
 1. Snapshot the VM and confirm network access.
 2. Build and start the service with both gate variables set; confirm `capabilities` reports
    `firewallWrites=true`.
-3. Apply an outbound block for a test executable; confirm the exact `Netpetra::{id}::OUT` rule.
+3. Apply an outbound block for a test executable; confirm the exact `Axiom::{id}::OUT` rule.
 4. Confirm the test app cannot connect and a second app still can.
 5. Remove the rule; confirm the test app connects again and no other rule changed.
 6. Restart the service and the UI; confirm the state reconciles.
-7. Record `Get-NetFirewallRule -Name 'Netpetra::*'` before/after and attach the output.
+7. Record `Get-NetFirewallRule -Name 'Axiom::*'` before/after and attach the output.

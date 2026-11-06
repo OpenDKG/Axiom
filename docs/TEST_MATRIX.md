@@ -7,14 +7,14 @@ SDK: 10.0.403. Configuration: `Release`.
 
 | Command | Result |
 |---|---|
-| `dotnet restore Netpetra.sln --locked-mode` | passed (also after standalone publish) |
-| `dotnet build Netpetra.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Netpetra.sln -c Release --no-build` | **351/351 passed** |
-| `dotnet publish src\Netpetra.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
+| `dotnet restore Axiom.sln --locked-mode` | passed (also after standalone publish) |
+| `dotnet build Axiom.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
+| `dotnet test Axiom.sln -c Release --no-build` | **352/352 passed** |
+| `dotnet publish src\Axiom.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
 
 | Test project | Count | Notes |
 |---|---|---|
-| Core | 65 | deterministic rule identity, spec and CIDR/port validation |
+| Core | 66 | deterministic rule identity, spec and CIDR/port validation |
 | Contracts | 50 | IPC contract, limits, optional-module probe, bounded history, local file hashing, VirusTotal and community feed |
 | Persistence | 14 | schema v2, history, firewall state and audit |
 | Infrastructure.Windows | 40 | IP Helper, pipe, COM read-only adapter |
@@ -66,11 +66,11 @@ SDK: 10.0.403. Configuration: `Release`.
 
 - MCP over stdio: `initialize` and `tools/list` were executed against the built server; nine
   read-only tools were advertised.
-- `tools/call` for `netpetra_get_threat_alerts`, `netpetra_get_reputation`, `netpetra_get_status` and
-  `netpetra_list_connections` returned structured JSON. With the service stopped, status and
+- `tools/call` for `axiom_get_threat_alerts`, `axiom_get_reputation`, `axiom_get_status` and
+  `axiom_list_connections` returned structured JSON. With the service stopped, status and
   connections returned `UNAVAILABLE`; the process did not crash and stdout stayed JSON-RPC only.
 - A raw JSON-RPC harness was run against a temporary console service (separate
-  `NETPETRA_DATA_DIR`, stopped afterwards): status, current connections, history and report returned
+  `AXIOM_DATA_DIR`, stopped afterwards): status, current connections, history and report returned
   real observations with limitations attached.
 - Unit tests cover endpoint host/port parsing (IPv4 and bracketed IPv6), private/loopback/ULA
   classification, SHA-256 indicator inference, invalid date rejection, missing-selector rejection,
@@ -96,13 +96,13 @@ Service in console mode + published standalone UI with `--service`.
 | E10 | The redundant Files tab is absent; the working local SHA-256 scan remains on Security and background tracking is explicitly disabled | PASS | `security-local-scan.png` |
 | E11 | Connections shows the unknown country placeholder | ✅ | `fnd006-connections.png` |
 | E12 | Overview 5m chart shows `LIVE COUNTERS` from timestamped system-wide interface samples; longer ranges show an explicit unavailable state; markers use first-seen time | ✅ | `traffic-live2.png` |
-| E13 | Firewall page reads capability `Available`, 0 owned rules and write path `disabled` | ✅ no rule changed | `netpetra-firewall.png` |
-| E14 | Gate-open service: Applications block buttons enabled, Firewall shows `TEST VM` and write path enabled; no click | ✅ 0 owned rules after | `netpetra-applications-writes-enabled.png`, `netpetra-firewall-writes-enabled.png` |
-| E15 | Advanced scope panel: protocol, ports, CIDR/addresses and profile checkboxes; block buttons disabled with the gate closed | ✅ no rule written | `netpetra-applications-scope-expanded.png` |
-| E16 | Security page probes a mock DKG node on loopback and shows `CONNECTED` with version/peer/role; Blackbox stays `NOT RUNNING`; no module started | ✅ loopback-only | `netpetra-security-connected.png` |
-| E17 | Security page shows Install for a non-connected module, Restart Axiom, and the last-30-checks activity strip; installer not clicked | ✅ no installer run | `netpetra-security-install-activity.png` |
-| E19 | Uninstall button visible for an installed Blackbox; cleanup is scoped to its folder/shortcut/`.hermes\blackbox`/scheduled task | ✅ no uninstall clicked | `netpetra-uninstall-button.png` |
-| E20 | Audit and Block buttons visible next to installed Blackbox; switching wrote `plugins.entries.blackbox.mode` and restored audit | ✅ config only | `netpetra-audit-block-buttons.png` |
+| E13 | Firewall page reads capability `Available`, 0 owned rules and write path `disabled` | ✅ no rule changed | `axiom-firewall.png` |
+| E14 | Gate-open service: Applications block buttons enabled, Firewall shows `TEST VM` and write path enabled; no click | ✅ 0 owned rules after | `axiom-applications-writes-enabled.png`, `axiom-firewall-writes-enabled.png` |
+| E15 | Advanced scope panel: protocol, ports, CIDR/addresses and profile checkboxes; block buttons disabled with the gate closed | ✅ no rule written | `axiom-applications-scope-expanded.png` |
+| E16 | Security page probes a mock DKG node on loopback and shows `CONNECTED` with version/peer/role; Blackbox stays `NOT RUNNING`; no module started | ✅ loopback-only | `axiom-security-connected.png` |
+| E17 | Security page shows Install for a non-connected module, Restart Axiom, and the last-30-checks activity strip; installer not clicked | ✅ no installer run | `axiom-security-install-activity.png` |
+| E19 | Uninstall button visible for an installed Blackbox; cleanup is scoped to its folder/shortcut/`.hermes\blackbox`/scheduled task | ✅ no uninstall clicked | `axiom-uninstall-button.png` |
+| E20 | Audit and Block buttons visible next to installed Blackbox; switching wrote `plugins.entries.blackbox.mode` and restored audit | ✅ config only | `axiom-audit-block-buttons.png` |
 
 ## 3. FND-005 definition of done
 
@@ -125,7 +125,7 @@ Service in console mode + published standalone UI with `--service`.
 | Requirement | Status |
 |---|---|
 | COM adapter with STA executor | ✅ read-only paths tested |
-| Exact `Netpetra::{id}::{OUT|IN}` names, no wildcard | ✅ |
+| Exact `Axiom::{id}::{OUT|IN}` names, no wildcard | ✅ |
 | Two-variable write gate | ✅ tested refusal |
 | Coordinator pending/applied/failed + audit | ✅ fake adapter tests |
 | UI block/unblock/remove | ✅ code; disabled unless `WritesEnabled=true` |
@@ -181,8 +181,8 @@ Therefore:
 ## 8. Reproduction
 
 ```powershell
-dotnet restore Netpetra.sln --locked-mode
-dotnet build Netpetra.sln -c Release --no-restore
-dotnet test Netpetra.sln -c Release --no-build
+dotnet restore Axiom.sln --locked-mode
+dotnet build Axiom.sln -c Release --no-restore
+dotnet test Axiom.sln -c Release --no-build
 .\scripts\run-service.ps1
 ```

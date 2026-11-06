@@ -62,24 +62,24 @@ From the repository root, after a standalone build:
 Or point at an existing executable:
 
 ```powershell
-.\scripts\install-portable.ps1 -Source D:\Dist\Netpetra.Desktop.exe
+.\scripts\install-portable.ps1 -Source D:\Dist\Axiom.Desktop.exe
 ```
 
 Defaults:
 
 | Item | Location |
 |---|---|
-| Executable | `%LOCALAPPDATA%\Programs\Netpetra\Netpetra.Desktop.exe` |
-| Service (optional, run manually) | `%LOCALAPPDATA%\Programs\Netpetra\Netpetra.Service.exe` |
-| Manifest (version, SHA-256, time) | `%LOCALAPPDATA%\Programs\Netpetra\install.json` |
+| Executable | `%LOCALAPPDATA%\Programs\Axiom\Axiom.Desktop.exe` |
+| Service (optional, run manually) | `%LOCALAPPDATA%\Programs\Axiom\Axiom.Service.exe` |
+| Manifest (version, SHA-256, time) | `%LOCALAPPDATA%\Programs\Axiom\install.json` |
 | Start Menu shortcut | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Axiom.lnk` |
-| Local data (created by the service) | `%LOCALAPPDATA%\Netpetra` |
+| Local data (created by the service) | `%LOCALAPPDATA%\Axiom` |
 
 Use `-NoShortcut` to skip the shortcut and `-InstallDir` to choose another directory.
 
 ## First run
 
-The desktop starts the bundled `Netpetra.Service.exe` automatically when it sits next to the
+The desktop starts the bundled `Axiom.Service.exe` automatically when it sits next to the
 executable. This is a per-user console process, not a registered Windows service. If it cannot start,
 the app falls back to in-process monitoring.
 
@@ -101,16 +101,17 @@ wizard.
 ```
 
 This removes only the installed executable, the manifest and the shortcut. Local data is kept by
-default; add `-RemoveData` to delete the Axiom database (`netpetra.db` and WAL sidecars). Unknown
+default; add `-RemoveData` to delete the Axiom database (`axiom.db` and WAL sidecars). Unknown
 files in the installation directory are never deleted. Junction and symbolic-link paths are skipped
 so cleanup cannot recurse into user data outside the installation.
 
 ## Upgrading from an earlier build
 
-The public product name changed to Axiom, but the service name, Named Pipe, per-user data
-directory, database file and owned-rule prefix remain Netpetra for compatibility. Stop the old
-build before starting Axiom. Existing data under `%LOCALAPPDATA%\Netpetra` is reused; no database
-migration is required. Previously owned firewall rules remain recognized.
+The public product name changed to Axiom. On first start, Axiom runs a one-time local migration:
+it moves legacy data into `%LOCALAPPDATA%\Axiom`, renames the database to `axiom.db`, migrates the
+starter-feed URL and removes legacy startup/shortcut entries. Existing legacy firewall rules are
+still recognized as Axiom-owned so they can be migrated when the write gate is enabled. Stop the
+old build before starting Axiom.
 
 ## Code signing and SmartScreen
 
@@ -131,22 +132,22 @@ Compare it with `SHA256SUMS.txt` from the same release.
 .\scripts\build-release.ps1
 ```
 
-This publishes the standalone desktop and service builds, packs `Netpetra.Desktop.exe`,
-`Netpetra.Service.exe`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and the portable
+This publishes the standalone desktop and service builds, packs `Axiom.Desktop.exe`,
+`Axiom.Service.exe`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and the portable
 install/uninstall scripts into `artifacts\release\Axiom-<version>-win-x64.zip`, and writes
 `SHA256SUMS.txt`. Nothing is uploaded.
 
 From an extracted release archive:
 
 ```powershell
-.\install-portable.ps1 -Source .\Netpetra.Desktop.exe
+.\install-portable.ps1 -Source .\Axiom.Desktop.exe
 ```
 
 Silent setup requires an explicit risk acknowledgement: `Axiom-Setup.exe --silent --accept-risk`.
 
 ## What the portable install does not do
 
-- It copies `Netpetra.Service.exe` and the desktop starts it as a per-user console process; it does
+- It copies `Axiom.Service.exe` and the desktop starts it as a per-user console process; it does
   not register or start a Windows service.
 - It does not create, change or remove Windows Firewall rules.
 - It does not add itself to startup. You can enable **Start Axiom with Windows** later in Settings; this writes only the per-user startup Run value.

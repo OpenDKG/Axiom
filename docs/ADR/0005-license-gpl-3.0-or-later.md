@@ -9,7 +9,7 @@
 
 Handoff V2 requires a **true open-source project, completely free**, with no paid features,
 advertising, tracking or mandatory account. V2 proposes GPL-3.0-or-later for the desktop and service,
-with separate MIT/Apache-2.0 packages for optional integrations. The `Netpetra` repository is
+with separate MIT/Apache-2.0 packages for optional integrations. The `Axiom` repository is
 private and the owner approved the license.
 
 Until now the project had no chosen license; the README said "license not selected". That blocked

@@ -4,7 +4,7 @@
     Publishes the single-file Axiom Setup executable with an embedded desktop/service payload.
 
 .DESCRIPTION
-    First publishes the self-contained desktop and service, then embeds them into Netpetra.Setup.exe (internal executable name).
+    First publishes the self-contained desktop and service, then embeds them into Axiom.Setup.exe (internal executable name).
     The resulting setup EXE needs no .NET runtime and installs the application per user.
 #>
 param(
@@ -43,16 +43,16 @@ $OutputDir = $resolvedOutput
 $desktopOut = Join-Path $root "artifacts\publish\win-x64"
 $serviceOut = Join-Path $root "artifacts\publish\service"
 $payloadOut = Join-Path $root "artifacts\publish\setup-payload"
-$setupProject = Join-Path $root "src\Netpetra.Setup\Netpetra.Setup.csproj"
+$setupProject = Join-Path $root "src\Axiom.Setup\Axiom.Setup.csproj"
 
 Write-Host "Publishing desktop payload..." -ForegroundColor Cyan
-& $dotnet publish (Join-Path $root "src\Netpetra.Desktop\Netpetra.Desktop.csproj") `
+& $dotnet publish (Join-Path $root "src\Axiom.Desktop\Axiom.Desktop.csproj") `
     -c Release -p:PublishProfile=win-x64-selfcontained
 if ($LASTEXITCODE -ne 0) { throw "Desktop publish failed." }
 
 Write-Host "Publishing service payload..." -ForegroundColor Cyan
 Remove-Item $serviceOut -Recurse -Force -ErrorAction SilentlyContinue
-& $dotnet publish (Join-Path $root "src\Netpetra.Service\Netpetra.Service.csproj") `
+& $dotnet publish (Join-Path $root "src\Axiom.Service\Axiom.Service.csproj") `
     -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:DebugType=None -o $serviceOut
@@ -60,8 +60,8 @@ if ($LASTEXITCODE -ne 0) { throw "Service publish failed." }
 
 Remove-Item $payloadOut -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $payloadOut | Out-Null
-Copy-Item (Join-Path $desktopOut "Netpetra.Desktop.exe") $payloadOut -Force
-Copy-Item (Join-Path $serviceOut "Netpetra.Service.exe") $payloadOut -Force
+Copy-Item (Join-Path $desktopOut "Axiom.Desktop.exe") $payloadOut -Force
+Copy-Item (Join-Path $serviceOut "Axiom.Service.exe") $payloadOut -Force
 Copy-Item (Join-Path $desktopOut "community") $payloadOut -Recurse -Force
 
 Remove-Item $OutputDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -70,10 +70,10 @@ Write-Host "Publishing setup EXE..." -ForegroundColor Cyan
     -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true -p:DebugType=None `
-    -p:NetpetraPayloadDir="$payloadOut" -o $OutputDir
+    -p:AxiomPayloadDir="$payloadOut" -o $OutputDir
 if ($LASTEXITCODE -ne 0) { throw "Setup publish failed." }
 
-$setupExe = Join-Path $OutputDir "Netpetra.Setup.exe"
+$setupExe = Join-Path $OutputDir "Axiom.Setup.exe"
 if (-not (Test-Path $setupExe)) { throw "Setup executable not found: $setupExe" }
 
 $size = [math]::Round((Get-Item $setupExe).Length / 1MB, 1)

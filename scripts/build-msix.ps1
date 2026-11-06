@@ -16,14 +16,14 @@
     Release version. Defaults to the Version property in Directory.Build.props.
 
 .PARAMETER IdentityName
-    Package Identity Name from Partner Center. Defaults to NETPETRA_STORE_IDENTITY_NAME or Axiom.
+    Package Identity Name from Partner Center. Defaults to AXIOM_STORE_IDENTITY_NAME or Axiom.
 
 .PARAMETER Publisher
-    Package Publisher from Partner Center, including CN=. Defaults to NETPETRA_STORE_PUBLISHER or
+    Package Publisher from Partner Center, including CN=. Defaults to AXIOM_STORE_PUBLISHER or
     CN=Axiom.
 
 .PARAMETER PublisherDisplayName
-    Publisher display name from Partner Center. Defaults to NETPETRA_STORE_PUBLISHER_DISPLAY_NAME or
+    Publisher display name from Partner Center. Defaults to AXIOM_STORE_PUBLISHER_DISPLAY_NAME or
     Axiom.
 
 .PARAMETER OutputDir
@@ -45,9 +45,9 @@
 #>
 param(
     [string]$Version = "",
-    [string]$IdentityName = $env:NETPETRA_STORE_IDENTITY_NAME,
-    [string]$Publisher = $env:NETPETRA_STORE_PUBLISHER,
-    [string]$PublisherDisplayName = $env:NETPETRA_STORE_PUBLISHER_DISPLAY_NAME,
+    [string]$IdentityName = $env:AXIOM_STORE_IDENTITY_NAME,
+    [string]$Publisher = $env:AXIOM_STORE_PUBLISHER,
+    [string]$PublisherDisplayName = $env:AXIOM_STORE_PUBLISHER_DISPLAY_NAME,
     [string]$OutputDir = "",
     [string]$MakeAppxPath = "",
     [switch]$SkipPublish
@@ -153,8 +153,8 @@ $OutputDir = Assert-UnderArtifacts $OutputDir
 
 $dotnet = Resolve-Dotnet
 $makeappx = Resolve-MakeAppx $MakeAppxPath
-$desktopProject = Join-Path $root "src\Netpetra.Desktop\Netpetra.Desktop.csproj"
-$serviceProject = Join-Path $root "src\Netpetra.Service\Netpetra.Service.csproj"
+$desktopProject = Join-Path $root "src\Axiom.Desktop\Axiom.Desktop.csproj"
+$serviceProject = Join-Path $root "src\Axiom.Service\Axiom.Service.csproj"
 $desktopOut = Join-Path $root "artifacts\msix\publish\desktop"
 $serviceOut = Join-Path $root "artifacts\msix\publish\service"
 $staging = Join-Path $root "artifacts\msix\staging"
@@ -178,8 +178,8 @@ if (-not $SkipPublish) {
     if ($LASTEXITCODE -ne 0) { throw "Service publish failed with exit code $LASTEXITCODE." }
 }
 
-$desktopExe = Join-Path $desktopOut "Netpetra.Desktop.exe"
-$serviceExe = Join-Path $serviceOut "Netpetra.Service.exe"
+$desktopExe = Join-Path $desktopOut "Axiom.Desktop.exe"
+$serviceExe = Join-Path $serviceOut "Axiom.Service.exe"
 if (-not (Test-Path $desktopExe)) { throw "Published Desktop executable not found: $desktopExe" }
 if (-not (Test-Path $serviceExe)) { throw "Published Service executable not found: $serviceExe" }
 
@@ -190,8 +190,8 @@ if (-not (Test-Path (Join-Path $assets "StoreLogo.png"))) {
 
 Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $staging | Out-Null
-Copy-Item $desktopExe (Join-Path $staging "Netpetra.Desktop.exe")
-Copy-Item $serviceExe (Join-Path $staging "Netpetra.Service.exe")
+Copy-Item $desktopExe (Join-Path $staging "Axiom.Desktop.exe")
+Copy-Item $serviceExe (Join-Path $staging "Axiom.Service.exe")
 Copy-Item $assets (Join-Path $staging "Assets") -Recurse
 Copy-Item (Join-Path $desktopOut "community") (Join-Path $staging "community") -Recurse -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "LICENSE") $staging
