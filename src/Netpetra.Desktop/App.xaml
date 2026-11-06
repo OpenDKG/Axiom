@@ -38,6 +38,9 @@
       <DataTemplate DataType="{x:Type vm:PrivacyShieldViewModel}">
         <views:PrivacyShieldView />
       </DataTemplate>
+      <DataTemplate DataType="{x:Type vm:AiAnalystViewModel}">
+        <views:AiAnalystView />
+      </DataTemplate>
       <DataTemplate DataType="{x:Type vm:SupportViewModel}">
         <views:SupportView />
       </DataTemplate>

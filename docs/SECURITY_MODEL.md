@@ -124,7 +124,24 @@ submission. See [STORE.md](STORE.md).
   query is not evidence that a connection was prevented.
 - See [PRIVACY_SHIELD.md](PRIVACY_SHIELD.md) for the user-facing safety and recovery contract.
 
-## 9. Reporting vulnerabilities
+## 9. AI Security Analyst (FND-019 initial manual mode)
+
+- Disabled by default. The AI page is a manual action; it does not auto-analyze network events in
+  this build.
+- The API key is DPAPI-protected for the current user. Findings contain structured summaries and
+  evidence references, not prompts, provider responses or keys.
+- Evidence is bounded to process metadata, endpoints, direction, state and quality. Local paths are
+  reduced to file names by default. Packet contents, credentials, cookies, agent histories and
+  arbitrary files are never collected.
+- Cloud endpoints require HTTPS; HTTP is accepted only for a loopback local endpoint.
+- Provider output is treated as untrusted. It is parsed into a fixed structured contract, list
+  lengths are bounded, `SAFE`/`CLEAN` are normalized to `UNKNOWN`, and no firewall, shell, file or
+  agent-config action field exists.
+- A model warning is not a confirmed incident, and `SUPPORTED_ALERT` is not an enforcement result.
+- The existing MCP server remains read-only and separate; this initial UI path does not add a second
+  MCP server or any MCP write tool.
+
+## 10. Reporting vulnerabilities
 
 Until a public channel exists, report directly to the project owner. Do not publish real SIDs,
 paths or database content in a reproduction.
