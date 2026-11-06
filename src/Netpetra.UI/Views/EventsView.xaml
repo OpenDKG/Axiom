@@ -92,7 +92,7 @@
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
               <TextBlock Text="Event timeline" Style="{StaticResource SectionTitle}" />
-              <TextBlock Text="Network events from the local service; other categories are not available in this build."
+              <TextBlock Text="Persisted network flows from the local service. File, agent, system and blocked event feeds are not recorded in this build."
                          Style="{StaticResource Caption}"
                          Margin="0,2,0,0" />
             </StackPanel>
@@ -176,7 +176,7 @@
               <TextBlock Style="{StaticResource Caption}"
                          TextAlignment="Center"
                          Margin="0,8,0,0"
-                         Text="Network events require the service (start with --service). Other categories are present as filters only." />
+                         Text="Network events require the local service (start with --service). File, agent, system and blocked event feeds are not recorded yet." />
             </StackPanel>
           </Border>
         </Grid>

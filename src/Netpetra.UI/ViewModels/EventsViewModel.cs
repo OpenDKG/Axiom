@@ -12,8 +12,8 @@ using Netpetra.UI.Services;
 namespace Netpetra.UI.ViewModels;
 
 /// <summary>
-/// Unified event timeline. Network events come from the local service database; the other
-/// categories are present as filters but report that no events of that type exist in this build.
+/// Event timeline for persisted network flows. File, agent, system and blocked events do not
+/// currently have a durable event source, so those empty filters are not exposed.
 /// </summary>
 public sealed partial class EventsViewModel : PageViewModel, IDisposable
 {
@@ -55,7 +55,7 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
 
     public IReadOnlyList<string> Ranges { get; } = ["15m", "1h", "24h", "7d"];
 
-    public IReadOnlyList<string> Categories { get; } = ["All", "Network", "Blocked", "Files", "Agents", "System"];
+    public IReadOnlyList<string> Categories { get; } = ["All", "Network"];
 
     public ObservableCollection<EventRowView> Rows { get; } = [];
 
@@ -119,16 +119,6 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
 
         try
         {
-            if (!IsNetworkCategory)
-            {
-                Rows.Clear();
-                TotalCount = 0;
-                IsEmpty = true;
-                CanExport = false;
-                StatusText = $"No {SelectedCategory.ToLowerInvariant()} events are available in this build.";
-                return;
-            }
-
             var page = await LoadAsync(PageLimit).ConfigureAwait(true);
 
             Rows.Clear();
@@ -170,7 +160,7 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private async Task ExportCsvAsync()
     {
-        if (_client is null || !IsNetworkCategory)
+        if (_client is null)
         {
             return;
         }
@@ -227,10 +217,6 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
             StatusText = $"Export failed: {exception.Message}";
         }
     }
-
-    private bool IsNetworkCategory =>
-        string.Equals(SelectedCategory, "All", StringComparison.Ordinal) ||
-        string.Equals(SelectedCategory, "Network", StringComparison.Ordinal);
 
     private Task<HistoryPage> LoadAsync(int limit)
     {
