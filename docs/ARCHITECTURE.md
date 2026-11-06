@@ -122,6 +122,8 @@ Infrastructure/Service/Desktop.
 - `Applications` groups observed executables by resolved path with live sorting by socket count.
 - `Events` is a persisted network-flow timeline. Only `All` and `Network` are exposed because no
   durable file, agent, system or blocked event source exists in this build.
+- `Connections` and `Events` support a **Group by application** view. Expanding a group shows the
+  loaded sockets or events for that executable without discarding the flat table view.
 - The former `Files` page was removed because it only redirected users to the working local
   SHA-256 scan on `Security`; background folder watching and quarantine remain disabled. `Agents`
   owns DKG, Blackbox, module activity and the recognized workspace list. `Security` owns

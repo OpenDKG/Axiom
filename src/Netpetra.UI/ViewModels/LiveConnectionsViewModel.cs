@@ -17,6 +17,8 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
 
     private readonly CollectionView _view;
 
+    private readonly Dictionary<string, ConnectionAppGroup> _appGroups = new(StringComparer.OrdinalIgnoreCase);
+
     public LiveConnectionsViewModel(ConnectionMonitor monitor)
         : base("Connections", "Sockets read from this Windows host · read-only, poll-only", "\uE774")
     {
@@ -83,6 +85,11 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
 
     public ObservableCollection<ConnectionRow> RelatedConnections { get; } = [];
 
+    public ObservableCollection<ConnectionAppGroup> AppGroups { get; } = [];
+
+    [ObservableProperty]
+    private bool _isGroupedByApp;
+
     public void Dispose() => _monitor.Updated -= OnMonitorUpdated;
 
     partial void OnProtocolFilterChanged(string value) => ApplyFilter();
@@ -95,9 +102,29 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
 
     partial void OnSelectedConnectionChanged(ConnectionRow? value) => RefreshRelated();
 
+    partial void OnIsGroupedByAppChanged(bool value)
+    {
+        if (value)
+        {
+            HasRelated = false;
+            RebuildGroups();
+        }
+        else if (SelectedConnection is not null)
+        {
+            RefreshRelated();
+        }
+    }
+
     private void RefreshRelated()
     {
         RelatedConnections.Clear();
+
+        if (IsGroupedByApp)
+        {
+            HasRelated = false;
+            RelatedTitle = string.Empty;
+            return;
+        }
 
         if (SelectedConnection is null)
         {
@@ -149,6 +176,11 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
         {
             RefreshRelated();
         }
+
+        if (IsGroupedByApp)
+        {
+            RebuildGroups();
+        }
     }
 
     private bool HasActiveFilters =>
@@ -161,6 +193,46 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
     {
         _view.Refresh();
         UpdateStatus();
+        if (IsGroupedByApp)
+        {
+            RebuildGroups();
+        }
+    }
+
+    private void RebuildGroups()
+    {
+        var grouped = _view
+            .Cast<ConnectionRow>()
+            .GroupBy(row => row.Source.AppPath.Length > 0
+                ? row.Source.AppPath
+                : $"pid:{row.Source.ProcessId}", StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.First().AppDisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var activeKeys = new HashSet<string>(grouped.Select(group => group.Key), StringComparer.OrdinalIgnoreCase);
+        foreach (var stale in _appGroups.Keys.Where(key => !activeKeys.Contains(key)).ToList())
+        {
+            _appGroups.Remove(stale);
+        }
+
+        AppGroups.Clear();
+        foreach (var group in grouped)
+        {
+            if (!_appGroups.TryGetValue(group.Key, out var rowGroup))
+            {
+                rowGroup = new ConnectionAppGroup(group.Key);
+                _appGroups[group.Key] = rowGroup;
+            }
+
+            var rows = group.ToList();
+            var first = rows[0];
+            rowGroup.Update(
+                first.Source.ProcessId == 0 ? "Unowned kernel sockets (PID 0)" : first.AppDisplayName,
+                first.Source.ProcessId == 0 ? "No process owner" : first.Source.AppPath,
+                rows);
+            AppGroups.Add(rowGroup);
+        }
     }
 
     private void UpdateStatus()
@@ -208,5 +280,54 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
 
         var query = SearchText.Trim();
         return query.Length == 0 || row.SearchBlob.Contains(query, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+/// <summary>One application group in the Connections grouped view.</summary>
+public sealed partial class ConnectionAppGroup : ObservableObject
+{
+    public ConnectionAppGroup(string key)
+    {
+        Key = key;
+    }
+
+    public string Key { get; }
+
+    [ObservableProperty]
+    private string _name = string.Empty;
+
+    [ObservableProperty]
+    private string _pathText = string.Empty;
+
+    [ObservableProperty]
+    private string _countText = string.Empty;
+
+    [ObservableProperty]
+    private string _summaryText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isExpanded;
+
+    public ObservableCollection<ConnectionRow> Connections { get; } = [];
+
+    public void Update(string name, string path, IReadOnlyList<ConnectionRow> rows)
+    {
+        Name = name;
+        PathText = string.IsNullOrWhiteSpace(path) ? "Executable path not readable" : path;
+        CountText = $"{rows.Count} socket{(rows.Count == 1 ? string.Empty : "s")}";
+        var tcp = rows.Count(row => row.Protocol == TransportProtocol.Tcp);
+        var udp = rows.Count - tcp;
+        var states = rows
+            .GroupBy(row => row.State, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(group => group.Count())
+            .Take(2)
+            .Select(group => $"{group.Key} {group.Count()}");
+        SummaryText = $"{tcp} TCP \u00b7 {udp} UDP \u00b7 {string.Join(" \u00b7 ", states)}";
+
+        Connections.Clear();
+        foreach (var row in rows)
+        {
+            Connections.Add(row);
+        }
     }
 }
