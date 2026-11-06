@@ -63,6 +63,7 @@ public sealed class DnsProxyTests
         var status = server.Snapshot(settings);
         Assert.Equal(1, status.Blocked);
         Assert.Contains(status.TopBlocked, item => item.Domain == "ads.blocked.example");
+        Assert.Contains(status.RecentBlocked, item => item.Domain == "ads.blocked.example");
     }
 
     [Fact]

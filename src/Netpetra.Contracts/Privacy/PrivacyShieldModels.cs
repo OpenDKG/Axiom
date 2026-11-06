@@ -77,6 +77,11 @@ public sealed record PrivacyShieldSettings
 
 public sealed record PrivacyShieldTopDomain(string Domain, long Count);
 
+public sealed record PrivacyShieldBlockedEvent(
+    string Domain,
+    PrivacyCategory Category,
+    DateTimeOffset BlockedUtc);
+
 public sealed record PrivacyShieldSourceInfo(
     string Id,
     string Name,
@@ -157,6 +162,9 @@ public sealed record PrivacyShieldStatus
     public IReadOnlyList<PrivacyShieldSourceStatus> Sources { get; init; } = [];
 
     public IReadOnlyList<PrivacyShieldTopDomain> TopBlocked { get; init; } = [];
+
+    /// <summary>Bounded in-memory recent blocks; this is not persisted DNS history.</summary>
+    public IReadOnlyList<PrivacyShieldBlockedEvent> RecentBlocked { get; init; } = [];
 
     public string Detail { get; init; } = string.Empty;
 
