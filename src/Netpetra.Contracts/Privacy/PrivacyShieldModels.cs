@@ -69,11 +69,64 @@ public sealed record PrivacyShieldSettings
 
     public IReadOnlyList<string> BlockedDomains { get; init; } = [];
 
+    public IReadOnlyList<string> EnabledSourceIds { get; init; } = [];
+
     /// <summary>Reserved for a future bounded query log; the initial implementation keeps counts only.</summary>
     public bool LogQueries { get; init; }
 }
 
 public sealed record PrivacyShieldTopDomain(string Domain, long Count);
+
+public sealed record PrivacyShieldSourceInfo(
+    string Id,
+    string Name,
+    string Url,
+    string License,
+    PrivacyCategory Category,
+    string Description);
+
+public sealed record PrivacyShieldStoredRule(
+    string Domain,
+    string SourceId,
+    PrivacyCategory Category,
+    DateTimeOffset UpdatedUtc);
+
+public sealed record PrivacyShieldSourceStatus(
+    string Id,
+    string Name,
+    string License,
+    bool Enabled,
+    int Entries,
+    DateTimeOffset? UpdatedUtc,
+    string? Error);
+
+public static class PrivacyShieldSourceCatalog
+{
+    public static IReadOnlyList<PrivacyShieldSourceInfo> All { get; } =
+    [
+        new(
+            "hagezi-pro",
+            "HaGeZi Multi PRO",
+            "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt",
+            "GPL-3.0",
+            PrivacyCategory.Ads | PrivacyCategory.Tracking | PrivacyCategory.Analytics,
+            "Broad ads, trackers and telemetry; verify current upstream license and size."),
+        new(
+            "oisd-big",
+            "OISD Big",
+            "https://big.oisd.nl/domainswild",
+            "GPL-3.0",
+            PrivacyCategory.Ads | PrivacyCategory.Tracking | PrivacyCategory.Malware,
+            "Balanced ads/tracking/malware list with wildcard domains."),
+        new(
+            "windowsspyblocker",
+            "WindowsSpyBlocker telemetry",
+            "https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/spy.txt",
+            "MIT",
+            PrivacyCategory.Telemetry,
+            "Windows telemetry-focused hosts list; inspect upstream changes before updating."),
+    ];
+}
 
 public sealed record PrivacyShieldStatus
 {
@@ -100,6 +153,8 @@ public sealed record PrivacyShieldStatus
     public required int RuleCount { get; init; }
 
     public PrivacyShieldSettings Settings { get; init; } = new();
+
+    public IReadOnlyList<PrivacyShieldSourceStatus> Sources { get; init; } = [];
 
     public IReadOnlyList<PrivacyShieldTopDomain> TopBlocked { get; init; } = [];
 

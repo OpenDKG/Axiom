@@ -66,6 +66,56 @@ public sealed class DnsProxyTests
     }
 
     [Fact]
+    public async Task Proxy_blocks_matching_domains_over_tcp()
+    {
+        var settings = new PrivacyShieldSettings
+        {
+            Categories = PrivacyCategory.None,
+            BlockedDomains = ["blocked.example"],
+        };
+        var policy = PrivacyShieldPolicy.Create(settings);
+        await using var server = new DnsProxyServer(
+            policy,
+            [new IPEndPoint(IPAddress.Loopback, 9)],
+            port: 0);
+
+        Assert.DoesNotContain("UDP only", server.BindAddress, StringComparison.Ordinal);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var client = new TcpClient(AddressFamily.InterNetwork);
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await client.ConnectAsync(IPAddress.Loopback, server.Port, timeout.Token);
+                break;
+            }
+            catch (SocketException) when (attempt < 10)
+            {
+                await Task.Delay(25, timeout.Token);
+            }
+        }
+
+        using var stream = client.GetStream();
+        var query = BuildQuery("blocked.example");
+        await stream.WriteAsync(new byte[]
+        {
+            (byte)(query.Length >> 8),
+            (byte)query.Length,
+        }, timeout.Token);
+        await stream.WriteAsync(query, timeout.Token);
+        await stream.FlushAsync(timeout.Token);
+
+        var lengthBytes = new byte[2];
+        await stream.ReadExactlyAsync(lengthBytes, timeout.Token);
+        var responseLength = (lengthBytes[0] << 8) | lengthBytes[1];
+        var response = new byte[responseLength];
+        await stream.ReadExactlyAsync(response, timeout.Token);
+
+        Assert.Equal(3, response[3] & 0x0F);
+        Assert.Equal(1, server.Snapshot(settings).Blocked);
+    }
+
+    [Fact]
     public async Task Proxy_forwards_allowed_queries_to_the_upstream()
     {
         using var upstream = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));

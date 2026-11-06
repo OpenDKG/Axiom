@@ -68,7 +68,8 @@ An optional, default-disabled local DNS filter with Basic/Balanced/Strict profil
 block lists and a loopback resolver. It never changes adapter DNS settings automatically; manual
 adapter configuration and rollback are documented in [Privacy Shield](docs/PRIVACY_SHIELD.md).
 Only in-memory counters are kept, not DNS query history. DoH/DoT/DoQ, hardcoded IPs and VPN traffic
-are not covered.
+are not covered. Optional catalogued HTTPS sources are bounded and atomically updated; VM test
+coverage is tracked in [the VM test plan](docs/PRIVACY_SHIELD_VM_TEST_PLAN.md).
 
 ### File tracker and local reputation
 

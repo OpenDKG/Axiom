@@ -158,6 +158,84 @@
 
       <Border Style="{StaticResource Card}" Margin="0,14,0,0">
         <StackPanel>
+          <TextBlock Text="Verified source catalog" Style="{StaticResource SectionTitle}" />
+          <TextBlock Text="Only catalogued HTTPS sources are downloaded. Each update is parsed, bounded and atomically replaces the previous ruleset only when every selected source succeeds."
+                     Style="{StaticResource Caption}"
+                     TextWrapping="Wrap"
+                     Margin="0,4,0,10" />
+          <ItemsControl ItemsSource="{Binding Sources}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="0,0,0,1"
+                        Padding="0,8">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <CheckBox Grid.Column="0"
+                              Style="{StaticResource AppCheckBox}"
+                              IsChecked="{Binding Enabled, Mode=TwoWay}"
+                              IsEnabled="{Binding DataContext.IsSupported, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                              Margin="0,2,14,0" />
+                    <StackPanel Grid.Column="1">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding License, StringFormat=License: {0}}" Style="{StaticResource Caption}" />
+                      <TextBlock Text="{Binding Description}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                      <TextBlock Text="{Binding UpdatedText}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                      <TextBlock Text="{Binding ErrorText}" Style="{StaticResource Caption}" Foreground="{DynamicResource Brush.Warning}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <Button Style="{StaticResource GhostButton}"
+                    Content="Save selection and update lists"
+                    Command="{Binding UpdateSourcesCommand}"
+                    IsEnabled="{Binding IsSupported}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <TextBlock Text="Optional automatic adapter integration" Style="{StaticResource SectionTitle}" />
+          <TextBlock Text="This uses a separate UAC elevation prompt to save the current DNS values and point one adapter at the loopback resolver. It is never silent."
+                     Style="{StaticResource Caption}"
+                     TextWrapping="Wrap"
+                     Margin="0,4,0,10" />
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="160" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Network adapter" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1"
+                      ItemsSource="{Binding Adapters}"
+                      SelectedItem="{Binding SelectedAdapter, Mode=TwoWay}"
+                      DisplayMemberPath="Name"
+                      IsEnabled="{Binding IsSupported}" />
+          </Grid>
+          <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <Button Style="{StaticResource GhostButton}"
+                    Content="Set adapter DNS (UAC)"
+                    Command="{Binding EnableSystemDnsCommand}"
+                    IsEnabled="{Binding IsSupported}"
+                    Margin="0,0,8,0" />
+            <Button Style="{StaticResource GhostButton}"
+                    Content="Restore saved DNS (UAC)"
+                    Command="{Binding RestoreSystemDnsCommand}"
+                    IsEnabled="{Binding IsSupported}" />
+          </StackPanel>
+          <TextBlock Text="{Binding DnsHelperStatusText}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
           <TextBlock Text="Local statistics" Style="{StaticResource SectionTitle}" />
           <TextBlock Text="{Binding StatsText}" Style="{StaticResource BodyMuted}" Margin="0,6,0,0" />
           <TextBlock Text="Counts are held in memory and reset when the resolver restarts. No DNS history is written to disk."

@@ -16,24 +16,24 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
 - A small starter set of manually reviewed telemetry/advertising/tracking domains. This is not a
   third-party blocklist and is not presented as complete protection.
 - A loopback DNS proxy that:
-  - accepts UDP DNS queries on `127.0.0.1` and, when available, `::1`;
+  - accepts UDP and TCP DNS queries on `127.0.0.1` and, when available, `::1`;
   - returns NXDOMAIN for blocked questions before contacting an upstream;
-  - forwards allowed queries to the current Windows DNS servers or a configured upstream;
+  - forwards allowed UDP queries over UDP and TCP queries over TCP, with bounded timeouts;
   - keeps in-memory query/allowed/blocked/error counters and top blocked domains only.
 - A Privacy Shield page with profile/category controls, custom allow/block lists, local list import,
-  resolver status and manual integration instructions.
+  verified source catalog, resolver status and explicit UAC DNS integration.
+- A catalog of **HTTPS-only, license-labelled** sources (HaGeZi, OISD, WindowsSpyBlocker). A source
+  update downloads with a 20 MB/45 s bound, parses and normalizes domains, then atomically replaces
+  the previous ruleset only if every selected source succeeds. The previous rules file is retained.
 - Per-user settings in `%LOCALAPPDATA%\Netpetra\privacy-shield.json`. No DNS query history is stored.
 
 ## What is not implemented
 
-- Automatic adapter DNS changes. `Set-DnsClientServerAddress` and equivalent operations require
-  elevation and are deliberately not performed by this per-user service.
-- A privileged helper, WFP callout driver, hosts-file editing or LAN-wide resolver.
+- A WFP callout driver, hosts-file editing or LAN-wide resolver.
 - DNS-over-HTTPS, DNS-over-TLS or DNS-over-QUIC interception.
-- TCP DNS fallback for oversized/truncated responses.
-- Real third-party blocklist downloads or a source-license pipeline. The **Import local list...**
-  button accepts a bounded local file; users are responsible for the source and license.
 - Per-process DNS attribution. Socket history and DNS counters are separate.
+- Automatic adapter DNS changes by the service itself. A separate explicit UAC helper can save and
+  change one selected adapter; it never elevates silently.
 
 ## Manual use
 
@@ -42,15 +42,18 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
 3. Start the resolver on port **53**. Port 53 is required for normal Windows DNS; another port is
    useful only for local testing.
 4. Before changing adapter DNS, note the existing DNS servers so they can be restored.
-5. In an elevated PowerShell window, save the current DNS settings:
+5. Use **Set adapter DNS (UAC)** on the Privacy Shield page. Windows shows its elevation prompt;
+   Netpetra saves the current values and points only the selected adapter at `127.0.0.1`/`::1`.
+   Alternatively, use the explicit script:
    `.\scripts\privacy-shield-dns.ps1 -Action Save`
-6. Enable the loopback DNS explicitly for one adapter:
    `.\scripts\privacy-shield-dns.ps1 -Action Enable -InterfaceAlias "Ethernet"`
-7. If the network requires corporate or VPN DNS, put that resolver in **Upstream DNS** instead of
+6. If the network requires corporate or VPN DNS, put that resolver in **Upstream DNS** instead of
    relying on automatic system discovery.
-8. Restore immediately with `.\scripts\privacy-shield-dns.ps1 -Action Restore` if resolution fails.
+7. Use **Restore saved DNS (UAC)** or `.\scripts\privacy-shield-dns.ps1 -Action Restore` immediately
+   if resolution fails.
 
-The script requires administrator rights and is never invoked automatically by Netpetra.
+The helper requires administrator approval for each action and is never invoked automatically by
+the service.
 
 If Windows DNS is already pointed at `127.0.0.1`, the service cannot discover the old upstream.
 Privacy Shield then uses a conservative public fallback (`1.1.1.1`/`9.9.9.9`) and reports it; set
