@@ -15,7 +15,9 @@ namespace Netpetra.Persistence;
 /// </summary>
 public sealed class AgentSessionReader : IAgentSessionSource
 {
-    private static readonly TimeSpan RecentWindow = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan ActiveWindow = TimeSpan.FromMinutes(5);
+
+    private static readonly TimeSpan HistoryWindow = TimeSpan.FromDays(7);
 
     private readonly string _userProfile;
 
@@ -116,8 +118,8 @@ public sealed class AgentSessionReader : IAgentSessionSource
                 }
 
                 var lastSeen = new DateTimeOffset(File.GetLastWriteTimeUtc(path));
-                live |= now - lastSeen <= RecentWindow;
-                if (!live && now - lastSeen > TimeSpan.FromHours(24))
+                live |= now - lastSeen <= ActiveWindow;
+                if (!live && now - lastSeen > HistoryWindow)
                 {
                     continue;
                 }
@@ -160,13 +162,12 @@ public sealed class AgentSessionReader : IAgentSessionSource
         }
 
         var now = DateTimeOffset.UtcNow;
-        var running = IsProcessRunning("codex") || IsProcessRunning("Codex");
         foreach (var path in candidates
                      .Distinct(StringComparer.OrdinalIgnoreCase)
                      .OrderByDescending(File.GetLastWriteTimeUtc)
                      .Take(3))
         {
-            foreach (var session in ReadCodexDatabase(path, now, running))
+            foreach (var session in ReadCodexDatabase(path, now))
             {
                 yield return session;
             }
@@ -175,8 +176,7 @@ public sealed class AgentSessionReader : IAgentSessionSource
 
     private static IEnumerable<AgentSessionInfo> ReadCodexDatabase(
         string path,
-        DateTimeOffset now,
-        bool processRunning)
+        DateTimeOffset now)
     {
         var connectionString = new SqliteConnectionStringBuilder
         {
@@ -228,8 +228,8 @@ public sealed class AgentSessionReader : IAgentSessionSource
             var lastSeen = updatedColumn == "updated_at_ms"
                 ? DateTimeOffset.FromUnixTimeMilliseconds(raw <= 0 ? 0 : raw)
                 : DateTimeOffset.FromUnixTimeSeconds(raw <= 0 ? 0 : raw);
-            var live = processRunning || now - lastSeen <= RecentWindow;
-            if (!live && now - lastSeen > TimeSpan.FromHours(24))
+            var live = now - lastSeen <= ActiveWindow;
+            if (!live && now - lastSeen > HistoryWindow)
             {
                 continue;
             }
@@ -248,18 +248,6 @@ public sealed class AgentSessionReader : IAgentSessionSource
     {
         var digest = SHA256.HashData(Encoding.UTF8.GetBytes(framework + "\0" + id));
         return Convert.ToHexString(digest)[..24].ToLowerInvariant();
-    }
-
-    private static bool IsProcessRunning(string name)
-    {
-        try
-        {
-            return Process.GetProcessesByName(name).Length > 0;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
     }
 
     private static string? ReadString(JsonElement root, string name) =>
