@@ -1,8 +1,8 @@
 # Axiom
 
-**Open-Source Firewall & Security Monitor**
+**Open-Source Firewall, Network Monitor & Local Agent Protection**
 
-**Repository:** https://github.com/a-51-50/Axiom ? **License:** GPL-3.0-or-later
+**Version:** 0.5.2 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -13,10 +13,30 @@
 > your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
 > and keep a recovery path.
 
-Axiom is a local, offline Windows network monitor and firewall policy manager. It shows
-which applications use the network, which endpoints they talk to, and what happened over time. It
-manages only its own rules in the built-in Windows Firewall; Windows remains the enforcement
-authority. There is no account, no cloud, no advertising and no telemetry.
+Axiom is a local, offline Windows network monitor, firewall policy manager and agent-protection
+console. It shows which applications use the network, which endpoints they talk to, and what
+happened over time. It manages only its own rules in the built-in Windows Firewall; Windows remains
+the enforcement authority. There is no account, no cloud, no advertising and no telemetry.
+
+Axiom brings together four surfaces:
+
+- **Network visibility and history** for TCP/UDP IPv4/IPv6 sockets and applications.
+- **Owned firewall rules** with explicit writes, read-back verification and recovery.
+- **Local privacy controls** including Privacy Shield DNS filtering and a read-only AI analyst.
+- **Agent protection** through Blackbox-compatible lifecycle hooks and a local audit view.
+
+Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
+agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.5.2
+
+- New blue Axiom shield, wordmark, Windows icon and Microsoft Store artwork.
+- ZCode and DeepSeek Harness support alongside OpenCode/OpenChamber, Codex, Claude Code, Cursor,
+  GitHub Copilot CLI, Gemini CLI, Windsurf Cascade and Cline.
+- Automatic Axiom-managed hook provisioning for detected harnesses.
+- Theme-aware right-click menus and refined minimize/maximize/close controls.
+- Complete local agent activity history with framework attribution, install visibility and copy
+  actions.
 
 ## What it covers
 
@@ -29,6 +49,26 @@ authority. There is no account, no cloud, no advertising and no telemetry.
   flow was observed.
 - A sortable, filterable, virtualized table that stays responsive with hundreds of processes and
   thousands of rows.
+
+### Agent protection
+
+- Detects supported coding-agent workspaces and installs only Axiom-managed hook files. Existing
+  user-authored hooks are preserved and backed up.
+- Supported harnesses: **OpenCode/OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI,
+  Gemini CLI, Windsurf Cascade, Cline, ZCode and DeepSeek Harness**.
+- Uses five lifecycle points where the host supports them: session start, user prompt, pre-tool,
+  post-tool and stop. ZCode uses its user-level `hooks.events`; DeepSeek Harness uses its Claude
+  Code-compatible bridge.
+- The **Agents** page separates `HOOKED`, `CONNECTED`, `VERIFIED`, `TRUST REQUIRED`, `AUDIT ONLY`
+  and `DEGRADED` states. An installed hook is never presented as proof of runtime blocking.
+- Agent activity is loaded from the local Blackbox audit store, with a separate bounded Axiom hook
+  evidence feed. Sessions, API steps, tool calls, package installs, file access and threats can be
+  filtered and copied from the UI.
+- Agent configuration, sessions and databases are fingerprinted during install, hook repair and
+  uninstall. Unexpected deletions or edits are reported and, where possible, restored.
+- **Codex still requires its own `/hooks` trust approval.** Axiom installs the definitions but does
+  not bypass, forge or pre-approve Codex trust. DeepSeek Harness also requires the official
+  `@deepseek-ai/dsh-hooks-claude-code` bridge package in a DSH profile.
 
 ### Local history
 
@@ -109,27 +149,46 @@ cannot change firewall rules, execute commands or read arbitrary files. See
   respect the published rate limits, cache results and never auto-upload files.
 - A VirusTotal result is one source with a timestamp, not a verdict.
 
-### Blackbox compatibility
+### Blackbox (Umanitek Guardian Agent Blackbox)
 
-- An adapter for an already installed Umanitek Blackbox, not a reimplementation and not a
-  replacement for its configuration.
-- The Standard build starts no Blackbox, Hermes, OpenClaw, Python, Node or Docker process.
-- If Blackbox is not installed, the UI says `not installed`; it never claims protection from a
-  component that is absent. Once installed, **Audit** and **Block** buttons switch the mode in
+Blackbox is an optional local agent-safety layer. Axiom does not reimplement it: Axiom installs thin
+adapters and calls the guard that Blackbox exposes from its Hermes plugin environment.
+
+- The Blackbox dashboard and guard stay on loopback (`127.0.0.1:9700`); Axiom never opens it to the
+  network. Axiom does not run Hermes, OpenClaw, Node or Docker in the background. A short-lived
+  Python adapter runs only when a supported agent hook fires; if Blackbox is absent, it fails open.
+- Axiom's OpenCode/Codex/Claude/ZCode/DeepSeek and other adapters send **tool and lifecycle events**
+  to the local Blackbox guard. Blackbox evaluates the policy and records locally redacted audit
+  events; Axiom shows those events on the Agents and Overview pages.
+- In **Audit** mode Blackbox records findings without blocking. In **Block** mode it rejects
+  confirmed threats according to its configured severity and policy. Axiom can switch the mode in
   `~/.hermes/config.yaml` without reinstalling.
-- The difference between `audit` and `block`, and the fail-open limits of a third-party agent guard,
-  are stated explicitly. No official partnership is implied.
+- Agent hooks are **fail-open**: if the guard, Python runtime or hook process fails, the agent is not
+  made unusable. That is a deliberate availability trade-off and is shown as `DEGRADED`, not
+  "protected".
+- Blackbox is third-party software. No official partnership or endorsement is implied. Codex trust
+  remains a Codex-owned decision.
 
 ### OriginTrail DKG V10
 
-- The Standard build uses small, signed offline bundles; no local DKG node, wallet or token is
+OriginTrail's Decentralized Knowledge Graph (DKG) is an optional knowledge and provenance layer. It
+is not a firewall engine and is not required for local monitoring or enforcement.
+
+- The Standard build uses small, signed offline bundles; no wallet, token or local DKG node is
   required for the firewall to work.
-- The Advanced mode can use an already installed local Edge Node through the documented DKG
-  API/CLI/MCP interface. No DKG process is started by Standard.
-- DKG is never in the per-flow firewall check. If the node is offline, the local firewall keeps
-  working with the last verified cache.
-- Bundles are verified for publisher signature, version, expiry, revocation, replay and tampering
-  before use. Signed does not mean automatically true.
+- Advanced mode can use an already installed local Edge Node through the documented DKG
+  API/CLI/MCP interface. Axiom does not start a DKG process in Standard mode.
+- DKG supplies verified rules, threat context and provenance. Bundles are checked for publisher
+  signature, version, expiry, revocation, replay and tampering before use.
+- If the node is offline, the local firewall keeps working from the last verified cache. DKG is
+  never in the per-flow firewall check.
+- Signed data is evidence, not automatic truth. Publishing to a test network is a separate,
+  explicit action with its own budget and approval.
+
+**How they fit together:** Blackbox is the local **agent guard and audit trail**; DKG is the
+optional **verified knowledge layer** that can supply signed rules and threat context. They are
+independent: Axiom works with neither installed, a DKG outage does not disable the firewall, and an
+offline Blackbox does not stop local monitoring.
 
 ### Agent security research memory
 
@@ -248,10 +307,10 @@ key is configured later on the Security page.
 **Complete installation** also runs the official Blackbox and DKG installers, starts their local
 services and installs agent hooks after Blackbox is ready. Those third-party installers may download
 large packages, require network access and show their own prompts/terms. **Partial installation**
-installs only core Axiom and leaves Blackbox, DKG, OpenCode, OpenChamber and Codex files
-unchanged. Axiom also provisions Axiom-managed hooks for detected harnesses once per build at
-startup, preserving user-authored hooks. Codex still requires its own one-time `/hooks` trust
-review.
+installs only core Axiom and leaves Blackbox, DKG, OpenCode, OpenChamber, Codex, ZCode and DeepSeek
+Harness files unchanged. Axiom also provisions Axiom-managed hooks for detected harnesses once per
+build at startup, preserving user-authored hooks. Codex still requires its own one-time `/hooks`
+trust review.
 
 You can also install from a shell:
 
