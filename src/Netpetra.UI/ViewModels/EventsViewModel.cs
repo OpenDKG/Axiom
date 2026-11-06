@@ -64,7 +64,7 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
     public ObservableCollection<EventAppGroup> AppGroups { get; } = [];
 
     [ObservableProperty]
-    private bool _isGroupedByApp;
+    private bool _isGroupedByApp = true;
 
     [ObservableProperty]
     private string _selectedRange = "1h";
