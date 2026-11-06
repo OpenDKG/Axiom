@@ -1,4 +1,4 @@
-# Security model — Netpetra (FND-005)
+# Security model — Axiom (FND-005)
 
 ## 1. Current trust boundary
 

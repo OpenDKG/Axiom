@@ -1,4 +1,4 @@
-# Netpetra native window shell and appearance — review notes
+# Axiom native window shell and appearance — review notes
 
 This Draft branch stacks on PR #97, which stacks on PR #96. Do **not** merge directly to main before validating the dependencies.
 

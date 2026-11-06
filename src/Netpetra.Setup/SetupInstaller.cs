@@ -44,10 +44,10 @@ internal static class SetupInstaller
             if (Process.GetProcessesByName("Netpetra.Desktop").Length > 0 ||
                 Process.GetProcessesByName("Netpetra.Service").Length > 0)
             {
-                return new SetupInstallResult(false, "Netpetra is running. Close it before installing.", log);
+                return new SetupInstallResult(false, "Axiom is running. Close it before installing.", log);
             }
 
-            var tempDir = Path.Combine(Path.GetTempPath(), "netpetra-setup-" + Guid.NewGuid().ToString("N"));
+            var tempDir = Path.Combine(Path.GetTempPath(), "axiom-setup-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
 
             try
@@ -56,7 +56,7 @@ internal static class SetupInstaller
                 if (!payload.HasDesktop || !payload.HasService)
                 {
                     return new SetupInstallResult(false,
-                        "The setup payload is incomplete. Use the official Netpetra release.", log);
+                        "The setup payload is incomplete. Use the official Axiom release.", log);
                 }
 
                 if (StorageSafety.IsReparsePointInPath(options.InstallDir))
@@ -85,18 +85,18 @@ internal static class SetupInstaller
                 var version = FileVersionInfo.GetVersionInfo(desktopTarget).ProductVersion ?? "0.0.0";
                 var manifest = new
                 {
-                    product = "Netpetra",
+                    product = "Axiom",
                     version,
                     sha256 = HashFile(desktopTarget),
                     serviceSha256 = HashFile(serviceTarget),
                     installedUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-                    source = "Netpetra.Setup",
+                    source = "Axiom.Setup",
                 };
                 await File.WriteAllTextAsync(
                     Path.Combine(options.InstallDir, "install.json"),
                     JsonSerializer.Serialize(manifest, ManifestJsonOptions),
                     cancellationToken).ConfigureAwait(false);
-                Report($"Installed Netpetra {version}");
+                Report($"Installed Axiom {version}");
 
                 var blackboxInstalled = false;
                 var dkgInstalled = false;
@@ -109,7 +109,7 @@ internal static class SetupInstaller
                         cancellationToken).ConfigureAwait(false);
                     var moduleInstaller = new OptionalModuleInstaller();
 
-                    Report("Auditing official installer scope: Netpetra modules, Hermes plugin config/mode and scheduled task only.");
+                    Report("Auditing official installer scope: Axiom modules, Hermes plugin config/mode and scheduled task only.");
                     Report("Starting the official Blackbox installer. Follow its prompts and terms.");
                     var blackboxExit = await Task.Run(
                         () => moduleInstaller.InstallBlackboxAndWait(Report),
@@ -276,10 +276,10 @@ internal static class SetupInstaller
                         UseShellExecute = true,
                         WorkingDirectory = options.InstallDir,
                     });
-                    Report("Started Netpetra");
+                    Report("Started Axiom");
                 }
 
-                return new SetupInstallResult(true, "Netpetra was installed successfully.", log);
+                return new SetupInstallResult(true, "Axiom was installed successfully.", log);
             }
             finally
             {
@@ -405,7 +405,7 @@ internal static class SetupInstaller
                 "Windows",
                 "Start Menu",
                 "Programs",
-                "Netpetra.lnk");
+                "Axiom.lnk");
             Directory.CreateDirectory(Path.GetDirectoryName(shortcutPath)!);
 
             shortcut = shellType.InvokeMember(
@@ -427,7 +427,7 @@ internal static class SetupInstaller
             shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, [workingDirectory],
                 CultureInfo.InvariantCulture);
             shortcutType.InvokeMember("Description", BindingFlags.SetProperty, null, shortcut,
-                ["Netpetra - Open-Source Firewall & Security Monitor"], CultureInfo.InvariantCulture);
+                ["Axiom - Open-Source Firewall & Security Monitor"], CultureInfo.InvariantCulture);
             shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null,
                 CultureInfo.InvariantCulture);
             return true;

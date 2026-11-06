@@ -2,9 +2,9 @@
 <Window x:Class="Netpetra.Setup.SetupWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Netpetra Setup"
+        Title="Axiom Setup"
         Width="640"
-        Height="820"
+        Height="900"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="{DynamicResource Brush.WindowBackground}"
@@ -14,105 +14,137 @@
   <Grid Margin="24">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
     <StackPanel Grid.Row="0">
-      <TextBlock Text="Netpetra Setup" FontSize="24" FontWeight="SemiBold" />
-      <TextBlock Text="Install Netpetra for this Windows user. No administrator rights, Windows service registration or firewall change is used."
+      <Image Source="/Netpetra.UI;component/Resources/axiom-lockup.png"
+             Width="190" Height="63" Stretch="Uniform" HorizontalAlignment="Left"
+             RenderOptions.BitmapScalingMode="HighQuality" Margin="0,0,0,12" />
+      <TextBlock Text="Axiom Setup" FontSize="24" FontWeight="SemiBold" />
+      <TextBlock Text="Install Axiom for this Windows user. No administrator rights, Windows service registration or firewall change is used."
                  Style="{StaticResource BodyMuted}"
                  TextWrapping="Wrap"
                  Margin="0,8,0,0" />
     </StackPanel>
 
-    <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,16,0,0">
+    <ScrollViewer x:Name="ContentScroll"
+                  Grid.Row="1"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  Margin="0,16,0,0">
       <StackPanel>
-        <TextBlock Text="Install location" Style="{StaticResource SectionTitle}" />
-        <TextBlock x:Name="InstallDirText"
-                   Style="{StaticResource Caption}"
-                   TextWrapping="Wrap"
-                   Margin="0,6,0,0" />
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12"
+                BorderBrush="{DynamicResource Brush.Warning}">
+          <StackPanel>
+            <TextBlock Text="Development build - use at your own risk"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource Brush.Warning}" />
+            <TextBlock Text="Axiom is under active development and may contain defects, incomplete features or regressions. Firewall changes can interrupt connectivity, DNS changes can break name resolution, and agent hooks can block tools or files. Do not rely on it as your only security control. Where possible, test firewall and DNS changes in a VM, keep backups and keep a recovery path."
+                       Style="{StaticResource Caption}"
+                       TextWrapping="Wrap"
+                       Margin="0,6,0,0" />
+            <CheckBox x:Name="AgreeCheck"
+                      Style="{StaticResource AppCheckBox}"
+                      Content="I understand these risks and accept that I use Axiom at my own risk."
+                      IsChecked="False"
+                      Margin="0,10,0,0" />
+          </StackPanel>
+        </Border>
 
-        <CheckBox x:Name="ShortcutCheck"
-                  Style="{StaticResource AppCheckBox}"
-                  Content="Create a Start Menu shortcut"
-                  IsChecked="True"
-                  Margin="0,14,0,0" />
-        <CheckBox x:Name="LaunchCheck"
-                  Style="{StaticResource AppCheckBox}"
-                  Content="Start Netpetra after installation"
-                  IsChecked="True"
-                  Margin="0,8,0,0" />
-        <CheckBox x:Name="HooksCheck"
-                  Style="{StaticResource AppCheckBox}"
-                  Content="Complete installation: install Netpetra, agent hooks, Blackbox and DKG"
-                  IsChecked="True"
-                  Margin="0,14,0,0" />
-        <TextBlock Text="Blackbox and DKG use their official third-party installers. They may download large packages, show prompts/terms and require network access. Netpetra starts them and installs agent hooks after the Blackbox runtime is ready."
-                   Style="{StaticResource Caption}"
-                   TextWrapping="Wrap"
-                   Margin="0,6,0,0" />
-        <TextBlock Text="MCP server definitions, selected models, favorites, sessions and Antigravity/Gemini history are never modified by Netpetra. Only Netpetra-owned hook files and the marker-owned hook entry may change."
-                   Style="{StaticResource Caption}"
-                   TextWrapping="Wrap"
-                   Margin="0,6,0,0" />
-        <TextBlock Text="Complete installation may write only:"
-                   Style="{StaticResource Caption}"
-                   FontWeight="SemiBold"
-                   Margin="0,8,0,0" />
-        <TextBlock Text="%USERPROFILE%\.config\opencode\plugins\netpetra-blackbox.ts&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py&#x0a;%USERPROFILE%\.codex\hooks.json (netpetra-codex-hook.py entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-codex-hook.py&#x0a;%USERPROFILE%\.claude\settings.json (netpetra-claude-hook.py PreToolUse entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-claude-hook.py&#x0a;%USERPROFILE%\.cursor\hooks.json (netpetra-cursor-hook.py preToolUse entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-cursor-hook.py&#x0a;%USERPROFILE%\.copilot\hooks\netpetra.json&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-copilot-hook.py&#x0a;%USERPROFILE%\.gemini\settings.json (BeforeTool entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-gemini-hook.py&#x0a;%USERPROFILE%\.codeium\windsurf\hooks.json (three Cascade pre-hooks only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-windsurf-hook.py&#x0a;%USERPROFILE%\Documents\Cline\Hooks\PreToolUse.py&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox, dkg and dkg-home&#x0a;%USERPROFILE%\.local\bin\blackbox.cmd&#x0a;%USERPROFILE%\.hermes\config.yaml, .hermes\blackbox and .hermes\plugins\blackbox (Blackbox mode/plugin only)&#x0a;%LOCALAPPDATA%\hermes\config.yaml, plugins, blackbox, bin, installs, cache, logs, backups and image/audio caches (official installer)&#x0a;Scheduled task: Agent Blackbox DKG node"
-                   Style="{StaticResource Caption}"
-                   FontFamily="Consolas"
-                   FontSize="11"
-                   TextWrapping="Wrap"
-                   Margin="0,3,0,0" />
-        <TextBlock Text="Uncheck for Partial installation: core Netpetra only. No Blackbox, DKG, OpenCode, OpenChamber, Codex, Claude Code, Cursor, Copilot, Gemini, Windsurf or Cline files will be installed or changed."
-                   Style="{StaticResource Caption}"
-                   TextWrapping="Wrap"
-                   Margin="0,6,0,0" />
+        <Border Style="{StaticResource Card}">
+          <StackPanel>
+            <TextBlock Text="Install location" Style="{StaticResource SectionTitle}" />
+            <TextBlock x:Name="InstallDirText"
+                       Style="{StaticResource Caption}"
+                       TextWrapping="Wrap"
+                       Margin="0,6,0,0" />
+
+            <CheckBox x:Name="ShortcutCheck"
+                      Style="{StaticResource AppCheckBox}"
+                      Content="Create a Start Menu shortcut"
+                      IsChecked="True"
+                      Margin="0,14,0,0" />
+            <CheckBox x:Name="LaunchCheck"
+                      Style="{StaticResource AppCheckBox}"
+                      Content="Start Axiom after installation"
+                      IsChecked="True"
+                      Margin="0,8,0,0" />
+            <CheckBox x:Name="HooksCheck"
+                      Style="{StaticResource AppCheckBox}"
+                      Content="Complete installation: install Axiom, agent hooks, Blackbox and DKG"
+                      IsChecked="True"
+                      Margin="0,14,0,0" />
+            <TextBlock Text="Blackbox and DKG use their official third-party installers. They may download large packages, show prompts/terms and require network access. Axiom starts them and installs agent hooks after the Blackbox runtime is ready."
+                       Style="{StaticResource Caption}"
+                       TextWrapping="Wrap"
+                       Margin="0,6,0,0" />
+            <TextBlock Text="MCP server definitions, selected models, favorites, sessions and Antigravity/Gemini history are never modified by Axiom. Only Axiom-owned hook files and the marker-owned hook entry may change."
+                       Style="{StaticResource Caption}"
+                       TextWrapping="Wrap"
+                       Margin="0,6,0,0" />
+            <TextBlock Text="Complete installation may write only:"
+                       Style="{StaticResource Caption}"
+                       FontWeight="SemiBold"
+                       Margin="0,8,0,0" />
+            <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto" Margin="0,3,0,0">
+              <TextBlock Text="%USERPROFILE%\.config\opencode\plugins\netpetra-blackbox.ts&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py&#x0a;%USERPROFILE%\.codex\hooks.json (netpetra-codex-hook.py entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-codex-hook.py&#x0a;%USERPROFILE%\.claude\settings.json (netpetra-claude-hook.py PreToolUse entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-claude-hook.py&#x0a;%USERPROFILE%\.cursor\hooks.json (netpetra-cursor-hook.py preToolUse entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-cursor-hook.py&#x0a;%USERPROFILE%\.copilot\hooks\netpetra.json&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-copilot-hook.py&#x0a;%USERPROFILE%\.gemini\settings.json (BeforeTool entry only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-gemini-hook.py&#x0a;%USERPROFILE%\.codeium\windsurf\hooks.json (three Cascade pre-hooks only)&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-windsurf-hook.py&#x0a;%USERPROFILE%\Documents\Cline\Hooks\PreToolUse.py&#x0a;%LOCALAPPDATA%\Netpetra\modules\blackbox, dkg and dkg-home&#x0a;%USERPROFILE%\.local\bin\blackbox.cmd&#x0a;%USERPROFILE%\.hermes\config.yaml, .hermes\blackbox and .hermes\plugins\blackbox (Blackbox mode/plugin only)&#x0a;%LOCALAPPDATA%\hermes\config.yaml, plugins, blackbox, bin, installs, cache, logs, backups and image/audio caches (official installer)&#x0a;Scheduled task: Agent Blackbox DKG node"
+                       Style="{StaticResource Caption}"
+                       FontFamily="Consolas"
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       Margin="0" />
+            </ScrollViewer>
+            <TextBlock Text="Uncheck for Partial installation: core Axiom only. No Blackbox, DKG, OpenCode, OpenChamber, Codex, Claude Code, Cursor, Copilot, Gemini, Windsurf or Cline files will be installed or changed."
+                       Style="{StaticResource Caption}"
+                       TextWrapping="Wrap"
+                       Margin="0,6,0,0" />
+          </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+          <StackPanel>
+            <TextBlock Text="What is included" Style="{StaticResource SectionTitle}" />
+            <TextBlock Text="Core: desktop application, local history service, system monitor, tray, four themes, Support page and the bundled community feed. Complete installation also runs the official Blackbox and DKG installers and starts their local services. VirusTotal is optional and its API key is configured later on the Security page."
+                       Style="{StaticResource Caption}"
+                       TextWrapping="Wrap"
+                       Margin="0,7,0,0" />
+          </StackPanel>
+        </Border>
+
       </StackPanel>
-    </Border>
+    </ScrollViewer>
 
-    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,12,0,0">
-      <StackPanel>
-        <TextBlock Text="What is included" Style="{StaticResource SectionTitle}" />
-        <TextBlock Text="Core: desktop application, local history service, system monitor, tray, four themes, Support page and the bundled community feed. Complete installation also runs the official Blackbox and DKG installers and starts their local services. VirusTotal is optional and its API key is configured later on the Security page."
-                   Style="{StaticResource Caption}"
-                   TextWrapping="Wrap"
-                   Margin="0,7,0,0" />
-      </StackPanel>
-    </Border>
+        <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,12,0,0">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Top" Text="Installation log" Style="{StaticResource SectionTitle}" />
+            <TextBox x:Name="LogBox"
+                     Margin="0,8,0,0"
+                     MinHeight="100"
+                     IsReadOnly="True"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Disabled"
+                     TextWrapping="Wrap"
+                     Background="{DynamicResource Brush.SurfaceAlt}"
+                     Foreground="{DynamicResource Brush.TextPrimary}"
+                     BorderBrush="{DynamicResource Brush.Border}"
+                     Padding="8" />
+          </DockPanel>
+        </Border>
 
-    <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,12,0,0">
-      <DockPanel>
-        <TextBlock DockPanel.Dock="Top" Text="Installation log" Style="{StaticResource SectionTitle}" />
-        <TextBox x:Name="LogBox"
-                 Margin="0,8,0,0"
-                 MinHeight="150"
-                 IsReadOnly="True"
-                 AcceptsReturn="True"
-                 VerticalScrollBarVisibility="Auto"
-                 HorizontalScrollBarVisibility="Disabled"
-                 TextWrapping="Wrap"
-                 Background="{DynamicResource Brush.SurfaceAlt}"
-                 Foreground="{DynamicResource Brush.TextPrimary}"
-                 BorderBrush="{DynamicResource Brush.Border}"
-                 Padding="8" />
-      </DockPanel>
-    </Border>
-
-    <StackPanel Grid.Row="4"
+    <StackPanel Grid.Row="3"
                 Orientation="Horizontal"
                 HorizontalAlignment="Right"
                 Margin="0,18,0,0">
       <Button x:Name="InstallButton"
               Style="{StaticResource GhostButton}"
-              Content="Install Netpetra"
+              Content="Install Axiom"
               MinWidth="150"
               Click="OnInstall"
+              IsEnabled="False"
               Margin="0,0,8,0" />
       <Button x:Name="CloseButton"
               Style="{StaticResource GhostButton}"

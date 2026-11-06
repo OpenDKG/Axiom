@@ -16,10 +16,10 @@
     ProcessorArchitecture="x64" />
 
   <Properties>
-    <DisplayName>Netpetra</DisplayName>
+    <DisplayName>Axiom</DisplayName>
     <PublisherDisplayName>__PUBLISHER_DISPLAY_NAME__</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
-    <Description>Local-first Windows network monitor and firewall inventory.</Description>
+    <Description>Axiom - local-first Windows network monitor and firewall inventory.</Description>
   </Properties>
 
   <Dependencies>
@@ -35,13 +35,13 @@
 
   <Applications>
     <Application
-      Id="Netpetra"
+      Id="Axiom"
       Executable="Netpetra.Desktop.exe"
       EntryPoint="Windows.FullTrustApplication">
 
       <uap:VisualElements
-        DisplayName="Netpetra"
-        Description="Local-first Windows network monitor and firewall inventory."
+        DisplayName="Axiom"
+        Description="Axiom - local-first Windows network monitor and firewall inventory."
         BackgroundColor="#0B0F14"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
@@ -50,7 +50,7 @@
           Wide310x150Logo="Assets\Wide310x150Logo.png"
           Square310x310Logo="Assets\Square310x310Logo.png"
           Square71x71Logo="Assets\Square71x71Logo.png"
-          ShortName="Netpetra" />
+          ShortName="Axiom" />
 
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
       </uap:VisualElements>

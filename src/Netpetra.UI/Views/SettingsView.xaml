@@ -92,10 +92,10 @@
         <StackPanel>
           <TextBlock Text="Startup &amp; window behavior" Style="{StaticResource SectionTitle}" />
           <CheckBox Style="{StaticResource AppCheckBox}"
-                    Content="Start Netpetra with Windows"
+                    Content="Start Axiom with Windows"
                     IsChecked="{Binding StartWithWindows, Mode=TwoWay}"
                     Margin="0,12,0,0"
-                    AutomationProperties.Name="Start Netpetra with Windows" />
+                    AutomationProperties.Name="Start Axiom with Windows" />
           <TextBlock Text="Launch automatically when you sign in to this Windows account. Off by default; no administrator rights are used."
                      Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0" />
           <CheckBox Style="{StaticResource AppCheckBox}"
@@ -103,7 +103,7 @@
                     IsChecked="{Binding StartMinimized, Mode=TwoWay}"
                     Margin="0,12,0,0"
                     AutomationProperties.Name="Start minimized to the notification area" />
-          <TextBlock Text="Only affects launches started by Windows; the tray icon remains available to reopen Netpetra."
+          <TextBlock Text="Only affects launches started by Windows; the tray icon remains available to reopen Axiom."
                      Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0" />
           <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
             <TextBlock Text="{Binding StartupStatusText}" Style="{StaticResource Caption}" VerticalAlignment="Center" />

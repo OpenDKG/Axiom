@@ -91,7 +91,7 @@ public partial class MainWindow : Window
         var maximized = WindowState == WindowState.Maximized;
         MaximizeButton.Content = maximized ? "❐" : "□";
         MaximizeButton.ToolTip = maximized ? "Restore" : "Maximize";
-        AutomationProperties.SetName(MaximizeButton, maximized ? "Restore Netpetra" : "Maximize Netpetra");
+        AutomationProperties.SetName(MaximizeButton, maximized ? "Restore Axiom" : "Maximize Axiom");
     }
 
     protected override void OnSourceInitialized(EventArgs e)

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Removes the per-user portable Netpetra installation.
+    Removes the per-user portable Axiom installation.
 
 .DESCRIPTION
     Removes only the files installed by install-portable.ps1 (Netpetra.Desktop.exe,
@@ -75,21 +75,24 @@ function Remove-SafeItem {
 }
 
 if (Get-Process -Name "Netpetra.Desktop","Netpetra.Service" -ErrorAction SilentlyContinue) {
-    throw "Netpetra is running. Close it before uninstalling."
+    throw "Axiom is running. Close it before uninstalling."
 }
 
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $startupValue = Get-ItemProperty -Path $runKey -Name "Netpetra" -ErrorAction SilentlyContinue
 if ($null -ne $startupValue) {
     Remove-ItemProperty -Path $runKey -Name "Netpetra" -ErrorAction SilentlyContinue
-    Write-Host "Removed Netpetra autostart entry."
+    Write-Host "Removed Axiom autostart entry."
 }
 
 $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
 $shortcutPath = Join-Path $startMenu "Netpetra.lnk"
-if (Test-Path $shortcutPath) {
-    Remove-SafeItem -Path $shortcutPath
-    Write-Host "Removed shortcut: $shortcutPath"
+$axiomShortcutPath = Join-Path $startMenu "Axiom.lnk"
+foreach ($candidate in @($axiomShortcutPath, $shortcutPath)) {
+    if (Test-Path $candidate) {
+        Remove-SafeItem -Path $candidate
+        Write-Host "Removed shortcut: $candidate"
+    }
 }
 
 $installedFiles = @(
@@ -149,4 +152,4 @@ else {
     Write-Host "Local data was kept at $(Join-Path $env:LOCALAPPDATA 'Netpetra'). Use -RemoveData to delete it."
 }
 
-Write-Host "Netpetra portable installation removed." -ForegroundColor Green
+Write-Host "Axiom portable installation removed." -ForegroundColor Green

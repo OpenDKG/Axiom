@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping with Netpetra. The project is pre-1.0 and moves one milestone
+Thanks for helping with Axiom. The project is pre-1.0 and moves one milestone
 at a time; small, verifiable changes are preferred over broad rewrites.
 
 ## License of contributions

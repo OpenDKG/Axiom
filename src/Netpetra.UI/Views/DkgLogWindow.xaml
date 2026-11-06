@@ -4,7 +4,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="DKG diagnostic log"
-        Icon="/Netpetra.UI;component/Resources/netpetra.ico"
+        Icon="/Netpetra.UI;component/Resources/axiom.ico"
         Width="820"
         Height="520"
         MinWidth="560"
@@ -41,7 +41,7 @@
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
-          <Image Source="/Netpetra.UI;component/Resources/netpetra-icon.png"
+          <Image Source="/Netpetra.UI;component/Resources/axiom-icon.png"
                  Width="20" Height="20" Stretch="Uniform"
                  RenderOptions.BitmapScalingMode="HighQuality" />
           <TextBlock Text="DKG diagnostic log" FontWeight="SemiBold" Margin="8,0,0,0"

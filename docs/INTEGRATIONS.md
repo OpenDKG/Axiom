@@ -1,7 +1,7 @@
 # Optional integrations
 
-Netpetra's standard build is the local network monitor and firewall policy manager. Blackbox and
-OriginTrail DKG are **optional third-party integrations**. Netpetra reads their loopback status; the
+Axiom's standard build is the local network monitor and firewall policy manager. Blackbox and
+OriginTrail DKG are **optional third-party integrations**. Axiom reads their loopback status; the
 Install buttons launch the official installers only after an explicit confirmation.
 
 Both probes accept only loopback URLs. A non-loopback endpoint is rejected, and no request leaves
@@ -30,7 +30,7 @@ visible PowerShell window only after a confirmation dialog:
 
 If Blackbox or DKG is installed but not running, its action changes to **Start**; it starts the
 existing dashboard/node without reinstalling. Nothing is installed silently. Close the PowerShell window only
-after it reports success, then click **Check again**. **Restart Netpetra** is available for a clean
+after it reports success, then click **Check again**. **Restart Axiom** is available for a clean
 restart after installation.
 The activity strip shows the last 30 loopback checks; it is a health indicator, not module event
 content.
@@ -43,7 +43,7 @@ Blackbox dashboard connects. The single-file setup's **Complete installation** r
 Blackbox and DKG installers, starts both local services and then installs the hooks. On the Agents
 page, choose **Install/repair agent hooks...** and select:
 
-- **Complete installation** to add/repair the Netpetra guard hooks for detected agents;
+- **Complete installation** to add/repair the Axiom guard hooks for detected agents;
 - **Partial installation** to leave every OpenCode/OpenChamber/Codex hook file unchanged.
 
 A complete OpenCode/OpenChamber installation writes:
@@ -55,61 +55,61 @@ A complete OpenCode/OpenChamber installation writes:
 - `%LOCALAPPDATA%\Netpetra\modules\blackbox\agent-blackbox\netpetra-guard-bridge.py`, which calls
   Blackbox's Python guard with the tool name and arguments.
 
-Existing Netpetra-managed files are backed up beside the originals before replacement. User-authored
+Existing Axiom-managed files are backed up beside the originals before replacement. User-authored
 plugins at the same paths, reparse points/junctions and unrelated settings are never overwritten.
 `IsInstalled` requires the V2 `Plugin.define`/`ctx.tool.hook` entrypoint, not just a marker string.
 Status refresh remains read-only. The current Blackbox mode applies: `audit` records findings,
 `block` rejects confirmed threats. Bridge or Blackbox failures fail open, like the Hermes hooks.
 Restart OpenCode/OpenChamber after the first install so the plugin is loaded. Uninstalling Blackbox
-removes the plugin; the bridge lives inside the Blackbox folder. This is a Netpetra adapter, not an
+removes the plugin; the bridge lives inside the Blackbox folder. This is a Axiom adapter, not an
 official Blackbox attachment kind.
 
 ### Codex
 
 Codex user hooks are read from `~/.codex/hooks.json`. Only after **Complete installation** on the
-Agents page does Netpetra merge a `PreToolUse` command hook and install
+Agents page does Axiom merge a `PreToolUse` command hook and install
 `netpetra-codex-hook.py` in the Blackbox folder. The existing `hooks.json` is copied to a
 timestamped `.netpetra-backup-*` file before it is changed; unrelated hooks are preserved. The hook
 receives Codex's `tool_name`/`tool_input`, calls the same Blackbox guard, and returns a
 `permissionDecision: deny` only when Blackbox blocks. **Partial installation** leaves Codex hook
 files unchanged. Codex may ask you to approve/trust the hook once; approve it and restart Codex.
-Uninstalling Blackbox removes the Netpetra hook entry and script.
+Uninstalling Blackbox removes the Axiom hook entry and script.
 
 ### Claude Code
 
 Claude Code user hooks are read from `~/.claude/settings.json`. Only after **Complete installation**
-does Netpetra merge a marker-owned `PreToolUse` entry and install `netpetra-claude-hook.py` in the
+does Axiom merge a marker-owned `PreToolUse` entry and install `netpetra-claude-hook.py` in the
 Blackbox folder. The existing settings file is backed up beside the original; unrelated settings and
 hooks are preserved. The hook receives Claude Code's `tool_name`/`tool_input`, calls the same
 Blackbox guard, and returns `hookSpecificOutput.permissionDecision: deny` only when Blackbox blocks.
 **Partial installation** leaves Claude settings unchanged. Claude Code may require a hook approval
 or restart; an installed hook is not proof of runtime blocking. Uninstalling Blackbox removes only
-the Netpetra hook entry and script.
+the Axiom hook entry and script.
 
 ### Cursor
 
 Cursor user hooks are read from `~/.cursor/hooks.json`. Only after **Complete installation** does
-Netpetra merge a marker-owned `preToolUse` entry and install `netpetra-cursor-hook.py` in the
+Axiom merge a marker-owned `preToolUse` entry and install `netpetra-cursor-hook.py` in the
 Blackbox folder. Existing hooks and unrelated keys are preserved; the file is backed up before a
 change. The hook maps Cursor's `tool_name`/`tool_input` to the same Blackbox guard and returns
 `permission: deny` only when Blackbox blocks. **Partial installation** leaves Cursor files unchanged.
 Restart Cursor or reload hooks after installation; an installed hook is not proof of runtime
-blocking. Uninstalling Blackbox removes only the Netpetra hook entry and script.
+blocking. Uninstalling Blackbox removes only the Axiom hook entry and script.
 
 ### GitHub Copilot CLI
 
 Copilot CLI user hooks are read from `~/.copilot/hooks/*.json`. Only after **Complete installation**
-does Netpetra create its own `~/.copilot/hooks/netpetra.json` and install
+does Axiom create its own `~/.copilot/hooks/netpetra.json` and install
 `netpetra-copilot-hook.py`; other hook files are never rewritten. The hook maps Copilot's
 `toolName`/`toolArgs` to the Blackbox guard and returns `permissionDecision: deny` only when
 Blackbox blocks. **Partial installation** leaves Copilot files unchanged. Copilot `preToolUse`
-command hooks are fail-closed on crashes/non-zero exits, so the Netpetra script always emits one
+command hooks are fail-closed on crashes/non-zero exits, so the Axiom script always emits one
 valid JSON decision. Restart Copilot CLI if it was already running. Uninstalling Blackbox removes
-only the Netpetra hook file and script.
+only the Axiom hook file and script.
 
 ### Gemini CLI
 
-Gemini CLI user hooks are read from `~/.gemini/settings.json`. Netpetra detects Gemini only when
+Gemini CLI user hooks are read from `~/.gemini/settings.json`. Axiom detects Gemini only when
 that settings file exists, not merely because the shared `~/.gemini` directory is present. Complete
 installation merges a marker-owned `BeforeTool` entry and installs `netpetra-gemini-hook.py`.
 Unrelated settings, MCP definitions, Antigravity history/conversations and other files under
@@ -136,15 +136,15 @@ to the Blackbox guard and returns `cancel: true` with an `errorMessage` only whe
 
 ### User-state protection
 
-Installation, hook repair, complete setup and uninstall are scoped to Netpetra-owned files and the
-marker-owned hook entry. Before each operation Netpetra fingerprints user-owned state across:
+Installation, hook repair, complete setup and uninstall are scoped to Axiom-owned files and the
+marker-owned hook entry. Before each operation Axiom fingerprints user-owned state across:
 
 - OpenCode/OpenChamber config, credentials, sessions, projects, chats and state databases.
 - Codex `config.toml`, `hooks.json`, `auth.json`, sessions, sqlite databases and state files.
 - Claude, Cursor and Copilot config, credentials and session state.
 - Hermes config, memories, skills, tools, hooks, pairing data and sessions.
 - Gemini and Antigravity config, MCP files, conversations, brain, cache and history databases.
-- Netpetra theme, tray, reputation, community and onboarding settings.
+- Axiom theme, tray, reputation, community and onboarding settings.
 
 Small files are hashed and can be restored byte-for-byte. Large agent databases are fingerprinted
 by length and last-write time so a multi-gigabyte database is never loaded or rehashed during every
@@ -152,14 +152,14 @@ action; small session/history files are hashed. Junctions and reparse points are
 traversed; install and uninstall cleanup refuses to recurse through a reparse point. Unexpected
 changes are restored where possible; setup stops if restoration fails and
 uninstall reports any path it could not restore. Uninstall deletes an OpenCode plugin only when it
-contains the `Managed by Netpetra` marker, and leaves Codex `hooks.json` byte-identical when no
-Netpetra hook is present.
+contains the `Managed by Axiom` marker, and leaves Codex `hooks.json` byte-identical when no
+Axiom hook is present.
 
 Complete installation shows the exact paths and hook entry it may write. The official Blackbox/DKG
-installers are allowed to change only their documented Netpetra module paths and the Hermes plugin
+installers are allowed to change only their documented Axiom module paths and the Hermes plugin
 config/mode files; any other protected change is treated as out of scope. Hermes YAML is edited with
 a line-preserving editor that changes only `plugins.entries.blackbox.mode`, so comments, key order
-and quoting survive the mode update. Netpetra does not write Codex `config.toml`.
+and quoting survive the mode update. Axiom does not write Codex `config.toml`.
 
 ## Blackbox control center
 
@@ -185,7 +185,7 @@ listener and never sends data off the machine.
   more raw data. Only an explicit `decision: block` is counted as blocked; high severity alone is not
   proof of blocking.
 - **Health** reads `GET /api/graph-status`, distinguishes the dashboard's configured DKG node from
-  Netpetra's standalone DKG, and shows verified/community rule counts and last sync. A running
+  Axiom's standalone DKG, and shows verified/community rule counts and last sync. A running
   dashboard is never presented as proof that the verified graph is synchronized.
 - **Test Protection** creates a temporary harmless canary, adds it to protected paths, requires
   Block mode, calls the local guard, restores the original paths and removes the canary. Its result
@@ -252,7 +252,7 @@ Verify the node directly:
 Invoke-RestMethod http://127.0.0.1:9200/api/status
 ```
 
-Then open Netpetra -> **Security** -> **Check again**. A running node shows `CONNECTED` with its
+Then open Axiom -> **Security** -> **Check again**. A running node shows `CONNECTED` with its
 version, peer id and role. The default endpoint is `http://127.0.0.1:9200`; override it only with a
 loopback URL:
 
@@ -280,7 +280,7 @@ loopback at `http://127.0.0.1:9700`. Verify it directly:
 Invoke-RestMethod http://127.0.0.1:9700/api/graph-status
 ```
 
-Then open Netpetra -> **Security** -> **Check again**. A running dashboard shows `CONNECTED`. The
+Then open Axiom -> **Security** -> **Check again**. A running dashboard shows `CONNECTED`. The
 default endpoint is `http://127.0.0.1:9700`; override it only with a loopback URL:
 
 ```powershell
@@ -304,14 +304,14 @@ the default when a mode is selected.
 
 ## Uninstall
 
-An **Uninstall** button appears when Netpetra detects an installed/configured module:
+An **Uninstall** button appears when Axiom detects an installed/configured module:
 
 - **Blackbox**: stops processes whose command line points into
   `%LOCALAPPDATA%\Netpetra\modules\blackbox`, removes that folder, the
   `%USERPROFILE%\.local\bin\blackbox.cmd` shortcut, `.hermes\blackbox` and the
   `Agent Blackbox DKG node` scheduled task if present. Other Hermes profiles, logs and global
   Python/npm packages are kept.
-- **DKG**: stops local processes under the Netpetra DKG folders and removes
+- **DKG**: stops local processes under the Axiom DKG folders and removes
   `%LOCALAPPDATA%\Netpetra\modules\dkg` and `dkg-home`. No global npm package is removed.
 - **Reputation provider**: deletes the stored VirusTotal key and disables the provider.
 - **Community feed**: deletes the stored URL/token.
@@ -323,7 +323,7 @@ Firewall rules, other applications or unrelated user data.
 
 | Status | Meaning |
 |---|---|
-| `CONNECTED` | The loopback endpoint answered. Netpetra only read its status. |
+| `CONNECTED` | The loopback endpoint answered. Axiom only read its status. |
 | `NOT RUNNING` | Nothing answered on the configured loopback endpoint. Start the module separately. |
 | `UNAVAILABLE` | The endpoint is invalid or not loopback; no request was sent. |
 | `CHECKING` | The initial probe is still running. |
@@ -332,9 +332,9 @@ Firewall rules, other applications or unrelated user data.
 
 - Install buttons launch the official installer only after explicit confirmation; nothing runs
   silently.
-- Uninstall stops only processes whose command line points into the Netpetra module folder; it does
+- Uninstall stops only processes whose command line points into the Axiom module folder; it does
   not stop unrelated agents or global services.
-- Netpetra does not configure or control a module after installation; it only reads status.
+- Axiom does not configure or control a module after installation; it only reads status.
 - No remote endpoint, cloud lookup, token display or credential storage.
 - No DKG wallet or token is required for the status probe.
 - Neither module is on the per-connection firewall enforcement path.

@@ -1,9 +1,16 @@
-# Installing Netpetra (portable, per-user)
+# Installing Axiom (portable, per-user)
 
-Netpetra can be installed for the current Windows user without administrator rights, a Windows
-service registration, a driver or any firewall change. The recommended GitHub release asset is `Netpetra.Setup.exe`: a single self-contained setup
+> **Development build - use at your own risk.** Axiom is under active development and may contain
+> defects, incomplete features or regressions. Firewall changes can interrupt connectivity, DNS
+> changes can break name resolution, and agent hooks can block tools or files. Do not rely on it as
+> your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
+> and keep a recovery path. The setup keeps
+> **Install Axiom** disabled until you acknowledge these risks.
+
+Axiom can be installed for the current Windows user without administrator rights, a Windows
+service registration, a driver or any firewall change. The recommended GitHub release asset is `Axiom-Setup.exe`: a single self-contained setup
 executable with the desktop and service payload embedded. Double-click it, keep or change the two
-options, and click **Install Netpetra**. It installs for the current user, creates a Start Menu
+options, and click **Install Axiom**. It installs for the current user, creates a Start Menu
 shortcut, and starts the application. No .NET runtime, administrator rights, service registration or
 firewall change is required.
 
@@ -14,7 +21,7 @@ Partner Center identity, submission and local test procedure.
 The setup's **Complete installation** option runs the official Blackbox and DKG installers, starts
 their loopback services and installs agent hooks after Blackbox is ready. The third-party installers
 may show their own prompts/terms, download large packages and require network access. Uncheck it for
-**Partial installation**: only core Netpetra is installed; no Blackbox, DKG, OpenCode, OpenChamber
+**Partial installation**: only core Axiom is installed; no Blackbox, DKG, OpenCode, OpenChamber
 or Codex files will be created or changed. VirusTotal is optional and its API key is configured
 later on the Security page.
 
@@ -32,11 +39,11 @@ Start Menu shortcut.
 ## Install
 
 The shortest path from a GitHub release is the bootstrap installer. It downloads the latest
-`Netpetra-<version>-win-x64.zip`, verifies `SHA256SUMS.txt`, installs for the current user and starts
+`Axiom-<version>-win-x64.zip`, verifies `SHA256SUMS.txt`, installs for the current user and starts
 the app:
 
 ```powershell
-irm https://raw.githubusercontent.com/a-51-50/Netpetra/main/scripts/install-from-github.ps1 | iex
+irm https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-github.ps1 | iex
 ```
 
 This runs a remote script; read it first if you prefer. It needs no administrator rights and makes
@@ -62,7 +69,7 @@ Defaults:
 | Executable | `%LOCALAPPDATA%\Programs\Netpetra\Netpetra.Desktop.exe` |
 | Service (optional, run manually) | `%LOCALAPPDATA%\Programs\Netpetra\Netpetra.Service.exe` |
 | Manifest (version, SHA-256, time) | `%LOCALAPPDATA%\Programs\Netpetra\install.json` |
-| Start Menu shortcut | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Netpetra.lnk` |
+| Start Menu shortcut | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Axiom.lnk` |
 | Local data (created by the service) | `%LOCALAPPDATA%\Netpetra` |
 
 Use `-NoShortcut` to skip the shortcut and `-InstallDir` to choose another directory.
@@ -91,17 +98,16 @@ wizard.
 ```
 
 This removes only the installed executable, the manifest and the shortcut. Local data is kept by
-default; add `-RemoveData` to delete the Netpetra database (`netpetra.db` and WAL sidecars). Unknown
+default; add `-RemoveData` to delete the Axiom database (`netpetra.db` and WAL sidecars). Unknown
 files in the installation directory are never deleted. Junction and symbolic-link paths are skipped
 so cleanup cannot recurse into user data outside the installation.
 
 ## Upgrading from an earlier build
 
-The service, Named Pipe, data directory and owned-rule prefix changed with the Netpetra rename.
-Stop the old build before starting Netpetra. The old database is not migrated automatically; to keep
-its history, copy the previous build's database into
-`%LOCALAPPDATA%\Netpetra\netpetra.db` before the first start. Previously owned firewall rules use
-the old prefix and are not renamed; remove them with the old build before enabling writes.
+The public product name changed to Axiom, but the service name, Named Pipe, per-user data
+directory, database file and owned-rule prefix remain Netpetra for compatibility. Stop the old
+build before starting Axiom. Existing data under `%LOCALAPPDATA%\Netpetra` is reused; no database
+migration is required. Previously owned firewall rules remain recognized.
 
 ## Code signing and SmartScreen
 
@@ -111,7 +117,7 @@ Microsoft Store package is signed by Microsoft as part of Store submission; see 
 Verify the published SHA-256 before running an archive downloaded from the internet:
 
 ```powershell
-Get-FileHash .\Netpetra-<version>-win-x64.zip -Algorithm SHA256
+Get-FileHash .\Axiom-<version>-win-x64.zip -Algorithm SHA256
 ```
 
 Compare it with `SHA256SUMS.txt` from the same release.
@@ -124,7 +130,7 @@ Compare it with `SHA256SUMS.txt` from the same release.
 
 This publishes the standalone desktop and service builds, packs `Netpetra.Desktop.exe`,
 `Netpetra.Service.exe`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and the portable
-install/uninstall scripts into `artifacts\release\Netpetra-<version>-win-x64.zip`, and writes
+install/uninstall scripts into `artifacts\release\Axiom-<version>-win-x64.zip`, and writes
 `SHA256SUMS.txt`. Nothing is uploaded.
 
 From an extracted release archive:
@@ -133,12 +139,14 @@ From an extracted release archive:
 .\install-portable.ps1 -Source .\Netpetra.Desktop.exe
 ```
 
+Silent setup requires an explicit risk acknowledgement: `Axiom-Setup.exe --silent --accept-risk`.
+
 ## What the portable install does not do
 
 - It copies `Netpetra.Service.exe` and the desktop starts it as a per-user console process; it does
   not register or start a Windows service.
 - It does not create, change or remove Windows Firewall rules.
-- It does not add itself to startup. You can enable **Start Netpetra with Windows** later in Settings; this writes only the per-user `Netpetra` Run value.
+- It does not add itself to startup. You can enable **Start Axiom with Windows** later in Settings; this writes only the per-user startup Run value.
 - It does not request administrator rights or elevation.
 - It does not download anything.
 

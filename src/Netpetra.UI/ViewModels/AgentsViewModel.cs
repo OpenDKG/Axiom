@@ -128,7 +128,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     private string _dkgHealthText = "DKG: unknown";
 
     [ObservableProperty]
-    private string _netpetraDkgHealthText = "Netpetra DKG: unknown";
+    private string _netpetraDkgHealthText = "Axiom DKG: unknown";
 
     [ObservableProperty]
     private string _graphHealthText = "Verified graph: unknown";
@@ -227,7 +227,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     {
         var confirmation = MessageBox.Show(
             "Run a harmless protected-file canary test?\n\n" +
-            "Netpetra creates a temporary file, adds it to Blackbox protected paths, calls the local " +
+            "Axiom creates a temporary file, adds it to Blackbox protected paths, calls the local " +
             "Blackbox guard, then removes the temporary file and restores the original paths. " +
             "No credentials, wallet files or destructive command are used.",
             "Test Blackbox protection",
@@ -641,8 +641,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
         var dkgModule = Security.Modules.FirstOrDefault(module => module.Name == "OriginTrail DKG");
         NetpetraDkgHealthText = dkgModule is null
-            ? "Netpetra DKG: unknown"
-            : $"Netpetra DKG: {dkgModule.Status} · {dkgModule.Detail}";
+            ? "Axiom DKG: unknown"
+            : $"Axiom DKG: {dkgModule.Status} · {dkgModule.Detail}";
 
         var ruleset = graph["ruleset"] as JsonObject;
         var verified = ReadInt(ruleset, "injection") + ReadInt(ruleset, "escalation") +

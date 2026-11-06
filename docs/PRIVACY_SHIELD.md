@@ -30,7 +30,7 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
 - A catalog of **HTTPS-only, license-labelled** sources (HaGeZi, OISD, WindowsSpyBlocker). A source
   update downloads with a 20 MB/45 s bound, parses and normalizes domains, then atomically replaces
   the previous ruleset only if every selected source succeeds. The previous rules file is retained.
-- Per-user settings in `%LOCALAPPDATA%\Netpetra\privacy-shield.json`. No DNS query history is stored.
+- Per-user settings in `%LOCALAPPDATA%\Netpetra\privacy-shield.json`. Settings contain no DNS query history; the separate bounded blocked-query history described above is the only DNS history.
 
 ## DNS-only boundary
 
@@ -38,10 +38,10 @@ Privacy Shield is **not a VPN, proxy or network gateway**. It filters DNS name r
 
 1. The optional UAC helper changes the selected adapter's DNS server to `127.0.0.1` after explicit
    elevation approval. The service itself never changes adapter DNS silently.
-2. Applications send DNS questions to the Windows resolver, which now reaches Netpetra on port 53.
-3. Netpetra returns NXDOMAIN for blocked names and forwards allowed questions to the upstream.
+2. Applications send DNS questions to the Windows resolver, which now reaches Axiom on port 53.
+3. Axiom returns NXDOMAIN for blocked names and forwards allowed questions to the upstream.
 4. Applications still connect directly to the returned destination IPs; their TCP/UDP traffic does
-   not pass through Netpetra.
+   not pass through Axiom.
 
 If adapter DNS is not pointed at the resolver, normal Windows DNS bypasses Privacy Shield entirely
 and the counters remain zero. Manual queries to `127.0.0.1` still work for testing, but they do not
@@ -57,13 +57,13 @@ prove that system-wide traffic is filtered.
 
 ## Manual use
 
-1. Start Netpetra in service mode (`Netpetra.Desktop.exe --service` or the bundled service).
+1. Start Axiom in service mode (`Netpetra.Desktop.exe --service` or the bundled service).
 2. Open **Privacy Shield**, choose a profile and optional custom rules, then click **Apply settings**.
 3. Start the resolver on port **53**. Port 53 is required for normal Windows DNS; another port is
    useful only for local testing.
 4. Before changing adapter DNS, note the existing DNS servers so they can be restored.
 5. Use **Set adapter DNS (UAC)** on the Privacy Shield page. Windows shows its elevation prompt;
-   Netpetra saves the current values and points only the selected adapter at `127.0.0.1`/`::1`.
+   Axiom saves the current values and points only the selected adapter at `127.0.0.1`/`::1`.
    Alternatively, use the explicit script:
    `.\scripts\privacy-shield-dns.ps1 -Action Save`
    `.\scripts\privacy-shield-dns.ps1 -Action Enable -InterfaceAlias "Ethernet"`

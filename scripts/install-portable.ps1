@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Installs Netpetra as a per-user portable application.
+    Installs Axiom as a per-user portable application.
 
 .DESCRIPTION
     Copies the published Netpetra.Desktop.exe and Netpetra.Service.exe into
@@ -88,7 +88,7 @@ if (-not $hasService) {
 }
 
 if (Get-Process -Name "Netpetra.Desktop","Netpetra.Service" -ErrorAction SilentlyContinue) {
-    throw "Netpetra is running. Close it before installing."
+    throw "Axiom is running. Close it before installing."
 }
 
 $sourceItem = Get-Item $Source
@@ -115,7 +115,7 @@ if ($hasService) {
 }
 
 $manifest = [ordered]@{
-    product        = "Netpetra"
+    product        = "Axiom"
     version        = $version
     sha256         = $hash
     serviceSha256  = $serviceHash
@@ -127,19 +127,23 @@ $manifest | ConvertTo-Json | Set-Content (Join-Path $InstallDir "install.json") 
 if (-not $NoShortcut) {
     $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
     New-Item -ItemType Directory -Force -Path $startMenu | Out-Null
-    $shortcutPath = Join-Path $startMenu "Netpetra.lnk"
+    $shortcutPath = Join-Path $startMenu "Axiom.lnk"
+    $legacyShortcutPath = Join-Path $startMenu "Netpetra.lnk"
+    if (Test-Path $legacyShortcutPath) {
+        Remove-Item -LiteralPath $legacyShortcutPath -Force
+    }
 
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = $target
     $shortcut.WorkingDirectory = $InstallDir
-    $shortcut.Description = "Netpetra - Open-Source Firewall & Security Monitor"
+    $shortcut.Description = "Axiom - Open-Source Firewall & Security Monitor"
     $shortcut.Save()
 
     Write-Host "Start Menu shortcut: $shortcutPath"
 }
 
-Write-Host "Installed Netpetra $version" -ForegroundColor Green
+Write-Host "Installed Axiom $version" -ForegroundColor Green
 Write-Host "  executable: $target"
 Write-Host "  sha256:     $hash"
 if ($hasService) {

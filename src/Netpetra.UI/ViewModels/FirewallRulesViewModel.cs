@@ -136,8 +136,8 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
 
         var confirmation = MessageBox.Show(
             $"Remove the owned Windows Firewall rule for {row.Application}?\n\n" +
-            "Only this Netpetra rule is removed; other Windows Firewall rules are not touched.",
-            "Netpetra firewall write",
+            "Only this Axiom rule is removed; other Windows Firewall rules are not touched.",
+            "Axiom firewall write",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
 
@@ -215,7 +215,7 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
             WritePathText = snapshot.WritesEnabled ? "enabled (test VM only)" : "disabled";
             HasError = snapshot.Capability.Status == FirewallCapabilityStatus.Unavailable;
             StatusText = snapshot.Rules.Count == 0
-                ? "0 owned rules. Netpetra has not created any Windows Firewall rule on this host."
+                ? "0 owned rules. Axiom has not created any Windows Firewall rule on this host."
                 : $"{snapshot.Rules.Count} owned rules read at {DateTimeOffset.Now:HH:mm:ss}.";
         }
         catch (ServiceUnavailableException exception)

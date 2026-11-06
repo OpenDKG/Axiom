@@ -20,9 +20,9 @@ public partial class FirstRunWindow : Window
             BlackboxCheck.IsChecked = false;
             BlackboxCheck.Visibility = Visibility.Collapsed;
             ComponentsHeader.Text = "Built-in core components";
-            AcceptCheck.Content = "I understand this Store package contains core Netpetra only.";
+            AcceptCheck.Content = "I understand this Store package contains core Axiom only.";
             IntroText.Text =
-                "The Microsoft Store package contains Netpetra core: local monitoring, history, " +
+                "The Microsoft Store package contains Axiom core: local monitoring, history, " +
                 "firewall inventory, reputation, community feed and local file scanning. Optional " +
                 "third-party installers and agent hooks are not included in this package.";
         }

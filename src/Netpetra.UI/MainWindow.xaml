@@ -4,8 +4,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Netpetra.UI.ViewModels"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="Netpetra — Open-Source Firewall &amp; Security Monitor"
-        Icon="/Netpetra.UI;component/Resources/netpetra.ico"
+        Title="Axiom — Open-Source Firewall &amp; Security Monitor"
+        Icon="/Netpetra.UI;component/Resources/axiom.ico"
         Height="900"
         Width="1460"
         MinHeight="720"
@@ -52,23 +52,23 @@
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
-          <Image Source="/Netpetra.UI;component/Resources/netpetra-icon.png"
+          <Image Source="/Netpetra.UI;component/Resources/axiom-icon.png"
                  Width="22" Height="22" Stretch="Uniform"
                  RenderOptions.BitmapScalingMode="HighQuality" />
-          <TextBlock Text="NETPETRA" FontWeight="SemiBold" FontSize="11"
+          <TextBlock Text="AXIOM" FontWeight="SemiBold" FontSize="11"
                      Margin="10,0,10,0" VerticalAlignment="Center" />
           <TextBlock Text="Network activity &amp; security" Style="{StaticResource Caption}"
                      VerticalAlignment="Center" />
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Stretch">
           <Button Style="{StaticResource GhostButton}" Width="46" Height="33" Padding="0"
-                  Content="—" ToolTip="Minimize" AutomationProperties.Name="Minimize Netpetra"
+                  Content="—" ToolTip="Minimize" AutomationProperties.Name="Minimize Axiom"
                   shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnMinimizeClicked" />
           <Button x:Name="MaximizeButton" Style="{StaticResource GhostButton}" Width="46" Height="33" Padding="0"
-                  Content="□" ToolTip="Maximize" AutomationProperties.Name="Maximize Netpetra"
+                  Content="□" ToolTip="Maximize" AutomationProperties.Name="Maximize Axiom"
                   shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnMaximizeClicked" />
           <Button Style="{StaticResource GhostButton}" Width="46" Height="33" Padding="0"
-                  Content="×" ToolTip="Close Netpetra" AutomationProperties.Name="Close Netpetra"
+                  Content="×" ToolTip="Close Axiom" AutomationProperties.Name="Close Axiom"
                   shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnCloseClicked" />
         </StackPanel>
       </Grid>
@@ -82,13 +82,9 @@
             BorderThickness="0,0,1,0">
       <DockPanel Margin="0,18,0,10">
         <StackPanel DockPanel.Dock="Top" Margin="20,0,20,18">
-          <StackPanel Orientation="Horizontal">
-            <Image Source="/Netpetra.UI;component/Resources/netpetra-icon.png"
-                   Width="30" Height="30" Stretch="Uniform"
-                   RenderOptions.BitmapScalingMode="HighQuality" />
-            <TextBlock Text="Netpetra" FontSize="16" FontWeight="SemiBold"
-                       Margin="10,0,0,0" VerticalAlignment="Center" />
-          </StackPanel>
+          <Image Source="/Netpetra.UI;component/Resources/axiom-lockup.png"
+                 Width="176" Height="59" Stretch="Uniform" HorizontalAlignment="Left"
+                 RenderOptions.BitmapScalingMode="HighQuality" />
           <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
             <Border Style="{StaticResource LiveBadge}">
               <TextBlock Style="{StaticResource LiveBadgeText}" Text="{Binding StatusLiveText}" />
@@ -104,11 +100,11 @@
               <ColumnDefinition Width="Auto" />
               <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Image Source="/Netpetra.UI;component/Resources/netpetra-icon.png"
+            <Image Source="/Netpetra.UI;component/Resources/axiom-icon.png"
                    Width="40" Height="40" Stretch="Uniform"
                    RenderOptions.BitmapScalingMode="HighQuality" />
             <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-              <TextBlock Text="NetPetra" FontWeight="SemiBold" FontSize="13" />
+              <TextBlock Text="Axiom" FontWeight="SemiBold" FontSize="13" />
               <TextBlock Text="{Binding VersionText}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
             </StackPanel>
           </Grid>
@@ -123,12 +119,12 @@
                     Padding="10,4"
                     Height="27"
                     Margin="0,0,6,0"
-                    ToolTip="Open the Netpetra GitHub repository." />
+                    ToolTip="Open the Axiom GitHub repository." />
             <Button Style="{StaticResource GhostButton}"
                     Command="{Binding OpenSupportCommand}"
                     Padding="9,4"
                     Height="27"
-                    ToolTip="Support Netpetra">
+                    ToolTip="Support Axiom">
               <TextBlock Text="♥ Donate" Foreground="{DynamicResource Brush.Accent}" FontSize="12" />
             </Button>
           </StackPanel>

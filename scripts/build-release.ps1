@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Builds the portable Netpetra release archive and checksum file.
+    Builds the portable Axiom release archive and checksum file.
 
 .DESCRIPTION
     Publishes the standalone Windows x64 desktop and service builds, packs both executables with the
@@ -63,11 +63,11 @@ $dotnet = Resolve-Dotnet
 $project = Join-Path $root "src\Netpetra.Desktop\Netpetra.Desktop.csproj"
 $serviceProject = Join-Path $root "src\Netpetra.Service\Netpetra.Service.csproj"
 
-Write-Host "Publishing Netpetra $Version (win-x64)..." -ForegroundColor Cyan
+Write-Host "Publishing Axiom $Version (win-x64)..." -ForegroundColor Cyan
 & $dotnet publish $project -c Release -p:PublishProfile=win-x64-selfcontained
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
 
-Write-Host "Publishing Netpetra service $Version (win-x64, self-contained)..." -ForegroundColor Cyan
+Write-Host "Publishing Axiom service $Version (win-x64, self-contained)..." -ForegroundColor Cyan
 $serviceOutput = Join-Path $root "artifacts\publish\service"
 Remove-Item $serviceOutput -Recurse -Force -ErrorAction SilentlyContinue
 & $dotnet publish $serviceProject -c Release -r win-x64 --self-contained true `
@@ -81,7 +81,7 @@ if (-not (Test-Path $exe)) { throw "Published executable not found: $exe" }
 $serviceExe = Join-Path $serviceOutput "Netpetra.Service.exe"
 if (-not (Test-Path $serviceExe)) { throw "Published service not found: $serviceExe" }
 
-Write-Host "Publishing single-file Netpetra Setup..." -ForegroundColor Cyan
+Write-Host "Publishing single-file Axiom Setup..." -ForegroundColor Cyan
 $setupScript = Join-Path $PSScriptRoot "publish-setup.ps1"
 $setupOutput = Join-Path $root "artifacts\publish\setup"
 & powershell -NoProfile -ExecutionPolicy Bypass -File $setupScript -OutputDir $setupOutput
@@ -95,11 +95,13 @@ $communityFeed = Join-Path $communityDir "feed.json"
 if (-not (Test-Path $communityFeed)) { throw "Bundled community feed not found: $communityFeed" }
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-$zipName = "Netpetra-$Version-win-x64.zip"
+$zipName = "Axiom-$Version-win-x64.zip"
 $zipPath = Join-Path $OutputDir $zipName
+$publicSetupExe = Join-Path $OutputDir "Axiom-Setup.exe"
+Copy-Item $setupExe $publicSetupExe -Force
 
 $files = @(
-    $setupExe,
+    $publicSetupExe,
     $exe,
     $serviceExe,
     $communityDir,

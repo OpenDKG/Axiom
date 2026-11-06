@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Downloads, verifies and installs the latest Netpetra release for the current user.
+    Downloads, verifies and installs the latest Axiom release for the current user.
 
 .DESCRIPTION
     Fetches the GitHub release asset and SHA256SUMS.txt, verifies the archive, extracts it, runs the
-    portable installer and optionally launches Netpetra. No administrator rights, service
+    portable installer and optionally launches Axiom. No administrator rights, service
     registration or firewall change is performed.
 
 .PARAMETER Version
@@ -22,7 +22,7 @@
     NETPETRA_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN. Never pass a token on a shared command line.
 
 .EXAMPLE
-    irm https://raw.githubusercontent.com/a-51-50/Netpetra/main/scripts/install-from-github.ps1 | iex
+    irm https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-github.ps1 | iex
 
 .EXAMPLE
     .\install-from-github.ps1 -Version 0.4.0 -NoLaunch
@@ -40,9 +40,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$repo = "a-51-50/Netpetra"
+$repo = "a-51-50/Axiom"
 $headers = @{
-    "User-Agent" = "Netpetra-Installer"
+    "User-Agent" = "Axiom-Installer"
     "Accept" = "application/vnd.github+json"
 }
 
@@ -71,7 +71,7 @@ else {
     "https://api.github.com/repos/$repo/releases/latest"
 }
 
-Write-Host "Reading Netpetra release metadata..." -ForegroundColor Cyan
+Write-Host "Reading Axiom release metadata..." -ForegroundColor Cyan
 try {
     $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers
 }
@@ -79,10 +79,10 @@ catch {
     throw "Could not read release metadata. If the repository is private, set NETPETRA_GITHUB_TOKEN (for example: `$env:NETPETRA_GITHUB_TOKEN = gh auth token). $($_.Exception.Message)"
 }
 
-$zipAsset = $release.assets | Where-Object { $_.name -like "Netpetra-*-win-x64.zip" } | Select-Object -First 1
+$zipAsset = $release.assets | Where-Object { $_.name -like "Axiom-*-win-x64.zip" } | Select-Object -First 1
 $sumAsset = $release.assets | Where-Object { $_.name -eq "SHA256SUMS.txt" } | Select-Object -First 1
 if (-not $zipAsset -or -not $sumAsset) {
-    throw "The release does not contain the expected Netpetra archive and SHA256SUMS.txt."
+    throw "The release does not contain the expected Axiom archive and SHA256SUMS.txt."
 }
 
 $temp = Join-Path $env:TEMP ("netpetra-install-" + [Guid]::NewGuid().ToString("N"))
@@ -130,7 +130,7 @@ try {
     if (-not $NoLaunch) {
         $installed = Join-Path $InstallDir "Netpetra.Desktop.exe"
         Start-Process -FilePath $installed
-        Write-Host "Started Netpetra." -ForegroundColor Green
+        Write-Host "Started Axiom." -ForegroundColor Green
     }
 }
 finally {

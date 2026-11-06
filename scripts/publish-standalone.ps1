@@ -3,7 +3,7 @@
     Publishes the standalone (self-contained) Windows x64 shell.
 
 .DESCRIPTION
-    Produces a single Netpetra.Desktop.exe that runs without a .NET runtime installed.
+    Produces a single Netpetra.Desktop.exe (internal executable name) that runs without a .NET runtime installed.
     WPF does not support trimming, so PublishTrimmed stays false. The output lands in
     artifacts\publish\win-x64 by default.
 

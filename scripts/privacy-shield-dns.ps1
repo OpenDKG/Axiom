@@ -4,8 +4,8 @@
     Explicitly save, enable or restore Windows DNS settings for Privacy Shield.
 
 .DESCRIPTION
-    This is a manual, administrator-only helper. It is never called by Netpetra automatically.
-    Save first, enable only after the Netpetra Privacy Shield resolver is listening on port 53,
+    This is a manual, administrator-only helper. It is never called by Axiom automatically.
+    Save first, enable only after the Axiom Privacy Shield resolver is listening on port 53,
     and restore immediately if resolution fails. The saved file contains interface aliases and
     DNS addresses, not query history.
 

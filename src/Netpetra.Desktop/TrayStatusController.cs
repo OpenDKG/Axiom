@@ -47,9 +47,9 @@ internal sealed class TrayStatusController : IDisposable
         };
         _notificationsItem.CheckedChanged += OnNotificationsCheckedChanged;
 
-        var openItem = new ToolStripMenuItem("Open Netpetra");
+        var openItem = new ToolStripMenuItem("Open Axiom");
         openItem.Click += OnOpenClicked;
-        var exitItem = new ToolStripMenuItem("Exit Netpetra");
+        var exitItem = new ToolStripMenuItem("Exit Axiom");
         exitItem.Click += OnExitClicked;
 
         _menu.Items.Add(_ratesItem);
@@ -63,7 +63,7 @@ internal sealed class TrayStatusController : IDisposable
         _tray = new NotifyIcon
         {
             Icon = _healthyIcon,
-            Text = "Netpetra | waiting for measured rates",
+            Text = "Axiom | waiting for measured rates",
             ContextMenuStrip = _menu,
             Visible = true,
         };
@@ -150,15 +150,15 @@ internal sealed class TrayStatusController : IDisposable
         _ratesItem.Text = $"↑ {upload}  |  ↓ {download}";
         _healthItem.Text = isProblem ? "Monitoring: problem (open app for details)" : "Monitoring: operating";
         _tray.Text = isProblem
-            ? "Netpetra ! Monitoring problem | open app"
-            : Shorten($"Netpetra ↑ {upload} ↓ {download}", 63);
+            ? "Axiom ! Monitoring problem | open app"
+            : Shorten($"Axiom ↑ {upload} ↓ {download}", 63);
 
         // Notify on a transition into a known monitoring failure, never on every poll.
         if (isProblem && !_issueActive && TraySettingsStore.Enabled)
         {
             _tray.ShowBalloonTip(
                 5000,
-                "Netpetra: network monitoring problem",
+                "Axiom: network monitoring problem",
                 Shorten(issue!, 180),
                 ToolTipIcon.Warning);
         }
@@ -192,30 +192,23 @@ internal sealed class TrayStatusController : IDisposable
 
     private static Icon CreateStatusIcon(bool problem)
     {
+        var resource = System.Windows.Application.GetResourceStream(
+            new Uri("pack://application:,,,/Netpetra.UI;component/Resources/axiom.ico"))
+            ?? throw new InvalidOperationException("Axiom tray icon resource is missing.");
+        using var source = new Icon(resource.Stream, 32, 32);
+
         using var bitmap = new Bitmap(32, 32);
         using var graphics = Graphics.FromImage(bitmap);
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         graphics.Clear(Color.Transparent);
-
-        using var background = new SolidBrush(Color.FromArgb(17, 29, 45));
-        using var teal = new Pen(Color.FromArgb(90, 231, 207), 3.1f);
-        using var blue = new Pen(Color.FromArgb(115, 170, 255), 3.1f);
-        graphics.FillEllipse(background, 1, 1, 30, 30);
-
-        // Two directional traces are intentionally distinct from any third-party logo.
-        graphics.DrawLine(teal, 9, 21, 9, 8);
-        graphics.DrawLine(teal, 5, 12, 9, 8);
-        graphics.DrawLine(teal, 13, 12, 9, 8);
-        graphics.DrawLine(blue, 21, 9, 21, 22);
-        graphics.DrawLine(blue, 17, 18, 21, 22);
-        graphics.DrawLine(blue, 25, 18, 21, 22);
+        graphics.DrawIcon(source, new Rectangle(0, 0, 32, 32));
 
         if (problem)
         {
             using var red = new SolidBrush(Color.FromArgb(229, 53, 61));
             using var white = new SolidBrush(Color.White);
             using var font = new Font("Segoe UI", 13, FontStyle.Bold, GraphicsUnit.Pixel);
-            graphics.FillEllipse(red, 18, 17, 13, 13);
+            graphics.FillEllipse(red, 18, 17, 14, 14);
             graphics.DrawString("!", font, white, 21, 16);
         }
 

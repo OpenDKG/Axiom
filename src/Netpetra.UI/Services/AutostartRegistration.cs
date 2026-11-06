@@ -67,7 +67,7 @@ public sealed class AutostartRegistration
                 return new AutostartStatus(
                     AutostartState.Disabled,
                     null,
-                    "No Netpetra startup entry is registered.");
+                    "No Axiom startup entry is registered.");
             }
 
             return string.Equals(value, ExpectedCommand, StringComparison.OrdinalIgnoreCase)

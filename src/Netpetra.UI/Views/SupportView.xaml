@@ -13,7 +13,7 @@
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
           <StackPanel Grid.Column="0">
-            <TextBlock Text="Support Netpetra" FontWeight="SemiBold" FontSize="22"
+            <TextBlock Text="Support Axiom" FontWeight="SemiBold" FontSize="22"
                        Foreground="{DynamicResource Brush.TextPrimary}" />
             <TextBlock Text="Independent, open-source network monitoring for everyone."
                        Style="{StaticResource BodyMuted}" Margin="0,7,0,0" />
@@ -116,7 +116,7 @@
               <TextBlock Text="PUBLIC ADDRESSES ONLY" Style="{StaticResource StatusPillText}" />
             </Border>
           </Grid>
-          <TextBlock Text="Send directly from your own wallet. Netpetra does not connect to wallets, request keys, sign transactions or monitor payments."
+          <TextBlock Text="Send directly from your own wallet. Axiom does not connect to wallets, request keys, sign transactions or monitor payments."
                      TextWrapping="Wrap" Style="{StaticResource BodyMuted}" Margin="0,7,0,0" />
           <TextBlock Text="{Binding CryptoEmptyText}" TextWrapping="Wrap"
                      Style="{StaticResource Caption}" Margin="0,9,0,0" />

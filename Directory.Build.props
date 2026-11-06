@@ -20,9 +20,9 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 
-    <Company>Netpetra</Company>
-    <Product>Netpetra</Product>
-    <Copyright>Copyright (C) 2026 The Netpetra contributors</Copyright>
+    <Company>Axiom</Company>
+    <Product>Axiom</Product>
+    <Copyright>Copyright (C) 2026 The Axiom contributors</Copyright>
     <Version>0.4.21</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <NeutralLanguage>en</NeutralLanguage>
