@@ -23,17 +23,28 @@ or modify agent configuration.
   responses are stored.
 - The model result is sanitized: unknown/SAFE-like statuses become `UNKNOWN`, list lengths are
   bounded, and no action field exists in the result contract.
+- Optional automatic analysis:
+  - default off;
+  - only new non-loopback destinations are considered;
+  - keys are deduplicated;
+  - configurable minimum interval and hourly request limit;
+  - no request is made while the analyst is disabled or unconfigured.
+- Optional second verifier model:
+  - uses a separate request/context and the same endpoint/key;
+  - records verifier status and summary without changing the primary finding;
+  - verifier failure is surfaced, not treated as agreement.
 - Existing MCP server remains separate and read-only. No second MCP server and no MCP write tool is
   added.
 
 ## What is intentionally not implemented
 
-- Automatic background analysis. The toggle is not present; analysis is an explicit button action.
+- MCP tool orchestration from the UI. This initial path reads the same service-backed monitor
+  snapshot directly; the existing MCP server remains available to external MCP clients.
 - Model-controlled firewall writes, shell execution, active scanning, reputation invention or
   guaranteed model confidence.
-- A second verifier model, OriginTrail publication, Blackbox integration or local research memory.
+- OriginTrail publication, Blackbox integration or local research memory.
 - Storage of raw prompts or raw provider responses.
-- Cost accounting beyond the configured token/request bounds.
+- Full cost accounting beyond token and hourly request bounds.
 
 ## Privacy
 
@@ -63,6 +74,8 @@ plain text for a human to review; they are never executed.
 - `AiAnalystSettingsStore` DPAPI round trip and `AiFindingStore` history tests are in the UI test
   suite.
 - `AiEvidenceBuilder`/client unit tests cover redaction, structured parsing, invalid provider
-  responses, HTTPS enforcement and status normalization.
+  responses, HTTPS enforcement, status normalization and the optional verifier request.
 - The existing MCP and firewall tests remain unchanged; the AI path has no write capability.
+- Automatic analysis is bounded and opt-in; its timer is not exercised by unit tests because no
+  provider request is allowed in the test suite.
 - The AI Analyst page was opened in the real WPF shell with the provider disabled.
