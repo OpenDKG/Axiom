@@ -30,6 +30,7 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
         _view.SortDescriptions.Add(new SortDescription(nameof(ConnectionRow.AppDisplayName), ListSortDirection.Ascending));
         monitor.Updated += OnMonitorUpdated;
         UpdateStatus();
+        RebuildGroups();
     }
 
     public ObservableCollection<ConnectionRow> Connections => _monitor.Connections;
@@ -88,7 +89,7 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
     public ObservableCollection<ConnectionAppGroup> AppGroups { get; } = [];
 
     [ObservableProperty]
-    private bool _isGroupedByApp;
+    private bool _isGroupedByApp = true;
 
     public void Dispose() => _monitor.Updated -= OnMonitorUpdated;
 
@@ -108,6 +109,7 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
         {
             HasRelated = false;
             RebuildGroups();
+            UpdateStatus();
         }
         else if (SelectedConnection is not null)
         {
@@ -232,6 +234,11 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
                 first.Source.ProcessId == 0 ? "No process owner" : first.Source.AppPath,
                 rows);
             AppGroups.Add(rowGroup);
+        }
+
+        if (IsGroupedByApp)
+        {
+            VisibleRowsText = $"Showing {AppGroups.Count} applications \u00b7 {_view.Count} sockets";
         }
     }
 
