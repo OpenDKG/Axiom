@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace Netpetra.Desktop;
 
@@ -20,6 +21,8 @@ internal sealed class BundledServiceHost : IDisposable
             return false;
         }
 
+        HideExistingServiceWindows();
+
         if (Process.GetProcessesByName("Netpetra.Service").Length > 0)
         {
             return true;
@@ -31,6 +34,7 @@ internal sealed class BundledServiceHost : IDisposable
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
                 WorkingDirectory = AppContext.BaseDirectory,
             });
 
@@ -41,6 +45,29 @@ internal sealed class BundledServiceHost : IDisposable
 #pragma warning restore CA1031
         {
             return false;
+        }
+    }
+
+    private static void HideExistingServiceWindows()
+    {
+        foreach (var process in Process.GetProcessesByName("Netpetra.Service"))
+        {
+            try
+            {
+                var handle = process.MainWindowHandle;
+                if (handle != IntPtr.Zero)
+                {
+                    _ = NativeMethods.ShowWindow(handle, 0);
+                }
+            }
+            catch (Exception exception) when (exception is
+                         InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+            }
+            finally
+            {
+                process.Dispose();
+            }
         }
     }
 
@@ -67,4 +94,11 @@ internal sealed class BundledServiceHost : IDisposable
             _owned.Dispose();
         }
     }
+}
+
+internal static class NativeMethods
+{
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool ShowWindow(IntPtr window, int command);
 }

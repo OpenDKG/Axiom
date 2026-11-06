@@ -46,7 +46,7 @@ $serviceError = Join-Path $env:TEMP "netpetra-service.err.log"
 Write-Host "Starting the service (console mode)..." -ForegroundColor Cyan
 $service = Start-Process -FilePath $dotnet `
     -ArgumentList @("run", "--project", $serviceProject, "-c", "Release", "--no-build") `
-    -PassThru -RedirectStandardOutput $serviceLog -RedirectStandardError $serviceError
+    -PassThru -WindowStyle Hidden -RedirectStandardOutput $serviceLog -RedirectStandardError $serviceError
 
 try {
     $ready = $false
