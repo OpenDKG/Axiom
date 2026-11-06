@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Starts the Netpetra desktop shell.
+    Starts the Axiom desktop shell.
 
 .DESCRIPTION
     Without parameters: runs the latest source with `dotnet run` (requires the .NET SDK).
@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$exe = Join-Path $root "artifacts\publish\win-x64\Netpetra.Desktop.exe"
+$exe = Join-Path $root "artifacts\publish\win-x64\Axiom.Desktop.exe"
 
 if ($Standalone) {
     if (-not (Test-Path $exe)) {
@@ -43,4 +43,4 @@ if (-not $dotnet) {
 
 if (-not $dotnet) { throw "dotnet CLI not found on PATH. Install the .NET 10 SDK (global.json) or use -Standalone." }
 
-& $dotnet run --project (Join-Path $root "src\Netpetra.Desktop\Netpetra.Desktop.csproj") -c Release
+& $dotnet run --project (Join-Path $root "src\Axiom.Desktop\Axiom.Desktop.csproj") -c Release

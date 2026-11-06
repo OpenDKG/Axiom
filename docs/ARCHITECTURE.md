@@ -8,21 +8,21 @@ elevation.
 
 ```text
 ┌────────────────────────────────────────────────────────┐
-│ Netpetra.Desktop (WinExe, asInvoker)              │
+│ Axiom.Desktop (WinExe, asInvoker)              │
 │ chooses the source: in-process or service              │
 └───────────────┬────────────────────────────────────────┘
                 │
 ┌───────────────▼────────────────────────────────────────┐
-│ Netpetra.UI (WPF library, Contracts only)         │
+│ Axiom.UI (WPF library, Contracts only)         │
 │ Live/Apps/History/Overview · ConnectionMonitor         │
 └───────┬──────────────────────────────┬─────────────────┘
         │ IConnectionSnapshotSource    │ ServicePipeClient
 ┌───────▼──────────────────┐    ┌──────▼──────────────────────┐
-│ Infrastructure.Windows   │    │ \\.\pipe\Netpetra.…    │
+│ Infrastructure.Windows   │    │ \\.\pipe\Axiom.…    │
 │ IP Helper · process      │    └──────┬──────────────────────┘
 │ identity · PipeServer    │           │
 └──────────────────────────┘    ┌──────▼──────────────────────┐
-                                │ Netpetra.Service       │
+                                │ Axiom.Service       │
                                 │ MonitoringWorker → cache    │
                                 │ HistoryWriter → SQLite      │
                                 │ PipeServerWorker            │
@@ -73,7 +73,7 @@ Infrastructure/Service/Desktop.
 
 ## 5. SQLite history (FND-005)
 
-- Path: `NETPETRA_DATA_DIR` → otherwise `%LOCALAPPDATA%` (interactive process) or
+- Path: `AXIOM_DATA_DIR` → otherwise `%LOCALAPPDATA%` (interactive process) or
   `%ProgramData%` (service).
 - WAL, `foreign_keys=ON`, `busy_timeout=5000`, `synchronous=NORMAL`.
 - Tables:
@@ -96,9 +96,9 @@ Infrastructure/Service/Desktop.
   documented `INetFwPolicy2`/`INetFwRule` COM objects on a dedicated STA thread.
 - Read-only operations: capability probe, owned-rule listing and verification. They need no admin
   on a normal host.
-- Write operations: apply and remove, limited to exact `Netpetra::{id}::{OUT|IN}` names. They are
-  refused unless `NETPETRA_ENABLE_FIREWALL_WRITES=1` and
-  `NETPETRA_FIREWALL_WRITE_CONFIRM=yes` are both set on the service.
+- Write operations: apply and remove, limited to exact `Axiom::{id}::{OUT|IN}` names. They are
+  refused unless `AXIOM_ENABLE_FIREWALL_WRITES=1` and
+  `AXIOM_FIREWALL_WRITE_CONFIRM=yes` are both set on the service.
 - `FirewallRuleCoordinator` serialises changes and runs
   validate → pending + audit → apply → read-back → applied/failed + audit.
 - SQLite schema v2 adds `firewall_rules` and `rule_audit`; the audit actor is the verified pipe
@@ -135,7 +135,7 @@ Infrastructure/Service/Desktop.
 
 ## 8. MCP server (read-only foundation)
 
-- `Netpetra.McpServer` is a separate local process using the official `ModelContextProtocol` SDK
+- `Axiom.McpServer` is a separate local process using the official `ModelContextProtocol` SDK
   over **stdio**. stdout is JSON-RPC; logs go to stderr.
 - It calls the existing authenticated Named Pipe for status, snapshots, history and read-only rule
   state. It does not open SQLite, Windows Firewall COM, the registry or arbitrary files.

@@ -1,22 +1,22 @@
 # Firewall recovery
 
-Axiom owns only rules whose name starts with `Netpetra::`. Recovery never resets the Windows
+Axiom owns only rules whose name starts with `Axiom::`. Recovery never resets the Windows
 Firewall and never deletes another product's rules.
 
 ## Identify owned rules
 
 ```powershell
-Get-NetFirewallRule -Name 'Netpetra::*' |
+Get-NetFirewallRule -Name 'Axiom::*' |
   Select-Object Name, DisplayName, Direction, Action, Enabled, Profile
 ```
 
-A rule name has the form `Netpetra::{rule-id}::{OUT|IN}`. The same id and direction identify the
+A rule name has the form `Axiom::{rule-id}::{OUT|IN}`. The same id and direction identify the
 rule in the local database (`firewall_rules`).
 
 ## Remove one owned rule
 
 ```powershell
-Remove-NetFirewallRule -Name 'Netpetra::11111111-1111-1111-1111-111111111111::OUT'
+Remove-NetFirewallRule -Name 'Axiom::11111111-1111-1111-1111-111111111111::OUT'
 ```
 
 This requires an elevated PowerShell session. Do not use wildcard removal against a prefix that
@@ -25,7 +25,7 @@ could match another product; check the list first.
 ## Remove all owned rules (recovery only)
 
 ```powershell
-Get-NetFirewallRule -Name 'Netpetra::*' | Remove-NetFirewallRule
+Get-NetFirewallRule -Name 'Axiom::*' | Remove-NetFirewallRule
 ```
 
 Run this only after reviewing the list. It still targets only names with the Axiom prefix.
@@ -46,15 +46,15 @@ The Firewall page now has two configuration layers:
   write path is read-only, but **Apply rule** remains disabled until the service write gate is open.
 
 The page intentionally never creates, changes or removes a non-Axiom rule. The owned-rule table
-lists only names with the `Netpetra::` prefix and offers targeted removal when writes are enabled.
+lists only names with the `Axiom::` prefix and offers targeted removal when writes are enabled.
 
 ## Write gate
 
 The service refuses write commands unless both variables are set on the service process:
 
 ```text
-NETPETRA_ENABLE_FIREWALL_WRITES=1
-NETPETRA_FIREWALL_WRITE_CONFIRM=yes
+AXIOM_ENABLE_FIREWALL_WRITES=1
+AXIOM_FIREWALL_WRITE_CONFIRM=yes
 ```
 
 Unset them (or restart the service without them) to return to read-only behaviour.
@@ -69,7 +69,7 @@ Unset them (or restart the service without them) to return to read-only behaviou
 ## Verification after recovery
 
 ```powershell
-Get-NetFirewallRule -Name 'Netpetra::*'
+Get-NetFirewallRule -Name 'Axiom::*'
 ```
 
 An empty result means no Axiom-owned rule remains. Other rules are outside this check.

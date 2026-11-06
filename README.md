@@ -42,7 +42,7 @@ authority. There is no account, no cloud, no advertising and no telemetry.
 
 - Rules are path-scoped and bound to a direction and Windows network profile.
 - Every rule owned by the application has a deterministic name,
-  `Netpetra::{rule-id}::{OUT|IN}`, so it can be found and removed without touching anyone
+  `Axiom::{rule-id}::{OUT|IN}`, so it can be found and removed without touching anyone
   else's rules.
 - A rule is reported as applied only after an OS read-back of the created rule; an external block or
   Group Policy remains authoritative.
@@ -151,7 +151,7 @@ cannot change firewall rules, execute commands or read arbitrary files. See
 - The Security page has a **Setup** action for an HTTPS JSON feed. The format is
   `{"entries":[{"sha256":"...","name":"...","verdict":"...","source":"...","updatedUtc":"..."}]}`.
   Only entries with a valid SHA-256 are accepted; the feed is evidence, not a verdict.
-- First-run setup can enable the bundled `netpetra://starter` feed: one clearly labelled EICAR
+- First-run setup can enable the bundled `axiom://starter` feed: one clearly labelled EICAR
   test entry, read from disk with no network call. Replace it with an HTTPS feed when available.
 
 ### Rules for every optional module
@@ -213,9 +213,9 @@ window. The desktop and `run-service.ps1` also start it in the background. Use t
 log when you need diagnostics.
 
 ```powershell
-dotnet restore Netpetra.sln --locked-mode
-dotnet build Netpetra.sln -c Release --no-restore
-dotnet test Netpetra.sln -c Release --no-build
+dotnet restore Axiom.sln --locked-mode
+dotnet build Axiom.sln -c Release --no-restore
+dotnet test Axiom.sln -c Release --no-build
 .\scripts\publish-standalone.ps1
 ```
 
@@ -224,14 +224,14 @@ dotnet test Netpetra.sln -c Release --no-build
 .\scripts\run-service.ps1
 
 # in-process read-only mode
-.\artifacts\publish\win-x64\Netpetra.Desktop.exe
+.\artifacts\publish\win-x64\Axiom.Desktop.exe
 ```
 
-The standalone build produces one self-contained `Netpetra.Desktop.exe` in
+The standalone build produces one self-contained `Axiom.Desktop.exe` in
 `artifacts\publish\win-x64`.
 
 WPF software rendering is enabled by default because some GPU drivers leave the client area blank
-after a driver reset. Set `NETPETRA_HARDWARE_RENDER=1` before starting the app to opt in to hardware
+after a driver reset. Set `AXIOM_HARDWARE_RENDER=1` before starting the app to opt in to hardware
 acceleration on a machine where it is known to work.
 
 ### Installation (no administrator)
@@ -239,7 +239,7 @@ acceleration on a machine where it is known to work.
 The release ZIP contains **`Axiom-Setup.exe`**. Double-click it, choose the agent-hook scope
 (Complete or Partial) and click **Install Axiom**. The setup is a single self-contained
 executable with the desktop and local service payload embedded; it installs under
-`%LOCALAPPDATA%\Programs\Netpetra`, creates a Start Menu shortcut and starts the app. No .NET
+`%LOCALAPPDATA%\Programs\Axiom`, creates a Start Menu shortcut and starts the app. No .NET
 runtime, Windows service registration, firewall change or elevation is involved.
 
 The desktop starts the bundled local service automatically. VirusTotal remains optional; its API
@@ -258,20 +258,20 @@ irm https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-gi
 ```
 
 The bootstrap downloads the latest release, verifies `SHA256SUMS.txt`, installs under
-`%LOCALAPPDATA%\Programs\Netpetra` and starts the app. The first run shows the optional module
+`%LOCALAPPDATA%\Programs\Axiom` and starts the app. The first run shows the optional module
 wizard.
 
 For the private repository, authenticate with `gh auth login` first and pass the token to the
 bootstrap:
 
 ```powershell
-$env:NETPETRA_GITHUB_TOKEN = gh auth token
-$headers = @{ Authorization = "Bearer $env:NETPETRA_GITHUB_TOKEN" }
+$env:AXIOM_GITHUB_TOKEN = gh auth token
+$headers = @{ Authorization = "Bearer $env:AXIOM_GITHUB_TOKEN" }
 irm -Headers $headers https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-github.ps1 | iex
 ```
 
 The installer uses the token for release metadata and asset downloads; a public repository needs
-only the plain `irm` command. A token is read from `NETPETRA_GITHUB_TOKEN`, `GH_TOKEN` or
+only the plain `irm` command. A token is read from `AXIOM_GITHUB_TOKEN`, `GH_TOKEN` or
 `GITHUB_TOKEN` and is never written to disk by the installer.
 
 You can also run `.\scripts\install-portable.ps1` from a checkout. Remove with
@@ -295,13 +295,13 @@ in [`docs/STORE.md`](docs/STORE.md).
 
 ```text
 src/
-  Netpetra.Contracts/              # DTOs, IPC and history contracts
-  Netpetra.Core/                   # domain rules and firewall port
-  Netpetra.Infrastructure.Windows/ # IP Helper, process identity, Named Pipe server
-  Netpetra.Persistence/            # SQLite schema, queries, retention
-  Netpetra.Service/                # Worker host, monitoring, history writer, pipe
-  Netpetra.UI/                     # WPF library: views, view models, theme
-  Netpetra.Desktop/                # composition root / the only UI executable
+  Axiom.Contracts/              # DTOs, IPC and history contracts
+  Axiom.Core/                   # domain rules and firewall port
+  Axiom.Infrastructure.Windows/ # IP Helper, process identity, Named Pipe server
+  Axiom.Persistence/            # SQLite schema, queries, retention
+  Axiom.Service/                # Worker host, monitoring, history writer, pipe
+  Axiom.UI/                     # WPF library: views, view models, theme
+  Axiom.Desktop/                # composition root / the only UI executable
 tests/                                  # unit and Windows integration tests
 docs/                                   # architecture, security, test matrix, licensing, ADRs
 scripts/                                # local run, service mode, standalone publish

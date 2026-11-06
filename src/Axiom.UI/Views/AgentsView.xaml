@@ -1,0 +1,662 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<UserControl x:Class="Axiom.UI.Views.AgentsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Axiom.UI.ViewModels">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="24,18,24,24" HorizontalAlignment="Stretch">
+
+      <!-- Product identity cards; symbolic initials are NOT third-party official logos. -->
+      <Grid Margin="0,0,0,14">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="14" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Style="{StaticResource Card}">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Background="#0B1024" CornerRadius="9" Padding="8,6" VerticalAlignment="Top">
+              <Image Source="/Axiom.UI;component/Resources/origintrail-logo.png"
+                     Width="104" Height="23" Stretch="Uniform"
+                     RenderOptions.BitmapScalingMode="HighQuality" />
+            </Border>
+            <StackPanel Grid.Column="1">
+              <TextBlock Text="{Binding Security.DkgBrandLabel}" Style="{StaticResource SectionTitle}"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="Decentralized Knowledge Graph (DKG): optional local knowledge infrastructure and provenance. This status reflects a local node probe."
+                         Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,5,0,0" />
+              <TextBlock Text="origintrail.io" Style="{StaticResource Caption}" Margin="0,7,0,0" />
+            </StackPanel>
+          </Grid>
+        </Border>
+        <Border Grid.Column="2" Style="{StaticResource Card}">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Background="#0B1024" CornerRadius="9" Padding="8,6" VerticalAlignment="Top">
+              <Image Source="/Axiom.UI;component/Resources/blackbox-logo.png"
+                     Width="104" Height="18" Stretch="Uniform"
+                     RenderOptions.BitmapScalingMode="HighQuality" />
+            </Border>
+            <StackPanel Grid.Column="1">
+              <TextBlock Text="{Binding Security.BlackboxBrandLabel}" Style="{StaticResource SectionTitle}"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="Guardian Agent Blackbox by Umanitek: optional local agent-safety module. Connection alone does not prove every agent is protected."
+                         Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,5,0,0" />
+              <Image Source="/Axiom.UI;component/Resources/umanitek-logo.png"
+                     Width="92" Height="20" Stretch="Uniform"
+                     RenderOptions.BitmapScalingMode="HighQuality"
+                     HorizontalAlignment="Left" Margin="0,7,0,0"
+                     ToolTip="Umanitek" />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
+
+      <Border Style="{StaticResource Card}">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="{Binding Security.AgentStatusTitle}" Style="{StaticResource EmptyStateTitle}" />
+              <TextBlock Text="{Binding Security.AgentStatusText}"
+                         Style="{StaticResource BodyMuted}"
+                         Margin="0,6,0,0" />
+              <TextBlock Text="{Binding Security.AgentHookInstallHint}"
+                         Style="{StaticResource Caption}"
+                         TextWrapping="Wrap"
+                         Margin="0,7,0,0" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+              <Button Style="{StaticResource PrimaryButton}"
+                      Content="Configure"
+                      Command="{Binding ConfigureCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Open native Blackbox settings." />
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Test Protection"
+                      Command="{Binding TestProtectionCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Run a harmless canary test against the local Blackbox guard." />
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Refresh"
+                      Command="{Binding RefreshAllCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Refresh module probes, health and activity." />
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Open Dashboard"
+                      Command="{Binding OpenDashboardCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Open the local Blackbox web dashboard." />
+              <Border>
+                <Border.Style>
+                  <Style TargetType="Border" BasedOn="{StaticResource StatusPill}">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding Security.AgentStatusBadge}" Value="CONNECTED">
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Success}" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding Security.AgentStatusBadge}">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding Security.AgentStatusBadge}" Value="CONNECTED">
+                          <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
+              </Border>
+            </StackPanel>
+          </Grid>
+          <TextBlock Text="{Binding Security.LastCheckedText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,8,0,0" />
+          <TextBlock Text="{Binding Security.InstallStatusText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,4,0,0"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <TextBlock Text="Blackbox health" Style="{StaticResource SectionTitle}" />
+          <TextBlock Text="{Binding HealthStatusText}"
+                     Style="{StaticResource BodyMuted}"
+                     Margin="0,4,0,0"
+                     TextWrapping="Wrap" />
+          <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding BlackboxHealthText}" Style="{StaticResource Caption}" Margin="0,0,12,6" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DkgHealthText}" Style="{StaticResource Caption}" Margin="0,0,0,6" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding AxiomDkgHealthText}" Style="{StaticResource Caption}" Margin="0,0,12,0" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GraphHealthText}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+          </Grid>
+          <TextBlock Text="{Binding ProtectionTestText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,8,0,0"
+                     TextWrapping="Wrap" />
+          <Button Style="{StaticResource GhostButton}"
+                  Content="View DKG log"
+                  Command="{Binding ViewDkgLogCommand}"
+                  HorizontalAlignment="Left"
+                  Margin="0,8,0,0"
+                  ToolTip="Show a bounded, redacted tail of the local DKG daemon log." />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="0">
+        <ItemsControl ItemsSource="{Binding Security.Modules}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="{x:Type vm:SecurityModule}">
+              <Border Padding="16,12"
+                      BorderBrush="{DynamicResource Brush.Border}"
+                      BorderThickness="0,0,0,1"
+                      Visibility="{Binding IsAgentModule, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+
+                  <Border Grid.Column="0"
+                          Width="32"
+                          Height="32"
+                          CornerRadius="8"
+                          Background="{DynamicResource Brush.SurfaceAlt}"
+                          Margin="0,0,12,0">
+                    <TextBlock Text="{Binding Glyph}"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="14"
+                               Foreground="{DynamicResource Brush.TextSecondary}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                  </Border>
+
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Detail}"
+                               Style="{StaticResource Caption}"
+                               Margin="0,2,0,0"
+                               TextWrapping="Wrap" />
+                  </StackPanel>
+
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="{Binding ActionLabel}"
+                            Padding="8,3"
+                            FontSize="11"
+                            Margin="0,0,8,0"
+                            Command="{Binding DataContext.Security.ActOnModuleCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="{Binding Name}"
+                            Visibility="{Binding CanAct, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Run the setup action for this optional module.">
+                      <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding ActionLabel}" Value="Starting...">
+                              <Setter Property="IsEnabled" Value="False" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Button.Style>
+                    </Button>
+                    <Button Content="Audit"
+                            Padding="6,2"
+                            FontSize="10"
+                            Margin="0,0,4,0"
+                            Command="{Binding DataContext.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="audit"
+                            Visibility="{Binding CanSetMode, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Log and report Blackbox findings without blocking.">
+                      <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding DataContext.Security.BlackboxModeText, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="audit">
+                              <Setter Property="Background" Value="{DynamicResource Brush.AccentSoft}" />
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                              <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Button.Style>
+                    </Button>
+                    <Button Content="Block"
+                            Padding="6,2"
+                            FontSize="10"
+                            Margin="0,0,8,0"
+                            Command="{Binding DataContext.SetBlackboxModeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="block"
+                            Visibility="{Binding CanSetMode, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Stop confirmed Blackbox threats at the configured severity.">
+                      <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding DataContext.Security.BlackboxModeText, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="block">
+                              <Setter Property="Background" Value="{DynamicResource Brush.AccentSoft}" />
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                              <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Button.Style>
+                    </Button>
+                    <Button Style="{StaticResource GhostButton}"
+                            Content="Uninstall"
+                            Padding="8,3"
+                            FontSize="11"
+                            Margin="0,0,8,0"
+                            Command="{Binding DataContext.Security.UninstallModuleCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="{Binding Name}"
+                            Visibility="{Binding CanUninstall, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Remove only the files and settings owned by Axiom for this module." />
+                    <Border Style="{StaticResource StatusPill}">
+                      <TextBlock Text="{Binding Status}">
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                    </Border>
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <TextBlock Text="Module activity" Style="{StaticResource SectionTitle}" />
+          <TextBlock Text="Last 30 loopback checks; green = connected, muted = not running."
+                     Style="{StaticResource Caption}"
+                     Margin="0,2,0,0" />
+
+          <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="64" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="DKG" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+            <ItemsControl Grid.Column="1" ItemsSource="{Binding Security.Activity}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:ModuleActivity}">
+                  <TextBlock Text="▮" FontSize="15" Margin="1,0">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DkgConnected}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Grid>
+
+          <Grid Margin="0,4,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="64" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Blackbox" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+            <ItemsControl Grid.Column="1" ItemsSource="{Binding Security.Activity}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:ModuleActivity}">
+                  <TextBlock Text="▮" FontSize="15" Margin="1,0">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding BlackboxConnected}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Grid>
+        </StackPanel>
+      </Border>
+
+                  <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Security findings" Style="{StaticResource SectionTitle}" />
+            <TextBlock Grid.Column="1"
+                       Text="blocked ≠ merely flagged"
+                       Style="{StaticResource Caption}"
+                       VerticalAlignment="Center" />
+          </Grid>
+          <TextBlock Text="Only a finding with an explicit decision of block is counted as blocked."
+                     Style="{StaticResource Caption}"
+                     Margin="0,2,0,0" />
+          <DataGrid ItemsSource="{Binding Findings}"
+                    Style="{StaticResource TableDataGrid}"
+                    AutoGenerateColumns="False"
+                    IsReadOnly="True"
+                    MaxHeight="180"
+                    Margin="0,10,0,0"
+                    EnableRowVirtualization="True"
+                    HeadersVisibility="Column"
+                    RowHeight="28">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="TIME" Binding="{Binding TimeText}" Width="70" />
+              <DataGridTextColumn Header="AGENT" Binding="{Binding Agent}" Width="90" />
+              <DataGridTextColumn Header="CATEGORY" Binding="{Binding Category}" Width="110" />
+              <DataGridTextColumn Header="SEVERITY" Binding="{Binding Severity}" Width="75" />
+              <DataGridTextColumn Header="IDENTIFIER" Binding="{Binding Identifier}" Width="*" />
+              <DataGridTemplateColumn Header="SECURITY" Width="94">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding SecurityOutcome}"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsBlocked}" Value="True">
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsFlagged}" Value="True">
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+            </DataGrid.Columns>
+          </DataGrid>
+        </StackPanel>
+      </Border>
+
+<Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Axiom hook evidence" Style="{StaticResource SectionTitle}" />
+            <TextBlock Grid.Column="1"
+                       Text="bounded · no arguments"
+                       Style="{StaticResource Caption}"
+                       VerticalAlignment="Center" />
+          </Grid>
+          <TextBlock Text="OpenCode/Codex adapter events may not appear in the native Blackbox dashboard. This local feed records hook load, guard decisions and errors without prompts, paths or tool arguments."
+                     Style="{StaticResource Caption}"
+                     Margin="0,2,0,0"
+                     TextWrapping="Wrap" />
+          <DataGrid ItemsSource="{Binding HookEvidence}"
+                    Style="{StaticResource TableDataGrid}"
+                    AutoGenerateColumns="False"
+                    IsReadOnly="True"
+                    MaxHeight="180"
+                    Margin="0,10,0,0"
+                    EnableRowVirtualization="True"
+                    HeadersVisibility="Column"
+                    RowHeight="28">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="TIME" Binding="{Binding TimeText}" Width="70" />
+              <DataGridTextColumn Header="FRAMEWORK" Binding="{Binding Framework}" Width="100" />
+              <DataGridTextColumn Header="EVENT" Binding="{Binding EventType}" Width="120" />
+              <DataGridTextColumn Header="TOOL" Binding="{Binding Tool}" Width="100" />
+              <DataGridTextColumn Header="DECISION" Binding="{Binding Decision}" Width="90" />
+              <DataGridTextColumn Header="ERROR" Binding="{Binding ErrorCode}" Width="*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="Recognized agents" Style="{StaticResource SectionTitle}" />
+              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber, Codex and Claude Code workspaces. Codex trust state is read from Codex itself; installed hooks are not proof of runtime blocking."
+                         Style="{StaticResource Caption}"
+                         Margin="0,2,0,0" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Install/repair agent hooks..."
+                      Command="{Binding InstallHooksCommand}"
+                      Margin="0,0,8,0"
+                      ToolTip="Choose Complete installation with agent hooks or Partial installation without changing agent hook files. Existing managed hooks are backed up." />
+              <Border Style="{StaticResource StatusPill}">
+                <TextBlock Text="BLACKBOX" Style="{StaticResource StatusPillText}" />
+              </Border>
+            </StackPanel>
+          </Grid>
+
+          <TextBlock Text="{Binding Security.AgentsStatusText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,8,0,0"
+                     TextWrapping="Wrap" />
+
+          <ItemsControl ItemsSource="{Binding Security.ProtectedAgents}" Margin="0,6,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:ProtectedAgent}">
+                <Border Padding="0,7"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="0,0,0,1">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="84" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Background="{DynamicResource Brush.AccentSoft}"
+                            CornerRadius="4"
+                            Padding="6,2"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top">
+                      <TextBlock Text="{Binding KindText}"
+                                 FontSize="10"
+                                 FontWeight="SemiBold"
+                                 Foreground="{DynamicResource Brush.Accent}" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="10,0,10,0">
+                      <TextBlock Text="{Binding TargetText}"
+                                 Style="{StaticResource Caption}"
+                                 FontFamily="{StaticResource Font.Mono}"
+                                 TextTrimming="CharacterEllipsis"
+                                 ToolTip="{Binding TargetText}" />
+                      <TextBlock Text="{Binding Detail}"
+                                 Style="{StaticResource Caption}"
+                                 Foreground="{DynamicResource Brush.TextMuted}"
+                                 Margin="0,2,0,0"
+                                 TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                      <StackPanel Margin="0,0,8,0">
+                        <Button Style="{StaticResource GhostButton}"
+                                Content="Test hook"
+                                Padding="7,3"
+                                FontSize="10"
+                                HorizontalAlignment="Left"
+                                IsEnabled="{Binding CanTest}"
+                                Command="{Binding DataContext.Security.TestAgentCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding}"
+                                ToolTip="Run the installed hook adapter with a benign simulated tool call. This does not run the full agent process." />
+                        <TextBlock Text="{Binding TestResult}"
+                                   Style="{StaticResource Caption}"
+                                   Foreground="{DynamicResource Brush.TextMuted}"
+                                   MaxWidth="240"
+                                   TextWrapping="Wrap"
+                                   Margin="0,3,0,0" />
+                      </StackPanel>
+                      <Border Style="{StaticResource StatusPill}" VerticalAlignment="Top">
+                        <TextBlock Text="{Binding DisplayStatus}">
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsProtected}" Value="True">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="HOOKED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="CONNECTED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="PROTECTED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="VERIFIED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="DETECTED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="AUDIT ONLY">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="TRUST REQUIRED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="DEGRADED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="OFFLINE">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
+                      </Border>
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <TextBlock Text="Host sessions" Style="{StaticResource SectionTitle}" />
+          <TextBlock Text="{Binding SessionStatusText}"
+                     Style="{StaticResource Caption}"
+                     TextWrapping="Wrap"
+                     Margin="0,2,0,0" />
+          <ItemsControl ItemsSource="{Binding SessionGroups}" Margin="0,8,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:AgentSessionGroup}">
+                <StackPanel Margin="0,0,0,10">
+                  <TextBlock Text="{Binding Provider}"
+                             FontWeight="SemiBold"
+                             FontSize="11"
+                             Foreground="{DynamicResource Brush.TextMuted}"
+                             Margin="0,0,0,4" />
+                  <ItemsControl ItemsSource="{Binding Sessions}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="{x:Type vm:AgentSessionRow}">
+                        <Border Padding="0,5"
+                                BorderBrush="{DynamicResource Brush.Border}"
+                                BorderThickness="0,0,0,1">
+                          <Grid>
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="*" />
+                              <ColumnDefinition Width="Auto" />
+                              <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                              <TextBlock Text="{Binding Title}"
+                                         TextTrimming="CharacterEllipsis"
+                                         ToolTip="{Binding Title}" />
+                              <TextBlock Text="{Binding Workspace}"
+                                         Style="{StaticResource Caption}"
+                                         FontFamily="{StaticResource Font.Mono}"
+                                         TextTrimming="CharacterEllipsis"
+                                         ToolTip="{Binding Workspace}"
+                                         Margin="0,1,0,0" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding LastSeen}"
+                                       Style="{StaticResource Caption}"
+                                       Foreground="{DynamicResource Brush.TextMuted}"
+                                       Margin="0,0,8,0" />
+                            <Border Grid.Column="2"
+                                    Style="{StaticResource StatusPill}"
+                                    Visibility="{Binding Live, Converter={StaticResource BoolToVisibility}}">
+                              <TextBlock Text="LIVE" Style="{StaticResource StatusPillText}" />
+                            </Border>
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

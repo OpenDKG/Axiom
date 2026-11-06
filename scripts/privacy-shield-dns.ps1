@@ -34,7 +34,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 if (-not $BackupPath) {
-    $BackupPath = Join-Path $env:LOCALAPPDATA "Netpetra\privacy-shield-dns-backup.json"
+    $BackupPath = Join-Path $env:LOCALAPPDATA "Axiom\privacy-shield-dns-backup.json"
 }
 
 function Get-DnsSnapshot {

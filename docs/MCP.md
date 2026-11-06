@@ -13,11 +13,11 @@ terminate a process, read an arbitrary file or run a command.
 MCP client (OpenCode, another local agent)
         │  JSON-RPC over stdio, one process per client
         ▼
-Netpetra.McpServer.exe
+Axiom.McpServer.exe
         │  existing NDJSON Named Pipe protocol
-        │  \\.\pipe\Netpetra.Service.v1, DACL + client SID check
+        │  \\.\pipe\Axiom.Service.v1, DACL + client SID check
         ▼
-Netpetra.Service.exe
+Axiom.Service.exe
         │  read-only IP Helper snapshot, SQLite history, rule read-back
         ▼
 Windows host
@@ -28,21 +28,21 @@ Windows host
   SQLite or Windows Firewall COM objects directly.
 - The protocol is bounded by the service: 256 KiB request, 4 MiB response, 100 requests/s.
 - Diagnostics from the MCP host go to **stderr**. stdout is the JSON-RPC wire.
-- The server has no write tools. `netpetra_get_firewall_rules` reads capability and rules only.
+- The server has no write tools. `axiom_get_firewall_rules` reads capability and rules only.
 
 ## 2. Tools in PR A
 
 | Tool | Purpose | Important limitation |
 |---|---|---|
-| `netpetra_get_status` | Service health, source, last capture, capabilities and limitations | A live capture is not a complete host inventory |
-| `netpetra_list_connections` | Current sockets with bounded filters | Socket ownership can be unknown or `partial`; no packet contents |
-| `netpetra_get_connection_history` | Stored observations with paging and real coverage | Requested range may be longer than retained history |
-| `netpetra_inspect_process` | Observed executable path, PIDs, endpoints and quality | No hash, Authenticode, parent process or command line in the current IPC contract |
-| `netpetra_analyze_connection` | Deterministic private/loopback/public classification and uncertainty | No reputation provider; a new public destination is a lead, not proof. A row without an observed remote endpoint is `INSUFFICIENT_DATA`, not local/low risk. |
-| `netpetra_get_threat_alerts` | Reports that no alert store exists yet | Empty alerts are **not** a clean bill of health |
-| `netpetra_get_reputation` | Reports that no local cache/provider is configured | Unknown is not clean; no external request is sent |
-| `netpetra_get_firewall_rules` | Axiom-owned rules, capability and write-gate state | A stored rule is not proof that an observed connection was blocked |
-| `netpetra_generate_security_report` | Bounded summary from stored observations | History-only; no packet, DNS, TLS or byte evidence |
+| `axiom_get_status` | Service health, source, last capture, capabilities and limitations | A live capture is not a complete host inventory |
+| `axiom_list_connections` | Current sockets with bounded filters | Socket ownership can be unknown or `partial`; no packet contents |
+| `axiom_get_connection_history` | Stored observations with paging and real coverage | Requested range may be longer than retained history |
+| `axiom_inspect_process` | Observed executable path, PIDs, endpoints and quality | No hash, Authenticode, parent process or command line in the current IPC contract |
+| `axiom_analyze_connection` | Deterministic private/loopback/public classification and uncertainty | No reputation provider; a new public destination is a lead, not proof. A row without an observed remote endpoint is `INSUFFICIENT_DATA`, not local/low risk. |
+| `axiom_get_threat_alerts` | Reports that no alert store exists yet | Empty alerts are **not** a clean bill of health |
+| `axiom_get_reputation` | Reports that no local cache/provider is configured | Unknown is not clean; no external request is sent |
+| `axiom_get_firewall_rules` | Axiom-owned rules, capability and write-gate state | A stored rule is not proof that an observed connection was blocked |
+| `axiom_generate_security_report` | Bounded summary from stored observations | History-only; no packet, DNS, TLS or byte evidence |
 
 All outputs include `schemaVersion`, scope/coverage and limitations. The server does not return
 `SAFE`; `UNKNOWN` and `INSUFFICIENT_DATA` are valid, visible outcomes.
@@ -63,15 +63,15 @@ All outputs include `schemaVersion`, scope/coverage and limitations. The server 
 ## 4. Build and run
 
 ```powershell
-dotnet build src\Netpetra.McpServer\Netpetra.McpServer.csproj -c Release
-dotnet run --project src\Netpetra.McpServer
+dotnet build src\Axiom.McpServer\Axiom.McpServer.csproj -c Release
+dotnet run --project src\Axiom.McpServer
 ```
 
 Then register the executable (or the `dotnet run` command) as a **local stdio MCP server** in the
 client. Registration is manual in PR A; no client config is written automatically.
 
-Smoke test used during development: initialise, list tools, call `netpetra_get_threat_alerts` and
-`netpetra_get_reputation`, and call `netpetra_get_status` with the service stopped. The last call
+Smoke test used during development: initialise, list tools, call `axiom_get_threat_alerts` and
+`axiom_get_reputation`, and call `axiom_get_status` with the service stopped. The last call
 returned `UNAVAILABLE`; the MCP process stayed alive and stdout remained valid JSON-RPC.
 
 ## 5. Testing truth
@@ -80,7 +80,7 @@ Executed:
 
 | Check | Result |
 |---|---|
-| `dotnet build src\Netpetra.McpServer` | passed, 0 warnings / 0 errors |
+| `dotnet build src\Axiom.McpServer` | passed, 0 warnings / 0 errors |
 | MCP `initialize` then `tools/list` over stdin | passed; 9 tools advertised |
 | `tools/call` for unavailable status/alerts/reputation | passed; structured `UNAVAILABLE`, no crash |
 | Raw JSON-RPC harness against a temporary console service | passed; status, current connections, history and report returned real observations |
@@ -88,7 +88,7 @@ Executed:
 
 **Not run:** a real MCP client (OpenCode/another agent) driving the tools, a model-generated
 investigation, or any action against a live protected host. Those are integration checks for a
-later PR and are not claimed here. The temporary service used a separate `NETPETRA_DATA_DIR` and
+later PR and are not claimed here. The temporary service used a separate `AXIOM_DATA_DIR` and
 was stopped after the check.
 
 ## 6. Planned follow-up PRs

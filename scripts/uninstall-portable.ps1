@@ -4,16 +4,16 @@
     Removes the per-user portable Axiom installation.
 
 .DESCRIPTION
-    Removes only the files installed by install-portable.ps1 (Netpetra.Desktop.exe,
-    Netpetra.Service.exe, install.json) and the Start Menu shortcut. User data is kept unless
+    Removes only the files installed by install-portable.ps1 (Axiom.Desktop.exe,
+    Axiom.Service.exe, install.json) and the Start Menu shortcut. User data is kept unless
     -RemoveData is specified. No administrator rights are required and no Windows service or firewall
     rule is touched.
 
 .PARAMETER InstallDir
-    Installation directory. Defaults to %LOCALAPPDATA%\Programs\Netpetra.
+    Installation directory. Defaults to %LOCALAPPDATA%\Programs\Axiom.
 
 .PARAMETER RemoveData
-    Also remove the local Netpetra database (netpetra.db and WAL sidecars). Unknown files are kept.
+    Also remove the local Axiom database (axiom.db and WAL sidecars). Unknown files are kept.
 
 .EXAMPLE
     .\scripts\uninstall-portable.ps1
@@ -22,7 +22,7 @@
     .\scripts\uninstall-portable.ps1 -RemoveData
 #>
 param(
-    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Netpetra"),
+    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Axiom"),
     [switch]$RemoveData
 )
 
@@ -74,21 +74,23 @@ function Remove-SafeItem {
     }
 }
 
-if (Get-Process -Name "Netpetra.Desktop","Netpetra.Service" -ErrorAction SilentlyContinue) {
+if (Get-Process -Name "Axiom.Desktop","Axiom.Service","Netpetra.Desktop","Netpetra.Service" -ErrorAction SilentlyContinue) {
     throw "Axiom is running. Close it before uninstalling."
 }
 
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-$startupValue = Get-ItemProperty -Path $runKey -Name "Netpetra" -ErrorAction SilentlyContinue
-if ($null -ne $startupValue) {
-    Remove-ItemProperty -Path $runKey -Name "Netpetra" -ErrorAction SilentlyContinue
-    Write-Host "Removed Axiom autostart entry."
+foreach ($startupName in @("Axiom", "Netpetra")) {
+    $startupValue = Get-ItemProperty -Path $runKey -Name $startupName -ErrorAction SilentlyContinue
+    if ($null -ne $startupValue) {
+        Remove-ItemProperty -Path $runKey -Name $startupName -ErrorAction SilentlyContinue
+        Write-Host "Removed $startupName autostart entry."
+    }
 }
 
 $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
-$shortcutPath = Join-Path $startMenu "Netpetra.lnk"
-$axiomShortcutPath = Join-Path $startMenu "Axiom.lnk"
-foreach ($candidate in @($axiomShortcutPath, $shortcutPath)) {
+$shortcutPath = Join-Path $startMenu "Axiom.lnk"
+$legacyShortcutPath = Join-Path $startMenu "Netpetra.lnk"
+foreach ($candidate in @($shortcutPath, $legacyShortcutPath)) {
     if (Test-Path $candidate) {
         Remove-SafeItem -Path $candidate
         Write-Host "Removed shortcut: $candidate"
@@ -96,6 +98,8 @@ foreach ($candidate in @($axiomShortcutPath, $shortcutPath)) {
 }
 
 $installedFiles = @(
+    (Join-Path $InstallDir "Axiom.Desktop.exe"),
+    (Join-Path $InstallDir "Axiom.Service.exe"),
     (Join-Path $InstallDir "Netpetra.Desktop.exe"),
     (Join-Path $InstallDir "Netpetra.Service.exe"),
     (Join-Path $InstallDir "install.json")
@@ -118,38 +122,42 @@ if ((Test-Path $communityDir) -and -not (Get-ChildItem $communityDir -Force)) {
     Remove-SafeItem -Path $communityDir
 }
 
-if (Test-Path $InstallDir) {
-    $remaining = @(Get-ChildItem $InstallDir -Force)
-    if ($remaining.Count -eq 0) {
-        Remove-SafeItem -Path $InstallDir
-        Write-Host "Removed empty directory: $InstallDir"
-    }
-    else {
-        Write-Host "Kept $InstallDir because it still contains files:" -ForegroundColor Yellow
-        $remaining | ForEach-Object { Write-Host "  $($_.Name)" }
+$legacyInstallDir = Join-Path $env:LOCALAPPDATA "Programs\Netpetra"
+foreach ($dir in @($InstallDir, $legacyInstallDir)) {
+    if (Test-Path $dir) {
+        $remaining = @(Get-ChildItem $dir -Force)
+        if ($remaining.Count -eq 0) {
+            Remove-SafeItem -Path $dir
+            Write-Host "Removed empty directory: $dir"
+        }
+        else {
+            Write-Host "Kept $dir because it still contains files:" -ForegroundColor Yellow
+            $remaining | ForEach-Object { Write-Host "  $($_.Name)" }
+        }
     }
 }
 
 if ($RemoveData) {
-    $dataDir = Join-Path $env:LOCALAPPDATA "Netpetra"
-    foreach ($name in @("netpetra.db", "netpetra.db-wal", "netpetra.db-shm")) {
-        $path = Join-Path $dataDir $name
-        if (Test-Path $path) {
-            Remove-SafeItem -Path $path
-            Write-Host "Removed data file: $path"
+    foreach ($dataDir in @((Join-Path $env:LOCALAPPDATA "Axiom"), (Join-Path $env:LOCALAPPDATA "Netpetra"))) {
+        foreach ($name in @("axiom.db", "axiom.db-wal", "axiom.db-shm", "netpetra.db", "netpetra.db-wal", "netpetra.db-shm")) {
+            $path = Join-Path $dataDir $name
+            if (Test-Path $path) {
+                Remove-SafeItem -Path $path
+                Write-Host "Removed data file: $path"
+            }
         }
-    }
 
-    if (Test-Path $dataDir) {
-        $remainingData = @(Get-ChildItem $dataDir -Force)
-        if ($remainingData.Count -eq 0) {
-            Remove-SafeItem -Path $dataDir
-            Write-Host "Removed empty data directory: $dataDir"
+        if (Test-Path $dataDir) {
+            $remainingData = @(Get-ChildItem $dataDir -Force)
+            if ($remainingData.Count -eq 0) {
+                Remove-SafeItem -Path $dataDir
+                Write-Host "Removed empty data directory: $dataDir"
+            }
         }
     }
 }
 else {
-    Write-Host "Local data was kept at $(Join-Path $env:LOCALAPPDATA 'Netpetra'). Use -RemoveData to delete it."
+    Write-Host "Local data was kept at $(Join-Path $env:LOCALAPPDATA 'Axiom'). Use -RemoveData to delete it."
 }
 
 Write-Host "Axiom portable installation removed." -ForegroundColor Green

@@ -60,8 +60,8 @@ if (-not $OutputDir) {
 }
 
 $dotnet = Resolve-Dotnet
-$project = Join-Path $root "src\Netpetra.Desktop\Netpetra.Desktop.csproj"
-$serviceProject = Join-Path $root "src\Netpetra.Service\Netpetra.Service.csproj"
+$project = Join-Path $root "src\Axiom.Desktop\Axiom.Desktop.csproj"
+$serviceProject = Join-Path $root "src\Axiom.Service\Axiom.Service.csproj"
 
 Write-Host "Publishing Axiom $Version (win-x64)..." -ForegroundColor Cyan
 & $dotnet publish $project -c Release -p:PublishProfile=win-x64-selfcontained
@@ -75,10 +75,10 @@ Remove-Item $serviceOutput -Recurse -Force -ErrorAction SilentlyContinue
     -o $serviceOutput
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish (service) failed with exit code $LASTEXITCODE." }
 
-$exe = Join-Path $root "artifacts\publish\win-x64\Netpetra.Desktop.exe"
+$exe = Join-Path $root "artifacts\publish\win-x64\Axiom.Desktop.exe"
 if (-not (Test-Path $exe)) { throw "Published executable not found: $exe" }
 
-$serviceExe = Join-Path $serviceOutput "Netpetra.Service.exe"
+$serviceExe = Join-Path $serviceOutput "Axiom.Service.exe"
 if (-not (Test-Path $serviceExe)) { throw "Published service not found: $serviceExe" }
 
 Write-Host "Publishing single-file Axiom Setup..." -ForegroundColor Cyan
@@ -87,7 +87,7 @@ $setupOutput = Join-Path $root "artifacts\publish\setup"
 & powershell -NoProfile -ExecutionPolicy Bypass -File $setupScript -OutputDir $setupOutput
 if ($LASTEXITCODE -ne 0) { throw "Setup publish failed with exit code $LASTEXITCODE." }
 
-$setupExe = Join-Path $setupOutput "Netpetra.Setup.exe"
+$setupExe = Join-Path $setupOutput "Axiom.Setup.exe"
 if (-not (Test-Path $setupExe)) { throw "Published setup not found: $setupExe" }
 
 $communityDir = Join-Path $root "artifacts\publish\win-x64\community"

@@ -4,9 +4,9 @@
 
 | Process | Rights | What it does |
 |---|---|---|
-| `Netpetra.Desktop.exe` | `asInvoker` | UI; reads IP Helper or calls the pipe |
-| `Netpetra.Service.exe` | `asInvoker` (console mode) | polls IP Helper, writes SQLite, serves the pipe |
-| `Netpetra.McpServer.exe` | `asInvoker`, same user | read-only MCP tools; calls the authenticated pipe only |
+| `Axiom.Desktop.exe` | `asInvoker` | UI; reads IP Helper or calls the pipe |
+| `Axiom.Service.exe` | `asInvoker` (console mode) | polls IP Helper, writes SQLite, serves the pipe |
+| `Axiom.McpServer.exe` | `asInvoker`, same user | read-only MCP tools; calls the authenticated pipe only |
 
 In production the service would run under a service account (FND-009); the UI stays unprivileged.
 There are no COM/WFP/ETW/netsh calls, no firewall writes and no outbound network communication.
@@ -16,7 +16,7 @@ in the service.
 
 ## 2. Named Pipe protection
 
-- `\\.\pipe\Netpetra.Service.v1`.
+- `\\.\pipe\Axiom.Service.v1`.
 - Explicit DACL: allow the service account + one SID; deny `Network`/`Anonymous`/`Guests`.
 - The client process SID is read from its token after connect; a mismatch closes the connection.
 - Limits: request 256 KiB, response 4 MiB, 100 requests/s, 30 s idle, 4 instances.
@@ -28,8 +28,8 @@ in the service.
 
 ## 3. Data at rest (FND-005)
 
-- Database: `%LOCALAPPDATA%\Netpetra\netpetra.db` (per-user/console mode) or
-  `%ProgramData%\Netpetra\` (installed service). `NETPETRA_DATA_DIR` overrides the path.
+- Database: `%LOCALAPPDATA%\Axiom\axiom.db` (per-user/console mode) or
+  `%ProgramData%\Axiom\` (installed service). `AXIOM_DATA_DIR` overrides the path.
 - Only **connection metadata** is stored: process name/path, PID, protocol, local/remote endpoint,
   state, direction, quality, first/last seen.
 - No payload, TLS content, DNS queries, tokens or credentials are stored.
@@ -37,16 +37,16 @@ in the service.
 - SQLite WAL; `foreign_keys=ON`; `integrity_check` at startup.
 - A corrupt file is moved to `.corrupt-<timestamp>` (not deleted) and the database is recreated.
 - CSV export writes to a path the user explicitly selects; UTF-8 BOM; escaping.
-- The installer (FND-009) must set an explicit ACL on `%ProgramData%\Netpetra\`; development
+- The installer (FND-009) must set an explicit ACL on `%ProgramData%\Axiom\`; development
   uses per-user LocalAppData.
 
 ## 4. Firewall write gate (FND-006)
 
 - `WindowsFirewallPolicyAdapter` uses the documented COM policy/rule objects on a dedicated STA
   thread. Read-only listing and verification are enabled; writes are gated.
-- Both variables must be present on the service process: `NETPETRA_ENABLE_FIREWALL_WRITES=1` and
-  `NETPETRA_FIREWALL_WRITE_CONFIRM=yes`. A normal build starts with both unset.
-- Only exact `Netpetra::{id}::{OUT|IN}` names are created or removed; no wildcard, prefix or group
+- Both variables must be present on the service process: `AXIOM_ENABLE_FIREWALL_WRITES=1` and
+  `AXIOM_FIREWALL_WRITE_CONFIRM=yes`. A normal build starts with both unset.
+- Only exact `Axiom::{id}::{OUT|IN}` names are created or removed; no wildcard, prefix or group
   deletion exists.
 - The coordinator writes pending/applied/failed state and an audit row (actor SID, time, action,
   result, spec, error) in the same SQLite transaction as the rule state.
@@ -117,7 +117,7 @@ submission. See [STORE.md](STORE.md).
   or application identity and does not claim per-process DNS attribution.
 - Counters and top blocked domains are in memory. A bounded, local blocked-query history (last 1,000)
   stores only blocked domain, category and timestamp in
-  `%LOCALAPPDATA%\Netpetra\privacy-shield-blocked.jsonl`; allowed queries are never stored, and the
+  `%LOCALAPPDATA%\Axiom\privacy-shield-blocked.jsonl`; allowed queries are never stored, and the
   user can clear it. No other DNS history is written to SQLite or any other store.
 - If no non-loopback system DNS is available, the service uses a conservative public fallback
   (`1.1.1.1`/`9.9.9.9`) and reports it, so a manually configured loopback adapter does not lose all

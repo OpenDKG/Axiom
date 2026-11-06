@@ -1,0 +1,370 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<UserControl x:Class="Axiom.UI.Views.FirewallRulesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Axiom.UI.ViewModels">
+
+  <Grid Margin="24,18,24,14">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <Border Style="{StaticResource NoticeCard}">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <StackPanel Grid.Column="0">
+          <TextBlock Text="Windows Firewall inventory"
+                     FontSize="12"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource Brush.TextPrimary}" />
+          <TextBlock Style="{StaticResource BodyMuted}"
+                     Margin="0,3,0,0"
+                     Text="{Binding NoticeText}" />
+        </StackPanel>
+        <Border Grid.Column="1"
+                Style="{StaticResource StatusPill}"
+                Background="Transparent"
+                BorderBrush="{DynamicResource Brush.Warning}"
+                VerticalAlignment="Top">
+          <TextBlock Text="{Binding NoticeBadgeText}" Style="{StaticResource StatusPillText}" Foreground="{DynamicResource Brush.Warning}" />
+        </Border>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" Margin="0,14,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+
+      <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,10,0">
+        <StackPanel>
+          <TextBlock Text="CAPABILITY" Style="{StaticResource MetricLabel}" />
+          <TextBlock Text="{Binding CapabilityStatusText}">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock" BasedOn="{StaticResource MetricValue}">
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding CapabilityStatusText}" Value="Available">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding CapabilityStatusText}" Value="Unavailable">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+          <TextBlock Text="{Binding CapabilityDetail}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,4,0,0"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="1" Style="{StaticResource Card}" Margin="0,0,10,0">
+        <StackPanel>
+          <TextBlock Text="OWNED RULES" Style="{StaticResource MetricLabel}" />
+          <TextBlock Text="{Binding OwnedRuleCountText}" Style="{StaticResource MetricValue}" />
+          <TextBlock Text="Axiom-owned rules use the Axiom:: prefix" Style="{StaticResource Caption}" Margin="0,4,0,0" />
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="2" Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Text="WRITE PATH" Style="{StaticResource MetricLabel}" />
+          <TextBlock Text="{Binding WritePathText}">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock" BasedOn="{StaticResource MetricValue}">
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding WritePathText}" Value="disabled">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding WritePathText}" Value="enabled (test VM only)">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+          <TextBlock Text="no rule can be created without the explicit gate" Style="{StaticResource Caption}" Margin="0,4,0,0" />
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Border Grid.Row="2" Style="{StaticResource Card}" Padding="14" Margin="0,14,0,0">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Grid.Column="0"
+                   Text="{Binding StatusText}"
+                   Style="{StaticResource BodyMuted}"
+                   TextWrapping="Wrap"
+                   VerticalAlignment="Center" />
+        <Button Grid.Column="1"
+                Style="{StaticResource GhostButton}"
+                Content="Recheck Windows policy"
+                IsEnabled="{Binding CanRecheck}"
+                Command="{Binding RefreshCommand}"
+                VerticalAlignment="Center"
+                Margin="12,0,0,0"
+                ToolTip="Reads the capability and owned rules again. Does not change any rule." />
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,14,0,0">
+      <Expander IsExpanded="True"
+                HorizontalContentAlignment="Stretch"
+                Foreground="{DynamicResource Brush.TextPrimary}">
+        <Expander.Header>
+          <StackPanel>
+            <TextBlock Text="Firewall configuration" Style="{StaticResource SectionTitle}" />
+            <TextBlock Text="Rule defaults and a direct owned-rule editor"
+                       Style="{StaticResource Caption}" Margin="0,2,0,0" />
+          </StackPanel>
+        </Expander.Header>
+
+        <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+          <StackPanel>
+            <TextBlock Text="Rule defaults are editable now. Applying or removing a Windows Firewall rule requires the explicit service write gate below."
+                       Style="{StaticResource BodyMuted}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,10" />
+            <TextBlock Text="Rule defaults" Style="{StaticResource SectionTitle}" />
+            <TextBlock Text="These defaults are applied to new block rules created from Applications."
+                       Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,8" />
+            <WrapPanel>
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Domain"
+                        IsChecked="{Binding DefaultDomain, Mode=TwoWay}" Margin="0,0,16,6" />
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Private"
+                        IsChecked="{Binding DefaultPrivate, Mode=TwoWay}" Margin="0,0,16,6" />
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Public"
+                        IsChecked="{Binding DefaultPublic, Mode=TwoWay}" />
+            </WrapPanel>
+            <Grid Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="150" />
+                <ColumnDefinition Width="18" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+              <TextBlock Text="Protocol" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding ProtocolOptions}"
+                        SelectedItem="{Binding DefaultProtocolText, Mode=TwoWay}"
+                        Margin="0,0,0,8" />
+              <TextBlock Grid.Row="1" Text="Addresses" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
+                       Style="{StaticResource FilterTextBox}"
+                       Text="{Binding DefaultAddressesText, UpdateSourceTrigger=PropertyChanged}"
+                       ToolTip="Optional IPv4/IPv6 addresses or CIDR ranges; empty means any." />
+            </Grid>
+            <Grid Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Ports" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Style="{StaticResource FilterTextBox}"
+                       Text="{Binding DefaultPortsText, UpdateSourceTrigger=PropertyChanged}"
+                       ToolTip="Optional remote port list or range; empty means any." />
+            </Grid>
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+              <Button Style="{StaticResource GhostButton}" Content="Save defaults"
+                      Command="{Binding SaveDefaultsCommand}" Margin="0,0,8,0" />
+              <Button Style="{StaticResource GhostButton}" Content="Reset defaults"
+                      Command="{Binding ResetDefaultsCommand}" />
+            </StackPanel>
+            <TextBlock Text="{Binding DefaultsStatusText}" Style="{StaticResource Caption}"
+                       TextWrapping="Wrap" Margin="0,6,0,0" />
+
+            <Border Height="1" Background="{DynamicResource Brush.Border}" Margin="0,14" />
+
+            <TextBlock Text="Create or update an owned rule" Style="{StaticResource SectionTitle}" />
+            <TextBlock Text="{Binding NewRuleWriteHint}" Style="{StaticResource Caption}"
+                       TextWrapping="Wrap" Margin="0,3,0,8" />
+
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Application" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Style="{StaticResource FilterTextBox}"
+                       Text="{Binding NewRulePath, UpdateSourceTrigger=PropertyChanged}"
+                       AutomationProperties.Name="New firewall rule executable path" />
+              <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="Browse..."
+                      Command="{Binding BrowseNewRuleExecutableCommand}" Margin="8,0,0,0" />
+            </Grid>
+
+            <Grid Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="150" />
+                <ColumnDefinition Width="18" />
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="150" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Direction" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding DirectionOptions}"
+                        SelectedItem="{Binding NewRuleDirectionText, Mode=TwoWay}" />
+              <TextBlock Grid.Column="3" Text="Action" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <ComboBox Grid.Column="4" ItemsSource="{Binding ActionOptions}"
+                        SelectedItem="{Binding NewRuleActionText, Mode=TwoWay}" />
+            </Grid>
+
+            <WrapPanel Margin="0,8,0,0">
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Domain"
+                        IsChecked="{Binding NewRuleDomain, Mode=TwoWay}" Margin="0,0,16,6" />
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Private"
+                        IsChecked="{Binding NewRulePrivate, Mode=TwoWay}" Margin="0,0,16,6" />
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Public"
+                        IsChecked="{Binding NewRulePublic, Mode=TwoWay}" Margin="0,0,16,6" />
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Enabled"
+                        IsChecked="{Binding NewRuleEnabled, Mode=TwoWay}" />
+            </WrapPanel>
+
+            <Grid Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="150" />
+                <ColumnDefinition Width="18" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Protocol" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding ProtocolOptions}"
+                        SelectedItem="{Binding NewRuleProtocolText, Mode=TwoWay}" />
+            </Grid>
+            <Grid Margin="0,6,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Ports" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Style="{StaticResource FilterTextBox}"
+                       Text="{Binding NewRulePortsText, UpdateSourceTrigger=PropertyChanged}" />
+            </Grid>
+            <Grid Margin="0,6,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Addresses" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Style="{StaticResource FilterTextBox}"
+                       Text="{Binding NewRuleAddressesText, UpdateSourceTrigger=PropertyChanged}"
+                       ToolTip="Optional addresses/CIDR; empty means any." />
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+              <Button Style="{StaticResource GhostButton}" Content="Apply rule"
+                      Command="{Binding ApplyNewRuleCommand}" Margin="0,0,8,0"
+                      ToolTip="Create or update this Axiom-owned rule. Requires the explicit write gate." />
+              <TextBlock Text="{Binding NewRuleStatusText}" Style="{StaticResource Caption}"
+                         TextWrapping="Wrap" VerticalAlignment="Center" MaxWidth="520" />
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </Expander>
+    </Border>
+
+    <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0" Margin="0,14,0,0">
+      <DockPanel>
+        <Border DockPanel.Dock="Top"
+                Padding="16,12,16,10"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,0,0,1">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="Owned rules" Style="{StaticResource SectionTitle}" />
+              <TextBlock Text="Only rules named Axiom::{id}::{OUT|IN} are listed."
+                         Style="{StaticResource Caption}"
+                         Margin="0,2,0,0" />
+            </StackPanel>
+            <Border Grid.Column="1" Style="{StaticResource StatusPill}" VerticalAlignment="Top">
+              <TextBlock Text="LIVE READ" Style="{StaticResource StatusPillText}" />
+            </Border>
+          </Grid>
+        </Border>
+
+        <Grid>
+          <DataGrid Style="{StaticResource TableDataGrid}"
+                    ItemsSource="{Binding Rules}"
+                    AutomationProperties.Name="Owned firewall rules"
+                    Margin="0,0,0,6">
+            <DataGrid.RowStyle>
+              <Style TargetType="DataGridRow" BasedOn="{StaticResource TableRow}">
+                <Setter Property="ToolTip" Value="{Binding Tooltip}" />
+              </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="RULE" Width="1.5*" Binding="{Binding OsRuleName}" ElementStyle="{StaticResource TableText}" />
+              <DataGridTextColumn Header="APPLICATION" Width="1.2*" Binding="{Binding Application}" ElementStyle="{StaticResource TableText}" />
+              <DataGridTextColumn Header="DIR" Width="44" Binding="{Binding DirectionText}" ElementStyle="{StaticResource TableText}" />
+              <DataGridTextColumn Header="ACTION" Width="64" Binding="{Binding ActionText}" ElementStyle="{StaticResource TableText}" />
+              <DataGridTextColumn Header="PROFILES" Width="1.4*" Binding="{Binding ProfilesText}" ElementStyle="{StaticResource TableText}" />
+              <DataGridTextColumn Header="PROTO" Width="58" Binding="{Binding ProtocolText}" ElementStyle="{StaticResource TableText}" />
+              <DataGridTextColumn Header="PORTS" Width="80" Binding="{Binding PortsText}" ElementStyle="{StaticResource TableText}" />
+              <DataGridTextColumn Header="ENABLED" Width="70" Binding="{Binding EnabledText}" ElementStyle="{StaticResource TableText}" />
+              <DataGridTextColumn Header="STATE" Width="80" Binding="{Binding StateText}" ElementStyle="{StaticResource TableText}" />
+              <DataGridTemplateColumn Header="ACTION" Width="86">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <Button Style="{StaticResource GhostButton}"
+                            Content="Remove"
+                            Padding="8,3"
+                            FontSize="11"
+                            Command="{Binding DataContext.RemoveRuleCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                            CommandParameter="{Binding}"
+                            ToolTip="Remove this owned rule. Requires the explicit write gate." />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+            </DataGrid.Columns>
+          </DataGrid>
+
+          <Border Background="{DynamicResource Brush.Surface}"
+                  Margin="0,0,0,6"
+                  Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520">
+              <TextBlock Text="No owned rules"
+                         Style="{StaticResource EmptyStateTitle}"
+                         HorizontalAlignment="Center" />
+              <TextBlock Style="{StaticResource BodyMuted}"
+                         TextAlignment="Center"
+                         Margin="0,6,0,0"
+                         Text="{Binding StatusText}" />
+              <TextBlock Style="{StaticResource Caption}"
+                         TextAlignment="Center"
+                         Margin="0,8,0,0"
+                         Text="An empty list means Axiom owns no rule; it does not mean Windows Firewall is inactive." />
+            </StackPanel>
+          </Border>
+        </Grid>
+      </DockPanel>
+    </Border>
+
+    <TextBlock Grid.Row="5"
+               Style="{StaticResource Caption}"
+               Margin="2,8,0,0"
+               TextWrapping="Wrap"
+               Text="Windows Firewall remains the enforcement authority. External rules and Group Policy can still block or allow traffic; this page reports only Axiom-owned rules." />
+  </Grid>
+</UserControl>

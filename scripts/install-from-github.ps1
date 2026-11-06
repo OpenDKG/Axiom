@@ -12,14 +12,14 @@
     Release tag without the leading v (for example 0.4.0). Defaults to the latest release.
 
 .PARAMETER InstallDir
-    Target directory. Defaults to %LOCALAPPDATA%\Programs\Netpetra.
+    Target directory. Defaults to %LOCALAPPDATA%\Programs\Axiom.
 
 .PARAMETER NoLaunch
     Install without starting the desktop.
 
 .PARAMETER Token
     Optional GitHub token for a private repository. When omitted, the installer reads
-    NETPETRA_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN. Never pass a token on a shared command line.
+    AXIOM_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN. Never pass a token on a shared command line.
 
 .EXAMPLE
     irm https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-github.ps1 | iex
@@ -29,12 +29,12 @@
 
 .EXAMPLE
     # Private repository: reuse an authenticated GitHub CLI session.
-    $env:NETPETRA_GITHUB_TOKEN = gh auth token
+    $env:AXIOM_GITHUB_TOKEN = gh auth token
     .\install-from-github.ps1
 #>
 param(
     [string]$Version = "",
-    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Netpetra"),
+    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Axiom"),
     [switch]$NoLaunch,
     [string]$Token = ""
 )
@@ -48,6 +48,9 @@ $headers = @{
 
 $tokenValue = if (-not [string]::IsNullOrWhiteSpace($Token)) {
     $Token
+}
+elseif (-not [string]::IsNullOrWhiteSpace($env:AXIOM_GITHUB_TOKEN)) {
+    $env:AXIOM_GITHUB_TOKEN
 }
 elseif (-not [string]::IsNullOrWhiteSpace($env:NETPETRA_GITHUB_TOKEN)) {
     $env:NETPETRA_GITHUB_TOKEN
@@ -76,7 +79,7 @@ try {
     $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers
 }
 catch {
-    throw "Could not read release metadata. If the repository is private, set NETPETRA_GITHUB_TOKEN (for example: `$env:NETPETRA_GITHUB_TOKEN = gh auth token). $($_.Exception.Message)"
+    throw "Could not read release metadata. If the repository is private, set AXIOM_GITHUB_TOKEN (for example: `$env:AXIOM_GITHUB_TOKEN = gh auth token). $($_.Exception.Message)"
 }
 
 $zipAsset = $release.assets | Where-Object { $_.name -like "Axiom-*-win-x64.zip" } | Select-Object -First 1
@@ -92,7 +95,7 @@ if (-not $zipAsset -or -not $sumAsset) {
     throw "The release does not contain an Axiom archive (or legacy Netpetra archive) and SHA256SUMS.txt."
 }
 
-$temp = Join-Path $env:TEMP ("netpetra-install-" + [Guid]::NewGuid().ToString("N"))
+$temp = Join-Path $env:TEMP ("axiom-install-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $temp | Out-Null
 
 try {
@@ -126,7 +129,7 @@ try {
     Write-Host "Checksum verified." -ForegroundColor Green
     Expand-Archive -Path $zipPath -DestinationPath $temp -Force
 
-    $desktop = Join-Path $temp "Netpetra.Desktop.exe"
+    $desktop = Join-Path $temp "Axiom.Desktop.exe"
     $installer = Join-Path $temp "install-portable.ps1"
     if (-not (Test-Path $desktop) -or -not (Test-Path $installer)) {
         throw "The archive is incomplete."
@@ -135,7 +138,7 @@ try {
     & $installer -Source $desktop -InstallDir $InstallDir
 
     if (-not $NoLaunch) {
-        $installed = Join-Path $InstallDir "Netpetra.Desktop.exe"
+        $installed = Join-Path $InstallDir "Axiom.Desktop.exe"
         Start-Process -FilePath $installed
         Write-Host "Started Axiom." -ForegroundColor Green
     }
