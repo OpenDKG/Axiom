@@ -180,7 +180,7 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
 
     public string NoticeText => WritesEnabled
         ? "Rules are read through the service with the documented INetFwPolicy2 COM objects. Writes are enabled for this test session; each change requires confirmation and is audited."
-        : "Rules are read through the service with the documented INetFwPolicy2 COM objects. This session is read-only.";
+        : "This session is read-only for Windows Firewall changes. Rule defaults below are editable and are used by new rules from Applications. Apply/Remove need the service write gate: NETPETRA_ENABLE_FIREWALL_WRITES=1 and NETPETRA_FIREWALL_WRITE_CONFIRM=yes.";
 
     public string NoticeBadgeText => WritesEnabled ? "TEST VM" : "READ-ONLY";
 
