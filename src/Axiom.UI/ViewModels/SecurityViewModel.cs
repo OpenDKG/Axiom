@@ -91,6 +91,8 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
         "gemini" => "Gemini CLI",
         "windsurf" => "Windsurf Cascade",
         "cline" => "Cline",
+        "zcode" => "ZCode",
+        "deepseek" => "DeepSeek Harness",
         _ => Kind,
     };
 
@@ -111,7 +113,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
 
     public bool IsProtected => Status == "PROTECTED";
 
-    public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude" or "cursor" or "copilot" or "gemini" or "windsurf" or "cline";
+    public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude" or "cursor" or "copilot" or "gemini" or "windsurf" or "cline" or "zcode" or "deepseek";
 
     public string TestResult { get; init; } = string.Empty;
 
@@ -161,6 +163,10 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private readonly WindsurfProtection _windsurfProtection = new();
 
     private readonly ClineProtection _clineProtection = new();
+
+    private readonly ZCodeProtection _zCodeProtection = new();
+
+    private readonly DeepSeekProtection _deepSeekProtection = new();
 
     private readonly AgentHookProbe _agentHookProbe = new();
 
@@ -335,12 +341,12 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     public string AgentStatusText => DistributionContext.IsStorePackage
         ? "Microsoft Store build: optional DKG/Blackbox modules and agent hooks are excluded."
         : "DKG and Blackbox status, install actions and the workspaces they report. " +
-          "OpenCode, OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI, Gemini CLI, Windsurf Cascade, Cline and Hermes are listed below; an installed hook is not proof of runtime blocking.";
+          "OpenCode, OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI, Gemini CLI, Windsurf Cascade, Cline, ZCode, DeepSeek Harness and Hermes are listed below; an installed hook is not proof of runtime blocking.";
 
     public string AgentHookInstallHint => DistributionContext.IsStorePackage
         ? "Agent hook installation is not available in the Microsoft Store build."
-        : "Status refresh is read-only. Agent hooks are installed only when you choose Install/Repair hooks and select " +
-          "Complete installation; Partial installation leaves all agent hook files unchanged.";
+        : "Status refresh is read-only. Axiom provisions Axiom-managed hooks for detected harnesses at startup; " +
+          "Install/Repair hooks can force a repair. Partial installation leaves all agent hook files unchanged.";
 
     public string SecurityStatusTitle
     {
@@ -838,6 +844,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 allowedChanges.Add(_geminiProtection.SettingsPath);
                 allowedChanges.Add(_windsurfProtection.HooksPath);
                 allowedChanges.Add(_clineProtection.HookPath);
+                allowedChanges.Add(_zCodeProtection.ConfigPath);
+                allowedChanges.Add(_deepSeekProtection.HooksPath);
+                allowedChanges.Add(_deepSeekProtection.PatchPath);
                 allowedChanges.Add(_uninstaller.OpenCodePlugin);
                 allowedChanges.Add(_uninstaller.OpenCodeV1Plugin);
                 allowedChanges.Add(_uninstaller.OpenCodeLegacyPlugin);
@@ -909,7 +918,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (!dialog.CompleteInstallation)
         {
-            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber, Codex, Claude Code, Cursor, Copilot, Gemini, Windsurf or Cline hook files were changed.";
+            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber, Codex, Claude Code, Cursor, Copilot, Gemini, Windsurf, Cline, ZCode or DeepSeek Harness hook files were changed.";
             return;
         }
 
@@ -922,6 +931,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         var gemini = _geminiProtection.EnsureInstalled();
         var windsurf = _windsurfProtection.EnsureInstalled();
         var cline = _clineProtection.EnsureInstalled();
+        var zCode = _zCodeProtection.EnsureInstalled();
+        var deepSeek = _deepSeekProtection.EnsureInstalled();
 
         var allowedHookChanges = new[]
         {
@@ -947,6 +958,11 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             _windsurfProtection.HooksPath,
             _windsurfProtection.HookScriptPath,
             _clineProtection.HookPath,
+            _zCodeProtection.ConfigPath,
+            _zCodeProtection.HookScriptPath,
+            _deepSeekProtection.HooksPath,
+            _deepSeekProtection.PatchPath,
+            _deepSeekProtection.HookScriptPath,
         };
         var unexpectedChanges = await Task.Run(
             () => _userStateProtection.Verify(snapshot, allowedHookChanges)).ConfigureAwait(true);
@@ -967,7 +983,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}, " +
             $"Cursor {(cursor ? "installed" : "skipped")}, GitHub Copilot CLI {(copilot ? "installed" : "skipped")}, " +
             $"Gemini CLI {(gemini ? "installed" : "skipped")}, Windsurf Cascade {(windsurf ? "installed" : "skipped")}, " +
-            $"Cline {(cline ? "installed" : "skipped")}. " +
+            $"Cline {(cline ? "installed" : "skipped")}, ZCode {(zCode ? "installed" : "skipped")}, " +
+            $"DeepSeek Harness {(deepSeek ? "installed" : "skipped")}. " +
             "Existing managed hook files are backed up beside the originals. " +
             "MCP server definitions, selected models, favorites, sessions and Antigravity history were not changed.";
         await RefreshAsync().ConfigureAwait(true);
@@ -1091,6 +1108,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         AddGeminiAgents(blackboxConnected);
         AddWindsurfAgents(blackboxConnected);
         AddClineAgents(blackboxConnected);
+        AddZCodeAgents(blackboxConnected);
+        AddDeepSeekAgents(blackboxConnected);
         AddOpenCodeAgents(blackboxConnected);
 
         if (!blackboxConnected)
@@ -1431,6 +1450,69 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         ProtectedAgents.Add(new ProtectedAgent(
             "cline",
             _clineProtection.HookPath,
+            status,
+            detail));
+    }
+
+    private void AddZCodeAgents(bool blackboxConnected)
+    {
+        if (!_zCodeProtection.IsZCodeDetected)
+        {
+            return;
+        }
+
+        var installed = _zCodeProtection.IsInstalled;
+        var evidence = _agentEvidence.Latest("zcode", EvidenceLifetime);
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected, auditOnly: IsAuditOnly);
+        var detail = !installed
+            ? "ZCode config detected; the user-scope Axiom hook entries are missing or malformed."
+            : evidence is null
+                ? "Hook config detected; runtime not verified. ZCode snapshots hooks at session start, so restart it or start a new session."
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
+
+        ProtectedAgents.Add(new ProtectedAgent(
+            "zcode",
+            _zCodeProtection.ConfigPath,
+            status,
+            detail));
+    }
+
+    private void AddDeepSeekAgents(bool blackboxConnected)
+    {
+        if (!_deepSeekProtection.IsDeepSeekDetected)
+        {
+            return;
+        }
+
+        var configured = _deepSeekProtection.IsConfigured;
+        var installed = _deepSeekProtection.IsInstalled;
+        var evidence = _agentEvidence.Latest("deepseek", EvidenceLifetime);
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected, auditOnly: IsAuditOnly);
+        var detail = !configured
+            ? "DeepSeek Harness home detected; the Axiom hook file or bridge mount is missing."
+            : !_deepSeekProtection.IsBridgeInstalled
+                ? "Axiom hooks are prepared, but DeepSeek's dsh-hooks-claude-code bridge is not installed in a DSH profile."
+                : evidence is null
+                    ? "Hook config and bridge mount detected; runtime not verified. Restart DSH."
+                    : evidence.IsFailure
+                        ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                        : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
+
+        ProtectedAgents.Add(new ProtectedAgent(
+            "deepseek",
+            _deepSeekProtection.HooksPath,
             status,
             detail));
     }

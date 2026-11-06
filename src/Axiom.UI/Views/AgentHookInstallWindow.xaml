@@ -27,7 +27,7 @@
             Margin="0,18,0,0">
       <StackPanel>
         <TextBlock Text="Partial installation" FontWeight="SemiBold" />
-        <TextBlock Text="Install no agent hooks now. Do not create, replace or delete OpenCode, OpenChamber, Codex, Claude Code, Cursor, Copilot, Gemini, Windsurf or Cline hook files."
+        <TextBlock Text="Install no agent hooks now. Do not create, replace or delete OpenCode, OpenChamber, Codex, Claude Code, Cursor, Copilot, Gemini, Windsurf, Cline, ZCode or DeepSeek Harness hook files."
                    Style="{StaticResource Caption}"
                    TextWrapping="Wrap"
                    Margin="0,3,0,0" />
@@ -42,11 +42,11 @@
             Margin="0,10,0,0">
       <StackPanel>
         <TextBlock Text="Complete installation" FontWeight="SemiBold" />
-        <TextBlock Text="Install or repair Axiom guard hooks for detected OpenCode/OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI, Gemini CLI, Windsurf Cascade and Cline. Existing Axiom-managed files are backed up first."
+        <TextBlock Text="Install or repair Axiom guard hooks for detected OpenCode/OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI, Gemini CLI, Windsurf Cascade, Cline, ZCode and DeepSeek Harness. Existing Axiom-managed files are backed up first."
                    Style="{StaticResource Caption}"
                    TextWrapping="Wrap"
                    Margin="0,3,0,0" />
-        <TextBlock Text="Will write only: %USERPROFILE%\.config\opencode\plugins\axiom-blackbox.ts; %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-guard-bridge.py; %USERPROFILE%\.codex\hooks.json (axiom-codex-hook.py entry only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-codex-hook.py; %USERPROFILE%\.claude\settings.json (axiom-claude-hook.py PreToolUse entry only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-claude-hook.py; %USERPROFILE%\.cursor\hooks.json (axiom-cursor-hook.py preToolUse entry only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-cursor-hook.py; %USERPROFILE%\.copilot\hooks\axiom.json; %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-copilot-hook.py; %USERPROFILE%\.gemini\settings.json (BeforeTool entry only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-gemini-hook.py; %USERPROFILE%\.codeium\windsurf\hooks.json (pre_run_command, pre_write_code and pre_mcp_tool_use entries only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-windsurf-hook.py; %USERPROFILE%\Documents\Cline\Hooks\PreToolUse.py."
+        <TextBlock Text="Will write only: %USERPROFILE%\.config\opencode\plugins\axiom-blackbox.ts; %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-guard-bridge.py; %USERPROFILE%\.codex\hooks.json (axiom-codex-hook.py entry only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-codex-hook.py; %USERPROFILE%\.claude\settings.json (axiom-claude-hook.py PreToolUse entry only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-claude-hook.py; %USERPROFILE%\.cursor\hooks.json (axiom-cursor-hook.py preToolUse entry only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-cursor-hook.py; %USERPROFILE%\.copilot\hooks\axiom.json; %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-copilot-hook.py; %USERPROFILE%\.gemini\settings.json (BeforeTool entry only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-gemini-hook.py; %USERPROFILE%\.codeium\windsurf\hooks.json (pre_run_command, pre_write_code and pre_mcp_tool_use entries only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-windsurf-hook.py; %USERPROFILE%\Documents\Cline\Hooks\PreToolUse.py; %USERPROFILE%\.zcode\cli\config.json (Axiom user-hook entries only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-zcode-hook.py; %USERPROFILE%\.dsh\axiom-hooks.json; %USERPROFILE%\.dsh\cordis.patch.yml (Axiom bridge row only); %LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-deepseek-hook.py."
                    Style="{StaticResource Caption}"
                    FontFamily="Consolas"
                    FontSize="11"

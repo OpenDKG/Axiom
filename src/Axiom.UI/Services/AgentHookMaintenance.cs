@@ -73,6 +73,12 @@ public static class AgentHookMaintenance
         var cline = new ClineProtection();
         Ensure(() => cline.IsInstalled, () => cline.EnsureInstalled(), refreshExisting);
 
+        var zCode = new ZCodeProtection();
+        Ensure(() => zCode.IsInstalled, () => zCode.EnsureInstalled(), refreshExisting);
+
+        var deepSeek = new DeepSeekProtection();
+        Ensure(() => deepSeek.IsConfigured, () => deepSeek.EnsureInstalled(), refreshExisting);
+
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(marker)!);

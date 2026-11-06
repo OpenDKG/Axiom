@@ -43,6 +43,8 @@ public sealed class AgentHookProbe
                 "gemini" => await TestGeminiAsync(token).ConfigureAwait(false),
                 "windsurf" => await TestWindsurfAsync(token).ConfigureAwait(false),
                 "cline" => await TestClineAsync(token).ConfigureAwait(false),
+                "zcode" => await TestLifecycleScriptAsync("ZCode", "axiom-zcode-hook.py", token).ConfigureAwait(false),
+                "deepseek" => await TestLifecycleScriptAsync("DeepSeek Harness", "axiom-deepseek-hook.py", token).ConfigureAwait(false),
                 "opencode" => await TestOpenCodeAsync("OpenCode", token).ConfigureAwait(false),
                 "openchamber" => await TestOpenCodeAsync("OpenChamber", token).ConfigureAwait(false),
                 _ => new AgentHookTestResult(
@@ -547,6 +549,67 @@ public sealed class AgentHookProbe
         {
             return false;
         }
+    }
+
+    private async Task<AgentHookTestResult> TestLifecycleScriptAsync(
+        string label,
+        string scriptName,
+        CancellationToken cancellationToken)
+    {
+        var root = Path.Combine(_localAppData, "Axiom", "modules", "blackbox", "agent-blackbox");
+        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var hook = Path.Combine(root, scriptName);
+        if (!File.Exists(python) || !IsManagedScript(hook))
+        {
+            return new AgentHookTestResult("FAIL", $"{label} hook or Blackbox Python runtime is missing.");
+        }
+
+        var startInfo = new ProcessStartInfo(python)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = root,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        startInfo.ArgumentList.Add(hook);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Could not start the {label} hook.");
+        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
+        {
+            hook_event_name = "PreToolUse",
+            tool_name = "Read",
+            tool_input = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
+            session_id = "axiom-hook-test",
+            tool_use_id = Guid.NewGuid().ToString("N"),
+        })).ConfigureAwait(false);
+        process.StandardInput.Close();
+
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var output = await outputTask.ConfigureAwait(false);
+        _ = await errorTask.ConfigureAwait(false);
+
+        if (process.ExitCode != 0)
+        {
+            return new AgentHookTestResult("FAIL", $"{label} hook exited with {process.ExitCode}.");
+        }
+
+        if (IsDeniedCodexOutput(output))
+        {
+            return new AgentHookTestResult(
+                "BLOCKED",
+                $"{label} hook executed and returned permissionDecision: deny for the benign test call. " +
+                "The real agent process was not exercised.");
+        }
+
+        return new AgentHookTestResult(
+            "HOOK RAN",
+            $"{label} hook executed and reached the local guard without a block. " +
+            "The real agent process was not exercised.");
     }
 
     private async Task<AgentHookTestResult> TestOpenCodeAsync(string label, CancellationToken cancellationToken)

@@ -68,7 +68,7 @@ starts both local services. On the Agents page, **Install/repair agent hooks...*
 to repair immediately or to choose:
 
 - **Complete installation** to add/repair the Axiom guard hooks for detected agents;
-- **Partial installation** to leave every OpenCode/OpenChamber/Codex hook file unchanged.
+- **Partial installation** to leave every OpenCode/OpenChamber/Codex/ZCode/DeepSeek hook file unchanged.
 
 A complete OpenCode/OpenChamber installation writes:
 
@@ -177,6 +177,25 @@ marker-owned Python hook there and never overwrites a user-authored `PreToolUse.
 to the Blackbox guard and returns `cancel: true` with an `errorMessage` only when Blackbox blocks.
 **Partial installation** changes nothing. Cline hooks must be enabled and Cline may need a restart.
 
+### ZCode
+
+ZCode user hooks live in `~/.zcode/cli/config.json` under `hooks.events`. Axiom sets
+`hooks.enabled: true`, preserves unrelated hooks and keys, and adds the five lifecycle handlers
+(`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`) as `process` hooks that
+invoke `axiom-zcode-hook.py`. ZCode ignores project-level hook configuration; Axiom never writes
+project `.zcode` or `zcode.json` files. Restart ZCode or start a new session after installation
+because ZCode snapshots hooks at session start. **Partial installation** changes nothing.
+
+### DeepSeek Harness (DSH)
+
+DeepSeek Harness does not read a hook file by itself. Axiom writes the Claude-compatible lifecycle
+file to `~/.dsh/axiom-hooks.json` and adds one managed row to `~/.dsh/cordis.patch.yml` mounting
+DeepSeek's `@deepseek-ai/dsh-hooks-claude-code` bridge at that absolute path. Existing hooks and
+patch rows are preserved. The Agents page reports `DETECTED` until the bridge package is installed
+in a DSH profile; Axiom does not install or upgrade npm packages automatically. Once the bridge is
+present, restart DSH. The file uses the same five lifecycle events and the
+`axiom-deepseek-hook.py` adapter. **Partial installation** changes nothing.
+
 ### User-state protection
 
 Installation, hook repair, complete setup and uninstall are scoped to Axiom-owned files and the
@@ -185,6 +204,7 @@ marker-owned hook entry. Before each operation Axiom fingerprints user-owned sta
 - OpenCode/OpenChamber config, credentials, sessions, projects, chats and state databases.
 - Codex `config.toml`, `hooks.json`, `auth.json`, sessions, sqlite databases and state files.
 - Claude, Cursor and Copilot config, credentials and session state.
+- ZCode user configuration/instructions and DeepSeek Harness hook/config/profile state.
 - Hermes config, memories, skills, tools, hooks, pairing data and sessions.
 - Gemini and Antigravity config, MCP files, conversations, brain, cache and history databases.
 - Axiom theme, tray, reputation, community and onboarding settings.

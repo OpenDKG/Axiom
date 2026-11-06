@@ -60,15 +60,15 @@
           <TextBlock Text="Network activity &amp; security" Style="{StaticResource Caption}"
                      VerticalAlignment="Center" />
         </StackPanel>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Stretch">
-          <Button Style="{StaticResource GhostButton}" Width="46" Height="33" Padding="0"
-                  Content="—" ToolTip="Minimize" AutomationProperties.Name="Minimize Axiom"
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,4,0">
+          <Button Style="{StaticResource CaptionButton}" Width="44" Height="30" Padding="0"
+                  Content="&#xE921;" ToolTip="Minimize" AutomationProperties.Name="Minimize Axiom"
                   shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnMinimizeClicked" />
-          <Button x:Name="MaximizeButton" Style="{StaticResource GhostButton}" Width="46" Height="33" Padding="0"
-                  Content="□" ToolTip="Maximize" AutomationProperties.Name="Maximize Axiom"
+          <Button x:Name="MaximizeButton" Style="{StaticResource CaptionButton}" Width="44" Height="30" Padding="0"
+                  Content="&#xE922;" ToolTip="Maximize" AutomationProperties.Name="Maximize Axiom"
                   shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnMaximizeClicked" />
-          <Button Style="{StaticResource GhostButton}" Width="46" Height="33" Padding="0"
-                  Content="×" ToolTip="Close Axiom" AutomationProperties.Name="Close Axiom"
+          <Button Style="{StaticResource CaptionCloseButton}" Width="44" Height="30" Padding="0"
+                  Content="&#xE8BB;" ToolTip="Close Axiom" AutomationProperties.Name="Close Axiom"
                   shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnCloseClicked" />
         </StackPanel>
       </Grid>

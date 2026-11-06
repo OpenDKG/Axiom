@@ -138,6 +138,10 @@ public sealed class UserStateProtectionTests
         Assert.Contains(Path.Combine(temp.Root, ".config", "openchamber", "projects"), directories);
         Assert.Contains(Path.Combine(temp.Root, ".codex", "sessions"), directories);
         Assert.Contains(Path.Combine(temp.Root, ".claude"), directories);
+        Assert.Contains(Path.Combine(temp.Root, ".zcode", "cli", "config.json"), files);
+        Assert.Contains(Path.Combine(temp.Root, ".zcode"), directories);
+        Assert.Contains(Path.Combine(temp.Root, ".dsh", "cordis.patch.yml"), files);
+        Assert.Contains(Path.Combine(temp.Root, ".dsh", "profiles"), directories);
         Assert.Contains(Path.Combine(temp.Root, ".gemini", "antigravity", "conversations"), directories);
         Assert.Contains(Path.Combine(temp.LocalAppData, "hermes", "sessions"), directories);
         Assert.Contains(Path.Combine(temp.RoamingAppData, "Cursor", "User", "globalStorage", "state.vscdb"), files);

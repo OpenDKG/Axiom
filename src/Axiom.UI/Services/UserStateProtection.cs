@@ -145,6 +145,17 @@ public sealed class UserStateProtection
                 HomeFile(".copilot/mcp-config.json", "Copilot MCP config"),
                 HomeFile(".copilot/hooks/axiom.json", "Copilot hooks"),
 
+                // ZCode user configuration and hook bridge.
+                HomeFile(".zcode/cli/config.json", "ZCode config"),
+                HomeFile(".zcode/AGENTS.md", "ZCode instructions"),
+
+                // DeepSeek Harness configuration and its Claude hook bridge mount.
+                HomeFile(".dsh/hooks.json", "DeepSeek hooks"),
+                HomeFile(".dsh/axiom-hooks.json", "DeepSeek hooks"),
+                HomeFile(".dsh/cordis.yml", "DeepSeek config"),
+                HomeFile(".dsh/cordis.patch.yml", "DeepSeek config"),
+                HomeFile(".dsh/AGENTS.md", "DeepSeek instructions"),
+
                 // Hermes user state and Blackbox-managed Hermes configuration.
                 LocalFile("hermes/config.yaml", "Hermes config"),
                 LocalFile("hermes/SOUL.md", "Hermes memory"),
@@ -231,6 +242,10 @@ public sealed class UserStateProtection
                 HomeDir(".claude", "Claude state"),
                 HomeDir(".cursor", "Cursor state"),
                 HomeDir(".copilot", "Copilot state"),
+                HomeDir(".zcode", "ZCode state", Recursive: false),
+                HomeDir(".zcode/cli", "ZCode config", Recursive: false),
+                HomeDir(".dsh", "DeepSeek Harness state", Recursive: false),
+                HomeDir(".dsh/profiles", "DeepSeek profiles", Recursive: false),
 
                 // Hermes user state. Installer-owned plugin/bin directories are intentionally excluded.
                 LocalDir("hermes", "Hermes state", Recursive: false),

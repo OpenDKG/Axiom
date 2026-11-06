@@ -392,7 +392,7 @@
                     RowHeight="28"
                     PreviewMouseRightButtonDown="OnDataGridPreviewMouseRightButtonDown">
             <DataGrid.ContextMenu>
-              <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+              <ContextMenu Style="{StaticResource AxiomContextMenu}" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                 <MenuItem Header="Copy finding" Command="{Binding CopyFindingCommand}" />
               </ContextMenu>
             </DataGrid.ContextMenu>
@@ -460,7 +460,7 @@
                     RowHeight="28"
                     PreviewMouseRightButtonDown="OnDataGridPreviewMouseRightButtonDown">
             <DataGrid.ContextMenu>
-              <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+              <ContextMenu Style="{StaticResource AxiomContextMenu}" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                 <MenuItem Header="Copy hook evidence" Command="{Binding CopyHookEvidenceCommand}" />
               </ContextMenu>
             </DataGrid.ContextMenu>
@@ -485,7 +485,7 @@
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
               <TextBlock Text="Recognized agents" Style="{StaticResource SectionTitle}" />
-              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber, Codex and Claude Code workspaces. Codex trust state is read from Codex itself; installed hooks are not proof of runtime blocking."
+              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber, Codex, Claude Code, ZCode and DeepSeek Harness workspaces. Codex trust state is read from Codex itself; installed hooks are not proof of runtime blocking."
                          Style="{StaticResource Caption}"
                          Margin="0,2,0,0" />
             </StackPanel>
@@ -513,7 +513,7 @@
                         BorderBrush="{DynamicResource Brush.Border}"
                         BorderThickness="0,0,0,1">
                   <Border.ContextMenu>
-                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                    <ContextMenu Style="{StaticResource AxiomContextMenu}" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                       <MenuItem Header="Copy agent details" Click="OnCopyProtectedAgentClick" />
                     </ContextMenu>
                   </Border.ContextMenu>
@@ -639,7 +639,7 @@
                                 BorderBrush="{DynamicResource Brush.Border}"
                                 BorderThickness="0,0,0,1">
                           <Border.ContextMenu>
-                            <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                            <ContextMenu Style="{StaticResource AxiomContextMenu}" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                               <MenuItem Header="Copy session details" Click="OnCopySessionClick" />
                             </ContextMenu>
                           </Border.ContextMenu>

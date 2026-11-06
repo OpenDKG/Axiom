@@ -9,7 +9,7 @@ SDK: 10.0.403. Configuration: `Release`.
 |---|---|
 | `dotnet restore Axiom.sln --locked-mode` | passed (also after standalone publish) |
 | `dotnet build Axiom.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Axiom.sln -c Release --no-build` | **353/353 passed** |
+| `dotnet test Axiom.sln -c Release --no-build` | **355/355 passed** |
 | `dotnet publish src\Axiom.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 70.1 MB single EXE |
 
 | Test project | Count | Notes |
@@ -20,7 +20,7 @@ SDK: 10.0.403. Configuration: `Release`.
 | Infrastructure.Windows | 40 | IP Helper, pipe, COM read-only adapter |
 | Service | 16 | coordinator with a fake adapter, Privacy Shield rollback and persistence |
 | MCP server | 33 | endpoint parsing, private IPv4/IPv6, indicator type, invalid-input handling, truthful unavailable states |
-| UI | 135 | view models, settings stores, lifecycle hook contracts, Codex trust hashes, session readers, OpenCode lifecycle generation, firewall defaults and display status |
+| UI | 137 | view models, settings stores, lifecycle hook contracts, Codex trust hashes, session readers, OpenCode lifecycle generation, ZCode/DeepSeek hook generation, firewall defaults and display status |
 
 ### History coverage
 

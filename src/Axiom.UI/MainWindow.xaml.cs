@@ -89,7 +89,7 @@ public partial class MainWindow : Window
         }
 
         var maximized = WindowState == WindowState.Maximized;
-        MaximizeButton.Content = maximized ? "❐" : "□";
+        MaximizeButton.Content = maximized ? "\uE923" : "\uE922";
         MaximizeButton.ToolTip = maximized ? "Restore" : "Maximize";
         AutomationProperties.SetName(MaximizeButton, maximized ? "Restore Axiom" : "Maximize Axiom");
     }

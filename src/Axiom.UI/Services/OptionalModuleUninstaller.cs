@@ -147,6 +147,8 @@ public sealed class OptionalModuleUninstaller
         new GeminiProtection().Remove();
         new WindsurfProtection().Remove();
         new ClineProtection().Remove();
+        new ZCodeProtection().Remove();
+        new DeepSeekProtection().Remove();
         RemoveManagedOpenCodePlugin();
     }
 

@@ -20,7 +20,7 @@ Explicitly excluded:
 
 - OriginTrail DKG and Umanitek Blackbox installers;
 - OpenCode, OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI, Gemini CLI, Windsurf
-  Cascade, Cline and Hermes hook installation;
+  Cascade, Cline, ZCode, DeepSeek Harness and Hermes hook installation;
 - changes to third-party agent configuration;
 - HKCU `Run` autostart registration.
 
@@ -138,7 +138,7 @@ On a clean Windows test VM:
 - confirm the Security page has no DKG/Blackbox install actions;
 - confirm there is no Agents page and no hook installation action;
 - confirm no HKCU Run startup value is created;
-- confirm no OpenCode/Codex/Claude/Cursor/Copilot/Gemini/Windsurf/Cline files are changed;
+- confirm no OpenCode/Codex/Claude/Cursor/Copilot/Gemini/Windsurf/Cline/ZCode/DeepSeek files are changed;
 - close the app and confirm the bundled service process stops or is reusable;
 - upgrade the package to a newer version and confirm local data remains readable;
 - uninstall and confirm Windows removes the package data as expected.

@@ -46,6 +46,21 @@ public static class AgentBinaryLocator
         Exists(
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Windsurf", "Windsurf.exe"));
 
+    public static bool IsZCodeAvailable() =>
+        OnPath("zcode") ||
+        Exists(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "zcode.cmd"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "zcode", "zcode.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "ZCode", "ZCode.exe"));
+
+    public static bool IsDeepSeekAvailable() =>
+        OnPath("dsh") ||
+        OnPath("deepseek") ||
+        Exists(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "dsh.cmd"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "dsh", "dsh.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin", "dsh.exe"));
+
     public static bool IsClineAvailable()
     {
         if (OnPath("cline") ||
