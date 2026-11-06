@@ -91,8 +91,8 @@ Service in console mode + published standalone UI with `--service`.
 | E06 | Reconnect without restarting the UI | ✅ | `fnd003-service-recovered.png` |
 | E07 | Standalone EXE (no SDK) | ✅ | all screenshots |
 | E08 | CSV export | ⚠️ code + escaping; dialog not automated | — |
-| E09 | Nine-page navigation (Overview, Connections, Applications, Events, Agents, Firewall, Files, Security, Settings); Agents sits above Firewall | ✅ | `agents-nav.png`, `agents-page.png`, `security-no-agents.png` |
-| E10 | Files points at the working local scan on Security; background tracking is explicitly disabled | ✅ no fake scanner | `files-open-security.png` |
+| E09 | Navigation exposes Overview, Connections, Applications, Events, Agents, Firewall, Security, Privacy Shield, AI Analyst, Support and Settings; Agents sits above Firewall | PASS | `agents-nav.png`, `agents-page.png`, `security-no-agents.png` |
+| E10 | The redundant Files tab is absent; the working local SHA-256 scan remains on Security and background tracking is explicitly disabled | PASS | `security-local-scan.png` |
 | E11 | Connections shows the unknown country placeholder | ✅ | `fnd006-connections.png` |
 | E12 | Overview 5m chart shows `LIVE COUNTERS` from timestamped system-wide interface samples; longer ranges show an explicit unavailable state; markers use first-seen time | ✅ | `traffic-live2.png` |
 | E13 | Firewall page reads capability `Available`, 0 owned rules and write path `disabled` | ✅ no rule changed | `netpetra-firewall.png` |

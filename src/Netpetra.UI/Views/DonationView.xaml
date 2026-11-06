@@ -1,0 +1,167 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<UserControl x:Class="Netpetra.UI.Views.DonationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto"
+                HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="24,18,24,24" HorizontalAlignment="Stretch">
+      <Border Style="{StaticResource Card}">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <StackPanel Grid.Column="0">
+            <TextBlock Text="Support Axiom" FontWeight="SemiBold" FontSize="22"
+                       Foreground="{DynamicResource Brush.TextPrimary}" />
+            <TextBlock Text="Independent, open-source network monitoring for everyone."
+                       Style="{StaticResource BodyMuted}" Margin="0,7,0,0" />
+            <TextBlock Text="Your support can help maintain the application, test new Windows versions and improve detection and accessibility."
+                       Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap" />
+          </StackPanel>
+          <Border Grid.Column="1"
+                  Style="{StaticResource StatusPill}"
+                  Margin="14,0,0,0"
+                  VerticalAlignment="Top">
+            <TextBlock Text="100% OPTIONAL" Style="{StaticResource StatusPillText}" />
+          </Border>
+        </Grid>
+      </Border>
+
+      <TextBlock Text="{Binding SetupNote}" Style="{StaticResource Caption}"
+                 TextWrapping="Wrap" Margin="4,12,0,0" />
+
+      <Grid Margin="0,14,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="12" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="12" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Style="{StaticResource Card}" MinHeight="194">
+          <StackPanel>
+            <Border Width="38" Height="38" CornerRadius="10" HorizontalAlignment="Left"
+                    Background="{DynamicResource Brush.AccentSoft}">
+              <TextBlock Text="☕" FontSize="20" HorizontalAlignment="Center"
+                         VerticalAlignment="Center" />
+            </Border>
+            <TextBlock Text="Buy Me a Coffee" Style="{StaticResource SectionTitle}" Margin="0,12,0,0" />
+            <TextBlock Text="A simple one-time contribution through the creator's external page."
+                       TextWrapping="Wrap" Style="{StaticResource Caption}" Margin="0,5,0,0" />
+            <TextBlock Text="{Binding BuyMeACoffeeStatus}" Style="{StaticResource Caption}"
+                       Margin="0,8,0,0" />
+            <Button Content="Open Buy Me a Coffee" Style="{StaticResource GhostButton}"
+                    HorizontalAlignment="Stretch" Margin="0,12,0,0"
+                    Command="{Binding OpenDonationPageCommand}" CommandParameter="coffee"
+                    IsEnabled="{Binding HasBuyMeACoffee}"
+                    AutomationProperties.Name="Open Buy Me a Coffee donation page" />
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Column="2" Style="{StaticResource Card}" MinHeight="194">
+          <StackPanel>
+            <Border Width="38" Height="38" CornerRadius="10" HorizontalAlignment="Left"
+                    Background="{DynamicResource Brush.AccentSoft}">
+              <TextBlock Text="P" FontSize="21" FontWeight="Bold"
+                         Foreground="{DynamicResource Brush.Accent}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <TextBlock Text="PayPal" Style="{StaticResource SectionTitle}" Margin="0,12,0,0" />
+            <TextBlock Text="Support development through a verified external PayPal.Me link."
+                       TextWrapping="Wrap" Style="{StaticResource Caption}" Margin="0,5,0,0" />
+            <TextBlock Text="{Binding PayPalStatus}" Style="{StaticResource Caption}"
+                       Margin="0,8,0,0" />
+            <Button Content="Open PayPal" Style="{StaticResource GhostButton}"
+                    HorizontalAlignment="Stretch" Margin="0,12,0,0"
+                    Command="{Binding OpenDonationPageCommand}" CommandParameter="paypal"
+                    IsEnabled="{Binding HasPayPal}"
+                    AutomationProperties.Name="Open PayPal donation page" />
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Column="4" Style="{StaticResource Card}" MinHeight="194">
+          <StackPanel>
+            <Border Width="38" Height="38" CornerRadius="10" HorizontalAlignment="Left"
+                    Background="{DynamicResource Brush.AccentSoft}">
+              <TextBlock Text="★" FontSize="20" Foreground="{DynamicResource Brush.Accent}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <TextBlock Text="GitHub Sponsors" Style="{StaticResource SectionTitle}" Margin="0,12,0,0" />
+            <TextBlock Text="Sponsor the maintainer through GitHub's external sponsorship page."
+                       TextWrapping="Wrap" Style="{StaticResource Caption}" Margin="0,5,0,0" />
+            <TextBlock Text="{Binding GitHubSponsorsStatus}" Style="{StaticResource Caption}"
+                       Margin="0,8,0,0" />
+            <Button Content="Open GitHub Sponsors" Style="{StaticResource GhostButton}"
+                    HorizontalAlignment="Stretch" Margin="0,12,0,0"
+                    Command="{Binding OpenDonationPageCommand}" CommandParameter="github"
+                    IsEnabled="{Binding HasGitHubSponsors}"
+                    AutomationProperties.Name="Open GitHub Sponsors page" />
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Cryptocurrency" Style="{StaticResource SectionTitle}"
+                       VerticalAlignment="Center" />
+            <Border Grid.Column="1" Style="{StaticResource StatusPill}" VerticalAlignment="Center">
+              <TextBlock Text="PUBLIC ADDRESSES ONLY" Style="{StaticResource StatusPillText}" />
+            </Border>
+          </Grid>
+          <TextBlock Text="Send directly from your own wallet. Axiom does not connect to wallets, request keys, sign transactions or monitor payments."
+                     TextWrapping="Wrap" Style="{StaticResource BodyMuted}" Margin="0,7,0,0" />
+          <TextBlock Text="{Binding CryptoEmptyText}" TextWrapping="Wrap"
+                     Style="{StaticResource Caption}" Margin="0,9,0,0" />
+
+          <ItemsControl ItemsSource="{Binding CryptoOptions}" Margin="0,10,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0"
+                        Padding="0,12,0,10">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                      <TextBlock Text="{Binding Heading}" Style="{StaticResource SectionTitle}" />
+                      <TextBlock Text="{Binding Address}"
+                                 Foreground="{DynamicResource Brush.TextSecondary}"
+                                 FontFamily="{StaticResource Font.Mono}" TextWrapping="Wrap"
+                                 Margin="0,5,0,0" />
+                      <TextBlock Text="{Binding NetworkWarning}" Style="{StaticResource Caption}"
+                                 TextWrapping="Wrap" Margin="0,6,0,0" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Style="{StaticResource GhostButton}"
+                            Content="Copy address" VerticalAlignment="Center"
+                            Command="{Binding DataContext.CopyCryptoAddressCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            AutomationProperties.Name="Copy public cryptocurrency donation address" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <TextBlock Text="Privacy and safety" Style="{StaticResource SectionTitle}" />
+          <TextBlock Text="Donations never unlock firewall features, change security decisions or reduce protection. External links open in the default browser. Always verify the recipient on the provider's site and use the exact cryptocurrency network. Network transfers cannot usually be reversed."
+                     Style="{StaticResource BodyMuted}" TextWrapping="Wrap" Margin="0,8,0,0" />
+          <TextBlock Text="{Binding ActionStatus}" Style="{StaticResource Caption}"
+                     TextWrapping="Wrap" Margin="0,10,0,0" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

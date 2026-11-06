@@ -117,10 +117,19 @@
       </Border>
 
       <Border Style="{StaticResource Card}" Margin="0,14,0,0">
-        <StackPanel>
-          <TextBlock Text="Custom rules" Style="{StaticResource SectionTitle}" />
+        <Expander IsExpanded="False"
+                  HorizontalContentAlignment="Stretch"
+                  Foreground="{DynamicResource Brush.TextPrimary}">
+          <Expander.Header>
+            <StackPanel>
+              <TextBlock Text="Custom rules" Style="{StaticResource SectionTitle}" />
+              <TextBlock Text="Allowlist and custom blocklist overrides"
+                         Style="{StaticResource Caption}" Margin="0,2,0,0" />
+            </StackPanel>
+          </Expander.Header>
+          <StackPanel Margin="0,12,0,0">
           <TextBlock Text="One domain per line. Allow rules win over profile and custom block rules."
-                     Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,10" />
+                     Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10" />
 
           <TextBlock Text="Allowlist domains" Style="{StaticResource Caption}" />
           <TextBox AcceptsReturn="True"
@@ -153,7 +162,8 @@
             <Button Style="{StaticResource GhostButton}" Content="Clear form" Command="{Binding ClearDomainsCommand}" IsEnabled="{Binding IsSupported}" />
           </StackPanel>
           <TextBlock Text="{Binding LastErrorText}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" />
-        </StackPanel>
+          </StackPanel>
+        </Expander>
       </Border>
 
       <Border Style="{StaticResource Card}" Margin="0,14,0,0">
@@ -239,7 +249,7 @@
           <TextBlock Text="Local statistics" Style="{StaticResource SectionTitle}" />
           <TextBlock Text="{Binding StatsText}" Style="{StaticResource BodyMuted}" Margin="0,6,0,0" />
           <TextBlock Text="{Binding LastUpdatedText}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
-          <TextBlock Text="Counts and recent blocks are held in memory and reset when the resolver restarts. No DNS history is written to disk."
+          <TextBlock Text="Counts reset when the resolver restarts. Blocked-query history is stored locally (up to 1,000 entries) and can be cleared; allowed queries are never stored."
                      Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" />
           <StackPanel Margin="0,12,0,0">
             <TextBlock Text="Top blocked domains" Style="{StaticResource Caption}" />

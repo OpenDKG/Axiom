@@ -3,7 +3,7 @@ using System.Windows.Controls;
 
 namespace Netpetra.UI.Views;
 
-public partial class FilesView : UserControl
+public partial class DonationView : UserControl
 {
-    public FilesView() => InitializeComponent();
+    public DonationView() => InitializeComponent();
 }

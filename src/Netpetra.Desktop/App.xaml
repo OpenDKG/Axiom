@@ -26,9 +26,6 @@
       <DataTemplate DataType="{x:Type vm:EventsViewModel}">
         <views:EventsView />
       </DataTemplate>
-      <DataTemplate DataType="{x:Type vm:FilesViewModel}">
-        <views:FilesView />
-      </DataTemplate>
       <DataTemplate DataType="{x:Type vm:AgentsViewModel}">
         <views:AgentsView />
       </DataTemplate>
