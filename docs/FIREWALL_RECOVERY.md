@@ -36,6 +36,18 @@ Applied Windows Firewall rules remain in force when the service or UI stops. Axi
 remove rules on exit. The UI shows `Service unavailable`; use the commands above if the service
 cannot be started.
 
+## Firewall page configuration
+
+The Firewall page now has two configuration layers:
+
+- **Rule defaults** are per-user scope preferences (profiles, protocol, remote ports and addresses).
+  They are always editable and are applied to new block rules created from Applications.
+- **Create or update an owned rule** is a direct rule editor. Its fields can be prepared while the
+  write path is read-only, but **Apply rule** remains disabled until the service write gate is open.
+
+The page intentionally never creates, changes or removes a non-Axiom rule. The owned-rule table
+lists only names with the `Netpetra::` prefix and offers targeted removal when writes are enabled.
+
 ## Write gate
 
 The service refuses write commands unless both variables are set on the service process:
