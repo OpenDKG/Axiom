@@ -208,6 +208,10 @@ Windows Service
 
 ## Building and running
 
+The desktop starts the bundled service as a hidden background process. When the service is started
+manually, it hides its own console window; set `NETPETRA_KEEP_CONSOLE=1` before starting it only
+when you need the console logs for diagnostics.
+
 ```powershell
 dotnet restore Netpetra.sln --locked-mode
 dotnet build Netpetra.sln -c Release --no-restore
