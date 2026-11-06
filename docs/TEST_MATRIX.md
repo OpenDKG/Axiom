@@ -1,6 +1,6 @@
 # Test matrix — Axiom (FND-005)
 
-Date: 2026-11-04. Host: Windows 10 IoT Enterprise LTSC 2021, 10.0.19044, x64.
+Date: 2026-11-06. Host: Windows 10 IoT Enterprise LTSC 2021, 10.0.19044, x64.
 SDK: 10.0.403. Configuration: `Release`.
 
 ## 1. Automated checks (executed)
@@ -9,17 +9,18 @@ SDK: 10.0.403. Configuration: `Release`.
 |---|---|
 | `dotnet restore Netpetra.sln --locked-mode` | passed (also after standalone publish) |
 | `dotnet build Netpetra.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Netpetra.sln -c Release --no-build` | **172/172 passed** |
+| `dotnet test Netpetra.sln -c Release --no-build` | **338/338 passed** |
 | `dotnet publish src\Netpetra.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
 
 | Test project | Count | Notes |
 |---|---|---|
 | Core | 65 | deterministic rule identity, spec and CIDR/port validation |
-| Contracts | 24 | IPC contract, limits, optional-module probe, bounded history, local file hashing, VirusTotal and community feed |
+| Contracts | 49 | IPC contract, limits, optional-module probe, bounded history, local file hashing, VirusTotal and community feed |
 | Persistence | 12 | schema v2, history, firewall state and audit |
-| Infrastructure.Windows | 34 | IP Helper, pipe, COM read-only adapter |
-| Service | 5 | coordinator with a fake adapter |
-| MCP server | 32 | endpoint parsing, private IPv4/IPv6, indicator type, invalid-input handling, truthful unavailable states |
+| Infrastructure.Windows | 40 | IP Helper, pipe, COM read-only adapter |
+| Service | 13 | coordinator with a fake adapter |
+| MCP server | 33 | endpoint parsing, private IPv4/IPv6, indicator type, invalid-input handling, truthful unavailable states |
+| UI | 126 | view models, settings stores, protection adapters, firewall defaults and display status |
 
 ### History coverage
 

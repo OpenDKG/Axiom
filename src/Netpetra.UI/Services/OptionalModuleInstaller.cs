@@ -16,6 +16,9 @@ public sealed class OptionalModuleInstaller
 {
     private const string DkgPackage = "@origintrail-official/dkg@latest";
 
+    // Pinned vendor installer digest. Update only after reviewing a new official release.
+    private const string BlackboxInstallerSha256 = "261122F5E879596E88D63C30D5D36D12B4E155986F83AA3EB83ADEB406E41179";
+
     public string DkgRoot { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Netpetra",
@@ -147,8 +150,12 @@ public sealed class OptionalModuleInstaller
             $installer = Join-Path $dir 'blackbox-install.ps1'
             Write-Host 'Downloading the official Umanitek Blackbox installer...' -ForegroundColor Cyan
             Invoke-WebRequest -UseBasicParsing -Uri 'https://blackbox-w.umanitek.ai' -OutFile $installer
-            $hash = (Get-FileHash $installer -Algorithm SHA256).Hash
+            $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
             Write-Host "Installer SHA256: $hash" -ForegroundColor Yellow
+            if ($hash -ne '{{BlackboxInstallerSha256}}') {
+              throw "Blackbox installer hash mismatch. Expected {{BlackboxInstallerSha256}}, got $hash. Refusing to run an unpinned installer."
+            }
+            Write-Host 'Installer hash matches the pinned Axiom digest.' -ForegroundColor Green
             Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
             & $installer -StoreBackend oxigraph
             $venv = Join-Path $dir 'agent-blackbox\venv\Scripts\python.exe'

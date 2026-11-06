@@ -80,9 +80,16 @@ catch {
 }
 
 $zipAsset = $release.assets | Where-Object { $_.name -like "Axiom-*-win-x64.zip" } | Select-Object -First 1
+if (-not $zipAsset) {
+    # Compatibility bridge for releases published before the public Axiom rename.
+    $zipAsset = $release.assets | Where-Object { $_.name -like "Netpetra-*-win-x64.zip" } | Select-Object -First 1
+    if ($zipAsset) {
+        Write-Warning "Using the legacy Netpetra archive from this release. A newer Axiom-named release is preferred."
+    }
+}
 $sumAsset = $release.assets | Where-Object { $_.name -eq "SHA256SUMS.txt" } | Select-Object -First 1
 if (-not $zipAsset -or -not $sumAsset) {
-    throw "The release does not contain the expected Axiom archive and SHA256SUMS.txt."
+    throw "The release does not contain an Axiom archive (or legacy Netpetra archive) and SHA256SUMS.txt."
 }
 
 $temp = Join-Path $env:TEMP ("netpetra-install-" + [Guid]::NewGuid().ToString("N"))
