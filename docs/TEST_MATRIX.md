@@ -9,7 +9,7 @@ SDK: 10.0.403. Configuration: `Release`.
 |---|---|
 | `dotnet restore Netpetra.sln --locked-mode` | passed (also after standalone publish) |
 | `dotnet build Netpetra.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Netpetra.sln -c Release --no-build` | **348/348 passed** |
+| `dotnet test Netpetra.sln -c Release --no-build` | **351/351 passed** |
 | `dotnet publish src\Netpetra.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 58.8 MB single EXE |
 
 | Test project | Count | Notes |
@@ -18,7 +18,7 @@ SDK: 10.0.403. Configuration: `Release`.
 | Contracts | 50 | IPC contract, limits, optional-module probe, bounded history, local file hashing, VirusTotal and community feed |
 | Persistence | 14 | schema v2, history, firewall state and audit |
 | Infrastructure.Windows | 40 | IP Helper, pipe, COM read-only adapter |
-| Service | 13 | coordinator with a fake adapter |
+| Service | 16 | coordinator with a fake adapter, Privacy Shield rollback and persistence |
 | MCP server | 33 | endpoint parsing, private IPv4/IPv6, indicator type, invalid-input handling, truthful unavailable states |
 | UI | 133 | view models, settings stores, lifecycle hook contracts, Codex trust hashes, session readers, firewall defaults and display status |
 
