@@ -102,7 +102,26 @@ The package is a full-trust MSIX with `runFullTrust`, `internetClient` and
 `privateNetworkClientServer`. It is unsigned locally and signed by Microsoft during Store
 submission. See [STORE.md](STORE.md).
 
-## 8. Reporting vulnerabilities
+## 8. Privacy Shield (FND-020, initial local resolver)
+
+- Disabled by default; enabling is an explicit UI action. The service never changes adapter DNS,
+  the hosts file, firewall state or agent configuration.
+- The resolver binds UDP loopback only (`127.0.0.1`, and `::1` when available). It is not a LAN
+  resolver. TCP DNS fallback is not implemented.
+- Blocked queries are answered locally with NXDOMAIN. Allowed queries are forwarded to the current
+  Windows DNS servers or an explicitly configured non-loopback upstream.
+- The policy engine evaluates only the DNS question name. It does not inspect payloads, TLS, HTTP
+  or application identity and does not claim per-process DNS attribution.
+- Counters and top blocked domains are in memory. No DNS query history is written to SQLite or any
+  other store; settings contain only profiles, categories, ports, upstream and custom lists.
+- If no non-loopback system DNS is available, the service uses a conservative public fallback
+  (`1.1.1.1`/`9.9.9.9`) and reports it, so a manually configured loopback adapter does not lose all
+  resolution. Managed networks should set an explicit upstream.
+- DoH/DoT/DoQ, hardcoded IPs, VPN tunnels and pre-activation cache bypass the resolver. A blocked
+  query is not evidence that a connection was prevented.
+- See [PRIVACY_SHIELD.md](PRIVACY_SHIELD.md) for the user-facing safety and recovery contract.
+
+## 9. Reporting vulnerabilities
 
 Until a public channel exists, report directly to the project owner. Do not publish real SIDs,
 paths or database content in a reproduction.

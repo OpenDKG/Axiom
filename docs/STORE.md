@@ -12,6 +12,8 @@ Included:
 - local IP Helper monitoring with the bundled per-user service process;
 - history, applications, events, firewall inventory, overview and settings;
 - reputation-provider configuration, the community feed and local SHA-256 file scanning;
+- the opt-in local Privacy Shield DNS resolver (manual adapter DNS integration; no automatic DNS
+  adapter changes);
 - local CSV/support features.
 
 Explicitly excluded:

@@ -18,6 +18,9 @@ builder.Services.AddSingleton(new HistoryStore(DatabasePaths.ResolveForCurrentPr
 builder.Services.AddSingleton<WindowsFirewallPolicyAdapter>();
 builder.Services.AddSingleton<IFirewallPolicyAdapter>(provider => provider.GetRequiredService<WindowsFirewallPolicyAdapter>());
 builder.Services.AddSingleton<FirewallRuleCoordinator>();
+builder.Services.AddSingleton<PrivacyShieldSettingsStore>();
+builder.Services.AddSingleton<PrivacyShieldController>();
+builder.Services.AddHostedService<PrivacyShieldWorker>();
 
 builder.Services.AddSingleton<MonitoringWorker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<MonitoringWorker>());

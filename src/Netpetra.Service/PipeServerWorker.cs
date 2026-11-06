@@ -15,6 +15,7 @@ public sealed partial class PipeServerWorker(
     HistoryStore history,
     WindowsFirewallPolicyAdapter firewall,
     FirewallRuleCoordinator coordinator,
+    PrivacyShieldController privacyShield,
     ILogger<PipeServerWorker> logger) : BackgroundService
 {
     [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "Pipe {Pipe} allows SID {Sid}")]
@@ -51,6 +52,8 @@ public sealed partial class PipeServerWorker(
             (spec, actorSid, cancellationToken) => coordinator.ApplyAsync(spec, actorSid, cancellationToken),
             (managedRuleId, actorSid, cancellationToken) => coordinator.RemoveAsync(managedRuleId, actorSid, cancellationToken),
             (managedRuleId, cancellationToken) => coordinator.VerifyAsync(managedRuleId, cancellationToken),
+            (cancellationToken) => privacyShield.GetStatusAsync(cancellationToken),
+            (settings, cancellationToken) => privacyShield.ConfigureAsync(settings, cancellationToken),
             message => LogMessage(logger, message));
 
         await server.RunAsync(stoppingToken).ConfigureAwait(false);
