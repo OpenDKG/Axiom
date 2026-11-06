@@ -181,6 +181,7 @@ public sealed class UserStateProtection
                 LocalFile("Netpetra/privacy-shield-blocked.jsonl", "Netpetra Privacy Shield blocked history"),
                 LocalFile("Netpetra/ai-analyst.json", "Netpetra AI analyst settings"),
                 LocalFile("Netpetra/ai-findings.json", "Netpetra AI findings"),
+                LocalFile("Netpetra/firewall-defaults.json", "Netpetra firewall defaults"),
             };
 
             if (_includeHermesSettings)

@@ -9,6 +9,7 @@
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
@@ -121,7 +122,162 @@
       </Grid>
     </Border>
 
-    <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0" Margin="0,14,0,0">
+    <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,14,0,0">
+      <Expander IsExpanded="False"
+                HorizontalContentAlignment="Stretch"
+                Foreground="{DynamicResource Brush.TextPrimary}">
+        <Expander.Header>
+          <StackPanel>
+            <TextBlock Text="Firewall configuration" Style="{StaticResource SectionTitle}" />
+            <TextBlock Text="Rule defaults and a direct owned-rule editor"
+                       Style="{StaticResource Caption}" Margin="0,2,0,0" />
+          </StackPanel>
+        </Expander.Header>
+
+        <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+          <StackPanel>
+            <TextBlock Text="Rule defaults" Style="{StaticResource SectionTitle}" />
+            <TextBlock Text="These defaults are applied to new block rules created from Applications."
+                       Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,8" />
+            <WrapPanel>
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Domain"
+                        IsChecked="{Binding DefaultDomain, Mode=TwoWay}" Margin="0,0,16,6" />
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Private"
+                        IsChecked="{Binding DefaultPrivate, Mode=TwoWay}" Margin="0,0,16,6" />
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Public"
+                        IsChecked="{Binding DefaultPublic, Mode=TwoWay}" />
+            </WrapPanel>
+            <Grid Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="150" />
+                <ColumnDefinition Width="18" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+              <TextBlock Text="Protocol" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding ProtocolOptions}"
+                        SelectedItem="{Binding DefaultProtocolText, Mode=TwoWay}"
+                        Margin="0,0,0,8" />
+              <TextBlock Grid.Row="1" Text="Addresses" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
+                       Style="{StaticResource FilterTextBox}"
+                       Text="{Binding DefaultAddressesText, UpdateSourceTrigger=PropertyChanged}"
+                       ToolTip="Optional IPv4/IPv6 addresses or CIDR ranges; empty means any." />
+            </Grid>
+            <Grid Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Ports" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Style="{StaticResource FilterTextBox}"
+                       Text="{Binding DefaultPortsText, UpdateSourceTrigger=PropertyChanged}"
+                       ToolTip="Optional remote port list or range; empty means any." />
+            </Grid>
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+              <Button Style="{StaticResource GhostButton}" Content="Save defaults"
+                      Command="{Binding SaveDefaultsCommand}" Margin="0,0,8,0" />
+              <Button Style="{StaticResource GhostButton}" Content="Reset defaults"
+                      Command="{Binding ResetDefaultsCommand}" />
+            </StackPanel>
+            <TextBlock Text="{Binding DefaultsStatusText}" Style="{StaticResource Caption}"
+                       TextWrapping="Wrap" Margin="0,6,0,0" />
+
+            <Border Height="1" Background="{DynamicResource Brush.Border}" Margin="0,14" />
+
+            <TextBlock Text="Create or update an owned rule" Style="{StaticResource SectionTitle}" />
+            <TextBlock Text="{Binding NewRuleWriteHint}" Style="{StaticResource Caption}"
+                       TextWrapping="Wrap" Margin="0,3,0,8" />
+
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Application" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Style="{StaticResource FilterTextBox}"
+                       Text="{Binding NewRulePath, UpdateSourceTrigger=PropertyChanged}"
+                       AutomationProperties.Name="New firewall rule executable path" />
+              <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="Browse..."
+                      Command="{Binding BrowseNewRuleExecutableCommand}" Margin="8,0,0,0" />
+            </Grid>
+
+            <Grid Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="150" />
+                <ColumnDefinition Width="18" />
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="150" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Direction" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding DirectionOptions}"
+                        SelectedItem="{Binding NewRuleDirectionText, Mode=TwoWay}" />
+              <TextBlock Grid.Column="3" Text="Action" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <ComboBox Grid.Column="4" ItemsSource="{Binding ActionOptions}"
+                        SelectedItem="{Binding NewRuleActionText, Mode=TwoWay}" />
+            </Grid>
+
+            <WrapPanel Margin="0,8,0,0">
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Domain"
+                        IsChecked="{Binding NewRuleDomain, Mode=TwoWay}" Margin="0,0,16,6" />
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Private"
+                        IsChecked="{Binding NewRulePrivate, Mode=TwoWay}" Margin="0,0,16,6" />
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Public"
+                        IsChecked="{Binding NewRulePublic, Mode=TwoWay}" Margin="0,0,16,6" />
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Enabled"
+                        IsChecked="{Binding NewRuleEnabled, Mode=TwoWay}" />
+            </WrapPanel>
+
+            <Grid Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="150" />
+                <ColumnDefinition Width="18" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Protocol" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding ProtocolOptions}"
+                        SelectedItem="{Binding NewRuleProtocolText, Mode=TwoWay}" />
+            </Grid>
+            <Grid Margin="0,6,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Ports" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Style="{StaticResource FilterTextBox}"
+                       Text="{Binding NewRulePortsText, UpdateSourceTrigger=PropertyChanged}" />
+            </Grid>
+            <Grid Margin="0,6,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Addresses" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Style="{StaticResource FilterTextBox}"
+                       Text="{Binding NewRuleAddressesText, UpdateSourceTrigger=PropertyChanged}"
+                       ToolTip="Optional addresses/CIDR; empty means any." />
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+              <Button Style="{StaticResource GhostButton}" Content="Apply rule"
+                      Command="{Binding ApplyNewRuleCommand}" Margin="0,0,8,0"
+                      ToolTip="Create or update this Axiom-owned rule. Requires the explicit write gate." />
+              <TextBlock Text="{Binding NewRuleStatusText}" Style="{StaticResource Caption}"
+                         TextWrapping="Wrap" VerticalAlignment="Center" MaxWidth="520" />
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </Expander>
+    </Border>
+
+    <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0" Margin="0,14,0,0">
       <DockPanel>
         <Border DockPanel.Dock="Top"
                 Padding="16,12,16,10"
@@ -201,7 +357,7 @@
       </DockPanel>
     </Border>
 
-    <TextBlock Grid.Row="4"
+    <TextBlock Grid.Row="5"
                Style="{StaticResource Caption}"
                Margin="2,8,0,0"
                TextWrapping="Wrap"

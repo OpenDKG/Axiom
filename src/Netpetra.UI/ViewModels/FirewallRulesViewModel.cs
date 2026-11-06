@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Win32;
 using CommunityToolkit.Mvvm.Input;
 using Netpetra.Contracts.Firewall;
 using Netpetra.Contracts.Ipc;
@@ -62,9 +64,14 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
 {
     private readonly ServicePipeClient? _client;
 
+    private readonly FirewallDefaultsStore _defaultsStore = FirewallDefaultsStore.Shared;
+
     public FirewallRulesViewModel(bool serviceMode)
-        : base("Firewall", "Owned rules read through the local service", "\uE72E")
+        : base("Firewall", "Owned rules, defaults and rule editor", "\uE72E")
     {
+        ApplyDefaults(_defaultsStore.Load());
+        CopyDefaultsToNewRule();
+
         if (!serviceMode)
         {
             CapabilityStatusText = "Service required";
@@ -82,6 +89,70 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
 
     public ObservableCollection<FirewallRuleRow> Rules { get; } = [];
 
+    public IReadOnlyList<string> ProtocolOptions { get; } = ["Any", "TCP", "UDP"];
+
+    public IReadOnlyList<string> DirectionOptions { get; } = ["Outbound", "Inbound"];
+
+    public IReadOnlyList<string> ActionOptions { get; } = ["Block", "Allow"];
+
+    [ObservableProperty]
+    private bool _defaultDomain = true;
+
+    [ObservableProperty]
+    private bool _defaultPrivate = true;
+
+    [ObservableProperty]
+    private bool _defaultPublic = true;
+
+    [ObservableProperty]
+    private string _defaultProtocolText = "Any";
+
+    [ObservableProperty]
+    private string _defaultPortsText = string.Empty;
+
+    [ObservableProperty]
+    private string _defaultAddressesText = string.Empty;
+
+    [ObservableProperty]
+    private string _defaultsStatusText = "Defaults apply to new block rules created from Applications.";
+
+    [ObservableProperty]
+    private string _newRulePath = string.Empty;
+
+    [ObservableProperty]
+    private string _newRuleDirectionText = "Outbound";
+
+    [ObservableProperty]
+    private string _newRuleActionText = "Block";
+
+    [ObservableProperty]
+    private bool _newRuleDomain = true;
+
+    [ObservableProperty]
+    private bool _newRulePrivate = true;
+
+    [ObservableProperty]
+    private bool _newRulePublic = true;
+
+    [ObservableProperty]
+    private string _newRuleProtocolText = "Any";
+
+    [ObservableProperty]
+    private string _newRulePortsText = string.Empty;
+
+    [ObservableProperty]
+    private string _newRuleAddressesText = string.Empty;
+
+    [ObservableProperty]
+    private bool _newRuleEnabled = true;
+
+    [ObservableProperty]
+    private string _newRuleStatusText = "Writes are disabled; the rule editor is read-only until the test-VM write gate is enabled.";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ApplyNewRuleCommand))]
+    private bool _isApplyingRule;
+
     [ObservableProperty]
     private string _capabilityStatusText = "Checking…";
 
@@ -96,12 +167,15 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RemoveRuleCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ApplyNewRuleCommand))]
     private bool _isBusy;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RemoveRuleCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ApplyNewRuleCommand))]
     [NotifyPropertyChangedFor(nameof(NoticeText))]
     [NotifyPropertyChangedFor(nameof(NoticeBadgeText))]
+    [NotifyPropertyChangedFor(nameof(NewRuleWriteHint))]
     private bool _writesEnabled;
 
     public string NoticeText => WritesEnabled
@@ -109,6 +183,10 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
         : "Rules are read through the service with the documented INetFwPolicy2 COM objects. This session is read-only.";
 
     public string NoticeBadgeText => WritesEnabled ? "TEST VM" : "READ-ONLY";
+
+    public string NewRuleWriteHint => WritesEnabled
+        ? "Writes are enabled for this test session. Each change requires confirmation and is audited."
+        : "Writes are disabled by design. Start the service with NETPETRA_ENABLE_FIREWALL_WRITES=1 and NETPETRA_FIREWALL_WRITE_CONFIRM=yes on an isolated test VM, then recheck.";
 
     [ObservableProperty]
     private string _writePathText = "disabled";
@@ -124,6 +202,148 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
 
     public void Dispose()
     {
+    }
+
+    [RelayCommand]
+    private void SaveDefaults()
+    {
+        var profiles = BuildProfiles(DefaultDomain, DefaultPrivate, DefaultPublic);
+        if (profiles == FirewallProfile.None)
+        {
+            DefaultsStatusText = "Select at least one profile for the defaults.";
+            return;
+        }
+
+        var defaults = new FirewallDefaults(
+            profiles,
+            ParseProtocol(DefaultProtocolText),
+            DefaultPortsText.Trim(),
+            DefaultAddressesText.Trim());
+
+        DefaultsStatusText = _defaultsStore.Save(defaults)
+            ? "Defaults saved. New rules created from Applications will use this scope."
+            : "Defaults could not be saved. Check the per-user data folder.";
+        CopyDefaultsToNewRule();
+    }
+
+    [RelayCommand]
+    private void ResetDefaults()
+    {
+        ApplyDefaults(FirewallDefaults.Default);
+        CopyDefaultsToNewRule();
+        DefaultsStatusText = "Defaults reset to all profiles, any protocol and any address.";
+    }
+
+    [RelayCommand]
+    private void BrowseNewRuleExecutable()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Select an executable for the Axiom firewall rule",
+            Filter = "Executables (*.exe)|*.exe|All files (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = false,
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            NewRulePath = dialog.FileName;
+        }
+    }
+
+    private bool CanApplyNewRule() => WritesEnabled && !IsBusy && !IsApplyingRule;
+
+    [RelayCommand(CanExecute = nameof(CanApplyNewRule))]
+    private async Task ApplyNewRuleAsync()
+    {
+        if (_client is null)
+        {
+            NewRuleStatusText = "Firewall writes require the local service.";
+            return;
+        }
+
+        var path = NewRulePath.Trim();
+        if (path.Length == 0 || !Path.IsPathFullyQualified(path))
+        {
+            NewRuleStatusText = "Select an absolute executable path first.";
+            return;
+        }
+
+        var profiles = BuildProfiles(NewRuleDomain, NewRulePrivate, NewRulePublic);
+        if (profiles == FirewallProfile.None)
+        {
+            NewRuleStatusText = "Select at least one network profile.";
+            return;
+        }
+
+        var direction = string.Equals(NewRuleDirectionText, "Inbound", StringComparison.OrdinalIgnoreCase)
+            ? FirewallDirection.Inbound
+            : FirewallDirection.Outbound;
+        var action = string.Equals(NewRuleActionText, "Allow", StringComparison.OrdinalIgnoreCase)
+            ? FirewallAction.Allow
+            : FirewallAction.Block;
+        var addresses = NewRuleAddressesText.Split(
+            [',', ';', ' '],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var spec = new RuleSpec
+        {
+            ManagedRuleId = RuleIdentity.ForApp(path, direction),
+            AppPath = path,
+            Direction = direction,
+            Action = action,
+            Profiles = profiles,
+            Protocol = ParseProtocol(NewRuleProtocolText),
+            RemoteAddresses = addresses,
+            RemotePorts = string.IsNullOrWhiteSpace(NewRulePortsText) ? null : NewRulePortsText.Trim(),
+            Enabled = NewRuleEnabled,
+            CreatedBy = Environment.UserName,
+            Description = $"Axiom {action.ToString().ToLowerInvariant()} for {Path.GetFileName(path)}",
+        };
+
+        var confirmation = MessageBox.Show(
+            $"Create or update the Axiom-owned {action.ToString().ToLowerInvariant()} rule for:\n{path}\n\n" +
+            "Only this rule is changed. Other Windows Firewall rules are not touched. Continue only on an isolated test VM.",
+            "Axiom firewall write",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            NewRuleStatusText = "Rule change cancelled.";
+            return;
+        }
+
+        IsApplyingRule = true;
+        try
+        {
+            var result = await _client
+                .SendAsync<RuleApplyResult>(IpcCommandTypes.RuleApply, spec, CancellationToken.None)
+                .ConfigureAwait(true);
+
+            NewRuleStatusText = result.Success
+                ? $"Rule applied and verified at {result.VerifiedUtc?.ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "unknown"}."
+                : $"Rule apply failed: {result.ErrorCode} - {result.ErrorMessage}";
+
+            if (result.Success)
+            {
+                await RefreshAsync().ConfigureAwait(true);
+            }
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            NewRuleStatusText = exception.Message;
+        }
+#pragma warning disable CA1031 // The UI must show an IPC failure instead of crashing.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            NewRuleStatusText = $"Rule apply failed: {exception.Message}";
+        }
+        finally
+        {
+            IsApplyingRule = false;
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanRemoveRule))]
@@ -177,6 +397,47 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
     }
 
     private bool CanRemoveRule() => WritesEnabled && !IsBusy;
+
+    private static FirewallProfile BuildProfiles(bool domain, bool privateProfile, bool publicProfile)
+    {
+        var profiles = FirewallProfile.None;
+        if (domain) profiles |= FirewallProfile.Domain;
+        if (privateProfile) profiles |= FirewallProfile.Private;
+        if (publicProfile) profiles |= FirewallProfile.Public;
+        return profiles;
+    }
+
+    private static NetworkProtocol ParseProtocol(string value) => value switch
+    {
+        "TCP" => NetworkProtocol.Tcp,
+        "UDP" => NetworkProtocol.Udp,
+        _ => NetworkProtocol.Any,
+    };
+
+    private void ApplyDefaults(FirewallDefaults defaults)
+    {
+        DefaultDomain = defaults.Profiles.HasFlag(FirewallProfile.Domain);
+        DefaultPrivate = defaults.Profiles.HasFlag(FirewallProfile.Private);
+        DefaultPublic = defaults.Profiles.HasFlag(FirewallProfile.Public);
+        DefaultProtocolText = defaults.Protocol switch
+        {
+            NetworkProtocol.Tcp => "TCP",
+            NetworkProtocol.Udp => "UDP",
+            _ => "Any",
+        };
+        DefaultPortsText = defaults.RemotePorts;
+        DefaultAddressesText = defaults.RemoteAddresses;
+    }
+
+    private void CopyDefaultsToNewRule()
+    {
+        NewRuleDomain = DefaultDomain;
+        NewRulePrivate = DefaultPrivate;
+        NewRulePublic = DefaultPublic;
+        NewRuleProtocolText = DefaultProtocolText;
+        NewRulePortsText = DefaultPortsText;
+        NewRuleAddressesText = DefaultAddressesText;
+    }
 
     [RelayCommand]
     private async Task RefreshAsync()

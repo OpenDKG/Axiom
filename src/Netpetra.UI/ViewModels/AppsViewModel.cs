@@ -26,6 +26,8 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
 
     private readonly ServicePipeClient? _client;
 
+    private readonly FirewallDefaultsStore _firewallDefaults = FirewallDefaultsStore.Shared;
+
     public AppsViewModel(ConnectionMonitor monitor, bool serviceMode)
         : base("Applications", "Executables observed on this host · grouped by resolved path", "\uE71D")
     {
@@ -47,6 +49,8 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
             WriteStatusText = "Firewall writes require the local service. Start the app with --service.";
         }
 
+        ApplyFirewallDefaults(_firewallDefaults.Load());
+        _firewallDefaults.Changed += OnFirewallDefaultsChanged;
         monitor.Updated += OnMonitorUpdated;
         Rebuild();
     }
@@ -89,7 +93,11 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
     [ObservableProperty]
     private string _summaryText = string.Empty;
 
-    public void Dispose() => _monitor.Updated -= OnMonitorUpdated;
+    public void Dispose()
+    {
+        _monitor.Updated -= OnMonitorUpdated;
+        _firewallDefaults.Changed -= OnFirewallDefaultsChanged;
+    }
 
     partial void OnSelectedAppChanged(AppRow? value) => _selectedKey = value?.Key;
 
@@ -310,6 +318,24 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
     }
 
     private void OnMonitorUpdated(object? sender, EventArgs e) => Rebuild();
+
+    private void OnFirewallDefaultsChanged(object? sender, EventArgs e) =>
+        ApplyFirewallDefaults(_firewallDefaults.Load());
+
+    private void ApplyFirewallDefaults(FirewallDefaults defaults)
+    {
+        BlockDomain = defaults.Profiles.HasFlag(FirewallProfile.Domain);
+        BlockPrivate = defaults.Profiles.HasFlag(FirewallProfile.Private);
+        BlockPublic = defaults.Profiles.HasFlag(FirewallProfile.Public);
+        SelectedProtocolText = defaults.Protocol switch
+        {
+            NetworkProtocol.Tcp => "TCP",
+            NetworkProtocol.Udp => "UDP",
+            _ => "Any",
+        };
+        RemotePortsText = defaults.RemotePorts;
+        RemoteAddressesText = defaults.RemoteAddresses;
+    }
 
     private void Rebuild()
     {
