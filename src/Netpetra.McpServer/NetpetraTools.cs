@@ -62,6 +62,7 @@ public sealed class NetpetraTools
         "DNS/TLS payload evidence.",
         "Reputation provider results.",
         "Windows Filtering Platform block events.",
+        "Rows without an observed remote endpoint remain unassessed.",
     ];
 
     [McpServerTool(Name = "netpetra_get_status"), Description("Return Netpetra service health, monitoring source, data quality, last snapshot, capabilities and limitations. Read-only.")]
@@ -296,19 +297,30 @@ public sealed class NetpetraTools
             }
 
             var remoteHost = EndpointHost(match.RemoteEndpoint);
-            var isPrivate = IsPrivateOrLoopback(remoteHost);
+            var hasRemote = !string.IsNullOrWhiteSpace(remoteHost);
+            var isPrivate = hasRemote && IsPrivateOrLoopback(remoteHost);
             var evidence = new List<string>
             {
                 $"process={match.AppDisplayName}, pid={match.ProcessId}, quality={match.Quality}",
                 $"protocol={match.Protocol}, direction={match.Direction}, state={match.State}",
                 $"remote={(string.IsNullOrWhiteSpace(match.RemoteEndpoint) ? "unknown" : match.RemoteEndpoint)}",
                 match.IsNew ? "first observed in the current observation window" : "observed before the current window",
-                match.IsLoopback ? "loopback destination" : isPrivate ? "private/local destination" : "public destination",
+                match.IsLoopback
+                    ? "loopback destination"
+                    : !hasRemote
+                        ? "remote endpoint was not observed"
+                        : isPrivate
+                            ? "private/local destination"
+                            : "public destination",
             };
 
-            var risk = match.IsLoopback || isPrivate ? "LOW_OBSERVED_RISK" : "UNKNOWN";
-            var confidence = match.Quality == DataQuality.Observed ? "medium" : "low";
-            if (match.IsNew && !match.IsLoopback && !isPrivate)
+            var risk = !hasRemote
+                ? "INSUFFICIENT_DATA"
+                : match.IsLoopback || isPrivate
+                    ? "LOW_OBSERVED_RISK"
+                    : "UNKNOWN";
+            var confidence = hasRemote && match.Quality == DataQuality.Observed ? "medium" : "low";
+            if (hasRemote && match.IsNew && !match.IsLoopback && !isPrivate)
             {
                 risk = "SUSPICIOUS";
                 confidence = "low";
@@ -407,10 +419,12 @@ public sealed class NetpetraTools
                 .Take(20)
                 .ToArray();
 
-            var publicDestinations = page.Rows
-                .Where(row => !IsPrivateOrLoopback(EndpointHost(row.RemoteEndpoint)))
+            var remoteHosts = page.Rows
                 .Select(row => EndpointHost(row.RemoteEndpoint))
-                .Where(host => host.Length > 0)
+                .ToArray();
+            var unknownRemoteConnections = remoteHosts.Count(string.IsNullOrWhiteSpace);
+            var publicDestinations = remoteHosts
+                .Where(host => host.Length > 0 && !IsPrivateOrLoopback(host))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Take(50)
                 .ToArray();
@@ -431,6 +445,7 @@ public sealed class NetpetraTools
                 processesExamined = apps,
                 destinationsExamined = publicDestinations.Length,
                 publicDestinations,
+                unknownRemoteConnections,
                 confirmedMaliciousIndicators = Array.Empty<object>(),
                 suspiciousUnconfirmed = Array.Empty<object>(),
                 unassessedConnectionsInSample = page.Rows.Count,
@@ -554,8 +569,12 @@ public sealed class NetpetraTools
 
     internal static bool IsPrivateOrLoopback(string host)
     {
-        if (string.IsNullOrWhiteSpace(host) ||
-            host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return false;
+        }
+
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

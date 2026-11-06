@@ -39,6 +39,8 @@ public sealed class CodexProtection
 
     public string HookScriptPath => Path.Combine(BlackboxAgentRoot, Marker);
 
+    private string ManagedCommand => $"\"{PythonPath}\" \"{HookScriptPath}\"";
+
     public bool IsCodexDetected => Directory.Exists(ConfigDirectory);
 
     public bool IsInstalled => File.Exists(HookScriptPath) && HasHookEntry();
@@ -112,7 +114,7 @@ public sealed class CodexProtection
                 for (var handlerIndex = handlers.Count - 1; handlerIndex >= 0; handlerIndex--)
                 {
                     if (handlers[handlerIndex] is JsonObject handler &&
-                        handler["command"]?.ToString().Contains(Marker, StringComparison.Ordinal) == true)
+                        IsOwnedHandler(handler))
                     {
                         handlers.RemoveAt(handlerIndex);
                         removed = true;
@@ -166,14 +168,18 @@ public sealed class CodexProtection
                    hooks["PreToolUse"] is JsonArray groups &&
                    groups.OfType<JsonObject>().Any(group =>
                        group["hooks"] is JsonArray handlers &&
-                       handlers.OfType<JsonObject>().Any(handler =>
-                           handler["command"]?.ToString().Contains(Marker, StringComparison.Ordinal) == true));
+                       handlers.OfType<JsonObject>().Any(IsOwnedHandler));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
             return false;
         }
     }
+
+    private bool IsOwnedHandler(JsonObject handler) =>
+        handler["command"] is JsonValue value &&
+        value.TryGetValue<string>(out var command) &&
+        string.Equals(command, ManagedCommand, StringComparison.OrdinalIgnoreCase);
 
     private bool MergeHookEntry()
     {
@@ -227,7 +233,7 @@ public sealed class CodexProtection
                 new JsonObject
                 {
                     ["type"] = "command",
-                    ["command"] = $"\"{PythonPath}\" \"{HookScriptPath}\"",
+                    ["command"] = ManagedCommand,
                     ["timeout"] = 10,
                 },
             },

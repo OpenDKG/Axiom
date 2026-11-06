@@ -38,7 +38,7 @@ Windows host
 | `netpetra_list_connections` | Current sockets with bounded filters | Socket ownership can be unknown or `partial`; no packet contents |
 | `netpetra_get_connection_history` | Stored observations with paging and real coverage | Requested range may be longer than retained history |
 | `netpetra_inspect_process` | Observed executable path, PIDs, endpoints and quality | No hash, Authenticode, parent process or command line in the current IPC contract |
-| `netpetra_analyze_connection` | Deterministic private/loopback/public classification and uncertainty | No reputation provider; a new public destination is a lead, not proof |
+| `netpetra_analyze_connection` | Deterministic private/loopback/public classification and uncertainty | No reputation provider; a new public destination is a lead, not proof. A row without an observed remote endpoint is `INSUFFICIENT_DATA`, not local/low risk. |
 | `netpetra_get_threat_alerts` | Reports that no alert store exists yet | Empty alerts are **not** a clean bill of health |
 | `netpetra_get_reputation` | Reports that no local cache/provider is configured | Unknown is not clean; no external request is sent |
 | `netpetra_get_firewall_rules` | Netpetra-owned rules, capability and write-gate state | A stored rule is not proof that an observed connection was blocked |

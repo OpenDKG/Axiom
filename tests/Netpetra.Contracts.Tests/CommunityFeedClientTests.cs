@@ -48,6 +48,41 @@ public sealed class CommunityFeedClientTests
     }
 
     [Fact]
+    public async Task Malformed_entry_shapes_are_skipped()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {
+              "entries": [
+                { "sha256": 123 },
+                { "sha256": { "value": "44D88612FEA8A8F36DE82E1278ABB02F2C4B4B0F9B0B0B0B0B0B0B0B0B0B0B0B" } },
+                { "sha256": ["44D88612FEA8A8F36DE82E1278ABB02F2C4B4B0B0B0B0B0B0B0B0B0B0B0B0B0B"] },
+                { "sha256": "not-a-hash" }
+              ]
+            }
+            """));
+        using var http = new HttpClient(handler);
+        using var client = new CommunityFeedClient(http);
+
+        var result = await client.FetchAsync("https://feed.example/entries.json", null, CancellationToken.None);
+
+        Assert.Empty(result.Entries);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("\"text\"")]
+    [InlineData("null")]
+    public async Task Non_object_root_is_reported_as_invalid_feed(string body)
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, body));
+        using var http = new HttpClient(handler);
+        using var client = new CommunityFeedClient(http);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            client.FetchAsync("https://feed.example/entries.json", null, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Non_https_feed_is_rejected_before_a_request()
     {
         var handler = new StubHandler(_ => Json(HttpStatusCode.OK, "{\"entries\":[]}"));

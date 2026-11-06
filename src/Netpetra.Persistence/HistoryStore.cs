@@ -309,6 +309,55 @@ public sealed class HistoryStore
         await transaction.CommitAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Records a failed removal without deleting the stored intent. The OS rule may still be
+    /// present, so the durable state becomes Failed and the actor/error is audited in the same
+    /// transaction.
+    /// </summary>
+    public async Task RecordFirewallRuleRemovalFailureAsync(
+        Guid managedRuleId,
+        string actorSid,
+        string? errorCode,
+        string? errorMessage,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorSid);
+
+        var now = ToStorage(DateTimeOffset.UtcNow);
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        await using (var update = connection.CreateCommand())
+        {
+            update.Transaction = transaction;
+            update.CommandText = """
+                UPDATE firewall_rules
+                SET state = $state, last_error = $error, updated_utc = $now
+                WHERE managed_rule_id = $id;
+                """;
+            update.Parameters.AddWithValue("$state", (int)RuleState.Failed);
+            update.Parameters.AddWithValue("$error", (object?)errorCode ?? DBNull.Value);
+            update.Parameters.AddWithValue("$now", now);
+            update.Parameters.AddWithValue("$id", managedRuleId.ToString("D"));
+            await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await InsertAuditAsync(
+            connection,
+            transaction,
+            managedRuleId,
+            actorSid,
+            "rule.remove",
+            "failed",
+            newJson: null,
+            error: errorMessage ?? errorCode,
+            now,
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task DeleteFirewallRuleAsync(
         Guid managedRuleId,
         string actorSid,

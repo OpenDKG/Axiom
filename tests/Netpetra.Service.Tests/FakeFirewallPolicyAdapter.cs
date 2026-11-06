@@ -13,6 +13,8 @@ internal sealed class FakeFirewallPolicyAdapter : IFirewallPolicyAdapter
 
     public bool FailNextRemove { get; set; }
 
+    public bool ThrowOnRemove { get; set; }
+
     public int UpsertCalls { get; private set; }
 
     public int RemoveCalls { get; private set; }
@@ -72,6 +74,11 @@ internal sealed class FakeFirewallPolicyAdapter : IFirewallPolicyAdapter
     {
         RemoveCalls++;
 
+        if (ThrowOnRemove)
+        {
+            throw new InvalidOperationException("The fake adapter threw during removal.");
+        }
+
         if (FailNextRemove)
         {
             return Task.FromResult(new RuleApplyResult
@@ -94,14 +101,14 @@ internal sealed class FakeFirewallPolicyAdapter : IFirewallPolicyAdapter
         });
     }
 
-    public Task<EffectiveRuleReport> VerifyAsync(Guid managedRuleId, CancellationToken ct)
+    public Task<EffectiveRuleReport> VerifyAsync(RuleSpec spec, CancellationToken ct)
     {
         VerifyCalls++;
-        var rule = Rules.FirstOrDefault(candidate => candidate.ManagedRuleId == managedRuleId);
+        var rule = Rules.FirstOrDefault(candidate => candidate.ManagedRuleId == spec.ManagedRuleId);
 
         return Task.FromResult(new EffectiveRuleReport
         {
-            ManagedRuleId = managedRuleId,
+            ManagedRuleId = spec.ManagedRuleId,
             PresentInOs = rule is not null,
             MatchesSpec = rule is not null,
             EffectiveAction = rule?.Spec.Action,

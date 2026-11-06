@@ -17,5 +17,5 @@ public interface IFirewallPolicyAdapter
 
     Task<RuleApplyResult> RemoveOwnedRuleAsync(Guid managedRuleId, CancellationToken ct);
 
-    Task<EffectiveRuleReport> VerifyAsync(Guid managedRuleId, CancellationToken ct);
+    Task<EffectiveRuleReport> VerifyAsync(RuleSpec spec, CancellationToken ct);
 }

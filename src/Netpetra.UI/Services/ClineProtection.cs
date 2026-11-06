@@ -123,7 +123,7 @@ public sealed class ClineProtection
         import time
         from pathlib import Path
 
-        ROOT = Path(r"{{PythonPath}}").resolve().parent
+        ROOT = Path(r"{{BlackboxAgentRoot}}")
         sys.path.insert(0, str(ROOT))
         EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Netpetra" / "agent-evidence.jsonl"
 

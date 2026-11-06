@@ -178,15 +178,20 @@ public sealed class ClaudeProtection
         }
     }
 
-    private static bool IsOwnedHandler(JsonObject handler)
+    private bool IsOwnedHandler(JsonObject handler)
     {
-        if (handler["command"]?.ToString().Contains(Marker, StringComparison.Ordinal) == true)
+        if (handler["command"] is not JsonValue commandValue ||
+            !commandValue.TryGetValue<string>(out var command) ||
+            !string.Equals(command, PythonPath, StringComparison.OrdinalIgnoreCase))
         {
-            return true;
+            return false;
         }
 
         return handler["args"] is JsonArray args &&
-               args.Any(item => item?.ToString().Contains(Marker, StringComparison.Ordinal) == true);
+               args.Count == 1 &&
+               args[0] is JsonValue scriptValue &&
+               scriptValue.TryGetValue<string>(out var script) &&
+               string.Equals(script, HookScriptPath, StringComparison.OrdinalIgnoreCase);
     }
 
     private bool MergeHookEntry()

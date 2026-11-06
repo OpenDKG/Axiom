@@ -98,6 +98,38 @@ public sealed class FirewallRuleCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task Remove_failure_is_audited_and_marks_the_stored_rule_failed()
+    {
+        var spec = NewSpec();
+        await _coordinator.ApplyAsync(spec, Actor, CancellationToken.None);
+        _adapter.FailNextRemove = true;
+
+        var result = await _coordinator.RemoveAsync(spec.ManagedRuleId, Actor, CancellationToken.None);
+
+        Assert.False(result.Success);
+        var stored = Assert.Single(await _store.ListFirewallRulesAsync());
+        Assert.Equal(RuleState.Failed, stored.State);
+        Assert.Equal("fake.remove_failed", stored.LastErrorCode);
+        Assert.Equal(1, await CountAuditResultAsync(spec.ManagedRuleId, "rule.remove", "failed"));
+    }
+
+    [Fact]
+    public async Task Remove_adapter_exception_is_audited_and_returned_as_failure()
+    {
+        var spec = NewSpec();
+        await _coordinator.ApplyAsync(spec, Actor, CancellationToken.None);
+        _adapter.ThrowOnRemove = true;
+
+        var result = await _coordinator.RemoveAsync(spec.ManagedRuleId, Actor, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("rule.remove_exception", result.ErrorCode);
+        var stored = Assert.Single(await _store.ListFirewallRulesAsync());
+        Assert.Equal(RuleState.Failed, stored.State);
+        Assert.Equal(1, await CountAuditResultAsync(spec.ManagedRuleId, "rule.remove", "failed"));
+    }
+
+    [Fact]
     public async Task Verify_reads_the_fake_adapter_state()
     {
         var spec = NewSpec();
@@ -127,6 +159,21 @@ public sealed class FirewallRuleCoordinatorTests : IDisposable
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM rule_audit WHERE managed_rule_id = $id;";
         command.Parameters.AddWithValue("$id", id.ToString("D"));
+        return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private async Task<int> CountAuditResultAsync(Guid id, string action, string result)
+    {
+        await using var connection = new SqliteConnection($"Data Source={_store.DatabasePath}");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*) FROM rule_audit
+            WHERE managed_rule_id = $id AND action = $action AND result = $result;
+            """;
+        command.Parameters.AddWithValue("$id", id.ToString("D"));
+        command.Parameters.AddWithValue("$action", action);
+        command.Parameters.AddWithValue("$result", result);
         return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
     }
 }

@@ -62,14 +62,15 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
         return _com.InvokeAsync(() => RemoveRule(managedRuleId), ct);
     }
 
-    public Task<EffectiveRuleReport> VerifyAsync(Guid managedRuleId, CancellationToken ct)
+    public Task<EffectiveRuleReport> VerifyAsync(RuleSpec spec, CancellationToken ct)
     {
-        if (managedRuleId == Guid.Empty)
+        ArgumentNullException.ThrowIfNull(spec);
+        if (spec.ManagedRuleId == Guid.Empty)
         {
-            throw new ArgumentException("Managed rule id must not be empty.", nameof(managedRuleId));
+            throw new ArgumentException("Managed rule id must not be empty.", nameof(spec));
         }
 
-        return _com.InvokeAsync(() => VerifyRule(managedRuleId), ct);
+        return _com.InvokeAsync(() => VerifyRule(spec), ct);
     }
 
     public void Dispose() => _com.Dispose();
@@ -275,61 +276,46 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
         };
     }
 
-    private static EffectiveRuleReport VerifyRule(Guid managedRuleId)
+    private static EffectiveRuleReport VerifyRule(RuleSpec spec)
     {
         var policy = CreatePolicy();
-        var notes = new List<string>();
-
-        foreach (var direction in new[] { FirewallDirection.Outbound, FirewallDirection.Inbound })
+        var name = OwnedRuleName.Create(spec.ManagedRuleId, spec.Direction);
+        var rule = FindRule(policy, name);
+        if (rule is null)
         {
-            var name = OwnedRuleName.Create(managedRuleId, direction);
-            var rule = FindRule(policy, name);
-            if (rule is null)
-            {
-                continue;
-            }
-
-            var action = (int)rule.Action == NetFwActionBlock ? FirewallAction.Block : FirewallAction.Allow;
-            var profiles = (FirewallProfile)(int)rule.Profiles & FirewallProfile.All;
-            var protocol = (int)rule.Protocol switch
-            {
-                NetFwProtocolTcp => NetworkProtocol.Tcp,
-                NetFwProtocolUdp => NetworkProtocol.Udp,
-                _ => NetworkProtocol.Any,
-            };
-            var expectedDirection = direction;
-
-            if ((int)rule.Direction != (expectedDirection == FirewallDirection.Outbound ? NetFwDirectionOut : NetFwDirectionIn))
-            {
-                notes.Add("Direction differs from the owned name.");
-            }
-
-            if (action != FirewallAction.Block)
-            {
-                notes.Add("The rule is not a block rule.");
-            }
-
             return new EffectiveRuleReport
             {
-                ManagedRuleId = managedRuleId,
-                PresentInOs = true,
-                MatchesSpec = notes.Count == 0,
-                EffectiveAction = action,
-                Notes = notes,
+                ManagedRuleId = spec.ManagedRuleId,
+                PresentInOs = false,
+                MatchesSpec = false,
+                EffectiveAction = null,
+                Notes = ["No owned rule with this id and direction is present in Windows Firewall."],
             };
+        }
+
+        var action = (int)rule.Action == NetFwActionBlock ? FirewallAction.Block : FirewallAction.Allow;
+        var notes = new List<string>();
+        if (action != spec.Action)
+        {
+            notes.Add("Action differs from the persisted specification.");
+        }
+
+        if (!MatchesSpec(rule, spec))
+        {
+            notes.Add("One or more enforcement fields differ from the persisted specification.");
         }
 
         return new EffectiveRuleReport
         {
-            ManagedRuleId = managedRuleId,
-            PresentInOs = false,
-            MatchesSpec = false,
-            EffectiveAction = null,
-            Notes = ["No owned rule with this id is present in Windows Firewall."],
+            ManagedRuleId = spec.ManagedRuleId,
+            PresentInOs = true,
+            MatchesSpec = notes.Count == 0,
+            EffectiveAction = action,
+            Notes = notes,
         };
     }
 
-    private static void ApplyFields(dynamic rule, RuleSpec spec, string name)
+    internal static void ApplyFields(dynamic rule, RuleSpec spec, string name)
     {
         rule.Name = name;
         rule.Description = spec.Description ?? $"Netpetra managed rule {spec.ManagedRuleId:D}";
@@ -353,22 +339,63 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
             rule.RemoteAddresses = "*";
         }
 
-        if (!string.IsNullOrWhiteSpace(spec.RemotePorts) && spec.Protocol != NetworkProtocol.Any)
-        {
-            rule.RemotePorts = spec.RemotePorts;
-        }
+        // Reusing an existing OS rule must actively clear a previous port restriction. Leaving the
+        // property untouched would keep the old scope while reporting a successful update.
+        rule.RemotePorts = !string.IsNullOrWhiteSpace(spec.RemotePorts) && spec.Protocol != NetworkProtocol.Any
+            ? spec.RemotePorts
+            : "*";
 
         rule.Enabled = spec.Enabled;
         rule.Grouping = "Netpetra";
     }
 
-    private static bool MatchesSpec(dynamic rule, RuleSpec spec)
+    internal static bool MatchesSpec(dynamic rule, RuleSpec spec)
     {
+        var expectedDirection = spec.Direction == FirewallDirection.Outbound
+            ? NetFwDirectionOut
+            : NetFwDirectionIn;
+        var expectedProtocol = spec.Protocol switch
+        {
+            NetworkProtocol.Tcp => NetFwProtocolTcp,
+            NetworkProtocol.Udp => NetFwProtocolUdp,
+            _ => NetFwProtocolAny,
+        };
+
         return string.Equals((string?)rule.Name, OwnedRuleName.Create(spec.ManagedRuleId, spec.Direction), StringComparison.Ordinal)
             && string.Equals((string?)rule.ApplicationName, spec.AppPath, StringComparison.OrdinalIgnoreCase)
             && (int)rule.Action == (spec.Action == FirewallAction.Block ? NetFwActionBlock : NetFwActionAllow)
+            && (int)rule.Direction == expectedDirection
+            && (int)rule.Protocol == expectedProtocol
             && (int)rule.Profiles == (int)spec.Profiles
-            && (bool)rule.Enabled == spec.Enabled;
+            && (bool)rule.Enabled == spec.Enabled
+            && AddressesMatch((string?)rule.RemoteAddresses, spec.RemoteAddresses)
+            && PortsMatch(
+                (string?)rule.RemotePorts,
+                spec.Protocol == NetworkProtocol.Any ? null : spec.RemotePorts);
+    }
+
+    private static bool PortsMatch(string? actual, string? expected)
+    {
+        var actualValues = SplitList(actual)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var expectedValues = SplitList(expected)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return actualValues.SequenceEqual(expectedValues, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool AddressesMatch(string? actual, IReadOnlyList<string> expected)
+    {
+        var actualValues = SplitList(actual)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var expectedValues = expected
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return actualValues.SequenceEqual(expectedValues, StringComparer.OrdinalIgnoreCase);
     }
 
     private static object? FindRule(dynamic policy, string name)
