@@ -75,36 +75,117 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         try
         {
             var normalized = Normalize(requested);
-            if (!_store.Save(normalized))
+            var previous = _settings;
+            var previousWasRunning = _server is not null;
+
+            // Disabled -> disabled: no resolver state to preserve, but a failed write must not
+            // leave the requested configuration as the authoritative one.
+            if (!normalized.Enabled && !previousWasRunning)
             {
-                _lastError = "Could not write the Privacy Shield settings file.";
+                if (!_store.Save(normalized))
+                {
+                    _settings = previous;
+                    _lastError = "Configuration failed; previous disabled configuration was kept.";
+                    return CreateStatus();
+                }
+
+                _settings = normalized;
+                _lastError = null;
                 return CreateStatus();
             }
 
-            var previous = _settings;
-            await StopServerLockedAsync().ConfigureAwait(false);
-            _settings = normalized;
-            _lastError = null;
-
-            if (normalized.Enabled)
+            // Enabled -> disabled: stop first, then persist. A failed write restores the old
+            // resolver and the old in-memory settings.
+            if (!normalized.Enabled)
             {
-                await StartServerLockedAsync(cancellationToken).ConfigureAwait(false);
-                if (_server is null && previous.Enabled)
+                await StopServerLockedAsync().ConfigureAwait(false);
+                if (!_store.Save(normalized))
                 {
-                    // A failed reconfiguration must not silently leave a resolver user who pointed
-                    // Windows at the old instance without a working fallback. Try the old settings.
                     _settings = previous;
-                    await StartServerLockedAsync(cancellationToken).ConfigureAwait(false);
-                    _lastError = "The new configuration could not start; the previous resolver settings were restored.";
+                    var restored = await RestorePreviousServerAsync(previous).ConfigureAwait(false);
+                    _lastError = restored
+                        ? "Configuration failed; previous resolver restored."
+                        : "Configuration failed; previous resolver could not be restored.";
+                    return CreateStatus();
                 }
+
+                _settings = normalized;
+                _lastError = null;
+                return CreateStatus();
             }
 
+            // Enabled -> enabled: start the candidate before persisting. If the port is unchanged,
+            // the old listener must be stopped first; otherwise both can coexist briefly.
+            var stoppedOldForSamePort = previousWasRunning && normalized.Port == previous.Port;
+            if (stoppedOldForSamePort)
+            {
+                await StopServerLockedAsync().ConfigureAwait(false);
+            }
+
+            if (!TryCreateServer(normalized, out var candidate, out var startError, out var startWarning))
+            {
+                _settings = previous;
+                var restored = await RestorePreviousServerAsync(previous).ConfigureAwait(false);
+                var recovery = !previous.Enabled
+                    ? "previous disabled configuration was kept"
+                    : restored
+                        ? "previous resolver restored"
+                        : "previous resolver could not be restored";
+                _lastError = $"Configuration failed; {recovery}. {startError}".Trim();
+                return CreateStatus();
+            }
+
+            if (!_store.Save(normalized))
+            {
+                if (candidate is not null)
+                {
+                    await candidate.DisposeAsync().ConfigureAwait(false);
+                }
+
+                _settings = previous;
+                var restored = await RestorePreviousServerAsync(previous).ConfigureAwait(false);
+                var recovery = !previous.Enabled
+                    ? "previous disabled configuration was kept"
+                    : restored
+                        ? "previous resolver restored"
+                        : "previous resolver could not be restored";
+                _lastError = $"Configuration failed; {recovery}.";
+                return CreateStatus();
+            }
+
+            if (previousWasRunning && !stoppedOldForSamePort)
+            {
+                await StopServerLockedAsync().ConfigureAwait(false);
+            }
+
+            _server = candidate;
+            _settings = normalized;
+            _lastError = startWarning;
             return CreateStatus();
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    private Task<bool> RestorePreviousServerAsync(PrivacyShieldSettings previous)
+    {
+        if (!previous.Enabled || _server is not null)
+        {
+            return Task.FromResult(true);
+        }
+
+        if (!TryCreateServer(previous, out var server, out var error, out var warning))
+        {
+            _server = null;
+            _lastError = error;
+            return Task.FromResult(false);
+        }
+
+        _server = server;
+        _lastError = warning;
+        return Task.FromResult(true);
     }
 
     public async Task<PrivacyShieldStatus> ClearHistoryAsync(CancellationToken cancellationToken)
@@ -186,16 +267,35 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     private async Task StartServerLockedAsync(CancellationToken cancellationToken)
     {
         await StopServerLockedAsync().ConfigureAwait(false);
-        _lastError = null;
+        if (TryCreateServer(_settings, out var server, out var error, out var warning))
+        {
+            _server = server;
+            _lastError = warning;
+            return;
+        }
+
+        _server = null;
+        _lastError = error;
+    }
+
+    private bool TryCreateServer(
+        PrivacyShieldSettings settings,
+        out DnsProxyServer? server,
+        out string? error,
+        out string? warning)
+    {
+        server = null;
+        error = null;
+        warning = null;
 
         IReadOnlyList<System.Net.IPEndPoint> upstreams;
-        if (!string.IsNullOrWhiteSpace(_settings.UpstreamDns))
+        if (!string.IsNullOrWhiteSpace(settings.UpstreamDns))
         {
-            if (!SystemDnsResolver.TryParseUpstream(_settings.UpstreamDns, out var endpoint) ||
+            if (!SystemDnsResolver.TryParseUpstream(settings.UpstreamDns, out var endpoint) ||
                 endpoint is null)
             {
-                _lastError = "The configured upstream DNS address is invalid.";
-                return;
+                error = "The configured upstream DNS address is invalid.";
+                return false;
             }
 
             upstreams = [endpoint];
@@ -215,24 +315,25 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 new System.Net.IPEndPoint(System.Net.IPAddress.Parse("1.1.1.1"), 53),
                 new System.Net.IPEndPoint(System.Net.IPAddress.Parse("9.9.9.9"), 53),
             ];
-            _lastError = "No non-loopback Windows DNS server was found; using fallback upstream DNS. " +
-                         "Set an explicit upstream address if this network requires a local resolver.";
+            warning = "No non-loopback Windows DNS server was found; using fallback upstream DNS. " +
+                      "Set an explicit upstream address if this network requires a local resolver.";
         }
 
         try
         {
-            var policy = PrivacyShieldPolicy.Create(_settings, _rules);
-            _server = new DnsProxyServer(
+            var policy = PrivacyShieldPolicy.Create(settings, _rules);
+            server = new DnsProxyServer(
                 policy,
                 upstreams,
-                _settings.Port,
+                settings.Port,
                 _blockedHistory.Append);
+            return true;
         }
         catch (Exception exception) when (exception is
                      System.Net.Sockets.SocketException or ArgumentException or InvalidOperationException)
         {
-            _lastError = exception.Message;
-            _server = null;
+            error = exception.Message;
+            return false;
         }
     }
 
