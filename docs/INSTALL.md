@@ -7,8 +7,8 @@
 > and keep a recovery path. The setup keeps
 > **Install Axiom** disabled until you acknowledge these risks.
 
-The bootstrap prefers `Axiom-*-win-x64.zip` release assets and falls back to legacy
-`Netpetra-*-win-x64.zip` assets for releases published before the rename.
+The bootstrap prefers `Axiom-*-win-x64.zip` release assets and falls back to the
+historical portable archives retained on releases published before the rename.
 
 Axiom can be installed for the current Windows user without administrator rights, a Windows
 service registration, a driver or any firewall change. The recommended GitHub release asset is `Axiom-Setup.exe`: a single self-contained setup
