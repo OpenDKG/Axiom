@@ -64,6 +64,41 @@ public sealed class AiAnalystTests
     }
 
     [Fact]
+    public async Task Optional_verifier_uses_a_separate_request_and_records_its_status()
+    {
+        var calls = 0;
+        var handler = new StubHandler(_ =>
+        {
+            calls++;
+            var content = calls == 1
+                ? "{\"status\":\"SUSPICIOUS\",\"severity\":\"low\",\"confidence\":\"low\",\"summary\":\"lead\"}"
+                : "{\"status\":\"INSUFFICIENT_DATA\",\"severity\":\"unknown\",\"confidence\":\"none\",\"summary\":\"not enough evidence\"}";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        choices = new[] { new { message = new { content } } },
+                    }),
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        });
+        using var http = new HttpClient(handler);
+        using var client = new AiAnalystClient(http);
+        var settings = NewSettings() with { VerifierModel = "verifier-model" };
+        var evidence = AiEvidenceBuilder.Build([NewConnection("app.exe", "203.0.113.10:443")], "test", [], 5, true);
+
+        var finding = await client.AnalyzeAsync(settings, "secret", evidence, CancellationToken.None);
+
+        Assert.Equal(2, calls);
+        Assert.Equal("SUSPICIOUS", finding.Status);
+        Assert.Equal("verifier-model", finding.VerifierModel);
+        Assert.Equal("INSUFFICIENT_DATA", finding.VerifierStatus);
+        Assert.Equal("not enough evidence", finding.VerifierSummary);
+    }
+
+    [Fact]
     public async Task Invalid_provider_json_returns_insufficient_data()
     {
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)

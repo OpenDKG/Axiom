@@ -23,6 +23,15 @@ public sealed record AiAnalystSettings
     public int MaxConnections { get; init; } = 25;
 
     public int MaxTokens { get; init; } = 1200;
+
+    public bool AutomaticAnalysis { get; init; }
+
+    public int AnalysisIntervalMinutes { get; init; } = 15;
+
+    public int MaxRequestsPerHour { get; init; } = 6;
+
+    /// <summary>Optional second model used to challenge the primary result with a separate context.</summary>
+    public string VerifierModel { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -56,6 +65,12 @@ public sealed record AiFinding
     public DateTimeOffset AnalysisTimestampUtc { get; init; } = DateTimeOffset.UtcNow;
 
     public bool HumanReviewed { get; init; }
+
+    public string VerifierModel { get; init; } = string.Empty;
+
+    public string VerifierStatus { get; init; } = "not run";
+
+    public string VerifierSummary { get; init; } = string.Empty;
 
     public string? Error { get; init; }
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Netpetra.Contracts.Ai;
@@ -26,6 +27,14 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
 
     private readonly AiFindingStore _findingStore = new();
 
+    private readonly DispatcherTimer _autoTimer = new() { Interval = TimeSpan.FromSeconds(60) };
+
+    private readonly HashSet<string> _autoSeen = new(StringComparer.Ordinal);
+
+    private readonly Queue<DateTimeOffset> _requestTimes = new();
+
+    private DateTimeOffset _lastAutoAttempt = DateTimeOffset.MinValue;
+
     private string _apiKey = string.Empty;
     private bool _apiKeyDirty;
 
@@ -39,6 +48,7 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
             new(AiProviderKind.LocalOpenAiCompatible, "OpenAI-compatible / local (HTTP loopback)"),
         ];
 
+        _autoTimer.Tick += (_, _) => _ = AutomaticTickAsync();
         var (settings, key) = _settingsStore.Load();
         _apiKey = key;
         Enabled = settings.Enabled;
@@ -48,6 +58,11 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         RedactPaths = settings.RedactPaths;
         MaxConnections = settings.MaxConnections;
         MaxTokens = settings.MaxTokens;
+        AutomaticAnalysis = settings.AutomaticAnalysis;
+        AnalysisIntervalMinutes = settings.AnalysisIntervalMinutes;
+        MaxRequestsPerHour = settings.MaxRequestsPerHour;
+        VerifierModel = settings.VerifierModel;
+        StartAutomaticTimer();
 
         foreach (var finding in _findingStore.LoadRecent())
         {
@@ -77,8 +92,9 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         "credentials, browser cookies, agent histories and arbitrary files are never sent.";
 
     public string AutomaticText =>
-        "Automatic background analysis is not enabled in this build. Analysis is an explicit button " +
-        "action; no event is sent to a provider without it.";
+        "Automatic analysis is opt-in. When enabled, only new non-loopback destinations are considered, " +
+        "deduplicated, and bounded by the interval and hourly request limit. No event is sent while " +
+        "the analyst is disabled.";
 
     [ObservableProperty]
     private bool _enabled;
@@ -102,6 +118,18 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
     private int _maxTokens = 1200;
 
     [ObservableProperty]
+    private bool _automaticAnalysis;
+
+    [ObservableProperty]
+    private int _analysisIntervalMinutes = 15;
+
+    [ObservableProperty]
+    private int _maxRequestsPerHour = 6;
+
+    [ObservableProperty]
+    private string _verifierModel = string.Empty;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanAnalyze))]
     private bool _isBusy;
 
@@ -114,16 +142,33 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
     [ObservableProperty]
     private AiFinding? _selectedFinding;
 
-    public void Activate()
+    partial void OnAutomaticAnalysisChanged(bool value)
     {
-        UpdateStatus();
+        if (!value)
+        {
+            _autoTimer.Stop();
+        }
     }
+
+    partial void OnEnabledChanged(bool value)
+    {
+        if (!value)
+        {
+            _autoTimer.Stop();
+        }
+    }
+
+    public void Activate() => UpdateStatus();
 
     public void Deactivate()
     {
     }
 
-    public void Dispose() => _client.Dispose();
+    public void Dispose()
+    {
+        _autoTimer.Stop();
+        _client.Dispose();
+    }
 
     public void SetApiKey(string value)
     {
@@ -146,10 +191,15 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         SettingsStatus = "Settings saved locally. The API key is protected with Windows DPAPI.";
         UpdateCredentialsText();
         UpdateStatus();
+        StartAutomaticTimer();
     }
 
     [RelayCommand]
-    private async Task AnalyzeAsync()
+    private Task AnalyzeAsync() => RunAnalysisAsync(automatic: false, connections: null);
+
+    private async Task RunAnalysisAsync(
+        bool automatic,
+        IReadOnlyList<Netpetra.Contracts.Monitoring.LiveConnection>? connections)
     {
         if (IsBusy)
         {
@@ -169,9 +219,16 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
             return;
         }
 
-        if (_monitor.Connections.Count == 0)
+        var sourceConnections = connections ??
+                                _monitor.Connections.Select(row => row.Source).ToArray();
+        if (sourceConnections.Count == 0)
         {
             StatusText = "No live connection is available to analyze. Start monitoring or refresh the page.";
+            return;
+        }
+
+        if (!ReserveRequest(settings, automatic))
+        {
             return;
         }
 
@@ -183,11 +240,13 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
 
         _apiKeyDirty = false;
         IsBusy = true;
-        StatusText = "Preparing bounded evidence and requesting analysis...";
+        StatusText = automatic
+            ? "Automatic analysis of new non-loopback activity is running..."
+            : "Preparing bounded evidence and requesting analysis...";
         try
         {
             var evidence = AiEvidenceBuilder.Build(
-                _monitor.Connections.Select(row => row.Source).ToArray(),
+                sourceConnections,
                 _monitor.SourceName,
                 _monitor.Limitations,
                 settings.MaxConnections,
@@ -205,13 +264,80 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
 
             SelectedFinding = finding;
             StatusText = finding.Error is null
-                ? "Analysis completed. Review evidence and uncertainty before acting."
+                ? (automatic
+                    ? "Automatic analysis completed. Review evidence and uncertainty before acting."
+                    : "Analysis completed. Review evidence and uncertainty before acting.")
                 : "Analysis returned no reliable result: " + finding.Error;
             UpdateStatus();
         }
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private async Task AutomaticTickAsync()
+    {
+        if (!AutomaticAnalysis || !Enabled || !IsConfigured || IsBusy)
+        {
+            return;
+        }
+
+        var interval = TimeSpan.FromMinutes(Math.Clamp(AnalysisIntervalMinutes, 5, 60));
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastAutoAttempt < interval)
+        {
+            return;
+        }
+
+        _lastAutoAttempt = now;
+        var candidates = _monitor.Connections
+            .Where(row => row.Source.IsNew &&
+                          !row.Source.IsLoopback &&
+                          !string.IsNullOrWhiteSpace(row.Source.RemoteEndpoint))
+            .Select(row => row.Source)
+            .Take(Math.Clamp(MaxConnections, 1, 50))
+            .Where(connection => _autoSeen.Add(
+                $"{connection.ProcessId}|{connection.Protocol}|{connection.RemoteEndpoint}"))
+            .ToArray();
+
+        if (candidates.Length == 0)
+        {
+            return;
+        }
+
+        if (_autoSeen.Count > 5000)
+        {
+            _autoSeen.Clear();
+        }
+
+        await RunAnalysisAsync(automatic: true, connections: candidates).ConfigureAwait(true);
+    }
+
+    private bool ReserveRequest(AiAnalystSettings settings, bool automatic)
+    {
+        var now = DateTimeOffset.UtcNow;
+        while (_requestTimes.Count > 0 && now - _requestTimes.Peek() > TimeSpan.FromHours(1))
+        {
+            _requestTimes.Dequeue();
+        }
+
+        if (automatic && _requestTimes.Count >= Math.Clamp(settings.MaxRequestsPerHour, 1, 60))
+        {
+            StatusText = "Automatic analysis hourly request limit reached; no request was sent.";
+            return false;
+        }
+
+        _requestTimes.Enqueue(now);
+        return true;
+    }
+
+    private void StartAutomaticTimer()
+    {
+        _autoTimer.Stop();
+        if (AutomaticAnalysis && Enabled)
+        {
+            _autoTimer.Start();
         }
     }
 
@@ -233,6 +359,10 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         RedactPaths = RedactPaths,
         MaxConnections = Math.Clamp(MaxConnections, 1, 50),
         MaxTokens = Math.Clamp(MaxTokens, 256, 4000),
+        AutomaticAnalysis = AutomaticAnalysis,
+        AnalysisIntervalMinutes = Math.Clamp(AnalysisIntervalMinutes, 5, 60),
+        MaxRequestsPerHour = Math.Clamp(MaxRequestsPerHour, 1, 60),
+        VerifierModel = VerifierModel.Trim(),
     };
 
     private void UpdateCredentialsText() => OnPropertyChanged(nameof(CredentialsText));
@@ -249,7 +379,9 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         }
         else
         {
-            StatusText = "Ready for an explicit manual analysis. No automatic request is made.";
+            StatusText = AutomaticAnalysis
+                ? "Ready. Automatic analysis is opt-in and limited to new non-loopback activity."
+                : "Ready for an explicit manual analysis. No automatic request is made.";
         }
 
         OnPropertyChanged(nameof(IsConfigured));
