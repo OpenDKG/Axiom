@@ -11,6 +11,8 @@ public sealed class EventRowView(HistoryRow row)
 
     public string AppDisplayName => row.AppDisplayName;
 
+    public string AppPath => row.AppPath;
+
     public int ProcessId => row.ProcessId;
 
     public string Protocol => row.Protocol.ToUpperInvariant();

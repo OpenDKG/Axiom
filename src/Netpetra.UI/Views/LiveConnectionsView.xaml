@@ -50,7 +50,11 @@
                       IsChecked="{Binding OnlyNew}" />
             <CheckBox Style="{StaticResource AppCheckBox}"
                       Content="Loopback only"
-                      IsChecked="{Binding OnlyLoopback}" />
+                      IsChecked="{Binding OnlyLoopback}"
+                      Margin="0,0,14,0" />
+            <CheckBox Style="{StaticResource AppCheckBox}"
+                      Content="Group by application"
+                      IsChecked="{Binding IsGroupedByApp}" />
           </StackPanel>
         </StackPanel>
 
@@ -151,7 +155,18 @@
         </Border>
 
         <Grid>
-          <DataGrid Style="{StaticResource TableDataGrid}"
+          <Grid>
+            <Grid.Style>
+              <Style TargetType="Grid">
+                <Setter Property="Visibility" Value="Visible" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsGroupedByApp}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Grid.Style>
+            <DataGrid Style="{StaticResource TableDataGrid}"
                     ItemsSource="{Binding View}"
                     SelectedItem="{Binding SelectedConnection}"
                     AutomationProperties.Name="Observed connections"
@@ -222,6 +237,83 @@
                          Text="Reset the filters to see every observed socket. An empty table without filters means the capture returned nothing; the limitations below explain why that can happen." />
             </StackPanel>
           </Border>
+          </Grid>
+
+          <Grid Visibility="{Binding IsGroupedByApp, Converter={StaticResource BoolToVisibility}}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,6">
+              <ItemsControl ItemsSource="{Binding AppGroups}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type vm:ConnectionAppGroup}">
+                    <Border BorderBrush="{DynamicResource Brush.Border}"
+                            BorderThickness="0,0,0,1"
+                            Padding="12,4">
+                      <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                                HorizontalContentAlignment="Stretch"
+                                Foreground="{DynamicResource Brush.TextPrimary}">
+                        <Expander.Header>
+                          <Grid Margin="0,3">
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="*" />
+                              <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                              <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" />
+                              <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                              <TextBlock Text="{Binding PathText}" Style="{StaticResource Caption}"
+                                         FontFamily="{StaticResource Font.Mono}" FontSize="10.5"
+                                         TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding CountText}"
+                                       Style="{StaticResource Caption}"
+                                       VerticalAlignment="Center"
+                                       FontFamily="{StaticResource Font.Mono}" />
+                          </Grid>
+                        </Expander.Header>
+                        <DataGrid Style="{StaticResource TableDataGrid}"
+                                  ItemsSource="{Binding Connections}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  SelectionMode="Single"
+                                  SelectionUnit="FullRow"
+                                  MaxHeight="260"
+                                  Margin="0,8,0,0"
+                                  HeadersVisibility="Column"
+                                  AutomationProperties.Name="Connections in application group">
+                          <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow" BasedOn="{StaticResource TableRow}">
+                              <Setter Property="ToolTip" Value="{Binding RowTooltip}" />
+                            </Style>
+                          </DataGrid.RowStyle>
+                          <DataGrid.Columns>
+                            <DataGridTextColumn Header="PID" Width="56" Binding="{Binding ProcessId}" ElementStyle="{StaticResource TableText}" />
+                            <DataGridTextColumn Header="PROTO" Width="56" Binding="{Binding ProtocolText}" ElementStyle="{StaticResource TableText}" />
+                            <DataGridTextColumn Header="LOCAL" Width="1.05*" Binding="{Binding LocalEndpoint}" ElementStyle="{StaticResource TableText}" />
+                            <DataGridTextColumn Header="REMOTE" Width="1.15*" Binding="{Binding RemoteEndpoint}" ElementStyle="{StaticResource TableText}" />
+                            <DataGridTextColumn Header="STATE" Width="86" Binding="{Binding State}" ElementStyle="{StaticResource TableText}" />
+                            <DataGridTextColumn Header="DIR" Width="44" Binding="{Binding DirectionText}" ElementStyle="{StaticResource TableText}" />
+                            <DataGridTextColumn Header="QUALITY" Width="68" Binding="{Binding QualityText}" ElementStyle="{StaticResource TableText}" />
+                            <DataGridTextColumn Header="FIRST SEEN" Width="86" Binding="{Binding FirstSeenText}" ElementStyle="{StaticResource TableText}" />
+                          </DataGrid.Columns>
+                        </DataGrid>
+                      </Expander>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+            <Border Background="{DynamicResource Brush.Surface}"
+                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+              <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460">
+                <TextBlock Text="No applications match these filters."
+                           Style="{StaticResource EmptyStateTitle}"
+                           HorizontalAlignment="Center" />
+                <TextBlock Style="{StaticResource BodyMuted}"
+                           TextAlignment="Center"
+                           Margin="0,6,0,0"
+                           Text="Reset the filters or switch back to the socket view." />
+              </StackPanel>
+            </Border>
+          </Grid>
         </Grid>
       </DockPanel>
     </Border>

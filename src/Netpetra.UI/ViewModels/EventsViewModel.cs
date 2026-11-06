@@ -27,6 +27,8 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
 
     private readonly DispatcherTimer? _searchDebounce;
 
+    private readonly Dictionary<string, EventAppGroup> _appGroups = new(StringComparer.OrdinalIgnoreCase);
+
     public EventsViewModel(bool serviceMode)
         : base("Events", "Unified timeline · network events from the local service", "\uE81C")
     {
@@ -58,6 +60,11 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
     public IReadOnlyList<string> Categories { get; } = ["All", "Network"];
 
     public ObservableCollection<EventRowView> Rows { get; } = [];
+
+    public ObservableCollection<EventAppGroup> AppGroups { get; } = [];
+
+    [ObservableProperty]
+    private bool _isGroupedByApp;
 
     [ObservableProperty]
     private string _selectedRange = "1h";
@@ -96,6 +103,14 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
 
     partial void OnSelectedCategoryChanged(string value) => _ = RefreshAsync();
 
+    partial void OnIsGroupedByAppChanged(bool value)
+    {
+        if (value)
+        {
+            RebuildGroups();
+        }
+    }
+
     partial void OnSearchTextChanged(string value)
     {
         if (_searchDebounce is null)
@@ -131,11 +146,13 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
             DatabaseText = page.DatabasePath;
             IsEmpty = page.TotalCount == 0;
             CanExport = page.Rows.Count > 0;
+            RebuildGroups();
             StatusText = $"{page.Rows.Count} of {page.TotalCount} network events · {SelectedRange}";
         }
         catch (ServiceUnavailableException exception)
         {
             Rows.Clear();
+            AppGroups.Clear();
             TotalCount = 0;
             IsEmpty = true;
             CanExport = false;
@@ -146,6 +163,7 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
 #pragma warning restore CA1031
         {
             Rows.Clear();
+            AppGroups.Clear();
             TotalCount = 0;
             IsEmpty = true;
             CanExport = false;
@@ -218,6 +236,41 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
         }
     }
 
+    private void RebuildGroups()
+    {
+        var grouped = Rows
+            .GroupBy(row => row.AppPath.Length > 0
+                ? row.AppPath
+                : row.AppDisplayName, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.First().AppDisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var activeKeys = new HashSet<string>(grouped.Select(group => group.Key), StringComparer.OrdinalIgnoreCase);
+        foreach (var stale in _appGroups.Keys.Where(key => !activeKeys.Contains(key)).ToList())
+        {
+            _appGroups.Remove(stale);
+        }
+
+        AppGroups.Clear();
+        foreach (var group in grouped)
+        {
+            if (!_appGroups.TryGetValue(group.Key, out var rowGroup))
+            {
+                rowGroup = new EventAppGroup(group.Key);
+                _appGroups[group.Key] = rowGroup;
+            }
+
+            var rows = group.ToList();
+            var first = rows[0];
+            rowGroup.Update(
+                first.ProcessId == 0 ? "Unowned kernel sockets (PID 0)" : first.AppDisplayName,
+                first.ProcessId == 0 ? "No process owner" : first.AppPath,
+                rows);
+            AppGroups.Add(rowGroup);
+        }
+    }
+
     private Task<HistoryPage> LoadAsync(int limit)
     {
         var to = DateTimeOffset.UtcNow;
@@ -250,4 +303,52 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
         value.Contains('\r', StringComparison.Ordinal)
             ? $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\""
             : value;
+}
+
+/// <summary>One application group in the Events grouped view.</summary>
+public sealed partial class EventAppGroup : ObservableObject
+{
+    public EventAppGroup(string key)
+    {
+        Key = key;
+    }
+
+    public string Key { get; }
+
+    [ObservableProperty]
+    private string _name = string.Empty;
+
+    [ObservableProperty]
+    private string _pathText = string.Empty;
+
+    [ObservableProperty]
+    private string _countText = string.Empty;
+
+    [ObservableProperty]
+    private string _summaryText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isExpanded;
+
+    public ObservableCollection<EventRowView> Events { get; } = [];
+
+    public void Update(string name, string path, IReadOnlyList<EventRowView> rows)
+    {
+        Name = name;
+        PathText = string.IsNullOrWhiteSpace(path) ? "Executable path not readable" : path;
+        CountText = $"{rows.Count} event{(rows.Count == 1 ? string.Empty : "s")}";
+        var endpoints = rows
+            .Select(row => row.RemoteEndpoint)
+            .Where(endpoint => !string.IsNullOrWhiteSpace(endpoint))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+        var latest = rows.Max(row => row.LastSeenUtc);
+        SummaryText = $"{endpoints} remote endpoint{(endpoints == 1 ? string.Empty : "s")} \u00b7 latest {latest.ToLocalTime():HH:mm:ss}";
+
+        Events.Clear();
+        foreach (var row in rows)
+        {
+            Events.Add(row);
+        }
+    }
 }
