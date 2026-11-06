@@ -16,6 +16,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private readonly PrivacyShieldSourceUpdater _sourceUpdater;
 
+    private readonly PrivacyShieldBlockedHistoryStore _blockedHistory = new();
+
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private readonly Dictionary<string, string> _sourceErrors =
@@ -97,6 +99,20 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 }
             }
 
+            return CreateStatus();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<PrivacyShieldStatus> ClearHistoryAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            _blockedHistory.Clear();
             return CreateStatus();
         }
         finally
@@ -206,7 +222,11 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         try
         {
             var policy = PrivacyShieldPolicy.Create(_settings, _rules);
-            _server = new DnsProxyServer(policy, upstreams, _settings.Port);
+            _server = new DnsProxyServer(
+                policy,
+                upstreams,
+                _settings.Port,
+                _blockedHistory.Append);
         }
         catch (Exception exception) when (exception is
                      System.Net.Sockets.SocketException or ArgumentException or InvalidOperationException)
@@ -235,6 +255,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             {
                 Settings = _settings,
                 Sources = BuildSourceStatuses(),
+                BlockedHistory = _blockedHistory.LoadRecent(),
                 LastError = _lastError,
             };
         }
@@ -257,6 +278,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             RuleCount = ruleCount,
             Settings = _settings,
             Sources = BuildSourceStatuses(),
+            BlockedHistory = _blockedHistory.LoadRecent(),
             Detail = _settings.Enabled
                 ? "Privacy Shield is enabled but the resolver is not running."
                 : "Privacy Shield is disabled. No DNS query is observed or filtered.",

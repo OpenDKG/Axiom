@@ -115,8 +115,10 @@ submission. See [STORE.md](STORE.md).
   validated, normalized and atomically swapped; the previous ruleset is retained for rollback.
 - The policy engine evaluates only the DNS question name. It does not inspect payloads, TLS, HTTP
   or application identity and does not claim per-process DNS attribution.
-- Counters and top blocked domains are in memory. No DNS query history is written to SQLite or any
-  other store; settings contain only profiles, categories, ports, upstream and custom lists.
+- Counters and top blocked domains are in memory. A bounded, local blocked-query history (last 1,000)
+  stores only blocked domain, category and timestamp in
+  `%LOCALAPPDATA%\Netpetra\privacy-shield-blocked.jsonl`; allowed queries are never stored, and the
+  user can clear it. No other DNS history is written to SQLite or any other store.
 - If no non-loopback system DNS is available, the service uses a conservative public fallback
   (`1.1.1.1`/`9.9.9.9`) and reports it, so a manually configured loopback adapter does not lose all
   resolution. Managed networks should set an explicit upstream.

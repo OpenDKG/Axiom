@@ -258,9 +258,21 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
           </StackPanel>
-          <StackPanel Margin="0,14,0,0">
-            <TextBlock Text="Recent blocked queries" Style="{StaticResource Caption}" />
-            <ItemsControl ItemsSource="{Binding RecentBlocked}" Margin="0,5,0,0">
+          <Grid Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Blocked history (last 1,000, local only)" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    Style="{StaticResource GhostButton}"
+                    Content="Clear blocked history"
+                    Command="{Binding ClearBlockedHistoryCommand}"
+                    Padding="8,3"
+                    FontSize="11" />
+          </Grid>
+          <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto" Margin="0,5,0,0">
+            <ItemsControl ItemsSource="{Binding BlockedHistory}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
                   <Grid Margin="0,2">
@@ -271,12 +283,12 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{Binding Domain}" FontFamily="{StaticResource Font.Mono}" FontSize="11" TextTrimming="CharacterEllipsis" />
                     <TextBlock Grid.Column="1" Text="{Binding Category}" Style="{StaticResource Caption}" />
-                    <TextBlock Grid.Column="2" Text="{Binding BlockedUtc, StringFormat={}{0:HH:mm:ss}}" Style="{StaticResource Caption}" TextAlignment="Right" />
+                    <TextBlock Grid.Column="2" Text="{Binding BlockedUtc, StringFormat={}{0:MM-dd HH:mm:ss}}" Style="{StaticResource Caption}" TextAlignment="Right" />
                   </Grid>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-          </StackPanel>
+          </ScrollViewer>
         </StackPanel>
       </Border>
 

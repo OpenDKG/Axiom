@@ -39,6 +39,7 @@ public static class IpcCommandTypes
     public const string PrivacyStatus = "privacy.status";
     public const string PrivacyConfigure = "privacy.configure";
     public const string PrivacySourcesUpdate = "privacy.sources.update";
+    public const string PrivacyHistoryClear = "privacy.history.clear";
     public const string ConfigGet = "config.get";
     public const string ConfigSet = "config.set";
     public const string DiagnosticsExport = "diagnostics.export";
@@ -57,6 +58,7 @@ public static class IpcCommandTypes
         PrivacyStatus,
         PrivacyConfigure,
         PrivacySourcesUpdate,
+        PrivacyHistoryClear,
         ConfigGet,
         ConfigSet,
         DiagnosticsExport,
