@@ -204,15 +204,24 @@
                   </StackPanel>
 
                   <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Style="{StaticResource GhostButton}"
-                            Content="{Binding ActionLabel}"
+                    <Button Content="{Binding ActionLabel}"
                             Padding="8,3"
                             FontSize="11"
                             Margin="0,0,8,0"
                             Command="{Binding DataContext.Security.ActOnModuleCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                             CommandParameter="{Binding Name}"
                             Visibility="{Binding CanAct, Converter={StaticResource BoolToVisibility}}"
-                            ToolTip="Run the setup action for this optional module." />
+                            ToolTip="Run the setup action for this optional module.">
+                      <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding ActionLabel}" Value="Starting...">
+                              <Setter Property="IsEnabled" Value="False" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Button.Style>
+                    </Button>
                     <Button Content="Audit"
                             Padding="6,2"
                             FontSize="10"
@@ -539,7 +548,7 @@
                                    Margin="0,3,0,0" />
                       </StackPanel>
                       <Border Style="{StaticResource StatusPill}" VerticalAlignment="Top">
-                        <TextBlock Text="{Binding Status}">
+                        <TextBlock Text="{Binding DisplayStatus}">
                           <TextBlock.Style>
                             <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
                               <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
@@ -547,25 +556,28 @@
                                 <DataTrigger Binding="{Binding IsProtected}" Value="True">
                                   <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding Status}" Value="DETECTED">
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="HOOKED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="CONNECTED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="PROTECTED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="VERIFIED">
+                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="DETECTED">
                                   <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding Status}" Value="HOOK INSTALLED">
-                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding Status}" Value="HOOK LOADED">
-                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding Status}" Value="VERIFIED BLOCKING">
-                                  <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding Status}" Value="AUDIT ONLY">
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="AUDIT ONLY">
                                   <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding Status}" Value="DEGRADED">
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="DEGRADED">
                                   <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding Status}" Value="OFFLINE">
+                                <DataTrigger Binding="{Binding DisplayStatus}" Value="OFFLINE">
                                   <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
                                 </DataTrigger>
                               </Style.Triggers>
