@@ -211,7 +211,13 @@ public sealed class OptionalModuleInstaller
         try
         {
             using var process = Process.Start(startInfo);
-            return process is not null;
+            if (process is null)
+            {
+                return false;
+            }
+
+            ProcessWindowHider.Start(process.Id);
+            return true;
         }
         catch (Exception exception) when (exception is
                      Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
@@ -257,7 +263,13 @@ public sealed class OptionalModuleInstaller
             };
 
             using var process = Process.Start(startInfo);
-            return process is not null;
+            if (process is null)
+            {
+                return false;
+            }
+
+            ProcessWindowHider.Start(process.Id);
+            return true;
         }
         catch (Exception exception) when (exception is
                      Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)

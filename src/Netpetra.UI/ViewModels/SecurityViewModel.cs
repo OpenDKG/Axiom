@@ -96,6 +96,19 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
 
     public string TargetText => string.IsNullOrWhiteSpace(Target) ? "No workspace detected" : Target;
 
+    /// <summary>
+    /// Human-readable state. A configured hook is "HOOKED" until runtime evidence proves that it
+    /// reached the local guard; it then becomes "CONNECTED". Blackbox-attached Hermes/OpenClaw
+    /// workspaces keep the stronger "PROTECTED" label.
+    /// </summary>
+    public string DisplayStatus => Status switch
+    {
+        "HOOK INSTALLED" => "HOOKED",
+        "HOOK LOADED" => "CONNECTED",
+        "VERIFIED BLOCKING" => "VERIFIED",
+        _ => Status,
+    };
+
     public bool IsProtected => Status == "PROTECTED";
 
     public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude" or "cursor" or "copilot" or "gemini" or "windsurf" or "cline";
@@ -401,6 +414,40 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
     }
 
+    private void SetModuleActionLabel(string moduleName, string label)
+    {
+        for (var index = 0; index < Modules.Count; index++)
+        {
+            if (Modules[index].Name == moduleName)
+            {
+                Modules[index] = Modules[index] with { ActionLabel = label };
+                return;
+            }
+        }
+    }
+
+    private async Task<bool> WaitForModuleStartAsync(string moduleName, int attempts = 12)
+    {
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            await Task.Delay(2000).ConfigureAwait(true);
+            await RefreshAsync().ConfigureAwait(true);
+
+            var module = Modules.FirstOrDefault(item => item.Name == moduleName);
+            if (module?.IsConnected == true)
+            {
+                return true;
+            }
+
+            // RefreshAsync rebuilds the module list, so keep the visible action label honest
+            // while the external process is still starting.
+            SetModuleActionLabel(moduleName, "Starting...");
+        }
+
+        SetModuleActionLabel(moduleName, "Start");
+        return false;
+    }
+
     [RelayCommand]
     private async Task ActOnModuleAsync(string? module)
     {
@@ -439,15 +486,20 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         {
             if (_uninstaller.IsBlackboxInstalled)
             {
+                SetModuleActionLabel(module, "Starting...");
+                InstallStatusText = "Starting the Blackbox dashboard...";
                 var started = _installer.StartBlackboxDashboard();
-                InstallStatusText = started
-                    ? "Blackbox dashboard start requested. Checking again in a few seconds."
-                    : "Blackbox venv is missing. Reinstall Blackbox to repair it.";
-
-                if (started)
+                if (!started)
                 {
-                    await Task.Delay(3000).ConfigureAwait(true);
-                    await RefreshAsync().ConfigureAwait(true);
+                    SetModuleActionLabel(module, "Start");
+                    InstallStatusText = "Blackbox venv is missing. Reinstall Blackbox to repair it.";
+                    return;
+                }
+
+                InstallStatusText = "Waiting for the Blackbox dashboard to answer...";
+                if (!await WaitForModuleStartAsync(module).ConfigureAwait(true))
+                {
+                    InstallStatusText = "Blackbox did not answer after 24 seconds. Check its local log or start it manually.";
                 }
 
                 return;
@@ -475,15 +527,20 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         {
             if (_uninstaller.IsDkgInstalled)
             {
+                SetModuleActionLabel(module, "Starting...");
+                InstallStatusText = "Starting the DKG node...";
                 var started = _installer.StartDkg();
-                InstallStatusText = started
-                    ? "DKG start requested. Checking again in a few seconds."
-                    : "DKG CLI is missing. Reinstall DKG to repair it.";
-
-                if (started)
+                if (!started)
                 {
-                    await Task.Delay(5000).ConfigureAwait(true);
-                    await RefreshAsync().ConfigureAwait(true);
+                    SetModuleActionLabel(module, "Start");
+                    InstallStatusText = "DKG CLI is missing. Reinstall DKG to repair it.";
+                    return;
+                }
+
+                InstallStatusText = "Waiting for the DKG node to become ready...";
+                if (!await WaitForModuleStartAsync(module, attempts: 45).ConfigureAwait(true))
+                {
+                    InstallStatusText = "DKG did not answer after 90 seconds. Check its local log or start it manually.";
                 }
 
                 return;

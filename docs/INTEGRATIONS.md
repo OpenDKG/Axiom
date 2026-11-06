@@ -29,11 +29,24 @@ visible PowerShell window only after a confirmation dialog:
   `http://127.0.0.1:9700`.
 
 If Blackbox or DKG is installed but not running, its action changes to **Start**; it starts the
-existing dashboard/node without reinstalling. Nothing is installed silently. Close the PowerShell window only
-after it reports success, then click **Check again**. **Restart Axiom** is available for a clean
-restart after installation.
+existing dashboard/node without reinstalling. The node/dashboard runs in the background, and child
+console windows created by third-party launchers are hidden. The button changes to **Starting...**
+and stays disabled while Axiom waits for the loopback probe; it returns to **Start** only after a
+timeout or a failed launch. Nothing is installed silently. Close the PowerShell window only after
+it reports success, then click **Check again**. **Restart Axiom** is available for a clean restart
+after installation.
 The activity strip shows the last 30 loopback checks; it is a health indicator, not module event
 content.
+
+Agent workspace labels are deliberately not interchangeable:
+
+- **HOOKED**: the Axiom hook is installed and Blackbox is reachable, but no runtime invocation has
+  been observed yet. It is shown green because the configuration and local connection are healthy.
+- **CONNECTED**: the hook has produced runtime evidence and reached the local guard. End-to-end
+  blocking is still not claimed unless it is explicitly verified.
+- **PROTECTED**: Hermes/OpenClaw reports an attached protected workspace through Blackbox.
+
+An installed hook is never treated as proof of runtime blocking.
 
 ### OpenCode and OpenChamber
 

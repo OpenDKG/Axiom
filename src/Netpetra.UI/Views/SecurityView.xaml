@@ -84,15 +84,24 @@
                   </StackPanel>
 
                   <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Style="{StaticResource GhostButton}"
-                            Content="{Binding ActionLabel}"
+                    <Button Content="{Binding ActionLabel}"
                             Padding="8,3"
                             FontSize="11"
                             Margin="0,0,8,0"
                             Command="{Binding DataContext.ActOnModuleCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                             CommandParameter="{Binding Name}"
                             Visibility="{Binding CanAct, Converter={StaticResource BoolToVisibility}}"
-                            ToolTip="Run the setup action for this optional module." />
+                            ToolTip="Run the setup action for this optional module.">
+                      <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding ActionLabel}" Value="Starting...">
+                              <Setter Property="IsEnabled" Value="False" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Button.Style>
+                    </Button>
                     <Button Content="Audit"
                             Padding="6,2"
                             FontSize="10"
