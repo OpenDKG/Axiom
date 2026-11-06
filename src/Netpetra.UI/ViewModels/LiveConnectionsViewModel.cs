@@ -218,9 +218,17 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
             _appGroups.Remove(stale);
         }
 
-        AppGroups.Clear();
-        foreach (var group in grouped)
+        for (var index = AppGroups.Count - 1; index >= 0; index--)
         {
+            if (!activeKeys.Contains(AppGroups[index].Key))
+            {
+                AppGroups.RemoveAt(index);
+            }
+        }
+
+        for (var index = 0; index < grouped.Count; index++)
+        {
+            var group = grouped[index];
             if (!_appGroups.TryGetValue(group.Key, out var rowGroup))
             {
                 rowGroup = new ConnectionAppGroup(group.Key);
@@ -233,7 +241,16 @@ public sealed partial class LiveConnectionsViewModel : PageViewModel, IDisposabl
                 first.Source.ProcessId == 0 ? "Unowned kernel sockets (PID 0)" : first.AppDisplayName,
                 first.Source.ProcessId == 0 ? "No process owner" : first.Source.AppPath,
                 rows);
-            AppGroups.Add(rowGroup);
+
+            var currentIndex = AppGroups.IndexOf(rowGroup);
+            if (currentIndex < 0)
+            {
+                AppGroups.Insert(index, rowGroup);
+            }
+            else if (currentIndex != index)
+            {
+                AppGroups.Move(currentIndex, index);
+            }
         }
 
         if (IsGroupedByApp)
@@ -331,10 +348,23 @@ public sealed partial class ConnectionAppGroup : ObservableObject
             .Select(group => $"{group.Key} {group.Count()}");
         SummaryText = $"{tcp} TCP \u00b7 {udp} UDP \u00b7 {string.Join(" \u00b7 ", states)}";
 
-        Connections.Clear();
+        // Keep the group's DataGrid scroll position and selection stable across one-second polls.
+        var desired = new HashSet<ConnectionRow>(rows, ReferenceEqualityComparer.Instance);
+        for (var index = Connections.Count - 1; index >= 0; index--)
+        {
+            if (!desired.Contains(Connections[index]))
+            {
+                Connections.RemoveAt(index);
+            }
+        }
+
+        var existing = new HashSet<ConnectionRow>(Connections, ReferenceEqualityComparer.Instance);
         foreach (var row in rows)
         {
-            Connections.Add(row);
+            if (existing.Add(row))
+            {
+                Connections.Add(row);
+            }
         }
     }
 }
