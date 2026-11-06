@@ -25,7 +25,7 @@ public sealed class DemoConnectionSnapshotSource : IConnectionSnapshotSource
             Limitations =
             [
                 "Demo rows only: no socket, process or interface was read.",
-                "Start Netpetra.Desktop.exe for the real IP Helper inventory.",
+                "Start the Axiom desktop app for the real IP Helper inventory.",
             ],
         });
     }

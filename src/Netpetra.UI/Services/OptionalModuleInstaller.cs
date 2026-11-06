@@ -176,7 +176,7 @@ public sealed class OptionalModuleInstaller
                 Invoke-WebRequest $dashboard -UseBasicParsing -TimeoutSec 5 | Out-Null
                 Write-Host 'Blackbox dashboard is up at http://127.0.0.1:9700.' -ForegroundColor Green
               } catch {
-                Write-Warning "Blackbox dashboard did not answer yet. Start it from Netpetra with the Start button."
+                Write-Warning "Blackbox dashboard did not answer yet. Start it from Axiom with the Start button."
               }
             }
             Write-Host 'Blackbox setup finished. Return to Netpetra and click Check again.' -ForegroundColor Green

@@ -8,7 +8,7 @@
     <RootNamespace>Netpetra.Desktop</RootNamespace>
     <AssemblyName>Netpetra.Desktop</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>..\Netpetra.UI\Resources\netpetra.ico</ApplicationIcon>
+    <ApplicationIcon>..\Netpetra.UI\Resources\axiom.ico</ApplicationIcon>
     <StartupObject>Netpetra.Desktop.Program</StartupObject>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>

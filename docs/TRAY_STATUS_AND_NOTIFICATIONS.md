@@ -4,7 +4,7 @@ This Draft feature stacks on PR #99, #97 and #96.
 
 ## What it does
 
-- Adds a lightweight tray icon to Windows' notification area next to the clock for the **running** Netpetra desktop process. Windows may hide it under the notification overflow menu until the user pins it.
+- Adds a lightweight tray icon to Windows' notification area next to the clock for the **running** Axiom desktop process. Windows may hide it under the notification overflow menu until the user pins it.
 - The icon displays two directional arrows; hovering over it reports **measured** system-wide upload and download rates in B/s, KB/s, MB/s or GB/s with autoscaling. No fabricated application-level traffic attribution.
 - Left click/double click opens the app. Right click shows the live rates, monitor health, an Open action, a notification toggle and Exit.
 - A red exclamation overlay is shown **only** when the existing socket monitor reports an error or an established connection snapshot is stale. New connections alone are never treated as threats.

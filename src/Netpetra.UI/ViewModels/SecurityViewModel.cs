@@ -281,7 +281,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     public string StatusText => DistributionContext.IsStorePackage
         ? "Microsoft Store build: optional third-party modules and agent hooks are not included. Core local security features remain available."
         : Modules.Any(module => module.IsConnected)
-            ? "Netpetra reads loopback status. Install buttons open the official third-party installer only after confirmation."
+            ? "Axiom reads loopback status. Install buttons open the official third-party installer only after confirmation."
             : "The standard build is local and offline. Use Install to open the official third-party installer after confirmation.";
 
     public string AgentStatusTitle

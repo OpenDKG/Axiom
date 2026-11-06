@@ -1,4 +1,4 @@
-# Architecture — Netpetra (FND-005)
+# Architecture — Axiom (FND-005)
 
 Current state: read-only inventory in the service, a local Named Pipe, SQLite history, and a UI that
 runs either in-process or through the service. FND-004 (ETW bytes) is deferred because it requires

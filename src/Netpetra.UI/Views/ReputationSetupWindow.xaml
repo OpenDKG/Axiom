@@ -26,7 +26,7 @@
                Style="{StaticResource BodyMuted}"
                Margin="0,6,0,0"
                TextWrapping="Wrap"
-               Text="Opt-in only. Netpetra sends the SHA-256 hash, never the file, path or URL. The key is stored with Windows DPAPI for your user." />
+               Text="Opt-in only. Axiom sends the SHA-256 hash, never the file, path or URL. The key is stored with Windows DPAPI for your user." />
 
     <StackPanel Grid.Row="2" Margin="0,16,0,0">
       <TextBlock Text="API key" Style="{StaticResource Caption}" Margin="0,0,0,5" />

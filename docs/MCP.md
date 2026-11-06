@@ -1,9 +1,9 @@
-# Netpetra MCP server (foundation)
+# Axiom MCP server (foundation)
 
 Status: **PR A foundation, read-only, not integrated into the installer.** No release, no automatic
 client configuration and no firewall write tools exist in this change.
 
-The server lets a local AI client ask what Netpetra has already observed. It is deliberately an
+The server lets a local AI client ask what Axiom has already observed. It is deliberately an
 analyst, not an enforcement path: every tool is read-only, and the agent cannot apply a rule,
 terminate a process, read an arbitrary file or run a command.
 
@@ -41,7 +41,7 @@ Windows host
 | `netpetra_analyze_connection` | Deterministic private/loopback/public classification and uncertainty | No reputation provider; a new public destination is a lead, not proof. A row without an observed remote endpoint is `INSUFFICIENT_DATA`, not local/low risk. |
 | `netpetra_get_threat_alerts` | Reports that no alert store exists yet | Empty alerts are **not** a clean bill of health |
 | `netpetra_get_reputation` | Reports that no local cache/provider is configured | Unknown is not clean; no external request is sent |
-| `netpetra_get_firewall_rules` | Netpetra-owned rules, capability and write-gate state | A stored rule is not proof that an observed connection was blocked |
+| `netpetra_get_firewall_rules` | Axiom-owned rules, capability and write-gate state | A stored rule is not proof that an observed connection was blocked |
 | `netpetra_generate_security_report` | Bounded summary from stored observations | History-only; no packet, DNS, TLS or byte evidence |
 
 All outputs include `schemaVersion`, scope/coverage and limitations. The server does not return

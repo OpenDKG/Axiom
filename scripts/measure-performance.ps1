@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Measures CPU and working-set usage of the Netpetra service and UI.
+    Measures CPU and working-set usage of the Axiom service and UI.
 
 .DESCRIPTION
     Starts the built service in console mode and the published UI with --service, warms up, samples
@@ -33,7 +33,7 @@ $uiExe = Join-Path $root "artifacts\publish\win-x64\Netpetra.Desktop.exe"
 if (-not (Test-Path $serviceExe)) { throw "Service build not found: $serviceExe. Run dotnet build first." }
 if (-not (Test-Path $uiExe)) { throw "Published UI not found: $uiExe. Run .\scripts\publish-standalone.ps1 first." }
 if (Get-Process -Name "Netpetra.Desktop","Netpetra.Service" -ErrorAction SilentlyContinue) {
-    throw "Netpetra is already running. Close it before measuring."
+    throw "Axiom is already running. Close it before measuring."
 }
 
 $outputDir = Join-Path $root "artifacts\performance"

@@ -8,7 +8,8 @@ public sealed record SetupOptions(
     bool CreateShortcut,
     bool StartAfterInstall,
     bool CompleteInstallation,
-    bool Silent = false)
+    bool Silent = false,
+    bool AcceptRisk = false)
 {
     public static SetupOptions Parse(string[] args)
     {
@@ -21,6 +22,7 @@ public sealed record SetupOptions(
         var startAfterInstall = true;
         var completeInstallation = true;
         var silent = false;
+        var acceptRisk = false;
 
         for (var index = 0; index < args.Length; index++)
         {
@@ -42,9 +44,18 @@ public sealed record SetupOptions(
                 case "--silent":
                     silent = true;
                     break;
+                case "--accept-risk":
+                    acceptRisk = true;
+                    break;
             }
         }
 
-        return new SetupOptions(installDir, createShortcut, startAfterInstall, completeInstallation, silent);
+        return new SetupOptions(
+            installDir,
+            createShortcut,
+            startAfterInstall,
+            completeInstallation,
+            silent,
+            acceptRisk);
     }
 }

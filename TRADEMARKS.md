@@ -1,12 +1,12 @@
 # Trademarks
 
-**Netpetra** is the name used by this project (repository `netpetra`). Names, logos and visual
+**Axiom** is the name used by this project (repository `Axiom`). Names, logos and visual
 identity are not granted by the source-code license.
 
 The GNU GPL-3.0-or-later gives you the right to use, study, share and modify the **code**. It does
 not give you the right to:
 
-- present a modified build as an official Netpetra release,
+- present a modified build as an official Axiom release,
 - use the project names or logos in a way that implies endorsement or partnership,
 - register confusingly similar names or logos.
 
@@ -22,6 +22,6 @@ that uses a confusingly similar name.
 ## Third-party marks
 
 **OriginTrail** and its logo are trademarks of OriginTrail. **Umanitek**, **Guardian Agent Blackbox**
-and their logos are trademarks of Umanitek. They are shown in Netpetra only to identify the local,
+and their logos are trademarks of Umanitek. They are shown in Axiom only to identify the local,
 optional modules and their status. Their use does not imply partnership or endorsement, and the
 assets remain subject to the owners' trademark policies.

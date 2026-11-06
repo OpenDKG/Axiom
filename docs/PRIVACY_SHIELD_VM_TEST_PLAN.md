@@ -6,7 +6,7 @@ product and result for every row.
 
 ## 1. Baseline and recovery
 
-- Clean VM, no Netpetra service running: service starts with Privacy Shield disabled and no port is
+- Clean VM, no Axiom service running: service starts with Privacy Shield disabled and no port is
   opened.
 - Save DNS with the UAC helper; enable the resolver on port 53; point one adapter at `127.0.0.1`.
 - Resolve a known public name and an allowed private/corporate name.

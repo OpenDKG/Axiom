@@ -83,7 +83,7 @@ public partial class App : Application
             PresentationTraceSources.Refresh();
             PresentationTraceSources.DataBindingSource.Listeners.Add(listener);
             PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
-            writer.WriteLine($"Netpetra binding trace enabled {DateTimeOffset.UtcNow:O}");
+            writer.WriteLine($"Axiom binding trace enabled {DateTimeOffset.UtcNow:O}");
         }
 
         var useService = e.Args.Any(argument =>

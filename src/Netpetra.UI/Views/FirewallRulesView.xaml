@@ -73,7 +73,7 @@
         <StackPanel>
           <TextBlock Text="OWNED RULES" Style="{StaticResource MetricLabel}" />
           <TextBlock Text="{Binding OwnedRuleCountText}" Style="{StaticResource MetricValue}" />
-          <TextBlock Text="Netpetra:: prefix only" Style="{StaticResource Caption}" Margin="0,4,0,0" />
+          <TextBlock Text="Axiom-owned rules use the legacy Netpetra:: prefix" Style="{StaticResource Caption}" Margin="0,4,0,0" />
         </StackPanel>
       </Border>
 
@@ -194,7 +194,7 @@
               <TextBlock Style="{StaticResource Caption}"
                          TextAlignment="Center"
                          Margin="0,8,0,0"
-                         Text="An empty list means Netpetra owns no rule; it does not mean Windows Firewall is inactive." />
+                         Text="An empty list means Axiom owns no rule; it does not mean Windows Firewall is inactive." />
             </StackPanel>
           </Border>
         </Grid>
@@ -205,6 +205,6 @@
                Style="{StaticResource Caption}"
                Margin="2,8,0,0"
                TextWrapping="Wrap"
-               Text="Windows Firewall remains the enforcement authority. External rules and Group Policy can still block or allow traffic; this page reports only Netpetra-owned rules." />
+               Text="Windows Firewall remains the enforcement authority. External rules and Group Policy can still block or allow traffic; this page reports only Axiom-owned rules." />
   </Grid>
 </UserControl>

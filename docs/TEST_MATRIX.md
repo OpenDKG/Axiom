@@ -1,4 +1,4 @@
-# Test matrix — Netpetra (FND-005)
+# Test matrix — Axiom (FND-005)
 
 Date: 2026-11-04. Host: Windows 10 IoT Enterprise LTSC 2021, 10.0.19044, x64.
 SDK: 10.0.403. Configuration: `Release`.
@@ -99,7 +99,7 @@ Service in console mode + published standalone UI with `--service`.
 | E14 | Gate-open service: Applications block buttons enabled, Firewall shows `TEST VM` and write path enabled; no click | ✅ 0 owned rules after | `netpetra-applications-writes-enabled.png`, `netpetra-firewall-writes-enabled.png` |
 | E15 | Advanced scope panel: protocol, ports, CIDR/addresses and profile checkboxes; block buttons disabled with the gate closed | ✅ no rule written | `netpetra-applications-scope-expanded.png` |
 | E16 | Security page probes a mock DKG node on loopback and shows `CONNECTED` with version/peer/role; Blackbox stays `NOT RUNNING`; no module started | ✅ loopback-only | `netpetra-security-connected.png` |
-| E17 | Security page shows Install for a non-connected module, Restart Netpetra, and the last-30-checks activity strip; installer not clicked | ✅ no installer run | `netpetra-security-install-activity.png` |
+| E17 | Security page shows Install for a non-connected module, Restart Axiom, and the last-30-checks activity strip; installer not clicked | ✅ no installer run | `netpetra-security-install-activity.png` |
 | E19 | Uninstall button visible for an installed Blackbox; cleanup is scoped to its folder/shortcut/`.hermes\blackbox`/scheduled task | ✅ no uninstall clicked | `netpetra-uninstall-button.png` |
 | E20 | Audit and Block buttons visible next to installed Blackbox; switching wrote `plugins.entries.blackbox.mode` and restored audit | ✅ config only | `netpetra-audit-block-buttons.png` |
 

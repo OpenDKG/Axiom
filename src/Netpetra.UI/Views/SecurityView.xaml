@@ -141,7 +141,7 @@
                             Command="{Binding DataContext.UninstallModuleCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                             CommandParameter="{Binding Name}"
                             Visibility="{Binding CanUninstall, Converter={StaticResource BoolToVisibility}}"
-                            ToolTip="Remove only the files and settings owned by Netpetra for this module." />
+                            ToolTip="Remove only the files and settings owned by Axiom for this module." />
                     <Border Style="{StaticResource StatusPill}">
                       <TextBlock Text="{Binding Status}">
                         <TextBlock.Style>

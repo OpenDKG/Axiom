@@ -92,7 +92,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         if (!serviceMode)
         {
             StatusBadge = "SERVICE REQUIRED";
-            StatusText = "Privacy Shield runs in the local Netpetra service. Start Netpetra with --service.";
+            StatusText = "Privacy Shield runs in the local Axiom service. Start Axiom with --service.";
             DetailText = "No DNS settings were changed.";
         }
         else
@@ -127,12 +127,12 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         $"{PrivacyShieldPolicy.StarterRulesAll.Count} starter rules (manually reviewed, not a third-party list)";
 
     public string ManualSetupText =>
-        "The Netpetra service never changes adapter DNS silently. The optional UAC helper changes " +
+        "The Axiom service never changes adapter DNS silently. The optional UAC helper changes " +
         "only the selected adapter after you confirm Windows elevation; it saves the previous DNS " +
         "and can restore it. If you do not use the helper, set the adapter DNS to 127.0.0.1 " +
         "(port 53) manually. Until Windows DNS points at this resolver, normal traffic bypasses it " +
         "and the counters stay at zero. This is DNS filtering only: applications still connect " +
-        "directly to destination IPs; traffic is not routed or proxied through Netpetra.";
+        "directly to destination IPs; traffic is not routed or proxied through Axiom.";
 
     public string BypassText =>
         "Privacy Shield is a DNS filter, not a VPN or traffic proxy. It does not block hardcoded IPs, " +

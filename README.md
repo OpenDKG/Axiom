@@ -1,10 +1,16 @@
-# Netpetra
+# Axiom
 
 **Open-Source Firewall & Security Monitor**
 
-**Repository:** https://github.com/a-51-50/Netpetra · **License:** GPL-3.0-or-later
+**Repository:** https://github.com/a-51-50/Axiom · **License:** GPL-3.0-or-later
 
-Netpetra is a local, offline Windows network monitor and firewall policy manager. It shows
+> **Development build - use at your own risk.** Axiom is under active development and may contain
+> defects, incomplete features or regressions. Firewall changes can interrupt connectivity, DNS
+> changes can break name resolution, and agent hooks can block tools or files. Do not rely on it as
+> your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
+> and keep a recovery path.
+
+Axiom is a local, offline Windows network monitor and firewall policy manager. It shows
 which applications use the network, which endpoints they talk to, and what happened over time. It
 manages only its own rules in the built-in Windows Firewall; Windows remains the enforcement
 authority. There is no account, no cloud, no advertising and no telemetry.
@@ -67,7 +73,7 @@ installer only after an explicit confirmation; nothing runs silently. Setup step
 An optional, default-disabled local DNS filter with Basic/Balanced/Strict profiles, custom allow and
 block lists and a loopback resolver. It never changes adapter DNS settings automatically; manual
 adapter configuration and rollback are documented in [Privacy Shield](docs/PRIVACY_SHIELD.md).
-Only in-memory counters are kept, not DNS query history. DoH/DoT/DoQ, hardcoded IPs and VPN traffic
+Counters are in memory; a bounded local history of blocked domains/categories/timestamps is kept and can be cleared. Allowed queries are never stored. DoH/DoT/DoQ, hardcoded IPs and VPN traffic
 are not covered. Optional catalogued HTTPS sources are bounded and atomically updated; VM test
 coverage is tracked in [the VM test plan](docs/PRIVACY_SHIELD_VM_TEST_PLAN.md).
 
@@ -222,8 +228,8 @@ acceleration on a machine where it is known to work.
 
 ### Installation (no administrator)
 
-The release ZIP contains **`Netpetra.Setup.exe`**. Double-click it, choose the agent-hook scope
-(Complete or Partial) and click **Install Netpetra**. The setup is a single self-contained
+The release ZIP contains **`Axiom-Setup.exe`**. Double-click it, choose the agent-hook scope
+(Complete or Partial) and click **Install Axiom**. The setup is a single self-contained
 executable with the desktop and local service payload embedded; it installs under
 `%LOCALAPPDATA%\Programs\Netpetra`, creates a Start Menu shortcut and starts the app. No .NET
 runtime, Windows service registration, firewall change or elevation is involved.
@@ -234,13 +240,13 @@ key is configured later on the Security page.
 **Complete installation** also runs the official Blackbox and DKG installers, starts their local
 services and installs agent hooks after Blackbox is ready. Those third-party installers may download
 large packages, require network access and show their own prompts/terms. **Partial installation**
-installs only core Netpetra and leaves Blackbox, DKG, OpenCode, OpenChamber and Codex files
+installs only core Axiom and leaves Blackbox, DKG, OpenCode, OpenChamber and Codex files
 unchanged.
 
 You can also install from a shell:
 
 ```powershell
-irm https://raw.githubusercontent.com/a-51-50/Netpetra/main/scripts/install-from-github.ps1 | iex
+irm https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-github.ps1 | iex
 ```
 
 The bootstrap downloads the latest release, verifies `SHA256SUMS.txt`, installs under
@@ -253,7 +259,7 @@ bootstrap:
 ```powershell
 $env:NETPETRA_GITHUB_TOKEN = gh auth token
 $headers = @{ Authorization = "Bearer $env:NETPETRA_GITHUB_TOKEN" }
-irm -Headers $headers https://raw.githubusercontent.com/a-51-50/Netpetra/main/scripts/install-from-github.ps1 | iex
+irm -Headers $headers https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-github.ps1 | iex
 ```
 
 The installer uses the token for release metadata and asset downloads; a public repository needs
@@ -309,7 +315,7 @@ scripts/                                # local run, service mode, standalone pu
 
 ## License and copyright
 
-Copyright (C) 2026 The Netpetra/Netpetra contributors.
+Copyright (C) 2026 The Axiom contributors.
 
 The desktop application, the Windows service and the core libraries are licensed under
 **GNU GPL v3.0 or later**. See [`LICENSE`](LICENSE) for the full text and [`NOTICE`](NOTICE) for the

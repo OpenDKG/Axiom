@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Builds the core-only Microsoft Store MSIX package and Store upload archive.
+    Builds the core-only Axiom Microsoft Store MSIX package and Store upload archive.
 
 .DESCRIPTION
     Publishes the self-contained Desktop and Service executables, stages only the core files,
@@ -16,15 +16,15 @@
     Release version. Defaults to the Version property in Directory.Build.props.
 
 .PARAMETER IdentityName
-    Package Identity Name from Partner Center. Defaults to NETPETRA_STORE_IDENTITY_NAME or Netpetra.
+    Package Identity Name from Partner Center. Defaults to NETPETRA_STORE_IDENTITY_NAME or Axiom.
 
 .PARAMETER Publisher
     Package Publisher from Partner Center, including CN=. Defaults to NETPETRA_STORE_PUBLISHER or
-    CN=Netpetra.
+    CN=Axiom.
 
 .PARAMETER PublisherDisplayName
     Publisher display name from Partner Center. Defaults to NETPETRA_STORE_PUBLISHER_DISPLAY_NAME or
-    Netpetra.
+    Axiom.
 
 .PARAMETER OutputDir
     Output directory. Defaults to artifacts\store.
@@ -39,9 +39,9 @@
     .\scripts\build-msix.ps1
 
 .EXAMPLE
-    .\scripts\build-msix.ps1 -IdentityName "12345Publisher.Netpetra" `
+    .\scripts\build-msix.ps1 -IdentityName "12345Publisher.Axiom" `
         -Publisher "CN=01234567-89ab-cdef-0123-456789abcdef" `
-        -PublisherDisplayName "Netpetra"
+        -PublisherDisplayName "Axiom"
 #>
 param(
     [string]$Version = "",
@@ -134,11 +134,11 @@ while ($versionParts.Count -lt 4) {
 }
 $packageVersion = ($versionParts[0..3] -join ".")
 
-if (-not $IdentityName) { $IdentityName = "Netpetra" }
-if (-not $Publisher) { $Publisher = "CN=Netpetra" }
-if (-not $PublisherDisplayName) { $PublisherDisplayName = "Netpetra" }
+if (-not $IdentityName) { $IdentityName = "Axiom" }
+if (-not $Publisher) { $Publisher = "CN=Axiom" }
+if (-not $PublisherDisplayName) { $PublisherDisplayName = "Axiom" }
 
-if ($IdentityName -eq "Netpetra" -and $Publisher -eq "CN=Netpetra") {
+if ($IdentityName -eq "Axiom" -and $Publisher -eq "CN=Axiom") {
     Write-Warning "Using placeholder package identity. Replace it with the exact Partner Center Name/Publisher values before a Store submission."
 }
 
@@ -209,9 +209,9 @@ $manifest = $manifest.Replace("__VERSION__", $packageVersion)
     (New-Object System.Text.UTF8Encoding -ArgumentList $false))
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-$msixName = "Netpetra-$Version-x64.msix"
+$msixName = "Axiom-$Version-x64.msix"
 $msixPath = Join-Path $OutputDir $msixName
-$uploadName = "Netpetra-$Version-x64.msixupload"
+$uploadName = "Axiom-$Version-x64.msixupload"
 $uploadPath = Join-Path $OutputDir $uploadName
 Remove-Item $msixPath -Force -ErrorAction SilentlyContinue
 Remove-Item $uploadPath -Force -ErrorAction SilentlyContinue
@@ -223,7 +223,7 @@ if (-not (Test-Path $msixPath)) { throw "MSIX was not created: $msixPath" }
 
 # Partner Center accepts an .msixupload container. It is a ZIP containing the .msix and optional
 # .appxsym files; this build has no symbols, so the package alone is sufficient.
-$temporaryUpload = Join-Path $OutputDir "Netpetra-$Version-x64.upload.zip"
+$temporaryUpload = Join-Path $OutputDir "Axiom-$Version-x64.upload.zip"
 Remove-Item $temporaryUpload -Force -ErrorAction SilentlyContinue
 Compress-Archive -Path $msixPath -DestinationPath $temporaryUpload -Force
 Move-Item $temporaryUpload $uploadPath -Force
@@ -236,13 +236,13 @@ $uploadHash = (Get-FileHash $uploadPath -Algorithm SHA256).Hash
 ) | Set-Content (Join-Path $OutputDir "SHA256SUMS.txt") -Encoding ASCII
 
 $info = [ordered]@{
-    product = "Netpetra"
+    product = "Axiom"
     version = $Version
     packageVersion = $packageVersion
     identityName = $IdentityName
     publisher = $Publisher
     publisherDisplayName = $PublisherDisplayName
-    identityIsPlaceholder = ($IdentityName -eq "Netpetra" -and $Publisher -eq "CN=Netpetra")
+    identityIsPlaceholder = ($IdentityName -eq "Axiom" -and $Publisher -eq "CN=Axiom")
     architecture = "x64"
     package = $msixName
     upload = $uploadName

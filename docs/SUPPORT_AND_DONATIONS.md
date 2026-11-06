@@ -1,4 +1,4 @@
-# Netpetra — optional support and donations
+# Axiom — optional support and donations
 
 This Draft branch stacks on #100 → #99 → #97 → #96. It adds a **Support** navigation destination. Do not merge into `main` until the parent PR chain is validated on Windows.
 
@@ -7,7 +7,7 @@ This Draft branch stacks on #100 → #99 → #97 → #96. It adds a **Support** 
 - Buy Me a Coffee: externally hosted creator URL, HTTPS only, `buymeacoffee.com/{username}`.
 - PayPal: externally hosted `paypal.me/{username}` link. This may display the recipient's profile name/city; the maintainer must review privacy and country eligibility.
 - GitHub Sponsors: `github.com/sponsors/{account}` after the maintainer account actually participates in Sponsors.
-- Crypto: configurable *public receiving addresses* for BTC on Bitcoin mainnet, ETH on Ethereum/Base/Polygon, or USDC on a specifically named EVM network. The UI displays the exact recipient address and chain and allows copying only; Netpetra never stores keys, connects to wallets, signs transactions, checks balances or submits transfers.
+- Crypto: configurable *public receiving addresses* for BTC on Bitcoin mainnet, ETH on Ethereum/Base/Polygon, or USDC on a specifically named EVM network. The UI displays the exact recipient address and chain and allows copying only; Axiom never stores keys, connects to wallets, signs transactions, checks balances or submits transfers.
 
 ## Where to configure recipients
 

@@ -1,10 +1,10 @@
 <# SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Publishes the single-file Netpetra Setup executable with an embedded desktop/service payload.
+    Publishes the single-file Axiom Setup executable with an embedded desktop/service payload.
 
 .DESCRIPTION
-    First publishes the self-contained desktop and service, then embeds them into Netpetra.Setup.exe.
+    First publishes the self-contained desktop and service, then embeds them into Netpetra.Setup.exe (internal executable name).
     The resulting setup EXE needs no .NET runtime and installs the application per user.
 #>
 param(

@@ -21,7 +21,7 @@ public sealed class ClineProtectionTests
             .TestAsync("cline", CancellationToken.None);
 
         Assert.Equal("FAIL", result.Status);
-        Assert.Contains("not Netpetra-managed", result.Detail, StringComparison.Ordinal);
+        Assert.Contains("not Axiom-managed", result.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

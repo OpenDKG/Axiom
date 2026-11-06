@@ -47,7 +47,7 @@ public sealed class AgentHookProbe
                 "openchamber" => await TestOpenCodeAsync("OpenChamber", token).ConfigureAwait(false),
                 _ => new AgentHookTestResult(
                     "SKIPPED",
-                    "Netpetra has no hook adapter for this recognized harness."),
+                    "Axiom has no hook adapter for this recognized harness."),
             };
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
@@ -476,7 +476,7 @@ public sealed class AgentHookProbe
         {
             return new AgentHookTestResult(
                 "FAIL",
-                "Cline hook is missing, not Netpetra-managed, or the Blackbox Python runtime is missing.");
+                "Cline hook is missing, not Axiom-managed, or the Blackbox Python runtime is missing.");
         }
 
         var startInfo = new ProcessStartInfo(python)
@@ -557,7 +557,7 @@ public sealed class AgentHookProbe
         {
             return new AgentHookTestResult(
                 "FAIL",
-                $"{label} hook is missing, not Netpetra-managed, or the Blackbox Python runtime is missing.");
+                $"{label} hook is missing, not Axiom-managed, or the Blackbox Python runtime is missing.");
         }
 
         var temp = Path.Combine(Path.GetTempPath(), "netpetra-hook-test-" + Guid.NewGuid().ToString("N"));

@@ -16,17 +16,31 @@ public partial class SetupWindow : Window
         ShortcutCheck.IsChecked = options.CreateShortcut;
         LaunchCheck.IsChecked = options.StartAfterInstall;
         HooksCheck.IsChecked = options.CompleteInstallation;
+        AgreeCheck.Checked += OnAgreementChanged;
+        AgreeCheck.Unchecked += OnAgreementChanged;
+        InstallButton.IsEnabled = false;
+        Loaded += (_, _) =>
+        {
+            ContentScroll.ScrollToTop();
+            AgreeCheck.Focus();
+        };
+    }
+
+    private void OnAgreementChanged(object sender, RoutedEventArgs e)
+    {
+        InstallButton.IsEnabled = !_installing && AgreeCheck.IsChecked == true;
     }
 
     private async void OnInstall(object sender, RoutedEventArgs e)
     {
-        if (_installing)
+        if (_installing || AgreeCheck.IsChecked != true)
         {
             return;
         }
 
         _installing = true;
         InstallButton.IsEnabled = false;
+        AgreeCheck.IsEnabled = false;
         CloseButton.IsEnabled = false;
         LogBox.Clear();
 
@@ -50,6 +64,7 @@ public partial class SetupWindow : Window
         {
             CloseButton.Content = "Close";
             CloseButton.IsEnabled = true;
+            AgreeCheck.IsEnabled = true;
 
             if (options.StartAfterInstall)
             {
@@ -57,14 +72,15 @@ public partial class SetupWindow : Window
                 return;
             }
 
-            MessageBox.Show(this, result.Message, "Netpetra Setup",
+            MessageBox.Show(this, result.Message, "Axiom Setup",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         else
         {
-            InstallButton.IsEnabled = true;
+            AgreeCheck.IsEnabled = true;
+            InstallButton.IsEnabled = AgreeCheck.IsChecked == true;
             CloseButton.IsEnabled = true;
-            MessageBox.Show(this, result.Message, "Netpetra Setup failed",
+            MessageBox.Show(this, result.Message, "Axiom Setup failed",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }

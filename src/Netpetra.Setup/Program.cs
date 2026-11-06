@@ -11,6 +11,14 @@ internal static class Program
         var options = SetupOptions.Parse(args);
         if (options.Silent)
         {
+            if (!options.AcceptRisk)
+            {
+                Console.Error.WriteLine(
+                    "Axiom is a development build. Pass --accept-risk with --silent to confirm that you use it at your own risk.");
+                Environment.ExitCode = 2;
+                return;
+            }
+
             var result = SetupInstaller
                 .InstallAsync(options, progress: null, CancellationToken.None)
                 .GetAwaiter()

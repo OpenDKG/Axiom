@@ -213,9 +213,9 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
         var directionText = direction == FirewallDirection.Outbound ? "outbound" : "inbound";
         var confirmation = MessageBox.Show(
             $"Create a Windows Firewall block rule for {app.Name} ({directionText})?\n\n" +
-            "The rule is owned by Netpetra and can be removed from the Firewall page. " +
+            "The rule is owned by Axiom and can be removed from the Firewall page. " +
             "Only continue on an isolated test VM.",
-            "Netpetra firewall write",
+            "Axiom firewall write",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
 
@@ -305,7 +305,7 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
             RemoteAddresses = addresses,
             RemotePorts = string.IsNullOrWhiteSpace(RemotePortsText) ? null : RemotePortsText.Trim(),
             CreatedBy = Environment.UserName,
-            Description = $"Netpetra block for {app.Name}",
+            Description = $"Axiom block for {app.Name}",
         };
     }
 

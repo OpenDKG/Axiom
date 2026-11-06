@@ -9,13 +9,13 @@ using Netpetra.UI.Services;
 
 namespace Netpetra.UI.ViewModels;
 
-/// <summary>Optional, external-only support for the open-source Netpetra project.</summary>
+/// <summary>Optional, external-only support for the open-source Axiom project.</summary>
 public sealed partial class SupportViewModel : PageViewModel
 {
     private readonly DonationConfig _config;
 
     public SupportViewModel()
-        : base("Support", "Help sustain the free, open-source Netpetra project", "\uE897")
+        : base("Support", "Help sustain the free, open-source Axiom project", "\uE897")
     {
         _config = DonationDestinations.Load();
 
@@ -36,7 +36,7 @@ public sealed partial class SupportViewModel : PageViewModel
             ? "No verified public receiving addresses are configured in this build."
             : $"Available receiving addresses: {CryptoOptions.Count}. Always match the exact network before sending.";
         SetupNote = HasBuyMeACoffee || HasPayPal || HasGitHubSponsors || CryptoOptions.Count > 0
-            ? "Donation destinations are bundled by the Netpetra maintainer. Verify the recipient independently before paying."
+            ? "Donation destinations are bundled by the Axiom maintainer. Verify the recipient independently before paying."
             : "Donation options are not yet configured by the project maintainer. No payments can be made from this screen.";
     }
 
@@ -61,7 +61,7 @@ public sealed partial class SupportViewModel : PageViewModel
     public string GitHubSponsorsStatus => HasGitHubSponsors ? "External sponsor page" : "Not configured";
 
     [ObservableProperty]
-    private string _actionStatus = "All donations are optional. Netpetra remains free.";
+    private string _actionStatus = "All donations are optional. Axiom remains free.";
 
     [RelayCommand]
     private void OpenDonationPage(string? provider)
@@ -98,7 +98,7 @@ public sealed partial class SupportViewModel : PageViewModel
         try
         {
             Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
-            ActionStatus = "The external donation page was requested in your default browser. Netpetra never processes payments.";
+            ActionStatus = "The external donation page was requested in your default browser. Axiom never processes payments.";
         }
         catch (Win32Exception)
         {

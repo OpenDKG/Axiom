@@ -22,8 +22,9 @@
     <None Remove="Resources\\support-links.json" />
     <EmbeddedResource Include="Resources\\support-links.json"
                       LogicalName="Netpetra.UI.Resources.support-links.json" />
-    <Resource Include="Resources\\netpetra-icon.png" />
-    <Resource Include="Resources\\netpetra.ico" />
+    <Resource Include="Resources\\axiom-icon.png" />
+    <Resource Include="Resources\\axiom.ico" />
+    <Resource Include="Resources\\axiom-lockup.png" />
     <Resource Include="Resources\\origintrail-logo.png" />
     <Resource Include="Resources\\umanitek-logo.png" />
     <Resource Include="Resources\\blackbox-logo.png" />

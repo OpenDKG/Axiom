@@ -8,7 +8,7 @@ public static class ServiceInfo
 {
     public const string ServiceName = "Netpetra";
 
-    public const string DisplayName = "Netpetra";
+    public const string DisplayName = "Axiom";
 
     /// <summary>Set explicitly at process start so uptime is not affected by lazy type loading.</summary>
     public static DateTimeOffset StartedUtc { get; private set; } = DateTimeOffset.UtcNow;
