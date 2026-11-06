@@ -15,7 +15,7 @@ public sealed partial class SupportViewModel : PageViewModel
     private readonly DonationConfig _config;
 
     public SupportViewModel()
-        : base("Support", "Help sustain the free, open-source Axiom project", "\uE897")
+        : base("Support", "How to use Axiom, report issues and support the project", "\uE897")
     {
         _config = DonationDestinations.Load();
 
@@ -40,6 +40,28 @@ public sealed partial class SupportViewModel : PageViewModel
             : "Donation options are not yet configured by the project maintainer. No payments can be made from this screen.";
     }
 
+    public IReadOnlyList<UsageStep> UsageSteps { get; } =
+    [
+        new(
+            "1. See what is happening",
+            "Use Overview, Connections and Applications to inspect live sockets, remote endpoints and per-application activity. These pages are read-only."),
+        new(
+            "2. Review firewall rules",
+            "Open Firewall to see only rules owned by Axiom. Writes are disabled by default; the explicit test-VM gate is required before any rule can be created or removed."),
+        new(
+            "3. Make one deliberate change",
+            "On Applications, select a process and choose Block outbound only when you understand the effect. Verify connectivity and remove the owned rule from Firewall if needed."),
+        new(
+            "4. Filter DNS only if needed",
+            "Privacy Shield is opt-in. It starts a loopback resolver; adapter DNS changes require the separate UAC helper and can break name resolution."),
+        new(
+            "5. Inspect local files and optional modules",
+            "Security provides a local SHA-256 file scan and optional reputation/community features. DKG, Blackbox and agent hooks are separate third-party integrations and are never installed silently."),
+        new(
+            "6. Check agents and settings",
+            "Agents shows hook and workspace status; an installed hook is not proof of blocking. Settings controls themes and per-user startup."),
+    ];
+
     public bool HasBuyMeACoffee { get; }
 
     public bool HasPayPal { get; }
@@ -62,6 +84,12 @@ public sealed partial class SupportViewModel : PageViewModel
 
     [ObservableProperty]
     private string _actionStatus = "All donations are optional. Axiom remains free.";
+
+    [RelayCommand]
+    private void OpenGitHubIssues() => OpenExternal("https://github.com/a-51-50/Axiom/issues/new/choose");
+
+    [RelayCommand]
+    private void OpenGitHubRepository() => OpenExternal("https://github.com/a-51-50/Axiom");
 
     [RelayCommand]
     private void OpenDonationPage(string? provider)
@@ -133,7 +161,23 @@ public sealed partial class SupportViewModel : PageViewModel
             ActionStatus = "Clipboard is busy. Select and copy the address manually.";
         }
     }
+
+    private static void OpenExternal(string target)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+        }
+        catch (Win32Exception)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
 }
+
+public sealed record UsageStep(string Title, string Detail);
 
 public sealed record CryptoDonationRow(string Currency, string Network, string Address)
 {
