@@ -19,8 +19,13 @@ public static class AgentHookMaintenance
         var version = typeof(AgentHookMaintenance).Assembly.GetName().Version?.ToString() ?? "unknown";
         try
         {
-            var assemblyPath = typeof(AgentHookMaintenance).Assembly.Location;
-            if (!string.IsNullOrWhiteSpace(assemblyPath) && File.Exists(assemblyPath))
+            var assemblyPath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(assemblyPath) || !File.Exists(assemblyPath))
+            {
+                assemblyPath = Path.Combine(AppContext.BaseDirectory, "Axiom.UI.dll");
+            }
+
+            if (File.Exists(assemblyPath))
             {
                 version += ":" + File.GetLastWriteTimeUtc(assemblyPath).Ticks.ToString(CultureInfo.InvariantCulture);
             }
