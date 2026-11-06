@@ -46,6 +46,8 @@ public sealed class WindsurfProtection
 
     public string HookScriptPath => Path.Combine(BlackboxAgentRoot, Marker);
 
+    private string ManagedCommand => $"& \"{PythonPath}\" \"{HookScriptPath}\"";
+
     public bool IsWindsurfDetected => Directory.Exists(ConfigDirectory) || File.Exists(HooksPath);
 
     public bool IsInstalled => File.Exists(HookScriptPath) && HasHookEntry();
@@ -188,9 +190,10 @@ public sealed class WindsurfProtection
         }
     }
 
-    private static bool IsOwnedHandler(JsonObject handler) =>
-        handler["command"]?.ToString().Contains(Marker, StringComparison.Ordinal) == true ||
-        handler["powershell"]?.ToString().Contains(Marker, StringComparison.Ordinal) == true;
+    private bool IsOwnedHandler(JsonObject handler) =>
+        handler["powershell"] is JsonValue value &&
+        value.TryGetValue<string>(out var command) &&
+        string.Equals(command, ManagedCommand, StringComparison.OrdinalIgnoreCase);
 
     private bool MergeHookEntries()
     {
@@ -233,7 +236,7 @@ public sealed class WindsurfProtection
 
             handlers.Add(new JsonObject
             {
-                ["powershell"] = $"& \"{PythonPath}\" \"{HookScriptPath}\"",
+                ["powershell"] = ManagedCommand,
                 ["show_output"] = false,
             });
         }

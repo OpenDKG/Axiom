@@ -40,6 +40,8 @@ public sealed class GeminiProtection
 
     public string HookScriptPath => Path.Combine(BlackboxAgentRoot, Marker);
 
+    private string ManagedCommand => $"\"{PythonPath}\" \"{HookScriptPath}\"";
+
     public bool IsGeminiDetected => File.Exists(SettingsPath);
 
     public bool IsInstalled => File.Exists(HookScriptPath) && HasHookEntry();
@@ -180,8 +182,10 @@ public sealed class GeminiProtection
         }
     }
 
-    private static bool IsOwnedHandler(JsonObject handler) =>
-        handler["command"]?.ToString().Contains(Marker, StringComparison.Ordinal) == true;
+    private bool IsOwnedHandler(JsonObject handler) =>
+        handler["command"] is JsonValue value &&
+        value.TryGetValue<string>(out var command) &&
+        string.Equals(command, ManagedCommand, StringComparison.OrdinalIgnoreCase);
 
     private bool MergeHookEntry()
     {
@@ -227,7 +231,7 @@ public sealed class GeminiProtection
                 {
                     ["name"] = "netpetra-guard",
                     ["type"] = "command",
-                    ["command"] = $"\"{PythonPath}\" \"{HookScriptPath}\"",
+                    ["command"] = ManagedCommand,
                     ["timeout"] = 10000,
                 },
             },

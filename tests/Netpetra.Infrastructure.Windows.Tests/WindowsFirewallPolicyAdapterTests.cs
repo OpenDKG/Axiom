@@ -43,11 +43,60 @@ public sealed class WindowsFirewallPolicyAdapterTests
     public async Task Unknown_rule_is_reported_as_absent()
     {
         using var adapter = new WindowsFirewallPolicyAdapter();
+        var spec = new RuleSpec
+        {
+            ManagedRuleId = Guid.NewGuid(),
+            AppPath = Path.Combine(Environment.SystemDirectory, "notepad.exe"),
+            Direction = FirewallDirection.Outbound,
+            Action = FirewallAction.Block,
+            Profiles = FirewallProfile.All,
+            CreatedBy = "test",
+        };
 
-        var report = await adapter.VerifyAsync(Guid.NewGuid(), CancellationToken.None);
+        var report = await adapter.VerifyAsync(spec, CancellationToken.None);
 
         Assert.False(report.PresentInOs);
         Assert.False(report.MatchesSpec);
+    }
+
+    [Fact]
+    public void Reapplying_without_ports_clears_the_old_scope_and_matches()
+    {
+        var id = Guid.NewGuid();
+        var name = OwnedRuleName.Create(id, FirewallDirection.Outbound);
+        var spec = new RuleSpec
+        {
+            ManagedRuleId = id,
+            AppPath = @"C:\Program Files\Example\example.exe",
+            Direction = FirewallDirection.Outbound,
+            Action = FirewallAction.Block,
+            Profiles = FirewallProfile.All,
+            Protocol = NetworkProtocol.Tcp,
+            RemotePorts = "443",
+            CreatedBy = "test",
+        };
+        var rule = new FakeRule
+        {
+            Name = name,
+            ApplicationName = spec.AppPath,
+            Direction = 2,
+            Action = 0,
+            Profiles = (int)FirewallProfile.All,
+            Protocol = 6,
+            RemoteAddresses = "*",
+            RemotePorts = "443",
+            Enabled = true,
+        };
+
+        Assert.True(WindowsFirewallPolicyAdapter.MatchesSpec(rule, spec));
+
+        var anyPort = spec with { RemotePorts = null };
+        Assert.False(WindowsFirewallPolicyAdapter.MatchesSpec(rule, anyPort));
+
+        WindowsFirewallPolicyAdapter.ApplyFields(rule, anyPort, name);
+
+        Assert.Equal("*", rule.RemotePorts);
+        Assert.True(WindowsFirewallPolicyAdapter.MatchesSpec(rule, anyPort));
     }
 
     [Fact]
@@ -82,5 +131,30 @@ public sealed class WindowsFirewallPolicyAdapterTests
             Environment.SetEnvironmentVariable(WindowsFirewallPolicyAdapter.WriteEnableVariable, previousEnable);
             Environment.SetEnvironmentVariable(WindowsFirewallPolicyAdapter.WriteConfirmVariable, previousConfirm);
         }
+    }
+
+    public sealed class FakeRule
+    {
+        public string Name { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
+
+        public string ApplicationName { get; set; } = string.Empty;
+
+        public int Direction { get; set; }
+
+        public int Action { get; set; }
+
+        public int Profiles { get; set; }
+
+        public int Protocol { get; set; }
+
+        public string? RemoteAddresses { get; set; }
+
+        public string? RemotePorts { get; set; }
+
+        public bool Enabled { get; set; }
+
+        public string? Grouping { get; set; }
     }
 }

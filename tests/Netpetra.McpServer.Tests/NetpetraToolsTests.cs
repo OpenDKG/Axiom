@@ -18,6 +18,7 @@ public sealed class NetpetraToolsTests
     [InlineData("fe80::1", true)]
     [InlineData("fc00::1", true)]
     [InlineData("localhost", true)]
+    [InlineData("", false)]
     [InlineData("203.0.113.10", false)]
     [InlineData("172.32.0.1", false)]
     [InlineData("8.8.8.8", false)]

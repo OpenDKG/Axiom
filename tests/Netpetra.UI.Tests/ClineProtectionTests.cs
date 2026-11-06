@@ -35,7 +35,12 @@ public sealed class ClineProtectionTests
         Assert.True(protection.IsClineDetected);
         Assert.True(protection.EnsureInstalled());
         Assert.True(protection.IsInstalled);
-        Assert.Contains("Managed by Netpetra", File.ReadAllText(protection.HookPath), StringComparison.Ordinal);
+        var script = File.ReadAllText(protection.HookPath);
+        Assert.Contains("Managed by Netpetra", script, StringComparison.Ordinal);
+        Assert.Contains(
+            $"ROOT = Path(r\"{Path.Combine(temp.Root, "Netpetra", "modules", "blackbox", "agent-blackbox")}\")",
+            script,
+            StringComparison.Ordinal);
     }
 
     [Fact]

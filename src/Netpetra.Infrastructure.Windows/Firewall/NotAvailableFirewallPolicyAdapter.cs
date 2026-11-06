@@ -36,6 +36,6 @@ public sealed class NotAvailableFirewallPolicyAdapter : IFirewallPolicyAdapter
     public Task<RuleApplyResult> RemoveOwnedRuleAsync(Guid managedRuleId, CancellationToken ct) =>
         throw new NotSupportedException(UnavailableReason);
 
-    public Task<EffectiveRuleReport> VerifyAsync(Guid managedRuleId, CancellationToken ct) =>
+    public Task<EffectiveRuleReport> VerifyAsync(RuleSpec spec, CancellationToken ct) =>
         throw new NotSupportedException(UnavailableReason);
 }

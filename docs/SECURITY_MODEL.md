@@ -50,6 +50,10 @@ in the service.
   deletion exists.
 - The coordinator writes pending/applied/failed state and an audit row (actor SID, time, action,
   result, spec, error) in the same SQLite transaction as the rule state.
+- Failed or throwing removals are also audited as `rule.remove` / `failed`; the stored rule is
+  marked `Failed` instead of remaining `Applied`.
+- Reapplying a rule clears a removed port scope, and read-back/verification compares action,
+  direction, protocol, profiles, enabled state, addresses and ports against the persisted spec.
 - The UI disables block/remove unless the service reports `FirewallWrites=true`.
 - The development host has not had any rule applied. Real enforcement, external-rule conflicts and
   rollback remain VM checks (ADR 0007).

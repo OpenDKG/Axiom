@@ -39,6 +39,8 @@ public sealed class CursorProtection
 
     public string HookScriptPath => Path.Combine(BlackboxAgentRoot, Marker);
 
+    private string ManagedCommand => $"\"{PythonPath}\" \"{HookScriptPath}\"";
+
     public bool IsCursorDetected => Directory.Exists(ConfigDirectory) || File.Exists(HooksPath);
 
     public bool IsInstalled => File.Exists(HookScriptPath) && HasHookEntry();
@@ -162,8 +164,10 @@ public sealed class CursorProtection
         }
     }
 
-    private static bool IsOwnedHandler(JsonObject handler) =>
-        handler["command"]?.ToString().Contains(Marker, StringComparison.Ordinal) == true;
+    private bool IsOwnedHandler(JsonObject handler) =>
+        handler["command"] is JsonValue value &&
+        value.TryGetValue<string>(out var command) &&
+        string.Equals(command, ManagedCommand, StringComparison.OrdinalIgnoreCase);
 
     private bool MergeHookEntry()
     {
@@ -220,7 +224,7 @@ public sealed class CursorProtection
         root["version"] = 1;
         handlers.Add(new JsonObject
         {
-            ["command"] = $"\"{PythonPath}\" \"{HookScriptPath}\"",
+            ["command"] = ManagedCommand,
             ["matcher"] = "*",
             ["timeout"] = 10,
         });

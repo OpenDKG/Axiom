@@ -78,6 +78,11 @@ public sealed class CommunityFeedClient : IDisposable
     {
         using var document = JsonDocument.Parse(body);
 
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException("Community feed root must be a JSON object.");
+        }
+
         if (!document.RootElement.TryGetProperty("entries", out var entries) ||
             entries.ValueKind != JsonValueKind.Array)
         {
@@ -94,6 +99,7 @@ public sealed class CommunityFeedClient : IDisposable
 
             if (entry.ValueKind != JsonValueKind.Object ||
                 !entry.TryGetProperty("sha256", out var hashElement) ||
+                hashElement.ValueKind != JsonValueKind.String ||
                 hashElement.GetString() is not { } hash ||
                 !IsSha256(hash))
             {
