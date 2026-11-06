@@ -123,7 +123,7 @@
     </Border>
 
     <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,14,0,0">
-      <Expander IsExpanded="False"
+      <Expander IsExpanded="True"
                 HorizontalContentAlignment="Stretch"
                 Foreground="{DynamicResource Brush.TextPrimary}">
         <Expander.Header>
@@ -136,6 +136,10 @@
 
         <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
           <StackPanel>
+            <TextBlock Text="Rule defaults are editable now. Applying or removing a Windows Firewall rule requires the explicit service write gate below."
+                       Style="{StaticResource BodyMuted}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,10" />
             <TextBlock Text="Rule defaults" Style="{StaticResource SectionTitle}" />
             <TextBlock Text="These defaults are applied to new block rules created from Applications."
                        Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,8" />
