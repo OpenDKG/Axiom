@@ -2,7 +2,7 @@
 namespace Netpetra.Contracts.Blackbox;
 
 /// <summary>
-/// Pure state classifier for Netpetra-owned agent adapters. File presence alone never becomes
+/// Pure state classifier for Axiom-owned agent adapters. File presence alone never becomes
 /// protected; runtime evidence and Blackbox availability are explicit inputs.
 /// </summary>
 public static class AgentProtectionClassifier

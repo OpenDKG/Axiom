@@ -269,7 +269,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             var canary = Path.Combine(
                 Path.GetTempPath(),
                 $"netpetra-protection-test-{Guid.NewGuid():N}.txt");
-            await File.WriteAllTextAsync(canary, "NETPETRA SECURITY TEST").ConfigureAwait(true);
+            await File.WriteAllTextAsync(canary, "AXIOM SECURITY TEST").ConfigureAwait(true);
 
             try
             {

@@ -122,7 +122,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
 
 /// <summary>
 /// Security page. Optional modules are read-only status probes; install buttons launch the official
-/// third-party installer only after an explicit warning. Netpetra does not stop or control a module.
+/// third-party installer only after an explicit warning. Axiom does not stop or control a module.
 /// </summary>
 public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 {

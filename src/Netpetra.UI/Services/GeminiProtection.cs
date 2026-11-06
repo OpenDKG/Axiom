@@ -310,7 +310,7 @@ public sealed class GeminiProtection
                 if blocked:
                     print(json.dumps({
                         "decision": "deny",
-                        "reason": decision.get("message") or "Blocked by Netpetra/Blackbox",
+                        "reason": decision.get("message") or "Blocked by Axiom/Blackbox",
                     }))
             except Exception as exc:
                 # Fail open: a Blackbox or hook fault must not break Gemini CLI.

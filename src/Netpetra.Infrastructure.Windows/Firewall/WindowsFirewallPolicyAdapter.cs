@@ -318,7 +318,7 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
     internal static void ApplyFields(dynamic rule, RuleSpec spec, string name)
     {
         rule.Name = name;
-        rule.Description = spec.Description ?? $"Netpetra managed rule {spec.ManagedRuleId:D}";
+        rule.Description = spec.Description ?? $"Axiom managed rule {spec.ManagedRuleId:D}";
         rule.ApplicationName = spec.AppPath;
         rule.Direction = spec.Direction == FirewallDirection.Outbound ? NetFwDirectionOut : NetFwDirectionIn;
         rule.Action = spec.Action == FirewallAction.Block ? NetFwActionBlock : NetFwActionAllow;
@@ -346,7 +346,7 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
             : "*";
 
         rule.Enabled = spec.Enabled;
-        rule.Grouping = "Netpetra";
+        rule.Grouping = "Axiom";
     }
 
     internal static bool MatchesSpec(dynamic rule, RuleSpec spec)

@@ -324,7 +324,7 @@ public sealed class WindsurfProtection
                     "blocked" if blocked else "allowed",
                     int((time.monotonic() - started) * 1000))
                 if blocked:
-                    print(decision.get("message") or "Blocked by Netpetra/Blackbox", file=sys.stderr)
+                    print(decision.get("message") or "Blocked by Axiom/Blackbox", file=sys.stderr)
                     sys.exit(2)
             except Exception as exc:
                 # Fail open: a Blackbox or hook fault must not break Windsurf.

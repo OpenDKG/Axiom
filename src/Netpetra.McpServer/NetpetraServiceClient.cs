@@ -6,7 +6,7 @@ using Netpetra.Contracts.Monitoring;
 namespace Netpetra.McpServer;
 
 public sealed class ServiceUnavailableException(string code, string message, Exception? inner = null)
-    : Exception($"Netpetra service unavailable: {message} ({code})", inner);
+    : Exception($"Axiom service unavailable: {message} ({code})", inner);
 
 /// <summary>
 /// Read-only client for the existing authenticated Netpetra Named Pipe. The MCP process never

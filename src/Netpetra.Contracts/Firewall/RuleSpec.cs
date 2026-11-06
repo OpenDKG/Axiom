@@ -2,7 +2,7 @@
 namespace Netpetra.Contracts.Firewall;
 
 /// <summary>
-/// Declarative description of a single firewall rule owned by Netpetra.
+/// Declarative description of a single firewall rule owned by Axiom.
 /// <para>
 /// The spec is the durable intent; the Windows rule is a derived artefact named
 /// <c>Netpetra::{ManagedRuleId}::{OUT|IN}</c>. See <c>OwnedRuleName</c> in

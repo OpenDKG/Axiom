@@ -5,6 +5,7 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>Netpetra.Service</RootNamespace>
     <AssemblyName>Netpetra.Service</AssemblyName>
+    <AssemblyTitle>Axiom Service</AssemblyTitle>
   </PropertyGroup>
 
   <ItemGroup>

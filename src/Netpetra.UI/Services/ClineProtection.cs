@@ -6,7 +6,7 @@ namespace Netpetra.UI.Services;
 
 /// <summary>
 /// Installs a user-level Cline PreToolUse hook at
-/// <c>~/Documents/Cline/Hooks/PreToolUse.py</c>. Cline executes the hook file directly; Netpetra
+/// <c>~/Documents/Cline/Hooks/PreToolUse.py</c>. Cline executes the hook file directly; Axiom
 /// never overwrites a user-authored hook and never writes project-level .cline hooks.
 /// </summary>
 public sealed class ClineProtection
@@ -176,7 +176,7 @@ public sealed class ClineProtection
                 if blocked:
                     print(json.dumps({
                         "cancel": True,
-                        "errorMessage": decision.get("message") or "Blocked by Netpetra/Blackbox",
+                        "errorMessage": decision.get("message") or "Blocked by Axiom/Blackbox",
                     }))
                 else:
                     print(json.dumps({}))
