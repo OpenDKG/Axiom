@@ -252,9 +252,17 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
             _appGroups.Remove(stale);
         }
 
-        AppGroups.Clear();
-        foreach (var group in grouped)
+        for (var index = AppGroups.Count - 1; index >= 0; index--)
         {
+            if (!activeKeys.Contains(AppGroups[index].Key))
+            {
+                AppGroups.RemoveAt(index);
+            }
+        }
+
+        for (var index = 0; index < grouped.Count; index++)
+        {
+            var group = grouped[index];
             if (!_appGroups.TryGetValue(group.Key, out var rowGroup))
             {
                 rowGroup = new EventAppGroup(group.Key);
@@ -267,7 +275,16 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
                 first.ProcessId == 0 ? "Unowned kernel sockets (PID 0)" : first.AppDisplayName,
                 first.ProcessId == 0 ? "No process owner" : first.AppPath,
                 rows);
-            AppGroups.Add(rowGroup);
+
+            var currentIndex = AppGroups.IndexOf(rowGroup);
+            if (currentIndex < 0)
+            {
+                AppGroups.Insert(index, rowGroup);
+            }
+            else if (currentIndex != index)
+            {
+                AppGroups.Move(currentIndex, index);
+            }
         }
     }
 
