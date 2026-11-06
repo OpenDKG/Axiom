@@ -39,7 +39,7 @@ public sealed record ServiceCapabilities
     public required string Milestone { get; init; }
 }
 
-/// <summary>Read-only view of the Windows Firewall capability and rules owned by Axiom.</summary>
+/// <summary>Read-only view of the host firewall capability and rules owned by Axiom.</summary>
 public sealed record FirewallRulesSnapshot
 {
     public required FirewallCapabilityReport Capability { get; init; }

@@ -9,8 +9,8 @@ public sealed class ServiceUnavailableException(string code, string message, Exc
     : Exception($"Axiom service unavailable: {message} ({code})", inner);
 
 /// <summary>
-/// Read-only client for the existing authenticated Axiom Named Pipe. The MCP process never
-/// touches SQLite or Windows Firewall COM objects directly.
+/// Read-only client for the authenticated local service endpoint (named pipe on Windows, Unix
+/// socket on Linux). The MCP process never touches SQLite or host firewall APIs directly.
 /// </summary>
 public sealed class AxiomServiceClient(string pipeName = IpcPipe.Name)
 {

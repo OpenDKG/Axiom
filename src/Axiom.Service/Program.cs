@@ -1,24 +1,42 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using Axiom.Contracts.Firewall;
 using Axiom.Core.Firewall;
-using Axiom.Infrastructure.Windows.Firewall;
+using Axiom.Core.Platform;
 using Axiom.Persistence;
 using Axiom.Service;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-Axiom.Persistence.LegacyDataMigration.Migrate();
+#if WINDOWS
+using Axiom.Infrastructure.Windows;
+#else
+using Axiom.Infrastructure.Linux;
+#endif
 
+// Windows user data may still live under the old product name; the migration is Windows-only
+// because no Linux build ever shipped under the old name.
+if (OperatingSystem.IsWindows())
+{
+    Axiom.Persistence.LegacyDataMigration.Migrate();
+}
 ServiceInfo.MarkStarted();
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory,
+});
 
+#if WINDOWS
 builder.Services.AddWindowsService(options => options.ServiceName = ServiceInfo.ServiceName);
+builder.Services.AddSingleton<IServicePlatform, WindowsServicePlatform>();
+#else
+builder.Services.AddSingleton<IServicePlatform, LinuxServicePlatform>();
+#endif
 
 builder.Services.AddSingleton<ConnectionSnapshotCache>();
 builder.Services.AddSingleton(new HistoryStore(DatabasePaths.ResolveForCurrentProcess()));
-builder.Services.AddSingleton<WindowsFirewallPolicyAdapter>();
-builder.Services.AddSingleton<IFirewallPolicyAdapter>(provider => provider.GetRequiredService<WindowsFirewallPolicyAdapter>());
+builder.Services.AddSingleton<IFirewallPolicyAdapter>(
+    provider => provider.GetRequiredService<IServicePlatform>().CreateFirewallAdapter());
 builder.Services.AddSingleton<FirewallRuleCoordinator>();
 builder.Services.AddSingleton<PrivacyShieldSettingsStore>();
 builder.Services.AddSingleton<PrivacyShieldController>();

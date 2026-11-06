@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Persistence;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -23,8 +24,7 @@ public sealed class PrivacyShieldRuleStore
     public PrivacyShieldRuleStore(string? path = null)
     {
         _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Axiom",
+            DatabasePaths.ResolvePrivacyShieldDirectory(),
             "privacy-shield-rules.json");
     }
 
@@ -61,7 +61,7 @@ public sealed class PrivacyShieldRuleStore
         {
             var directory = Path.GetDirectoryName(_path)
                 ?? throw new InvalidOperationException("Privacy Shield rules path has no directory.");
-            Directory.CreateDirectory(directory);
+            DatabasePaths.EnsurePrivateDirectory(directory);
 
             var temporary = _path + ".tmp-" + Guid.NewGuid().ToString("N");
             File.WriteAllText(

@@ -75,9 +75,10 @@ prove that system-wide traffic is filtered.
 The helper requires administrator approval for each action and is never invoked automatically by
 the service.
 
-If Windows DNS is already pointed at `127.0.0.1`, the service cannot discover the old upstream.
-Privacy Shield then uses a conservative public fallback (`1.1.1.1`/`9.9.9.9`) and reports it; set
-the correct upstream explicitly on managed or corporate networks.
+If the system resolver is already the proxy itself and no other resolver can be discovered, the
+service refuses to start the filter and reports the error. It never substitutes a public resolver;
+set the correct upstream explicitly on managed or corporate networks. Local stub resolvers such as
+systemd-resolved on `127.0.0.53` are valid upstreams and are used when discovered.
 
 ## Safety and recovery
 

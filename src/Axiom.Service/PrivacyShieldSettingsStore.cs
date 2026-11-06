@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Persistence;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -7,7 +8,7 @@ using Axiom.Contracts.Privacy;
 namespace Axiom.Service;
 
 /// <summary>Per-user Privacy Shield configuration. No DNS query history is stored here.</summary>
-public sealed class PrivacyShieldSettingsStore
+public class PrivacyShieldSettingsStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -20,8 +21,7 @@ public sealed class PrivacyShieldSettingsStore
     public PrivacyShieldSettingsStore(string? path = null)
     {
         _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Axiom",
+            DatabasePaths.ResolvePrivacyShieldDirectory(),
             "privacy-shield.json");
     }
 
@@ -48,7 +48,7 @@ public sealed class PrivacyShieldSettingsStore
         }
     }
 
-    public bool Save(PrivacyShieldSettings settings)
+    public virtual bool Save(PrivacyShieldSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -56,7 +56,7 @@ public sealed class PrivacyShieldSettingsStore
         {
             var directory = Path.GetDirectoryName(_path)
                 ?? throw new InvalidOperationException("Privacy Shield settings path has no directory.");
-            Directory.CreateDirectory(directory);
+            DatabasePaths.EnsurePrivateDirectory(directory);
 
             var temporary = _path + ".tmp-" + Guid.NewGuid().ToString("N");
             File.WriteAllText(

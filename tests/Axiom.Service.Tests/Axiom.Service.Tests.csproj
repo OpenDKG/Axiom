@@ -1,11 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(OS)' == 'Windows_NT'">net10.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(OS)' != 'Windows_NT'">net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Axiom.Service.Tests</RootNamespace>
-  </PropertyGroup>
+      <!-- The target framework is selected by the host OS (net10.0 / net10.0-windows), and NuGet
+         has no way to express both graphs in one packages.lock.json. A lock file here would make
+         a locked restore fail on the other platform, so these two projects rely on the central
+         version pins in Directory.Packages.props instead of a lock file. -->
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+</PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

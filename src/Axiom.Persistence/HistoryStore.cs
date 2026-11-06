@@ -102,6 +102,10 @@ public sealed class HistoryStore
 
     private readonly string _connectionString;
 
+    private string? _preOpenEvidenceDirectory;
+
+    private bool _quarantined;
+
     public HistoryStore(string databasePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
@@ -128,17 +132,48 @@ public sealed class HistoryStore
         var directory = Path.GetDirectoryName(DatabasePath);
         if (!string.IsNullOrEmpty(directory))
         {
-            Directory.CreateDirectory(directory);
+            DatabasePaths.EnsurePrivateDirectory(directory);
+        }
+
+        // An unclean shutdown leaves a WAL/journal that SQLite may checkpoint or delete while it
+        // opens the database. Copy the database and every sidecar first so a later corruption
+        // decision keeps the bytes exactly as they were before SQLite touched them.
+        PreservePreOpenEvidence();
+
+        // Quarantine an obviously non-SQLite file before opening it. SQLite may remove the WAL and
+        // SHM sidecars while rejecting the file, losing evidence that belongs with the backup.
+        if (File.Exists(DatabasePath) && !LooksLikeSqlite(DatabasePath))
+        {
+            try
+            {
+                RecoverCorruptDatabase();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // If Windows still holds the file, the SQLite open below reports the real error.
+            }
+        }
+        else if (File.Exists(DatabasePath) && IsCorruptDatabase())
+        {
+            // A valid SQLite header does not mean the pages are valid. Probe read-only so the
+            // original pages, WAL and SHM are still intact when they are quarantined.
+            RecoverCorruptDatabase();
         }
 
         try
         {
             await MigrateAsync(cancellationToken);
         }
-        catch (SqliteException exception) when (exception.SqliteErrorCode == 26)
+        catch (SqliteException exception) when (exception.SqliteErrorCode is 11 or 26)
         {
+            // 11 = SQLITE_CORRUPT, 26 = SQLITE_NOTADB. Both mean the file cannot be trusted.
             RecoverCorruptDatabase();
             await MigrateAsync(cancellationToken);
+        }
+
+        if (!_quarantined)
+        {
+            DiscardPreOpenEvidence();
         }
     }
 
@@ -147,7 +182,10 @@ public sealed class HistoryStore
         ArgumentNullException.ThrowIfNull(snapshot);
 
         var now = ToStorage(snapshot.CapturedUtc);
-        var appIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Windows paths are case-insensitive; Linux paths are not. Using one comparer on both
+        // platforms merged /opt/App and /opt/app into a single history application on Linux.
+        var appIds = new Dictionary<string, int>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         var written = 0;
 
         await using var connection = new SqliteConnection(_connectionString);
@@ -491,22 +529,137 @@ public sealed class HistoryStore
         await migration.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    private static bool LooksLikeSqlite(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            if (stream.Length == 0)
+            {
+                return true;
+            }
+
+            if (stream.Length < 16)
+            {
+                return false;
+            }
+
+            Span<byte> header = stackalloc byte[16];
+            return stream.Read(header) == header.Length &&
+                   header.SequenceEqual("SQLite format 3\0"u8);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Read-only integrity probe. It never writes the database file; a busy or locked database is
+    /// left to the normal open so a second process cannot make us quarantine a healthy file.
+    /// </summary>
+    private bool IsCorruptDatabase()
+    {
+        try
+        {
+            var probe = new SqliteConnectionStringBuilder
+            {
+                DataSource = DatabasePath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Cache = SqliteCacheMode.Private,
+                Pooling = false,
+            }.ToString();
+
+            using var connection = new SqliteConnection(probe);
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA quick_check;";
+            var result = command.ExecuteScalar() as string;
+            return !string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode is 11 or 26)
+        {
+            return true;
+        }
+        catch (SqliteException)
+        {
+            return false;
+        }
+    }
+
+    private void PreservePreOpenEvidence()
+    {
+        if (!File.Exists(DatabasePath) ||
+            (!File.Exists(DatabasePath + "-wal") && !File.Exists(DatabasePath + "-journal")))
+        {
+            return;
+        }
+
+        try
+        {
+            var directory = Path.Combine(
+                Path.GetDirectoryName(DatabasePath)!,
+                "quarantine",
+                $"preopen-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+
+            foreach (var suffix in new[] { string.Empty, "-wal", "-shm", "-journal" })
+            {
+                var source = DatabasePath + suffix;
+                if (File.Exists(source))
+                {
+                    File.Copy(source, Path.Combine(directory, Path.GetFileName(source)));
+                }
+            }
+
+            _preOpenEvidenceDirectory = directory;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Preserving evidence must never prevent the service from starting; the normal
+            // quarantine below still moves whatever SQLite has not consumed.
+            _ = exception;
+        }
+    }
+
+    private void DiscardPreOpenEvidence()
+    {
+        if (_preOpenEvidenceDirectory is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(_preOpenEvidenceDirectory, recursive: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            _ = exception;
+        }
+
+        _preOpenEvidenceDirectory = null;
+    }
+
     private void RecoverCorruptDatabase()
     {
+        _quarantined = true;
         SqliteConnection.ClearAllPools();
 
+        var backup = $"{DatabasePath}.corrupt-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}";
         if (File.Exists(DatabasePath))
         {
-            var backup = $"{DatabasePath}.corrupt-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}";
             File.Move(DatabasePath, backup, overwrite: true);
         }
 
-        foreach (var suffix in new[] { "-wal", "-shm" })
+        // Keep the WAL and shared-memory files beside the quarantined database. They may contain
+        // the only recoverable rows, and deleting them destroys forensic evidence.
+        foreach (var suffix in new[] { "-wal", "-shm", "-journal" })
         {
             var sidecar = DatabasePath + suffix;
             if (File.Exists(sidecar))
             {
-                File.Delete(sidecar);
+                File.Move(sidecar, backup + suffix, overwrite: true);
             }
         }
     }

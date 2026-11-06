@@ -13,10 +13,17 @@
 > your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
 > and keep a recovery path.
 
-Axiom is a local, offline Windows network monitor and firewall policy manager. It shows
+Axiom is a local, offline network monitor and firewall policy manager. It shows
 which applications use the network, which endpoints they talk to, and what happened over time. It
 manages only its own rules in the built-in Windows Firewall; Windows remains the enforcement
 authority. There is no account, no cloud, no advertising and no telemetry.
+
+Windows is the reference platform. A Linux build monitors TCP/UDP sockets from `/proc`, keeps the
+same local history, IPC protocol and MCP tools, and ships a loopback browser UI. Per-executable
+firewall rules are enforced through eBPF cgroup hooks when the operator opens the write gate on a
+host with cgroup v2, kernel BTF and `libbpf`; without those prerequisites the Linux build reports
+enforcement as unavailable instead of claiming protection. See [Linux](docs/LINUX.md) for the
+exact capability matrix and macOS follow-up.
 
 ## What it covers
 
@@ -202,6 +209,9 @@ Windows Service
 
 - Windows 10 x64 (19041+) is the current development/test host. Windows 11 x64 uses the same
   .NET/WPF code path, but Windows 11 VM validation is still in the test matrix.
+- Linux x64: monitoring, history, IPC, MCP and the browser UI are supported; per-executable firewall
+  enforcement is opt-in and needs root, cgroup v2, kernel BTF and `libbpf` (see
+  [docs/LINUX.md](docs/LINUX.md)). macOS is not supported.
 - .NET 10 SDK for building; the published self-contained build needs no .NET runtime.
 - No administrator rights are required for the UI or for read-only console development.
 - Firewall rule writes and ETW kernel tracing require an elevated service or an isolated test VM.
@@ -229,6 +239,13 @@ dotnet test Axiom.sln -c Release --no-build
 
 The standalone build produces one self-contained `Axiom.Desktop.exe` in
 `artifacts\publish\win-x64`.
+
+On Linux:
+
+```bash
+./scripts/build-linux.sh
+./scripts/install-linux.sh --user    # or --system --allow-uid "$SUDO_UID"
+```
 
 WPF software rendering is enabled by default because some GPU drivers leave the client area blank
 after a driver reset. Set `AXIOM_HARDWARE_RENDER=1` before starting the app to opt in to hardware
@@ -300,6 +317,9 @@ src/
   Axiom.Contracts/              # DTOs, IPC and history contracts
   Axiom.Core/                   # domain rules and firewall port
   Axiom.Infrastructure.Windows/ # IP Helper, process identity, Named Pipe server
+  Axiom.Infrastructure.Linux/   # procfs inventory, Unix socket server, fail-closed firewall
+  Axiom.Dns/                    # loopback DNS filter shared by both platforms
+  Axiom.Desktop.Linux/          # loopback browser UI host
   Axiom.Persistence/            # SQLite schema, queries, retention
   Axiom.Service/                # Worker host, monitoring, history writer, pipe
   Axiom.UI/                     # WPF library: views, view models, theme
@@ -318,6 +338,7 @@ scripts/                                # local run, service mode, standalone pu
 - [Performance budget](docs/PERFORMANCE_BUDGET.md)
 - [Firewall recovery](docs/FIREWALL_RECOVERY.md)
 - [MCP server foundation](docs/MCP.md)
+- [Linux build and capability matrix](docs/LINUX.md)
 - [Optional integrations](docs/INTEGRATIONS.md)
 - [Licensing](docs/LICENSING.md)
 - [Roadmap](docs/ROADMAP.md)

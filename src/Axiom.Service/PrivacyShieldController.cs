@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Privacy;
-using Axiom.Infrastructure.Windows.Dns;
+using Axiom.Dns;
 
 namespace Axiom.Service;
 
@@ -307,16 +307,11 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
         if (upstreams.Count == 0)
         {
-            // If the adapter already points at this loopback resolver, system DNS discovery must
-            // not leave the machine without an upstream. Keep a conservative public fallback and
-            // let the user override it explicitly.
-            upstreams =
-            [
-                new System.Net.IPEndPoint(System.Net.IPAddress.Parse("1.1.1.1"), 53),
-                new System.Net.IPEndPoint(System.Net.IPAddress.Parse("9.9.9.9"), 53),
-            ];
-            warning = "No non-loopback Windows DNS server was found; using fallback upstream DNS. " +
-                      "Set an explicit upstream address if this network requires a local resolver.";
+            // Never silently replace the host's resolver with a public provider. On a split-DNS or
+            // VPN host that would leak private names and break local resolution.
+            error = "No upstream DNS server was found. Configure an explicit upstream address; " +
+                    "Axiom will not fall back to a public resolver.";
+            return false;
         }
 
         try

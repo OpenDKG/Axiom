@@ -36,7 +36,7 @@ public sealed class LocalDatabase(string databasePath)
         var directory = Path.GetDirectoryName(DatabasePath);
         if (!string.IsNullOrEmpty(directory))
         {
-            Directory.CreateDirectory(directory);
+            DatabasePaths.EnsurePrivateDirectory(directory);
         }
 
         var connectionString = new SqliteConnectionStringBuilder

@@ -1,0 +1,22 @@
+{
+  "solution": {
+    "path": "Axiom.sln",
+    "projects": [
+      "src\\Axiom.Contracts\\Axiom.Contracts.csproj",
+      "src\\Axiom.Core\\Axiom.Core.csproj",
+      "src\\Axiom.Dns\\Axiom.Dns.csproj",
+      "src\\Axiom.Infrastructure.Linux\\Axiom.Infrastructure.Linux.csproj",
+      "src\\Axiom.Persistence\\Axiom.Persistence.csproj",
+      "src\\Axiom.Service\\Axiom.Service.csproj",
+      "src\\Axiom.McpServer\\Axiom.McpServer.csproj",
+      "src\\Axiom.Desktop.Linux\\Axiom.Desktop.Linux.csproj",
+      "tests\\Axiom.Contracts.Tests\\Axiom.Contracts.Tests.csproj",
+      "tests\\Axiom.Core.Tests\\Axiom.Core.Tests.csproj",
+      "tests\\Axiom.Dns.Tests\\Axiom.Dns.Tests.csproj",
+      "tests\\Axiom.Infrastructure.Linux.Tests\\Axiom.Infrastructure.Linux.Tests.csproj",
+      "tests\\Axiom.Persistence.Tests\\Axiom.Persistence.Tests.csproj",
+      "tests\\Axiom.Service.Tests\\Axiom.Service.Tests.csproj",
+      "tests\\Axiom.McpServer.Tests\\Axiom.McpServer.Tests.csproj"
+    ]
+  }
+}

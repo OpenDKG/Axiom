@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Axiom for Linux</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">Axiom <span class="platform">Linux</span></div>
+  <nav id="nav">
+    <button data-page="overview" class="active">Overview</button>
+    <button data-page="connections">Connections</button>
+    <button data-page="history">History</button>
+    <button data-page="firewall">Firewall</button>
+    <button data-page="privacy">Privacy Shield</button>
+    <button data-page="ai">AI Analyst</button>
+    <button data-page="about">About</button>
+  </nav>
+  <div id="service-state" class="state">connecting</div>
+</header>
+
+<main>
+  <section id="page-overview" class="page active">
+    <div class="cards" id="overview-cards"></div>
+    <h2>Data quality and limitations</h2>
+    <ul id="limitations" class="notes"></ul>
+  </section>
+
+  <section id="page-connections" class="page">
+    <div class="toolbar">
+      <input id="conn-filter" type="search" placeholder="Filter by process, path, endpoint or state">
+      <label><input id="conn-new-only" type="checkbox"> New only</label>
+      <span id="conn-count" class="muted"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Application</th><th>PID</th><th>Proto</th><th>Local</th><th>Remote</th><th>State</th><th>Direction</th><th>Quality</th></tr>
+        </thead>
+        <tbody id="connections-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="page-history" class="page">
+    <div class="toolbar">
+      <input id="history-search" type="search" placeholder="Search application, path, endpoint or PID">
+      <select id="history-hours">
+        <option value="1">1 hour</option>
+        <option value="24" selected>24 hours</option>
+        <option value="168">7 days</option>
+        <option value="720">30 days</option>
+      </select>
+      <button id="history-run">Search</button>
+      <button id="history-export">Export CSV</button>
+      <span id="history-info" class="muted"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Application</th><th>Proto</th><th>Local</th><th>Remote</th><th>Direction</th><th>First seen (UTC)</th><th>Last seen (UTC)</th></tr>
+        </thead>
+        <tbody id="history-body"></tbody>
+      </table>
+    </div>
+    <div class="toolbar">
+      <button id="history-prev">Previous</button>
+      <button id="history-next">Next</button>
+      <span id="history-db" class="muted"></span>
+    </div>
+  </section>
+
+  <section id="page-firewall" class="page">
+    <div id="firewall-summary" class="cards"></div>
+    <h2>Rules owned by Axiom</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Rule</th><th>Direction</th><th>Action</th><th>Application</th><th>State</th></tr>
+        </thead>
+        <tbody id="firewall-body"></tbody>
+      </table>
+    </div>
+    <p class="notes" id="firewall-note"></p>
+  </section>
+
+  <section id="page-privacy" class="page">
+    <div id="privacy-summary" class="cards"></div>
+    <p class="notes" id="privacy-note"></p>
+    <p class="notes">Privacy Shield is a loopback DNS filter. It never changes system DNS settings; point a client at the displayed address explicitly. Only blocked domains are recorded.</p>
+  </section>
+
+  <section id="page-ai" class="page">
+    <h2>Optional AI analyst</h2>
+    <p class="notes">
+      Only the bounded evidence package is sent: application name, endpoints, state and quality.
+      Local paths are reduced to file names by default. The provider key is stored by Secret
+      Service; without a keyring this page refuses to store it rather than writing plaintext.
+    </p>
+    <div class="toolbar">
+      <label><input id="ai-enabled" type="checkbox"> Enabled</label>
+      <input id="ai-endpoint" type="url" placeholder="https://api.example/v1" size="32">
+      <input id="ai-model" type="text" placeholder="model" size="16">
+      <label><input id="ai-redact" type="checkbox" checked> Redact paths</label>
+      <button id="ai-save">Save</button>
+    </div>
+    <div class="toolbar">
+      <input id="ai-key" type="password" placeholder="provider key" size="32">
+      <button id="ai-key-save">Store key</button>
+      <button id="ai-key-delete">Delete key</button>
+      <button id="ai-analyze">Analyze current snapshot</button>
+      <span id="ai-status" class="muted"></span>
+    </div>
+    <pre id="ai-output" class="notes"></pre>
+    <h2>Reputation (SHA-256 only)</h2>
+    <div class="toolbar">
+      <input id="reputation-path" type="text" placeholder="/absolute/path/to/file" size="48">
+      <button id="reputation-run">Look up hash</button>
+    </div>
+    <p class="notes" id="reputation-output"></p>
+  </section>
+
+  <section id="page-about" class="page">
+    <h2>Runtime</h2>
+    <dl id="about-list" class="kv"></dl>
+    <p class="notes">
+      This is the Linux build. It monitors TCP/UDP sockets from <code>/proc</code>, keeps history in
+      local SQLite and can enforce per-executable rules with eBPF cgroup hooks when the service has
+      libbpf, CAP_BPF/CAP_NET_ADMIN and an explicitly opened write gate. Inbound rules are limited to
+      blocking new binds. The Firewall page reports the real capability instead of assuming it.
+      <label><input id="autostart-enabled" type="checkbox"> Start Axiom at login</label>
+    </p>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Axiom.Contracts.Ai;
 
-namespace Axiom.UI.Services;
+namespace Axiom.Contracts.Ai;
 
 /// <summary>
 /// OpenAI-compatible chat-completions adapter. It is provider-neutral by configuration and accepts
@@ -251,20 +251,21 @@ public sealed class AiAnalystClient : IDisposable
             return false;
         }
 
-        var isLocal = settings.Provider == AiProviderKind.LocalOpenAiCompatible;
         if (parsed.Scheme == Uri.UriSchemeHttps)
         {
             endpoint = parsed;
             return true;
         }
 
-        if (isLocal && parsed.Scheme == Uri.UriSchemeHttp && parsed.IsLoopback)
+        // Loopback HTTP is local traffic regardless of which provider label the caller chose; the
+        // Linux UI/API saves an OpenAI-compatible loopback endpoint without a separate local flag.
+        if (parsed.Scheme == Uri.UriSchemeHttp && parsed.IsLoopback)
         {
             endpoint = parsed;
             return true;
         }
 
-        error = "Cloud providers must use HTTPS; plain HTTP is allowed only for a loopback local endpoint.";
+        error = "Remote AI endpoints must use HTTPS; plain HTTP is allowed only for a loopback endpoint.";
         return false;
     }
 

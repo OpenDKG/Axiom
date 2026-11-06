@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Persistence;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -31,8 +32,7 @@ public sealed class PrivacyShieldBlockedHistoryStore
     public PrivacyShieldBlockedHistoryStore(string? path = null)
     {
         _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Axiom",
+            DatabasePaths.ResolvePrivacyShieldDirectory(),
             "privacy-shield-blocked.jsonl");
         _count = CountLines();
     }
@@ -52,7 +52,7 @@ public sealed class PrivacyShieldBlockedHistoryStore
 
                 var directory = Path.GetDirectoryName(_path)
                     ?? throw new InvalidOperationException("Privacy Shield history path has no directory.");
-                Directory.CreateDirectory(directory);
+                DatabasePaths.EnsurePrivateDirectory(directory);
                 File.AppendAllText(
                     _path,
                     JsonSerializer.Serialize(blocked, JsonOptions) + "\n",

@@ -4,7 +4,7 @@ using System.IO;
 using Axiom.Contracts.Ai;
 using Axiom.Contracts.Monitoring;
 
-namespace Axiom.UI.Services;
+namespace Axiom.Contracts.Ai;
 
 /// <summary>
 /// Converts a bounded snapshot into evidence. Local paths are reduced to file names by default;

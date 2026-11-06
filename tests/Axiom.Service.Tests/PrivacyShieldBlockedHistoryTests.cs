@@ -10,7 +10,9 @@ public sealed class PrivacyShieldBlockedHistoryTests
     [Fact]
     public void History_is_bounded_newest_first_and_clearable()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"axiom-blocked-{Guid.NewGuid():N}.jsonl");
+        var directory = Path.Combine(Path.GetTempPath(), $"axiom-blocked-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "blocked.jsonl");
         try
         {
             var store = new PrivacyShieldBlockedHistoryStore(path);
@@ -38,7 +40,7 @@ public sealed class PrivacyShieldBlockedHistoryTests
         }
         finally
         {
-            File.Delete(path);
+            Directory.Delete(directory, recursive: true);
         }
     }
 }

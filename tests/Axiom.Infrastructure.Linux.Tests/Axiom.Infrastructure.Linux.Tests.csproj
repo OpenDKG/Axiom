@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- Unix file-mode and libc tests cannot run on Windows; do not let the Windows solution
+         discover this project as a test project. The Linux solution filter still runs it. -->
+    <IsTestProject Condition="'$(OS)' == 'Windows_NT'">false</IsTestProject>
+    <IsTestProject Condition="'$(OS)' != 'Windows_NT'">true</IsTestProject>
+    <RootNamespace>Axiom.Infrastructure.Linux.Tests</RootNamespace>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Axiom.Infrastructure.Linux\Axiom.Infrastructure.Linux.csproj" />
+    <ProjectReference Include="..\..\src\Axiom.McpServer\Axiom.McpServer.csproj" />
+  </ItemGroup>
+
+</Project>

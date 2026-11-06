@@ -1,21 +1,36 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType Condition="'$(OS)' == 'Windows_NT'">WinExe</OutputType>
+    <OutputType Condition="'$(OS)' != 'Windows_NT'">Exe</OutputType>
+    <TargetFramework Condition="'$(OS)' == 'Windows_NT'">net10.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(OS)' != 'Windows_NT'">net10.0</TargetFramework>
     <RootNamespace>Axiom.Service</RootNamespace>
     <AssemblyName>Axiom.Service</AssemblyName>
     <AssemblyTitle>Axiom Service</AssemblyTitle>
-  </PropertyGroup>
+      <!-- The target framework is selected by the host OS (net10.0 / net10.0-windows), and NuGet
+         has no way to express both graphs in one packages.lock.json. A lock file here would make
+         a locked restore fail on the other platform, so these two projects rely on the central
+         version pins in Directory.Packages.props instead of a lock file. -->
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+</PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
     <ProjectReference Include="..\Axiom.Core\Axiom.Core.csproj" />
-    <ProjectReference Include="..\Axiom.Infrastructure.Windows\Axiom.Infrastructure.Windows.csproj" />
+    <ProjectReference Include="..\Axiom.Dns\Axiom.Dns.csproj" />
     <ProjectReference Include="..\Axiom.Persistence\Axiom.Persistence.csproj" />
+    <ProjectReference Include="..\Axiom.Infrastructure.Windows\Axiom.Infrastructure.Windows.csproj"
+                      Condition="'$(OS)' == 'Windows_NT'" />
+    <ProjectReference Include="..\Axiom.Infrastructure.Linux\Axiom.Infrastructure.Linux.csproj"
+                      Condition="'$(OS)' != 'Windows_NT'" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
   </ItemGroup>
 

@@ -23,6 +23,8 @@ public sealed class AxiomToolsTests
     [InlineData("172.32.0.1", false)]
     [InlineData("8.8.8.8", false)]
     [InlineData("2001:4860:4860::8888", false)]
+    [InlineData("::ffff:10.1.2.3", true)]
+    [InlineData("::ffff:8.8.8.8", false)]
     public void ClassifiesLocalAndPublicAddresses(string host, bool expected)
     {
         Assert.Equal(expected, AxiomTools.IsPrivateOrLoopback(host));

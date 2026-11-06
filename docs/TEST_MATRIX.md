@@ -186,3 +186,66 @@ dotnet build Axiom.sln -c Release --no-restore
 dotnet test Axiom.sln -c Release --no-build
 .\scripts\run-service.ps1
 ```
+
+## 9. Linux compatibility branch (2026-11-06, completion pass, re-based on Axiom `3d58baa`)
+
+Host: Ubuntu 24.04 x64 (kernel 7.0.0), .NET SDK 10.0.403, root in a privileged container with
+cgroup v2, `libbpf` 1.3, clang 18 and kernel BTF. Configuration: `Debug` for the iteration runs,
+`Release` for the full build. This is a separate run from the Windows matrix above; Windows runtime
+behaviour was not executed here (compile-only check below).
+
+| Command | Result |
+|---|---|
+| `dotnet build Axiom.Linux.slnf` | 0 error(s) |
+| `dotnet test Axiom.Linux.slnf` | **305/305 passed, 0 skipped** (two consecutive full runs on the final tree) |
+| Windows compile: `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` (WPF, Desktop, Service, Setup, Windows infrastructure) | 0 error(s) |
+
+| Test project | Count | Notes |
+|---|---|---|
+| Contracts | 67 | dispatcher/limits, bounded response, **blocked-writer deadline for the oversized-request error**, cancellation, CSV escaping and spreadsheet-injection neutralisation, VirusTotal, community feed, IPC protocol, loopback/remote AI endpoint validation |
+| Core | 66 | path/rule validation is platform-aware instead of skipped |
+| Persistence | 23 | history, platform-aware paths, case-sensitive Linux app identity, invalid-header and **valid-header page corruption** (pre-open DB/WAL/SHM evidence + quarantine), healthy WAL not quarantined, non-private directory refusal |
+| Dns | 11 | Privacy Shield proxy, loopback-stub upstream parsing, proxy self-endpoint rejection, **shutdown drains an in-flight query before sockets close** |
+| Service | 16 | coordinator, Privacy Shield rollback |
+| MCP server | 35 | unchanged tool tests plus IPv4-mapped private-address classification |
+| Infrastructure.Linux | 87 | `/proc` parser, inode/start-time attribution, PID reuse, socket auth/permissions, refused second instance, **initialization-failure endpoint cleanup**, **executable path hash vs kernel vector**, mount-root resolution, **policy compiler (ports/CIDR/allow-list/refusals)**, **live eBPF TCP/UDP/bind/allow-list/removal/restore/CIDR tests**, autostart, Secret Service store (fake backend), host environment detector, MCP over the real socket |
+
+Live firewall tests skip themselves at discovery time with a printed reason unless the host is root,
+has a writable cgroup v2 hierarchy, `/sys/kernel/btf/vmlinux`, `libbpf.so.1` and `python3`. On this
+host all eleven ran against a disposable child cgroup; the shared root cgroup was never filtered.
+
+Runtime evidence executed in disposable paths (`AXIOM_DATA_DIR`, `AXIOM_IPC_SOCKET`,
+`AXIOM_FIREWALL_CGROUP`):
+
+- service start/stop/restart; socket 0600 in a private directory; socket removed on stop; data kept;
+- real capture of controlled TCP v4/TCP v6/UDP traffic with attribution; history persisted and was
+  queried through the UI API;
+- UI 401 without token, 200 with token, non-loopback `Host` rejected (400), `Cache-Control: no-store`,
+  CSP/frame headers; `GET /api/firewall` reported `available` with the write gate closed and zero
+  owned rules; `GET /api/history.csv` returned `text/csv` with the BOM, quoting and no-store header;
+  `GET /api/ai` reported the Secret Service backend and `available=false` (no keyring in this
+  container) without creating a plaintext key file; `GET /api/autostart` reported the supported
+  apphost;
+- `.deb`: `dpkg-deb --info/--contents`, extraction, `desktop-file-validate`, extracted service run
+  with a disposable data dir/socket, UI self-check over the real socket, MCP server start, clean
+  stop with socket removal and data preservation;
+- firewall live tests: TCP block (`EPERM`), UDP `sendto` block, bind block, allow-list mode
+  (unlisted port denied), a rule for another executable did not affect the client, remove restored
+  connectivity, verify/list reported `Applied`;
+- soak (90 s, published payload): 7 070 token-authenticated HTTP requests across three concurrent
+  load clients plus loopback traffic, **0 HTTP errors**; service RSS 69 872 -> 266 436 KiB, UI RSS
+  67 156 -> 332 708 KiB, service CPU 81 s, service threads 20, UI threads 23, last capture 4 057
+  sockets / 6 536 history rows; socket cleanup `ok`, data preserved `ok`; no firewall/DNS changes.
+  RSS growth is reported as observed, not as a steady-state guarantee.
+
+Not run / not available on Linux:
+
+- agent hook installers (the hook payload needs the Windows-only Blackbox module; installing a
+  fail-open hook was rejected);
+- AI provider round-trip and real keyring round-trip (no keyring/session bus in this container; the
+  fake-backend contract and refusal path are tested);
+- Windows runtime regression (only compilation verified), WSL2/SELinux/AppArmor-confined runtime,
+  tray icon, macOS;
+- 24 h soak, reboot and multi-host stress;
+- one `Dns` TCP test flaked once under full-suite parallelism and then passed in the next two full
+  runs; it is treated as a test-infrastructure race, not a product pass.

@@ -1,0 +1,31 @@
+[Unit]
+Description=Axiom local service (Axiom)
+Documentation=https://github.com/a-51-50/Axiom
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/axiom/service/Axiom.Service
+WorkingDirectory=/opt/axiom/service
+Environment=AXIOM_DATA_DIR=/var/lib/axiom
+Environment=AXIOM_IPC_SOCKET=/run/axiom/service.sock
+# Replaced by install-linux.sh with the uid of the user allowed to call the service.
+Environment=AXIOM_ALLOWED_UID=0
+RuntimeDirectory=axiom
+RuntimeDirectoryMode=0711
+StateDirectory=axiom
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

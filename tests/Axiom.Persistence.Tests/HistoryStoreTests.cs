@@ -212,6 +212,11 @@ public sealed class HistoryStoreTests : IDisposable
     {
         var path = Path.Combine(_directory, "axiom.db");
         Directory.CreateDirectory(_directory);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(_directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
         await File.WriteAllTextAsync(path, "this is not a sqlite database");
 
         var store = new HistoryStore(path);
@@ -227,6 +232,125 @@ public sealed class HistoryStoreTests : IDisposable
         });
 
         Assert.Equal(0, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task Case_distinct_executable_paths_follow_the_platform_identity()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var now = DateTimeOffset.UtcNow;
+        await store.UpsertAsync(Snapshot(
+            now,
+            ("app", "/opt/App/client", 100, "203.0.113.10:443"),
+            ("app", "/opt/app/client", 101, "203.0.113.11:443")));
+
+        var page = await store.QueryAsync(new HistoryQuery
+        {
+            FromUtc = now.AddMinutes(-1),
+            ToUtc = now.AddMinutes(1),
+        });
+
+        Assert.Equal(2, page.TotalCount);
+        Assert.Equal(OperatingSystem.IsWindows() ? 1 : 2, page.Rows
+            .Select(row => row.AppPath)
+            .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .Count());
+    }
+
+    [Fact]
+    public async Task Corrupt_database_quarantines_its_wal_and_shm_files()
+    {
+        var path = Path.Combine(_directory, "axiom.db");
+        Directory.CreateDirectory(_directory);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(_directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        await File.WriteAllTextAsync(path, "this is not a sqlite database");
+        await File.WriteAllTextAsync(path + "-wal", "wal evidence");
+        await File.WriteAllTextAsync(path + "-shm", "shm evidence");
+
+        var store = new HistoryStore(path);
+        await store.InitializeAsync(CancellationToken.None);
+
+        var walBackup = Assert.Single(Directory.GetFiles(_directory, "axiom.db.corrupt-*-wal"));
+        var shmBackup = Assert.Single(Directory.GetFiles(_directory, "axiom.db.corrupt-*-shm"));
+        Assert.Equal("wal evidence", await File.ReadAllTextAsync(walBackup));
+        Assert.Equal("shm evidence", await File.ReadAllTextAsync(shmBackup));
+    }
+
+    [Fact]
+    public async Task Valid_header_page_corruption_is_quarantined_with_pre_open_evidence()
+    {
+        var path = Path.Combine(_directory, "axiom.db");
+        Directory.CreateDirectory(_directory);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(_directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        await using (var connection = new SqliteConnection($"Data Source={path}"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "CREATE TABLE evidence(value BLOB); INSERT INTO evidence VALUES(randomblob(40000));";
+            await command.ExecuteNonQueryAsync();
+        }
+
+        SqliteConnection.ClearAllPools();
+
+        await using (var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            stream.Position = 4096;
+            var garbage = new byte[512];
+            Array.Fill(garbage, (byte)0xA5);
+            stream.Write(garbage);
+        }
+
+        var wal = path + "-wal";
+        var shm = path + "-shm";
+        await File.WriteAllTextAsync(wal, "wal evidence");
+        await File.WriteAllTextAsync(shm, "shm evidence");
+
+        var store = new HistoryStore(path);
+        await store.InitializeAsync(CancellationToken.None);
+
+        Assert.True(File.Exists(path));
+        Assert.NotEmpty(Directory.GetFiles(_directory, "axiom.db.corrupt-*"));
+
+        var walBackup = Assert.Single(Directory.GetFiles(_directory, "axiom.db.corrupt-*-wal"));
+        Assert.Equal("wal evidence", await File.ReadAllTextAsync(walBackup));
+
+        var preOpen = Assert.Single(Directory.GetDirectories(Path.Combine(_directory, "quarantine"), "preopen-*"));
+        Assert.True(File.Exists(Path.Combine(preOpen, "axiom.db")));
+        Assert.Equal("wal evidence", await File.ReadAllTextAsync(Path.Combine(preOpen, "axiom.db-wal")));
+        Assert.Equal("shm evidence", await File.ReadAllTextAsync(Path.Combine(preOpen, "axiom.db-shm")));
+
+        var page = await store.QueryAsync(new HistoryQuery
+        {
+            FromUtc = DateTimeOffset.UtcNow.AddHours(-1),
+            ToUtc = DateTimeOffset.UtcNow.AddMinutes(1),
+        });
+        Assert.Equal(0, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task Healthy_database_with_a_sidecar_is_not_quarantined()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        await File.WriteAllBytesAsync(store.DatabasePath + "-wal", []);
+
+        var reopened = new HistoryStore(store.DatabasePath);
+        await reopened.InitializeAsync(CancellationToken.None);
+
+        Assert.Empty(Directory.GetFiles(_directory, "axiom.db.corrupt-*"));
+        Assert.False(Directory.Exists(Path.Combine(_directory, "quarantine")) &&
+                     Directory.GetDirectories(Path.Combine(_directory, "quarantine"), "preopen-*").Length > 0);
     }
 
     private HistoryStore CreateStore() =>

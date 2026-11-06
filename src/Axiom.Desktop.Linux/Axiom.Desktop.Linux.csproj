@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Axiom.Desktop.Linux</RootNamespace>
+    <AssemblyName>Axiom.Desktop.Linux</AssemblyName>
+    <AssemblyTitle>Axiom for Linux</AssemblyTitle>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
+    <ProjectReference Include="..\Axiom.Infrastructure.Linux\Axiom.Infrastructure.Linux.csproj" />
+    <ProjectReference Include="..\Axiom.Persistence\Axiom.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Required for self-contained single-file publish under central package management. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

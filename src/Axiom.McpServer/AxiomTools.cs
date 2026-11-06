@@ -58,10 +58,10 @@ public sealed class AxiomTools
 
     private static readonly string[] ReportMissingEvidence =
     [
-        "Per-process byte counters (ETW not implemented).",
+        "Per-process byte counters (not measured by this build).",
         "DNS/TLS payload evidence.",
         "Reputation provider results.",
-        "Windows Filtering Platform block events.",
+        "OS firewall block events.",
         "Rows without an observed remote endpoint remain unassessed.",
     ];
 
@@ -97,9 +97,9 @@ public sealed class AxiomTools
                 },
                 dataQuality = new
                 {
-                    perProcessBytes = "not measured (ETW requires elevation and is deferred)",
-                    processIdentity = "IP Helper owner table plus resolved executable path",
-                    firewallEnforcement = "read-only unless the explicit service write gate is open",
+                    perProcessBytes = "not measured by this build; per-flow byte counters are unavailable",
+                    processIdentity = "OS socket owner table/path plus resolved executable path",
+                    firewallEnforcement = "read-only observation; no tool changes host firewall rules",
                 },
                 limitations = health.Limitations,
             };
@@ -254,8 +254,8 @@ public sealed class AxiomTools
                 {
                     fileHash = "not available in this read-only IPC contract",
                     authenticode = "not available in this read-only IPC contract",
-                    parentProcess = "not exposed by IP Helper",
-                    commandLine = "not exposed by IP Helper",
+                    parentProcess = "not exposed by the IPC contract",
+                    commandLine = "not exposed by the IPC contract",
                 },
             };
         });
@@ -379,7 +379,7 @@ public sealed class AxiomTools
         }));
     }
 
-    [McpServerTool(Name = "axiom_get_firewall_rules"), Description("Return read-only Axiom-owned firewall rules, capability and write-gate state. Does not change Windows Firewall.")]
+    [McpServerTool(Name = "axiom_get_firewall_rules"), Description("Return read-only Axiom-owned firewall rules, capability and write-gate state. Does not change host firewall rules.")]
     public static async Task<string> GetFirewallRules()
     {
         return await GuardAsync(async () =>
@@ -582,6 +582,12 @@ public sealed class AxiomTools
         if (!IPAddress.TryParse(host, out var address))
         {
             return false;
+        }
+
+        // procfs reports dual-stack IPv4 sockets as ::ffff:a.b.c.d; classify the IPv4 address.
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
         }
 
         if (IPAddress.IsLoopback(address))

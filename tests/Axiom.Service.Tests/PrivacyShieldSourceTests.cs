@@ -61,7 +61,9 @@ public sealed class PrivacyShieldSourceTests
     [Fact]
     public void Rule_store_round_trips_and_keeps_previous_snapshot()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"axiom-rules-{Guid.NewGuid():N}.json");
+        var directory = Path.Combine(Path.GetTempPath(), $"axiom-rules-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "rules.json");
         var previous = path + ".previous";
         try
         {
@@ -92,8 +94,7 @@ public sealed class PrivacyShieldSourceTests
         }
         finally
         {
-            File.Delete(path);
-            File.Delete(previous);
+            Directory.Delete(directory, recursive: true);
         }
     }
 

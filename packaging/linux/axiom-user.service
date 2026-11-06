@@ -1,0 +1,18 @@
+[Unit]
+Description=Axiom local service (Axiom, user scope)
+Documentation=https://github.com/a-51-50/Axiom
+
+[Service]
+Type=simple
+ExecStart=%h/.local/opt/axiom/service/Axiom.Service
+WorkingDirectory=%h/.local/opt/axiom/service
+Environment=AXIOM_DATA_DIR=%h/.local/share/Axiom
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+# Do not add PrivateTmp=yes here: on systemd versions that implement it with an idmapped
+# user namespace, the service loses CAP_SYS_PTRACE over host processes and cannot attribute
+# their sockets. Attribution is the product feature; use ProtectSystem/ProtectHome instead.
+
+[Install]
+WantedBy=default.target

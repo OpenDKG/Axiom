@@ -10,7 +10,9 @@ public sealed class RuleSpecValidatorTests
     private static RuleSpec ValidSpec() => new()
     {
         ManagedRuleId = Guid.NewGuid(),
-        AppPath = @"C:\Program Files\Example\example.exe",
+        AppPath = OperatingSystem.IsWindows()
+            ? @"C:\Program Files\Example\example.exe"
+            : "/usr/bin/example",
         Direction = FirewallDirection.Outbound,
         Action = FirewallAction.Block,
         Profiles = FirewallProfile.Domain | FirewallProfile.Private | FirewallProfile.Public,
@@ -83,13 +85,19 @@ public sealed class RuleSpecValidatorTests
         var result = RuleSpecValidator.Validate(spec);
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, error => error.Code == "rule.path.unc_not_supported");
+        var expected = OperatingSystem.IsWindows()
+            ? "rule.path.unc_not_supported"
+            : "rule.path.not_absolute";
+        Assert.Contains(result.Errors, error => error.Code == expected);
     }
 
     [Fact]
     public void Parent_segment_is_rejected()
     {
-        var spec = ValidSpec() with { AppPath = @"C:\Program Files\Example\..\Other\example.exe" };
+        var path = OperatingSystem.IsWindows()
+            ? @"C:\Program Files\Example\..\Other\example.exe"
+            : "/usr/bin/../lib/example";
+        var spec = ValidSpec() with { AppPath = path };
 
         var result = RuleSpecValidator.Validate(spec);
 
@@ -100,7 +108,10 @@ public sealed class RuleSpecValidatorTests
     [Fact]
     public void Control_characters_in_path_are_rejected()
     {
-        var spec = ValidSpec() with { AppPath = "C:\\Program Files\\Example\\exam\u0001ple.exe" };
+        var path = OperatingSystem.IsWindows()
+            ? "C:\\Program Files\\Example\\exam\u0001ple.exe"
+            : "/usr/bin/exam\u0001ple";
+        var spec = ValidSpec() with { AppPath = path };
 
         var result = RuleSpecValidator.Validate(spec);
 

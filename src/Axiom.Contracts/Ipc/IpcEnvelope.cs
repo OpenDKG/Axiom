@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace Axiom.Contracts.Ipc;
 
 /// <summary>
-/// Wire envelope for every UI to service message. The protocol is local-only (Named Pipes in
+/// Wire envelope for every UI to service message. The protocol is local-only (named pipes or Unix sockets in
 /// FND-003); FND-001 defines the shape and guards only.
 /// </summary>
 public sealed record IpcEnvelope

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Axiom
+GenericName=Network monitor and firewall policy manager
+Comment=Local network visibility and owned firewall rules
+Exec="@PREFIX@/ui/Axiom.Desktop.Linux"
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;Security;
+StartupNotify=true

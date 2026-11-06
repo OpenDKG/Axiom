@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Axiom.Infrastructure.Linux</RootNamespace>
+    <!-- This project is Linux-only by construction; Unix file modes are guarded at the callsites. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
+    <ProjectReference Include="..\Axiom.Core\Axiom.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Axiom.Infrastructure.Linux.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Prebuilt CO-RE object; source and build script live beside it. Rebuild with scripts/build-ebpf.sh. -->
+    <EmbeddedResource Include="Firewall\bpf\axiom_fw.bpf.o"
+                      LogicalName="Axiom.Infrastructure.Linux.Firewall.axiom_fw.bpf.o" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Required for self-contained single-file publish under central package management. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

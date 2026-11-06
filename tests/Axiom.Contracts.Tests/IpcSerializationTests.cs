@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.IO.Pipes;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Axiom.Contracts.Firewall;
@@ -89,6 +90,13 @@ public sealed class IpcSerializationTests
     public async Task Malformed_service_response_is_reported_as_ipc_error()
     {
         var pipeName = "axiom-contract-test-" + Guid.NewGuid().ToString("N");
+
+        if (!OperatingSystem.IsWindows())
+        {
+            await AssertMalformedUnixResponseAsync(pipeName);
+            return;
+        }
+
         await using var server = new NamedPipeServerStream(
             pipeName,
             PipeDirection.InOut,
@@ -114,5 +122,46 @@ public sealed class IpcSerializationTests
 
         var exception = await Assert.ThrowsAsync<IpcClientException>(() => request);
         Assert.Equal(IpcErrorCodes.InvalidRequest, exception.Code);
+    }
+
+    private static async Task AssertMalformedUnixResponseAsync(string pipeName)
+    {
+        var socketPath = Path.Combine(Path.GetTempPath(), pipeName + ".sock");
+        using var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+        listener.Bind(new UnixDomainSocketEndPoint(socketPath));
+        listener.Listen(1);
+
+        try
+        {
+            var accept = listener.AcceptAsync();
+            var client = new IpcPipeClient(
+                pipeName,
+                connectTimeout: TimeSpan.FromSeconds(2),
+                requestTimeout: TimeSpan.FromSeconds(2),
+                unixSocketPath: socketPath);
+
+            var request = client.SendAsync<object>(
+                IpcCommandTypes.ServiceHealth,
+                payload: null,
+                CancellationToken.None);
+
+            using var accepted = await accept;
+            await using var stream = new NetworkStream(accepted, ownsSocket: false);
+            var reader = new IpcLineReader(stream);
+            await reader.ReadLineAsync(IpcProtocol.MaxMessageBytes, CancellationToken.None);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("{not-json\n"));
+            await stream.FlushAsync();
+
+            var exception = await Assert.ThrowsAsync<IpcClientException>(() => request);
+            Assert.Equal(IpcErrorCodes.InvalidRequest, exception.Code);
+        }
+        finally
+        {
+            listener.Dispose();
+            if (File.Exists(socketPath))
+            {
+                File.Delete(socketPath);
+            }
+        }
     }
 }

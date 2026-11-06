@@ -45,3 +45,6 @@ desktop.ini
 
 # Internal planning documents (kept local, not published)
 *_SR.md
+
+# Generated eBPF headers (scripts/build-ebpf.sh regenerates them)
+src/Axiom.Infrastructure.Linux/Firewall/bpf/vmlinux.h
