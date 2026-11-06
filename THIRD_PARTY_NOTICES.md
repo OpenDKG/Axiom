@@ -1,7 +1,7 @@
 # Third-party notices
 
 This file lists the NuGet packages in the locked dependency graph (packages.lock.json) of
-Netpetra, generated on 2026-11-04. Licenses were read from each package's
+Axiom, generated on 2026-11-04. Licenses were read from each package's
 .nuspec on NuGet.org at that date.
 
 The project itself is licensed under **GPL-3.0-or-later** (see LICENSE and NOTICE). All listed

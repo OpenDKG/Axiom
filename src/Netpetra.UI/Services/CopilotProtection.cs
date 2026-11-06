@@ -221,7 +221,7 @@ public sealed class CopilotProtection
                 if blocked:
                     print(json.dumps({
                         "permissionDecision": "deny",
-                        "permissionDecisionReason": decision.get("message") or "Blocked by Netpetra/Blackbox",
+                        "permissionDecisionReason": decision.get("message") or "Blocked by Axiom/Blackbox",
                     }))
                 else:
                     print(json.dumps({"permissionDecision": "allow"}))

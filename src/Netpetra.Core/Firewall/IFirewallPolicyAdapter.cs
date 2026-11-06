@@ -4,7 +4,7 @@ using Netpetra.Contracts.Firewall;
 namespace Netpetra.Core.Firewall;
 
 /// <summary>
-/// The only port through which Netpetra may change OS firewall state. Implemented by
+/// The only port through which Axiom may change OS firewall state. Implemented by
 /// <c>Netpetra.Infrastructure.Windows</c>; the UI never sees this interface.
 /// </summary>
 public interface IFirewallPolicyAdapter

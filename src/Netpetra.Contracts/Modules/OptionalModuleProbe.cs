@@ -80,7 +80,7 @@ public sealed class OptionalModuleProbe : IDisposable
         }
         catch (HttpRequestException)
         {
-            return NotRunning("No local DKG node answered. Start it with `dkg start`; setup is in docs/INTEGRATIONS.md. Netpetra does not start it.", baseUri);
+            return NotRunning("No local DKG node answered. Start it with `dkg start`; setup is in docs/INTEGRATIONS.md. Axiom does not start it.", baseUri);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -122,7 +122,7 @@ public sealed class OptionalModuleProbe : IDisposable
         }
         catch (HttpRequestException)
         {
-            return NotRunning("No local Blackbox dashboard answered. Start Blackbox separately; setup is in docs/INTEGRATIONS.md. Netpetra does not start it.", baseUri);
+            return NotRunning("No local Blackbox dashboard answered. Start Blackbox separately; setup is in docs/INTEGRATIONS.md. Axiom does not start it.", baseUri);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -167,7 +167,7 @@ public sealed class OptionalModuleProbe : IDisposable
 
         if (!parsed.IsLoopback)
         {
-            error = "Only loopback endpoints are allowed; Netpetra does not contact remote module services.";
+            error = "Only loopback endpoints are allowed; Axiom does not contact remote module services.";
             return false;
         }
 

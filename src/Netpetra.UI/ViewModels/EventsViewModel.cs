@@ -189,7 +189,7 @@ public sealed partial class EventsViewModel : PageViewModel, IDisposable
 
             var dialog = new Microsoft.Win32.SaveFileDialog
             {
-                FileName = $"netpetra-events-{DateTime.Now:yyyyMMdd-HHmmss}.csv",
+                FileName = $"axiom-events-{DateTime.Now:yyyyMMdd-HHmmss}.csv",
                 Filter = "CSV (*.csv)|*.csv",
                 DefaultExt = ".csv",
             };

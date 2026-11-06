@@ -28,7 +28,7 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
         {
             Timeout = TimeSpan.FromSeconds(45),
         };
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("Netpetra-PrivacyShield/0.1");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("Axiom-PrivacyShield/0.1");
     }
 
     public async Task<PrivacyShieldSourceUpdateResult> UpdateAsync(

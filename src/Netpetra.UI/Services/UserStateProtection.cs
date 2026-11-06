@@ -57,8 +57,8 @@ public sealed class UserStateSnapshot(
 
 /// <summary>
 /// Captures a bounded fingerprint of user-owned agent configuration, sessions, projects,
-/// credentials, databases, history and Netpetra settings. Hook installation, setup and uninstall
-/// must change only explicitly allowed Netpetra-owned paths; unexpected changes are detected and
+/// credentials, databases, history and Axiom settings. Hook installation, setup and uninstall
+/// must change only explicitly allowed Axiom-owned paths; unexpected changes are detected and
 /// small files can be restored from memory. Large databases are fingerprinted by size and
 /// last-write time so a multi-gigabyte agent database is never loaded or rehashed on every action.
 /// </summary>
@@ -170,18 +170,18 @@ public sealed class UserStateProtection
                 RoamingFile("Cursor/User/settings.json", "Cursor settings"),
                 RoamingFile("Cursor/User/globalStorage/state.vscdb", "Cursor sessions", HashContent: false),
 
-                // Netpetra's own user settings.
-                LocalFile("Netpetra/theme.txt", "Netpetra settings"),
-                LocalFile("Netpetra/tray-notifications.txt", "Netpetra settings"),
-                LocalFile("Netpetra/reputation.json", "Netpetra settings"),
-                LocalFile("Netpetra/community-feed.json", "Netpetra settings"),
-                LocalFile("Netpetra/onboarding.json", "Netpetra settings"),
-                LocalFile("Netpetra/startup.json", "Netpetra settings"),
-                LocalFile("Netpetra/privacy-shield.json", "Netpetra Privacy Shield settings"),
-                LocalFile("Netpetra/privacy-shield-blocked.jsonl", "Netpetra Privacy Shield blocked history"),
-                LocalFile("Netpetra/ai-analyst.json", "Netpetra AI analyst settings"),
-                LocalFile("Netpetra/ai-findings.json", "Netpetra AI findings"),
-                LocalFile("Netpetra/firewall-defaults.json", "Netpetra firewall defaults"),
+                // Axiom's own user settings.
+                LocalFile("Netpetra/theme.txt", "Axiom settings"),
+                LocalFile("Netpetra/tray-notifications.txt", "Axiom settings"),
+                LocalFile("Netpetra/reputation.json", "Axiom settings"),
+                LocalFile("Netpetra/community-feed.json", "Axiom settings"),
+                LocalFile("Netpetra/onboarding.json", "Axiom settings"),
+                LocalFile("Netpetra/startup.json", "Axiom settings"),
+                LocalFile("Netpetra/privacy-shield.json", "Axiom Privacy Shield settings"),
+                LocalFile("Netpetra/privacy-shield-blocked.jsonl", "Axiom Privacy Shield blocked history"),
+                LocalFile("Netpetra/ai-analyst.json", "Axiom AI analyst settings"),
+                LocalFile("Netpetra/ai-findings.json", "Axiom AI findings"),
+                LocalFile("Netpetra/firewall-defaults.json", "Axiom firewall defaults"),
             };
 
             if (_includeHermesSettings)

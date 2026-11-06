@@ -7,7 +7,7 @@ using System.Text;
 namespace Netpetra.UI.Services;
 
 /// <summary>
-/// Explicit UAC-gated adapter DNS helper. Netpetra never elevates itself or changes DNS silently;
+/// Explicit UAC-gated adapter DNS helper. Axiom never elevates itself or changes DNS silently;
 /// the user confirms the Windows elevation prompt for each action.
 /// </summary>
 public static class PrivacyShieldDnsHelper

@@ -5,6 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Netpetra.McpServer</RootNamespace>
     <AssemblyName>Netpetra.McpServer</AssemblyName>
+    <AssemblyTitle>Axiom MCP Server</AssemblyTitle>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>

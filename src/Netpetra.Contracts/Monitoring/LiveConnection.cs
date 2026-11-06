@@ -20,7 +20,7 @@ public enum ConnectionDirection
 }
 
 /// <summary>
-/// What Netpetra knows about the rule state of a connection. Values are deliberately
+/// What Axiom knows about the rule state of a connection. Values are deliberately
 /// explicit so the UI can never render an unverified connection as "allowed".
 /// </summary>
 public enum ConnectionRuleStatus

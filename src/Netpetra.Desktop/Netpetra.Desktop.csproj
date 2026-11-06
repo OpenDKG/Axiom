@@ -7,6 +7,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>Netpetra.Desktop</RootNamespace>
     <AssemblyName>Netpetra.Desktop</AssemblyName>
+    <AssemblyTitle>Axiom</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\Netpetra.UI\Resources\axiom.ico</ApplicationIcon>
     <StartupObject>Netpetra.Desktop.Program</StartupObject>

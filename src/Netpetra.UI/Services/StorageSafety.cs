@@ -23,7 +23,7 @@ public static class StorageSafety
     /// <summary>
     /// Returns true when the path itself or any existing parent is a junction or symbolic link.
     /// This prevents installers and cleanup scripts from following a user-created link into data
-    /// outside the Netpetra-owned directory.
+    /// outside the Axiom-owned directory.
     /// </summary>
     public static bool IsReparsePointInPath(string path)
     {
