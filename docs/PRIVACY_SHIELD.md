@@ -21,7 +21,9 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
   - forwards allowed UDP queries over UDP and TCP queries over TCP, with bounded timeouts;
   - keeps in-memory query/allowed/blocked/error counters and top blocked domains only.
 - A Privacy Shield page with profile/category controls, custom allow/block lists, local list import,
-  verified source catalog, resolver status and explicit UAC DNS integration.
+  verified source catalog, resolver status, **live statistics (2-second refresh while selected)** and
+  explicit UAC DNS integration. Recent blocked queries are a bounded in-memory list (last 50), not
+  persisted history.
 - A catalog of **HTTPS-only, license-labelled** sources (HaGeZi, OISD, WindowsSpyBlocker). A source
   update downloads with a 20 MB/45 s bound, parses and normalizes domains, then atomically replaces
   the previous ruleset only if every selected source succeeds. The previous rules file is retained.

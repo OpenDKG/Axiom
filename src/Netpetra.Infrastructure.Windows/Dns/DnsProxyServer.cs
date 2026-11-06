@@ -42,6 +42,8 @@ public sealed class DnsProxyServer : IAsyncDisposable
     private readonly ConcurrentDictionary<string, long> _blockedDomains =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly ConcurrentQueue<PrivacyShieldBlockedEvent> _recentBlocked = new();
+
     private long _queries;
 
     private long _allowed;
@@ -136,6 +138,11 @@ public sealed class DnsProxyServer : IAsyncDisposable
             Errors = Interlocked.Read(ref _errors),
             RuleCount = _policy.RuleCount,
             TopBlocked = top,
+            RecentBlocked = _recentBlocked
+                .ToArray()
+                .Reverse()
+                .Take(50)
+                .ToArray(),
             Detail = $"Resolved {Interlocked.Read(ref _allowed)} and blocked {Interlocked.Read(ref _blocked)} queries. " +
                      "DNS filtering is not complete traffic filtering; DoH/DoT/DoQ and hardcoded IPs bypass it.",
         };
@@ -268,7 +275,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
                 if (decision.Blocked)
                 {
                     Interlocked.Increment(ref _blocked);
-                    RecordBlocked(parsed.Domain);
+                    RecordBlocked(parsed.Domain, decision.Category);
                     response = DnsProtocol.BuildResponse(query, parsed.QuestionEnd, 3);
                 }
                 else
@@ -398,7 +405,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
         if (decision.Blocked)
         {
             Interlocked.Increment(ref _blocked);
-            RecordBlocked(parsed.Domain);
+            RecordBlocked(parsed.Domain, decision.Category);
             await SendAsync(
                 client,
                 DnsProtocol.BuildResponse(query, parsed.QuestionEnd, 3),
@@ -471,13 +478,20 @@ public sealed class DnsProxyServer : IAsyncDisposable
         }
     }
 
-    private void RecordBlocked(string domain)
+    private void RecordBlocked(string domain, PrivacyCategory category)
     {
-        if (_blockedDomains.Count >= 256 && !_blockedDomains.ContainsKey(domain))
+        if (_blockedDomains.Count < 256 || _blockedDomains.ContainsKey(domain))
         {
-            return;
+            _blockedDomains.AddOrUpdate(domain, 1, (_, count) => count + 1);
         }
 
-        _blockedDomains.AddOrUpdate(domain, 1, (_, count) => count + 1);
+        _recentBlocked.Enqueue(new PrivacyShieldBlockedEvent(
+            domain,
+            category,
+            DateTimeOffset.UtcNow));
+        while (_recentBlocked.Count > 50)
+        {
+            _recentBlocked.TryDequeue(out _);
+        }
     }
 }

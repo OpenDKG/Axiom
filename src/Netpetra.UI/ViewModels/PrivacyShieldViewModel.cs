@@ -57,12 +57,18 @@ public sealed partial class PrivacyShieldSourceRow : ObservableObject
 /// Privacy Shield is an opt-in local DNS filter. It never changes adapter DNS settings; the user
 /// must point Windows at the displayed loopback resolver explicitly.
 /// </summary>
-public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatablePage
+public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatablePage, IDisposable
 {
     private readonly ServicePipeClient? _client;
 
+    private readonly System.Windows.Threading.DispatcherTimer _statsTimer = new()
+    {
+        Interval = TimeSpan.FromSeconds(2),
+    };
+
     private bool _updating;
     private bool _resolverActive;
+    private bool _statsRefreshing;
 
     public PrivacyShieldViewModel(bool serviceMode)
         : base("Privacy Shield", "Optional local DNS filtering; disabled by default", "\uE72E")
@@ -91,6 +97,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         }
         else
         {
+            _statsTimer.Tick += (_, _) => _ = RefreshStatsAsync();
             _ = RefreshAsync();
         }
     }
@@ -100,6 +107,8 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
     public IReadOnlyList<PrivacyShieldProfileOption> Profiles { get; }
 
     public ObservableCollection<PrivacyShieldTopDomain> TopBlocked { get; } = [];
+
+    public ObservableCollection<PrivacyShieldBlockedEvent> RecentBlocked { get; } = [];
 
     public ObservableCollection<PrivacyShieldSourceRow> Sources { get; } =
         new(PrivacyShieldSourceCatalog.All.Select(source => new PrivacyShieldSourceRow(source)));
@@ -172,6 +181,9 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
     private string _statsText = "No queries observed.";
 
     [ObservableProperty]
+    private string _lastUpdatedText = "Not refreshed.";
+
+    [ObservableProperty]
     private string _lastErrorText = string.Empty;
 
     [ObservableProperty]
@@ -187,11 +199,15 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         ApplyProfileCategories(value.Value);
     }
 
-    public void Activate() => _ = RefreshAsync();
-
-    public void Deactivate()
+    public void Activate()
     {
+        _statsTimer.Start();
+        _ = RefreshAsync();
     }
+
+    public void Deactivate() => _statsTimer.Stop();
+
+    public void Dispose() => _statsTimer.Stop();
 
     [RelayCommand]
     private async Task RefreshAsync()
@@ -218,6 +234,32 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private async Task RefreshStatsAsync()
+    {
+        if (_client is null || IsBusy || _statsRefreshing)
+        {
+            return;
+        }
+
+        _statsRefreshing = true;
+        try
+        {
+            var status = await _client
+                .SendAsync<PrivacyShieldStatus>(IpcCommandTypes.PrivacyStatus, null, CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyStats(status);
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            StatusBadge = "UNAVAILABLE";
+            StatusText = exception.Message;
+        }
+        finally
+        {
+            _statsRefreshing = false;
         }
     }
 
@@ -546,6 +588,12 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             _updating = false;
         }
 
+        ApplyStats(status);
+    }
+
+    private void ApplyStats(PrivacyShieldStatus status)
+    {
+        _resolverActive = status.Running;
         StatusBadge = status.Running ? "ACTIVE" : status.Enabled ? "ERROR" : "DISABLED";
         StatusText = status.Running
             ? $"Listening on {status.BindAddress}:{status.Port}; upstream {status.Upstream}."
@@ -556,12 +604,19 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         StatsText = status.Running
             ? $"{status.Queries:N0} queries observed."
             : "No queries observed.";
+        LastUpdatedText = $"Updated {DateTimeOffset.Now:HH:mm:ss}";
         LastErrorText = status.LastError ?? string.Empty;
 
         TopBlocked.Clear();
         foreach (var domain in status.TopBlocked)
         {
             TopBlocked.Add(domain);
+        }
+
+        RecentBlocked.Clear();
+        foreach (var blocked in status.RecentBlocked)
+        {
+            RecentBlocked.Add(blocked);
         }
     }
 

@@ -238,7 +238,8 @@
         <StackPanel>
           <TextBlock Text="Local statistics" Style="{StaticResource SectionTitle}" />
           <TextBlock Text="{Binding StatsText}" Style="{StaticResource BodyMuted}" Margin="0,6,0,0" />
-          <TextBlock Text="Counts are held in memory and reset when the resolver restarts. No DNS history is written to disk."
+          <TextBlock Text="{Binding LastUpdatedText}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+          <TextBlock Text="Counts and recent blocks are held in memory and reset when the resolver restarts. No DNS history is written to disk."
                      Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" />
           <StackPanel Margin="0,12,0,0">
             <TextBlock Text="Top blocked domains" Style="{StaticResource Caption}" />
@@ -252,6 +253,25 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{Binding Domain}" FontFamily="{StaticResource Font.Mono}" FontSize="11" TextTrimming="CharacterEllipsis" />
                     <TextBlock Grid.Column="1" Text="{Binding Count}" Style="{StaticResource Caption}" TextAlignment="Right" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+          <StackPanel Margin="0,14,0,0">
+            <TextBlock Text="Recent blocked queries" Style="{StaticResource Caption}" />
+            <ItemsControl ItemsSource="{Binding RecentBlocked}" Margin="0,5,0,0">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid Margin="0,2">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="120" />
+                      <ColumnDefinition Width="80" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Domain}" FontFamily="{StaticResource Font.Mono}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Text="{Binding Category}" Style="{StaticResource Caption}" />
+                    <TextBlock Grid.Column="2" Text="{Binding BlockedUtc, StringFormat={}{0:HH:mm:ss}}" Style="{StaticResource Caption}" TextAlignment="Right" />
                   </Grid>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
