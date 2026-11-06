@@ -326,7 +326,7 @@ public sealed class ClaudeProtection
                         "hookSpecificOutput": {
                             "hookEventName": "PreToolUse",
                             "permissionDecision": "deny",
-                            "permissionDecisionReason": decision.get("message") or "Blocked by Netpetra/Blackbox",
+                            "permissionDecisionReason": decision.get("message") or "Blocked by Axiom/Blackbox",
                         }
                     }))
             except Exception as exc:

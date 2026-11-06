@@ -241,7 +241,7 @@ public sealed class OpenCodeProtection
                     Date.now() - started,
                     "")
                   if (blocked) {
-                    throw new Error(decision.message || "Blocked by Netpetra/Blackbox")
+                    throw new Error(decision.message || "Blocked by Axiom/Blackbox")
                   }
                 })
               },
@@ -323,7 +323,7 @@ public sealed class OpenCodeProtection
                     Date.now() - started,
                     "")
                   if (blocked) {
-                    throw new Error(decision.message || "Blocked by Netpetra/Blackbox")
+                    throw new Error(decision.message || "Blocked by Axiom/Blackbox")
                   }
                 })
               },

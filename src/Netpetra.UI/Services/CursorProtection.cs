@@ -298,7 +298,7 @@ public sealed class CursorProtection
                     "blocked" if blocked else "allowed",
                     int((time.monotonic() - started) * 1000))
                 if blocked:
-                    message = decision.get("message") or "Blocked by Netpetra/Blackbox"
+                    message = decision.get("message") or "Blocked by Axiom/Blackbox"
                     print(json.dumps({
                         "permission": "deny",
                         "user_message": message,

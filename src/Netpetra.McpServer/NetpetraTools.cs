@@ -65,7 +65,7 @@ public sealed class NetpetraTools
         "Rows without an observed remote endpoint remain unassessed.",
     ];
 
-    [McpServerTool(Name = "netpetra_get_status"), Description("Return Netpetra service health, monitoring source, data quality, last snapshot, capabilities and limitations. Read-only.")]
+    [McpServerTool(Name = "netpetra_get_status"), Description("Return Axiom service health, monitoring source, data quality, last snapshot, capabilities and limitations. Read-only.")]
     public static async Task<string> GetStatus()
     {
         return await GuardAsync(async () =>
@@ -356,7 +356,7 @@ public sealed class NetpetraTools
             status = "UNAVAILABLE",
             limit = boundedLimit,
             alerts = Array.Empty<object>(),
-            message = "No Netpetra threat-alert store exists in this foundation build. Empty is not a clean bill of health.",
+            message = "No Axiom threat-alert store exists in this foundation build. Empty is not a clean bill of health.",
         }));
     }
 
@@ -379,7 +379,7 @@ public sealed class NetpetraTools
         }));
     }
 
-    [McpServerTool(Name = "netpetra_get_firewall_rules"), Description("Return read-only Netpetra-owned firewall rules, capability and write-gate state. Does not change Windows Firewall.")]
+    [McpServerTool(Name = "netpetra_get_firewall_rules"), Description("Return read-only Axiom-owned firewall rules, capability and write-gate state. Does not change Windows Firewall.")]
     public static async Task<string> GetFirewallRules()
     {
         return await GuardAsync(async () =>
@@ -396,7 +396,7 @@ public sealed class NetpetraTools
         });
     }
 
-    [McpServerTool(Name = "netpetra_generate_security_report"), Description("Generate a bounded evidence-based summary from current Netpetra observations. It does not claim safety and does not modify the host.")]
+    [McpServerTool(Name = "netpetra_generate_security_report"), Description("Generate a bounded evidence-based summary from current Axiom observations. It does not claim safety and does not modify the host.")]
     public static async Task<string> GenerateSecurityReport(
         [Description("History window in hours, 1-168. Default 24.")] int hours = 24,
         [Description("Maximum connections considered, 1-500. Default 200.")] int limit = 200)
@@ -469,7 +469,7 @@ public sealed class NetpetraTools
                 schemaVersion = SchemaVersion,
                 status = "UNAVAILABLE",
                 error = exception.Message,
-                message = "Netpetra service is not available. No data was fabricated.",
+                message = "Axiom service is not available. No data was fabricated.",
             });
         }
         catch (ArgumentException exception)
