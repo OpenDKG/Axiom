@@ -35,42 +35,43 @@ public static class AgentHookMaintenance
             // A version-only marker is still better than repairing on every start.
         }
 
+        var refreshExisting = true;
         try
         {
-            if (File.Exists(marker) &&
-                string.Equals(File.ReadAllText(marker).Trim(), version, StringComparison.Ordinal))
-            {
-                return;
-            }
+            refreshExisting = !File.Exists(marker) ||
+                              !string.Equals(
+                                  File.ReadAllText(marker).Trim(),
+                                  version,
+                                  StringComparison.Ordinal);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // Missing or unreadable marker means "run the repair once".
+            refreshExisting = true;
         }
 
         var openCode = new OpenCodeProtection();
-        Ensure(() => openCode.EnsureInstalled());
+        Ensure(() => openCode.IsInstalled, () => openCode.EnsureInstalled(), refreshExisting);
 
         var codex = new CodexProtection();
-        Ensure(() => codex.EnsureInstalled());
+        Ensure(() => codex.IsInstalled, () => codex.EnsureInstalled(), refreshExisting);
 
         var claude = new ClaudeProtection();
-        Ensure(() => claude.EnsureInstalled());
+        Ensure(() => claude.IsInstalled, () => claude.EnsureInstalled(), refreshExisting);
 
         var cursor = new CursorProtection();
-        Ensure(() => cursor.EnsureInstalled());
+        Ensure(() => cursor.IsInstalled, () => cursor.EnsureInstalled(), refreshExisting);
 
         var copilot = new CopilotProtection();
-        Ensure(() => copilot.EnsureInstalled());
+        Ensure(() => copilot.IsInstalled, () => copilot.EnsureInstalled(), refreshExisting);
 
         var gemini = new GeminiProtection();
-        Ensure(() => gemini.EnsureInstalled());
+        Ensure(() => gemini.IsInstalled, () => gemini.EnsureInstalled(), refreshExisting);
 
         var windsurf = new WindsurfProtection();
-        Ensure(() => windsurf.EnsureInstalled());
+        Ensure(() => windsurf.IsInstalled, () => windsurf.EnsureInstalled(), refreshExisting);
 
         var cline = new ClineProtection();
-        Ensure(() => cline.EnsureInstalled());
+        Ensure(() => cline.IsInstalled, () => cline.EnsureInstalled(), refreshExisting);
 
         try
         {
@@ -83,11 +84,17 @@ public static class AgentHookMaintenance
         }
     }
 
-    private static void Ensure(Func<bool> ensureInstalled)
+    private static void Ensure(
+        Func<bool> isInstalled,
+        Func<bool> ensureInstalled,
+        bool refreshExisting)
     {
         try
         {
-            _ = ensureInstalled();
+            if (refreshExisting || !isInstalled())
+            {
+                _ = ensureInstalled();
+            }
         }
         catch
         {
