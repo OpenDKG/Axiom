@@ -23,8 +23,10 @@ visible PowerShell window only after a confirmation dialog:
   the official interactive testnet setup (`--network testnet --role edge --store oxigraph`) and
   starts the node.
 - **Blackbox**: downloads the official Umanitek Windows installer to
-  `%LOCALAPPDATA%\Netpetra\modules\blackbox`, prints its SHA-256 and runs it with
-  `-StoreBackend oxigraph` (no Docker). It then repairs the Python dependencies the dashboard
+  `%LOCALAPPDATA%\Netpetra\modules\blackbox`, verifies its SHA-256 against the pinned digest in
+  `OptionalModuleInstaller` (`261122F5E879596E88D63C30D5D36D12B4E155986F83AA3EB83ADEB406E41179`)
+  and refuses to run on a mismatch, then runs it with `-StoreBackend oxigraph` (no Docker). Update
+  the pin only after reviewing a new official vendor release. It then repairs the Python dependencies the dashboard
   needs (`aiohttp`, `cryptography`, `psutil`, FastAPI, uvicorn) and starts the dashboard at
   `http://127.0.0.1:9700`.
 

@@ -2,7 +2,10 @@
 
 **Open-Source Firewall & Security Monitor**
 
-**Repository:** https://github.com/a-51-50/Axiom · **License:** GPL-3.0-or-later
+**Repository:** https://github.com/a-51-50/Axiom ? **License:** GPL-3.0-or-later
+
+> The repository is private during active development. The source license remains
+> GPL-3.0-or-later; public source availability will be confirmed before a public release.
 
 > **Development build - use at your own risk.** Axiom is under active development and may contain
 > defects, incomplete features or regressions. Firewall changes can interrupt connectivity, DNS
@@ -197,7 +200,8 @@ Windows Service
 
 ## Platform and requirements
 
-- Windows 11 x64 is the supported target. Windows 10 x64 is best-effort.
+- Windows 10 x64 (19041+) is the current development/test host. Windows 11 x64 uses the same
+  .NET/WPF code path, but Windows 11 VM validation is still in the test matrix.
 - .NET 10 SDK for building; the published self-contained build needs no .NET runtime.
 - No administrator rights are required for the UI or for read-only console development.
 - Firewall rule writes and ETW kernel tracing require an elevated service or an isolated test VM.
