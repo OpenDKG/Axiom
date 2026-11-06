@@ -54,6 +54,7 @@ public sealed partial class PipeServerWorker(
             (managedRuleId, cancellationToken) => coordinator.VerifyAsync(managedRuleId, cancellationToken),
             (cancellationToken) => privacyShield.GetStatusAsync(cancellationToken),
             (settings, cancellationToken) => privacyShield.ConfigureAsync(settings, cancellationToken),
+            (cancellationToken) => privacyShield.UpdateSourcesAsync(cancellationToken),
             message => LogMessage(logger, message));
 
         await server.RunAsync(stoppingToken).ConfigureAwait(false);

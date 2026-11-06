@@ -69,7 +69,9 @@ public sealed class PrivacyShieldPolicy
 
     public static IReadOnlyList<PrivacyShieldStarterRule> StarterRulesAll => StarterRules;
 
-    public static PrivacyShieldPolicy Create(PrivacyShieldSettings settings)
+    public static PrivacyShieldPolicy Create(
+        PrivacyShieldSettings settings,
+        IEnumerable<PrivacyShieldStoredRule>? externalRules = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -100,6 +102,23 @@ public sealed class PrivacyShieldPolicy
             if (normalized is not null)
             {
                 policy._blocked.TryAdd(normalized, PrivacyCategory.Custom);
+            }
+        }
+
+        if (externalRules is not null)
+        {
+            foreach (var rule in externalRules)
+            {
+                if (policy._blocked.Count >= MaxRules)
+                {
+                    break;
+                }
+
+                var normalized = NormalizeDomain(rule.Domain);
+                if (normalized is not null)
+                {
+                    policy._blocked.TryAdd(normalized, rule.Category);
+                }
             }
         }
 

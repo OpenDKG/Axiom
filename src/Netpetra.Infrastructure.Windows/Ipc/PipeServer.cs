@@ -47,6 +47,8 @@ public sealed class PipeServer
 
     private readonly Func<PrivacyShieldSettings, CancellationToken, Task<PrivacyShieldStatus>>? _privacyConfigure;
 
+    private readonly Func<CancellationToken, Task<PrivacyShieldStatus>>? _privacySourcesUpdate;
+
     private readonly Action<string>? _log;
 
     public PipeServer(
@@ -61,6 +63,7 @@ public sealed class PipeServer
         Func<Guid, CancellationToken, Task<EffectiveRuleReport>>? ruleVerify = null,
         Func<CancellationToken, Task<PrivacyShieldStatus>>? privacyStatus = null,
         Func<PrivacyShieldSettings, CancellationToken, Task<PrivacyShieldStatus>>? privacyConfigure = null,
+        Func<CancellationToken, Task<PrivacyShieldStatus>>? privacySourcesUpdate = null,
         Action<string>? log = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
@@ -77,6 +80,7 @@ public sealed class PipeServer
         _ruleVerify = ruleVerify;
         _privacyStatus = privacyStatus;
         _privacyConfigure = privacyConfigure;
+        _privacySourcesUpdate = privacySourcesUpdate;
         _log = log;
     }
 
@@ -473,6 +477,22 @@ public sealed class PipeServer
                     await WriteResultAsync(stream, envelope.Id, privacyResult, cancellationToken).ConfigureAwait(false);
                     break;
 
+                case IpcCommandTypes.PrivacySourcesUpdate:
+                    if (_privacySourcesUpdate is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Privacy Shield source updates are not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var sourceResult = await _privacySourcesUpdate(cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, sourceResult, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.ConfigGet:
                 case IpcCommandTypes.ConfigSet:
                 case IpcCommandTypes.DiagnosticsExport:
@@ -537,6 +557,11 @@ public sealed class PipeServer
         if (_privacyConfigure is not null)
         {
             commands.Add(IpcCommandTypes.PrivacyConfigure);
+        }
+
+        if (_privacySourcesUpdate is not null)
+        {
+            commands.Add(IpcCommandTypes.PrivacySourcesUpdate);
         }
 
         if (WindowsFirewallPolicyAdapter.IsWriteGateOpen)

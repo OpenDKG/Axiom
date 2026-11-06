@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Net.NetworkInformation;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -16,6 +17,42 @@ public sealed record PrivacyShieldProfileOption(PrivacyShieldProfile Value, stri
     public override string ToString() => Label;
 }
 
+public sealed record PrivacyShieldAdapterOption(string Name, string Description)
+{
+    public override string ToString() => Name;
+}
+
+public sealed partial class PrivacyShieldSourceRow : ObservableObject
+{
+    public PrivacyShieldSourceRow(PrivacyShieldSourceInfo source)
+    {
+        Id = source.Id;
+        Name = source.Name;
+        License = source.License;
+        Description = source.Description;
+    }
+
+    public string Id { get; }
+
+    public string Name { get; }
+
+    public string License { get; }
+
+    public string Description { get; }
+
+    [ObservableProperty]
+    private bool _enabled;
+
+    [ObservableProperty]
+    private int _entries;
+
+    [ObservableProperty]
+    private string _updatedText = "not downloaded";
+
+    [ObservableProperty]
+    private string _errorText = string.Empty;
+}
+
 /// <summary>
 /// Privacy Shield is an opt-in local DNS filter. It never changes adapter DNS settings; the user
 /// must point Windows at the displayed loopback resolver explicitly.
@@ -25,6 +62,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
     private readonly ServicePipeClient? _client;
 
     private bool _updating;
+    private bool _resolverActive;
 
     public PrivacyShieldViewModel(bool serviceMode)
         : base("Privacy Shield", "Optional local DNS filtering; disabled by default", "\uE72E")
@@ -38,6 +76,13 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         ];
         _selectedProfile = Profiles[1];
         ApplyProfileCategories(PrivacyShieldProfile.Balanced);
+        Adapters = new ObservableCollection<PrivacyShieldAdapterOption>(
+            NetworkInterface.GetAllNetworkInterfaces()
+                .Where(network => network.OperationalStatus == OperationalStatus.Up &&
+                                  network.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .Select(network => new PrivacyShieldAdapterOption(network.Name, network.Description))
+                .ToArray());
+        _selectedAdapter = Adapters.FirstOrDefault();
         if (!serviceMode)
         {
             StatusBadge = "SERVICE REQUIRED";
@@ -55,6 +100,17 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
     public IReadOnlyList<PrivacyShieldProfileOption> Profiles { get; }
 
     public ObservableCollection<PrivacyShieldTopDomain> TopBlocked { get; } = [];
+
+    public ObservableCollection<PrivacyShieldSourceRow> Sources { get; } =
+        new(PrivacyShieldSourceCatalog.All.Select(source => new PrivacyShieldSourceRow(source)));
+
+    public ObservableCollection<PrivacyShieldAdapterOption> Adapters { get; }
+
+    [ObservableProperty]
+    private PrivacyShieldAdapterOption? _selectedAdapter;
+
+    [ObservableProperty]
+    private string _dnsHelperStatusText = "No adapter DNS change has been made.";
 
     public string StarterRulesText =>
         $"{PrivacyShieldPolicy.StarterRulesAll.Count} starter rules (manually reviewed, not a third-party list)";
@@ -238,6 +294,100 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
     }
 
     [RelayCommand]
+    private async Task UpdateSourcesAsync()
+    {
+        if (_client is null || IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var settings = BuildSettings();
+            if (!ValidateSettingsSize(settings))
+            {
+                return;
+            }
+
+            var status = await _client
+                .SendAsync<PrivacyShieldStatus>(
+                    IpcCommandTypes.PrivacyConfigure,
+                    settings,
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            status = await _client
+                .SendAsync<PrivacyShieldStatus>(
+                    IpcCommandTypes.PrivacySourcesUpdate,
+                    null,
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyStatus(status);
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            StatusBadge = "UNAVAILABLE";
+            StatusText = exception.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task EnableSystemDnsAsync()
+    {
+        if (!_resolverActive)
+        {
+            DnsHelperStatusText = "Start the Privacy Shield resolver on port 53 first.";
+            return;
+        }
+
+        if (SelectedAdapter is null)
+        {
+            DnsHelperStatusText = "Select a network adapter first.";
+            return;
+        }
+
+        DnsHelperStatusText = "Waiting for the Windows elevation prompt...";
+        try
+        {
+            var exitCode = await PrivacyShieldDnsHelper
+                .EnableAsync(SelectedAdapter.Name, "127.0.0.1", CancellationToken.None)
+                .ConfigureAwait(true);
+            DnsHelperStatusText = exitCode == 0
+                ? $"Adapter '{SelectedAdapter.Name}' now uses 127.0.0.1. Original settings were saved."
+                : $"The elevated DNS helper exited with code {exitCode}.";
+        }
+        catch (Exception exception) when (exception is
+                     System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+            DnsHelperStatusText = "Elevation was cancelled or the DNS helper failed: " + exception.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task RestoreSystemDnsAsync()
+    {
+        DnsHelperStatusText = "Waiting for the Windows elevation prompt...";
+        try
+        {
+            var exitCode = await PrivacyShieldDnsHelper
+                .RestoreAsync(CancellationToken.None)
+                .ConfigureAwait(true);
+            DnsHelperStatusText = exitCode == 0
+                ? "Original adapter DNS settings were restored."
+                : $"The elevated restore helper exited with code {exitCode}.";
+        }
+        catch (Exception exception) when (exception is
+                     System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+            DnsHelperStatusText = "Elevation was cancelled or the DNS restore failed: " + exception.Message;
+        }
+    }
+
+    [RelayCommand]
     private void ImportBlocklist()
     {
         var dialog = new OpenFileDialog
@@ -336,6 +486,10 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             BlockedDomains = PrivacyShieldPolicy.ParseList(
                 BlockedDomainsText,
                 PrivacyShieldPolicy.MaxSettingsDomains),
+            EnabledSourceIds = Sources
+                .Where(source => source.Enabled)
+                .Select(source => source.Id)
+                .ToArray(),
         };
     }
 
@@ -359,6 +513,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         _updating = true;
         try
         {
+            _resolverActive = status.Running;
             var settings = status.Settings;
             Enabled = settings.Enabled;
             SelectedProfile = Profiles.FirstOrDefault(profile => profile.Value == settings.Profile)
@@ -372,6 +527,19 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             UpstreamText = settings.UpstreamDns;
             AllowedDomainsText = string.Join(Environment.NewLine, settings.AllowedDomains);
             BlockedDomainsText = string.Join(Environment.NewLine, settings.BlockedDomains);
+            foreach (var source in Sources)
+            {
+                var state = status.Sources.FirstOrDefault(item =>
+                    string.Equals(item.Id, source.Id, StringComparison.OrdinalIgnoreCase));
+                source.Enabled = settings.EnabledSourceIds.Contains(
+                    source.Id,
+                    StringComparer.OrdinalIgnoreCase);
+                source.Entries = state?.Entries ?? 0;
+                source.UpdatedText = state?.UpdatedUtc is { } updated
+                    ? $"updated {updated.ToLocalTime():MM-dd HH:mm} · {state.Entries:N0} entries"
+                    : "not downloaded";
+                source.ErrorText = state?.Error ?? string.Empty;
+            }
         }
         finally
         {

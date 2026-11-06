@@ -12,18 +12,33 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 {
     private readonly PrivacyShieldSettingsStore _store;
 
+    private readonly PrivacyShieldRuleStore _ruleStore;
+
+    private readonly PrivacyShieldSourceUpdater _sourceUpdater;
+
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    private readonly Dictionary<string, string> _sourceErrors =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private PrivacyShieldSettings _settings;
+
+    private IReadOnlyList<PrivacyShieldStoredRule> _rules;
 
     private DnsProxyServer? _server;
 
     private string? _lastError;
 
-    public PrivacyShieldController(PrivacyShieldSettingsStore store)
+    public PrivacyShieldController(
+        PrivacyShieldSettingsStore store,
+        PrivacyShieldRuleStore? ruleStore = null,
+        PrivacyShieldSourceUpdater? sourceUpdater = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
+        _ruleStore = ruleStore ?? new PrivacyShieldRuleStore();
+        _sourceUpdater = sourceUpdater ?? new PrivacyShieldSourceUpdater();
         _settings = store.Load();
+        _rules = _ruleStore.Load();
     }
 
     public Task<PrivacyShieldStatus> GetStatusAsync(CancellationToken cancellationToken)
@@ -90,6 +105,53 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         }
     }
 
+    public async Task<PrivacyShieldStatus> UpdateSourcesAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var selected = PrivacyShieldSourceCatalog.All
+                .Where(source => _settings.EnabledSourceIds.Contains(
+                    source.Id,
+                    StringComparer.OrdinalIgnoreCase))
+                .ToArray();
+
+            var result = await _sourceUpdater.UpdateAsync(selected, cancellationToken).ConfigureAwait(false);
+            _sourceErrors.Clear();
+            foreach (var source in result.Sources.Where(source => source.Error is not null))
+            {
+                _sourceErrors[source.Id] = source.Error!;
+            }
+
+            if (result.Success)
+            {
+                if (!_ruleStore.Save(result.Rules))
+                {
+                    _lastError = "Could not write the compiled Privacy Shield ruleset.";
+                }
+                else
+                {
+                    _rules = result.Rules;
+                    _lastError = null;
+                    if (_settings.Enabled)
+                    {
+                        await StartServerLockedAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+            else
+            {
+                _lastError = result.Error ?? "The blocklist update failed; the previous ruleset was kept.";
+            }
+
+            return CreateStatus();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -101,6 +163,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         {
             _gate.Release();
             _gate.Dispose();
+            _sourceUpdater.Dispose();
         }
     }
 
@@ -142,7 +205,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
         try
         {
-            var policy = PrivacyShieldPolicy.Create(_settings);
+            var policy = PrivacyShieldPolicy.Create(_settings, _rules);
             _server = new DnsProxyServer(policy, upstreams, _settings.Port);
         }
         catch (Exception exception) when (exception is
@@ -171,11 +234,12 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             return _server.Snapshot(_settings) with
             {
                 Settings = _settings,
+                Sources = BuildSourceStatuses(),
                 LastError = _lastError,
             };
         }
 
-        var ruleCount = PrivacyShieldPolicy.Create(_settings).RuleCount;
+        var ruleCount = PrivacyShieldPolicy.Create(_settings, _rules).RuleCount;
         return new PrivacyShieldStatus
         {
             State = _settings.Enabled ? "Error" : "Disabled",
@@ -192,12 +256,33 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             Errors = 0,
             RuleCount = ruleCount,
             Settings = _settings,
+            Sources = BuildSourceStatuses(),
             Detail = _settings.Enabled
                 ? "Privacy Shield is enabled but the resolver is not running."
                 : "Privacy Shield is disabled. No DNS query is observed or filtered.",
             LastError = _lastError,
         };
     }
+
+    private PrivacyShieldSourceStatus[] BuildSourceStatuses() =>
+        PrivacyShieldSourceCatalog.All
+            .Select(source =>
+            {
+                var rules = _rules.Where(rule =>
+                    string.Equals(rule.SourceId, source.Id, StringComparison.OrdinalIgnoreCase)).ToArray();
+                DateTimeOffset? updated = rules.Length == 0
+                    ? null
+                    : rules.Max(rule => rule.UpdatedUtc);
+                return new PrivacyShieldSourceStatus(
+                    source.Id,
+                    source.Name,
+                    source.License,
+                    _settings.EnabledSourceIds.Contains(source.Id, StringComparer.OrdinalIgnoreCase),
+                    rules.Length,
+                    updated,
+                    _sourceErrors.GetValueOrDefault(source.Id));
+            })
+            .ToArray();
 
     private static PrivacyShieldSettings Normalize(PrivacyShieldSettings settings)
     {
@@ -215,6 +300,11 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             Categories = categories,
             AllowedDomains = NormalizeDomains(settings.AllowedDomains),
             BlockedDomains = NormalizeDomains(settings.BlockedDomains),
+            EnabledSourceIds = settings.EnabledSourceIds
+                .Where(id => PrivacyShieldSourceCatalog.All.Any(source =>
+                    string.Equals(source.Id, id, StringComparison.OrdinalIgnoreCase)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
         };
     }
 
