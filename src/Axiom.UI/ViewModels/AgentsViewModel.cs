@@ -30,7 +30,9 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private const int ActivityMax = 20_000;
 
-    private const int VerifiedGraphPageSize = 16;
+    private const int VerifiedGraphPageSize = 80;
+
+    private const int VerifiedGraphPreviewSize = 12;
 
     private static readonly TimeSpan ActivityRefreshInterval = TimeSpan.FromSeconds(15);
 
@@ -84,7 +86,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         Security = security ?? throw new ArgumentNullException(nameof(security));
         _agentSessions = agentSessions;
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
         _timer.Tick += async (_, _) => await RefreshAsync().ConfigureAwait(true);
     }
 
@@ -104,8 +106,6 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     public ObservableCollection<BlackboxAuditEntry> Activity { get; } = [];
 
     public ObservableCollection<BlackboxFinding> Findings { get; } = [];
-
-    public ObservableCollection<BlackboxGraphThreat> VerifiedGraphThreats { get; } = [];
 
     public ObservableCollection<AgentEvidenceEvent> HookEvidence { get; } = [];
 
@@ -184,6 +184,19 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     [ObservableProperty]
     private string _verifiedGraphListStatus = "No verified threats loaded.";
+
+    [ObservableProperty]
+    private IReadOnlyList<BlackboxGraphThreat> _verifiedGraphThreats = [];
+
+    [ObservableProperty]
+    private IReadOnlyList<BlackboxGraphThreat> _verifiedGraphPreview = [];
+
+    [ObservableProperty]
+    private IReadOnlyDictionary<string, int> _verifiedGraphCategoryTotals =
+        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+    [ObservableProperty]
+    private int _verifiedGraphTotal;
 
     [ObservableProperty]
     private bool _isVerifiedSyncRunning;
@@ -1003,12 +1016,19 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     {
         try
         {
-            return await _client.GetVerifiedSyncAsync(CancellationToken.None).ConfigureAwait(true);
+            var dashboard = await _client.GetVerifiedSyncAsync(CancellationToken.None).ConfigureAwait(true);
+            var local = BlackboxLocalState.TryReadSync();
+            if (local is not null && local.VerifiedRules > dashboard.VerifiedRules)
+            {
+                return local;
+            }
+
+            return dashboard;
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
         {
-            return null;
+            return BlackboxLocalState.TryReadSync();
         }
     }
 
@@ -1024,7 +1044,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
         {
-            return null;
+            return BlackboxLocalState.TryReadGraph();
         }
     }
 
@@ -1044,11 +1064,13 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         }
 
         var state = sync.State.Trim().ToLowerInvariant();
+        var hasCompiledRules = sync.VerifiedRules > 0 || (sync.CompiledAssets ?? 0) > 0;
+        var nodeUnavailableWithRules = sync.IsOffline && hasCompiledRules;
         VerifiedSyncState = state switch
         {
             "synced" => "SYNCED",
             "syncing" => "SYNCING",
-            "unavailable" => "NODE OFFLINE",
+            "unavailable" => nodeUnavailableWithRules ? "DEGRADED" : "NODE OFFLINE",
             "unknown" => "UNKNOWN",
             _ => state.Length == 0 ? "UNKNOWN" : state.ToUpperInvariant(),
         };
@@ -1068,7 +1090,9 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             : $"Verified-answer lookups: {sync.Lookups.Label}";
 
         var detail = sync.IsOffline
-            ? "The local DKG node is not answering. Downloaded data is not synchronized, so verified graph coverage is not available."
+            ? nodeUnavailableWithRules
+                ? "The node probe timed out, but the last compiled verified rules remain loaded. The graph may be catching up."
+                : "The local DKG node is not answering. Downloaded data is not synchronized, so verified graph coverage is not available."
             : sync.IsSyncing
                 ? (string.IsNullOrWhiteSpace(sync.PhaseText)
                     ? "The local dashboard is syncing the verified graph."
@@ -1089,22 +1113,28 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private void ApplyVerifiedGraph(BlackboxGraphPage page)
     {
-        VerifiedGraphThreats.Clear();
-        foreach (var threat in page.Threats.Take(VerifiedGraphPageSize))
-        {
-            VerifiedGraphThreats.Add(threat);
-        }
+        var threats = page.Threats
+            .Take(VerifiedGraphPageSize)
+            .ToList();
 
-        if (page.Total == 0 && page.Threats.Count == 0)
+        VerifiedGraphThreats = threats;
+        VerifiedGraphPreview = threats.Take(VerifiedGraphPreviewSize).ToList();
+        VerifiedGraphCategoryTotals = page.CategoryTotals;
+        VerifiedGraphTotal = page.Total;
+
+        if (page.Total == 0 && threats.Count == 0)
         {
-            VerifiedGraphListStatus = string.Equals(VerifiedSyncState, "NODE OFFLINE", StringComparison.Ordinal)
-                ? "The verified graph is not loaded while the local DKG node is offline."
-                : "The verified graph currently contains no threats.";
+            VerifiedGraphListStatus = VerifiedSyncState switch
+            {
+                "NODE OFFLINE" => "The verified graph is not loaded while the local DKG node is offline.",
+                "DEGRADED" => "The graph sample could not be read while the node probe timed out.",
+                _ => "The verified graph currently contains no threats.",
+            };
             return;
         }
 
-        VerifiedGraphListStatus = page.Partial || page.Total > VerifiedGraphThreats.Count
-            ? $"Showing {VerifiedGraphThreats.Count} of {page.Total} verified threat(s)."
+        VerifiedGraphListStatus = page.Partial || page.Total > VerifiedGraphPreview.Count
+            ? $"Showing {VerifiedGraphPreview.Count} of {page.Total} verified threat(s); the graph above uses {threats.Count} loaded node(s)."
             : $"Showing all {page.Total} verified threat(s).";
     }
 

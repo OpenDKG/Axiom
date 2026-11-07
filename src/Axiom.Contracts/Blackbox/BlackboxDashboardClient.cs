@@ -229,7 +229,11 @@ public sealed record BlackboxGraphThreat(
 public sealed record BlackboxGraphPage(
     IReadOnlyList<BlackboxGraphThreat> Threats,
     int Total,
-    bool Partial);
+    bool Partial)
+{
+    public IReadOnlyDictionary<string, int> CategoryTotals { get; init; } =
+        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+}
 
 public sealed record BlackboxSyncResult(bool Ok, string Message);
 
@@ -257,14 +261,14 @@ public sealed class BlackboxDashboardClient : IDisposable
 
         if (httpClient is null)
         {
-            _http = new HttpClient { BaseAddress = uri, Timeout = TimeSpan.FromSeconds(6) };
+            _http = new HttpClient { BaseAddress = uri, Timeout = TimeSpan.FromSeconds(15) };
             _ownsHttpClient = true;
         }
         else
         {
             _http = httpClient;
             _http.BaseAddress ??= uri;
-            _http.Timeout = TimeSpan.FromSeconds(6);
+            _http.Timeout = TimeSpan.FromSeconds(15);
         }
     }
 
@@ -439,7 +443,10 @@ public sealed class BlackboxDashboardClient : IDisposable
         return new BlackboxGraphPage(
             threats,
             ReadInt(document.RootElement, "total"),
-            ReadBool(document.RootElement, "partial"));
+            ReadBool(document.RootElement, "partial"))
+        {
+            CategoryTotals = ReadCategoryTotals(document.RootElement),
+        };
     }
 
     /// <summary>
@@ -1023,6 +1030,29 @@ public sealed class BlackboxDashboardClient : IDisposable
             JsonValueKind.Null or JsonValueKind.Undefined => string.Empty,
             _ => property.GetRawText(),
         };
+    }
+
+    private static Dictionary<string, int> ReadCategoryTotals(JsonElement element)
+    {
+        var totals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty("category_totals", out var categories) ||
+            categories.ValueKind != JsonValueKind.Object)
+        {
+            return totals;
+        }
+
+        foreach (var property in categories.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.Number &&
+                property.Value.TryGetInt32(out var count) &&
+                count >= 0)
+            {
+                totals[property.Name] = count;
+            }
+        }
+
+        return totals;
     }
 
     private static string ReadEcosystems(JsonElement element)

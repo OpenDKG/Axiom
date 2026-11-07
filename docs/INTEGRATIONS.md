@@ -255,9 +255,13 @@ listener and never sends data off the machine.
 - **Verified graph sync** reads `GET /api/verified-sync` and `GET /api/graph?tier=public` from the
   local dashboard. The card shows the server-owned state (`synced`, `syncing`, `node offline`,
   `unknown`), downloaded versus compiled assets, triples, verified rules and verified-answer lookup
-  health. `Sync now` sends `POST /api/sync` with the `X-Blackbox-Token` from `GET /api/session`;
-  Axiom does not start a second DKG sync loop. Null values are shown as `—`, never as zero, and an
-  offline node is never presented as an empty or clean graph.
+  health. The native graph view groups the first loaded verified threats by the dashboard's
+  categories and uses severity rings, so it does not need a WebView or a second browser process.
+  `Sync now` sends `POST /api/sync` with the `X-Blackbox-Token` from `GET /api/session`; Axiom does
+  not start a second DKG sync loop. When the dashboard is busy with a long node read, Axiom falls
+  back to the local `authoritative-sync.json`, `sync_progress.json` and `ruleset.json` files for the
+  last known counts and graph sample instead of falsely reporting the node offline. Null values are
+  shown as `—`, never as zero, and an offline node is never presented as an empty or clean graph.
 - **Test Protection** creates a temporary harmless canary, adds it to protected paths, requires
   Block mode, calls the local guard, restores the original paths and removes the canary. Its result
   is explicitly labelled guard-level; it does not claim that an agent hook was executed.

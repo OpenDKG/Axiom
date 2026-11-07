@@ -1,0 +1,103 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+using System;
+using System.IO;
+using Axiom.UI.Services;
+using Xunit;
+
+namespace Axiom.UI.Tests;
+
+public sealed class BlackboxLocalStateTests
+{
+    [Fact]
+    public void Reads_compiled_rules_and_graph_sample_from_local_state()
+    {
+        using var temp = new TemporaryDirectory();
+        var now = DateTimeOffset.UtcNow;
+        File.WriteAllText(
+            Path.Combine(temp.Path, "authoritative-sync.json"),
+            $$"""
+              {
+                "status": "partial",
+                "phase": "verified-rules-available",
+                "public_entries": 450000,
+                "community_entries": 0,
+                "graph_complete": false,
+                "detection_ready": true,
+                "updated_at": {{now.ToUnixTimeSeconds()}},
+                "started_at": {{now.AddMinutes(-10).ToUnixTimeSeconds()}}
+              }
+              """);
+        File.WriteAllText(
+            Path.Combine(temp.Path, "sync_progress.json"),
+            """{"counts":[480,450,971]}""");
+        File.WriteAllText(
+            Path.Combine(temp.Path, "verified_lookup_state.json"),
+            """{"state":"ok","reason":""}""");
+        File.WriteAllText(
+            Path.Combine(temp.Path, "ruleset.json"),
+            """
+            {
+              "graph_threats": [
+                {"identifier":"injection:1","name":"Instruction override","category":"injection","severity":"high","source":"public"},
+                {"identifier":"ioc:2","name":"Known IOC","category":"ioc","severity":"critical","source":"public"}
+              ]
+            }
+            """);
+
+        var sync = BlackboxLocalState.TryReadSync(temp.Path, now);
+        var graph = BlackboxLocalState.TryReadGraph(temp.Path);
+
+        Assert.NotNull(sync);
+        Assert.Equal("syncing", sync!.State);
+        Assert.Equal(450_000, sync.VerifiedRules);
+        Assert.Equal(971, sync.GraphAssets);
+        Assert.Equal(480, sync.DownloadedAssets);
+        Assert.Equal(450, sync.CompiledAssets);
+        Assert.Equal(49.4, sync.PercentDownloaded);
+        Assert.Equal(46.3, sync.PercentCompiled);
+        Assert.Equal("Live from graph", sync.Lookups.Label);
+
+        Assert.NotNull(graph);
+        Assert.Equal(450_000, graph!.Total);
+        Assert.Equal(2, graph.Threats.Count);
+        Assert.Equal(1, graph.CategoryTotals["injection"]);
+        Assert.Equal(1, graph.CategoryTotals["ioc"]);
+    }
+
+    [Fact]
+    public void Stale_local_state_is_ignored()
+    {
+        using var temp = new TemporaryDirectory();
+        File.WriteAllText(
+            Path.Combine(temp.Path, "authoritative-sync.json"),
+            """{"status":"partial","public_entries":10,"updated_at":1000}""");
+
+        Assert.Null(BlackboxLocalState.TryReadSync(
+            temp.Path,
+            DateTimeOffset.UtcNow));
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "axiom-blackbox-state-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+}
