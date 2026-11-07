@@ -114,6 +114,8 @@
                      Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="190,4,0,0" />
           <TextBlock Text="Suggested: 1.1.1.1 (Cloudflare), 9.9.9.9 (Quad9), 94.140.14.14 (AdGuard). Use an IP or IP:port; DoH/DoT are not supported. On a corporate or VPN network use that network's DNS."
                      Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="190,3,0,0" />
+          <TextBlock Text="Changing this upstream alone does not route Windows DNS through Privacy Shield. System-wide filtering starts only after the adapter selected below points its DNS at 127.0.0.1."
+                     Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="190,3,0,0" />
           <TextBlock Text="{Binding StarterRulesText}" Style="{StaticResource Caption}" Margin="190,4,0,0" />
         </StackPanel>
       </Border>
@@ -228,9 +230,13 @@
             <ComboBox Grid.Column="1"
                       ItemsSource="{Binding Adapters}"
                       SelectedItem="{Binding SelectedAdapter, Mode=TwoWay}"
-                      DisplayMemberPath="Name"
+                      DisplayMemberPath="DisplayName"
                       IsEnabled="{Binding IsSupported}" />
           </Grid>
+          <TextBlock Text="Select the adapter marked 'default route' — normally the one carrying your LAN gateway. Only that adapter is switched to 127.0.0.1; the upstream DNS above is what the resolver forwards to. Adapters not selected keep bypassing Privacy Shield."
+                     Style="{StaticResource Caption}"
+                     TextWrapping="Wrap"
+                     Margin="160,6,0,0" />
           <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
             <Button Style="{StaticResource GhostButton}"
                     Content="Set adapter DNS (UAC)"

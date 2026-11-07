@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -17,9 +18,17 @@ public sealed record PrivacyShieldProfileOption(PrivacyShieldProfile Value, stri
     public override string ToString() => Label;
 }
 
-public sealed record PrivacyShieldAdapterOption(string Name, string Description)
+public sealed record PrivacyShieldAdapterOption(
+    string Name,
+    string Description,
+    string DnsText,
+    bool HasDefaultRoute)
 {
-    public override string ToString() => Name;
+    public string DisplayName => HasDefaultRoute
+        ? $"{Name} — default route · DNS {DnsText}"
+        : $"{Name} — DNS {DnsText}";
+
+    public override string ToString() => DisplayName;
 }
 
 public sealed partial class PrivacyShieldSourceRow : ObservableObject
@@ -86,7 +95,26 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             NetworkInterface.GetAllNetworkInterfaces()
                 .Where(network => network.OperationalStatus == OperationalStatus.Up &&
                                   network.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                .Select(network => new PrivacyShieldAdapterOption(network.Name, network.Description))
+                .Select(network =>
+                {
+                    var properties = network.GetIPProperties();
+                    var dns = properties.DnsAddresses
+                        .Where(address => !IPAddress.IsLoopback(address))
+                        .Select(address => address.ToString())
+                        .Distinct()
+                        .ToArray();
+                    var hasDefaultRoute = properties.GatewayAddresses.Any(gateway =>
+                        !gateway.Address.Equals(IPAddress.Any) &&
+                        !gateway.Address.Equals(IPAddress.IPv6Any) &&
+                        !IPAddress.IsLoopback(gateway.Address));
+                    return new PrivacyShieldAdapterOption(
+                        network.Name,
+                        network.Description,
+                        dns.Length == 0 ? "automatic" : string.Join(", ", dns),
+                        hasDefaultRoute);
+                })
+                .OrderByDescending(adapter => adapter.HasDefaultRoute)
+                .ThenBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
                 .ToArray());
         _selectedAdapter = Adapters.FirstOrDefault();
         if (!serviceMode)
