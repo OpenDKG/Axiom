@@ -1,0 +1,123 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Axiom.UI.Avalonia.Views.AppsView">
+  <Grid ColumnDefinitions="1.55*,7,*" Margin="24,18,24,24">
+    <Border Grid.Column="0" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1"
+            CornerRadius="8" Padding="10" MinWidth="320">
+      <Grid RowDefinitions="Auto,*">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="8,4,8,10">
+          <StackPanel Grid.Column="0">
+            <TextBlock Text="Observed executables" FontSize="15" FontWeight="SemiBold" Foreground="#E6EDF3" />
+            <TextBlock Text="{Binding SummaryText}" FontSize="10" Foreground="#8A98A8" Margin="0,2,0,0" />
+          </StackPanel>
+          <Border Grid.Column="1" Background="#123236" CornerRadius="4" Padding="6,2" VerticalAlignment="Top">
+            <TextBlock Text="{Binding ModeBadgeText}" Foreground="#5EEAD4" FontSize="9" FontWeight="Bold" />
+          </Border>
+        </Grid>
+
+        <ListBox Grid.Row="1" Classes="data-list" ItemsSource="{Binding Apps}" SelectedItem="{Binding SelectedApp}"
+                 Background="Transparent" BorderThickness="0"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
+                <Border Grid.Column="0" Width="34" Height="34" CornerRadius="8" Background="#123236" Margin="0,0,10,0">
+                  <TextBlock Text="{Binding Initial}" FontSize="13" FontWeight="Bold" Foreground="#5EEAD4"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold" Foreground="#E6EDF3" />
+                  <TextBlock Text="{Binding PathText}" FontSize="10" Foreground="#8A98A8"
+                             TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" MaxWidth="420" />
+                  <Border Width="{Binding BarWidth}" Height="3" CornerRadius="1.5" Background="#1F6FEB"
+                          HorizontalAlignment="Left" Margin="0,4,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0"
+                            HorizontalAlignment="Right" Spacing="2">
+                  <TextBlock Text="{Binding SocketsText}" FontSize="11.5" Foreground="#E6EDF3" HorizontalAlignment="Right" />
+                  <TextBlock Text="{Binding ProtocolText}" FontSize="10" Foreground="#8A98A8" HorizontalAlignment="Right" />
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+    </Border>
+
+    <GridSplitter Grid.Column="1" Width="7" Background="#2E3A47" ResizeDirection="Columns"
+                  ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+
+    <Border Grid.Column="2" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1"
+            CornerRadius="8" Padding="18" MinWidth="300">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid>
+        <StackPanel IsVisible="{Binding HasSelection}" Spacing="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="{Binding SelectedApp.Name}" FontSize="17" FontWeight="SemiBold"
+                       Foreground="#E6EDF3" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            <Border Grid.Column="1" Background="#123236" CornerRadius="4" Padding="6,2" VerticalAlignment="Top">
+              <TextBlock Text="OBSERVED" Foreground="#5EEAD4" FontSize="9" FontWeight="Bold" />
+            </Border>
+          </Grid>
+
+          <TextBlock Text="{Binding SelectedApp.PathText}" FontSize="10" Foreground="#8A98A8" TextWrapping="Wrap" />
+          <Border Height="1" Background="#2E3A47" Margin="0,4" />
+
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Sockets" FontSize="11" Foreground="#8A98A8" Margin="0,0,14,0" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedApp.SocketsText}" FontSize="11" Foreground="#D6DEE7" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Protocols" FontSize="11" Foreground="#8A98A8" Margin="0,0,14,0" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedApp.ProtocolText}" FontSize="11" Foreground="#D6DEE7" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="States" FontSize="11" Foreground="#8A98A8" Margin="0,0,14,0" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedApp.StatesText}" FontSize="11" Foreground="#D6DEE7" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="First seen" FontSize="11" Foreground="#8A98A8" Margin="0,0,14,0" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedApp.FirstSeenText}" FontSize="11" Foreground="#D6DEE7" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Rule" FontSize="11" Foreground="#8A98A8" Margin="0,0,14,0" />
+            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedApp.RuleText}" FontSize="11" Foreground="#D6DEE7" />
+          </Grid>
+
+          <Expander Header="Advanced scope (protocol, ports, addresses, profiles)" IsExpanded="False"
+                    Foreground="#E6EDF3" HorizontalAlignment="Stretch">
+            <StackPanel Spacing="5" Margin="0,8,0,0">
+              <TextBlock Text="Protocol" FontSize="11" Foreground="#8A98A8" />
+              <ComboBox ItemsSource="{Binding ProtocolOptions}" SelectedItem="{Binding SelectedProtocolText}" Width="120" HorizontalAlignment="Left" />
+              <TextBlock Text="Remote ports (TCP/UDP only; e.g. 443,8000-8100)" FontSize="11" Foreground="#8A98A8" />
+              <TextBox Text="{Binding RemotePortsText}" />
+              <TextBlock Text="Remote addresses (IPv4/IPv6 or CIDR; comma-separated)" FontSize="11" Foreground="#8A98A8" />
+              <TextBox Text="{Binding RemoteAddressesText}" />
+              <TextBlock Text="Profiles" FontSize="11" Foreground="#8A98A8" />
+              <StackPanel Orientation="Horizontal" Spacing="14">
+                <CheckBox Content="Domain" IsChecked="{Binding BlockDomain}" Foreground="#D6DEE7" />
+                <CheckBox Content="Private" IsChecked="{Binding BlockPrivate}" Foreground="#D6DEE7" />
+                <CheckBox Content="Public" IsChecked="{Binding BlockPublic}" Foreground="#D6DEE7" />
+              </StackPanel>
+              <TextBlock Text="Scope applies to the next block action." FontSize="10" Foreground="#8A98A8" />
+            </StackPanel>
+          </Expander>
+
+          <WrapPanel Orientation="Horizontal">
+            <Button Content="Block outbound" Command="{Binding BlockOutboundCommand}"
+                    IsEnabled="{Binding CanWrite}" Margin="0,0,8,8" Padding="12,6" />
+            <Button Content="Block inbound" Command="{Binding BlockInboundCommand}"
+                    IsEnabled="{Binding CanWrite}" Margin="0,0,8,8" Padding="12,6" />
+            <Button Content="End task" Command="{Binding EndTaskAppCommand}"
+                    CommandParameter="{Binding SelectedApp}" Margin="0,0,8,8" Padding="12,6" />
+            <Button Content="Copy path" Command="{Binding CopyPathAppCommand}"
+                    CommandParameter="{Binding SelectedApp}" Margin="0,0,8,8" Padding="12,6" />
+          </WrapPanel>
+
+          <TextBlock Text="{Binding WriteStatusText}" FontSize="10" Foreground="#8A98A8" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <StackPanel IsVisible="{Binding !HasSelection}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Spacing="6" MaxWidth="300">
+          <TextBlock Text="No executable selected" FontSize="15" FontWeight="SemiBold" Foreground="#E6EDF3"
+                     HorizontalAlignment="Center" />
+          <TextBlock Text="Select an application from the live inventory." FontSize="11" Foreground="#8A98A8"
+                     TextAlignment="Center" TextWrapping="Wrap" />
+        </StackPanel>
+        </Grid>
+      </ScrollViewer>
+    </Border>
+  </Grid>
+</UserControl>

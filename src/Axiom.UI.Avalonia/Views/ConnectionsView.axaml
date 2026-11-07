@@ -14,7 +14,7 @@
           <TextBlock Grid.Column="2" Text="REMOTE" Foreground="#8A98A8" FontSize="11" />
           <TextBlock Grid.Column="3" Text="STATE" Foreground="#8A98A8" FontSize="11" />
         </Grid>
-        <ListBox Grid.Row="1" ItemsSource="{Binding Connections}" Background="Transparent" BorderThickness="0"
+        <ListBox Grid.Row="1" Classes="data-list" ItemsSource="{Binding Connections}" Background="Transparent" BorderThickness="0"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
             <DataTemplate>

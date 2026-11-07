@@ -4,5 +4,12 @@
              RequestedThemeVariant="Dark">
   <Application.Styles>
     <FluentTheme />
+    <Style Selector="ListBox.data-list > ListBoxItem:selected">
+      <Setter Property="Background" Value="#123236" />
+      <Setter Property="Foreground" Value="#E6EDF3" />
+    </Style>
+    <Style Selector="ListBox.data-list > ListBoxItem:pointerover">
+      <Setter Property="Background" Value="#1A2430" />
+    </Style>
   </Application.Styles>
 </Application>

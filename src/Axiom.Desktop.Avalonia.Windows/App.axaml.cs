@@ -28,6 +28,7 @@ public partial class App : Application
 
             _serviceHost = new BundledServiceHost();
             ServiceStatusProbe? serviceProbe = null;
+            IServiceRequestClient? serviceClient = null;
             IConnectionSnapshotSource source;
 
             if (useService || _serviceHost.TryStart())
@@ -35,14 +36,24 @@ public partial class App : Application
                 var client = new ServicePipeClient();
                 source = new ServiceSnapshotSource(client);
                 serviceProbe = new ServiceStatusProbe(client);
+                serviceClient = client;
             }
             else
             {
                 source = new IpHelperConnectionSource();
             }
 
-            _shell = new ShellViewModel(source, new AvaloniaUiTimerFactory(), serviceProbe);
-            desktop.MainWindow = new MainWindow { DataContext = _shell };
+            MainWindow? window = null;
+            var interaction = new AvaloniaUserInteraction(() => window);
+            _shell = new ShellViewModel(
+                source,
+                new AvaloniaUiTimerFactory(),
+                serviceProbe,
+                serviceClient,
+                interaction,
+                new ProcessActions());
+            window = new MainWindow { DataContext = _shell };
+            desktop.MainWindow = window;
             _shell.Start();
             desktop.Exit += (_, _) =>
             {

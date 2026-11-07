@@ -41,7 +41,7 @@
         <StackPanel Spacing="10">
           <TextBlock Text="Live sockets" FontSize="16" FontWeight="SemiBold" Foreground="#E6EDF3" />
           <TextBlock Text="{Binding SourceText}" Foreground="#8A98A8" FontSize="11" />
-          <ListBox ItemsSource="{Binding Connections}" Height="390" Background="Transparent" BorderThickness="0"
+          <ListBox Classes="data-list" ItemsSource="{Binding Connections}" Height="390" Background="Transparent" BorderThickness="0"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
               <DataTemplate>

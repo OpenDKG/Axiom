@@ -22,7 +22,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public ShellViewModel(
         IConnectionSnapshotSource source,
         IUiTimerFactory timers,
-        ServiceStatusProbe? serviceProbe = null)
+        ServiceStatusProbe? serviceProbe = null,
+        IServiceRequestClient? serviceClient = null,
+        IUserInteraction? userInteraction = null,
+        IProcessActions? processActions = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(timers);
@@ -30,9 +33,19 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _traffic = new TrafficEngine(timers);
         _serviceProbe = serviceProbe;
         IsServiceMode = source is ServiceSnapshotSource;
+        var interaction = userInteraction ?? new NullUserInteraction();
         Overview = new OverviewPageViewModel(_monitor, _traffic);
         Connections = new ConnectionsPageViewModel(_monitor);
-        Pages = [Overview, Connections];
+        Apps = new AppsPageViewModel(
+            _monitor,
+            IsServiceMode ? serviceClient : null,
+            interaction,
+            processActions ?? new UnsupportedProcessActions());
+        Events = new EventsPageViewModel(
+            IsServiceMode ? serviceClient : null,
+            timers,
+            interaction);
+        Pages = [Overview, Connections, Apps, Events];
         _selectedPage = Overview;
         _monitor.Updated += OnMonitorUpdated;
     }
@@ -40,6 +53,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public OverviewPageViewModel Overview { get; }
 
     public ConnectionsPageViewModel Connections { get; }
+
+    public AppsPageViewModel Apps { get; }
+
+    public EventsPageViewModel Events { get; }
 
     public ObservableCollection<PageViewModel> Pages { get; }
 
@@ -87,6 +104,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _cancellation.Dispose();
         Overview.Dispose();
         Connections.Dispose();
+        Apps.Dispose();
+        Events.Dispose();
         _traffic.Dispose();
         _monitor.Dispose();
     }
