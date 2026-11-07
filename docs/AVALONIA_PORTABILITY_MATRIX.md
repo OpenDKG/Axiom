@@ -259,4 +259,6 @@ The portability audit is complete when:
 - the license decision is recorded;
 - portable CI can be described without assuming the Windows solution builds on Linux/macOS.
 
-No extraction has been performed yet.
+Initial extraction: `Axiom.Presentation` now contains the portable page base, UI timer/dispatcher
+contracts, connection monitor, traffic engine and pure row/geometry/formatting models. The WPF page
+view models and views have not yet been moved; the old UI remains the reference and fallback.

@@ -1,6 +1,6 @@
 # Axiom — Avalonia Migration Baseline
 
-Status: baseline captured, no migration code written
+Status: baseline captured; portable presentation foundation started
 Branch: `feature/avalonia-windows-first`
 Baseline commit: `61d5520` (`feat(agents): add opt-in incremental auto-sync`)
 Date: 2026-11-07
@@ -29,22 +29,14 @@ Commands were run from the migration worktree.
 
 | Command | Result |
 |---|---|
-| `dotnet restore Axiom.sln --locked-mode` | **FAILED, pre-existing lock/RID mismatch** |
-| `dotnet restore Axiom.sln --force-evaluate` | succeeded; lock files were reverted after baseline |
+| `dotnet restore Axiom.sln --locked-mode` | **passed after normalizing the committed lock files** |
 | `dotnet build Axiom.sln -c Release --no-restore` | **0 warnings, 0 errors** |
-| `dotnet test Axiom.sln -c Release --no-build --no-restore` | **364/364 passed** |
+| `dotnet test Axiom.sln -c Release --no-build --no-restore` | **367/367 passed** |
 
-The locked restore failure is real and must not be mistaken for an Avalonia regression:
-
-```text
-NU1004: The project's runtime identifiers have changed from.
-Project's runtime identifiers: , lock file's runtime identifiers win-x64.
-```
-
-The source projects’ lock files were produced with `win-x64`, while several test projects’ lock
-files have no RID. Restoring with `-r win-x64` fixes the source projects but fails the test projects
-for the inverse reason. This is a pre-existing restore-policy inconsistency. It should be fixed in a
-small, separate infrastructure PR before portable CI is introduced; it is not part of the UI port.
+The initial baseline exposed a pre-existing lock/RID mismatch: source projects carried `win-x64`
+lock sections while test projects had none. The normalization removed those stale RID sections and
+refreshed the project dependency version references. Locked restore is now reproducible with the
+standard handoff command.
 
 Test breakdown:
 
@@ -57,7 +49,8 @@ Test breakdown:
 | Axiom.Persistence.Tests | 14 |
 | Axiom.Service.Tests | 16 |
 | Axiom.UI.Tests | 140 |
-| **Total** | **364** |
+| Axiom.Presentation.Tests | 3 |
+| **Total** | **367** |
 
 ## 3. Screenshot baseline
 
@@ -140,18 +133,16 @@ starter community feed. `scripts/publish-standalone.ps1` still publishes the WPF
 
 ## 6. Observed baseline findings
 
-1. **Locked restore is not currently reproducible.** This predates the Avalonia work and blocks the
-   handoff’s proposed `dotnet restore --locked-mode` gate until lock/RID policy is corrected.
-2. **Minimum-width layout is clipped.** At 1080 × 720 the Overview KPI row and activity table extend
+1. **Minimum-width layout is clipped.** At 1080 × 720 the Overview KPI row and activity table extend
    past the right edge; Connections/Events tables also clip columns. A responsive layout is required,
    not just a resized screenshot.
-3. **Service mode needs an explicit host path in an unpackaged worktree build.** The desktop stays
+2. **Service mode needs an explicit host path in an unpackaged worktree build.** The desktop stays
    in-process read-only unless `--service` is passed and `Axiom.Service.exe` is running; the installed
    package supplies the bundled service. The Avalonia host must preserve the installed-service
    behavior and clearly label disconnected/stale states.
-4. **Screenshots contain local activity.** They are useful for parity review but are private and
+3. **Screenshots contain local activity.** They are useful for parity review but are private and
    must remain out of Git.
-5. **The workload is live.** Socket/activity counts and module status vary between captures; parity
+4. **The workload is live.** Socket/activity counts and module status vary between captures; parity
    screenshots must record the timestamp and mode rather than compare raw numbers.
 
 One uncontrolled memory sample in service mode was approximately 306 MB working set / 190 MB
