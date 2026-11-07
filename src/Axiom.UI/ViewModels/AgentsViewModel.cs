@@ -350,7 +350,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         }
     }
 
-    private bool CanSyncVerifiedGraph() => !IsVerifiedSyncRunning;
+    private bool CanSyncVerifiedGraph() => IsAvailable && !IsVerifiedSyncRunning;
 
     partial void OnIsVerifiedSyncRunningChanged(bool value) =>
         SyncVerifiedGraphCommand.NotifyCanExecuteChanged();
@@ -1093,7 +1093,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             VerifiedGraphThreats.Add(threat);
         }
 
-        if (page.Total == 0)
+        if (page.Total == 0 && page.Threats.Count == 0)
         {
             VerifiedGraphListStatus = string.Equals(VerifiedSyncState, "NODE OFFLINE", StringComparison.Ordinal)
                 ? "The verified graph is not loaded while the local DKG node is offline."
