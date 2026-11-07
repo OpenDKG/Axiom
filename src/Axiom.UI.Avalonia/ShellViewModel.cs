@@ -88,7 +88,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             IsServiceMode,
             _theme,
             autostartService ?? new UnsupportedAutostartService());
-        Pages = [Overview, Connections, Apps, Events, Firewall, PrivacyShield, Security, Agents, AiAnalyst, Support, Settings];
+        Overview.AgentActivity = Agents;
+        Pages = [Overview, Connections, Apps, Events, Agents, Firewall, Security, PrivacyShield, AiAnalyst, Support, Settings];
         _selectedPage = Overview;
         _selectedTheme = ThemeLabel(_theme.Current);
         _theme.Changed += OnThemeChanged;
@@ -222,6 +223,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _monitor.Start();
         _traffic.Start();
         Overview.Refresh();
+        (SelectedPage as IActivatablePage)?.Activate();
         RefreshStatus();
         _ = ProbeServiceAsync(force: true);
     }

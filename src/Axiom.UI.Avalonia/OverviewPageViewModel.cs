@@ -6,7 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Axiom.UI.Avalonia;
 
-public sealed partial class OverviewPageViewModel : PageViewModel, IDisposable
+public sealed partial class OverviewPageViewModel : PageViewModel, IActivatablePage, IDisposable
 {
     private readonly ConnectionMonitor _monitor;
     private readonly TrafficEngine _traffic;
@@ -24,6 +24,13 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IDisposable
         _traffic.Updated += OnTrafficUpdated;
         Refresh();
     }
+
+    /// <summary>Agent/audit surface shown on Overview, as in the WPF application.</summary>
+    public AgentsPageViewModel? AgentActivity { get; set; }
+
+    public void Activate() => AgentActivity?.Activate();
+
+    public void Deactivate() => AgentActivity?.Deactivate();
 
     public ObservableCollection<ConnectionRow> Connections => _monitor.Connections;
 
