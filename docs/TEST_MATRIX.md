@@ -15,12 +15,14 @@ SDK: 10.0.403. Configuration: `Release`.
 | Test project | Count | Notes |
 |---|---|---|
 | Core | 66 | deterministic rule identity, spec and CIDR/port validation |
-| Contracts | 50 | IPC contract, limits, optional-module probe, bounded history, local file hashing, VirusTotal and community feed |
+| Contracts | 55 | IPC contract, limits, optional-module probe, bounded history, local file hashing, VirusTotal and community feed |
 | Persistence | 14 | schema v2, history, firewall state and audit |
 | Infrastructure.Windows | 40 | IP Helper, pipe, COM read-only adapter |
 | Service | 16 | coordinator with a fake adapter, Privacy Shield rollback and persistence |
 | MCP server | 33 | endpoint parsing, private IPv4/IPv6, indicator type, invalid-input handling, truthful unavailable states |
-| UI | 137 | view models, settings stores, lifecycle hook contracts, Codex trust hashes, session readers, OpenCode lifecycle generation, ZCode/DeepSeek hook generation, firewall defaults and display status |
+| UI | 140 | view models, settings stores, lifecycle hook contracts, Codex trust hashes, session readers, OpenCode lifecycle generation, ZCode/DeepSeek hook generation, firewall defaults and display status |
+| Presentation | 6 | portable monitor, formatting, service probe and offline service states |
+| UI.Avalonia | 4 | navigation inventory, service-required/offline page states and no-invented-data checks |
 
 ### History coverage
 
