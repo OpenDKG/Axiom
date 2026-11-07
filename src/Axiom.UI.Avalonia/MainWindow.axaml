@@ -1,0 +1,66 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Axiom.UI.Avalonia"
+        xmlns:views="using:Axiom.UI.Avalonia.Views"
+        x:Class="Axiom.UI.Avalonia.MainWindow"
+        Title="Axiom — Open-Source Firewall &amp; Security Monitor"
+        Width="1460" Height="900" MinWidth="1080" MinHeight="720"
+        Background="#0E1116" Foreground="#E6EDF3"
+        WindowStartupLocation="CenterScreen">
+  <Window.DataTemplates>
+    <DataTemplate DataType="local:OverviewPageViewModel">
+      <views:OverviewView />
+    </DataTemplate>
+    <DataTemplate DataType="local:ConnectionsPageViewModel">
+      <views:ConnectionsView />
+    </DataTemplate>
+  </Window.DataTemplates>
+
+  <Grid ColumnDefinitions="236,*">
+    <Border Grid.Column="0" Background="#11161D" BorderBrush="#2E3A47" BorderThickness="0,0,1,0">
+      <Grid RowDefinitions="Auto,*,Auto">
+        <StackPanel Grid.Row="0" Margin="20,22,20,18" Spacing="10">
+          <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-lockup.png" Width="176" Height="59" Stretch="Uniform" HorizontalAlignment="Left" />
+          <TextBlock Text="LIVE · READ-ONLY" Foreground="#5EEAD4" FontSize="10" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding VersionText}" Foreground="#8A98A8" FontSize="11" />
+        </StackPanel>
+
+        <ListBox Grid.Row="1" ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
+                 Background="Transparent" BorderThickness="0" Margin="8,0">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Title}" Foreground="#D6DEE7" Padding="12,9" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+
+        <TextBlock Grid.Row="2" Text="Axiom 0.5.3 · local only" Foreground="#8A98A8" FontSize="10" Margin="20,0,20,18" />
+      </Grid>
+    </Border>
+
+    <Grid Grid.Column="1" RowDefinitions="64,*,30">
+      <Border Grid.Row="0" Background="#0E1116" BorderBrush="#2E3A47" BorderThickness="0,0,0,1">
+        <Grid Margin="24,0,20,0" ColumnDefinitions="*,Auto">
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="{Binding SelectedPage.Title}" FontSize="17" FontWeight="SemiBold" Foreground="#E6EDF3" />
+            <TextBlock Text="{Binding SelectedPage.Subtitle}" FontSize="11" Foreground="#9BA9B8" />
+          </StackPanel>
+          <TextBlock Grid.Column="1" Text="Avalonia migration slice · WPF fallback remains" Foreground="#8A98A8" FontSize="11" VerticalAlignment="Center" />
+        </Grid>
+      </Border>
+
+      <ContentControl Grid.Row="1" Content="{Binding SelectedPage}" />
+
+      <Border Grid.Row="2" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="0,1,0,0">
+        <Grid Margin="24,0,20,0" ColumnDefinitions="*,Auto">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
+            <TextBlock Text="{Binding StatusMonitoringText}" Foreground="#9BA9B8" FontSize="10" />
+            <TextBlock Text="{Binding StatusStorageText}" Foreground="#9BA9B8" FontSize="10" />
+            <TextBlock Text="{Binding StatusSourceText}" Foreground="#5EEAD4" FontSize="10" />
+          </StackPanel>
+          <TextBlock Grid.Column="1" Text="{Binding StatusIpcText}" Foreground="#9BA9B8" FontSize="10" VerticalAlignment="Center" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>
