@@ -1,8 +1,8 @@
-# Axiom
+﻿# Axiom
 
 **Open-Source Firewall, Network Monitor & Local Agent Protection**
 
-**Version:** 0.7.4 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.7.5 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -21,7 +21,7 @@ the enforcement authority. There is no account, no cloud, no advertising and no 
 Axiom brings together four surfaces:
 
 - **Network visibility and history** for TCP/UDP IPv4/IPv6 sockets and applications.
-- **Axiom Shield** — one switch that installs the elevated local service and turns the ask policy
+- **Axiom Shield** â€” one switch that installs the elevated local service and turns the ask policy
   on: every new outbound application waits for Block or Allow, and blocks are Axiom-owned Windows
   Firewall rules with read-back verification and recovery.
 - **Local privacy controls** including Privacy Shield DNS filtering and a read-only AI analyst.
@@ -30,6 +30,16 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.7.5
+
+- Module health now samples every 5 seconds and keeps a fixed 30-check window. The strip always
+  shows 30 slots: filled squares for recorded checks, outlined squares while the window fills.
+  The summary reads `n/30 checks` with per-module uptime and the last check time.
+- The DKG module Start action now falls back to a `dkg` command installed on PATH. A node installed
+  outside the Axiom folder (for example `F:\AI-Storage\dkg`) can be started from the app instead of
+  only from a terminal. DKG still never starts on its own.
+- The module summary no longer reports the oldest sample as the last one.
 
 ## What's in 0.7.4
 
@@ -113,7 +123,7 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 ## What's in 0.6.1
 
-- Restored the sidebar product footer: Axiom icon, version, description, GitHub and ♥ Donate.
+- Restored the sidebar product footer: Axiom icon, version, description, GitHub and â™¥ Donate.
 - Added the top-bar theme selector and status-bar mode/firewall badges.
 - Includes the 0.6.0 Avalonia cutover.
 
@@ -127,7 +137,7 @@ agent-level guardrails and signed threat-intelligence context respectively.
   applications, native verified threat graph, selectable threat details, protected workspaces and
   agent module cards.
 - Four real palettes (Dark, Light, Dark Midnight, Light Warm), custom Axiom title bar, tray icon,
-  single-instance handling and 1080×720 shell fit.
+  single-instance handling and 1080Ã—720 shell fit.
 - Ported context menus for applications, connections, overview sockets and agent evidence.
 - Installer, MSIX and release scripts now publish the Avalonia host as `Axiom.Desktop.exe`.
 - Includes the 0.5.3 verified threat graph and Privacy Shield source-fit work.
@@ -331,12 +341,12 @@ offline Blackbox does not stop local monitoring.
 
 ```text
 Unprivileged Avalonia UI (WPF fallback retained in source)
-   │  local Named Pipe (explicit ACL, client SID check)
-   ▼
+   â”‚  local Named Pipe (explicit ACL, client SID check)
+   â–¼
 Windows Service
-   ├─ IP Helper inventory and process attribution
-   ├─ bounded aggregation and local SQLite history
-   └─ owned-rule coordinator → Windows Firewall
+   â”œâ”€ IP Helper inventory and process attribution
+   â”œâ”€ bounded aggregation and local SQLite history
+   â””â”€ owned-rule coordinator â†’ Windows Firewall
 ```
 
 - The UI never runs as administrator and never receives a generic shell or "execute" command.

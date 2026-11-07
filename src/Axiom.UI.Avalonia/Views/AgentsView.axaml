@@ -33,6 +33,11 @@
     <Style Selector="Border.sq-off">
       <Setter Property="Background" Value="{DynamicResource Axiom.Border}" />
     </Style>
+    <Style Selector="Border.sq-empty">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
   </UserControl.Styles>
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24,18,24,24" Spacing="14">
@@ -250,7 +255,7 @@
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
               <TextBlock Text="Module health" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <TextBlock Text="One square per loopback health check. Green = connected, muted = not running."
+              <TextBlock Text="One square per 5 s loopback check, last 30 kept. Green = connected, muted = not running, outlined = waiting for a sample."
                          FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             </StackPanel>
             <Border Grid.Column="1" Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2" VerticalAlignment="Top">
@@ -261,7 +266,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Text="DKG" FontSize="10"
                        Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
             <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
-              <ItemsControl ItemsSource="{Binding Security.Activity}">
+              <ItemsControl ItemsSource="{Binding Security.ModuleHealthSlots}">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate>
                     <StackPanel Orientation="Horizontal" />
@@ -270,8 +275,10 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
                     <Border Width="7" Height="12" CornerRadius="1" Margin="1,0"
-                            Classes.sq-on="{Binding DkgConnected}"
-                            Classes.sq-off="{Binding !DkgConnected}" />
+                            Classes.sq-on="{Binding DkgOn}"
+                            Classes.sq-off="{Binding DkgOff}"
+                            Classes.sq-empty="{Binding IsPlaceholder}"
+                            ToolTip.Tip="{Binding IsPlaceholder, StringFormat=Waiting for sample}" />
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
@@ -279,7 +286,7 @@
             <TextBlock Grid.Row="1" Grid.Column="0" Text="Blackbox" FontSize="10"
                        Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
             <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
-              <ItemsControl ItemsSource="{Binding Security.Activity}">
+              <ItemsControl ItemsSource="{Binding Security.ModuleHealthSlots}">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate>
                     <StackPanel Orientation="Horizontal" />
@@ -288,8 +295,10 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
                     <Border Width="7" Height="12" CornerRadius="1" Margin="1,0"
-                            Classes.sq-on="{Binding BlackboxConnected}"
-                            Classes.sq-off="{Binding !BlackboxConnected}" />
+                            Classes.sq-on="{Binding BlackboxOn}"
+                            Classes.sq-off="{Binding BlackboxOff}"
+                            Classes.sq-empty="{Binding IsPlaceholder}"
+                            ToolTip.Tip="{Binding IsPlaceholder, StringFormat=Waiting for sample}" />
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>

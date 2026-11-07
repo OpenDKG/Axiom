@@ -41,6 +41,9 @@ public sealed class OptionalModuleInstaller
 
     public bool IsDkgInstalled => File.Exists(DkgCommand);
 
+    /// <summary>True when a DKG CLI exists in the per-user folder or on PATH.</summary>
+    public bool IsDkgAvailable => ResolveDkgCommand().Command is not null;
+
     /// <summary>
     /// Installs the DKG CLI into a per-user folder, then opens the official interactive setup on
     /// testnet and starts the node. The user answers the official prompts; nothing is hidden.
@@ -201,19 +204,24 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        if (!File.Exists(DkgCommand) || IsUnsafeInstallRoot(DkgRoot, DkgHome, DkgCommand))
+        var (command, useOwnHome) = ResolveDkgCommand();
+        if (command is null)
         {
             return false;
         }
 
-        var startInfo = new ProcessStartInfo("cmd.exe", $"/c \"\"{DkgCommand}\" start\"")
+        var startInfo = new ProcessStartInfo("cmd.exe", $"/c \"\"{command}\" start\"")
         {
             UseShellExecute = false,
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden,
-            WorkingDirectory = DkgRoot,
+            WorkingDirectory = Path.GetDirectoryName(command) ?? DkgRoot,
         };
-        startInfo.Environment["DKG_HOME"] = DkgHome;
+
+        if (useOwnHome)
+        {
+            startInfo.Environment["DKG_HOME"] = DkgHome;
+        }
 
         try
         {
@@ -230,6 +238,45 @@ public sealed class OptionalModuleInstaller
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Prefers the Axiom-managed per-user install; otherwise uses an existing `dkg` command from
+    /// PATH so a user-installed node (with its own DKG_HOME) can be started from the app.
+    /// </summary>
+    private (string? Command, bool UseOwnHome) ResolveDkgCommand()
+    {
+        if (File.Exists(DkgCommand) && !IsUnsafeInstallRoot(DkgRoot, DkgHome, DkgCommand))
+        {
+            return (DkgCommand, true);
+        }
+
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return (null, false);
+        }
+
+        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            foreach (var name in new[] { "dkg.cmd", "dkg.exe", "dkg.bat" })
+            {
+                try
+                {
+                    var candidate = Path.Combine(directory.Trim(), name);
+                    if (File.Exists(candidate))
+                    {
+                        return (candidate, false);
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    // A malformed PATH entry is skipped; the next one may still resolve.
+                }
+            }
+        }
+
+        return (null, false);
     }
 
     /// <summary>
