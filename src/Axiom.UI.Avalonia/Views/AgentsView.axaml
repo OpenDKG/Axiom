@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.AgentsView">
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24,18,24,24" Spacing="14">
@@ -84,6 +85,18 @@
           <TextBlock Text="{Binding VerifiedGraphListStatus}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <TextBlock Text="{Binding AutoSyncStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
         </StackPanel>
+      </Border>
+
+      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="8">
+        <controls:ThreatGraphControl Height="320"
+                                     Threats="{Binding VerifiedGraphThreats}"
+                                     Total="{Binding VerifiedGraphTotal}"
+                                     CategoryTotals="{Binding VerifiedGraphCategoryTotals}"
+                                     StateText="{Binding VerifiedSyncState}"
+                                     TextBrush="{DynamicResource Axiom.TextPrimary}"
+                                     MutedBrush="{DynamicResource Axiom.TextMuted}"
+                                     SurfaceBrush="{DynamicResource Axiom.Surface}"
+                                     BorderBrush="{DynamicResource Axiom.Border}" />
       </Border>
 
       <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">

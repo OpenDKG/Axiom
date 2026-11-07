@@ -200,7 +200,7 @@ Implemented in `Axiom.UI.Avalonia` with real data, real service calls and explic
 | Privacy Shield | service `privacy.status/configure` | active, disabled, service required, service offline, UAC-gated adapter DNS |
 | AI Analyst | local monitor + configured provider | disabled, configured, manual/automatic, DPAPI-protected key |
 | Security | local module probes + file scan + feed | module status, scan, hash lookup, community feed, agent hook install |
-| Agents | Blackbox dashboard + local probes | health, verified sync, verified threat list, agent sessions, hook evidence, activity, findings, context-menu copy, mode/settings |
+| Agents | Blackbox dashboard + local probes | health, verified sync, native verified-threat graph, verified threat list, agent sessions, hook evidence, activity, findings, context-menu copy, mode/settings |
 | Support | bundled destinations | external links, clipboard, no configured destination |
 | Settings | per-user stores + Windows host | four palettes (Dark, Light, Dark Midnight, Light Warm), startup, tray notification preference, build/runtime |
 
