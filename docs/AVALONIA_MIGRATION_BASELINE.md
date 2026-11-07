@@ -150,6 +150,18 @@ One uncontrolled memory sample in service mode was approximately 306 MB working 
 private for the desktop and 595 MB working set for the service process. These are not a performance
 baseline and must be remeasured with a fixed workload, resolution, mode and idle period.
 
+### Avalonia slice sample (2026-11-07, 96 DPI, 1460×900, service mode)
+
+After 35 seconds of idle live monitoring with the service running:
+
+| Process | Working set | Private |
+|---|---:|---:|
+| Avalonia desktop | 177.2 MB | 127.9 MB |
+| Axiom.Service | 315.4 MB | 370.0 MB |
+
+This is a single uncontrolled sample, not a regression gate. Re-measure with a fixed workload,
+resolution, mode and idle period before drawing conclusions.
+
 ## 7. Parity checklist for every migrated page
 
 - [ ] Live data source, not mock data.
@@ -206,10 +218,13 @@ All eleven parity pages are now listed in the Avalonia navigation. Native setup 
 implemented in Avalonia: reputation provider, community feed, agent hook installation (complete vs
 partial), Blackbox settings, DKG log and first-run onboarding.
 
+The Avalonia window now uses the Axiom custom title bar (no native caption) with drag, double-click
+maximize, minimize, maximize and close, on top of a native resizable border.
+
 Still outstanding:
 
-- Custom Axiom window chrome; the Avalonia host currently uses native Windows chrome.
 - Windows 10 19044 DPI evidence at 125/150/200% and 1080×720.
-- Performance measurement with a fixed workload/resolution/mode/idle period.
-- Linux/macOS CI for `Axiom.Portable.slnx`.
+- A controlled performance run with a fixed workload/resolution/mode/idle period.
+- Hosted Linux/macOS CI verification for `.github/workflows/portable.yml`; the workflow exists but
+  has not run on a hosted runner from this workstation.
 - Installer/MSIX packaging and the separately approved release cutover.

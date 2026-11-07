@@ -115,11 +115,13 @@ never rendered as live protection.
 
 ## 7. Remaining before cutover
 
-1. Replace native Windows chrome with the Axiom custom title bar and native snap behaviour.
-2. Add 125/150/200% DPI evidence at 1080×720 and 1460×900.
-3. Add Linux/macOS CI that builds/tests `Axiom.Portable.slnx` only.
-4. Measure performance with a fixed workload, resolution, mode and idle period.
-5. Build an installer test package and run a separate cutover review.
+1. Add 125/150/200% DPI evidence at 1080×720 and 1460×900.
+2. Run and verify `.github/workflows/portable.yml` on hosted Ubuntu and macOS runners.
+3. Measure performance with a fixed workload, resolution, mode and idle period.
+4. Build an installer test package and run a separate cutover review.
+
+The Avalonia window already uses the Axiom custom title bar with native resize border, drag,
+double-click maximize and explicit minimize/maximize/close buttons.
 
 ## 8. Adding a Linux/macOS host later
 
