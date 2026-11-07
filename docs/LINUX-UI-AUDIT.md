@@ -88,9 +88,32 @@ editors. Agent hooks/Blackbox installers and a tray icon remain unsupported on L
 AI/reputation need a user-session Secret Service keyring and provider configuration;
 this headless live host has no such keyring. No external-provider success is claimed.
 
-The additional fix changes the UI host binary, not static assets. Activating it
-requires restarting the UI and rotating its per-run authentication token. It was
-therefore verified in the isolated host but not silently deployed over the user's
-working browser session. The monitoring service and its socket authorization stay
-unchanged. Until an explicit restart, the running host retains the malformed-JSON
-500 behavior; normal UI-generated JSON requests are unaffected.
+### Completed UI binary deployment
+
+Following the user's instruction to complete deployment, the reviewed revision
+`9f23d9bdcec7e8c90be2ac15093b5270faccc7aa` was published with SDK 10.0.403,
+Release/linux-x64/self-contained, using the existing publish script's UI command.
+Only changed files in `/opt/axiom/ui` were atomically replaced, root-owned; the
+installation manifest was regenerated for the actual UI payload. No service or
+MCP payload was updated. Backup of the entire previous UI plus manifest:
+`/tmp/opencode/axiom-ui-binary-backup-20261106-223410/`.
+
+Only `axiom-ui.service` restarted. Its per-run token rotated and was not disclosed.
+The backend PID remained `1501067`, its socket inode/ownership/mode stayed unchanged,
+and both units remained active. UI persisted profile hashes were identical (the
+profile contained no files), as were unit, nginx configuration and resolver hashes.
+All 810 installation-manifest entries validated. Installed UI DLL SHA-256:
+`8f3e8418d2f88667d24798b72c5e0104fe77bdd9f014d0924449b819bf5fe2fc`.
+
+Post-restart real authenticated LAN Chromium repeated all seven pages, filters,
+history pagination/search/time window and empty/populated CSV downloads. The real
+browser paging-failure/retry check passed again. Five authenticated malformed-JSON
+write routes returned HTTP 400 `invalid-request`; missing and previous tokens
+returned 401, while the new token worked. No settings were written by these malformed
+requests. Evidence: `binary-deployment.json`, `postdeploy-validation.json` and
+`postdeploy-overview.png` in the existing host-local evidence directory.
+
+Binary rollback: stop only `axiom-ui.service`, restore the backup `ui/` and
+`install-manifest.sha256` into `/opt/axiom`, then start only `axiom-ui.service`.
+That restart also rotates the token. No backend restart, proxy, firewall or DNS
+change is required.
