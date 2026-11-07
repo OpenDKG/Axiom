@@ -38,6 +38,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private static readonly TimeSpan VerifiedGraphRefreshInterval = TimeSpan.FromSeconds(60);
 
+    private static readonly TimeSpan AutoSyncInterval = TimeSpan.FromMinutes(15);
+
     private static readonly Regex SecretPattern = new(
         @"(?i)\b(token|secret|password|passwd|api[_-]?key|authorization)\b\s*[:=]\s*(""[^""]*""|'[^']*'|[^\s,}\]]+)",
         RegexOptions.Compiled);
@@ -51,6 +53,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         RegexOptions.Compiled);
 
     private readonly BlackboxDashboardClient _client = new();
+
+    private readonly BlackboxAutoSyncStore _autoSyncStore = new();
 
     private readonly AgentEvidenceStore _agentEvidence = new();
 
@@ -80,14 +84,37 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private bool _verifiedGraphInitialized;
 
+    private bool _pageActive;
+
+    private bool _autoSyncRunning;
+
+    private DateTimeOffset _lastAutoSyncAttempt = DateTimeOffset.MinValue;
+
     public AgentsViewModel(SecurityViewModel security, IAgentSessionSource? agentSessions = null)
         : base("Agents", "DKG, Blackbox and the workspaces they protect", "\uE99A")
     {
         Security = security ?? throw new ArgumentNullException(nameof(security));
         _agentSessions = agentSessions;
 
+        var autoSync = _autoSyncStore.Load();
+        _isAutoSyncEnabled = autoSync.Enabled;
+        _lastAutoSyncAttempt = autoSync.LastAttemptUtc;
+        _autoSyncStatusText = autoSync.Enabled
+            ? string.IsNullOrWhiteSpace(autoSync.LastStatus)
+                ? "Auto-sync is on; checks every 15 minutes for new verified assets."
+                : autoSync.LastStatus
+            : "Auto-sync is off.";
+
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
-        _timer.Tick += async (_, _) => await RefreshAsync().ConfigureAwait(true);
+        _timer.Tick += async (_, _) =>
+        {
+            if (_pageActive)
+            {
+                await RefreshAsync().ConfigureAwait(true);
+            }
+
+            await MaybeAutoSyncAsync().ConfigureAwait(true);
+        };
     }
 
     public SecurityViewModel Security { get; }
@@ -202,6 +229,12 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     private bool _isVerifiedSyncRunning;
 
     [ObservableProperty]
+    private bool _isAutoSyncEnabled;
+
+    [ObservableProperty]
+    private string _autoSyncStatusText = "Auto-sync is off.";
+
+    [ObservableProperty]
     private string _summaryText = "No activity has been loaded.";
 
     [ObservableProperty]
@@ -226,6 +259,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             return;
         }
 
+        _pageActive = true;
         _timer.Start();
         _lastSessionRefresh = DateTimeOffset.MinValue;
         _activityInitialized = false;
@@ -233,7 +267,14 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         _ = RefreshAsync();
     }
 
-    public void Deactivate() => _timer.Stop();
+    public void Deactivate()
+    {
+        _pageActive = false;
+        if (!IsAutoSyncEnabled)
+        {
+            _timer.Stop();
+        }
+    }
 
     public void Dispose()
     {
@@ -369,6 +410,92 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     partial void OnIsVerifiedSyncRunningChanged(bool value) =>
         SyncVerifiedGraphCommand.NotifyCanExecuteChanged();
+
+    partial void OnIsAutoSyncEnabledChanged(bool value)
+    {
+        AutoSyncStatusText = value
+            ? "Auto-sync is on; checks every 15 minutes for new verified assets."
+            : "Auto-sync is off.";
+
+        if (value)
+        {
+            _timer.Start();
+        }
+        else if (!_pageActive)
+        {
+            _timer.Stop();
+        }
+
+        PersistAutoSync();
+    }
+
+    private async Task MaybeAutoSyncAsync()
+    {
+        if (!IsAutoSyncEnabled || _autoSyncRunning || !IsAvailable)
+        {
+            return;
+        }
+
+        if (IsVerifiedSyncRunning ||
+            string.Equals(VerifiedSyncState, "SYNCING", StringComparison.Ordinal) ||
+            string.Equals(VerifiedSyncState, "NODE OFFLINE", StringComparison.Ordinal) ||
+            string.Equals(VerifiedSyncState, "UNAVAILABLE", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastAutoSyncAttempt < AutoSyncInterval)
+        {
+            return;
+        }
+
+        _autoSyncRunning = true;
+        _lastAutoSyncAttempt = now;
+        AutoSyncStatusText = "Auto-sync: checking for new verified assets…";
+        PersistAutoSync();
+        try
+        {
+            var result = await _client.RequestSyncAsync(CancellationToken.None).ConfigureAwait(true);
+            if (!result.Ok)
+            {
+                AutoSyncStatusText = $"Auto-sync: {result.Message}";
+                return;
+            }
+
+            AutoSyncStatusText = "Auto-sync requested; existing assets stay local and only new data is fetched.";
+            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            if (_pageActive)
+            {
+                await RefreshAsync().ConfigureAwait(true);
+            }
+        }
+        catch (Exception exception) when (exception is
+            HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            AutoSyncStatusText = $"Auto-sync could not reach the dashboard: {exception.Message}";
+        }
+        finally
+        {
+            _autoSyncRunning = false;
+            PersistAutoSync();
+        }
+    }
+
+    private void PersistAutoSync()
+    {
+        try
+        {
+            _autoSyncStore.Save(new BlackboxAutoSyncSettings(
+                IsAutoSyncEnabled,
+                _lastAutoSyncAttempt,
+                AutoSyncStatusText));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AutoSyncStatusText = $"Auto-sync setting could not be saved: {exception.Message}";
+        }
+    }
 
     [RelayCommand]
     private async Task LoadMoreActivityAsync()

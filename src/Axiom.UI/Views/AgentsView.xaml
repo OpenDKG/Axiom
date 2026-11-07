@@ -222,6 +222,11 @@
                   </TextBlock.Style>
                 </TextBlock>
               </Border>
+              <CheckBox Content="Auto-sync"
+                        IsChecked="{Binding IsAutoSyncEnabled, Mode=TwoWay}"
+                        VerticalAlignment="Center"
+                        Margin="10,0,10,0"
+                        ToolTip="Every 15 minutes, ask the local dashboard for new verified assets. This is an incremental catch-up; existing local assets are kept and are not downloaded again." />
               <Button Style="{StaticResource GhostButton}"
                       Content="Sync now"
                       Command="{Binding SyncVerifiedGraphCommand}"
@@ -256,6 +261,10 @@
                      Margin="0,8,0,0"
                      TextWrapping="Wrap" />
           <TextBlock Text="{Binding VerifiedSyncLookupText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,4,0,0"
+                     TextWrapping="Wrap" />
+          <TextBlock Text="{Binding AutoSyncStatusText}"
                      Style="{StaticResource Caption}"
                      Margin="0,4,0,0"
                      TextWrapping="Wrap" />

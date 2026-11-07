@@ -72,8 +72,10 @@ agent-level guardrails and signed threat-intelligence context respectively.
   compiled assets, triples, verified rules and verified-answer lookup health. It draws the verified
   threat graph natively from the same local `/api/graph` data, grouped by the dashboard's categories
   and coloured by severity. **Sync now** triggers the dashboard's own `POST /api/sync`; Axiom does
-  not run a second DKG sync loop. Missing values stay unknown and an offline node is never shown as
-  a clean graph.
+  not run a second DKG sync loop. **Auto-sync** checks every 15 minutes and asks for the incremental
+  catch-up only, so existing local assets stay in place and new graph entries are fetched without
+  repeating the full download. Missing values stay unknown and an offline node is never shown as a
+  clean graph.
 - Agent configuration, sessions and databases are fingerprinted during install, hook repair and
   uninstall. Unexpected deletions or edits are reported and, where possible, restored.
 - **Codex still requires its own `/hooks` trust approval.** Axiom installs the definitions but does
