@@ -263,6 +263,21 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     [ObservableProperty]
     private string _blackboxBrandLabel = "Umanitek Blackbox · checking";
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DkgHealthLabel))]
+    private bool _dkgConnected;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BlackboxHealthLabel))]
+    private bool _blackboxConnected;
+
+    [ObservableProperty]
+    private string _moduleActivitySummary = "No health samples yet.";
+
+    public string DkgHealthLabel => DkgConnected ? "CONNECTED" : "NOT CONNECTED";
+
+    public string BlackboxHealthLabel => BlackboxConnected ? "CONNECTED" : "NOT CONNECTED";
+
     public ObservableCollection<SecurityModule> Modules { get; }
 
     public ObservableCollection<ModuleActivity> Activity { get; } = [];
@@ -471,6 +486,12 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             {
                 Activity.Add(sample);
             }
+
+            ModuleActivitySummary = Activity.Count == 0
+                ? "No health samples yet."
+                : $"{Activity.Count} sample(s) · DKG up {Activity.Count(sample => sample.DkgConnected)} · " +
+                  $"Blackbox up {Activity.Count(sample => sample.BlackboxConnected)} · " +
+                  $"last {Activity[0].At.ToLocalTime():HH:mm:ss}";
         }
         finally
         {
@@ -1690,6 +1711,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     private void Rebuild(OptionalModuleStatus dkg, OptionalModuleStatus blackbox)
     {
+        DkgConnected = dkg.IsConnected;
+        BlackboxConnected = blackbox.IsConnected;
         DkgBrandLabel = dkg.IsConnected
             ? "Powered by OriginTrail · DKG connected"
             : "OriginTrail DKG · not connected";

@@ -2,7 +2,7 @@
 
 **Open-Source Firewall, Network Monitor & Local Agent Protection**
 
-**Version:** 0.7.2 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.7.3 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,14 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.7.3
+
+- Agents page restores the **Module health** history from the WPF application: one small square per
+  loopback health check, green when DKG or Blackbox answered, muted when the module was not running.
+  A summary shows the sample count, how many checks saw each module and the last check time.
+- The two module cards now carry a live health square next to the title (green connected, muted not
+  connected) with the state on hover.
 
 ## What's in 0.7.2
 
