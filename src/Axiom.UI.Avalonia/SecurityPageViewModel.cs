@@ -20,6 +20,20 @@ namespace Axiom.UI.Avalonia;
 /// <summary>One loopback probe sample for the activity strip.</summary>
 public sealed record ModuleActivity(DateTimeOffset At, bool DkgConnected, bool BlackboxConnected);
 
+/// <summary>One square in the module health strip; placeholders keep the 30-check window visible.</summary>
+public sealed record ModuleHealthSlot(bool HasSample, bool DkgConnected, bool BlackboxConnected)
+{
+    public bool DkgOn => HasSample && DkgConnected;
+
+    public bool DkgOff => HasSample && !DkgConnected;
+
+    public bool BlackboxOn => HasSample && BlackboxConnected;
+
+    public bool BlackboxOff => HasSample && !BlackboxConnected;
+
+    public bool IsPlaceholder => !HasSample;
+}
+
 /// <summary>Status of one optional security or intelligence module.</summary>
 public sealed record SecurityModule(
     string Name,
@@ -215,6 +229,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     private bool _communityConnected;
 
     private readonly IUiTimer _activityTimer;
+
+    private readonly IUiTimer _healthTimer;
     private readonly IUserInteraction _ui;
     private readonly ISecurityDialogService _dialogs;
     private readonly IShellActions _shell;
@@ -254,8 +270,18 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         _activityTimer.Tick += (_, _) => _ = RefreshAsync();
         _activityTimer.Start();
 
+        _healthTimer = timers.Create(TimeSpan.FromSeconds(5));
+        _healthTimer.Tick += (_, _) => _ = SampleHealthAsync();
+        _healthTimer.Start();
+
+        SyncModuleHealth();
         _ = RefreshAsync();
     }
+
+    /// <summary>Fixed window of module health squares, oldest on the left.</summary>
+    public const int ModuleHealthWindow = 30;
+
+    public ObservableCollection<ModuleHealthSlot> ModuleHealthSlots { get; } = [];
 
     [ObservableProperty]
     private string _dkgBrandLabel = "OriginTrail DKG · checking";
@@ -436,6 +462,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     {
         _activityTimer.StopTimer();
         _activityTimer.Dispose();
+        _healthTimer.StopTimer();
+        _healthTimer.Dispose();
         _probe.Dispose();
         _virusTotal.Dispose();
         _communityClient.Dispose();
@@ -476,28 +504,83 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             await RefreshAgentsAsync(blackboxTask.Result.IsConnected).ConfigureAwait(true);
             ApplyHookTestStates();
 
-            _activityHistory.Add(new ModuleActivity(
-                DateTimeOffset.Now,
-                dkgTask.Result.IsConnected,
-                blackboxTask.Result.IsConnected));
-
-            Activity.Clear();
-            foreach (var sample in _activityHistory.Items)
-            {
-                Activity.Add(sample);
-            }
-
-            ModuleActivitySummary = Activity.Count == 0
-                ? "No health samples yet."
-                : $"{Activity.Count} sample(s) · DKG up {Activity.Count(sample => sample.DkgConnected)} · " +
-                  $"Blackbox up {Activity.Count(sample => sample.BlackboxConnected)} · " +
-                  $"last {Activity[0].At.ToLocalTime():HH:mm:ss}";
+            AppendHealthSample(dkgTask.Result.IsConnected, blackboxTask.Result.IsConnected);
         }
         finally
         {
             IsBusy = false;
             NotifyStatusProperties();
         }
+    }
+
+    private async Task SampleHealthAsync()
+    {
+        try
+        {
+            var dkgTask = _probe.ProbeDkgAsync(CancellationToken.None);
+            var blackboxTask = _probe.ProbeBlackboxAsync(CancellationToken.None);
+            await Task.WhenAll(dkgTask, blackboxTask).ConfigureAwait(true);
+
+            ApplyBrandLabels(dkgTask.Result.IsConnected, blackboxTask.Result.IsConnected);
+            AppendHealthSample(dkgTask.Result.IsConnected, blackboxTask.Result.IsConnected);
+        }
+#pragma warning disable CA1031 // A single failed probe must not stop the health strip.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+        }
+    }
+
+    private void AppendHealthSample(bool dkgConnected, bool blackboxConnected)
+    {
+        // The 15 s full refresh and the 5 s health timer share the history. Skip a sample that would
+        // land on top of one taken seconds ago so the strip stays one square per interval.
+        if (_activityHistory.Count > 0 &&
+            DateTimeOffset.Now - _activityHistory.Items[^1].At < TimeSpan.FromSeconds(3))
+        {
+            return;
+        }
+
+        _activityHistory.Add(new ModuleActivity(DateTimeOffset.Now, dkgConnected, blackboxConnected));
+        SyncModuleHealth();
+    }
+
+    private void SyncModuleHealth()
+    {
+        Activity.Clear();
+        foreach (var sample in _activityHistory.Items)
+        {
+            Activity.Add(sample);
+        }
+
+        ModuleHealthSlots.Clear();
+        foreach (var sample in _activityHistory.Items)
+        {
+            ModuleHealthSlots.Add(new ModuleHealthSlot(true, sample.DkgConnected, sample.BlackboxConnected));
+        }
+
+        for (var index = _activityHistory.Count; index < ModuleHealthWindow; index++)
+        {
+            ModuleHealthSlots.Add(new ModuleHealthSlot(false, false, false));
+        }
+
+        ModuleActivitySummary = Activity.Count == 0
+            ? $"0/{ModuleHealthWindow} checks · waiting for the first probe"
+            : $"{Activity.Count}/{ModuleHealthWindow} checks · DKG up {Activity.Count(sample => sample.DkgConnected)} · " +
+              $"Blackbox up {Activity.Count(sample => sample.BlackboxConnected)} · " +
+              $"last {Activity[^1].At.ToLocalTime():HH:mm:ss}";
+    }
+
+    private void ApplyBrandLabels(bool dkgConnected, bool blackboxConnected)
+    {
+        DkgConnected = dkgConnected;
+        BlackboxConnected = blackboxConnected;
+        DkgBrandLabel = dkgConnected
+            ? "Powered by OriginTrail · DKG connected"
+            : "OriginTrail DKG · not connected";
+        BlackboxBrandLabel = blackboxConnected
+            ? "Blackbox by Umanitek · dashboard connected"
+            : "Umanitek Blackbox · not connected";
     }
 
     private void SetModuleActionLabel(string moduleName, string label)
@@ -1711,14 +1794,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     private void Rebuild(OptionalModuleStatus dkg, OptionalModuleStatus blackbox)
     {
-        DkgConnected = dkg.IsConnected;
-        BlackboxConnected = blackbox.IsConnected;
-        DkgBrandLabel = dkg.IsConnected
-            ? "Powered by OriginTrail · DKG connected"
-            : "OriginTrail DKG · not connected";
-        BlackboxBrandLabel = blackbox.IsConnected
-            ? "Blackbox by Umanitek · dashboard connected"
-            : "Umanitek Blackbox · not connected";
+        ApplyBrandLabels(dkg.IsConnected, blackbox.IsConnected);
         Modules.Clear();
         Modules.Add(new SecurityModule(
             "Reputation provider",
@@ -1742,7 +1818,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 blackboxInstalled ? "Start" : "Install",
                 blackboxInstalled,
                 _blackboxMode.IsAvailable));
-            var dkgInstalled = _uninstaller.IsDkgInstalled;
+            var dkgInstalled = _installer.IsDkgAvailable;
             Modules.Add(new SecurityModule(
                 "OriginTrail DKG",
                 dkg.Status,
@@ -1751,7 +1827,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 dkg.IsConnected,
                 !dkgInstalled || !dkg.IsConnected,
                 dkgInstalled ? "Start" : "Install",
-                dkgInstalled));
+                _uninstaller.IsDkgInstalled));
         }
 
         Modules.Add(CreateCommunityModule());
