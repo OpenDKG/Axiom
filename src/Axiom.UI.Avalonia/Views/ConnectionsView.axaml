@@ -34,7 +34,25 @@
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
             <DataTemplate>
-              <Grid ColumnDefinitions="1.4*,60,60,1.1*,1.1*,40,80,70,1*" Margin="0,3">
+              <Grid ColumnDefinitions="1.4*,60,60,1.1*,1.1*,40,80,70,1*" Margin="0,3"
+                    Tag="{Binding $parent[ListBox].DataContext}">
+                <Grid.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Copy row details"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyRowCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    <MenuItem Header="Copy executable path"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyPathCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    <Separator />
+                    <MenuItem Header="Copy local endpoint"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyLocalCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    <MenuItem Header="Copy remote endpoint"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyRemoteCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                  </ContextMenu>
+                </Grid.ContextMenu>
                 <TextBlock Grid.Column="0" Text="{Binding AppDisplayName}" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
                 <TextBlock Grid.Column="1" Text="{Binding ProcessId}" Foreground="{DynamicResource Axiom.TextSecondary}" />
                 <TextBlock Grid.Column="2" Text="{Binding ProtocolText}" Foreground="{DynamicResource Axiom.TextSecondary}" />

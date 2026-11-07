@@ -43,8 +43,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _serviceProbe = serviceProbe;
         IsServiceMode = source is ServiceSnapshotSource;
         var interaction = userInteraction ?? new NullUserInteraction();
-        Overview = new OverviewPageViewModel(_monitor, _traffic);
-        Connections = new ConnectionsPageViewModel(_monitor);
+        Overview = new OverviewPageViewModel(_monitor, _traffic, interaction);
+        Connections = new ConnectionsPageViewModel(_monitor, interaction);
         Apps = new AppsPageViewModel(
             _monitor,
             IsServiceMode ? serviceClient : null,

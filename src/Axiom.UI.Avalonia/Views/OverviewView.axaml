@@ -55,6 +55,63 @@
         </StackPanel>
       </Border>
 
+      <Grid ColumnDefinitions="1.6*,12,*">
+        <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}"
+                BorderThickness="1" CornerRadius="8" Padding="14">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" Text="New connection events" FontSize="14" FontWeight="SemiBold"
+                         Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <TextBlock Grid.Column="1" Text="{Binding NewConnectionsText}" FontSize="10"
+                         Foreground="{DynamicResource Axiom.TextMuted}" />
+            </Grid>
+            <ListBox Classes="data-list" ItemsSource="{Binding NewConnectionEvents}" SelectedItem="{Binding SelectedEvent}"
+                     MaxHeight="190" Background="Transparent" BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="70,*" Margin="0,2">
+                    <TextBlock Grid.Column="0" Text="{Binding TimeText}" FontSize="9"
+                               Foreground="{DynamicResource Axiom.TextMuted}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Summary}" FontSize="10"
+                               Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Text="{Binding NewConnectionEventsEmptyText}" FontSize="10"
+                       Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap"
+                       IsVisible="{Binding !HasNewConnectionEvents}" />
+            <TextBlock Text="{Binding SelectedEventDetails}" FontSize="10"
+                       Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}"
+                BorderThickness="1" CornerRadius="8" Padding="14">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Top applications" FontSize="14" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <ItemsControl ItemsSource="{Binding TopApps}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                    <StackPanel Grid.Column="0" Spacing="1">
+                      <TextBlock Text="{Binding Name}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}"
+                                 TextTrimming="CharacterEllipsis" />
+                      <Border Width="{Binding BarWidth}" Height="3" CornerRadius="1.5"
+                              Background="{DynamicResource Axiom.AccentStrong}" HorizontalAlignment="Left" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="{Binding SocketsText}" FontSize="9"
+                               Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </Grid>
+
       <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
         <StackPanel Spacing="10">
           <TextBlock Text="Live sockets" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
@@ -63,7 +120,21 @@
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
               <DataTemplate>
-                <Grid ColumnDefinitions="180,80,220,*" Margin="0,3">
+                <Grid ColumnDefinitions="180,80,220,*" Margin="0,3"
+                      Tag="{Binding $parent[ListBox].DataContext}">
+                  <Grid.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Copy row details"
+                                Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyRowCommand}"
+                                CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                      <MenuItem Header="Copy executable path"
+                                Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyPathCommand}"
+                                CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                      <MenuItem Header="Copy remote endpoint"
+                                Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyRemoteCommand}"
+                                CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    </ContextMenu>
+                  </Grid.ContextMenu>
                   <TextBlock Grid.Column="0" Text="{Binding AppDisplayName}" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
                   <TextBlock Grid.Column="1" Text="{Binding ProtocolText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
                   <TextBlock Grid.Column="2" Text="{Binding RemoteEndpoint}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />

@@ -20,7 +20,25 @@
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
             <DataTemplate>
-              <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
+              <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4"
+                    Tag="{Binding $parent[ListBox].DataContext}">
+                <Grid.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Block outbound"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockOutboundAppCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    <MenuItem Header="Block inbound"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockInboundAppCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    <Separator />
+                    <MenuItem Header="End task"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndTaskAppCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    <MenuItem Header="Copy executable path"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyPathAppCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                  </ContextMenu>
+                </Grid.ContextMenu>
                 <Border Grid.Column="0" Width="34" Height="34" CornerRadius="8" Background="{DynamicResource Axiom.AccentSoft}" Margin="0,0,10,0">
                   <TextBlock Text="{Binding Initial}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource Axiom.Accent}"
                              HorizontalAlignment="Center" VerticalAlignment="Center" />

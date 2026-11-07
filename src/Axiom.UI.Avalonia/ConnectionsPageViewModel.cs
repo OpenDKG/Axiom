@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
@@ -8,12 +9,14 @@ namespace Axiom.UI.Avalonia;
 public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposable
 {
     private readonly ConnectionMonitor _monitor;
+    private readonly IUserInteraction _ui;
     private string? _selectedKey;
 
-    public ConnectionsPageViewModel(ConnectionMonitor monitor)
+    public ConnectionsPageViewModel(ConnectionMonitor monitor, IUserInteraction? ui = null)
         : base("Connections", "Sockets read from this Windows host · read-only", "C")
     {
         _monitor = monitor;
+        _ui = ui ?? new NullUserInteraction();
         _monitor.Updated += OnUpdated;
         ApplyFilters();
     }
@@ -59,6 +62,37 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
     partial void OnSelectedConnectionChanged(ConnectionRow? value) => _selectedKey = value?.Source.RemoteEndpoint is { } remote
         ? $"{value.ProcessId}|{value.ProtocolText}|{value.LocalEndpoint}|{remote}"
         : null;
+
+    [RelayCommand]
+    private Task CopyRowAsync(ConnectionRow? row) => CopyAsync(row, row?.RowTooltip);
+
+    [RelayCommand]
+    private Task CopyPathAsync(ConnectionRow? row) => CopyAsync(row, row?.PathText);
+
+    [RelayCommand]
+    private Task CopyLocalAsync(ConnectionRow? row) => CopyAsync(row, row?.LocalEndpoint);
+
+    [RelayCommand]
+    private Task CopyRemoteAsync(ConnectionRow? row) => CopyAsync(row, row?.RemoteEndpoint);
+
+    private async Task CopyAsync(ConnectionRow? row, string? value)
+    {
+        if (row is null || string.IsNullOrWhiteSpace(value) || value == "—")
+        {
+            return;
+        }
+
+        try
+        {
+            await _ui.CopyTextAsync(value, CancellationToken.None).ConfigureAwait(true);
+            StatusText = "Copied to the clipboard.";
+        }
+        catch (Exception exception) when (exception is
+                     InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
+        {
+            StatusText = "Clipboard is unavailable.";
+        }
+    }
 
     public void Dispose()
     {
