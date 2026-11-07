@@ -82,6 +82,13 @@ public sealed class DesktopLinuxUiTests
             var empty = await SendAsync(http, HttpMethod.Post, "/api/reputation/key", "{}", token);
             Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
 
+            foreach (var path in new[] { "/api/reputation/key", "/api/ai/key", "/api/ai/settings", "/api/autostart", "/api/reputation" })
+            {
+                var malformed = await SendAsync(http, HttpMethod.Post, path, "{", token);
+                Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode);
+                Assert.Contains("invalid-request", await malformed.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+            }
+
             // Static assets must revalidate so an updated app.js replaces the cached one; API data is never cached.
             foreach (var asset in new[] { "/", "/app.js", "/style.css" })
             {

@@ -148,3 +148,30 @@ test('an expired token produces explicit guidance instead of "unauthorized"', as
   await flush();
   assert.match(elements.get('history-body').innerHTML, /Session token missing or expired/);
 });
+
+
+test('a failed next page can be retried without getting stuck', async () => {
+  const { elements, requests } = createPage();
+  elements.get('history-run').click();
+  await flush();
+  requests[0].resolve({
+    status: 200, ok: true,
+    json: async () => ({ totalCount: 250, databasePath: 'db', rows: [] }),
+  });
+  await flush();
+  elements.get('history-next').click();
+  await flush();
+  requests[1].resolve({ status: 503, ok: false, json: async () => ({ error: 'service_unavailable' }) });
+  await flush();
+  elements.get('history-next').click();
+  await flush();
+  assert.equal(requests.length, 3);
+  assert.match(requests[2].url, /offset=200/);
+  requests[2].resolve({
+    status: 200, ok: true,
+    json: async () => ({ totalCount: 250, databasePath: 'db', rows: [] }),
+  });
+  await flush();
+  assert.equal(elements.get('history-prev').disabled, false);
+  assert.equal(elements.get('history-next').disabled, true);
+});

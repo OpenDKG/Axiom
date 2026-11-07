@@ -369,6 +369,11 @@ public static class Program
             return Results.Json(new { error = "credential-unavailable", message = exception.Message }, JsonOptions,
                 statusCode: StatusCodes.Status409Conflict);
         }
+        catch (JsonException)
+        {
+            return Results.Json(new { error = "invalid-request", message = "A valid JSON request body is required." }, JsonOptions,
+                statusCode: StatusCodes.Status400BadRequest);
+        }
         catch (InvalidOperationException exception)
         {
             return Results.Json(new { error = "invalid-request", message = exception.Message }, JsonOptions,

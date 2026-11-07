@@ -19,6 +19,7 @@
   const state = document.getElementById("service-state");
   let snapshot = null;
   let historyOffset = 0;
+  let historyLoadedOffset = 0;
   let historyTotal = 0;
   let historyRequest = 0;
 
@@ -157,6 +158,7 @@
     try {
       const page = await api(url);
       if (request !== historyRequest) return;
+      historyLoadedOffset = offset;
       historyTotal = page.totalCount;
       document.getElementById("history-info").textContent = page.rows.length === 0
         ? `0 of ${historyTotal}`
@@ -176,6 +178,7 @@
         </tr>`).join("") || `<tr><td colspan="7" class="muted">No stored rows in this window.</td></tr>`;
     } catch (error) {
       if (request !== historyRequest) return;
+      historyOffset = historyLoadedOffset;
       document.getElementById("history-body").innerHTML = `<tr><td colspan="7">${esc(error.message)}</td></tr>`;
     }
   }
