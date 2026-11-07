@@ -99,11 +99,18 @@
           <TextBlock Text="{Binding VersionText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
         </StackPanel>
 
-        <ListBox Grid.Row="1" ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
+        <ListBox Grid.Row="1" Classes="nav-list" ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
                  Background="Transparent" BorderThickness="0" Margin="8,0">
           <ListBox.ItemTemplate>
             <DataTemplate>
-              <TextBlock Text="{Binding Title}" Foreground="{DynamicResource Axiom.TextPrimary}" Padding="12,4" />
+              <Grid ColumnDefinitions="3,*">
+                <Border Grid.Column="0" Width="3" Height="16" CornerRadius="1.5"
+                        Background="{DynamicResource Axiom.Accent}" Margin="0,0,9,0"
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
+                <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="12.5"
+                           Foreground="{DynamicResource Axiom.TextPrimary}" Padding="0,4" />
+              </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>

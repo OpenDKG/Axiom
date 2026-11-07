@@ -25,7 +25,7 @@
                 VerticalAlignment="Bottom" Padding="12,6" />
         <Button Grid.Column="8" Content="Export CSV" Command="{Binding ExportCsvCommand}"
                 IsEnabled="{Binding CanExport}" VerticalAlignment="Bottom" Padding="12,6"
-                Background="{DynamicResource Axiom.AccentStrong}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+                Background="{DynamicResource Axiom.Accent}" Foreground="{DynamicResource Axiom.AccentContrast}" />
       </Grid>
     </Border>
 

@@ -47,7 +47,7 @@
                   <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
                   <TextBlock Text="{Binding PathText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}"
                              TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" MaxWidth="420" />
-                  <Border Width="{Binding BarWidth}" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.AccentStrong}"
+                  <Border Width="{Binding BarWidth}" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}"
                           HorizontalAlignment="Left" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0"

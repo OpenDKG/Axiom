@@ -18,13 +18,7 @@ public sealed class TrafficChartControl : Control
     public static readonly StyledProperty<IList<double>?> DownloadSeriesProperty =
         AvaloniaProperty.Register<TrafficChartControl, IList<double>?>(nameof(DownloadSeries));
 
-    private static readonly IBrush GridBrush = new SolidColorBrush(Color.Parse("#2E3A47"));
-    private static readonly IBrush UploadBrush = new SolidColorBrush(Color.Parse("#5EEAD4"));
-    private static readonly IBrush DownloadBrush = new SolidColorBrush(Color.Parse("#1F6FEB"));
-    private static readonly IBrush MutedBrush = new SolidColorBrush(Color.Parse("#8A98A8"));
-    private static readonly Pen GridPen = new(GridBrush, 1);
-    private static readonly Pen UploadPen = new(UploadBrush, 1.6);
-    private static readonly Pen DownloadPen = new(DownloadBrush, 1.6);
+    private IBrush _muted = new SolidColorBrush(Color.Parse("#8A98A8"));
 
     public IList<double>? UploadSeries
     {
@@ -77,10 +71,15 @@ public sealed class TrafficChartControl : Control
         var plotWidth = Math.Max(1, width - paddingLeft - paddingRight);
         var plotHeight = Math.Max(1, height - paddingTop - paddingBottom);
 
+        var gridPen = new Pen(ResolveBrush("Axiom.GridLine", "#2E3A47"), 1);
+        var uploadPen = new Pen(ResolveBrush("Axiom.Upload", "#5EEAD4"), 1.6);
+        var downloadPen = new Pen(ResolveBrush("Axiom.Download", "#1F6FEB"), 1.6);
+        _muted = ResolveBrush("Axiom.TextMuted", "#8A98A8");
+
         for (var line = 0; line <= 4; line++)
         {
             var y = paddingTop + plotHeight * line / 4;
-            context.DrawLine(GridPen, new Point(paddingLeft, y), new Point(paddingLeft + plotWidth, y));
+            context.DrawLine(gridPen, new Point(paddingLeft, y), new Point(paddingLeft + plotWidth, y));
         }
 
         var upload = UploadSeries;
@@ -92,8 +91,8 @@ public sealed class TrafficChartControl : Control
             return;
         }
 
-        DrawSeries(context, upload, UploadPen, max, paddingLeft, paddingTop, plotWidth, plotHeight);
-        DrawSeries(context, download, DownloadPen, max, paddingLeft, paddingTop, plotWidth, plotHeight);
+        DrawSeries(context, upload, uploadPen, max, paddingLeft, paddingTop, plotWidth, plotHeight);
+        DrawSeries(context, download, downloadPen, max, paddingLeft, paddingTop, plotWidth, plotHeight);
 
         DrawText(context, FormatRate(max), new Point(paddingLeft + plotWidth + 6, paddingTop - 4));
         DrawText(context, "up", new Point(paddingLeft + plotWidth + 6, paddingTop + 12));
@@ -162,7 +161,7 @@ public sealed class TrafficChartControl : Control
             ? $"{bytesPerSecond / (1024 * 1024):0.0} MB/s"
             : $"{bytesPerSecond / 1024:0.0} KB/s";
 
-    private static void DrawText(DrawingContext context, string text, Point origin)
+    private void DrawText(DrawingContext context, string text, Point origin)
     {
         var formatted = new FormattedText(
             text,
@@ -170,7 +169,12 @@ public sealed class TrafficChartControl : Control
             FlowDirection.LeftToRight,
             Typeface.Default,
             9,
-            MutedBrush);
+            _muted);
         context.DrawText(formatted, origin);
     }
+
+    private IBrush ResolveBrush(string key, string fallback) =>
+        this.TryFindResource(key, out var value) && value is IBrush brush
+            ? brush
+            : new SolidColorBrush(Color.Parse(fallback));
 }

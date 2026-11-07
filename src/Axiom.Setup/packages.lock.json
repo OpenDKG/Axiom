@@ -14,7 +14,7 @@
       "axiom.ui": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.5.3, )",
+          "Axiom.Contracts": "[0.6.1, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
@@ -24,6 +24,7 @@
         "resolved": "8.4.2",
         "contentHash": "WadCzGEc2U+3e20avRLng4qNtt4zoOGWrdUISqJWrHe3/FSnrYjuM5Sb4yQb09LhkBXrrI4Zt3dLKgRMbItsrg=="
       }
-    }
+    },
+    "net10.0-windows7.0/win-x64": {}
   }
 }
