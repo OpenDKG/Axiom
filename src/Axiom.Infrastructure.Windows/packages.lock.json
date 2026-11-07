@@ -14,7 +14,7 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.6.5, )"
+          "Axiom.Contracts": "[0.7.0, )"
         }
       }
     },

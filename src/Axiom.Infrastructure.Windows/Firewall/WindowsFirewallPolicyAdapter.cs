@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Globalization;
+using System.Net;
 using System.Runtime.InteropServices;
 using Axiom.Contracts;
 using Axiom.Contracts.Firewall;
@@ -243,12 +244,24 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
             var readBack = FindRule(policy, name);
             if (readBack is null || !MatchesSpec(readBack, spec))
             {
-                if (existing is null)
+                // A property that cannot be cleared in place (for example a stale port scope) is
+                // fixed by rebuilding the Axiom-owned rule once rather than reporting a half-state.
+                if (existing is not null)
                 {
                     TryRemove(policy, name);
+                    dynamic rebuilt = Activator.CreateInstance(
+                        Type.GetTypeFromProgID("HNetCfg.FwRule")
+                            ?? throw new InvalidOperationException("Windows Firewall COM rule is not available."))!;
+                    ApplyFields(rebuilt, spec, name);
+                    policy.Rules.Add(rebuilt);
+                    readBack = FindRule(policy, name);
                 }
 
-                return Failed(spec.ManagedRuleId, "rule.verify_failed", "The OS rule did not read back as written.");
+                if (readBack is null || !MatchesSpec(readBack, spec))
+                {
+                    TryRemove(policy, name);
+                    return Failed(spec.ManagedRuleId, "rule.verify_failed", "The OS rule did not read back as written.");
+                }
             }
 
             return new RuleApplyResult
@@ -260,7 +273,7 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
                 VerifiedUtc = DateTimeOffset.UtcNow,
             };
         }
-        catch (Exception exception) when (exception is COMException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception exception) when (exception is COMException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
             return Failed(spec.ManagedRuleId, "rule.apply_failed", exception.Message);
         }
@@ -352,36 +365,56 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
 
     internal static void ApplyFields(dynamic rule, RuleSpec spec, string name)
     {
-        rule.Name = name;
-        rule.Description = spec.Description ?? $"Axiom managed rule {spec.ManagedRuleId:D}";
-        rule.ApplicationName = spec.AppPath;
-        rule.Direction = spec.Direction == FirewallDirection.Outbound ? NetFwDirectionOut : NetFwDirectionIn;
-        rule.Action = spec.Action == FirewallAction.Block ? NetFwActionBlock : NetFwActionAllow;
-        rule.Profiles = (int)spec.Profiles;
-        rule.Protocol = spec.Protocol switch
-        {
-            NetworkProtocol.Tcp => NetFwProtocolTcp,
-            NetworkProtocol.Udp => NetFwProtocolUdp,
-            _ => NetFwProtocolAny,
-        };
+        SetField(() => rule.Name = name, "Name");
+        SetField(() => rule.Description = spec.Description ?? $"Axiom managed rule {spec.ManagedRuleId:D}", "Description");
+        SetField(() => rule.ApplicationName = spec.AppPath, "ApplicationName");
+        SetField(
+            () => rule.Direction = spec.Direction == FirewallDirection.Outbound ? NetFwDirectionOut : NetFwDirectionIn,
+            "Direction");
+        SetField(() => rule.Profiles = (int)spec.Profiles, "Profiles");
+        SetField(() => rule.Action = spec.Action == FirewallAction.Block ? NetFwActionBlock : NetFwActionAllow, "Action");
+        SetField(
+            () => rule.Protocol = spec.Protocol switch
+            {
+                NetworkProtocol.Tcp => NetFwProtocolTcp,
+                NetworkProtocol.Udp => NetFwProtocolUdp,
+                _ => NetFwProtocolAny,
+            },
+            "Protocol");
+        SetField(() => rule.Enabled = spec.Enabled, "Enabled");
+        SetField(() => rule.Grouping = "Axiom", "Grouping");
 
-        if (spec.RemoteAddresses.Count > 0)
+        // The port scope is only meaningful for TCP/UDP. INetFwRule rejects a port string on the
+        // "any protocol" rule (E_INVALIDARG), which is the default shape of a Shield block.
+        // The port scope is only meaningful for TCP/UDP. INetFwRule rejects any RemotePorts value
+        // while the protocol is "any" (ArgumentException / E_INVALIDARG), which is the default
+        // shape of a Shield block, so the property is left at its empty default there.
+        SetField(
+            () => rule.RemoteAddresses = spec.RemoteAddresses.Count > 0
+                ? string.Join(',', spec.RemoteAddresses)
+                : "*",
+            "RemoteAddresses");
+
+        if (spec.Protocol != NetworkProtocol.Any)
         {
-            rule.RemoteAddresses = string.Join(',', spec.RemoteAddresses);
+            SetField(
+                () => rule.RemotePorts = string.IsNullOrWhiteSpace(spec.RemotePorts) ? "*" : spec.RemotePorts,
+                "RemotePorts");
         }
-        else
+    }
+
+    private static void SetField(Action assignment, string field)
+    {
+        try
         {
-            rule.RemoteAddresses = "*";
+            assignment();
         }
-
-        // Reusing an existing OS rule must actively clear a previous port restriction. Leaving the
-        // property untouched would keep the old scope while reporting a successful update.
-        rule.RemotePorts = !string.IsNullOrWhiteSpace(spec.RemotePorts) && spec.Protocol != NetworkProtocol.Any
-            ? spec.RemotePorts
-            : "*";
-
-        rule.Enabled = spec.Enabled;
-        rule.Grouping = "Axiom";
+        catch (Exception exception) when (exception is COMException or ArgumentException)
+        {
+            throw new InvalidOperationException(
+                $"Firewall rule field '{field}' was rejected: {exception.Message} (0x{exception.HResult:X8}).",
+                exception);
+        }
     }
 
     internal static bool MatchesSpec(dynamic rule, RuleSpec spec)
@@ -424,13 +457,103 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
     private static bool AddressesMatch(string? actual, IReadOnlyList<string> expected)
     {
         var actualValues = SplitList(actual)
+            .Select(value => NormalizeAddress(value) ?? value)
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var expectedValues = expected
+            .Select(value => NormalizeAddress(value) ?? value)
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         return actualValues.SequenceEqual(expectedValues, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Windows Firewall rewrites IPv4 CIDR to address/mask form ("1.0.0.0/8" reads back as
+    /// "1.0.0.0/255.0.0.0"). Both forms are reduced to one canonical network/prefix string so the
+    /// read-back comparison checks the scope, not the notation.
+    /// </summary>
+    internal static string? NormalizeAddress(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value == "*")
+        {
+            return null;
+        }
+
+        var slash = value.IndexOf('/');
+        if (slash < 0)
+        {
+            return IPAddress.TryParse(value, out var single) ? single.ToString() : null;
+        }
+
+        if (!IPAddress.TryParse(value[..slash], out var address))
+        {
+            return null;
+        }
+
+        var suffix = value[(slash + 1)..];
+        int prefix;
+
+        if (suffix.Contains('.') || suffix.Contains(':'))
+        {
+            if (!IPAddress.TryParse(suffix, out var mask) ||
+                mask.AddressFamily != address.AddressFamily)
+            {
+                return null;
+            }
+
+            prefix = CountBits(mask.GetAddressBytes());
+        }
+        else if (!int.TryParse(suffix, System.Globalization.NumberStyles.None,
+                     System.Globalization.CultureInfo.InvariantCulture, out prefix))
+        {
+            return null;
+        }
+
+        var maxPrefix = address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 32 : 128;
+        if (prefix < 0 || prefix > maxPrefix)
+        {
+            return null;
+        }
+
+        var bytes = address.GetAddressBytes();
+        var fullBytes = prefix / 8;
+        var remaining = prefix % 8;
+
+        for (var index = 0; index < bytes.Length; index++)
+        {
+            if (index < fullBytes)
+            {
+                continue;
+            }
+
+            if (index == fullBytes && remaining > 0)
+            {
+                bytes[index] &= (byte)(0xFF << (8 - remaining));
+                continue;
+            }
+
+            bytes[index] = 0;
+        }
+
+        return $"{new IPAddress(bytes)}/{prefix}";
+    }
+
+    private static int CountBits(byte[] mask)
+    {
+        var bits = 0;
+        foreach (var value in mask)
+        {
+            for (var bit = 7; bit >= 0; bit--)
+            {
+                if ((value & (1 << bit)) != 0)
+                {
+                    bits++;
+                }
+            }
+        }
+
+        return bits;
     }
 
     private static object? FindRule(dynamic policy, string name)
