@@ -221,9 +221,13 @@ partial), Blackbox settings, DKG log and first-run onboarding.
 The Avalonia window now uses the Axiom custom title bar (no native caption) with drag, double-click
 maximize, minimize, maximize and close, on top of a native resizable border.
 
+At 1080×720 the Avalonia shell fits all eleven navigation destinations and the Overview KPI row;
+longer content scrolls inside its card. This addresses the baseline WPF clipping for the shell and
+KPI row. The 125/150/200% DPI passes are still uncaptured.
+
 Still outstanding:
 
-- Windows 10 19044 DPI evidence at 125/150/200% and 1080×720.
+- Windows 10 19044 DPI evidence at 125/150/200%.
 - A controlled performance run with a fixed workload/resolution/mode/idle period.
 - Hosted Linux/macOS CI verification for `.github/workflows/portable.yml`; the workflow exists but
   has not run on a hosted runner from this workstation.

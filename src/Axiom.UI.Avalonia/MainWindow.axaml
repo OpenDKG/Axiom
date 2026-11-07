@@ -63,8 +63,8 @@
 
     <Border Grid.Row="1" Grid.Column="0" Background="#11161D" BorderBrush="#2E3A47" BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,*,Auto">
-        <StackPanel Grid.Row="0" Margin="20,22,20,18" Spacing="10">
-          <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-lockup.png" Width="176" Height="59" Stretch="Uniform" HorizontalAlignment="Left" />
+        <StackPanel Grid.Row="0" Margin="20,14,20,12" Spacing="8">
+          <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-lockup.png" Width="160" Height="54" Stretch="Uniform" HorizontalAlignment="Left" />
           <TextBlock Text="LIVE · READ-ONLY" Foreground="#5EEAD4" FontSize="10" FontWeight="SemiBold" />
           <TextBlock Text="{Binding VersionText}" Foreground="#8A98A8" FontSize="11" />
         </StackPanel>
@@ -73,7 +73,7 @@
                  Background="Transparent" BorderThickness="0" Margin="8,0">
           <ListBox.ItemTemplate>
             <DataTemplate>
-              <TextBlock Text="{Binding Title}" Foreground="#D6DEE7" Padding="12,9" />
+              <TextBlock Text="{Binding Title}" Foreground="#D6DEE7" Padding="12,4" />
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
