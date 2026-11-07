@@ -122,7 +122,8 @@ never rendered as live protection.
    separate cutover review. The WPF 0.5.3 package remains the published application.
 
 The Avalonia window already uses the Axiom custom title bar with native resize border, drag,
-double-click maximize and explicit minimize/maximize/close buttons.
+double-click maximize and explicit minimize/maximize/close buttons. The exact DPI, performance,
+CI and cutover gates are listed in `docs/DPI_AND_CUTOVER_CHECKLIST.md`.
 
 ## 8. Adding a Linux/macOS host later
 

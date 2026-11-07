@@ -9,7 +9,7 @@ SDK: 10.0.403. Configuration: `Release`.
 |---|---|
 | `dotnet restore Axiom.sln --locked-mode` | passed (also after standalone publish) |
 | `dotnet build Axiom.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Axiom.sln -c Release --no-build` | **374/374 passed** |
+| `dotnet test Axiom.sln -c Release --no-build` | **375/375 passed** |
 | `dotnet publish src\Axiom.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 70.1 MB single EXE |
 
 | Test project | Count | Notes |
@@ -22,7 +22,7 @@ SDK: 10.0.403. Configuration: `Release`.
 | MCP server | 33 | endpoint parsing, private IPv4/IPv6, indicator type, invalid-input handling, truthful unavailable states |
 | UI | 140 | view models, settings stores, lifecycle hook contracts, Codex trust hashes, session readers, OpenCode lifecycle generation, ZCode/DeepSeek hook generation, firewall defaults and display status |
 | Presentation | 6 | portable monitor, formatting, service probe and offline service states |
-| UI.Avalonia | 4 | navigation inventory, service-required/offline page states and no-invented-data checks |
+| UI.Avalonia | 5 | navigation inventory, service-required/offline page states and no-invented-data checks |
 
 ### History coverage
 

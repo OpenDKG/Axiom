@@ -31,7 +31,7 @@ Commands were run from the migration worktree.
 |---|---|
 | `dotnet restore Axiom.sln --locked-mode` | **passed after normalizing the committed lock files** |
 | `dotnet build Axiom.sln -c Release --no-restore` | **0 warnings, 0 errors** |
-| `dotnet test Axiom.sln -c Release --no-build --no-restore` | **374/374 passed** |
+| `dotnet test Axiom.sln -c Release --no-build --no-restore` | **375/375 passed** |
 
 The initial baseline exposed a pre-existing lock/RID mismatch: source projects carried `win-x64`
 lock sections while test projects had none. The normalization removed those stale RID sections and
@@ -50,8 +50,8 @@ Test breakdown:
 | Axiom.Service.Tests | 16 |
 | Axiom.UI.Tests | 140 |
 | Axiom.Presentation.Tests | 6 |
-| Axiom.UI.Avalonia.Tests | 4 |
-| **Total** | **374** |
+| Axiom.UI.Avalonia.Tests | 5 |
+| **Total** | **375** |
 
 ## 3. Screenshot baseline
 
