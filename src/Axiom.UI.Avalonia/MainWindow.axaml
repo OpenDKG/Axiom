@@ -6,8 +6,35 @@
         Title="Axiom — Open-Source Firewall &amp; Security Monitor"
         Width="1460" Height="900" MinWidth="1080" MinHeight="720"
         Background="{DynamicResource Axiom.Window}" Foreground="{DynamicResource Axiom.TextPrimary}"
-        WindowDecorations="BorderOnly"
+        WindowDecorations="None"
         WindowStartupLocation="CenterScreen">
+  <Window.Styles>
+    <Style Selector="Button.caption">
+      <Setter Property="Width" Value="46" />
+      <Setter Property="Height" Value="38" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+      <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.caption:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    </Style>
+    <Style Selector="Button.caption:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.Border}" />
+    </Style>
+    <Style Selector="Button.caption.close:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#C42B1C" />
+    </Style>
+    <Style Selector="Button.caption.close:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="#9F1D14" />
+    </Style>
+  </Window.Styles>
   <Window.DataTemplates>
     <DataTemplate DataType="local:OverviewPageViewModel">
       <views:OverviewView />
@@ -53,10 +80,13 @@
           <TextBlock Text="AXIOM" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <TextBlock Text="Network activity &amp; security" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
         </StackPanel>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-          <Button Content="—" Width="42" Height="30" Padding="0" Click="OnMinimizeClicked" Background="Transparent" Foreground="{DynamicResource Axiom.TextPrimary}" />
-          <Button Content="□" Width="42" Height="30" Padding="0" Click="OnMaximizeClicked" Background="Transparent" Foreground="{DynamicResource Axiom.TextPrimary}" />
-          <Button Content="✕" Width="42" Height="30" Padding="0" Click="OnCloseClicked" Background="Transparent" Foreground="{DynamicResource Axiom.TextPrimary}" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0" VerticalAlignment="Stretch">
+          <Button Classes="caption" Content="&#xE921;" ToolTip.Tip="Minimize"
+                  Click="OnMinimizeClicked" />
+          <Button x:Name="MaximizeButton" Classes="caption" Content="&#xE922;" ToolTip.Tip="Maximize"
+                  Click="OnMaximizeClicked" />
+          <Button Classes="caption close" Content="&#xE8BB;" ToolTip.Tip="Close"
+                  Click="OnCloseClicked" />
         </StackPanel>
       </Grid>
     </Border>
