@@ -58,7 +58,8 @@ public partial class App : Application
                 new ProcessActions(),
                 theme,
                 autostart,
-                new DpapiApiKeyProtector());
+                new DpapiApiKeyProtector(),
+                new WindowsDnsAdapterHelper());
             window = new MainWindow { DataContext = _shell };
             desktop.MainWindow = window;
             _shell.Start();

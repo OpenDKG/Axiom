@@ -28,7 +28,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         IProcessActions? processActions = null,
         IThemeService? themeService = null,
         IAutostartService? autostartService = null,
-        IApiKeyProtector? apiKeyProtector = null)
+        IApiKeyProtector? apiKeyProtector = null,
+        IDnsAdapterHelper? dnsAdapterHelper = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(timers);
@@ -49,6 +50,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             timers,
             interaction);
         Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction);
+        PrivacyShield = new PrivacyShieldPageViewModel(
+            IsServiceMode ? serviceClient : null,
+            interaction,
+            dnsAdapterHelper ?? new UnsupportedDnsAdapterHelper(),
+            timers);
         AiAnalyst = new AiAnalystPageViewModel(
             _monitor,
             apiKeyProtector ?? new UnsupportedApiKeyProtector(),
@@ -59,7 +65,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             IsServiceMode,
             themeService ?? new FixedThemeService(),
             autostartService ?? new UnsupportedAutostartService());
-        Pages = [Overview, Connections, Apps, Events, Firewall, AiAnalyst, Support, Settings];
+        Pages = [Overview, Connections, Apps, Events, Firewall, PrivacyShield, AiAnalyst, Support, Settings];
         _selectedPage = Overview;
         _monitor.Updated += OnMonitorUpdated;
     }
@@ -74,6 +80,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public FirewallPageViewModel Firewall { get; }
 
+    public PrivacyShieldPageViewModel PrivacyShield { get; }
+
     public AiAnalystPageViewModel AiAnalyst { get; }
 
     public SupportPageViewModel Support { get; }
@@ -84,6 +92,15 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private PageViewModel _selectedPage;
+
+    partial void OnSelectedPageChanged(PageViewModel value)
+    {
+        (_activePage as IActivatablePage)?.Deactivate();
+        _activePage = value;
+        (value as IActivatablePage)?.Activate();
+    }
+
+    private PageViewModel? _activePage;
 
     [ObservableProperty]
     private string _statusMonitoringText = "Monitoring: starting";
@@ -129,6 +146,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Apps.Dispose();
         Events.Dispose();
         Firewall.Dispose();
+        PrivacyShield.Dispose();
         AiAnalyst.Dispose();
         Settings.Dispose();
         _traffic.Dispose();

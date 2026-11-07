@@ -23,6 +23,9 @@
     <DataTemplate DataType="local:FirewallPageViewModel">
       <views:FirewallView />
     </DataTemplate>
+    <DataTemplate DataType="local:PrivacyShieldPageViewModel">
+      <views:PrivacyShieldView />
+    </DataTemplate>
     <DataTemplate DataType="local:AiAnalystPageViewModel">
       <views:AiAnalystView />
     </DataTemplate>
