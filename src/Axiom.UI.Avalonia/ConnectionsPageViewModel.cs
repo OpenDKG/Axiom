@@ -25,7 +25,12 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
 
     public ObservableCollection<ConnectionRow> VisibleConnections { get; } = [];
 
+    public ObservableCollection<ConnectionAppGroup> Groups { get; } = [];
+
     public IReadOnlyList<string> ProtocolOptions { get; } = ["All", "TCP", "UDP"];
+
+    [ObservableProperty]
+    private bool _isGroupedByApp;
 
     [ObservableProperty]
     private string _statusText = "Connecting to the socket inventory…";
@@ -130,6 +135,22 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         foreach (var row in filtered)
         {
             VisibleConnections.Add(row);
+        }
+
+        Groups.Clear();
+        foreach (var group in VisibleConnections
+                     .GroupBy(
+                         row => row.PathText.Length > 0 ? row.PathText : row.AppDisplayName,
+                         StringComparer.OrdinalIgnoreCase)
+                     .OrderByDescending(group => group.Count())
+                     .ThenBy(group => group.First().AppDisplayName, StringComparer.OrdinalIgnoreCase))
+        {
+            var rows = group.ToList();
+            Groups.Add(new ConnectionAppGroup(
+                group.Key,
+                rows[0].AppDisplayName,
+                rows[0].PathText,
+                rows));
         }
 
         if (_selectedKey is not null)
