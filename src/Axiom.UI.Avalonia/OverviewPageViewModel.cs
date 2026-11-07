@@ -55,8 +55,28 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private string _selectedEventDetails =
         "Select a first-observed connection to see details.";
 
-    partial void OnSelectedEventChanged(NewConnectionMarkerEvent? value) =>
+    private string? _selectedEventKey;
+    private bool _restoringEvents;
+
+    partial void OnSelectedEventChanged(NewConnectionMarkerEvent? value)
+    {
+        if (_restoringEvents)
+        {
+            return;
+        }
+
+        _selectedEventKey = value is null ? null : EventKey(value);
         SelectedEventDetails = value?.Details ?? "Select a first-observed connection to see details.";
+    }
+
+    private static string EventKey(NewConnectionMarkerEvent item) =>
+        string.Join(
+            "|",
+            item.Protocol,
+            item.ProcessId,
+            item.Local,
+            item.Remote,
+            item.FirstSeenUtc.UtcTicks);
 
     public ObservableCollection<double> UploadSeries => _traffic.UploadSeries;
 
@@ -198,6 +218,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
             }
         }
 
+        var selectedKey = _selectedEventKey;
         var events = _sessionEvents
             .Where(item => now - item.FirstSeenUtc >= TimeSpan.Zero &&
                            now - item.FirstSeenUtc <= window)
@@ -205,31 +226,45 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
             .TakeLast(8)
             .ToList();
 
-        NewConnectionEvents.Clear();
-        for (var index = 0; index < events.Count; index++)
+        // A busy host can produce more than eight events in a few seconds. Keep the user's
+        // selected event in the visible list so the details panel does not vanish on the next poll.
+        if (selectedKey is not null &&
+            !events.Any(item => EventKey(item) == selectedKey) &&
+            _sessionEvents.FirstOrDefault(item =>
+                EventKey(item) == selectedKey &&
+                now - item.FirstSeenUtc >= TimeSpan.Zero &&
+                now - item.FirstSeenUtc <= window) is { } pinned)
         {
-            NewConnectionEvents.Add(events[index] with { Number = index + 1 });
+            events.Add(pinned);
+            events = events.OrderBy(item => item.FirstSeenUtc).ToList();
+        }
+
+        // Clearing the observable collection makes the ListBox push null into SelectedEvent.
+        // Keep the user's selected event key across the refresh and restore it afterwards.
+        _restoringEvents = true;
+        try
+        {
+            NewConnectionEvents.Clear();
+            for (var index = 0; index < events.Count; index++)
+            {
+                NewConnectionEvents.Add(events[index] with { Number = index + 1 });
+            }
+
+            SelectedEvent = selectedKey is null
+                ? null
+                : NewConnectionEvents.FirstOrDefault(item => EventKey(item) == selectedKey);
+            SelectedEventDetails = SelectedEvent?.Details
+                ?? "Select a first-observed connection to see details.";
+        }
+        finally
+        {
+            _restoringEvents = false;
         }
 
         HasNewConnectionEvents = events.Count > 0;
         NewConnectionEventsEmptyText = events.Count == 0
             ? "No first-observed connections retained for this period in this UI session."
             : "Markers reflect first-observed connections in this UI session, not verified threats.";
-
-        var selectedKey = SelectedEvent is null
-            ? null
-            : string.Join(
-                "|",
-                SelectedEvent.Protocol,
-                SelectedEvent.ProcessId,
-                SelectedEvent.Local,
-                SelectedEvent.Remote,
-                SelectedEvent.FirstSeenUtc.UtcTicks);
-        SelectedEvent = selectedKey is null
-            ? null
-            : NewConnectionEvents.FirstOrDefault(item =>
-                string.Join("|", item.Protocol, item.ProcessId, item.Local, item.Remote, item.FirstSeenUtc.UtcTicks) ==
-                selectedKey);
 
         var groups = AppGrouping.Group(_monitor.Connections).Take(5).ToList();
         var largest = groups.Count == 0 ? 0 : groups[0].SocketCount;
