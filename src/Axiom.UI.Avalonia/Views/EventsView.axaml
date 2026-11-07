@@ -1,0 +1,148 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Axiom.UI.Avalonia.Views.EventsView">
+  <Grid RowDefinitions="Auto,Auto,*" Margin="24,18,24,24">
+    <Border Grid.Row="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="14">
+      <Grid ColumnDefinitions="Auto,14,Auto,14,*,14,Auto,10,Auto">
+        <StackPanel Grid.Column="0" Spacing="5">
+          <TextBlock Text="Range" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
+          <ComboBox Width="92" ItemsSource="{Binding Ranges}" SelectedItem="{Binding SelectedRange}" />
+        </StackPanel>
+        <StackPanel Grid.Column="2" Spacing="5">
+          <TextBlock Text="Category" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
+          <ComboBox Width="110" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" />
+        </StackPanel>
+        <StackPanel Grid.Column="4" Spacing="5">
+          <TextBlock Text="Search app, path, remote or PID" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
+          <TextBox Text="{Binding SearchText}" PlaceholderText="Search…" />
+        </StackPanel>
+        <StackPanel Grid.Column="6" VerticalAlignment="Bottom" Spacing="5" Margin="0,0,0,2">
+          <CheckBox Content="Group by application" IsChecked="{Binding IsGroupedByApp}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <TextBlock Text="Times are stored in UTC and shown in local time. Byte counts are not stored yet."
+                     Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" TextWrapping="Wrap" MaxWidth="260" />
+        </StackPanel>
+        <Button Grid.Column="7" Content="Refresh" Command="{Binding RefreshCommand}"
+                VerticalAlignment="Bottom" Padding="12,6" />
+        <Button Grid.Column="8" Content="Export CSV" Command="{Binding ExportCsvCommand}"
+                IsEnabled="{Binding CanExport}" VerticalAlignment="Bottom" Padding="12,6"
+                Background="{DynamicResource Axiom.AccentStrong}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+      </Grid>
+    </Border>
+
+    <TextBlock Grid.Row="1" Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11"
+               TextWrapping="Wrap" Margin="2,10,0,0" />
+
+    <Border Grid.Row="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
+            CornerRadius="8" Padding="0" Margin="0,10,0,0">
+      <Grid RowDefinitions="Auto,*">
+        <Border Grid.Row="0" Padding="16,12" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="Event timeline" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <TextBlock Text="Persisted network flows from the local service. Other event feeds are not recorded in this build."
+                         Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" Margin="0,2,0,0" />
+            </StackPanel>
+            <Border Grid.Column="1" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,2" VerticalAlignment="Top">
+              <TextBlock Text="NETWORK" Foreground="{DynamicResource Axiom.Accent}" FontSize="9" FontWeight="Bold" />
+            </Border>
+          </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+          <Grid IsVisible="{Binding !IsGroupedByApp}" RowDefinitions="Auto,*">
+            <Grid Grid.Row="0" ColumnDefinitions="70,1.15*,56,56,1.05*,1.15*,40,84,78,80,80" Margin="16,10,16,6">
+              <TextBlock Grid.Column="0" Text="TYPE" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+              <TextBlock Grid.Column="1" Text="APP" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+              <TextBlock Grid.Column="2" Text="PID" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+              <TextBlock Grid.Column="3" Text="PROTO" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+              <TextBlock Grid.Column="4" Text="LOCAL" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+              <TextBlock Grid.Column="5" Text="REMOTE" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+              <TextBlock Grid.Column="6" Text="DIR" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+              <TextBlock Grid.Column="7" Text="STATE" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+              <TextBlock Grid.Column="8" Text="QUALITY" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+              <TextBlock Grid.Column="9" Text="FIRST" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+              <TextBlock Grid.Column="10" Text="LAST" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+            </Grid>
+            <ListBox Grid.Row="1" Classes="data-list" ItemsSource="{Binding Rows}" Background="Transparent" BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="70,1.15*,56,56,1.05*,1.15*,40,84,78,80,80" Margin="0,2">
+                    <TextBlock Grid.Column="0" Text="{Binding TypeText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <TextBlock Grid.Column="1" Text="{Binding AppDisplayName}" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="2" Text="{Binding ProcessId}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <TextBlock Grid.Column="3" Text="{Binding Protocol}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <TextBlock Grid.Column="4" Text="{Binding LocalEndpoint}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="5" Text="{Binding RemoteEndpoint}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="6" Text="{Binding DirectionText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <TextBlock Grid.Column="7" Text="{Binding State}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <TextBlock Grid.Column="8" Text="{Binding Quality}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <TextBlock Grid.Column="9" Text="{Binding FirstSeenText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <TextBlock Grid.Column="10" Text="{Binding LastSeenText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Grid>
+
+          <ScrollViewer IsVisible="{Binding IsGroupedByApp}" VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Disabled" Margin="0,4,0,0">
+            <ItemsControl ItemsSource="{Binding AppGroups}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1" Padding="12,4"
+                          HorizontalAlignment="Stretch">
+                    <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}" HorizontalContentAlignment="Stretch"
+                              HorizontalAlignment="Stretch" Foreground="{DynamicResource Axiom.TextPrimary}">
+                      <Expander.Header>
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                          <StackPanel Grid.Column="0" Spacing="2" Margin="0,0,14,0">
+                            <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+                            <TextBlock Text="{Binding SummaryText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+                            <TextBlock Text="{Binding PathText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}"
+                                       TextTrimming="CharacterEllipsis" />
+                          </StackPanel>
+                          <TextBlock Grid.Column="1" Text="{Binding CountText}" FontSize="10"
+                                     Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+                        </Grid>
+                      </Expander.Header>
+                      <ListBox ItemsSource="{Binding Events}" Background="Transparent" BorderThickness="0"
+                               MaxHeight="260" Margin="0,8,0,0">
+                        <ListBox.ItemTemplate>
+                          <DataTemplate>
+                            <Grid ColumnDefinitions="56,56,1.05*,1.15*,40,84,78,80,80" Margin="0,2">
+                              <TextBlock Grid.Column="0" Text="{Binding ProcessId}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                              <TextBlock Grid.Column="1" Text="{Binding Protocol}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                              <TextBlock Grid.Column="2" Text="{Binding LocalEndpoint}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                              <TextBlock Grid.Column="3" Text="{Binding RemoteEndpoint}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                              <TextBlock Grid.Column="4" Text="{Binding DirectionText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                              <TextBlock Grid.Column="5" Text="{Binding State}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                              <TextBlock Grid.Column="6" Text="{Binding Quality}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                              <TextBlock Grid.Column="7" Text="{Binding FirstSeenText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                              <TextBlock Grid.Column="8" Text="{Binding LastSeenText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                            </Grid>
+                          </DataTemplate>
+                        </ListBox.ItemTemplate>
+                      </ListBox>
+                    </Expander>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+
+          <Border IsVisible="{Binding IsEmpty}" Background="{DynamicResource Axiom.Surface}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520" Spacing="6">
+              <TextBlock Text="No events in this view." FontSize="15" FontWeight="SemiBold"
+                         Foreground="{DynamicResource Axiom.TextPrimary}" HorizontalAlignment="Center" />
+              <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" TextAlignment="Center"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="Network events require the local service (start with --service). File, agent, system and blocked event feeds are not recorded yet."
+                         Foreground="{DynamicResource Axiom.TextMuted}" TextAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </Grid>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

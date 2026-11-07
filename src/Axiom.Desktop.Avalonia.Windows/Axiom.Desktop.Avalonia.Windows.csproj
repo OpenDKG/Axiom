@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>Axiom.Desktop.Avalonia.Windows</RootNamespace>
+    <AssemblyName>Axiom.Desktop.Avalonia.Windows</AssemblyName>
+    <ApplicationIcon>..\Axiom.UI\Resources\axiom.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Axiom.UI.Avalonia\Axiom.UI.Avalonia.csproj" />
+    <ProjectReference Include="..\Axiom.Presentation\Axiom.Presentation.csproj" />
+    <ProjectReference Include="..\Axiom.Persistence\Axiom.Persistence.csproj" />
+    <ProjectReference Include="..\Axiom.Infrastructure.Windows\Axiom.Infrastructure.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\community\feed.json"
+             Link="community\feed.json"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      PublishSingleFile adds the ILLink task package during publish restore. Referencing it here
+      keeps packages.lock.json identical for normal restore and standalone publish.
+    -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

@@ -397,31 +397,31 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.4.21, )"
+          "Axiom.Contracts": "[0.5.3, )"
         }
       },
       "axiom.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.4.21, )",
-          "Axiom.Core": "[0.4.21, )"
+          "Axiom.Contracts": "[0.5.3, )",
+          "Axiom.Core": "[0.5.3, )"
         }
       },
       "axiom.persistence": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Data.Sqlite": "[10.0.14, )",
-          "Axiom.Contracts": "[0.4.21, )"
+          "Axiom.Contracts": "[0.5.3, )",
+          "Microsoft.Data.Sqlite": "[10.0.14, )"
         }
       },
       "axiom.service": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Extensions.Hosting.WindowsServices": "[10.0.14, )",
-          "Axiom.Contracts": "[0.4.21, )",
-          "Axiom.Core": "[0.4.21, )",
-          "Axiom.Infrastructure.Windows": "[0.4.21, )",
-          "Axiom.Persistence": "[0.4.21, )"
+          "Axiom.Contracts": "[0.5.3, )",
+          "Axiom.Core": "[0.5.3, )",
+          "Axiom.Infrastructure.Windows": "[0.5.3, )",
+          "Axiom.Persistence": "[0.5.3, )",
+          "Microsoft.Extensions.Hosting.WindowsServices": "[10.0.14, )"
         }
       },
       "Microsoft.Data.Sqlite": {

@@ -99,14 +99,14 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.4.21, )"
+          "Axiom.Contracts": "[0.5.3, )"
         }
       },
       "axiom.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.4.21, )",
-          "Axiom.Core": "[0.4.21, )"
+          "Axiom.Contracts": "[0.5.3, )",
+          "Axiom.Core": "[0.5.3, )"
         }
       }
     }

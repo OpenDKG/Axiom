@@ -1,0 +1,176 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+using System.Collections.Specialized;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Media;
+
+namespace Axiom.UI.Avalonia.Controls;
+
+/// <summary>
+/// Minimal measured-throughput chart. It plots the portable <c>TrafficEngine</c> samples and never
+/// synthesizes history: a gap in the series stays a gap.
+/// </summary>
+public sealed class TrafficChartControl : Control
+{
+    public static readonly StyledProperty<IList<double>?> UploadSeriesProperty =
+        AvaloniaProperty.Register<TrafficChartControl, IList<double>?>(nameof(UploadSeries));
+
+    public static readonly StyledProperty<IList<double>?> DownloadSeriesProperty =
+        AvaloniaProperty.Register<TrafficChartControl, IList<double>?>(nameof(DownloadSeries));
+
+    private static readonly IBrush GridBrush = new SolidColorBrush(Color.Parse("#2E3A47"));
+    private static readonly IBrush UploadBrush = new SolidColorBrush(Color.Parse("#5EEAD4"));
+    private static readonly IBrush DownloadBrush = new SolidColorBrush(Color.Parse("#1F6FEB"));
+    private static readonly IBrush MutedBrush = new SolidColorBrush(Color.Parse("#8A98A8"));
+    private static readonly Pen GridPen = new(GridBrush, 1);
+    private static readonly Pen UploadPen = new(UploadBrush, 1.6);
+    private static readonly Pen DownloadPen = new(DownloadBrush, 1.6);
+
+    public IList<double>? UploadSeries
+    {
+        get => GetValue(UploadSeriesProperty);
+        set => SetValue(UploadSeriesProperty, value);
+    }
+
+    public IList<double>? DownloadSeries
+    {
+        get => GetValue(DownloadSeriesProperty);
+        set => SetValue(DownloadSeriesProperty, value);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == UploadSeriesProperty || change.Property == DownloadSeriesProperty)
+        {
+            if (change.OldValue is INotifyCollectionChanged oldCollection)
+            {
+                oldCollection.CollectionChanged -= OnSeriesChanged;
+            }
+
+            if (change.NewValue is INotifyCollectionChanged newCollection)
+            {
+                newCollection.CollectionChanged += OnSeriesChanged;
+            }
+
+            InvalidateVisual();
+        }
+    }
+
+    private void OnSeriesChanged(object? sender, NotifyCollectionChangedEventArgs e) => InvalidateVisual();
+
+    public override void Render(DrawingContext context)
+    {
+        base.Render(context);
+
+        var width = Bounds.Width;
+        var height = Bounds.Height;
+        if (width <= 4 || height <= 4)
+        {
+            return;
+        }
+
+        const double paddingLeft = 8;
+        const double paddingRight = 54;
+        const double paddingTop = 8;
+        const double paddingBottom = 16;
+        var plotWidth = Math.Max(1, width - paddingLeft - paddingRight);
+        var plotHeight = Math.Max(1, height - paddingTop - paddingBottom);
+
+        for (var line = 0; line <= 4; line++)
+        {
+            var y = paddingTop + plotHeight * line / 4;
+            context.DrawLine(GridPen, new Point(paddingLeft, y), new Point(paddingLeft + plotWidth, y));
+        }
+
+        var upload = UploadSeries;
+        var download = DownloadSeries;
+        var max = Math.Max(MaxFinite(upload), MaxFinite(download));
+        if (max <= 0 || upload is null || download is null || upload.Count < 2)
+        {
+            DrawText(context, "No measured throughput yet", new Point(paddingLeft + 8, paddingTop + plotHeight / 2 - 8));
+            return;
+        }
+
+        DrawSeries(context, upload, UploadPen, max, paddingLeft, paddingTop, plotWidth, plotHeight);
+        DrawSeries(context, download, DownloadPen, max, paddingLeft, paddingTop, plotWidth, plotHeight);
+
+        DrawText(context, FormatRate(max), new Point(paddingLeft + plotWidth + 6, paddingTop - 4));
+        DrawText(context, "up", new Point(paddingLeft + plotWidth + 6, paddingTop + 12));
+        DrawText(context, "down", new Point(paddingLeft + plotWidth + 6, paddingTop + 26));
+    }
+
+    private static void DrawSeries(
+        DrawingContext context,
+        IList<double> values,
+        Pen pen,
+        double max,
+        double left,
+        double top,
+        double width,
+        double height)
+    {
+        var geometry = new StreamGeometry();
+        using var stream = geometry.Open();
+        var started = false;
+        for (var index = 0; index < values.Count; index++)
+        {
+            var value = values[index];
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0)
+            {
+                started = false;
+                continue;
+            }
+
+            var x = left + width * index / Math.Max(1, values.Count - 1);
+            var y = top + height - (value / max * height);
+            if (!started)
+            {
+                stream.BeginFigure(new Point(x, y), isFilled: false);
+                started = true;
+            }
+            else
+            {
+                stream.LineTo(new Point(x, y));
+            }
+        }
+
+        context.DrawGeometry(null, pen, geometry);
+    }
+
+    private static double MaxFinite(IList<double>? values)
+    {
+        if (values is null)
+        {
+            return 0;
+        }
+
+        var max = 0d;
+        foreach (var value in values)
+        {
+            if (double.IsFinite(value) && value > max)
+            {
+                max = value;
+            }
+        }
+
+        return max;
+    }
+
+    private static string FormatRate(double bytesPerSecond) =>
+        bytesPerSecond >= 1024 * 1024
+            ? $"{bytesPerSecond / (1024 * 1024):0.0} MB/s"
+            : $"{bytesPerSecond / 1024:0.0} KB/s";
+
+    private static void DrawText(DrawingContext context, string text, Point origin)
+    {
+        var formatted = new FormattedText(
+            text,
+            System.Globalization.CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight,
+            Typeface.Default,
+            9,
+            MutedBrush);
+        context.DrawText(formatted, origin);
+    }
+}

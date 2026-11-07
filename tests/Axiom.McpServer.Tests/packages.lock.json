@@ -376,9 +376,9 @@
       "axiom.mcpserver": {
         "type": "Project",
         "dependencies": {
+          "Axiom.Contracts": "[0.5.3, )",
           "Microsoft.Extensions.Hosting": "[10.0.14, )",
-          "ModelContextProtocol": "[2.3.1, )",
-          "Axiom.Contracts": "[0.4.21, )"
+          "ModelContextProtocol": "[2.3.1, )"
         }
       },
       "Microsoft.Extensions.Hosting": {

@@ -1,0 +1,215 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+using System.Diagnostics;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Platform.Storage;
+using Axiom.Presentation;
+
+namespace Axiom.UI.Avalonia;
+
+/// <summary>
+/// Avalonia host services: native modal confirmations, the platform save dialog, clipboard and
+/// external links. A missing owner or clipboard is reported as a failure instead of pretending.
+/// </summary>
+public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUserInteraction
+{
+    private static readonly IBrush Background = new SolidColorBrush(Color.Parse("#161B22"));
+    private static readonly IBrush Border = new SolidColorBrush(Color.Parse("#2E3A47"));
+    private static readonly IBrush PrimaryText = new SolidColorBrush(Color.Parse("#E6EDF3"));
+
+    public async Task<bool> ConfirmAsync(
+        string title,
+        string message,
+        string confirmLabel,
+        bool destructive,
+        CancellationToken cancellationToken)
+    {
+        var owner = ownerProvider();
+        if (owner is null)
+        {
+            return false;
+        }
+
+        var result = false;
+        var dialog = CreateDialog(title);
+        var cancel = CreateButton("Cancel", destructive: false);
+        var confirm = CreateButton(confirmLabel, destructive);
+
+        cancel.Click += (_, _) => dialog.Close();
+        confirm.Click += (_, _) =>
+        {
+            result = true;
+            dialog.Close();
+        };
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 10,
+            Children = { cancel, confirm },
+        };
+
+        dialog.Content = BuildContent(message, buttons);
+        await dialog.ShowDialog(owner).ConfigureAwait(true);
+        return result && !cancellationToken.IsCancellationRequested;
+    }
+
+    public async Task ShowMessageAsync(string title, string message, CancellationToken cancellationToken)
+    {
+        var owner = ownerProvider();
+        if (owner is null)
+        {
+            return;
+        }
+
+        var dialog = CreateDialog(title);
+        var close = CreateButton("Close", destructive: false);
+        close.Click += (_, _) => dialog.Close();
+        close.HorizontalAlignment = HorizontalAlignment.Right;
+
+        dialog.Content = BuildContent(message, close);
+        await dialog.ShowDialog(owner).ConfigureAwait(true);
+    }
+
+    public async Task<string?> PickSaveFileAsync(
+        string suggestedFileName,
+        string extension,
+        string typeName,
+        CancellationToken cancellationToken)
+    {
+        var owner = ownerProvider();
+        if (owner is null)
+        {
+            return null;
+        }
+
+        var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save Axiom export",
+            SuggestedFileName = suggestedFileName,
+            DefaultExtension = extension.TrimStart('.'),
+            ShowOverwritePrompt = true,
+            FileTypeChoices =
+            [
+                new FilePickerFileType(typeName)
+                {
+                    Patterns = [$"*.{extension.TrimStart('.')}"],
+                },
+            ],
+        }).ConfigureAwait(true);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return file?.TryGetLocalPath();
+    }
+
+    public async Task<string?> PickOpenFileAsync(
+        string title,
+        string extension,
+        string typeName,
+        CancellationToken cancellationToken)
+    {
+        var owner = ownerProvider();
+        if (owner is null)
+        {
+            return null;
+        }
+
+        var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType(typeName)
+                {
+                    Patterns = [$"*.{extension.TrimStart('.')}"],
+                },
+            ],
+        }).ConfigureAwait(true);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return files.Count == 0 ? null : files[0].TryGetLocalPath();
+    }
+
+    public async Task<string?> PickFolderAsync(string title, CancellationToken cancellationToken)
+    {
+        var owner = ownerProvider();
+        if (owner is null)
+        {
+            return null;
+        }
+
+        var folders = await owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+        }).ConfigureAwait(true);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return folders.Count == 0 ? null : folders[0].TryGetLocalPath();
+    }
+
+    public async Task CopyTextAsync(string text, CancellationToken cancellationToken)
+    {
+        var owner = ownerProvider()
+            ?? throw new InvalidOperationException("No window is available for the clipboard.");
+        var clipboard = owner.Clipboard
+            ?? throw new InvalidOperationException("The clipboard is not available on this platform.");
+
+        await clipboard.SetValueAsync(DataFormat.Text, text).ConfigureAwait(true);
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    public Task OpenExternalAsync(string url, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        return Task.CompletedTask;
+    }
+
+    private static Window CreateDialog(string title) => new()
+    {
+        Title = title,
+        Width = 520,
+        SizeToContent = SizeToContent.Height,
+        MinHeight = 170,
+        CanResize = false,
+        WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        Background = Background,
+        Foreground = PrimaryText,
+    };
+
+    private static StackPanel BuildContent(string message, Control action)
+    {
+        var panel = new StackPanel { Spacing = 16, Margin = new Thickness(22) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = PrimaryText,
+            FontSize = 13,
+        });
+        panel.Children.Add(action);
+        return panel;
+    }
+
+    private static Button CreateButton(string label, bool destructive) => new()
+    {
+        Content = label,
+        MinWidth = 96,
+        Padding = new Thickness(14, 7),
+        HorizontalContentAlignment = HorizontalAlignment.Center,
+        Background = destructive
+            ? new SolidColorBrush(Color.Parse("#7F1D1D"))
+            : new SolidColorBrush(Color.Parse("#1F6FEB")),
+        Foreground = PrimaryText,
+        BorderBrush = Border,
+        BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(6),
+    };
+}
