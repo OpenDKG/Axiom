@@ -146,7 +146,15 @@
                   <ItemsControl ItemsSource="{Binding Sessions}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
-                        <Grid ColumnDefinitions="*,1.4*,110,50" Margin="0,1">
+                        <Grid ColumnDefinitions="*,1.4*,110,50" Margin="0,1"
+                              Tag="{Binding $parent[ListBox].DataContext}">
+                          <Grid.ContextMenu>
+                            <ContextMenu>
+                              <MenuItem Header="Copy session details"
+                                        Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopySessionDetailsCommand}"
+                                        CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                            </ContextMenu>
+                          </Grid.ContextMenu>
                           <TextBlock Grid.Column="0" Text="{Binding Title}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
                           <TextBlock Grid.Column="1" Text="{Binding Workspace}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
                           <TextBlock Grid.Column="2" Text="{Binding LastSeen}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />

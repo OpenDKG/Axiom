@@ -1,6 +1,7 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Axiom.Contracts.Firewall;
 using Axiom.Presentation;
 using CommunityToolkit.Mvvm.Input;
 
@@ -11,15 +12,25 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private readonly ConnectionMonitor _monitor;
     private readonly TrafficEngine _traffic;
     private readonly IUserInteraction _ui;
+    private readonly ConnectionActionService _actions;
     private readonly List<NewConnectionMarkerEvent> _sessionEvents = [];
     private readonly HashSet<string> _seenEventKeys = new(StringComparer.Ordinal);
 
-    public OverviewPageViewModel(ConnectionMonitor monitor, TrafficEngine traffic, IUserInteraction? ui = null)
+    public OverviewPageViewModel(
+        ConnectionMonitor monitor,
+        TrafficEngine traffic,
+        IUserInteraction? ui = null,
+        IServiceRequestClient? serviceClient = null,
+        IProcessActions? processActions = null)
         : base("Overview", "Live sockets and system-wide interface counters", "O")
     {
         _monitor = monitor;
         _traffic = traffic;
         _ui = ui ?? new NullUserInteraction();
+        _actions = new ConnectionActionService(
+            serviceClient,
+            _ui,
+            processActions ?? new UnsupportedProcessActions());
         _monitor.Updated += OnMonitorUpdated;
         _traffic.Updated += OnTrafficUpdated;
         Refresh();
@@ -91,7 +102,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private string _rangeNote = "Measured on active network interfaces. Per-app rates require separate telemetry.";
 
     [ObservableProperty]
-    private string _bucketLabel = "1 s samples · rolling 5m · system-wide";
+    private string _bucketLabel = "1 s samples Â· rolling 5m Â· system-wide";
 
     partial void OnSelectedRangeChanged(string value) => ApplyRange(value);
 
@@ -126,19 +137,19 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private string _loopbackText = "0";
 
     [ObservableProperty]
-    private string _uploadText = "—";
+    private string _uploadText = "â€”";
 
     [ObservableProperty]
-    private string _downloadText = "—";
+    private string _downloadText = "â€”";
 
     [ObservableProperty]
-    private string _sourceText = "IP Helper · TCP/UDP IPv4/IPv6";
+    private string _sourceText = "IP Helper Â· TCP/UDP IPv4/IPv6";
 
     [ObservableProperty]
     private string _sourceBadgeText = "live from IP Helper";
 
     [ObservableProperty]
-    private string _statusText = "Starting the read-only connection monitor…";
+    private string _statusText = "Starting the read-only connection monitorâ€¦";
 
     public void Refresh()
     {
@@ -276,6 +287,12 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         }
     }
 
+    [ObservableProperty]
+    private string _actionStatusText = string.Empty;
+
+    [ObservableProperty]
+    private ConnectionRow? _selectedSocket;
+
     [RelayCommand]
     private Task CopyRowAsync(ConnectionRow? row) => CopyAsync(row?.RowTooltip);
 
@@ -285,9 +302,42 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     [RelayCommand]
     private Task CopyRemoteAsync(ConnectionRow? row) => CopyAsync(row?.RemoteEndpoint);
 
+    [RelayCommand]
+    private async Task BlockOutboundAsync(ConnectionRow? row)
+    {
+        if (row is not null)
+        {
+            ActionStatusText = await _actions
+                .BlockAsync(row.AppDisplayName, row.PathText, FirewallDirection.Outbound)
+                .ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private async Task BlockInboundAsync(ConnectionRow? row)
+    {
+        if (row is not null)
+        {
+            ActionStatusText = await _actions
+                .BlockAsync(row.AppDisplayName, row.PathText, FirewallDirection.Inbound)
+                .ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private async Task EndTaskAsync(ConnectionRow? row)
+    {
+        if (row is not null)
+        {
+            ActionStatusText = await _actions
+                .EndTaskAsync(row.AppDisplayName, [row.ProcessId])
+                .ConfigureAwait(true);
+        }
+    }
+
     private async Task CopyAsync(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value) || value == "—")
+        if (string.IsNullOrWhiteSpace(value) || value == "â€”")
         {
             return;
         }

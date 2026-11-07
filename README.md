@@ -2,7 +2,7 @@
 
 **Open-Source Firewall, Network Monitor & Local Agent Protection**
 
-**Version:** 0.7.5 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.7.6 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,14 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.7.6
+
+- Connections rows and Overview live sockets now expose the same actions as Applications: **Block
+  outbound**, **Block inbound**, **End task** and **Copy path**, as buttons above the table and in
+  the row context menu. Every action confirms first.
+- Agent Stats sessions gained **Copy session details** in the row menu, as in the WPF application.
+- The Connections action menu covers both the flat and the grouped view.
 
 ## What's in 0.7.5
 

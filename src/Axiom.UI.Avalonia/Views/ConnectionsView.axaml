@@ -1,11 +1,11 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Axiom.UI.Avalonia.Views.ConnectionsView">
   <Grid RowDefinitions="Auto,Auto,*" Margin="24,18,24,24">
     <Border Grid.Row="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
             CornerRadius="8" Padding="12">
       <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12">
-        <TextBox Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="Search app, path, PID, local or remote…" />
+        <TextBox Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="Search app, path, PID, local or remoteâ€¦" />
         <ComboBox Grid.Column="1" ItemsSource="{Binding ProtocolOptions}" SelectedItem="{Binding ProtocolFilter}" Width="96" />
         <CheckBox Grid.Column="2" Content="Only new" IsChecked="{Binding OnlyNew}" Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
         <CheckBox Grid.Column="3" Content="Loopback" IsChecked="{Binding OnlyLoopback}" Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
@@ -18,8 +18,18 @@
                TextWrapping="Wrap" Margin="2,8,0,8" />
 
     <Border Grid.Row="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
-      <Grid RowDefinitions="Auto,*">
-        <Grid Grid.Row="0" ColumnDefinitions="1.4*,60,60,1.1*,1.1*,40,80,70,1*" Margin="0,0,0,8"
+      <Grid RowDefinitions="Auto,Auto,*">
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+          <Button Content="Block outbound" Padding="10,4"
+                  Command="{Binding BlockOutboundCommand}" CommandParameter="{Binding SelectedConnection}" />
+          <Button Content="Block inbound" Padding="10,4"
+                  Command="{Binding BlockInboundCommand}" CommandParameter="{Binding SelectedConnection}" />
+          <Button Content="End task" Padding="10,4"
+                  Command="{Binding EndTaskCommand}" CommandParameter="{Binding SelectedConnection}" />
+          <Button Content="Copy path" Padding="10,4"
+                  Command="{Binding CopyPathCommand}" CommandParameter="{Binding SelectedConnection}" />
+        </StackPanel>
+        <Grid Grid.Row="1" ColumnDefinitions="1.4*,60,60,1.1*,1.1*,40,80,70,1*" Margin="0,0,0,8"
               IsVisible="{Binding !IsGroupedByApp}">
           <TextBlock Grid.Column="0" Text="APPLICATION" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
           <TextBlock Grid.Column="1" Text="PID" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
@@ -31,7 +41,7 @@
           <TextBlock Grid.Column="7" Text="QUALITY" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
           <TextBlock Grid.Column="8" Text="RULE" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
         </Grid>
-        <ListBox Grid.Row="1" Classes="data-list" ItemsSource="{Binding VisibleConnections}"
+        <ListBox Grid.Row="2" Classes="data-list" ItemsSource="{Binding VisibleConnections}"
                  SelectedItem="{Binding SelectedConnection}" Background="Transparent" BorderThickness="0"
                  IsVisible="{Binding !IsGroupedByApp}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -54,6 +64,17 @@
                     <MenuItem Header="Copy remote endpoint"
                               Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyRemoteCommand}"
                               CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    <Separator />
+                    <MenuItem Header="Block outbound"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockOutboundCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    <MenuItem Header="Block inbound"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockInboundCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    <Separator />
+                    <MenuItem Header="End task"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndTaskCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                   </ContextMenu>
                 </Grid.ContextMenu>
                 <TextBlock Grid.Column="0" Text="{Binding AppDisplayName}" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
@@ -69,10 +90,10 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
-        <TextBlock Grid.Row="1" Text="No socket matches these filters." Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11"
+        <TextBlock Grid.Row="2" Text="No socket matches these filters." Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11"
                    HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsEmpty}" />
 
-        <ScrollViewer Grid.Row="0" Grid.RowSpan="2" IsVisible="{Binding IsGroupedByApp}"
+        <ScrollViewer Grid.Row="1" Grid.RowSpan="2" IsVisible="{Binding IsGroupedByApp}"
                       VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <ItemsControl ItemsSource="{Binding Groups}">
             <ItemsControl.ItemTemplate>
@@ -102,7 +123,29 @@
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                       <ListBox.ItemTemplate>
                         <DataTemplate>
-                          <Grid ColumnDefinitions="60,60,1.2*,1.2*,40,80,70" Margin="0,2">
+                          <Grid ColumnDefinitions="60,60,1.2*,1.2*,40,80,70" Margin="0,2"
+                                Tag="{Binding $parent[ListBox].DataContext}">
+                            <Grid.ContextMenu>
+                              <ContextMenu>
+                                <MenuItem Header="Copy row details"
+                                          Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyRowCommand}"
+                                          CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                                <MenuItem Header="Copy executable path"
+                                          Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyPathCommand}"
+                                          CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                                <Separator />
+                                <MenuItem Header="Block outbound"
+                                          Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockOutboundCommand}"
+                                          CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                                <MenuItem Header="Block inbound"
+                                          Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockInboundCommand}"
+                                          CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                                <Separator />
+                                <MenuItem Header="End task"
+                                          Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndTaskCommand}"
+                                          CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                              </ContextMenu>
+                            </Grid.ContextMenu>
                             <TextBlock Grid.Column="0" Text="{Binding ProcessId}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
                             <TextBlock Grid.Column="1" Text="{Binding ProtocolText}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
                             <TextBlock Grid.Column="2" Text="{Binding LocalEndpoint}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />

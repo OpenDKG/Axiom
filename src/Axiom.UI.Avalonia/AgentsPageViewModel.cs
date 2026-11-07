@@ -708,6 +708,23 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     }
 
     [RelayCommand]
+    private void CopySessionDetails(AgentSessionRow? session)
+    {
+        if (session is null)
+        {
+            return;
+        }
+
+        CopyToClipboard(string.Join(
+            Environment.NewLine,
+            $"Provider: {session.Provider}",
+            $"Session: {session.Title}",
+            $"Workspace: {session.Workspace}",
+            $"Last seen: {session.LastSeen}",
+            $"Live: {(session.Live ? "yes" : "no")}"));
+    }
+
+    [RelayCommand]
     private void CopyText(string? value) => CopyToClipboard(value ?? string.Empty);
 
     private void CopyToClipboard(string text) => _ = CopyToClipboardAsync(text);
