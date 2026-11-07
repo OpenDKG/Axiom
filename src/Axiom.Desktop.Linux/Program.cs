@@ -52,6 +52,16 @@ public static class Program
         builder.Logging.ClearProviders();
         builder.Logging.AddSimpleConsole(options => options.SingleLine = true);
 
+        foreach (var endpoint in builder.Configuration.GetSection("Kestrel:Endpoints").GetChildren())
+        {
+            if (!IsLoopbackEndpoint(endpoint["Url"]))
+            {
+                Console.Error.WriteLine(
+                    "Axiom UI refuses to start: Kestrel is configured with a non-loopback endpoint.");
+                return 2;
+            }
+        }
+
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
             kestrel.Listen(IPAddress.Loopback, options.Port);
@@ -279,13 +289,21 @@ public static class Program
 
         await app.StartAsync().ConfigureAwait(false);
 
-        var address = app.Services
+        var addresses = app.Services
             .GetRequiredService<IServer>()
             .Features
             .Get<IServerAddressesFeature>()!
             .Addresses
-            .First();
+            .ToArray();
 
+        if (addresses.Length == 0 || addresses.Any(candidate => !IsLoopbackEndpoint(candidate)))
+        {
+            Console.Error.WriteLine("Axiom UI refuses to serve: a non-loopback listener was bound.");
+            await app.StopAsync().ConfigureAwait(false);
+            return 2;
+        }
+
+        var address = addresses[0];
         var launchUrl = $"{address}/#t={token}";
         Console.WriteLine($"Axiom UI: {launchUrl}");
 
@@ -477,6 +495,20 @@ public static class Program
                 : StatusCodes.Status502BadGateway;
             return Results.Json(new { error = exception.Code, message = exception.Message }, JsonOptions, statusCode: status);
         }
+    }
+
+    /// <summary>
+    /// The UI is loopback-only by contract; a configuration-supplied endpoint must not widen it.
+    /// </summary>
+    private static bool IsLoopbackEndpoint(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+               (IPAddress.TryParse(uri.Host, out var address) && IPAddress.IsLoopback(address));
     }
 
     private static bool TokenMatches(HttpContext context, string token)

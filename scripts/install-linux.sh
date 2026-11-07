@@ -95,6 +95,9 @@ fi
 [[ -x "$prefix/service/Axiom.Service" ]] || { echo "service payload is missing its executable" >&2; exit 1; }
 [[ -x "$prefix/ui/Axiom.Desktop.Linux" ]] || { echo "UI payload is missing its executable" >&2; exit 1; }
 
+# Remove any pre-existing entry first: an adopted prefix may contain a manifest symlink, and shell
+# redirection would follow it and truncate the target as root.
+rm -f -- "$prefix/install-manifest.sha256"
 (
   cd "$prefix"
   find service ui mcp -type f -print0 | sort -z | xargs -0 sha256sum > install-manifest.sha256

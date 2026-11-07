@@ -493,22 +493,18 @@ public sealed class LinuxFirewallPolicyAdapter : IFirewallPolicyAdapter, IFirewa
         catch (FirewallPolicyException exception)
         {
             _lastError = exception.Message;
-            foreach (var snapshot in snapshots.Values)
-            {
-                RestoreSnapshot(snapshot);
-            }
-
-            return Failed(managedRuleId, exception.Code, exception.Message);
+            return Failed(
+                managedRuleId,
+                exception.Code,
+                Rollback(exception.Message, snapshots.Values));
         }
         catch (Exception exception) when (exception is PlatformNotSupportedException or IOException or InvalidOperationException)
         {
             _lastError = exception.Message;
-            foreach (var snapshot in snapshots.Values)
-            {
-                RestoreSnapshot(snapshot);
-            }
-
-            return Failed(managedRuleId, "rule.apply_failed", exception.Message);
+            return Failed(
+                managedRuleId,
+                "rule.apply_failed",
+                Rollback(exception.Message, snapshots.Values));
         }
     }
 
@@ -631,32 +627,117 @@ public sealed class LinuxFirewallPolicyAdapter : IFirewallPolicyAdapter, IFirewa
         return new ExeSnapshot(identity, hadExe, exeValue, slots);
     }
 
-    private void RestoreSnapshot(ExeSnapshot snapshot)
+    /// <summary>
+    /// Restores every touched executable from its snapshot and reports a failure instead of
+    /// returning the original error as if the previous policy were intact.
+    /// </summary>
+    private string Rollback(string originalMessage, IEnumerable<ExeSnapshot> snapshots)
+    {
+        var restored = true;
+        foreach (var snapshot in snapshots)
+        {
+            restored &= RestoreSnapshot(snapshot);
+        }
+
+        return restored
+            ? originalMessage
+            : $"{originalMessage} (the previous firewall policy could not be verified after rollback; " +
+              "enforcement may be incomplete until the service is restarted)";
+    }
+
+    private bool RestoreSnapshot(ExeSnapshot snapshot)
     {
         if (_object is null)
         {
-            return;
+            return true;
         }
 
         var exeKey = FirewallPolicyLayout.ExeKey(snapshot.Identity);
-        _ = _object.DeleteMap("np_exes", exeKey);
+        if (!DeleteIfPresent("np_exes", exeKey))
+        {
+            return false;
+        }
 
         for (var index = 0; index < FirewallPolicyLayout.MaxSlots; index++)
         {
             var ruleKey = FirewallPolicyLayout.RuleKey(snapshot.Identity.HashHi, snapshot.Identity.HashLo, index);
-            _ = _object.DeleteMap("np_rules", ruleKey);
+            if (!DeleteIfPresent("np_rules", ruleKey))
+            {
+                return false;
+            }
         }
 
         foreach (var (index, value) in snapshot.Slots)
         {
             var ruleKey = FirewallPolicyLayout.RuleKey(snapshot.Identity.HashHi, snapshot.Identity.HashLo, index);
-            _ = _object.UpdateMap("np_rules", ruleKey, value);
+            if (_object.UpdateMap("np_rules", ruleKey, value) != 0)
+            {
+                return false;
+            }
         }
 
-        if (snapshot.HadExe)
+        if (snapshot.HadExe && _object.UpdateMap("np_exes", exeKey, snapshot.ExeValue) != 0)
         {
-            _ = _object.UpdateMap("np_exes", exeKey, snapshot.ExeValue);
+            return false;
         }
+
+        return SnapshotMatches(snapshot);
+    }
+
+    private bool DeleteIfPresent(string map, byte[] key)
+    {
+        if (_object is null)
+        {
+            return true;
+        }
+
+        if (_object.DeleteMap(map, key) == 0)
+        {
+            return true;
+        }
+
+        // bpf_map_delete_elem reports ENOENT for a slot that was already empty.
+        return NativeBpf.LastErrno == 2;
+    }
+
+    private bool SnapshotMatches(ExeSnapshot snapshot)
+    {
+        if (_object is null)
+        {
+            return true;
+        }
+
+        var exeKey = FirewallPolicyLayout.ExeKey(snapshot.Identity);
+        var exeValue = new byte[FirewallPolicyLayout.ExeValueSize];
+        var hasExe = _object.TryLookupMap("np_exes", exeKey, exeValue);
+
+        if (hasExe != snapshot.HadExe)
+        {
+            return false;
+        }
+
+        if (snapshot.HadExe && !exeValue.AsSpan().SequenceEqual(snapshot.ExeValue))
+        {
+            return false;
+        }
+
+        for (var index = 0; index < FirewallPolicyLayout.MaxSlots; index++)
+        {
+            var ruleKey = FirewallPolicyLayout.RuleKey(snapshot.Identity.HashHi, snapshot.Identity.HashLo, index);
+            var value = new byte[FirewallPolicyLayout.RuleValueSize];
+            var present = _object.TryLookupMap("np_rules", ruleKey, value);
+            if (present != snapshot.Slots.TryGetValue(index, out var expected))
+            {
+                return false;
+            }
+
+            if (present && expected is not null && !value.AsSpan().SequenceEqual(expected))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void EnsureLoaded()

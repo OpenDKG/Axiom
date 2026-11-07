@@ -306,6 +306,7 @@ public sealed class HistoryStore
         string action,
         string result,
         string? error,
+        RuleSpec? auditedSpec = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(rule);
@@ -313,6 +314,9 @@ public sealed class HistoryStore
 
         var now = ToStorage(DateTimeOffset.UtcNow);
         var specJson = JsonSerializer.Serialize(rule.Spec, IpcJson.Options);
+        // A failed update keeps the previous applied rule as durable intent, but the audit row must
+        // show the specification the operator actually attempted.
+        var auditSpecJson = auditedSpec is null ? specJson : JsonSerializer.Serialize(auditedSpec, IpcJson.Options);
 
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
@@ -343,7 +347,7 @@ public sealed class HistoryStore
             await upsert.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await InsertAuditAsync(connection, transaction, rule.ManagedRuleId, actorSid, action, result, specJson, error, now, cancellationToken);
+        await InsertAuditAsync(connection, transaction, rule.ManagedRuleId, actorSid, action, result, auditSpecJson, error, now, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -370,12 +374,14 @@ public sealed class HistoryStore
         await using (var update = connection.CreateCommand())
         {
             update.Transaction = transaction;
+            // A failed removal leaves the rule in force in the kernel until the process exits, so
+            // the stored state must not become Failed: startup restores Applied rules and would
+            // otherwise silently drop an enforcement that is still active.
             update.CommandText = """
                 UPDATE firewall_rules
-                SET state = $state, last_error = $error, updated_utc = $now
+                SET last_error = $error, updated_utc = $now
                 WHERE managed_rule_id = $id;
                 """;
-            update.Parameters.AddWithValue("$state", (int)RuleState.Failed);
             update.Parameters.AddWithValue("$error", (object?)errorCode ?? DBNull.Value);
             update.Parameters.AddWithValue("$now", now);
             update.Parameters.AddWithValue("$id", managedRuleId.ToString("D"));

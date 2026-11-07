@@ -49,12 +49,12 @@ Linux equivalent.
 | IPC | Unix socket, `SO_PEERCRED`, 0600, private dir | Complete; init-failure ownership cleanup hardened | M2 tests |
 | Firewall read/list/verify/apply/remove, per-application | **eBPF cgroup hooks** (`connect4/6`, `sendmsg4/6`, `bind4/6`) with executable path identity | Complete for outbound and bind-scoped inbound; inbound allow-with-remote-scope stays unsupported (exact code) | 6 live tests, 3 compiler/identity suites, service smoke |
 | Privacy Shield DNS | loopback filter in `Axiom.Dns` | Complete (already); drain fix | M2 tests |
-| External reputation / feed / local scan | hash-only VirusTotal endpoint + `ICredentialStore` (Secret Service, else refuse) | Complete for the contract and refusal path; no live provider key exercised | M3 tests |
+| External reputation / feed / local scan | hash-only VirusTotal endpoint + `ICredentialStore` (Secret Service, else refuse) | Contract and refusal path complete; the Linux UI has no VirusTotal key field, and no live provider key was exercised | M3 tests |
 | AI analyst | portable HTTP client + Linux settings/credential storage + UI action | Implemented (settings, key store, analyze endpoint, UI panel); no provider round-trip executed | M3 tests, docs |
 | Agent hook adapters (Claude, Codex, Cline, Cursor, Copilot, Gemini, Windsurf, OpenCode) | hook payload depends on the Blackbox Python module, which ships only as a pinned Windows installer | **Unresolved** (exact blocker). Linux hook installer is not shipped because it would install hooks that fail open | matrix + PR |
 | Optional Blackbox | Windows-only vendor installer | Unresolved (no Linux build to pin/verify) | docs |
-| Optional DKG | npm package, platform-neutral | Complete: probe + documented CLI instructions; no silent download | M3 |
-| Tray icon/status/notifications | no tray without a shell extension; desktop notifications via `notify-send` | Partial: notifications on rule/DNS events where `notify-send` exists; tray icon not claimed | docs |
+| Optional DKG | npm package, platform-neutral | Documented only: no Linux probe or status surface; no silent download | docs |
+| Tray icon/status/notifications | no tray without a shell extension; no notification backend shipped on Linux | Unresolved: neither tray nor desktop notifications are implemented; the browser UI is the surface | docs |
 | UI autostart | `~/.config/autostart/*.desktop` (XDG) | Complete | M3 tests |
 | Desktop UI | loopback browser UI | Complete (already) | UI run |
 | CLI/MCP | Unix socket transport | Complete (already) | 35 MCP tests |
@@ -179,10 +179,11 @@ reason; it is not a crash and not a silent no-op.
   error, not a silent no-op.
 - **Autostart**: XDG desktop entry (`~/.config/autostart/axiom-ui.desktop`) with absolute exec
   path, validated by `desktop-file-validate`; enable/disable/status; no registry emulation.
-- **Notifications**: `notify-send` when available for rule apply/remove failures and DNS-block
-  bursts; absence is reported, never fatal. Tray icon remains an explicit non-claim.
-- **Optional modules**: DKG detected and documented for Linux (`npm` package, user-scope prefix, no
-  silent install); Blackbox reported unavailable on Linux with the exact vendor-installer reason.
+- **Notifications**: not implemented on Linux (no `notify-send` path); the browser UI is the
+  status surface. Tray icon and desktop notifications remain an explicit non-claim.
+- **Optional modules**: DKG documented for Linux only (`npm` package, user-scope prefix, no silent
+  install, no status probe); Blackbox reported unavailable on Linux with the exact
+  vendor-installer reason.
 - **Platform reporting**: WSL (`/proc/version` microsoft), container (`/.dockerenv`,
   `container=` env, cgroup), AppArmor/SELinux (`/sys/kernel/security/lsm`,
   `/proc/self/attr/current`), systemd user bus availability. These produce explicit limitation
@@ -360,11 +361,35 @@ did not change the product scope above.
 ### Verification on the merged tree
 
 - `dotnet restore Axiom.Linux.slnf --locked-mode` 0 errors; `dotnet build -c Release` 0 warnings,
-  0 errors; `dotnet test Axiom.Linux.slnf -c Release` **305 passed, 0 failed, 0 skipped**
-  (Contracts 67, Core 66, Persistence 23, Service 16, Dns 11, MCP 35, Infrastructure.Linux 87,
-  including the 12 live eBPF tests against a disposable child cgroup).
+  0 errors; `dotnet test Axiom.Linux.slnf -c Release` **312 passed, 0 failed, 0 skipped**
+  (Contracts 72, Core 66, Persistence 23, Service 18, Dns 11, MCP 35, Infrastructure.Linux 87,
+  including the 12 live eBPF tests against a disposable child cgroup). Windows compile
+  (`EnableWindowsTargeting=true`) 0 errors. Upstream `696e4d4` merged; its file-lock privacy test
+  cannot fail on Unix (rename over a locked file succeeds), so the Linux-safe `FailingSettingsStore`
+  variant was restored while keeping upstream's other change.
 - `scripts/publish-linux.sh` self-contained x64 payload; `.deb` built, `dpkg-deb --info/--contents`,
   extraction, `desktop-file-validate`, isolated payload start/self-check/MCP and clean stop.
+
+### Review remediation (this pass)
+
+The independent reviewer rejected the first deployment delta and then the fix delta; findings and
+dispositions:
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| 1 | high | A pre-existing `install-manifest.sha256` symlink in an adopted `/opt/axiom` would be followed by the root redirect | Fixed: the installer unlinks the manifest before writing it |
+| 2 | high | Failed removal persisted `Failed`, so the still-enforced kernel rule was dropped by the next restart | Fixed: failed removal keeps the stored state (normally `Applied`), records `last_error` and the failed audit row |
+| 3 | high | Failed update of an `Applied` rule persisted the failed replacement, losing the previous policy on restart | Fixed: the coordinator reads the previous record inside its gate and persists the previous `Applied` spec for returned failures and exceptions; the failed attempt is still audited |
+| 4 | medium | Failed-update audit row showed the retained policy instead of the attempted replacement | Fixed: `SaveFirewallRuleAsync` takes an optional audited spec; both failure paths pass the attempted spec, covered by two tests |
+| 5 | medium | Rollback ignored native map results and never verified the snapshot | Fixed: every rollback operation is checked (ENOENT treated as empty), the maps are re-read and compared, and a failed rollback is reported in the returned error |
+| 6 | medium | Kestrel configuration could add a non-loopback endpoint | Fixed: startup refuses a non-loopback configured `Kestrel:Endpoints` URL and refuses to serve if any bound address is not loopback; manually exercised by disposable execution |
+| 7 | medium | Headless unit example stored settings on a read-only mount | Fixed: `StateDirectory=axiom-ui` plus XDG variables in the documented unit; applied to the running unit |
+| 8 | medium | Capability claims exceeded the Linux implementation (DKG probe, notify-send, reputation key field) | Docs and matrix corrected to the implemented surface |
+| 9 | medium | Token passed to `xdg-open` is visible in process arguments | Not fixed; documented as a limitation. The deployed unit uses `--no-browser` |
+| 10 | medium | No injected-fault tests for rollback and no automated HTTP boundary tests | Explicitly outstanding; the Kestrel rejection was verified manually. Carried only because enforcement stays disabled and the PR stays draft |
+
+Review outcome: the last round approved this delta for the draft, monitoring-only branch (its only
+nit, the exception-path audit assertion, was added); enforcement/release approval is still withheld.
 
 ### Installed deployment
 

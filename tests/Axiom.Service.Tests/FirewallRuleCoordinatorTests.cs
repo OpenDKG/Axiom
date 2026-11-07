@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Firewall;
 using Axiom.Persistence;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -98,7 +99,7 @@ public sealed class FirewallRuleCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task Remove_failure_is_audited_and_marks_the_stored_rule_failed()
+    public async Task Remove_failure_is_audited_and_keeps_the_stored_rule_applied()
     {
         var spec = NewSpec();
         await _coordinator.ApplyAsync(spec, Actor, CancellationToken.None);
@@ -108,7 +109,8 @@ public sealed class FirewallRuleCoordinatorTests : IDisposable
 
         Assert.False(result.Success);
         var stored = Assert.Single(await _store.ListFirewallRulesAsync());
-        Assert.Equal(RuleState.Failed, stored.State);
+        // The kernel rule is still in force, so the restart restore path must keep seeing it.
+        Assert.Equal(RuleState.Applied, stored.State);
         Assert.Equal("fake.remove_failed", stored.LastErrorCode);
         Assert.Equal(1, await CountAuditResultAsync(spec.ManagedRuleId, "rule.remove", "failed"));
     }
@@ -125,8 +127,58 @@ public sealed class FirewallRuleCoordinatorTests : IDisposable
         Assert.False(result.Success);
         Assert.Equal("rule.remove_exception", result.ErrorCode);
         var stored = Assert.Single(await _store.ListFirewallRulesAsync());
-        Assert.Equal(RuleState.Failed, stored.State);
+        Assert.Equal(RuleState.Applied, stored.State);
         Assert.Equal(1, await CountAuditResultAsync(spec.ManagedRuleId, "rule.remove", "failed"));
+    }
+
+    [Fact]
+    public async Task Failed_update_keeps_the_previous_applied_specification()
+    {
+        var spec = NewSpec();
+        await _coordinator.ApplyAsync(spec, Actor, CancellationToken.None);
+        _adapter.FailNextApply = true;
+
+        var replacement = spec with { Protocol = NetworkProtocol.Tcp, RemotePorts = "443" };
+        var result = await _coordinator.ApplyAsync(replacement, Actor, CancellationToken.None);
+
+        Assert.False(result.Success);
+        var stored = Assert.Single(await _store.ListFirewallRulesAsync());
+        // The adapter kept the previous kernel policy, so the durable intent must stay that spec;
+        // a Failed replacement would be skipped by the startup restore and silently drop it.
+        Assert.Equal(RuleState.Applied, stored.State);
+        Assert.Equal(spec.ManagedRuleId, stored.Spec.ManagedRuleId);
+        Assert.Equal(spec.AppPath, stored.Spec.AppPath);
+        Assert.Equal(NetworkProtocol.Any, stored.Spec.Protocol);
+        Assert.Null(stored.Spec.RemotePorts);
+        Assert.Equal("fake.apply_failed", stored.LastErrorCode);
+        Assert.Equal(1, await CountAuditResultAsync(spec.ManagedRuleId, "rule.apply", "failed"));
+
+        // The audit row must show what was attempted, not the retained previous policy.
+        using var attempted = await ReadFailedApplySpecAsync(spec.ManagedRuleId);
+        Assert.Equal("tcp", attempted.RootElement.GetProperty("protocol").GetString());
+        Assert.Equal("443", attempted.RootElement.GetProperty("remotePorts").GetString());
+    }
+
+    [Fact]
+    public async Task Failed_update_exception_keeps_the_previous_applied_specification()
+    {
+        var spec = NewSpec();
+        await _coordinator.ApplyAsync(spec, Actor, CancellationToken.None);
+        _adapter.ThrowOnApply = true;
+
+        var replacement = spec with { Protocol = NetworkProtocol.Tcp, RemotePorts = "443" };
+        var result = await _coordinator.ApplyAsync(replacement, Actor, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("rule.apply_exception", result.ErrorCode);
+        var stored = Assert.Single(await _store.ListFirewallRulesAsync());
+        Assert.Equal(RuleState.Applied, stored.State);
+        Assert.Equal(NetworkProtocol.Any, stored.Spec.Protocol);
+        Assert.Equal(1, await CountAuditResultAsync(spec.ManagedRuleId, "rule.apply", "failed"));
+
+        using var attempted = await ReadFailedApplySpecAsync(spec.ManagedRuleId);
+        Assert.Equal("tcp", attempted.RootElement.GetProperty("protocol").GetString());
+        Assert.Equal("443", attempted.RootElement.GetProperty("remotePorts").GetString());
     }
 
     [Fact]
@@ -162,6 +214,22 @@ public sealed class FirewallRuleCoordinatorTests : IDisposable
         command.CommandText = "SELECT COUNT(*) FROM rule_audit WHERE managed_rule_id = $id;";
         command.Parameters.AddWithValue("$id", id.ToString("D"));
         return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private async Task<JsonDocument> ReadFailedApplySpecAsync(Guid id)
+    {
+        await using var connection = new SqliteConnection($"Data Source={_store.DatabasePath}");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT new_json FROM rule_audit
+            WHERE managed_rule_id = $id AND action = 'rule.apply' AND result = 'failed'
+            ORDER BY timestamp_utc DESC LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$id", id.ToString("D"));
+        var json = (string?)await command.ExecuteScalarAsync();
+        Assert.NotNull(json);
+        return JsonDocument.Parse(json);
     }
 
     private async Task<int> CountAuditResultAsync(Guid id, string action, string result)

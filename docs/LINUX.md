@@ -83,12 +83,15 @@ socket outside the test cgroup is affected. The service + UI smoke run reported 
   module would create a hook that fails open; the Linux build therefore installs none and says so.
   The installers, trust checks and ownership rules stay in the WPF project.
 - **Blackbox** is not installable on Linux: there is no verified Linux artifact to pin.
-- **DKG** is an npm package and works on Linux, but this build does not download or install it.
-  Use the documented CLI commands in a user-scope prefix; the About page reports it as not
-  installed rather than pretending.
-- **AI analyst / reputation** are optional and disabled until configured. The provider key is
-  stored by Secret Service; without a keyring the UI refuses to store it. Only the bounded evidence
-  package (or the SHA-256 for reputation) leaves the host.
+- **DKG** is an npm package and works on Linux, but this build does not detect, download or install
+  it. Use the documented CLI commands in a user-scope prefix; no Linux page reports a DKG status.
+- **AI analyst** is optional and disabled until configured. The provider key is stored by Secret
+  Service; without a keyring the UI refuses to store it. Only the bounded evidence package leaves
+  the host.
+- **Reputation** is hash-only and needs a VirusTotal key. The Linux UI has no field for that key
+  (`virustotal` credential), so the reputation action reports a missing key until one is stored by
+  another Secret Service client; only the SHA-256 would leave the host. No live provider call was
+  exercised.
 
 ### Tray icon, autostart and packaging
 
@@ -179,6 +182,9 @@ dotnet run --project src/Axiom.Desktop.Linux -- --port 5600
 
 The UI prints `http://127.0.0.1:<port>/#t=<token>` and tries `xdg-open`. The token is kept in
 `sessionStorage` and sent as `X-Axiom-Token`; it is never put in a query string or a cookie.
+With browser auto-open enabled the token-bearing URL is passed to `xdg-open` as a process argument,
+so another local account that can read the process table can observe it during launch; run with
+`--no-browser` where that matters (the headless unit below does).
 
 ### Headless server (system service, unprivileged UI unit)
 
@@ -198,7 +204,10 @@ Type=simple
 User=axiom-ui
 Group=axiom-ui
 Environment=HOME=/var/lib/axiom-ui
+Environment=XDG_CONFIG_HOME=/var/lib/axiom-ui/.config
+Environment=XDG_DATA_HOME=/var/lib/axiom-ui/.local/share
 ExecStart=/opt/axiom/ui/Axiom.Desktop.Linux --no-browser --port 5600 --socket /run/axiom/service.sock
+StateDirectory=axiom-ui
 Restart=on-failure
 NoNewPrivileges=true
 ProtectSystem=strict
@@ -209,9 +218,10 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-`AXIOM_ALLOWED_UID` in `axiom.service` must be the UI uid, and `/var/lib/axiom-ui` must be owned by
-it (0700). The unit is site-local, not shipped: the UI remains an ordinary IPC client and the
-service stays the only privileged process. No remote listener is opened; on a headless host reach
+`AXIOM_ALLOWED_UID` in `axiom.service` must be the UI uid. `StateDirectory=axiom-ui` creates
+`/var/lib/axiom-ui` owned by that uid and keeps it writable under `ProtectSystem=strict`, which is
+where AI settings and the autostart entry are stored. The unit is site-local, not shipped: the UI
+remains an ordinary IPC client and the service stays the only privileged process. No remote listener is opened; on a headless host reach
 `127.0.0.1:5600` through an SSH local-forward. The per-run token is printed to the unit's stdout
 (journal, readable by root and `adm`), so keep the journal restricted accordingly.
 

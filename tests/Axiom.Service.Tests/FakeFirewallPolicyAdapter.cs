@@ -11,6 +11,8 @@ internal sealed class FakeFirewallPolicyAdapter : IFirewallPolicyAdapter
 
     public bool FailNextApply { get; set; }
 
+    public bool ThrowOnApply { get; set; }
+
     public bool FailNextRemove { get; set; }
 
     public bool ThrowOnRemove { get; set; }
@@ -35,6 +37,11 @@ internal sealed class FakeFirewallPolicyAdapter : IFirewallPolicyAdapter
     public Task<RuleApplyResult> UpsertOwnedRuleAsync(RuleSpec spec, CancellationToken ct)
     {
         UpsertCalls++;
+
+        if (ThrowOnApply)
+        {
+            throw new InvalidOperationException("The fake adapter threw during apply.");
+        }
 
         if (FailNextApply)
         {

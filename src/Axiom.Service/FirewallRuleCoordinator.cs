@@ -54,7 +54,13 @@ public sealed partial class FirewallRuleCoordinator(
                 State = RuleState.Pending,
             };
 
-            await store.SaveFirewallRuleAsync(pending, actorSid, "rule.apply", "pending", null, cancellationToken)
+            // A failed update must leave the previously applied specification restorable: the
+            // adapter keeps that policy in force, so the stored record must not become the failed
+            // replacement with state Failed (startup restore only replays Applied rules).
+            var previous = (await store.ListFirewallRulesAsync(cancellationToken).ConfigureAwait(false))
+                .FirstOrDefault(rule => rule.ManagedRuleId == spec.ManagedRuleId);
+
+            await store.SaveFirewallRuleAsync(pending, actorSid, "rule.apply", "pending", null, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
             try
@@ -69,18 +75,21 @@ public sealed partial class FirewallRuleCoordinator(
                         LastVerifiedUtc = result.VerifiedUtc ?? DateTimeOffset.UtcNow,
                     };
 
-                    await store.SaveFirewallRuleAsync(applied, actorSid, "rule.apply", "applied", null, cancellationToken)
+                    await store.SaveFirewallRuleAsync(applied, actorSid, "rule.apply", "applied", null, cancellationToken: cancellationToken)
                         .ConfigureAwait(false);
                     return result;
                 }
 
-                var failed = pending with
-                {
-                    State = RuleState.Failed,
-                    LastErrorCode = result.ErrorCode,
-                };
+                var failed = FailureRecord(pending, previous, result.ErrorCode);
 
-                await store.SaveFirewallRuleAsync(failed, actorSid, "rule.apply", "failed", result.ErrorMessage, cancellationToken)
+                await store.SaveFirewallRuleAsync(
+                    failed,
+                    actorSid,
+                    "rule.apply",
+                    "failed",
+                    result.ErrorMessage,
+                    auditedSpec: spec,
+                    cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
                 return result;
             }
@@ -90,13 +99,16 @@ public sealed partial class FirewallRuleCoordinator(
             {
                 LogApplyFailure(logger, exception);
 
-                var failed = pending with
-                {
-                    State = RuleState.Failed,
-                    LastErrorCode = "rule.apply_exception",
-                };
+                var failed = FailureRecord(pending, previous, "rule.apply_exception");
 
-                await store.SaveFirewallRuleAsync(failed, actorSid, "rule.apply", "failed", exception.Message, cancellationToken)
+                await store.SaveFirewallRuleAsync(
+                    failed,
+                    actorSid,
+                    "rule.apply",
+                    "failed",
+                    exception.Message,
+                    auditedSpec: spec,
+                    cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
                 return Failed(spec.ManagedRuleId, "rule.apply_exception", exception.Message);
             }
@@ -106,6 +118,15 @@ public sealed partial class FirewallRuleCoordinator(
             _gate.Release();
         }
     }
+
+    /// <summary>
+    /// The record to persist after a failed apply: the previously applied rule when there is one,
+    /// otherwise the failed attempt. The failed attempt still reaches the audit trail.
+    /// </summary>
+    private static ManagedRule FailureRecord(ManagedRule pending, ManagedRule? previous, string? errorCode) =>
+        previous is { State: RuleState.Applied }
+            ? previous with { LastErrorCode = errorCode }
+            : pending with { State = RuleState.Failed, LastErrorCode = errorCode };
 
     public async Task<RuleApplyResult> RemoveAsync(
         Guid managedRuleId,
