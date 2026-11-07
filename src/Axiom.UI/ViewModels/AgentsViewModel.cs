@@ -335,6 +335,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             }
 
             VerifiedSyncStateDetail = result.Message;
+            _verifiedGraphInitialized = false;
+            _lastVerifiedGraphRefresh = DateTimeOffset.MinValue;
             await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
             await RefreshAsync().ConfigureAwait(true);
         }
