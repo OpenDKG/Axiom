@@ -2,7 +2,7 @@
 
 **Open-Source Firewall, Network Monitor & Local Agent Protection**
 
-**Version:** 0.7.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.7.1 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,16 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.7.1
+
+- Fixes the first live enforcement pass: INetFwRule rejects a port scope while the protocol is
+  "any", so the property is now only written for TCP/UDP. A stale scope is repaired by rebuilding
+  the Axiom-owned rule once.
+- Read-back now compares remote addresses as network/prefix pairs, because Windows rewrites IPv4
+  CIDR to address/mask notation. The 16-range agent lockdown scope applies and verifies.
+- Verified end to end on Windows: block rule created and read back, test executable loses network,
+  allow removes the rule and restores it.
 
 ## What's in 0.7.0
 
