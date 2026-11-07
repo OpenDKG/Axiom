@@ -599,6 +599,34 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     }
 
     [RelayCommand]
+    private async Task CopyAgentDetailsAsync(ProtectedAgent? agent)
+    {
+        if (agent is null)
+        {
+            return;
+        }
+
+        var text = string.Join(
+            Environment.NewLine,
+            $"Agent: {agent.KindText}",
+            $"Workspace: {agent.TargetText}",
+            $"Status: {agent.DisplayStatus}",
+            $"Process running: {(agent.ProcessRunning ? "yes" : "no")}",
+            $"Trust required: {(agent.TrustRequired ? "yes" : "no")}",
+            $"Detail: {agent.Detail}",
+            $"Test: {agent.TestResult}");
+        try
+        {
+            await _ui.CopyTextAsync(text, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is
+                     InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
+        {
+            InstallStatusText = "Clipboard is unavailable.";
+        }
+    }
+
+    [RelayCommand]
     private async Task TestAgentAsync(ProtectedAgent? agent)
     {
         if (agent is null || !agent.CanTest)

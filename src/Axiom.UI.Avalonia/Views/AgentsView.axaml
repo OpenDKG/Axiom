@@ -47,6 +47,115 @@
         </StackPanel>
       </Border>
 
+      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="0">
+        <ItemsControl ItemsSource="{Binding Security.Modules}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Padding="16,12" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1"
+                      IsVisible="{Binding IsAgentModule}">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <Border Grid.Column="0" Width="32" Height="32" CornerRadius="8"
+                          Background="{DynamicResource Axiom.SurfaceAlt}" Margin="0,0,12,0">
+                    <TextBlock Text="{Binding Glyph}" FontSize="14" Foreground="{DynamicResource Axiom.TextSecondary}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Axiom.TextPrimary}" />
+                    <TextBlock Text="{Binding Detail}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}"
+                               TextWrapping="Wrap" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Button Content="{Binding ActionLabel}" Padding="8,3" FontSize="11"
+                            IsVisible="{Binding CanAct}"
+                            Command="{Binding $parent[ItemsControl].DataContext.Security.ActOnModuleCommand}"
+                            CommandParameter="{Binding Name}" />
+                    <Button Content="Uninstall" Padding="8,3" FontSize="11"
+                            IsVisible="{Binding CanUninstall}"
+                            Command="{Binding $parent[ItemsControl].DataContext.Security.UninstallModuleCommand}"
+                            CommandParameter="{Binding Name}" />
+                    <Button Content="Audit" Padding="6,2" FontSize="10"
+                            IsVisible="{Binding CanSetMode}"
+                            Command="{Binding $parent[ItemsControl].DataContext.Security.SetBlackboxModeCommand}"
+                            CommandParameter="audit" />
+                    <Button Content="Block" Padding="6,2" FontSize="10"
+                            IsVisible="{Binding CanSetMode}"
+                            Command="{Binding $parent[ItemsControl].DataContext.Security.SetBlackboxModeCommand}"
+                            CommandParameter="block" />
+                    <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2">
+                      <TextBlock Text="{Binding Status}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    </Border>
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+
+      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0" Spacing="2">
+              <TextBlock Text="Protected workspaces" FontSize="14" FontWeight="SemiBold"
+                         Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber, Codex, Claude Code, ZCode and DeepSeek Harness. Installed hooks are not proof of runtime blocking."
+                         FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Install/repair agent hooks…"
+                    Command="{Binding Security.InstallAgentHooksCommand}" Padding="12,6"
+                    VerticalAlignment="Top" />
+          </Grid>
+          <TextBlock Text="{Binding Security.AgentsStatusText}" FontSize="10"
+                     Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <ItemsControl ItemsSource="{Binding Security.ProtectedAgents}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Padding="0,7" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1"
+                        Tag="{Binding $parent[ItemsControl].DataContext}">
+                  <Grid ColumnDefinitions="84,*,Auto">
+                    <Border Grid.Column="0" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4"
+                            Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Top">
+                      <TextBlock Text="{Binding KindText}" FontSize="10" FontWeight="SemiBold"
+                                 Foreground="{DynamicResource Axiom.Accent}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="10,0,10,0" Spacing="2">
+                      <TextBlock Text="{Binding TargetText}" FontSize="9"
+                                 Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding Detail}" FontSize="9"
+                                 Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                      <StackPanel Spacing="2">
+                        <Button Content="Test hook" Padding="7,3" FontSize="10"
+                                IsEnabled="{Binding CanTest}"
+                                Command="{Binding $parent[ItemsControl].DataContext.Security.TestAgentCommand}"
+                                CommandParameter="{Binding}" />
+                        <TextBlock Text="{Binding TestResult}" FontSize="8"
+                                   Foreground="{DynamicResource Axiom.TextMuted}" MaxWidth="220"
+                                   TextWrapping="Wrap" />
+                      </StackPanel>
+                      <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2"
+                              VerticalAlignment="Top">
+                        <TextBlock Text="{Binding DisplayStatus}" FontSize="9"
+                                   Foreground="{DynamicResource Axiom.TextSecondary}" />
+                      </Border>
+                    </StackPanel>
+                  </Grid>
+                  <Border.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Copy agent details"
+                                Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.Security.CopyAgentDetailsCommand}"
+                                CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    </ContextMenu>
+                  </Border.ContextMenu>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
       <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
@@ -83,6 +192,9 @@
           </Grid>
           <TextBlock Text="{Binding VerifiedSyncLookupText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
           <TextBlock Text="{Binding VerifiedGraphListStatus}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <CheckBox Content="Auto-sync verified graph every 15 minutes"
+                    IsChecked="{Binding IsAutoSyncEnabled}"
+                    Foreground="{DynamicResource Axiom.TextPrimary}" />
           <TextBlock Text="{Binding AutoSyncStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
@@ -103,27 +215,39 @@
         <StackPanel Spacing="6">
           <TextBlock Text="Verified graph threats" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <TextBlock Text="{Binding VerifiedGraphListStatus}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-          <ListBox Classes="data-list" ItemsSource="{Binding VerifiedGraphThreats}" MaxHeight="160"
-                   Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-            <ListBox.ItemTemplate>
-              <DataTemplate>
-                <Grid ColumnDefinitions="*,110,80,90" Margin="0,2">
-                  <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="1" Text="{Binding CategoryLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                  <TextBlock Grid.Column="2" Text="{Binding Severity}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                  <TextBlock Grid.Column="3" Text="{Binding Source}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
-                </Grid>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
+          <Grid ColumnDefinitions="*,12,320">
+            <ListBox Grid.Column="0" Classes="data-list" ItemsSource="{Binding VerifiedGraphThreats}"
+                     SelectedItem="{Binding SelectedThreat}" MaxHeight="200"
+                     Background="Transparent" BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,110,80,90" Margin="0,2">
+                    <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Text="{Binding CategoryLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <TextBlock Grid.Column="2" Text="{Binding SeverityLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
+                    <TextBlock Grid.Column="3" Text="{Binding Source}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <Border Grid.Column="2" Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="6" Padding="10">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{Binding SelectedThreatTitle}" FontSize="11" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding SelectedThreatDetail}" FontSize="10"
+                           Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+          </Grid>
         </StackPanel>
       </Border>
 
       <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
         <StackPanel Spacing="6">
           <TextBlock Text="Agent sessions" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-          <TextBlock Text="Host-owned Claude/Codex descriptors, read-only and bounded. A listed session is not proof of protection."
-                     FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding SessionStatusText}" FontSize="10"
+                     Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <ItemsControl ItemsSource="{Binding SessionGroups}">
             <ItemsControl.ItemTemplate>
               <DataTemplate>

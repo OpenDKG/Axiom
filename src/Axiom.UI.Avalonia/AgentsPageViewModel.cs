@@ -235,6 +235,33 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private int _verifiedGraphTotal;
 
     [ObservableProperty]
+    private BlackboxGraphThreat? _selectedThreat;
+
+    [ObservableProperty]
+    private string _selectedThreatTitle = "Select a verified threat to see details.";
+
+    [ObservableProperty]
+    private string _selectedThreatDetail = string.Empty;
+
+    partial void OnSelectedThreatChanged(BlackboxGraphThreat? value)
+    {
+        if (value is null)
+        {
+            SelectedThreatTitle = "Select a verified threat to see details.";
+            SelectedThreatDetail = string.Empty;
+            return;
+        }
+
+        SelectedThreatTitle = value.DisplayName;
+        SelectedThreatDetail =
+            $"Identifier: {value.Identifier}\n" +
+            $"Category: {value.CategoryLabel}\n" +
+            $"Severity: {value.SeverityLabel}\n" +
+            $"Ecosystems: {(string.IsNullOrWhiteSpace(value.Ecosystems) ? "unknown" : value.Ecosystems)}\n" +
+            $"Source: {(string.IsNullOrWhiteSpace(value.Source) ? "unknown" : value.Source)}";
+    }
+
+    [ObservableProperty]
     private bool _isVerifiedSyncRunning;
 
     [ObservableProperty]
