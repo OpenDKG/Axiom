@@ -110,6 +110,31 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
 
     public bool IsProtected => Status == "PROTECTED";
 
+    /// <summary>
+    /// Traffic-light tone for the status badge. Green means the hook is loaded or verified,
+    /// orange means it is installed but still needs trust or a test, red means the guard failed.
+    /// </summary>
+    public bool ToneOk => Status is "PROTECTED" or "VERIFIED BLOCKING" or "HOOK LOADED";
+
+    public bool ToneWarn => Status is "HOOK INSTALLED" or "TRUST REQUIRED" or "DETECTED" or "AUDIT ONLY" or "TESTING";
+
+    public bool ToneFail => Status is "DEGRADED" or "OFFLINE" or "FAIL";
+
+    public bool ToneIdle => !ToneOk && !ToneWarn && !ToneFail;
+
+    public string ToneHint => Status switch
+    {
+        "PROTECTED" or "VERIFIED BLOCKING" or "HOOK LOADED" => "Hooked and reachable; the guard answered the canary test.",
+        "HOOK INSTALLED" => "Hook installed but not proven. Run Test hook; a passing test turns this green.",
+        "TRUST REQUIRED" => "Installed but not trusted by the host yet. Trust it, then test.",
+        "DETECTED" => "Agent detected without an Axiom hook. Install/repair hooks.",
+        "AUDIT ONLY" => "The hook answered but nothing was blocked. Use block mode, then test again.",
+        "DEGRADED" => "The hook reached the guard but the guard failed. Fail-open means no protection.",
+        "OFFLINE" => "Blackbox is offline, so the hook cannot answer.",
+        "TESTING" => "Hook test is running.",
+        _ => "Not detected on this machine.",
+    };
+
     public bool CanTest => Kind is "opencode" or "openchamber" or "codex" or "claude" or "cursor" or "copilot" or "gemini" or "windsurf" or "cline" or "zcode" or "deepseek";
 
     public string TestResult { get; init; } = string.Empty;
@@ -174,6 +199,12 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     private static readonly TimeSpan EvidenceLifetime = TimeSpan.FromMinutes(5);
 
     private readonly HashSet<string> _verifiedBlockingAgents = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Agents whose last manual hook test did not run or failed; kept red until a test passes.</summary>
+    private readonly HashSet<string> _failedHookTests = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Agents whose test proved the hook reaches the guard; kept green as CONNECTED.</summary>
+    private readonly HashSet<string> _loadedHookAgents = new(StringComparer.OrdinalIgnoreCase);
 
     private bool IsAuditOnly => string.Equals(BlackboxModeText, "audit", StringComparison.OrdinalIgnoreCase);
 
@@ -428,6 +459,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             Rebuild(dkgTask.Result, blackboxTask.Result);
             LastCheckedText = $"Checked {DateTimeOffset.Now:HH:mm:ss}";
             await RefreshAgentsAsync(blackboxTask.Result.IsConnected).ConfigureAwait(true);
+            ApplyHookTestStates();
 
             _activityHistory.Add(new ModuleActivity(
                 DateTimeOffset.Now,
@@ -640,17 +672,33 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             return;
         }
 
-        ProtectedAgents[index] = agent with { TestResult = "Testing hook adapter…" };
+        ProtectedAgents[index] = agent with { TestResult = "Testing hook adapter…", Status = "TESTING" };
         var result = await _agentHookProbe.TestAsync(agent.Kind, CancellationToken.None).ConfigureAwait(true);
         index = ProtectedAgents.IndexOf(ProtectedAgents.FirstOrDefault(item =>
             item.Kind == agent.Kind && item.Target == agent.Target) ?? agent);
-        if (string.Equals(result.Status, "BLOCKED", StringComparison.OrdinalIgnoreCase))
+
+        var blocked = string.Equals(result.Status, "BLOCKED", StringComparison.OrdinalIgnoreCase);
+        var reachedGuard = !blocked &&
+                           (result.Status.Contains("HOOK RAN", StringComparison.OrdinalIgnoreCase) ||
+                            result.Status.Contains("ALLOWED", StringComparison.OrdinalIgnoreCase));
+
+        if (blocked)
         {
             _verifiedBlockingAgents.Add(agent.Kind);
+            _loadedHookAgents.Remove(agent.Kind);
+            _failedHookTests.Remove(agent.Kind);
+        }
+        else if (reachedGuard)
+        {
+            _verifiedBlockingAgents.Remove(agent.Kind);
+            _loadedHookAgents.Add(agent.Kind);
+            _failedHookTests.Remove(agent.Kind);
         }
         else
         {
             _verifiedBlockingAgents.Remove(agent.Kind);
+            _loadedHookAgents.Remove(agent.Kind);
+            _failedHookTests.Add(agent.Kind);
         }
 
         if (index >= 0)
@@ -658,7 +706,60 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             ProtectedAgents[index] = ProtectedAgents[index] with
             {
                 TestResult = $"{result.Status}: {result.Detail}",
+                Status = blocked ? "VERIFIED BLOCKING" : reachedGuard ? "HOOK LOADED" : "DEGRADED",
             };
+        }
+
+        AgentsStatusText = blocked
+            ? $"{agent.KindText}: test blocked the canary call; marked verified."
+            : reachedGuard
+                ? $"{agent.KindText}: hook reached the guard; marked connected."
+                : $"{agent.KindText}: test did not run or failed; marked degraded.";
+    }
+
+    /// <summary>
+    /// Re-applies manual test outcomes after a status refresh so a passed test stays green and a
+    /// failed one stays red instead of silently reverting to the file-presence state.
+    /// </summary>
+    private void ApplyHookTestStates()
+    {
+        for (var index = 0; index < ProtectedAgents.Count; index++)
+        {
+            var agent = ProtectedAgents[index];
+
+            if (_failedHookTests.Contains(agent.Kind))
+            {
+                if (agent.Status is not "DEGRADED")
+                {
+                    ProtectedAgents[index] = agent with
+                    {
+                        Status = "DEGRADED",
+                        Detail = "The last hook test did not run or failed. Fail-open means protection is not proven; run Test hook again after fixing the guard.",
+                    };
+                }
+
+                continue;
+            }
+
+            if (_loadedHookAgents.Contains(agent.Kind))
+            {
+                if (agent.Status is not ("HOOK LOADED" or "VERIFIED BLOCKING"))
+                {
+                    ProtectedAgents[index] = agent with
+                    {
+                        Status = "HOOK LOADED",
+                        Detail = "Hook test passed: the hook ran and the local guard answered. Blocking still depends on the guard policy.",
+                    };
+                }
+
+                continue;
+            }
+
+            if (_verifiedBlockingAgents.Contains(agent.Kind) &&
+                agent.Status is not ("VERIFIED BLOCKING" or "PROTECTED"))
+            {
+                ProtectedAgents[index] = agent with { Status = "VERIFIED BLOCKING" };
+            }
         }
     }
 
