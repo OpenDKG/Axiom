@@ -65,7 +65,8 @@
               <TextBlock Grid.Column="1" Text="{Binding NewConnectionsText}" FontSize="10"
                          Foreground="{DynamicResource Axiom.TextMuted}" />
             </Grid>
-            <ListBox Classes="data-list" ItemsSource="{Binding NewConnectionEvents}" SelectedItem="{Binding SelectedEvent}"
+            <ListBox Classes="data-list" ItemsSource="{Binding NewConnectionEvents}"
+                     SelectedItem="{Binding SelectedEvent, Mode=TwoWay}"
                      MaxHeight="190" Background="Transparent" BorderThickness="0"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
               <ListBox.ItemTemplate>
