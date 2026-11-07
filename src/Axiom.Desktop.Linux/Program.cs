@@ -90,10 +90,10 @@ public static class Program
             context.Response.Headers["Referrer-Policy"] = "no-referrer";
             context.Response.Headers["Content-Security-Policy"] =
                 "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'";
-            if (context.Request.Path.StartsWithSegments("/api"))
-            {
-                context.Response.Headers.CacheControl = "no-store";
-            }
+            // API responses carry data, so they are never cached. Static assets must revalidate:
+            // a browser that kept an old app.js would run the previous release's UI.
+            context.Response.Headers.CacheControl =
+                context.Request.Path.StartsWithSegments("/api") ? "no-store" : "no-cache";
 
             await next().ConfigureAwait(false);
         });
@@ -250,6 +250,39 @@ public static class Program
                     .ConfigureAwait(false);
             })));
 
+        app.MapGet("/api/reputation", (Func<HttpContext, Task<IResult>>)(context => Guarded(context, token, async () =>
+        {
+            var stored = await credentials.GetAsync("virustotal", context.RequestAborted).ConfigureAwait(false);
+            return new
+            {
+                credential = new
+                {
+                    backend = credentials.Backend,
+                    available = credentials.IsAvailable,
+                    hasKey = !string.IsNullOrEmpty(stored),
+                },
+            };
+        })));
+
+        app.MapPost("/api/reputation/key", (Func<HttpContext, Task<IResult>>)(context =>
+            GuardedJson(context, token, async () =>
+            {
+                var body = await ReadJsonAsync<KeyRequest>(context).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(body?.Key) || body.Key.Length > 4096)
+                {
+                    throw new InvalidOperationException("A key is required.");
+                }
+
+                await credentials.SetAsync("virustotal", body.Key, context.RequestAborted).ConfigureAwait(false);
+                return new { stored = true };
+            })));
+
+        app.MapDelete("/api/reputation/key", (Func<HttpContext, Task<IResult>>)(context => GuardedJson(context, token, async () =>
+        {
+            await credentials.DeleteAsync("virustotal", context.RequestAborted).ConfigureAwait(false);
+            return new { deleted = true };
+        })));
+
         app.MapPost("/api/reputation", (Func<HttpContext, Task<IResult>>)(context =>
             GuardedJson(context, token, async () =>
             {
@@ -263,8 +296,9 @@ public static class Program
                 var key = await credentials.GetAsync("virustotal", context.RequestAborted).ConfigureAwait(false);
                 if (string.IsNullOrEmpty(key))
                 {
-                    throw new InvalidOperationException(
-                        "No VirusTotal key is stored in Secret Service; only the SHA-256 is sent.");
+                    throw new InvalidOperationException(credentials.IsAvailable
+                        ? "No VirusTotal key is stored in Secret Service; only the SHA-256 is sent."
+                        : "No Secret Service keyring is available, so a VirusTotal key cannot be stored on this host.");
                 }
 
                 var hash = await Sha256Async(body.Path, context.RequestAborted).ConfigureAwait(false);
@@ -494,6 +528,18 @@ public static class Program
                 ? StatusCodes.Status503ServiceUnavailable
                 : StatusCodes.Status502BadGateway;
             return Results.Json(new { error = exception.Code, message = exception.Message }, JsonOptions, statusCode: status);
+        }
+        catch (NotSupportedException exception)
+        {
+            // Credential-store backend missing (no keyring/session bus): not a server fault.
+            return Results.Json(new { error = "credential-unavailable", message = exception.Message }, JsonOptions,
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (TimeoutException exception)
+        {
+            // A stalled credential backend must not surface as an unhandled 500.
+            return Results.Json(new { error = "credential-unavailable", message = exception.Message }, JsonOptions,
+                statusCode: StatusCodes.Status503ServiceUnavailable);
         }
     }
 

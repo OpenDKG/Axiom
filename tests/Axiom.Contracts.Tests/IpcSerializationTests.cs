@@ -164,4 +164,27 @@ public sealed class IpcSerializationTests
             }
         }
     }
+
+    [Fact]
+    public async Task Missing_unix_socket_reports_a_readable_service_unavailable_message()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var socketPath = Path.Combine(Path.GetTempPath(), "axiom-absent-" + Guid.NewGuid().ToString("N") + ".sock");
+        var client = new IpcPipeClient(
+            "axiom-absent",
+            connectTimeout: TimeSpan.FromSeconds(2),
+            requestTimeout: TimeSpan.FromSeconds(2),
+            unixSocketPath: socketPath);
+
+        var exception = await Assert.ThrowsAsync<IpcClientException>(
+            () => client.SendAsync<object>(IpcCommandTypes.ServiceHealth, payload: null, CancellationToken.None));
+
+        Assert.Equal(IpcErrorCodes.ServiceUnavailable, exception.Code);
+        // The UI shows this text, so a raw errno string ("Cannot assign requested address") must not escape.
+        Assert.Contains("not reachable", exception.Message, StringComparison.Ordinal);
+    }
 }

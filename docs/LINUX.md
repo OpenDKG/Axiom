@@ -19,12 +19,12 @@ container with cgroup v2, libbpf 1.3 and clang 18 for the eBPF object):
 | Service lifecycle | systemd system or user unit | System scope sees every process; user scope is sandboxed by the session |
 | Local IPC | Unix domain socket in a private directory, `SO_PEERCRED` uid check | 0600 socket, 0700 directory (0711 when another uid is allowed); no TCP listener; same protocol, caps, rate limit and deadlines |
 | MCP server | unchanged tools over the Unix socket transport | Verified against the real service, not a mock |
-| Browser UI | `Axiom.Desktop.Linux`, loopback only, per-run token | No remote listener, no shell, CSP, frame denial, loopback Host check |
+| Browser UI | `Axiom.Desktop.Linux`, loopback only, per-run token | No remote listener, no shell, CSP, frame denial, loopback Host check; a missing or rotated token shows an explicit "session expired" banner instead of bare `unauthorized`; static assets are served `no-cache` so a UI update is never masked by a stale `app.js` |
 | Privacy Shield DNS filter | `Axiom.Dns`, loopback design | Host resolver as upstream, including `127.0.0.53`; no public fallback; in-flight queries are drained on shutdown; never changes system DNS settings |
 | **Per-executable firewall** | eBPF cgroup hooks (`connect4/6`, `sendmsg4/6`, `bind4/6`) | Opt-in write gate; executable identity by dentry-path hash; read-back, rollback, link-owned cleanup |
 | Credential storage | Secret Service through `secret-tool` | No plaintext fallback: writes fail with an explicit error when no keyring/session bus exists |
 | AI analyst | portable OpenAI-compatible client + Linux settings and key storage | Bounded evidence package; paths redacted by default; optional, no automatic analysis loop |
-| Reputation | VirusTotal hash-only client | The local file is hashed locally; only the SHA-256 leaves the host |
+| Reputation | VirusTotal hash-only client | The local file is hashed locally; only the SHA-256 leaves the host; the key is stored in Secret Service from the AI Analyst page (no plaintext fallback) |
 | Autostart | XDG `~/.config/autostart/axiom.desktop` | Marker-owned entry, absolute `Exec`, refuses unowned/symlinked files |
 | Desktop notifications | not claimed; the browser UI is the status surface | There is no tray icon on Linux (see below) |
 | Packaging | self-contained tarball and `.deb` | `scripts/package-deb.sh`; the package does not enable/start the service or touch firewall/DNS |
@@ -88,10 +88,9 @@ socket outside the test cgroup is affected. The service + UI smoke run reported 
 - **AI analyst** is optional and disabled until configured. The provider key is stored by Secret
   Service; without a keyring the UI refuses to store it. Only the bounded evidence package leaves
   the host.
-- **Reputation** is hash-only and needs a VirusTotal key. The Linux UI has no field for that key
-  (`virustotal` credential), so the reputation action reports a missing key until one is stored by
-  another Secret Service client; only the SHA-256 would leave the host. No live provider call was
-  exercised.
+- **Reputation** is hash-only and needs a VirusTotal key. The key is stored through Secret Service
+  (`virustotal`) from the AI Analyst page, which disables the control and states the reason when no
+  keyring is available; only the SHA-256 leaves the host. No live provider call was exercised.
 
 ### Tray icon, autostart and packaging
 
@@ -146,6 +145,11 @@ Not available on Linux in this build, and reported as such:
 toolchain. The Linux tests include the real `/proc` parser, Unix socket authentication, live eBPF
 enforcement on a disposable cgroup, Privacy Shield DNS and the existing
 Contracts/Core/Persistence/Service/MCP suites.
+
+The browser UI has no build step, so its behaviour is pinned separately:
+`node --test tests/ui/app-history.test.mjs` runs the real `wwwroot/app.js` in a stub DOM and covers
+UTC rendering, the History paging controls, the out-of-order-response guard and the expired-token
+message. It needs Node 22+ and no packages.
 
 The service and its test project select `net10.0` on Linux and `net10.0-windows` on Windows, so a
 single NuGet lock graph cannot describe both. Both projects therefore disable

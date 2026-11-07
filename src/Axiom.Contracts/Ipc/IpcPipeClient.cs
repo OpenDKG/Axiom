@@ -115,9 +115,10 @@ public sealed class IpcPipeClient(
         }
         catch (SocketException exception)
         {
+            // Raw errno text ("Cannot assign requested address") means nothing to a user.
             throw new IpcClientException(
                 IpcErrorCodes.ServiceUnavailable,
-                exception.Message,
+                "The Axiom service is not reachable; it may be stopped or restarting.",
                 exception);
         }
         catch (UnauthorizedAccessException exception)

@@ -53,6 +53,15 @@ nav button.active { color: var(--text); border-color: var(--line); background: #
 .state.ok { color: var(--ok); }
 .state.bad { color: var(--bad); }
 
+.auth-note {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--bad);
+  border-radius: 8px;
+  background: #2a1a1e;
+  color: var(--text);
+}
+
 main { padding: 20px; max-width: 1400px; margin: 0 auto; }
 
 .page { display: none; }
@@ -91,6 +100,9 @@ input[type="search"], select, button {
 input[type="search"] { min-width: 320px; }
 button { cursor: pointer; }
 button:hover { border-color: var(--accent); }
+/* A control that cannot work here is disabled and visibly inert, never a live-looking dead button. */
+button:disabled, input:disabled { opacity: .45; cursor: not-allowed; }
+button:disabled:hover { border-color: var(--line); }
 
 .muted { color: var(--muted); }
 .notes { color: var(--muted); padding-left: 18px; }

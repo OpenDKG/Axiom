@@ -23,6 +23,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Axiom.Infrastructure.Linux\Axiom.Infrastructure.Linux.csproj" />
     <ProjectReference Include="..\..\src\Axiom.McpServer\Axiom.McpServer.csproj" />
+    <!-- Build-order only: DesktopLinuxUiTests launches the real UI host binary, so it must exist
+         and be current before the test runs. -->
+    <ProjectReference Include="..\..\src\Axiom.Desktop.Linux\Axiom.Desktop.Linux.csproj"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

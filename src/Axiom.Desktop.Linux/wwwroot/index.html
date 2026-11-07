@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Axiom for Linux</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -22,6 +23,7 @@
 </header>
 
 <main>
+  <p id="auth-note" class="auth-note" hidden></p>
   <section id="page-overview" class="page active">
     <div class="cards" id="overview-cards"></div>
     <h2>Data quality and limitations</h2>
@@ -115,6 +117,16 @@
     </div>
     <pre id="ai-output" class="notes"></pre>
     <h2>Reputation (SHA-256 only)</h2>
+    <div class="toolbar">
+      <input id="reputation-key" type="password" placeholder="VirusTotal API key" size="32">
+      <button id="reputation-key-save">Store key</button>
+      <button id="reputation-key-delete">Delete key</button>
+      <span id="reputation-status" class="muted"></span>
+    </div>
+    <p class="notes">
+      Only the SHA-256 of the chosen file is sent. A VirusTotal result is one source with a
+      timestamp, not a verdict.
+    </p>
     <div class="toolbar">
       <input id="reputation-path" type="text" placeholder="/absolute/path/to/file" size="48">
       <button id="reputation-run">Look up hash</button>

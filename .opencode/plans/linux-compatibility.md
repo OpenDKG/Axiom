@@ -431,3 +431,43 @@ nit, the exception-path audit assertion, was added); enforcement/release approva
   only), 24 h soak, Windows runtime, agent hooks/Blackbox install (still blocked on the Windows-only
   Blackbox payload), tray icon, AI provider/keyring live round-trip, WSL/container/SELinux/AppArmor
   confined runtime, macOS.
+
+### Browser UI audit and repair
+
+Method: Playwright/Chromium exercised the deployed LAN HTTPS UI (`https://192.168.4.199:5643`)
+and two isolated loopback instances of the fresh publish (one with the real service socket as uid
+997, one with a missing socket), authenticated with the deployment's per-run token. Every page,
+navigation, filter, sort-free table, paging control, time window, export, settings form and error
+path was driven with non-destructive input; the service socket, history data, firewall/DNS state,
+autostart, agent settings and credentials were never mutated. Rendered state was compared with the
+IPC contracts rather than trusting HTTP 200.
+
+Defects found and fixed (all reproduced first, then re-tested in the browser):
+
+| # | Severity | Defect | Fix |
+|---|---|---|---|
+| 1 | high | With the service socket missing, every page printed the raw .NET text "Cannot assign requested address"; a stopped service looked like a network misconfiguration | `IpcPipeClient` maps a socket connect failure to "The Axiom service is not reachable; it may be stopped or restarting." (`service_unavailable`). Message-only change in shared code, so Windows and MCP get the same wording |
+| 2 | high | After a UI restart the per-run token rotates; an open tab kept the stale token and every page showed a bare `unauthorized` with no way to recover | 401 is reported as "Session token missing or expired" with the exact recovery command; a banner carries it, the state reads `session expired`, and the token-link reload is kept and covered by a browser test |
+| 3 | medium | History columns are headed "First seen (UTC)"/"Last seen (UTC)" but values were rendered in the viewer's local zone | UTC rendering for History and for the overview "Last capture (UTC)" |
+| 4 | medium | Static assets carried no cache directive, so a browser could keep the previous `app.js` after an update and show a UI the service no longer matches | Non-API responses now send `Cache-Control: no-cache` (revalidate with ETag); `/api/*` stays `no-store` |
+| 5 | medium | Reputation could never work on Linux: nothing stored the `virustotal` credential | `GET /api/reputation` reports the credential backend and whether a key exists; `POST`/`DELETE /api/reputation/key` store and remove it through `ICredentialStore` (Secret Service, no plaintext fallback); the lookup now separates "no key stored" from "no keyring on this host" |
+| 6 | medium | With no keyring, the AI and reputation "Store key" controls looked live and every click failed | Controls are disabled with the reason stated in the page text and are visibly inert (`button:disabled`) |
+| 7 | low | History Previous/Next were never disabled (silent no-ops at both ends) and changing the time window kept the old offset, showing an empty page | Disabled state from offset and total; a window change resets to the first page |
+| 8 | low | A slower, older History response could overwrite a newer selection's rows, count and paging state | Request counter discards superseded responses and their failures |
+| 9 | low | `/favicon.ico` returned 404 on every load, adding a console error to an otherwise clean page | Inline `data:` icon in `index.html` |
+
+Verification: `tests/ui/app-history.test.mjs` runs the real `app.js` in a stub DOM (UTC rendering,
+paging disablement, out-of-order responses, expired-token text; confirmed to fail without the
+ordering guard); `IpcSerializationTests` pins the user-facing IPC message;
+`DesktopLinuxUiTests` starts the real loopback host on an ephemeral port with a fake `secret-tool`
+on PATH and asserts the token gate on all three credential routes, wrong-token rejection, key-size
+validation, no echo or disclosure of a stored key, and the static/API cache headers. 296 Linux tests
+pass; the two `PrivacyShieldTests` failures are pre-existing at HEAD in this environment (the tests
+place state directly in `/tmp`, which the privacy-directory guard refuses) and are unaffected by
+this delta. `Axiom.sln` builds for Windows with `EnableWindowsTargeting=true`, 0 warnings.
+
+Still not available in the Linux browser UI, stated rather than faked: Privacy Shield configuration,
+source/block-list editing and history clearing (the service exposes `privacy.configure`,
+`privacy.sources.update`, `privacy.history.clear`; the page is status-only), per-flow throughput
+(`/proc` socket tables expose no byte counts, so no throughput chart is possible and the page says
+so), tray icon, and agent-hook/Blackbox installation.

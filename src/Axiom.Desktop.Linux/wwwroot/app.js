@@ -11,11 +11,25 @@
     history.replaceState(null, "", location.pathname);
   }
 
+  // A token link opened in a tab that already loaded the UI changes only the
+  // fragment; reload so the new token replaces the stale one.
+  window.addEventListener("hashchange", () => location.reload());
+
   const token = sessionStorage.getItem("axiomToken") || "";
   const state = document.getElementById("service-state");
   let snapshot = null;
   let historyOffset = 0;
   let historyTotal = 0;
+  let historyRequest = 0;
+
+  const HISTORY_PAGE = 200;
+
+  // Both the service and the History page labels report UTC; render it explicitly so a
+  // timestamp is never silently shown in the viewer's local zone.
+  const utcTimestamp = (value) => {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 19).replace("T", " ");
+  };
 
   const esc = (value) => String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -23,9 +37,15 @@
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 
-  async function api(path) {
-    const response = await fetch(path, { headers: { "X-Axiom-Token": token } });
+  async function readJson(response) {
     const body = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      const error = new Error(
+        "Session token missing or expired. Reopen the Axiom UI link that contains #t=… " +
+        "(the UI prints it on startup, for the unit: journalctl -u axiom-ui).");
+      error.code = "unauthorized";
+      throw error;
+    }
     if (!response.ok) {
       const error = new Error(body.message || body.error || `HTTP ${response.status}`);
       error.code = body.error;
@@ -34,9 +54,20 @@
     return body;
   }
 
+  async function api(path) {
+    const response = await fetch(path, { headers: { "X-Axiom-Token": token } });
+    return readJson(response);
+  }
+
   function setState(text, cssClass) {
     state.textContent = text;
     state.className = `state ${cssClass || ""}`;
+  }
+
+  function showAuthNote(message) {
+    const note = document.getElementById("auth-note");
+    note.textContent = message;
+    note.hidden = !message;
   }
 
   function card(label, value, cssClass) {
@@ -48,13 +79,14 @@
       const data = await api("/api/status");
       const h = data.health;
       setState(`service ${h.status}`, "ok");
+      showAuthNote("");
       document.getElementById("overview-cards").innerHTML = [
         card("Source", h.sourceName),
         card("Connections", h.connectionCount),
         card("Processes", h.processCount),
         card("Uptime", `${Math.floor(h.uptimeSeconds / 60)} min`),
         card("Poll interval", `${h.pollIntervalSeconds}s`),
-        card("Last capture", h.lastCaptureUtc ? new Date(h.lastCaptureUtc).toLocaleTimeString() : "pending"),
+        card("Last capture (UTC)", h.lastCaptureUtc ? utcTimestamp(h.lastCaptureUtc) : "pending"),
       ].join("");
       document.getElementById("limitations").innerHTML =
         (h.limitations || []).map((item) => `<li>${esc(item)}</li>`).join("") ||
@@ -68,7 +100,11 @@
       }).map(([key, value]) => `<dt>${esc(key)}</dt><dd>${esc(value)}</dd>`).join("");
     } catch (error) {
       setState(error.code === "service_unavailable" ? "service unavailable" : "error", "bad");
-      document.getElementById("overview-cards").innerHTML = card("Service", error.message, "bad");
+      showAuthNote(error.code === "unauthorized" ? error.message : "");
+      document.getElementById("overview-cards").innerHTML = card(
+        "Service",
+        error.code === "unauthorized" ? "session expired" : error.message,
+        "bad");
     }
   }
 
@@ -112,15 +148,21 @@
   async function loadHistory() {
     const search = document.getElementById("history-search").value.trim();
     const hours = document.getElementById("history-hours").value;
-    const url = `/api/history?hours=${encodeURIComponent(hours)}&limit=200&offset=${historyOffset}` +
+    const offset = historyOffset;
+    // A slower, older query must not overwrite the newer selection's rows and paging state.
+    const request = ++historyRequest;
+    const url = `/api/history?hours=${encodeURIComponent(hours)}&limit=${HISTORY_PAGE}&offset=${offset}` +
       (search ? `&search=${encodeURIComponent(search)}` : "");
 
     try {
       const page = await api(url);
+      if (request !== historyRequest) return;
       historyTotal = page.totalCount;
       document.getElementById("history-info").textContent = page.rows.length === 0
         ? `0 of ${historyTotal}`
-        : `${historyOffset + 1}-${Math.min(historyOffset + page.rows.length, historyTotal)} of ${historyTotal}`;
+        : `${offset + 1}-${Math.min(offset + page.rows.length, historyTotal)} of ${historyTotal}`;
+      document.getElementById("history-prev").disabled = offset === 0;
+      document.getElementById("history-next").disabled = offset + HISTORY_PAGE >= historyTotal;
       document.getElementById("history-db").textContent = page.databasePath;
       document.getElementById("history-body").innerHTML = page.rows.map((row) => `
         <tr>
@@ -129,10 +171,11 @@
           <td>${esc(row.localEndpoint)}</td>
           <td>${esc(row.remoteEndpoint)}</td>
           <td>${esc(row.direction)}</td>
-          <td>${esc(new Date(row.firstSeenUtc).toLocaleString())}</td>
-          <td>${esc(new Date(row.lastSeenUtc).toLocaleString())}</td>
+          <td>${esc(utcTimestamp(row.firstSeenUtc))}</td>
+          <td>${esc(utcTimestamp(row.lastSeenUtc))}</td>
         </tr>`).join("") || `<tr><td colspan="7" class="muted">No stored rows in this window.</td></tr>`;
     } catch (error) {
+      if (request !== historyRequest) return;
       document.getElementById("history-body").innerHTML = `<tr><td colspan="7">${esc(error.message)}</td></tr>`;
     }
   }
@@ -169,10 +212,32 @@
       document.getElementById("ai-endpoint").value = data.settings.endpoint || "";
       document.getElementById("ai-model").value = data.settings.model || "";
       document.getElementById("ai-redact").checked = data.settings.redactPaths !== false;
+      const available = !!data.credential.available;
       document.getElementById("ai-status").textContent =
-        `credential backend: ${data.credential.backend} (${data.credential.available ? "available" : "unavailable"}), key stored: ${data.credential.hasKey ? "yes" : "no"}`;
+        `credential backend: ${data.credential.backend} (${available ? "available" : "unavailable"}), key stored: ${data.credential.hasKey ? "yes" : "no"}` +
+        (available ? "" : " — no keyring, so the key cannot be stored on this host");
+      // A store that cannot succeed is disabled with the reason above instead of failing on click.
+      document.getElementById("ai-key").disabled = !available;
+      document.getElementById("ai-key-save").disabled = !available;
+      document.getElementById("ai-key-delete").disabled = !available;
     } catch (error) {
       document.getElementById("ai-status").textContent = error.message;
+    }
+  }
+
+  async function loadReputation() {
+    const status = document.getElementById("reputation-status");
+    try {
+      const data = await api("/api/reputation");
+      const available = !!data.credential.available;
+      status.textContent =
+        `credential backend: ${data.credential.backend} (${available ? "available" : "unavailable"}), key stored: ${data.credential.hasKey ? "yes" : "no"}` +
+        (available ? "" : " — no keyring, so the key cannot be stored on this host");
+      document.getElementById("reputation-key").disabled = !available;
+      document.getElementById("reputation-key-save").disabled = !available;
+      document.getElementById("reputation-key-delete").disabled = !available;
+    } catch (error) {
+      status.textContent = error.message;
     }
   }
 
@@ -219,13 +284,18 @@
     if (button.dataset.page === "history") loadHistory();
     if (button.dataset.page === "firewall") loadFirewall();
     if (button.dataset.page === "privacy") loadPrivacy();
-    if (button.dataset.page === "ai") loadAi();
+    if (button.dataset.page === "ai") { loadAi(); loadReputation(); }
     if (button.dataset.page === "about") { loadOverview(); loadAutostart(); }
   });
 
   document.getElementById("conn-filter").addEventListener("input", renderConnections);
   document.getElementById("conn-new-only").addEventListener("change", renderConnections);
   document.getElementById("history-run").addEventListener("click", () => {
+    historyOffset = 0;
+    loadHistory();
+  });
+  // A narrower window starts at the first page; keeping the old offset would show an empty page.
+  document.getElementById("history-hours").addEventListener("change", () => {
     historyOffset = 0;
     loadHistory();
   });
@@ -242,7 +312,10 @@
       (search ? `&search=${encodeURIComponent(search)}` : "");
     const response = await fetch(url, { headers: { "X-Axiom-Token": sessionStorage.getItem("axiomToken") || "" } });
     if (!response.ok) {
-      document.getElementById("history-info").textContent = "export failed";
+      const detail = await response.json().catch(() => ({}));
+      document.getElementById("history-info").textContent = response.status === 401
+        ? "session expired — reopen the token link, then export again"
+        : `export failed: ${detail.message || detail.error || `HTTP ${response.status}`}`;
       return;
     }
     const blob = await response.blob();
@@ -262,9 +335,7 @@
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || data.error || `HTTP ${response.status}`);
-    return data;
+    return readJson(response);
   }
 
   document.getElementById("ai-save").addEventListener("click", async () => {
@@ -312,6 +383,27 @@
     }
   });
 
+  document.getElementById("reputation-key-save").addEventListener("click", async () => {
+    const status = document.getElementById("reputation-status");
+    try {
+      await postJson("/api/reputation/key", { key: document.getElementById("reputation-key").value });
+      document.getElementById("reputation-key").value = "";
+      await loadReputation();
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  });
+
+  document.getElementById("reputation-key-delete").addEventListener("click", async () => {
+    const status = document.getElementById("reputation-status");
+    try {
+      await postJson("/api/reputation/key", undefined, "DELETE");
+      await loadReputation();
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  });
+
   document.getElementById("reputation-run").addEventListener("click", async () => {
     document.getElementById("reputation-output").textContent = "hashing...";
     try {
@@ -332,12 +424,12 @@
   });
 
   document.getElementById("history-prev").addEventListener("click", () => {
-    historyOffset = Math.max(0, historyOffset - 200);
+    historyOffset = Math.max(0, historyOffset - HISTORY_PAGE);
     loadHistory();
   });
   document.getElementById("history-next").addEventListener("click", () => {
-    if (historyOffset + 200 < historyTotal) {
-      historyOffset += 200;
+    if (historyOffset + HISTORY_PAGE < historyTotal) {
+      historyOffset += HISTORY_PAGE;
       loadHistory();
     }
   });
