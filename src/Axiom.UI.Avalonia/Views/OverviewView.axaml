@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.OverviewView">
   <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="24,18,24,24" Spacing="14">
@@ -35,6 +36,24 @@
           </StackPanel>
         </Border>
       </Grid>
+
+      <Border Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1" CornerRadius="8" Padding="16">
+        <StackPanel Spacing="6">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0" Spacing="2">
+              <TextBlock Text="System-wide throughput" FontSize="14" FontWeight="SemiBold" Foreground="#E6EDF3" />
+              <TextBlock Text="{Binding BucketLabel}" FontSize="10" Foreground="#8A98A8" />
+            </StackPanel>
+            <ComboBox Grid.Column="1" ItemsSource="{Binding RangeOptions}" SelectedItem="{Binding SelectedRange}" Width="92" />
+          </Grid>
+          <controls:TrafficChartControl Height="150" UploadSeries="{Binding UploadSeries}" DownloadSeries="{Binding DownloadSeries}" />
+          <Grid ColumnDefinitions="Auto,Auto,*">
+            <TextBlock Grid.Column="0" Text="{Binding DownloadText, StringFormat=Down: {0}}" Foreground="#1F6FEB" FontSize="10" Margin="0,0,14,0" />
+            <TextBlock Grid.Column="1" Text="{Binding UploadText, StringFormat=Up: {0}}" Foreground="#5EEAD4" FontSize="10" Margin="0,0,14,0" />
+            <TextBlock Grid.Column="2" Text="{Binding RangeNote}" Foreground="#8A98A8" FontSize="10" TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" MaxWidth="520" />
+          </Grid>
+        </StackPanel>
+      </Border>
 
       <Border Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1" CornerRadius="8" Padding="16">
         <StackPanel Spacing="10">

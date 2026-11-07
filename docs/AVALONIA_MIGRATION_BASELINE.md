@@ -192,7 +192,7 @@ Implemented in `Axiom.UI.Avalonia` with real data, real service calls and explic
 
 | Page | Data source | State covered |
 |---|---|---|
-| Overview | `ConnectionMonitor` + `TrafficEngine` | live, service mode, offline |
+| Overview | `ConnectionMonitor` + `TrafficEngine` | live, service mode, offline, measured throughput chart, 5m/1h/24h/7d/30d ranges |
 | Connections | `ConnectionMonitor` | live, service mode, offline with last capture timestamp |
 | Applications | `ConnectionMonitor` / `AppGrouping` | live inventory, read-only, service mode |
 | Events | service `history.query` | live, empty, service required, service offline, CSV export |
