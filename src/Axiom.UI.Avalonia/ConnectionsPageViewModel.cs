@@ -26,6 +26,17 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         _monitor.Updated -= OnUpdated;
     }
 
-    private void OnUpdated(object? sender, EventArgs e) =>
+    private void OnUpdated(object? sender, EventArgs e)
+    {
+        if (_monitor.LastError is { } error)
+        {
+            var captured = _monitor.LastCaptureUtc is { } timestamp
+                ? $" · last capture {timestamp.ToLocalTime():HH:mm:ss}"
+                : string.Empty;
+            StatusText = $"Unavailable: {error}{captured}";
+            return;
+        }
+
         StatusText = $"Live read-only · {Connections.Count} sockets";
+    }
 }

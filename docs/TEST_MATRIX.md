@@ -9,7 +9,7 @@ SDK: 10.0.403. Configuration: `Release`.
 |---|---|
 | `dotnet restore Axiom.sln --locked-mode` | passed (also after standalone publish) |
 | `dotnet build Axiom.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Axiom.sln -c Release --no-build` | **367/367 passed** |
+| `dotnet test Axiom.sln -c Release --no-build` | **370/370 passed** |
 | `dotnet publish src\Axiom.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 70.1 MB single EXE |
 
 | Test project | Count | Notes |

@@ -1,6 +1,6 @@
 # Axiom — Avalonia Migration Baseline
 
-Status: baseline captured; portable presentation foundation started
+Status: baseline captured; first Avalonia shell and service boundary implemented
 Branch: `feature/avalonia-windows-first`
 Baseline commit: `61d5520` (`feat(agents): add opt-in incremental auto-sync`)
 Date: 2026-11-07
@@ -31,7 +31,7 @@ Commands were run from the migration worktree.
 |---|---|
 | `dotnet restore Axiom.sln --locked-mode` | **passed after normalizing the committed lock files** |
 | `dotnet build Axiom.sln -c Release --no-restore` | **0 warnings, 0 errors** |
-| `dotnet test Axiom.sln -c Release --no-build --no-restore` | **367/367 passed** |
+| `dotnet test Axiom.sln -c Release --no-build --no-restore` | **370/370 passed** |
 
 The initial baseline exposed a pre-existing lock/RID mismatch: source projects carried `win-x64`
 lock sections while test projects had none. The normalization removed those stale RID sections and
@@ -49,8 +49,8 @@ Test breakdown:
 | Axiom.Persistence.Tests | 14 |
 | Axiom.Service.Tests | 16 |
 | Axiom.UI.Tests | 140 |
-| Axiom.Presentation.Tests | 3 |
-| **Total** | **367** |
+| Axiom.Presentation.Tests | 6 |
+| **Total** | **370** |
 
 ## 3. Screenshot baseline
 

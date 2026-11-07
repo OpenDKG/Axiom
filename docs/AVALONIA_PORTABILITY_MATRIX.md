@@ -260,5 +260,10 @@ The portability audit is complete when:
 - portable CI can be described without assuming the Windows solution builds on Linux/macOS.
 
 Initial extraction: `Axiom.Presentation` now contains the portable page base, UI timer/dispatcher
-contracts, connection monitor, traffic engine and pure row/geometry/formatting models. The WPF page
-view models and views have not yet been moved; the old UI remains the reference and fallback.
+contracts, connection monitor, traffic engine, pure row/geometry/formatting models and the typed
+service pipe boundary (`IServiceRequestClient`, `ServicePipeClient`, `ServiceSnapshotSource`,
+`ServiceStatusProbe`). The WPF page view models and views have not yet been moved; the old UI remains
+the reference and fallback.
+
+The rest of this matrix still describes the pre-migration code. Update the affected rows when a page
+or service is actually extracted rather than assuming the target map is already true.

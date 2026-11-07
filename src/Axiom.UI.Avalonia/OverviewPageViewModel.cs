@@ -41,10 +41,17 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IDisposable
     private string _sourceText = "IP Helper · TCP/UDP IPv4/IPv6";
 
     [ObservableProperty]
+    private string _sourceBadgeText = "live from IP Helper";
+
+    [ObservableProperty]
     private string _statusText = "Starting the read-only connection monitor…";
 
     public void Refresh()
     {
+        SourceText = _monitor.SourceName;
+        SourceBadgeText = _monitor.SourceName.Contains("Service", StringComparison.OrdinalIgnoreCase)
+            ? "live from the local service"
+            : "live from IP Helper";
         var rows = _monitor.Connections;
         ConnectionsText = rows.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
         ProcessesText = rows.Select(row => row.ProcessId).Where(pid => pid != 0).Distinct().Count()
