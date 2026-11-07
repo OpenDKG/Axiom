@@ -180,6 +180,41 @@ dotnet run --project src/Axiom.Desktop.Linux -- --port 5600
 The UI prints `http://127.0.0.1:<port>/#t=<token>` and tries `xdg-open`. The token is kept in
 `sessionStorage` and sent as `X-Axiom-Token`; it is never put in a query string or a cookie.
 
+### Headless server (system service, unprivileged UI unit)
+
+A server has no desktop session, so the supported shape is the system service above plus a small
+local unit that runs the loopback UI as a separate unprivileged uid. Both processes then start at
+boot without a login:
+
+```ini
+# /etc/systemd/system/axiom-ui.service
+[Unit]
+Description=Axiom loopback browser UI (unprivileged IPC client)
+After=axiom.service
+Wants=axiom.service
+
+[Service]
+Type=simple
+User=axiom-ui
+Group=axiom-ui
+Environment=HOME=/var/lib/axiom-ui
+ExecStart=/opt/axiom/ui/Axiom.Desktop.Linux --no-browser --port 5600 --socket /run/axiom/service.sock
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`AXIOM_ALLOWED_UID` in `axiom.service` must be the UI uid, and `/var/lib/axiom-ui` must be owned by
+it (0700). The unit is site-local, not shipped: the UI remains an ordinary IPC client and the
+service stays the only privileged process. No remote listener is opened; on a headless host reach
+`127.0.0.1:5600` through an SSH local-forward. The per-run token is printed to the unit's stdout
+(journal, readable by root and `adm`), so keep the journal restricted accordingly.
+
 ## Paths and environment
 
 | Setting | Default | Purpose |

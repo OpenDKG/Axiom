@@ -341,3 +341,65 @@ public DNS fallback, token/Host handling, and unchanged private-cgroup test isol
 
 Final verification after these fixes: **305/305** tests twice, Windows compile and locked restore
 0 errors.
+
+## Deployment pass (persistent install on this host)
+
+Authorized by the user after the audit pass: keep a real Linux deployment running on this server,
+isolated from other workloads and from the existing user settings. This pass did not re-plan and
+did not change the product scope above.
+
+### Synchronization
+
+| Step | Value |
+|---|---|
+| Upstream | `a-51-50/Axiom` `main` advanced `3d58baa` -> `7431612` (README only); fetched and merged, conflict in `README.md` resolved keeping upstream text |
+| Branch | `feature/linux-compatibility`, merge commit on top of `a869be2` |
+| Preserved work | `wip/linux-interrupted-20261106` (`75dfd6a`) untouched; no reset, no stash drop |
+| Fork/PR | `brxtrac/Axiom`, PR #174 (draft) reused, not duplicated |
+
+### Verification on the merged tree
+
+- `dotnet restore Axiom.Linux.slnf --locked-mode` 0 errors; `dotnet build -c Release` 0 warnings,
+  0 errors; `dotnet test Axiom.Linux.slnf -c Release` **305 passed, 0 failed, 0 skipped**
+  (Contracts 67, Core 66, Persistence 23, Service 16, Dns 11, MCP 35, Infrastructure.Linux 87,
+  including the 12 live eBPF tests against a disposable child cgroup).
+- `scripts/publish-linux.sh` self-contained x64 payload; `.deb` built, `dpkg-deb --info/--contents`,
+  extraction, `desktop-file-validate`, isolated payload start/self-check/MCP and clean stop.
+
+### Installed deployment
+
+- System scope: `/opt/axiom` (root-owned payload + `install-manifest.sha256`), unit
+  `/etc/systemd/system/axiom.service`, data `/var/lib/axiom` (0700 root; the pre-existing
+  `privacy-shield-blocked.jsonl` was kept, hash unchanged across restart/reinstall), socket
+  `/run/axiom/service.sock` (0600, owned by the allowed uid, directory 0711).
+- Dedicated unprivileged account `axiom-ui` (uid 997) is the only uid `AXIOM_ALLOWED_UID` accepts.
+  A site-local `axiom-ui.service` runs the loopback UI as that account on `127.0.0.1:5600`
+  (`--no-browser`), enabled at boot; the unit content is documented in `docs/LINUX.md`.
+- Enforcement and DNS stay off: `/api/firewall` reports `available` with `writesEnabled: false`,
+  `/api/privacy` reports `Disabled` with no listener; no iptables/nft rules name Axiom and
+  `/etc/resolv.conf` was not touched.
+
+### Runtime checks
+
+- HTTP: `/api/status` 401 without token, 200 with token and `Cache-Control: no-store`; CSP,
+  `X-Frame-Options: DENY`, `nosniff`, `no-referrer`; `Host: attacker.example` -> 400; no CORS
+  allow headers; `/` and `/app.js`/`/style.css` render; `/api/history.csv` UTF-8 BOM, RFC 4180,
+  `Content-Disposition`.
+- IPC authorization: uid 0 connects and is rejected from `SO_PEERCRED` (logged), uid 1000 gets
+  `EACCES` at the socket, uid 997 connects and is served. MCP over the deployed socket
+  (`initialize`, `tools/list` = 9 tools, `axiom_get_status`) as uid 997.
+- Capture: a spawned client's TCP listen/established rows and its bound UDP socket appeared with
+  the right PID and executable path, disappeared from the snapshot after exit, and the flow
+  remained in history (`/api/history?search=<port>` returned it).
+- Lifecycle: restart and stop/start keep the unit and data; with the service stopped the UI returns
+  `503 service_unavailable` instead of crashing; reinstall over the running install preserved data
+  and the allowed-uid unit setting.
+- Soak (300 s, isolated data/socket, published payload): 16 120 HTTP requests, 0 HTTP errors,
+  service RSS 67 232 -> 264 376 KiB, UI RSS 67 376 -> 371 160 KiB, service CPU 318 s, 20/24
+  threads, 2 822 sockets and 13 965 history rows at the end, socket cleanup and data preservation
+  `ok`. RSS rises during warm-up and had levelled off by the end of the window; this is a 5 minute
+  bound, not a 24 hour one.
+- Not exercised, stated instead of claimed: real reboot (units are enabled and restart-tested
+  only), 24 h soak, Windows runtime, agent hooks/Blackbox install (still blocked on the Windows-only
+  Blackbox payload), tray icon, AI provider/keyring live round-trip, WSL/container/SELinux/AppArmor
+  confined runtime, macOS.
