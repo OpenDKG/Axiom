@@ -399,7 +399,9 @@ nit, the exception-path audit assertion, was added); enforcement/release approva
   `/run/axiom/service.sock` (0600, owned by the allowed uid, directory 0711).
 - Dedicated unprivileged account `axiom-ui` (uid 997) is the only uid `AXIOM_ALLOWED_UID` accepts.
   A site-local `axiom-ui.service` runs the loopback UI as that account on `127.0.0.1:5600`
-  (`--no-browser`), enabled at boot; the unit content is documented in `docs/LINUX.md`.
+  (`--no-browser`), enabled at boot, with `StateDirectory=axiom-ui` + `StateDirectoryMode=0700`
+  for writable settings under `ProtectSystem=strict`; the unit content is documented in
+  `docs/LINUX.md`.
 - Enforcement and DNS stay off: `/api/firewall` reports `available` with `writesEnabled: false`,
   `/api/privacy` reports `Disabled` with no listener; no iptables/nft rules name Axiom and
   `/etc/resolv.conf` was not touched.
@@ -419,11 +421,12 @@ nit, the exception-path audit assertion, was added); enforcement/release approva
 - Lifecycle: restart and stop/start keep the unit and data; with the service stopped the UI returns
   `503 service_unavailable` instead of crashing; reinstall over the running install preserved data
   and the allowed-uid unit setting.
-- Soak (300 s, isolated data/socket, published payload): 16 120 HTTP requests, 0 HTTP errors,
-  service RSS 67 232 -> 264 376 KiB, UI RSS 67 376 -> 371 160 KiB, service CPU 318 s, 20/24
-  threads, 2 822 sockets and 13 965 history rows at the end, socket cleanup and data preservation
-  `ok`. RSS rises during warm-up and had levelled off by the end of the window; this is a 5 minute
-  bound, not a 24 hour one.
+- Soak, isolated data/socket, published payload: 300 s on the first build gave 16 120 requests,
+  0 HTTP errors, service RSS 67 232 -> 264 376 KiB, UI RSS 67 376 -> 371 160 KiB, 318 s service CPU;
+  180 s on the final build gave 11 530 requests, 0 HTTP errors, service RSS 65 212 -> 289 580 KiB,
+  UI RSS 67 004 -> 312 756 KiB, 184 s service CPU, 21/24 threads, 3 523 sockets, socket cleanup and
+  data preservation `ok`. RSS rises during warm-up and had levelled off by the end of each window;
+  these are 3-5 minute bounds, not a 24 hour one.
 - Not exercised, stated instead of claimed: real reboot (units are enabled and restart-tested
   only), 24 h soak, Windows runtime, agent hooks/Blackbox install (still blocked on the Windows-only
   Blackbox payload), tray icon, AI provider/keyring live round-trip, WSL/container/SELinux/AppArmor
