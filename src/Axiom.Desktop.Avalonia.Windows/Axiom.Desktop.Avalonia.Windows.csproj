@@ -4,7 +4,8 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>Axiom.Desktop.Avalonia.Windows</RootNamespace>
-    <AssemblyName>Axiom.Desktop.Avalonia.Windows</AssemblyName>
+    <AssemblyName>Axiom.Desktop</AssemblyName>
+    <AssemblyTitle>Axiom</AssemblyTitle>
     <ApplicationIcon>..\Axiom.UI\Resources\axiom.ico</ApplicationIcon>
   </PropertyGroup>
 

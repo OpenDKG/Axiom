@@ -19,8 +19,8 @@ namespace Axiom.Desktop.Avalonia.Windows;
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The Avalonia application lifetime owns shutdown.")]
 public partial class App : Application
 {
-    private const string SingleInstanceMutexName = @"Local\Axiom.Avalonia.Desktop.SingleInstance";
-    private const string ShowWindowEventName = @"Local\Axiom.Avalonia.Desktop.Show";
+    private const string SingleInstanceMutexName = @"Local\Axiom.Desktop.SingleInstance";
+    private const string ShowWindowEventName = @"Local\Axiom.Desktop.Show";
 
     private ShellViewModel? _shell;
     private BundledServiceHost? _serviceHost;
@@ -54,7 +54,10 @@ public partial class App : Application
             IServiceRequestClient? serviceClient = null;
             IConnectionSnapshotSource source;
 
-            if (useService || _serviceHost.TryStart())
+            // Always try the bundled service so an installed package works with --service even
+            // when no service was started externally. The explicit flag still forces the pipe path.
+            var bundledService = _serviceHost.TryStart();
+            if (useService || bundledService)
             {
                 var client = new ServicePipeClient();
                 source = new ServiceSnapshotSource(client);

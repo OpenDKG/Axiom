@@ -46,7 +46,7 @@ $payloadOut = Join-Path $root "artifacts\publish\setup-payload"
 $setupProject = Join-Path $root "src\Axiom.Setup\Axiom.Setup.csproj"
 
 Write-Host "Publishing desktop payload..." -ForegroundColor Cyan
-& $dotnet publish (Join-Path $root "src\Axiom.Desktop\Axiom.Desktop.csproj") `
+& $dotnet publish (Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj") `
     -c Release -p:PublishProfile=win-x64-selfcontained
 if ($LASTEXITCODE -ne 0) { throw "Desktop publish failed." }
 

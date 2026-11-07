@@ -108,7 +108,7 @@
           </ListBox.ItemTemplate>
         </ListBox>
 
-        <TextBlock Grid.Row="2" Text="Axiom 0.5.3 · local only" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" Margin="20,0,20,18" />
+        <TextBlock Grid.Row="2" Text="Axiom · local only" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" Margin="20,0,20,18" />
       </Grid>
     </Border>
 
@@ -119,7 +119,7 @@
             <TextBlock Text="{Binding SelectedPage.Title}" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <TextBlock Text="{Binding SelectedPage.Subtitle}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" />
           </StackPanel>
-          <TextBlock Grid.Column="1" Text="Avalonia migration slice · WPF fallback remains" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="Local only · no telemetry" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" VerticalAlignment="Center" />
         </Grid>
       </Border>
 
