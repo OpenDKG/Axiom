@@ -13,6 +13,7 @@ public sealed class PrivacyShieldTests
     public async Task Enabled_controller_starts_and_stops_the_loopback_resolver()
     {
         var path = Path.Combine(Path.GetTempPath(), $"axiom-privacy-{Guid.NewGuid():N}.json");
+        var rulesPath = Path.Combine(Path.GetTempPath(), $"axiom-privacy-rules-{Guid.NewGuid():N}.json");
         int port;
         using (var probe = new System.Net.Sockets.UdpClient(
                    new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0)))
@@ -23,7 +24,9 @@ public sealed class PrivacyShieldTests
         try
         {
             var store = new PrivacyShieldSettingsStore(path);
-            await using var controller = new PrivacyShieldController(store);
+            await using var controller = new PrivacyShieldController(
+                store,
+                new PrivacyShieldRuleStore(rulesPath));
             var settings = new PrivacyShieldSettings
             {
                 Enabled = true,
@@ -42,6 +45,7 @@ public sealed class PrivacyShieldTests
         finally
         {
             File.Delete(path);
+            File.Delete(rulesPath);
         }
     }
 
