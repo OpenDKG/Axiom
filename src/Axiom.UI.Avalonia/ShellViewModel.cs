@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Agents;
 using Axiom.Contracts.Monitoring;
 using Axiom.Presentation;
@@ -16,9 +17,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly ConnectionMonitor _monitor;
     private readonly TrafficEngine _traffic;
     private readonly ServiceStatusProbe? _serviceProbe;
+    private readonly IUserInteraction _ui;
+    private readonly IThemeService _theme;
     private readonly CancellationTokenSource _cancellation = new();
     private DateTimeOffset _lastProbeUtc = DateTimeOffset.MinValue;
     private bool _isProbing;
+    private bool _updatingTheme;
 
     public ShellViewModel(
         IConnectionSnapshotSource source,
@@ -43,6 +47,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _serviceProbe = serviceProbe;
         IsServiceMode = source is ServiceSnapshotSource;
         var interaction = userInteraction ?? new NullUserInteraction();
+        _ui = interaction;
+        _theme = themeService ?? new FixedThemeService();
         Overview = new OverviewPageViewModel(_monitor, _traffic, interaction);
         Connections = new ConnectionsPageViewModel(_monitor, interaction);
         Apps = new AppsPageViewModel(
@@ -80,12 +86,69 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Settings = new SettingsPageViewModel(
             _monitor,
             IsServiceMode,
-            themeService ?? new FixedThemeService(),
+            _theme,
             autostartService ?? new UnsupportedAutostartService());
         Pages = [Overview, Connections, Apps, Events, Firewall, PrivacyShield, Security, Agents, AiAnalyst, Support, Settings];
         _selectedPage = Overview;
+        _selectedTheme = ThemeLabel(_theme.Current);
+        _theme.Changed += OnThemeChanged;
         _monitor.Updated += OnMonitorUpdated;
     }
+
+    public IReadOnlyList<string> Themes { get; } =
+        ["Dark", "Light", "Dark Midnight", "Light Warm"];
+
+    [ObservableProperty]
+    private string _selectedTheme;
+
+    partial void OnSelectedThemeChanged(string value)
+    {
+        if (_updatingTheme)
+        {
+            return;
+        }
+
+        _theme.Apply(value switch
+        {
+            "Light" => UiTheme.Light,
+            "Dark Midnight" => UiTheme.DarkMidnight,
+            "Light Warm" => UiTheme.LightWarm,
+            _ => UiTheme.Dark,
+        });
+    }
+
+    [RelayCommand]
+    private async Task OpenGitHubAsync()
+    {
+        try
+        {
+            await _ui.OpenExternalAsync("https://github.com/a-51-50/Axiom", CancellationToken.None)
+                .ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is
+                     InvalidOperationException or NotSupportedException or System.ComponentModel.Win32Exception)
+        {
+            // No browser handler is available; leave the shell usable.
+        }
+    }
+
+    [RelayCommand]
+    private void OpenSupport() => SelectedPage = Support;
+
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
+        _updatingTheme = true;
+        SelectedTheme = ThemeLabel(_theme.Current);
+        _updatingTheme = false;
+    }
+
+    private static string ThemeLabel(UiTheme theme) => theme switch
+    {
+        UiTheme.Light => "Light",
+        UiTheme.DarkMidnight => "Dark Midnight",
+        UiTheme.LightWarm => "Light Warm",
+        _ => "Dark",
+    };
 
     public OverviewPageViewModel Overview { get; }
 
@@ -141,6 +204,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _footerText = "Local only · no driver · no telemetry · no remote access.";
 
+    [ObservableProperty]
+    private string _statusModeText = "In-process monitor";
+
+    [ObservableProperty]
+    private string _statusFirewallBadgeText = "READ-ONLY";
+
     public bool IsServiceMode { get; }
 
     public ServiceStatusSnapshot? ServiceStatus { get; private set; }
@@ -160,6 +229,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _monitor.Updated -= OnMonitorUpdated;
+        _theme.Changed -= OnThemeChanged;
         _cancellation.Cancel();
         _cancellation.Dispose();
         Overview.Dispose();
@@ -195,6 +265,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         StatusFirewallText = ServiceStatus?.Capabilities?.FirewallWrites == true
             ? "Firewall writes: enabled for this service session"
             : "Firewall writes: read-only";
+        StatusFirewallBadgeText = ServiceStatus?.Capabilities?.FirewallWrites == true
+            ? "TEST VM"
+            : "READ-ONLY";
+        StatusModeText = IsServiceMode ? "Service monitor" : "In-process monitor";
 
         StatusStorageText = ServiceStatus?.IsConnected == true
             ? "Database: service-managed"
@@ -211,6 +285,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         FooterText = IsServiceMode
             ? "Local service · no driver · no telemetry · no remote access."
             : "In-process monitor · no service · no driver · no telemetry.";
+        OnPropertyChanged(nameof(FooterText));
     }
 
     private async Task ProbeServiceAsync(bool force = false)

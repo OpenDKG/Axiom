@@ -21,6 +21,7 @@
           <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#0B1024" />
           <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#7F1D1D" />
           <SolidColorBrush x:Key="Axiom.Critical" Color="#EF4444" />
+          <SolidColorBrush x:Key="Axiom.Warning" Color="#F59E0B" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="{x:Static themes:AxiomThemeVariants.DarkMidnight}">
           <SolidColorBrush x:Key="Axiom.Window" Color="#070B12" />
@@ -37,6 +38,7 @@
           <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#050A14" />
           <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#7F1D1D" />
           <SolidColorBrush x:Key="Axiom.Critical" Color="#F87171" />
+          <SolidColorBrush x:Key="Axiom.Warning" Color="#F59E0B" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="{x:Static themes:AxiomThemeVariants.LightWarm}">
           <SolidColorBrush x:Key="Axiom.Window" Color="#FAF7F2" />
@@ -53,6 +55,7 @@
           <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#FDF0D5" />
           <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#B42318" />
           <SolidColorBrush x:Key="Axiom.Critical" Color="#B42318" />
+          <SolidColorBrush x:Key="Axiom.Warning" Color="#FBBF24" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
           <SolidColorBrush x:Key="Axiom.Window" Color="#F5F6F8" />
@@ -69,6 +72,7 @@
           <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#E6F4F1" />
           <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#B42318" />
           <SolidColorBrush x:Key="Axiom.Critical" Color="#B42318" />
+          <SolidColorBrush x:Key="Axiom.Warning" Color="#B45309" />
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
     </ResourceDictionary>
