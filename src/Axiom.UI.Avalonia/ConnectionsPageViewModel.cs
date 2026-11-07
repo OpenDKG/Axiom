@@ -1,7 +1,8 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Axiom.Contracts.Firewall;
 using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
@@ -10,13 +11,22 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
 {
     private readonly ConnectionMonitor _monitor;
     private readonly IUserInteraction _ui;
+    private readonly ConnectionActionService _actions;
     private string? _selectedKey;
 
-    public ConnectionsPageViewModel(ConnectionMonitor monitor, IUserInteraction? ui = null)
-        : base("Connections", "Sockets read from this Windows host · read-only", "C")
+    public ConnectionsPageViewModel(
+        ConnectionMonitor monitor,
+        IUserInteraction? ui = null,
+        IServiceRequestClient? serviceClient = null,
+        IProcessActions? processActions = null)
+        : base("Connections", "Sockets read from this Windows host Â· read-only", "C")
     {
         _monitor = monitor;
         _ui = ui ?? new NullUserInteraction();
+        _actions = new ConnectionActionService(
+            serviceClient,
+            _ui,
+            processActions ?? new UnsupportedProcessActions());
         _monitor.Updated += OnUpdated;
         ApplyFilters();
     }
@@ -33,7 +43,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
     private bool _isGroupedByApp;
 
     [ObservableProperty]
-    private string _statusText = "Connecting to the socket inventory…";
+    private string _statusText = "Connecting to the socket inventoryâ€¦";
 
     [ObservableProperty]
     private string _visibleRowsText = "0 sockets";
@@ -80,9 +90,42 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
     [RelayCommand]
     private Task CopyRemoteAsync(ConnectionRow? row) => CopyAsync(row, row?.RemoteEndpoint);
 
+    [RelayCommand]
+    private async Task BlockOutboundAsync(ConnectionRow? row)
+    {
+        if (row is not null)
+        {
+            StatusText = await _actions
+                .BlockAsync(row.AppDisplayName, row.PathText, FirewallDirection.Outbound)
+                .ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private async Task BlockInboundAsync(ConnectionRow? row)
+    {
+        if (row is not null)
+        {
+            StatusText = await _actions
+                .BlockAsync(row.AppDisplayName, row.PathText, FirewallDirection.Inbound)
+                .ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private async Task EndTaskAsync(ConnectionRow? row)
+    {
+        if (row is not null)
+        {
+            StatusText = await _actions
+                .EndTaskAsync(row.AppDisplayName, [row.ProcessId])
+                .ConfigureAwait(true);
+        }
+    }
+
     private async Task CopyAsync(ConnectionRow? row, string? value)
     {
-        if (row is null || string.IsNullOrWhiteSpace(value) || value == "—")
+        if (row is null || string.IsNullOrWhiteSpace(value) || value == "â€”")
         {
             return;
         }
@@ -110,13 +153,13 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         if (_monitor.LastError is { } error)
         {
             var captured = _monitor.LastCaptureUtc is { } timestamp
-                ? $" · last capture {timestamp.ToLocalTime():HH:mm:ss}"
+                ? $" Â· last capture {timestamp.ToLocalTime():HH:mm:ss}"
                 : string.Empty;
             StatusText = $"Unavailable: {error}{captured}";
             return;
         }
 
-        StatusText = $"Live read-only · {_monitor.SourceName} · {_monitor.PollInterval.TotalSeconds:0} s";
+        StatusText = $"Live read-only Â· {_monitor.SourceName} Â· {_monitor.PollInterval.TotalSeconds:0} s";
     }
 
     private void ApplyFilters()
@@ -163,7 +206,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         VisibleRowsText = $"{VisibleConnections.Count} of {_monitor.Connections.Count} sockets";
         if (_monitor.LastError is null)
         {
-            StatusText = $"Live read-only · {_monitor.SourceName} · {VisibleRowsText}";
+            StatusText = $"Live read-only Â· {_monitor.SourceName} Â· {VisibleRowsText}";
         }
     }
 }

@@ -56,13 +56,23 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         var interaction = userInteraction ?? new NullUserInteraction();
         _ui = interaction;
         _theme = themeService ?? new FixedThemeService();
-        Overview = new OverviewPageViewModel(_monitor, _traffic, interaction);
-        Connections = new ConnectionsPageViewModel(_monitor, interaction);
+        var processes = processActions ?? new UnsupportedProcessActions();
+        Overview = new OverviewPageViewModel(
+            _monitor,
+            _traffic,
+            interaction,
+            IsServiceMode ? serviceClient : null,
+            processes);
+        Connections = new ConnectionsPageViewModel(
+            _monitor,
+            interaction,
+            IsServiceMode ? serviceClient : null,
+            processes);
         Apps = new AppsPageViewModel(
             _monitor,
             IsServiceMode ? serviceClient : null,
             interaction,
-            processActions ?? new UnsupportedProcessActions());
+            processes);
         Events = new EventsPageViewModel(
             IsServiceMode ? serviceClient : null,
             timers,
