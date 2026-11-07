@@ -2,7 +2,7 @@
 
 **Open-Source Firewall, Network Monitor & Local Agent Protection**
 
-**Version:** 0.6.1 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.6.2 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -27,6 +27,13 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.6.2
+
+- Avalonia palettes now use the exact WPF Dark, Light, Dark Midnight and Light Warm values.
+- Navigation and data-row selection use the WPF nav-selected/accent-soft colours instead of Fluent blue.
+- Chart upload/download colours and primary buttons follow the WPF accent tokens.
+- Includes the 0.6.1 footer, GitHub/Donate, theme selector and status badges.
 
 ## What's in 0.6.1
 

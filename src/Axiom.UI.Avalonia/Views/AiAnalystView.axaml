@@ -59,7 +59,7 @@
         <WrapPanel Orientation="Horizontal">
           <Button Content="Save settings" Command="{Binding SaveSettingsCommand}" Margin="0,0,8,0" Padding="12,6" />
           <Button Content="Analyze now" Command="{Binding AnalyzeCommand}" IsEnabled="{Binding CanAnalyze}"
-                  Margin="0,0,8,0" Padding="12,6" Background="{DynamicResource Axiom.AccentStrong}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+                  Margin="0,0,8,0" Padding="12,6" Background="{DynamicResource Axiom.Accent}" Foreground="{DynamicResource Axiom.AccentContrast}" />
           <Button Content="Clear history" Command="{Binding ClearHistoryCommand}" Padding="12,6" />
         </WrapPanel>
         <TextBlock Text="{Binding SettingsStatus}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />

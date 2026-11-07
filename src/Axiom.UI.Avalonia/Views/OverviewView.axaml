@@ -48,7 +48,7 @@
           </Grid>
           <controls:TrafficChartControl Height="150" UploadSeries="{Binding UploadSeries}" DownloadSeries="{Binding DownloadSeries}" />
           <Grid ColumnDefinitions="Auto,Auto,*">
-            <TextBlock Grid.Column="0" Text="{Binding DownloadText, StringFormat=Down: {0}}" Foreground="{DynamicResource Axiom.AccentStrong}" FontSize="10" Margin="0,0,14,0" />
+            <TextBlock Grid.Column="0" Text="{Binding DownloadText, StringFormat=Down: {0}}" Foreground="{DynamicResource Axiom.Download}" FontSize="10" Margin="0,0,14,0" />
             <TextBlock Grid.Column="1" Text="{Binding UploadText, StringFormat=Up: {0}}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" Margin="0,0,14,0" />
             <TextBlock Grid.Column="2" Text="{Binding RangeNote}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" MaxWidth="520" />
           </Grid>
@@ -100,7 +100,7 @@
                       <TextBlock Text="{Binding Name}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}"
                                  TextTrimming="CharacterEllipsis" />
                       <Border Width="{Binding BarWidth}" Height="3" CornerRadius="1.5"
-                              Background="{DynamicResource Axiom.AccentStrong}" HorizontalAlignment="Left" />
+                              Background="{DynamicResource Axiom.Accent}" HorizontalAlignment="Left" />
                     </StackPanel>
                     <TextBlock Grid.Column="1" Text="{Binding SocketsText}" FontSize="9"
                                Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
