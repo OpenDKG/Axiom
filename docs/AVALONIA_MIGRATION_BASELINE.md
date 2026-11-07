@@ -31,7 +31,7 @@ Commands were run from the migration worktree.
 |---|---|
 | `dotnet restore Axiom.sln --locked-mode` | **passed after normalizing the committed lock files** |
 | `dotnet build Axiom.sln -c Release --no-restore` | **0 warnings, 0 errors** |
-| `dotnet test Axiom.sln -c Release --no-build --no-restore` | **370/370 passed** |
+| `dotnet test Axiom.sln -c Release --no-build --no-restore` | **374/374 passed** |
 
 The initial baseline exposed a pre-existing lock/RID mismatch: source projects carried `win-x64`
 lock sections while test projects had none. The normalization removed those stale RID sections and
@@ -50,7 +50,8 @@ Test breakdown:
 | Axiom.Service.Tests | 16 |
 | Axiom.UI.Tests | 140 |
 | Axiom.Presentation.Tests | 6 |
-| **Total** | **370** |
+| Axiom.UI.Avalonia.Tests | 4 |
+| **Total** | **374** |
 
 ## 3. Screenshot baseline
 
@@ -172,3 +173,41 @@ Baseline is complete when the repository records:
 - known layout and environment limitations.
 
 The portability matrix is tracked separately in `docs/AVALONIA_PORTABILITY_MATRIX.md`.
+
+## 9. Current Avalonia slice (2026-11-07)
+
+Implemented in `Axiom.UI.Avalonia` with real data, real service calls and explicit offline states:
+
+| Page | Data source | State covered |
+|---|---|---|
+| Overview | `ConnectionMonitor` + `TrafficEngine` | live, service mode, offline |
+| Connections | `ConnectionMonitor` | live, service mode, offline with last capture timestamp |
+| Applications | `ConnectionMonitor` / `AppGrouping` | live inventory, read-only, service mode |
+| Events | service `history.query` | live, empty, service required, service offline, CSV export |
+| Firewall | service `rules.query` | available, read-only, service offline, apply/remove gated |
+| Privacy Shield | service `privacy.status/configure` | active, disabled, service required, service offline, UAC-gated adapter DNS |
+| AI Analyst | local monitor + configured provider | disabled, configured, manual/automatic, DPAPI-protected key |
+| Support | bundled destinations | external links, clipboard, no configured destination |
+| Settings | per-user stores + Windows host | theme, startup, tray notification preference, build/runtime |
+
+Host infrastructure implemented in `Axiom.Desktop.Avalonia.Windows`:
+
+- bundled service startup and `--service` mode;
+- service capabilities/health probe with explicit `service offline` text;
+- single-instance mutex and show-window signal;
+- tray icon with Open, notifications toggle and Exit;
+- `--start-minimized` and `--autostart` preference handling;
+- native confirm, save/open dialogs, clipboard and external links;
+- Windows autostart registration, theme application, DPAPI key protection, UAC DNS helper.
+
+Not yet migrated:
+
+- **Security** page (module probes, file scan, reputation, community feed, protected agents) and its
+  `ReputationSetupWindow`, `CommunitySetupWindow` and `AgentHookInstallWindow`.
+- **Agents** page and its `BlackboxSettingsWindow` and `DkgLogWindow`.
+- `FirstRunWindow` onboarding and donation window.
+- Custom Axiom window chrome; the Avalonia host currently uses native Windows chrome.
+- Installer/MSIX packaging and the release cutover.
+
+These pages are deliberately not listed in the Avalonia navigation until they are ported with their
+real commands and security gates; no placeholder page is shown.

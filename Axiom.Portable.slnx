@@ -13,5 +13,6 @@
     <Project Path="tests/Axiom.McpServer.Tests/Axiom.McpServer.Tests.csproj" />
     <Project Path="tests/Axiom.Persistence.Tests/Axiom.Persistence.Tests.csproj" />
     <Project Path="tests/Axiom.Presentation.Tests/Axiom.Presentation.Tests.csproj" />
+    <Project Path="tests/Axiom.UI.Avalonia.Tests/Axiom.UI.Avalonia.Tests.csproj" />
   </Folder>
 </Solution>

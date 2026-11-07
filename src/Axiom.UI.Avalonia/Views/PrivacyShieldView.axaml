@@ -66,7 +66,7 @@
                       <TextBlock Text="{Binding ErrorText}" FontSize="9" Foreground="#EF4444" TextWrapping="Wrap" />
                     </StackPanel>
                     <TextBlock Grid.Column="2" Text="{Binding UpdatedText}" FontSize="9" Foreground="#8A98A8"
-                               VerticalAlignment="Center" Width="180" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" Width="200" TextTrimming="CharacterEllipsis"
                                TextAlignment="Right" />
                   </Grid>
                 </DataTemplate>
@@ -101,7 +101,7 @@
         <Border Grid.Row="2" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1"
                 CornerRadius="8" Padding="14">
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="8" HorizontalAlignment="Stretch">
+            <StackPanel Spacing="8" HorizontalAlignment="Stretch" Margin="0,0,16,0">
               <TextBlock Text="Recently blocked" FontSize="13" FontWeight="SemiBold" Foreground="#E6EDF3" />
               <ItemsControl ItemsSource="{Binding RecentBlocked}">
                 <ItemsControl.ItemTemplate>
