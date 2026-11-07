@@ -30,6 +30,8 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
 - A catalog of **HTTPS-only, license-labelled** sources (HaGeZi, OISD, WindowsSpyBlocker). A source
   update downloads with a 20 MB/45 s bound, parses and normalizes domains, then atomically replaces
   the previous ruleset only if every selected source succeeds. The previous rules file is retained.
+  The local cap is 500,000 unique domains, and every selected source keeps a reserved share so a
+  large list cannot starve a smaller telemetry list such as WindowsSpyBlocker.
 - Per-user settings in `%LOCALAPPDATA%\Axiom\privacy-shield.json`. Settings contain no DNS query history; the separate bounded blocked-query history described above is the only DNS history.
 
 ## DNS-only boundary
@@ -78,6 +80,17 @@ the service.
 If Windows DNS is already pointed at `127.0.0.1`, the service cannot discover the old upstream.
 Privacy Shield then uses a conservative public fallback (`1.1.1.1`/`9.9.9.9`) and reports it; set
 the correct upstream explicitly on managed or corporate networks.
+
+Recommended explicit upstreams (plain DNS, one IP or `IP:port`; DoH/DoT are not supported):
+
+- `1.1.1.1` or `1.0.0.1` — Cloudflare; verified working with this resolver.
+- `9.9.9.9` or `149.112.112.112` — Quad9.
+- `94.140.14.14` or `94.140.15.15` — AdGuard DNS.
+
+Use the DNS server provided by your VPN, corporate network or router when one is required. Leaving
+the field empty keeps the current Windows DNS servers. After enabling the resolver, verify with
+`Resolve-DnsName example.com -Server 127.0.0.1`; a blocked catalogued domain should return
+“DNS name does not exist”.
 
 ## Safety and recovery
 

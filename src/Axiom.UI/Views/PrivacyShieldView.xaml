@@ -112,6 +112,8 @@
           </Grid>
           <TextBlock Text="Empty upstream uses the current Windows DNS servers. Loopback upstreams are rejected."
                      Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="190,4,0,0" />
+          <TextBlock Text="Suggested: 1.1.1.1 (Cloudflare), 9.9.9.9 (Quad9), 94.140.14.14 (AdGuard). Use an IP or IP:port; DoH/DoT are not supported. On a corporate or VPN network use that network's DNS."
+                     Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="190,3,0,0" />
           <TextBlock Text="{Binding StarterRulesText}" Style="{StaticResource Caption}" Margin="190,4,0,0" />
         </StackPanel>
       </Border>
