@@ -60,6 +60,9 @@
     <DataTemplate DataType="local:AgentsPageViewModel">
       <views:AgentsView />
     </DataTemplate>
+    <DataTemplate DataType="local:AgentStatsPageViewModel">
+      <views:AgentStatsView />
+    </DataTemplate>
     <DataTemplate DataType="local:AiAnalystPageViewModel">
       <views:AiAnalystView />
     </DataTemplate>

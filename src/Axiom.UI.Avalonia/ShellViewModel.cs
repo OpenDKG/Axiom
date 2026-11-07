@@ -96,7 +96,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             _theme,
             autostartService ?? new UnsupportedAutostartService());
         Overview.AgentActivity = Agents;
-        Pages = [Overview, Connections, Apps, Events, Agents, Firewall, Security, PrivacyShield, AiAnalyst, Support, Settings];
+        AgentStats = new AgentStatsPageViewModel(Agents);
+        Pages = [Overview, Connections, Apps, Events, Agents, AgentStats, Firewall, Security, PrivacyShield, AiAnalyst, Support, Settings];
         _selectedPage = Overview;
         _selectedTheme = ThemeLabel(_theme.Current);
         _theme.Changed += OnThemeChanged;
@@ -173,6 +174,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public SecurityPageViewModel Security { get; }
 
     public AgentsPageViewModel Agents { get; }
+
+    public AgentStatsPageViewModel AgentStats { get; }
 
     public AiAnalystPageViewModel AiAnalyst { get; }
 
