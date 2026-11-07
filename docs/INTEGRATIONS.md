@@ -252,6 +252,12 @@ listener and never sends data off the machine.
 - **Health** reads `GET /api/graph-status`, distinguishes the dashboard's configured DKG node from
   Axiom's standalone DKG, and shows verified/community rule counts and last sync. A running
   dashboard is never presented as proof that the verified graph is synchronized.
+- **Verified graph sync** reads `GET /api/verified-sync` and `GET /api/graph?tier=public` from the
+  local dashboard. The card shows the server-owned state (`synced`, `syncing`, `node offline`,
+  `unknown`), downloaded versus compiled assets, triples, verified rules and verified-answer lookup
+  health. `Sync now` sends `POST /api/sync` with the `X-Blackbox-Token` from `GET /api/session`;
+  Axiom does not start a second DKG sync loop. Null values are shown as `—`, never as zero, and an
+  offline node is never presented as an empty or clean graph.
 - **Test Protection** creates a temporary harmless canary, adds it to protected paths, requires
   Block mode, calls the local guard, restores the original paths and removes the canary. Its result
   is explicitly labelled guard-level; it does not claim that an agent hook was executed.

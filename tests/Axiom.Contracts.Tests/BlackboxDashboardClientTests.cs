@@ -228,6 +228,187 @@ public sealed class BlackboxDashboardClientTests
     }
 
     [Fact]
+    public async Task Verified_sync_parser_preserves_unknown_values()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {
+              "state": "unavailable",
+              "graph_assets": null,
+              "downloaded_assets": null,
+              "downloaded_triples": null,
+              "compiled_assets": null,
+              "verified_rules": 0,
+              "percent_downloaded": null,
+              "percent_compiled": null,
+              "checked_at": "",
+              "lookups": {
+                "state": "unknown",
+                "label": "Node not answering",
+                "text": "The local DKG node is not answering."
+              },
+              "phase": "",
+              "phase_text": "",
+              "running_since": null,
+              "last_progress": null
+            }
+            """));
+
+        using var http = new HttpClient(handler);
+        using var client = new BlackboxDashboardClient(http);
+        var sync = await client.GetVerifiedSyncAsync(CancellationToken.None);
+
+        Assert.Equal("unavailable", sync.State);
+        Assert.True(sync.IsOffline);
+        Assert.Null(sync.GraphAssets);
+        Assert.Null(sync.DownloadedAssets);
+        Assert.Null(sync.PercentCompiled);
+        Assert.Equal(0, sync.VerifiedRules);
+        Assert.Equal(0, sync.DisplayPercent);
+        Assert.Equal("Node not answering", sync.Lookups.Label);
+    }
+
+    [Fact]
+    public async Task Verified_sync_parser_reads_compiled_progress()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {
+              "state": "synced",
+              "graph_assets": 120,
+              "downloaded_assets": 120,
+              "downloaded_triples": 3456,
+              "compiled_assets": 110,
+              "verified_rules": 42,
+              "percent_downloaded": 100,
+              "percent_compiled": 91.7,
+              "checked_at": "2026-11-07T10:00:00Z",
+              "lookups": {
+                "state": "live",
+                "label": "live",
+                "text": "Verified answers are served from the graph store."
+              },
+              "phase": "compile",
+              "phase_text": "Compiling verified rules",
+              "running_since": "2026-11-07T09:59:00Z",
+              "last_progress": "110/120"
+            }
+            """));
+
+        using var http = new HttpClient(handler);
+        using var client = new BlackboxDashboardClient(http);
+        var sync = await client.GetVerifiedSyncAsync(CancellationToken.None);
+
+        Assert.Equal("synced", sync.State);
+        Assert.False(sync.IsOffline);
+        Assert.Equal(120, sync.GraphAssets);
+        Assert.Equal(3456L, sync.DownloadedTriples);
+        Assert.Equal(42, sync.VerifiedRules);
+        Assert.Equal(91.7, sync.DisplayPercent);
+        Assert.Equal("Compiling verified rules", sync.PhaseText);
+        Assert.NotNull(sync.RunningSince);
+    }
+
+    [Fact]
+    public async Task Verified_graph_parser_reads_public_threat_page()
+    {
+        string? path = null;
+        var handler = new StubHandler(request =>
+        {
+            path = request.RequestUri!.PathAndQuery;
+            return Json(HttpStatusCode.OK, """
+                {
+                  "tier": "public",
+                  "threats": [
+                    {
+                      "identifier": "dep:npm:evil@1.0.0",
+                      "name": "evil-package",
+                      "category": "dependency",
+                      "severity": "critical",
+                      "ecosystems": ["npm"],
+                      "source": "verified"
+                    },
+                    {
+                      "identifier": "ioc:example",
+                      "category": "ioc",
+                      "severity": "high"
+                    }
+                  ],
+                  "total": 2,
+                  "partial": false
+                }
+                """);
+        });
+
+        using var http = new HttpClient(handler);
+        using var client = new BlackboxDashboardClient(http);
+        var page = await client.GetVerifiedGraphAsync(16, 0, CancellationToken.None);
+
+        Assert.Equal("/api/graph?tier=public&limit=16&offset=0", path);
+        Assert.Equal(2, page.Total);
+        Assert.False(page.Partial);
+        Assert.Equal(2, page.Threats.Count);
+        Assert.Equal("evil-package", page.Threats[0].DisplayName);
+        Assert.Equal("Dependency", page.Threats[0].CategoryLabel);
+        Assert.Equal("Critical", page.Threats[0].SeverityLabel);
+        Assert.Equal("npm", page.Threats[0].Ecosystems);
+        Assert.Equal("ioc:example", page.Threats[1].DisplayName);
+        Assert.Equal("IOC", page.Threats[1].CategoryLabel);
+    }
+
+    [Fact]
+    public async Task Sync_request_posts_session_token()
+    {
+        string? tokenHeader = null;
+        string? body = null;
+        string? path = null;
+
+        var handler = new StubHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/api/session")
+            {
+                return Json(HttpStatusCode.OK, """{"token":"session-token"}""");
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath == "/api/sync")
+            {
+                path = request.RequestUri.AbsolutePath;
+                tokenHeader = request.Headers.TryGetValues("X-Blackbox-Token", out var values)
+                    ? values.Single()
+                    : null;
+                body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return Json(HttpStatusCode.OK, """{"ok":true,"message":"Sync requested"}""");
+            }
+
+            return Json(HttpStatusCode.NotFound, """{"ok":false}""");
+        });
+
+        using var http = new HttpClient(handler);
+        using var client = new BlackboxDashboardClient(http);
+        var result = await client.RequestSyncAsync(CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal("Sync requested", result.Message);
+        Assert.Equal("/api/sync", path);
+        Assert.Equal("session-token", tokenHeader);
+        Assert.Equal("{}", body);
+    }
+
+    [Fact]
+    public async Task Sync_request_reports_dashboard_rejection()
+    {
+        var handler = new StubHandler(request =>
+            request.RequestUri!.AbsolutePath == "/api/session"
+                ? Json(HttpStatusCode.OK, """{"token":"session-token"}""")
+                : Json(HttpStatusCode.ServiceUnavailable, """{"ok":false,"errors":["DKG node offline"]}"""));
+
+        using var http = new HttpClient(handler);
+        using var client = new BlackboxDashboardClient(http);
+        var result = await client.RequestSyncAsync(CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Contains("DKG node offline", result.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Malformed_settings_json_throws_invalid_data()
     {
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)

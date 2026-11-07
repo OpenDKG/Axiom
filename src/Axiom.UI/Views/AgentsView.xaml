@@ -166,6 +166,125 @@
         </StackPanel>
       </Border>
 
+      <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="Verified graph sync" Style="{StaticResource SectionTitle}" />
+              <TextBlock Text="{Binding VerifiedSyncStateDetail}"
+                         Style="{StaticResource BodyMuted}"
+                         Margin="0,4,0,0"
+                         TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+              <Border Margin="0,0,8,0">
+                <Border.Style>
+                  <Style TargetType="Border" BasedOn="{StaticResource StatusPill}">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding VerifiedSyncState}" Value="SYNCED">
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Success}" />
+                      </DataTrigger>
+                      <DataTrigger Binding="{Binding VerifiedSyncState}" Value="SYNCING">
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Warning}" />
+                      </DataTrigger>
+                      <DataTrigger Binding="{Binding VerifiedSyncState}" Value="NODE OFFLINE">
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding VerifiedSyncState}">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource StatusPillText}">
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding VerifiedSyncState}" Value="SYNCED">
+                          <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding VerifiedSyncState}" Value="SYNCING">
+                          <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding VerifiedSyncState}" Value="NODE OFFLINE">
+                          <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
+              </Border>
+              <Button Style="{StaticResource GhostButton}"
+                      Content="Sync now"
+                      Command="{Binding SyncVerifiedGraphCommand}"
+                      ToolTip="Ask the local Blackbox dashboard to refresh its verified graph. Progress is reported by the local DKG node." />
+            </StackPanel>
+          </Grid>
+
+          <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ProgressBar Grid.Column="0"
+                         Height="8"
+                         Minimum="0"
+                         Maximum="100"
+                         Value="{Binding VerifiedSyncPercent}"
+                         Foreground="{DynamicResource Brush.Accent}"
+                         Background="{DynamicResource Brush.SurfaceAlt}"
+                         BorderThickness="0"
+                         VerticalAlignment="Center"
+                         ToolTip="Share of the verified graph compiled into enforceable rules." />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding VerifiedSyncProgressText}"
+                       Style="{StaticResource Caption}"
+                       Margin="12,0,0,0"
+                       VerticalAlignment="Center" />
+          </Grid>
+
+          <TextBlock Text="{Binding VerifiedSyncCountsText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,8,0,0"
+                     TextWrapping="Wrap" />
+          <TextBlock Text="{Binding VerifiedSyncLookupText}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,4,0,0"
+                     TextWrapping="Wrap" />
+
+          <TextBlock Text="{Binding VerifiedGraphListStatus}"
+                     Style="{StaticResource Caption}"
+                     Margin="0,10,0,4"
+                     TextWrapping="Wrap" />
+          <ItemsControl ItemsSource="{Binding VerifiedGraphThreats}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid Margin="0,0,0,4" ToolTip="{Binding Identifier}">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Grid.Column="0"
+                             Text="{Binding DisplayName}"
+                             Style="{StaticResource Caption}"
+                             TextTrimming="CharacterEllipsis"
+                             Margin="0,0,8,0" />
+                  <TextBlock Grid.Column="1"
+                             Text="{Binding CategoryLabel}"
+                             Style="{StaticResource Caption}"
+                             Margin="0,0,10,0" />
+                  <TextBlock Grid.Column="2"
+                             Text="{Binding SeverityLabel}"
+                             Style="{StaticResource Caption}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
       <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="0">
         <ItemsControl ItemsSource="{Binding Security.Modules}">
           <ItemsControl.ItemTemplate>

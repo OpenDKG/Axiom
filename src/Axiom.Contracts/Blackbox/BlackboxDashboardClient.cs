@@ -169,6 +169,70 @@ public sealed record BlackboxAuditPage(IReadOnlyList<BlackboxAuditEntry> Entries
 
 public sealed record BlackboxFindingPage(IReadOnlyList<BlackboxFinding> Findings, int Total);
 
+/// <summary>
+/// State of Blackbox's local verified-graph sync. Nullable counters are deliberate: a null means
+/// the local node could not report a value, not that the value is zero.
+/// </summary>
+public sealed record BlackboxVerifiedSync(
+    string State,
+    int? GraphAssets,
+    int? DownloadedAssets,
+    long? DownloadedTriples,
+    int? CompiledAssets,
+    int VerifiedRules,
+    double? PercentDownloaded,
+    double? PercentCompiled,
+    string CheckedAt,
+    BlackboxLookupState Lookups,
+    string Phase,
+    string PhaseText,
+    DateTimeOffset? RunningSince,
+    string LastProgress)
+{
+    public bool IsOffline => string.Equals(State, "unavailable", StringComparison.OrdinalIgnoreCase);
+
+    public bool IsSyncing => string.Equals(State, "syncing", StringComparison.OrdinalIgnoreCase);
+
+    public double DisplayPercent => Math.Clamp(PercentCompiled ?? 0, 0, 100);
+}
+
+public sealed record BlackboxLookupState(string State, string Label, string Text);
+
+/// <summary>One threat in the verified public graph exposed by the local dashboard.</summary>
+public sealed record BlackboxGraphThreat(
+    string Identifier,
+    string Name,
+    string Category,
+    string Severity,
+    string Ecosystems,
+    string Source)
+{
+    public string DisplayName => string.IsNullOrWhiteSpace(Name) ? Identifier : Name;
+
+    public string CategoryLabel => Category.ToLowerInvariant() switch
+    {
+        "dependency" => "Dependency",
+        "injection" => "Prompt injection",
+        "escalation" => "Escalation",
+        "fileaccess" => "File access",
+        "skill" => "Suspicious skill",
+        "secret" => "Secret exposure",
+        "ioc" => "IOC",
+        _ => "Other",
+    };
+
+    public string SeverityLabel => string.IsNullOrWhiteSpace(Severity)
+        ? "unknown"
+        : char.ToUpperInvariant(Severity[0]) + Severity[1..].ToLowerInvariant();
+}
+
+public sealed record BlackboxGraphPage(
+    IReadOnlyList<BlackboxGraphThreat> Threats,
+    int Total,
+    bool Partial);
+
+public sealed record BlackboxSyncResult(bool Ok, string Message);
+
 public sealed record BlackboxSaveResult(bool Ok, IReadOnlyList<string> Errors, JsonObject? Settings);
 
 /// <summary>
@@ -303,6 +367,115 @@ public sealed class BlackboxDashboardClient : IDisposable
 
     public Task<JsonObject> GetGraphStatusAsync(CancellationToken cancellationToken) =>
         GetObjectAsync("api/graph-status", cancellationToken);
+
+    /// <summary>
+    /// Reads the dashboard's verified-sync meter. This is a server-owned state machine: never
+    /// infer "synced" from a rule count, and never turn a missing value into zero.
+    /// </summary>
+    public async Task<BlackboxVerifiedSync> GetVerifiedSyncAsync(CancellationToken cancellationToken)
+    {
+        using var document = await GetJsonAsync("api/verified-sync", cancellationToken).ConfigureAwait(false);
+        var root = document.RootElement;
+        var lookups = ReadObject(root, "lookups");
+
+        return new BlackboxVerifiedSync(
+            ReadString(root, "state") ?? "unknown",
+            ReadNullableInt(root, "graph_assets"),
+            ReadNullableInt(root, "downloaded_assets"),
+            ReadNullableLong(root, "downloaded_triples"),
+            ReadNullableInt(root, "compiled_assets"),
+            ReadInt(root, "verified_rules"),
+            ReadNullableDouble(root, "percent_downloaded"),
+            ReadNullableDouble(root, "percent_compiled"),
+            ReadString(root, "checked_at") ?? string.Empty,
+            new BlackboxLookupState(
+                ReadString(lookups, "state") ?? "unknown",
+                ReadString(lookups, "label") ?? "Checking…",
+                ReadString(lookups, "text") ?? string.Empty),
+            ReadString(root, "phase") ?? string.Empty,
+            ReadString(root, "phase_text") ?? string.Empty,
+            ReadTimestamp(root, "running_since"),
+            ReadFlexibleString(root, "last_progress"));
+    }
+
+    /// <summary>
+    /// Reads the verified public graph. The dashboard caps page size; the caller should request a
+    /// bounded page instead of trying to mirror the whole graph into memory.
+    /// </summary>
+    public async Task<BlackboxGraphPage> GetVerifiedGraphAsync(
+        int limit,
+        int offset,
+        CancellationToken cancellationToken)
+    {
+        limit = Math.Clamp(limit, 1, 500);
+        offset = Math.Max(0, offset);
+
+        using var document = await GetJsonAsync(
+            $"api/graph?tier=public&limit={limit.ToString(CultureInfo.InvariantCulture)}&offset={offset.ToString(CultureInfo.InvariantCulture)}",
+            cancellationToken).ConfigureAwait(false);
+
+        var threats = new List<BlackboxGraphThreat>();
+        if (document.RootElement.TryGetProperty("threats", out var array) &&
+            array.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in array.EnumerateArray())
+            {
+                var identifier = ReadString(item, "identifier") ?? string.Empty;
+                if (identifier.Length == 0)
+                {
+                    continue;
+                }
+
+                threats.Add(new BlackboxGraphThreat(
+                    identifier,
+                    ReadString(item, "name") ?? string.Empty,
+                    ReadString(item, "category") ?? "other",
+                    ReadString(item, "severity") ?? "info",
+                    ReadEcosystems(item),
+                    ReadString(item, "source") ?? string.Empty));
+            }
+        }
+
+        return new BlackboxGraphPage(
+            threats,
+            ReadInt(document.RootElement, "total"),
+            ReadBool(document.RootElement, "partial"));
+    }
+
+    /// <summary>
+    /// Requests an asynchronous verified-graph sync from the local dashboard. The call only asks
+    /// the daemon to start; callers must poll <see cref="GetVerifiedSyncAsync"/> for progress.
+    /// </summary>
+    public async Task<BlackboxSyncResult> RequestSyncAsync(CancellationToken cancellationToken)
+    {
+        var token = await GetSessionTokenAsync(cancellationToken).ConfigureAwait(false);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "api/sync")
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Add("X-Blackbox-Token", token);
+
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var body = await ReadBoundedAsync(response, cancellationToken).ConfigureAwait(false);
+        using var document = Parse(body);
+        var root = document.RootElement;
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errors = ReadErrors(root);
+            return new BlackboxSyncResult(false, errors.FirstOrDefault() ?? "Blackbox rejected the sync request.");
+        }
+
+        if (root.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.False)
+        {
+            var errors = ReadErrors(root);
+            return new BlackboxSyncResult(false, errors.FirstOrDefault() ?? "Blackbox rejected the sync request.");
+        }
+
+        return new BlackboxSyncResult(
+            true,
+            ReadString(root, "message") ?? "Sync requested; the local dashboard will report progress.");
+    }
 
     public void Dispose()
     {
@@ -782,6 +955,101 @@ public sealed class BlackboxDashboardClient : IDisposable
         property.TryGetInt32(out var value)
             ? value
             : 0;
+
+    private static int? ReadNullableInt(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.Number)
+        {
+            return null;
+        }
+
+        if (property.TryGetInt32(out var value))
+        {
+            return value;
+        }
+
+        return property.TryGetDouble(out var number)
+            ? (int)Math.Round(number)
+            : null;
+    }
+
+    private static long? ReadNullableLong(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.Number)
+        {
+            return null;
+        }
+
+        if (property.TryGetInt64(out var value))
+        {
+            return value;
+        }
+
+        return property.TryGetDouble(out var number)
+            ? (long)Math.Round(number)
+            : null;
+    }
+
+    private static double? ReadNullableDouble(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        return property.ValueKind == JsonValueKind.Number &&
+               property.TryGetDouble(out var value)
+            ? value
+            : null;
+    }
+
+    private static string ReadFlexibleString(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(propertyName, out var property))
+        {
+            return string.Empty;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.String => property.GetString() ?? string.Empty,
+            JsonValueKind.Null or JsonValueKind.Undefined => string.Empty,
+            _ => property.GetRawText(),
+        };
+    }
+
+    private static string ReadEcosystems(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty("ecosystems", out var property))
+        {
+            return string.Empty;
+        }
+
+        if (property.ValueKind == JsonValueKind.String)
+        {
+            return property.GetString() ?? string.Empty;
+        }
+
+        if (property.ValueKind == JsonValueKind.Array)
+        {
+            return string.Join(
+                ", ",
+                property.EnumerateArray()
+                    .Where(item => item.ValueKind == JsonValueKind.String)
+                    .Select(item => item.GetString())
+                    .Where(item => !string.IsNullOrWhiteSpace(item)));
+        }
+
+        return string.Empty;
+    }
 
     private static DateTimeOffset? ReadTimestamp(JsonElement element, params string[] names)
     {

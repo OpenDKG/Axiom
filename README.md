@@ -64,6 +64,10 @@ agent-level guardrails and signed threat-intelligence context respectively.
 - Agent activity is loaded from the local Blackbox audit store, with a separate bounded Axiom hook
   evidence feed. Sessions, API steps, tool calls, package installs, file access and threats can be
   filtered and copied from the UI.
+- The **Verified graph sync** card mirrors the local dashboard's state machine: downloaded versus
+  compiled assets, triples, verified rules and verified-answer lookup health. **Sync now** triggers
+  the dashboard's own `POST /api/sync`; Axiom does not run a second DKG sync loop. Missing values
+  stay unknown and an offline node is never shown as a clean graph.
 - Agent configuration, sessions and databases are fingerprinted during install, hook repair and
   uninstall. Unexpected deletions or edits are reported and, where possible, restored.
 - **Codex still requires its own `/hooks` trust approval.** Axiom installs the definitions but does
