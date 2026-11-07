@@ -2,7 +2,7 @@
 
 **Open-Source Firewall, Network Monitor & Local Agent Protection**
 
-**Version:** 0.5.2 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.5.3 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -28,15 +28,19 @@ Axiom brings together four surfaces:
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
 
-## What's in 0.5.2
+## What's in 0.5.3
 
-- New blue Axiom shield, wordmark, Windows icon and Microsoft Store artwork.
-- ZCode and DeepSeek Harness support alongside OpenCode/OpenChamber, Codex, Claude Code, Cursor,
-  GitHub Copilot CLI, Gemini CLI, Windsurf Cascade and Cline.
-- Automatic Axiom-managed hook provisioning for detected harnesses.
-- Theme-aware right-click menus and refined minimize/maximize/close controls.
-- Complete local agent activity history with framework attribution, install visibility and copy
-  actions.
+- Native **verified threat graph** for the local Blackbox DKG: category hubs, severity rings,
+  verified-rule totals and a local sample of the graph served by the dashboard.
+- Live **verified graph sync** card with downloaded/compiled counts, triples, verified rules and
+  lookup health. Local state fallback keeps the card accurate when the dashboard is busy with a
+  long node read.
+- **Privacy Shield** now fits all three catalogued sources: the local rule cap is 500,000 unique
+  domains, and every selected source keeps a reserved share so WindowsSpyBlocker telemetry is not
+  starved by HaGeZi or OISD.
+- Suggested upstream DNS values and resolver verification guidance on the Privacy Shield page.
+- Includes the 0.5.2 branding, ZCode/DeepSeek Harness, auto-provisioning, context-menu and activity
+  work.
 
 ## What it covers
 
