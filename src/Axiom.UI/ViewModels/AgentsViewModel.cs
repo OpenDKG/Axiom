@@ -30,7 +30,11 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private const int ActivityMax = 20_000;
 
+    private const int VerifiedGraphPageSize = 16;
+
     private static readonly TimeSpan ActivityRefreshInterval = TimeSpan.FromSeconds(15);
+
+    private static readonly TimeSpan VerifiedGraphRefreshInterval = TimeSpan.FromSeconds(60);
 
     private static readonly Regex SecretPattern = new(
         @"(?i)\b(token|secret|password|passwd|api[_-]?key|authorization)\b\s*[:=]\s*(""[^""]*""|'[^']*'|[^\s,}\]]+)",
@@ -70,6 +74,10 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private DateTimeOffset _lastActivityRefresh = DateTimeOffset.MinValue;
 
+    private DateTimeOffset _lastVerifiedGraphRefresh = DateTimeOffset.MinValue;
+
+    private bool _verifiedGraphInitialized;
+
     public AgentsViewModel(SecurityViewModel security, IAgentSessionSource? agentSessions = null)
         : base("Agents", "DKG, Blackbox and the workspaces they protect", "\uE99A")
     {
@@ -96,6 +104,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     public ObservableCollection<BlackboxAuditEntry> Activity { get; } = [];
 
     public ObservableCollection<BlackboxFinding> Findings { get; } = [];
+
+    public ObservableCollection<BlackboxGraphThreat> VerifiedGraphThreats { get; } = [];
 
     public ObservableCollection<AgentEvidenceEvent> HookEvidence { get; } = [];
 
@@ -155,6 +165,30 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     private string _graphHealthText = "Verified graph: unknown";
 
     [ObservableProperty]
+    private string _verifiedSyncState = "Unknown";
+
+    [ObservableProperty]
+    private string _verifiedSyncStateDetail = "Verified graph sync has not been loaded yet.";
+
+    [ObservableProperty]
+    private double _verifiedSyncPercent;
+
+    [ObservableProperty]
+    private string _verifiedSyncProgressText = "—";
+
+    [ObservableProperty]
+    private string _verifiedSyncCountsText = "Downloaded — · compiled — · verified rules —";
+
+    [ObservableProperty]
+    private string _verifiedSyncLookupText = "Verified-answer lookups: unknown";
+
+    [ObservableProperty]
+    private string _verifiedGraphListStatus = "No verified threats loaded.";
+
+    [ObservableProperty]
+    private bool _isVerifiedSyncRunning;
+
+    [ObservableProperty]
     private string _summaryText = "No activity has been loaded.";
 
     [ObservableProperty]
@@ -208,14 +242,34 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         {
             var shouldRefreshActivity = !_activityInitialized ||
                                        now - _lastActivityRefresh >= ActivityRefreshInterval;
+            var shouldRefreshVerifiedGraph = !_verifiedGraphInitialized ||
+                                            now - _lastVerifiedGraphRefresh >= VerifiedGraphRefreshInterval;
             var settingsTask = _client.GetSettingsAsync(CancellationToken.None);
             var graphTask = _client.GetGraphStatusAsync(CancellationToken.None);
+            var verifiedSyncTask = TryGetVerifiedSyncAsync();
+            var verifiedGraphTask = shouldRefreshVerifiedGraph
+                ? TryGetVerifiedGraphAsync()
+                : Task.FromResult<BlackboxGraphPage?>(null);
             var auditTask = shouldRefreshActivity
                 ? LoadActivityAsync(full: !_activityInitialized)
                 : Task.FromResult<BlackboxAuditPage?>(null);
             var findingsTask = _client.GetFindingsAsync(100, 0, CancellationToken.None);
 
-            await Task.WhenAll(settingsTask, graphTask, auditTask, findingsTask).ConfigureAwait(true);
+            // These two are optional dashboard reads. Apply them independently so a slow audit
+            // history or a missing endpoint cannot hide the verified-graph state.
+            ApplyVerifiedSync(await verifiedSyncTask.ConfigureAwait(true));
+            if (await verifiedGraphTask.ConfigureAwait(true) is { } graphPage)
+            {
+                ApplyVerifiedGraph(graphPage);
+                _lastVerifiedGraphRefresh = now;
+                _verifiedGraphInitialized = true;
+            }
+
+            await Task.WhenAll(
+                settingsTask,
+                graphTask,
+                auditTask,
+                findingsTask).ConfigureAwait(true);
 
             if (auditTask.Result is { } auditPage)
             {
@@ -258,6 +312,50 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         _lastActivityRefresh = DateTimeOffset.MinValue;
         await RefreshAsync().ConfigureAwait(true);
     }
+
+    [RelayCommand(CanExecute = nameof(CanSyncVerifiedGraph))]
+    private async Task SyncVerifiedGraphAsync()
+    {
+        if (!IsAvailable || IsVerifiedSyncRunning)
+        {
+            return;
+        }
+
+        IsVerifiedSyncRunning = true;
+        VerifiedSyncState = "SYNCING";
+        VerifiedSyncStateDetail = "Requesting a verified-graph sync from the local Blackbox dashboard…";
+        try
+        {
+            var result = await _client.RequestSyncAsync(CancellationToken.None).ConfigureAwait(true);
+            if (!result.Ok)
+            {
+                VerifiedSyncState = "SYNC FAILED";
+                VerifiedSyncStateDetail = result.Message;
+                return;
+            }
+
+            VerifiedSyncStateDetail = result.Message;
+            _verifiedGraphInitialized = false;
+            _lastVerifiedGraphRefresh = DateTimeOffset.MinValue;
+            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            await RefreshAsync().ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is
+            HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            VerifiedSyncState = "SYNC FAILED";
+            VerifiedSyncStateDetail = $"Could not request a verified-graph sync: {exception.Message}";
+        }
+        finally
+        {
+            IsVerifiedSyncRunning = false;
+        }
+    }
+
+    private bool CanSyncVerifiedGraph() => IsAvailable && !IsVerifiedSyncRunning;
+
+    partial void OnIsVerifiedSyncRunningChanged(bool value) =>
+        SyncVerifiedGraphCommand.NotifyCanExecuteChanged();
 
     [RelayCommand]
     private async Task LoadMoreActivityAsync()
@@ -900,6 +998,124 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             ? "No blocked action observed."
             : $"{lastBlocked.TimeText} · {lastBlocked.Agent} · {lastBlocked.Tool} · {lastBlocked.Identifier}";
     }
+
+    private async Task<BlackboxVerifiedSync?> TryGetVerifiedSyncAsync()
+    {
+        try
+        {
+            return await _client.GetVerifiedSyncAsync(CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is
+            HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<BlackboxGraphPage?> TryGetVerifiedGraphAsync()
+    {
+        try
+        {
+            return await _client.GetVerifiedGraphAsync(
+                VerifiedGraphPageSize,
+                0,
+                CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is
+            HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    private void ApplyVerifiedSync(BlackboxVerifiedSync? sync)
+    {
+        if (sync is null)
+        {
+            VerifiedSyncState = "UNAVAILABLE";
+            VerifiedSyncStateDetail =
+                "The local Blackbox dashboard did not return verified-sync state. " +
+                "Local rules may still protect, but verified graph coverage is unknown.";
+            VerifiedSyncPercent = 0;
+            VerifiedSyncProgressText = "—";
+            VerifiedSyncCountsText = "Downloaded — · compiled — · verified rules —";
+            VerifiedSyncLookupText = "Verified-answer lookups: unknown";
+            return;
+        }
+
+        var state = sync.State.Trim().ToLowerInvariant();
+        VerifiedSyncState = state switch
+        {
+            "synced" => "SYNCED",
+            "syncing" => "SYNCING",
+            "unavailable" => "NODE OFFLINE",
+            "unknown" => "UNKNOWN",
+            _ => state.Length == 0 ? "UNKNOWN" : state.ToUpperInvariant(),
+        };
+
+        VerifiedSyncPercent = sync.DisplayPercent;
+        VerifiedSyncProgressText = sync.PercentCompiled is { } compiled
+            ? $"{compiled.ToString("0.0", CultureInfo.InvariantCulture)}% compiled"
+            : "compiled —";
+        VerifiedSyncCountsText =
+            $"{CountText(sync.DownloadedAssets)} / {CountText(sync.GraphAssets)} downloaded · " +
+            $"{CountText(sync.CompiledAssets)} / {CountText(sync.GraphAssets)} compiled · " +
+            $"{CountText(sync.DownloadedTriples)} triples · " +
+            $"{CountText(sync.VerifiedRules)} verified rules";
+
+        VerifiedSyncLookupText = string.IsNullOrWhiteSpace(sync.Lookups.Label)
+            ? "Verified-answer lookups: unknown"
+            : $"Verified-answer lookups: {sync.Lookups.Label}";
+
+        var detail = sync.IsOffline
+            ? "The local DKG node is not answering. Downloaded data is not synchronized, so verified graph coverage is not available."
+            : sync.IsSyncing
+                ? (string.IsNullOrWhiteSpace(sync.PhaseText)
+                    ? "The local dashboard is syncing the verified graph."
+                    : sync.PhaseText)
+                : string.Equals(state, "synced", StringComparison.Ordinal)
+                    ? $"The local graph holds {CountText(sync.VerifiedRules)} compiled verified rule(s)."
+                    : string.IsNullOrWhiteSpace(sync.PhaseText)
+                        ? $"The dashboard reports verified-graph state '{sync.State}'."
+                        : sync.PhaseText;
+
+        if (!string.IsNullOrWhiteSpace(sync.CheckedAt))
+        {
+            detail += $" Last checked {sync.CheckedAt}.";
+        }
+
+        VerifiedSyncStateDetail = detail;
+    }
+
+    private void ApplyVerifiedGraph(BlackboxGraphPage page)
+    {
+        VerifiedGraphThreats.Clear();
+        foreach (var threat in page.Threats.Take(VerifiedGraphPageSize))
+        {
+            VerifiedGraphThreats.Add(threat);
+        }
+
+        if (page.Total == 0 && page.Threats.Count == 0)
+        {
+            VerifiedGraphListStatus = string.Equals(VerifiedSyncState, "NODE OFFLINE", StringComparison.Ordinal)
+                ? "The verified graph is not loaded while the local DKG node is offline."
+                : "The verified graph currently contains no threats.";
+            return;
+        }
+
+        VerifiedGraphListStatus = page.Partial || page.Total > VerifiedGraphThreats.Count
+            ? $"Showing {VerifiedGraphThreats.Count} of {page.Total} verified threat(s)."
+            : $"Showing all {page.Total} verified threat(s).";
+    }
+
+    private static string CountText(int value) =>
+        value.ToString("N0", CultureInfo.InvariantCulture);
+
+    private static string CountText(int? value) =>
+        value is { } number ? CountText(number) : "—";
+
+    private static string CountText(long? value) =>
+        value is { } number ? number.ToString("N0", CultureInfo.InvariantCulture) : "—";
 
     private void ApplyHealth(JsonObject settings, JsonObject graph)
     {

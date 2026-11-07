@@ -12,8 +12,8 @@ public sealed class PrivacyShieldTests
     [Fact]
     public async Task Enabled_controller_starts_and_stops_the_loopback_resolver()
     {
-        var directory = CreateTemporaryDirectory();
-        var path = Path.Combine(directory, "settings.json");
+        var path = Path.Combine(Path.GetTempPath(), $"axiom-privacy-{Guid.NewGuid():N}.json");
+        var rulesPath = Path.Combine(Path.GetTempPath(), $"axiom-privacy-rules-{Guid.NewGuid():N}.json");
         int port;
         using (var probe = new System.Net.Sockets.UdpClient(
                    new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0)))
@@ -24,7 +24,9 @@ public sealed class PrivacyShieldTests
         try
         {
             var store = new PrivacyShieldSettingsStore(path);
-            await using var controller = new PrivacyShieldController(store);
+            await using var controller = new PrivacyShieldController(
+                store,
+                new PrivacyShieldRuleStore(rulesPath));
             var settings = new PrivacyShieldSettings
             {
                 Enabled = true,
@@ -42,7 +44,8 @@ public sealed class PrivacyShieldTests
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            File.Delete(path);
+            File.Delete(rulesPath);
         }
     }
 
@@ -137,8 +140,7 @@ public sealed class PrivacyShieldTests
         var directory = CreateTemporaryDirectory();
         var path = Path.Combine(directory, "settings.json");
         var port = ReservePort();
-        var store = new FailingSettingsStore(path);
-        var controller = new PrivacyShieldController(store);
+        var controller = new PrivacyShieldController(new PrivacyShieldSettingsStore(path));
         try
         {
             var first = await controller.ConfigureAsync(
@@ -146,20 +148,23 @@ public sealed class PrivacyShieldTests
                 CancellationToken.None);
             Assert.True(first.Running);
 
-            store.FailSave = true;
-            var failed = await controller.ConfigureAsync(
-                EnabledSettings(port) with { BlockedDomains = ["changed.example"] },
-                CancellationToken.None);
+            PrivacyShieldStatus failed;
+            using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                failed = await controller.ConfigureAsync(
+                    EnabledSettings(port) with { BlockedDomains = ["changed.example"] },
+                    CancellationToken.None);
+            }
 
             Assert.True(failed.Running);
             Assert.Equal(port, failed.Port);
             Assert.Contains("previous resolver restored", failed.LastError, StringComparison.OrdinalIgnoreCase);
 
-            // The failed write must leave the previous on-disk configuration intact.
             var loaded = new PrivacyShieldSettingsStore(path).Load();
             Assert.True(loaded.Enabled);
             Assert.Equal(port, loaded.Port);
             Assert.Contains("blocked.example", loaded.BlockedDomains);
+            Assert.DoesNotContain("changed.example", loaded.BlockedDomains);
         }
         finally
         {
@@ -171,8 +176,7 @@ public sealed class PrivacyShieldTests
     [Fact]
     public async Task Default_state_is_disabled_and_can_be_saved()
     {
-        var directory = CreateTemporaryDirectory();
-        var path = Path.Combine(directory, "settings.json");
+        var path = Path.Combine(Path.GetTempPath(), $"axiom-privacy-{Guid.NewGuid():N}.json");
         try
         {
             var store = new PrivacyShieldSettingsStore(path);
@@ -202,16 +206,8 @@ public sealed class PrivacyShieldTests
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            File.Delete(path);
         }
-    }
-
-    private sealed class FailingSettingsStore(string path) : PrivacyShieldSettingsStore(path)
-    {
-        public bool FailSave { get; set; }
-
-        public override bool Save(PrivacyShieldSettings settings) =>
-            FailSave ? false : base.Save(settings);
     }
 
     private static PrivacyShieldSettings EnabledSettings(int port) => new()
