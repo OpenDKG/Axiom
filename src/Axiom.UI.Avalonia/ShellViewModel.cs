@@ -27,7 +27,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         IUserInteraction? userInteraction = null,
         IProcessActions? processActions = null,
         IThemeService? themeService = null,
-        IAutostartService? autostartService = null)
+        IAutostartService? autostartService = null,
+        IApiKeyProtector? apiKeyProtector = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(timers);
@@ -48,13 +49,17 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             timers,
             interaction);
         Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction);
+        AiAnalyst = new AiAnalystPageViewModel(
+            _monitor,
+            apiKeyProtector ?? new UnsupportedApiKeyProtector(),
+            timers);
         Support = new SupportPageViewModel(interaction);
         Settings = new SettingsPageViewModel(
             _monitor,
             IsServiceMode,
             themeService ?? new FixedThemeService(),
             autostartService ?? new UnsupportedAutostartService());
-        Pages = [Overview, Connections, Apps, Events, Firewall, Support, Settings];
+        Pages = [Overview, Connections, Apps, Events, Firewall, AiAnalyst, Support, Settings];
         _selectedPage = Overview;
         _monitor.Updated += OnMonitorUpdated;
     }
@@ -68,6 +73,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public EventsPageViewModel Events { get; }
 
     public FirewallPageViewModel Firewall { get; }
+
+    public AiAnalystPageViewModel AiAnalyst { get; }
 
     public SupportPageViewModel Support { get; }
 
@@ -122,6 +129,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Apps.Dispose();
         Events.Dispose();
         Firewall.Dispose();
+        AiAnalyst.Dispose();
         Settings.Dispose();
         _traffic.Dispose();
         _monitor.Dispose();

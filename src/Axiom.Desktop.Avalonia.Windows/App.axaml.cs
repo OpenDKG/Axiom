@@ -57,7 +57,8 @@ public partial class App : Application
                 interaction,
                 new ProcessActions(),
                 theme,
-                autostart);
+                autostart,
+                new DpapiApiKeyProtector());
             window = new MainWindow { DataContext = _shell };
             desktop.MainWindow = window;
             _shell.Start();
