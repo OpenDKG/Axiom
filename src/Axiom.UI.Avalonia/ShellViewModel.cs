@@ -25,7 +25,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         ServiceStatusProbe? serviceProbe = null,
         IServiceRequestClient? serviceClient = null,
         IUserInteraction? userInteraction = null,
-        IProcessActions? processActions = null)
+        IProcessActions? processActions = null,
+        IThemeService? themeService = null,
+        IAutostartService? autostartService = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(timers);
@@ -45,7 +47,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             IsServiceMode ? serviceClient : null,
             timers,
             interaction);
-        Pages = [Overview, Connections, Apps, Events];
+        Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction);
+        Support = new SupportPageViewModel(interaction);
+        Settings = new SettingsPageViewModel(
+            _monitor,
+            IsServiceMode,
+            themeService ?? new FixedThemeService(),
+            autostartService ?? new UnsupportedAutostartService());
+        Pages = [Overview, Connections, Apps, Events, Firewall, Support, Settings];
         _selectedPage = Overview;
         _monitor.Updated += OnMonitorUpdated;
     }
@@ -57,6 +66,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public AppsPageViewModel Apps { get; }
 
     public EventsPageViewModel Events { get; }
+
+    public FirewallPageViewModel Firewall { get; }
+
+    public SupportPageViewModel Support { get; }
+
+    public SettingsPageViewModel Settings { get; }
 
     public ObservableCollection<PageViewModel> Pages { get; }
 
@@ -106,6 +121,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Connections.Dispose();
         Apps.Dispose();
         Events.Dispose();
+        Firewall.Dispose();
+        Settings.Dispose();
         _traffic.Dispose();
         _monitor.Dispose();
     }

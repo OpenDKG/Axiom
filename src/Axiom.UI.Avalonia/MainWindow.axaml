@@ -20,6 +20,15 @@
     <DataTemplate DataType="local:EventsPageViewModel">
       <views:EventsView />
     </DataTemplate>
+    <DataTemplate DataType="local:FirewallPageViewModel">
+      <views:FirewallView />
+    </DataTemplate>
+    <DataTemplate DataType="local:SupportPageViewModel">
+      <views:SupportView />
+    </DataTemplate>
+    <DataTemplate DataType="local:SettingsPageViewModel">
+      <views:SettingsView />
+    </DataTemplate>
   </Window.DataTemplates>
 
   <Grid ColumnDefinitions="236,*">

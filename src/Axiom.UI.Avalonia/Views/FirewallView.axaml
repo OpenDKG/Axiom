@@ -1,0 +1,141 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Axiom.UI.Avalonia.Views.FirewallView">
+  <Grid RowDefinitions="Auto,Auto,*" Margin="24,18,24,24">
+    <Border Grid.Row="0" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1"
+            CornerRadius="8" Padding="16">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Spacing="4">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <TextBlock Text="Windows Firewall · Axiom-owned rules" FontSize="15" FontWeight="SemiBold" Foreground="#E6EDF3" />
+            <Border Background="#123236" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+              <TextBlock Text="{Binding NoticeBadgeText}" Foreground="#5EEAD4" FontSize="9" FontWeight="Bold" />
+            </Border>
+          </StackPanel>
+          <TextBlock Text="{Binding NoticeText}" Foreground="#8A98A8" FontSize="10" TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Right">
+          <TextBlock Text="{Binding CapabilityStatusText}" Foreground="#E6EDF3" FontSize="12" HorizontalAlignment="Right" />
+          <TextBlock Text="{Binding WritePathText}" Foreground="#8A98A8" FontSize="10" HorizontalAlignment="Right" />
+          <Button Content="Recheck" Command="{Binding RefreshCommand}" HorizontalAlignment="Right" Padding="12,5" Margin="0,4,0,0" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <TextBlock Grid.Row="1" Text="{Binding StatusText}" Foreground="#9BA9B8" FontSize="11"
+               TextWrapping="Wrap" Margin="2,10,0,0" />
+
+    <Grid Grid.Row="2" ColumnDefinitions="1.35*,7,1*" Margin="0,10,0,0">
+      <Border Grid.Column="0" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1"
+              CornerRadius="8" Padding="0">
+        <Grid RowDefinitions="Auto,Auto,*">
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,12,16,8">
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="Owned rules" FontSize="15" FontWeight="SemiBold" Foreground="#E6EDF3" />
+              <TextBlock Text="{Binding CapabilityDetail}" FontSize="10" Foreground="#8A98A8" TextWrapping="Wrap" />
+            </StackPanel>
+            <TextBlock Grid.Column="1" Text="{Binding OwnedRuleCountText}" FontSize="16" FontWeight="SemiBold"
+                       Foreground="#5EEAD4" VerticalAlignment="Center" />
+          </Grid>
+
+          <Grid Grid.Row="1" ColumnDefinitions="1.3*,60,54,1.2*,56,70,70,Auto" Margin="16,4,16,6">
+            <TextBlock Grid.Column="0" Text="APPLICATION" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Grid.Column="1" Text="DIR" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Grid.Column="2" Text="ACTION" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Grid.Column="3" Text="PROFILES" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Grid.Column="4" Text="PROTO" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Grid.Column="5" Text="PORTS" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Grid.Column="6" Text="STATE" FontSize="10" Foreground="#8A98A8" />
+          </Grid>
+
+          <ListBox Grid.Row="2" Classes="data-list" ItemsSource="{Binding Rules}" Background="Transparent"
+                   BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Grid ColumnDefinitions="1.3*,60,54,1.2*,56,70,70,Auto" Margin="0,3">
+                  <TextBlock Grid.Column="0" Text="{Binding Application}" Foreground="#E6EDF3" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" Text="{Binding DirectionText}" Foreground="#9BA9B8" />
+                  <TextBlock Grid.Column="2" Text="{Binding ActionText}" Foreground="#9BA9B8" />
+                  <TextBlock Grid.Column="3" Text="{Binding ProfilesText}" Foreground="#9BA9B8" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="4" Text="{Binding ProtocolText}" Foreground="#9BA9B8" />
+                  <TextBlock Grid.Column="5" Text="{Binding PortsText}" Foreground="#9BA9B8" />
+                  <TextBlock Grid.Column="6" Text="{Binding StateText}" Foreground="#9BA9B8" />
+                  <Button Grid.Column="7" Content="Remove" Padding="8,2" Margin="6,0,0,0"
+                          Command="{Binding $parent[ListBox].DataContext.RemoveRuleCommand}"
+                          CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <TextBlock Grid.Row="2" Text="No Axiom-owned rules were found on this host." Foreground="#8A98A8"
+                     FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     IsVisible="{Binding IsEmpty}" />
+        </Grid>
+      </Border>
+
+      <GridSplitter Grid.Column="1" Width="7" Background="#2E3A47" ResizeDirection="Columns"
+                    ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+
+      <Border Grid.Column="2" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1"
+              CornerRadius="8" Padding="16">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Rule defaults" FontSize="14" FontWeight="SemiBold" Foreground="#E6EDF3" />
+            <TextBlock Text="{Binding DefaultsStatusText}" FontSize="10" Foreground="#8A98A8" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <CheckBox Content="Domain" IsChecked="{Binding DefaultDomain}" Foreground="#D6DEE7" />
+              <CheckBox Content="Private" IsChecked="{Binding DefaultPrivate}" Foreground="#D6DEE7" />
+              <CheckBox Content="Public" IsChecked="{Binding DefaultPublic}" Foreground="#D6DEE7" />
+            </StackPanel>
+            <ComboBox ItemsSource="{Binding ProtocolOptions}" SelectedItem="{Binding DefaultProtocolText}" Width="120" HorizontalAlignment="Left" />
+            <TextBox Text="{Binding DefaultPortsText}" PlaceholderText="Remote ports, e.g. 443,8000-8100" />
+            <TextBox Text="{Binding DefaultAddressesText}" PlaceholderText="Remote addresses or CIDR" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Save defaults" Command="{Binding SaveDefaultsCommand}" Padding="12,6" />
+              <Button Content="Reset" Command="{Binding ResetDefaultsCommand}" Padding="12,6" />
+            </StackPanel>
+
+            <Border Height="1" Background="#2E3A47" Margin="0,6" />
+            <TextBlock Text="New owned rule" FontSize="14" FontWeight="SemiBold" Foreground="#E6EDF3" />
+            <TextBlock Text="{Binding NewRuleWriteHint}" FontSize="10" Foreground="#8A98A8" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Grid.Column="0" Text="{Binding NewRulePath}" PlaceholderText="Absolute executable path" />
+              <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseNewRuleExecutableCommand}" Margin="8,0,0,0" Padding="12,6" />
+            </Grid>
+            <Grid ColumnDefinitions="*,10,*">
+              <StackPanel Grid.Column="0" Spacing="4">
+                <TextBlock Text="Direction" FontSize="10" Foreground="#8A98A8" />
+                <ComboBox ItemsSource="{Binding DirectionOptions}" SelectedItem="{Binding NewRuleDirectionText}" />
+              </StackPanel>
+              <StackPanel Grid.Column="2" Spacing="4">
+                <TextBlock Text="Action" FontSize="10" Foreground="#8A98A8" />
+                <ComboBox ItemsSource="{Binding ActionOptions}" SelectedItem="{Binding NewRuleActionText}" />
+              </StackPanel>
+            </Grid>
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <CheckBox Content="Domain" IsChecked="{Binding NewRuleDomain}" Foreground="#D6DEE7" />
+              <CheckBox Content="Private" IsChecked="{Binding NewRulePrivate}" Foreground="#D6DEE7" />
+              <CheckBox Content="Public" IsChecked="{Binding NewRulePublic}" Foreground="#D6DEE7" />
+              <CheckBox Content="Enabled" IsChecked="{Binding NewRuleEnabled}" Foreground="#D6DEE7" />
+            </StackPanel>
+            <Grid ColumnDefinitions="*,10,*">
+              <StackPanel Grid.Column="0" Spacing="4">
+                <TextBlock Text="Protocol" FontSize="10" Foreground="#8A98A8" />
+                <ComboBox ItemsSource="{Binding ProtocolOptions}" SelectedItem="{Binding NewRuleProtocolText}" />
+              </StackPanel>
+              <StackPanel Grid.Column="2" Spacing="4">
+                <TextBlock Text="Remote ports" FontSize="10" Foreground="#8A98A8" />
+                <TextBox Text="{Binding NewRulePortsText}" />
+              </StackPanel>
+            </Grid>
+            <TextBox Text="{Binding NewRuleAddressesText}" PlaceholderText="Remote addresses or CIDR" />
+            <Button Content="Apply rule" Command="{Binding ApplyNewRuleCommand}" Padding="12,6"
+                    HorizontalAlignment="Left" Background="#7F1D1D" Foreground="#E6EDF3" />
+            <TextBlock Text="{Binding NewRuleStatusText}" FontSize="10" Foreground="#8A98A8" TextWrapping="Wrap" />
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

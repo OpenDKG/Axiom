@@ -24,6 +24,13 @@ public interface IUserInteraction
         string typeName,
         CancellationToken cancellationToken);
 
+    /// <summary>Native open dialog. Returns null when the user cancels.</summary>
+    Task<string?> PickOpenFileAsync(
+        string title,
+        string extension,
+        string typeName,
+        CancellationToken cancellationToken);
+
     Task CopyTextAsync(string text, CancellationToken cancellationToken);
 
     Task OpenExternalAsync(string url, CancellationToken cancellationToken);

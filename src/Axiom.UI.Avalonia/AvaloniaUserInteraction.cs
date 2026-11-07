@@ -107,6 +107,35 @@ public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUser
         return file?.TryGetLocalPath();
     }
 
+    public async Task<string?> PickOpenFileAsync(
+        string title,
+        string extension,
+        string typeName,
+        CancellationToken cancellationToken)
+    {
+        var owner = ownerProvider();
+        if (owner is null)
+        {
+            return null;
+        }
+
+        var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType(typeName)
+                {
+                    Patterns = [$"*.{extension.TrimStart('.')}"],
+                },
+            ],
+        }).ConfigureAwait(true);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return files.Count == 0 ? null : files[0].TryGetLocalPath();
+    }
+
     public async Task CopyTextAsync(string text, CancellationToken cancellationToken)
     {
         var owner = ownerProvider()

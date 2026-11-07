@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Styling;
 using Axiom.Contracts.Monitoring;
 using Axiom.Infrastructure.Windows.IpHelper;
 using Axiom.Presentation;
@@ -45,13 +46,18 @@ public partial class App : Application
 
             MainWindow? window = null;
             var interaction = new AvaloniaUserInteraction(() => window);
+            var theme = new WindowsThemeService();
+            RequestedThemeVariant = theme.Current == UiTheme.Light ? ThemeVariant.Light : ThemeVariant.Dark;
+            var autostart = new WindowsAutostartService();
             _shell = new ShellViewModel(
                 source,
                 new AvaloniaUiTimerFactory(),
                 serviceProbe,
                 serviceClient,
                 interaction,
-                new ProcessActions());
+                new ProcessActions(),
+                theme,
+                autostart);
             window = new MainWindow { DataContext = _shell };
             desktop.MainWindow = window;
             _shell.Start();
