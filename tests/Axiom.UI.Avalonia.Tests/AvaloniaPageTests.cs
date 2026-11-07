@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.Protection;
 using Axiom.Presentation;
 using Axiom.UI.Avalonia;
 using Xunit;
@@ -79,12 +81,78 @@ public sealed class AvaloniaPageTests
             });
     }
 
+    [Fact]
+    public async Task Firewall_page_applies_shield_status()
+    {
+        var pending = new ProtectionPendingApp
+        {
+            AppPath = @"C:\Tools\opencode.exe",
+            AppName = "opencode.exe",
+            SocketCount = 3,
+            FirstObservedUtc = DateTimeOffset.UnixEpoch,
+            IsAgent = true,
+        };
+
+        var status = new ProtectionStatus
+        {
+            Enabled = true,
+            ServiceElevated = true,
+            WriteGateOpen = true,
+            AccountName = "SYSTEM",
+            DefaultPolicy = "ask",
+            Pending = [pending],
+            Decisions = [],
+            AgentPaths = [@"C:\Tools\opencode.exe"],
+            AgentLockdown = false,
+            OwnedRuleCount = 1,
+        };
+
+        var page = new FirewallPageViewModel(new ShieldClient(status), new NullUserInteraction());
+
+        await Task.Delay(300);
+
+        Assert.True(page.ShieldEnabled);
+        Assert.True(page.ServiceElevated);
+        Assert.True(page.WritesEnabled);
+        Assert.Equal("ON", page.ShieldBadgeText);
+        Assert.Equal(1, page.PendingCount);
+        Assert.True(page.HasPending);
+        Assert.Equal(1, page.AgentPathCount);
+        Assert.Single(page.Pending);
+        Assert.Equal("opencode.exe", page.Pending[0].AppName);
+        Assert.True(page.Pending[0].IsAgent);
+    }
+
+    private sealed class ShieldClient(ProtectionStatus status) : IServiceRequestClient
+    {
+        public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
+        {
+            object result = command switch
+            {
+                IpcCommandTypes.RulesQuery => new FirewallRulesSnapshot
+                {
+                    Capability = new FirewallCapabilityReport
+                    {
+                        Status = FirewallCapabilityStatus.Available,
+                        ManagedRulesReadable = true,
+                        ManagedRuleCount = 0,
+                    },
+                    Rules = [],
+                    WritesEnabled = true,
+                },
+                IpcCommandTypes.ProtectionStatus => status,
+                _ => throw new ServiceUnavailableException(IpcErrorCodes.NotSupported, "not supported"),
+            };
+
+            return Task.FromResult((T)result);
+        }
+    }
+
     private sealed class OfflineClient : IServiceRequestClient
     {
         public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken) =>
             throw new ServiceUnavailableException(IpcErrorCodes.ServiceUnavailable, "offline");
     }
-
     private sealed class FakeTimerFactory : IUiTimerFactory
     {
         public IUiTimer Create(TimeSpan interval) => new FakeTimer(interval);

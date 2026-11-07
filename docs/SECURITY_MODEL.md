@@ -43,9 +43,13 @@ in the service.
 ## 4. Firewall write gate (FND-006)
 
 - `WindowsFirewallPolicyAdapter` uses the documented COM policy/rule objects on a dedicated STA
-  thread. Read-only listing and verification are enabled; writes are gated.
-- Both variables must be present on the service process: `AXIOM_ENABLE_FIREWALL_WRITES=1` and
-  `AXIOM_FIREWALL_WRITE_CONFIRM=yes`. A normal build starts with both unset.
+  thread. Read-only listing and verification are always enabled; writes are gated.
+- Writes require **both** persisted user consent (`%ProgramData%\Axiom\protection.json`,
+  `Enabled=true`) and a non-interactive service host. The interactive app never writes, even with
+  consent; the legacy two-variable environment gate remains only as a test override
+  (`AXIOM_ENABLE_FIREWALL_WRITES=1`, `AXIOM_FIREWALL_WRITE_CONFIRM=yes`).
+- Consent is granted through Axiom Shield, which installs and starts the Windows service from one
+  UAC prompt. Removing the service is never automatic.
 - Only exact `Axiom::{id}::{OUT|IN}` names are created or removed; no wildcard, prefix or group
   deletion exists.
 - The coordinator writes pending/applied/failed state and an audit row (actor SID, time, action,
@@ -55,8 +59,9 @@ in the service.
 - Reapplying a rule clears a removed port scope, and read-back/verification compares action,
   direction, protocol, profiles, enabled state, addresses and ports against the persisted spec.
 - The UI disables block/remove unless the service reports `FirewallWrites=true`.
-- The development host has not had any rule applied. Real enforcement, external-rule conflicts and
-  rollback remain VM checks (ADR 0007).
+- The agent lockdown composes 16 non-loopback CIDR blocks (IPv4 and IPv6) so 127.0.0.0/8 and ::1
+  stay reachable for the local Blackbox guard; it never blocks loopback.
+- Installer uninstall, rollback and external-rule conflicts remain VM checks (ADR 0007).
 
 ## 5. Threat model
 
@@ -71,7 +76,7 @@ in the service.
 | Unbounded database growth | 30-day retention, hourly check | Tested |
 | SQL injection through search | Parameterized queries + `LIKE ... ESCAPE` | Tested |
 | Fake PID/path | `partial`, `unknown path` | FND-010 |
-| Firewall change | No write commands | FND-006 |
+| Firewall change | Consented shield, non-interactive service only, exact Axiom rule names | FND-006 |
 | Service crash | UI `Service unavailable`, reconnect | E2E tested |
 | Malicious prompt induces MCP tool abuse | Read-only tools only; no path input, shell, exec, rule or config command | PR A; no model-driven adversarial test yet |
 | MCP process reads data directly | Pipe-only adapter; no SQLite/COM/registry access | Code review; service SID check remains |

@@ -3,7 +3,9 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Agents;
+using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.Protection;
 using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
@@ -17,12 +19,16 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly ConnectionMonitor _monitor;
     private readonly TrafficEngine _traffic;
     private readonly ServiceStatusProbe? _serviceProbe;
+    private readonly IServiceRequestClient? _serviceClient;
     private readonly IUserInteraction _ui;
     private readonly IThemeService _theme;
     private readonly CancellationTokenSource _cancellation = new();
     private DateTimeOffset _lastProbeUtc = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastProtectionProbeUtc = DateTimeOffset.MinValue;
     private bool _isProbing;
+    private bool _isProbingProtection;
     private bool _updatingTheme;
+    private ProtectionStatus? _protection;
 
     public ShellViewModel(
         IConnectionSnapshotSource source,
@@ -45,6 +51,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _monitor = new ConnectionMonitor(source, timers);
         _traffic = new TrafficEngine(timers);
         _serviceProbe = serviceProbe;
+        _serviceClient = serviceClient;
         IsServiceMode = source is ServiceSnapshotSource;
         var interaction = userInteraction ?? new NullUserInteraction();
         _ui = interaction;
@@ -252,6 +259,45 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         RefreshStatus();
         _ = ProbeServiceAsync();
+        _ = ProbeProtectionAsync();
+    }
+
+    private async Task ProbeProtectionAsync()
+    {
+        if (_serviceClient is null || _isProbingProtection)
+        {
+            return;
+        }
+
+        if (DateTimeOffset.UtcNow - _lastProtectionProbeUtc < TimeSpan.FromSeconds(5))
+        {
+            return;
+        }
+
+        _isProbingProtection = true;
+        _lastProtectionProbeUtc = DateTimeOffset.UtcNow;
+
+        try
+        {
+            _protection = await _serviceClient
+                .SendAsync<ProtectionStatus>(IpcCommandTypes.ProtectionStatus, null, _cancellation.Token)
+                .ConfigureAwait(true);
+            RefreshStatus();
+        }
+        catch (ServiceUnavailableException)
+        {
+            _protection = null;
+        }
+#pragma warning disable CA1031 // An older service build simply does not expose the shield yet.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            _protection = null;
+        }
+        finally
+        {
+            _isProbingProtection = false;
+        }
     }
 
     private void RefreshStatus()
@@ -260,16 +306,29 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             ? $"Monitoring: live · {_monitor.PollInterval.TotalSeconds:0} s · {_monitor.SourceName}"
             : $"Monitoring: unavailable · {_monitor.LastError}";
 
-        StatusSourceText = IsServiceMode
-            ? "Data source: local service (read-only)"
-            : "Data source: in-process IP Helper (read-only)";
+        StatusSourceText = _protection is { Enabled: true }
+            ? "Data source: local service · traffic not filtered"
+            : IsServiceMode
+                ? "Data source: local service (read-only)"
+                : "Data source: in-process IP Helper (read-only)";
 
-        StatusFirewallText = ServiceStatus?.Capabilities?.FirewallWrites == true
-            ? "Firewall writes: enabled for this service session"
-            : "Firewall writes: read-only";
-        StatusFirewallBadgeText = ServiceStatus?.Capabilities?.FirewallWrites == true
-            ? "TEST VM"
-            : "READ-ONLY";
+        if (_protection is { Enabled: true } protection)
+        {
+            StatusFirewallText = protection.Pending.Count > 0
+                ? $"Protection: ON · {protection.OwnedRuleCount} rule(s) · {protection.Pending.Count} to decide"
+                : $"Protection: ON · {protection.OwnedRuleCount} rule(s)";
+            StatusFirewallBadgeText = "SHIELD ON";
+        }
+        else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
+        {
+            StatusFirewallText = "Firewall writes: enabled for this service session";
+            StatusFirewallBadgeText = "TEST VM";
+        }
+        else
+        {
+            StatusFirewallText = "Protection: off";
+            StatusFirewallBadgeText = "READ-ONLY";
+        }
         StatusModeText = IsServiceMode ? "Service monitor" : "In-process monitor";
 
         StatusStorageText = ServiceStatus?.IsConnected == true

@@ -43,6 +43,11 @@ public static class IpcCommandTypes
     public const string ConfigGet = "config.get";
     public const string ConfigSet = "config.set";
     public const string DiagnosticsExport = "diagnostics.export";
+    public const string ProtectionStatus = "protection.status";
+    public const string ProtectionEnable = "protection.enable";
+    public const string ProtectionDisable = "protection.disable";
+    public const string ProtectionDecide = "protection.decide";
+    public const string ProtectionLockdown = "protection.lockdown";
 
     public static IReadOnlyList<string> All { get; } =
     [
@@ -62,6 +67,11 @@ public static class IpcCommandTypes
         ConfigGet,
         ConfigSet,
         DiagnosticsExport,
+        ProtectionStatus,
+        ProtectionEnable,
+        ProtectionDisable,
+        ProtectionDecide,
+        ProtectionLockdown,
     ];
 }
 

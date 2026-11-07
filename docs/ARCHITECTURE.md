@@ -97,8 +97,8 @@ Infrastructure/Service/Desktop.
 - Read-only operations: capability probe, owned-rule listing and verification. They need no admin
   on a normal host.
 - Write operations: apply and remove, limited to exact `Axiom::{id}::{OUT|IN}` names. They are
-  refused unless `AXIOM_ENABLE_FIREWALL_WRITES=1` and
-  `AXIOM_FIREWALL_WRITE_CONFIRM=yes` are both set on the service.
+  refused unless the persisted shield consent is granted **and** the process is the
+  non-interactive Windows service. The two environment variables remain a test-only override.
 - `FirewallRuleCoordinator` serialises changes and runs
   validate → pending + audit → apply → read-back → applied/failed + audit.
 - SQLite schema v2 adds `firewall_rules` and `rule_audit`; the audit actor is the verified pipe

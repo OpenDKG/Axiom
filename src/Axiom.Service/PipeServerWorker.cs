@@ -16,6 +16,7 @@ public sealed partial class PipeServerWorker(
     WindowsFirewallPolicyAdapter firewall,
     FirewallRuleCoordinator coordinator,
     PrivacyShieldController privacyShield,
+    ProtectionController protection,
     ILogger<PipeServerWorker> logger) : BackgroundService
 {
     [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "Pipe {Pipe} allows SID {Sid}")]
@@ -34,8 +35,8 @@ public sealed partial class PipeServerWorker(
             allowedSid,
             () => cache.Latest,
             () => CreateHealth(cache),
-            (query, cancellationToken) => history.QueryAsync(query, cancellationToken),
-            async cancellationToken =>
+            historyQuery: (query, cancellationToken) => history.QueryAsync(query, cancellationToken),
+            rulesQuery: async cancellationToken =>
             {
                 var capability = await firewall.GetCapabilitiesAsync(cancellationToken).ConfigureAwait(false);
                 IReadOnlyList<ManagedRule> rules = capability.Status == FirewallCapabilityStatus.Available
@@ -49,14 +50,27 @@ public sealed partial class PipeServerWorker(
                     WritesEnabled = WindowsFirewallPolicyAdapter.IsWriteGateOpen,
                 };
             },
-            (spec, actorSid, cancellationToken) => coordinator.ApplyAsync(spec, actorSid, cancellationToken),
-            (managedRuleId, actorSid, cancellationToken) => coordinator.RemoveAsync(managedRuleId, actorSid, cancellationToken),
-            (managedRuleId, cancellationToken) => coordinator.VerifyAsync(managedRuleId, cancellationToken),
-            (cancellationToken) => privacyShield.GetStatusAsync(cancellationToken),
-            (settings, cancellationToken) => privacyShield.ConfigureAsync(settings, cancellationToken),
-            (cancellationToken) => privacyShield.UpdateSourcesAsync(cancellationToken),
-            (cancellationToken) => privacyShield.ClearHistoryAsync(cancellationToken),
-            message => LogMessage(logger, message));
+            ruleApply: (spec, actorSid, cancellationToken) =>
+                coordinator.ApplyAsync(spec, actorSid, cancellationToken),
+            ruleRemove: (managedRuleId, actorSid, cancellationToken) =>
+                coordinator.RemoveAsync(managedRuleId, actorSid, cancellationToken),
+            ruleVerify: (managedRuleId, cancellationToken) =>
+                coordinator.VerifyAsync(managedRuleId, cancellationToken),
+            privacyStatus: cancellationToken => privacyShield.GetStatusAsync(cancellationToken),
+            privacyConfigure: (settings, cancellationToken) =>
+                privacyShield.ConfigureAsync(settings, cancellationToken),
+            privacySourcesUpdate: cancellationToken => privacyShield.UpdateSourcesAsync(cancellationToken),
+            privacyHistoryClear: cancellationToken => privacyShield.ClearHistoryAsync(cancellationToken),
+            protectionStatus: cancellationToken => protection.GetStatusAsync(null, cancellationToken),
+            protectionEnable: (request, actorSid, cancellationToken) =>
+                protection.EnableAsync(request.DefaultPolicy, actorSid, cancellationToken),
+            protectionDisable: (actorSid, cancellationToken) =>
+                protection.DisableAsync(actorSid, cancellationToken),
+            protectionDecide: (request, actorSid, cancellationToken) =>
+                protection.DecideAsync(request, actorSid, cancellationToken),
+            protectionLockdown: (request, actorSid, cancellationToken) =>
+                protection.SetAgentLockdownAsync(request.Enabled, actorSid, cancellationToken),
+            log: message => LogMessage(logger, message));
 
         await server.RunAsync(stoppingToken).ConfigureAwait(false);
     }

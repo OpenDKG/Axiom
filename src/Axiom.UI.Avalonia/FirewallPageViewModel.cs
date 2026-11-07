@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Ipc;
+using Axiom.Contracts.Protection;
 using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
@@ -54,6 +55,24 @@ public sealed class FirewallRuleRow(ManagedRule rule)
         $"{rule.Spec.AppPath}\nRule: {rule.OsRuleName}\nCreated by: {rule.Spec.CreatedBy}";
 }
 
+/// <summary>One outbound application that is waiting for a Block/Allow decision.</summary>
+public sealed class PendingAppRow(ProtectionPendingApp app)
+{
+    public string AppPath => app.AppPath;
+
+    public string AppName => app.AppName;
+
+    public string SocketText => $"{app.SocketCount} socket(s)";
+
+    public string FirstSeenText => app.FirstObservedUtc.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+
+    public bool IsAgent => app.IsAgent;
+
+    public string AgentText => app.IsAgent ? "agent" : string.Empty;
+
+    public string Tooltip => app.AppPath;
+}
+
 /// <summary>
 /// Firewall page. It reads the capability and owned rules through the service. Apply/Remove stay
 /// disabled unless the service opened its explicit write gate, and every change asks first.
@@ -89,6 +108,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     }
 
     public ObservableCollection<FirewallRuleRow> Rules { get; } = [];
+
+    public ObservableCollection<PendingAppRow> Pending { get; } = [];
 
     public IReadOnlyList<string> ProtocolOptions { get; } = ["Any", "TCP", "UDP"];
 
@@ -180,14 +201,14 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     private bool _writesEnabled;
 
     public string NoticeText => WritesEnabled
-        ? "Rules are read through the service with the documented INetFwPolicy2 COM objects. Writes are enabled for this test session; each change requires confirmation and is audited."
-        : "This session is read-only for Windows Firewall changes. Rule defaults below are editable and are used by new rules from Applications. Apply/Remove need the service write gate: AXIOM_ENABLE_FIREWALL_WRITES=1 and AXIOM_FIREWALL_WRITE_CONFIRM=yes.";
+        ? "Axiom Shield is on. Rules are read and written through the elevated local service with the documented INetFwPolicy2 COM objects. Every change is confirmed and audited."
+        : "This session is read-only for Windows Firewall changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
 
-    public string NoticeBadgeText => WritesEnabled ? "TEST VM" : "READ-ONLY";
+    public string NoticeBadgeText => WritesEnabled ? "SHIELD ON" : "READ-ONLY";
 
     public string NewRuleWriteHint => WritesEnabled
-        ? "Writes are enabled for this test session. Each change requires confirmation and is audited."
-        : "Writes are disabled by design. Start the service with AXIOM_ENABLE_FIREWALL_WRITES=1 and AXIOM_FIREWALL_WRITE_CONFIRM=yes on an isolated test VM, then recheck.";
+        ? "Axiom Shield is on. Each change is confirmed and audited; only Axiom-owned rules are touched."
+        : "Turn on Axiom Shield to enable writes. Without it the rule editor stays read-only.";
 
     [ObservableProperty]
     private string _writePathText = "disabled";
@@ -200,6 +221,58 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private bool _canRecheck;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ToggleShieldCommand))]
+    [NotifyCanExecuteChangedFor(nameof(BlockPendingCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AllowPendingCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleAgentLockdownCommand))]
+    private bool _isShieldBusy;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ToggleAgentLockdownCommand))]
+    [NotifyPropertyChangedFor(nameof(ShieldBadgeText))]
+    [NotifyPropertyChangedFor(nameof(ShieldActionText))]
+    private bool _shieldEnabled;
+
+    [ObservableProperty]
+    private bool _shieldAvailable;
+
+    [ObservableProperty]
+    private bool _serviceElevated;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ToggleAgentLockdownCommand))]
+    [NotifyPropertyChangedFor(nameof(AgentLockdownActionText))]
+    private bool _agentLockdown;
+
+    [ObservableProperty]
+    private string _shieldStatusText = "Checking the local service…";
+
+    [ObservableProperty]
+    private string _shieldHintText =
+        "Axiom Shield applies Windows Firewall rules owned by Axiom. Nothing is blocked until you turn it on.";
+
+    [ObservableProperty]
+    private string _serviceAccountText = "unknown";
+
+    [ObservableProperty]
+    private int _pendingCount;
+
+    [ObservableProperty]
+    private bool _hasPending;
+
+    [ObservableProperty]
+    private int _agentPathCount;
+
+    [ObservableProperty]
+    private string _agentLockdownHintText = "No agent executable is connected right now.";
+
+    public string ShieldBadgeText => ShieldEnabled ? "ON" : "OFF";
+
+    public string ShieldActionText => ShieldEnabled ? "Disable protection" : "Enable protection";
+
+    public string AgentLockdownActionText => AgentLockdown ? "Remove agent lockdown" : "Lock agents to localhost";
 
     public void Dispose()
     {
@@ -396,6 +469,344 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
     private bool CanRemoveRule() => WritesEnabled && !IsBusy;
 
+    private bool CanToggleShield() => _client is not null && !IsShieldBusy;
+
+    [RelayCommand(CanExecute = nameof(CanToggleShield))]
+    private async Task ToggleShieldAsync()
+    {
+        if (_client is null)
+        {
+            ShieldStatusText = "Axiom Shield needs the local service.";
+            return;
+        }
+
+        if (ShieldEnabled)
+        {
+            var confirmed = await _ui.ConfirmAsync(
+                "Disable Axiom Shield",
+                "Turn protection off and remove every Axiom-owned Windows Firewall rule?\n\n" +
+                "Other firewall rules are not touched. Rules are re-created from your decisions when you enable it again.",
+                "Disable protection",
+                destructive: true,
+                CancellationToken.None).ConfigureAwait(true);
+
+            if (!confirmed)
+            {
+                return;
+            }
+
+            IsShieldBusy = true;
+            try
+            {
+                var disabled = await _client
+                    .SendAsync<ProtectionStatus>(IpcCommandTypes.ProtectionDisable, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+                ApplyStatus(disabled);
+                await RefreshAsync().ConfigureAwait(true);
+            }
+            catch (ServiceUnavailableException exception)
+            {
+                ShieldStatusText = exception.Message;
+            }
+#pragma warning disable CA1031 // The page must show an IPC failure instead of crashing.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                ShieldStatusText = $"Disable failed: {exception.Message}";
+            }
+            finally
+            {
+                IsShieldBusy = false;
+            }
+
+            return;
+        }
+
+        if (!ServiceElevated)
+        {
+            var approved = await _ui.ConfirmAsync(
+                "Enable Axiom Shield",
+                "Axiom installs and starts its Windows service so it can create machine-wide firewall rules.\n\n" +
+                "Windows will ask for administrator approval once. The desktop app itself stays unprivileged.",
+                "Continue",
+                destructive: false,
+                CancellationToken.None).ConfigureAwait(true);
+
+            if (!approved)
+            {
+                ShieldStatusText = "Enable cancelled.";
+                return;
+            }
+
+            IsShieldBusy = true;
+            ShieldStatusText = "Waiting for the administrator prompt…";
+            try
+            {
+                var install = ProtectionServiceInstall.InstallAndStart();
+                if (!install.Success)
+                {
+                    ShieldStatusText = install.Message;
+                    return;
+                }
+
+                ProtectionServiceInstall.StopInteractiveServiceProcesses();
+                await WaitForElevatedServiceAsync().ConfigureAwait(true);
+            }
+            finally
+            {
+                IsShieldBusy = false;
+            }
+        }
+
+        IsShieldBusy = true;
+        try
+        {
+            var status = await _client
+                .SendAsync<ProtectionStatus>(
+                    IpcCommandTypes.ProtectionEnable,
+                    new ProtectionEnableRequest(),
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+
+            ApplyStatus(status);
+            await RefreshAsync().ConfigureAwait(true);
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            ShieldStatusText = exception.Message;
+        }
+#pragma warning disable CA1031 // The page must show an IPC failure instead of crashing.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            ShieldStatusText = $"Enable failed: {exception.Message}";
+        }
+        finally
+        {
+            IsShieldBusy = false;
+        }
+    }
+
+    private bool CanDecidePending() => _client is not null && !IsShieldBusy && ShieldEnabled;
+
+    [RelayCommand(CanExecute = nameof(CanDecidePending))]
+    private Task BlockPendingAsync(PendingAppRow? row) =>
+        DecidePendingAsync(row, ProtectionDecisionAction.Block);
+
+    [RelayCommand(CanExecute = nameof(CanDecidePending))]
+    private Task AllowPendingAsync(PendingAppRow? row) =>
+        DecidePendingAsync(row, ProtectionDecisionAction.Allow);
+
+    private async Task DecidePendingAsync(PendingAppRow? row, ProtectionDecisionAction action)
+    {
+        if (_client is null || row is null)
+        {
+            return;
+        }
+
+        if (action == ProtectionDecisionAction.Block)
+        {
+            var confirmed = await _ui.ConfirmAsync(
+                "Block this application",
+                $"Create a Windows Firewall block rule for:\n{row.AppPath}\n\n" +
+                "Only the Axiom-owned rule is changed. You can remove it from the rules list at any time.",
+                "Block",
+                destructive: true,
+                CancellationToken.None).ConfigureAwait(true);
+
+            if (!confirmed)
+            {
+                return;
+            }
+        }
+
+        IsShieldBusy = true;
+        StatusText = $"{row.AppName}: applying {action.ToString().ToLowerInvariant()}…";
+        try
+        {
+            var status = await _client
+                .SendAsync<ProtectionStatus>(
+                    IpcCommandTypes.ProtectionDecide,
+                    new ProtectionDecideRequest
+                    {
+                        AppPath = row.AppPath,
+                        AppName = row.AppName,
+                        Action = action,
+                    },
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+
+            ApplyStatus(status);
+            StatusText = status.LastError
+                ?? $"{row.AppName}: {(action == ProtectionDecisionAction.Block ? "blocked" : "allowed")}.";
+            await RefreshAsync().ConfigureAwait(true);
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            StatusText = exception.Message;
+        }
+#pragma warning disable CA1031 // The page must show an IPC failure instead of crashing.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            StatusText = $"Decision failed: {exception.Message}";
+        }
+        finally
+        {
+            IsShieldBusy = false;
+        }
+    }
+
+    private bool CanToggleAgentLockdown() => _client is not null && !IsShieldBusy && ShieldEnabled;
+
+    [RelayCommand(CanExecute = nameof(CanToggleAgentLockdown))]
+    private async Task ToggleAgentLockdownAsync()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        var enabling = !AgentLockdown;
+        if (enabling)
+        {
+            var confirmed = await _ui.ConfirmAsync(
+                "Lock agents to localhost",
+                "Block internet access for every detected agent executable (OpenCode, Codex, Claude and similar).\n\n" +
+                "Loopback traffic stays reachable, so the local Blackbox guard keeps working. Each agent gets its own Axiom block rule with a non-loopback address scope.",
+                "Lock agents",
+                destructive: true,
+                CancellationToken.None).ConfigureAwait(true);
+
+            if (!confirmed)
+            {
+                return;
+            }
+        }
+
+        IsShieldBusy = true;
+        try
+        {
+            var status = await _client
+                .SendAsync<ProtectionStatus>(
+                    IpcCommandTypes.ProtectionLockdown,
+                    new ProtectionLockdownRequest { Enabled = enabling },
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+
+            ApplyStatus(status);
+            StatusText = status.LastError
+                ?? (enabling ? "Agent lockdown applied." : "Agent lockdown removed.");
+            await RefreshAsync().ConfigureAwait(true);
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            StatusText = exception.Message;
+        }
+#pragma warning disable CA1031 // The page must show an IPC failure instead of crashing.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            StatusText = $"Agent lockdown failed: {exception.Message}";
+        }
+        finally
+        {
+            IsShieldBusy = false;
+        }
+    }
+
+    private async Task RefreshShieldAsync()
+    {
+        if (_client is null)
+        {
+            ShieldAvailable = false;
+            ShieldStatusText = "Firewall policy needs the local service.";
+            return;
+        }
+
+        try
+        {
+            var status = await _client
+                .SendAsync<ProtectionStatus>(IpcCommandTypes.ProtectionStatus, null, CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyStatus(status);
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            ShieldAvailable = false;
+            ShieldStatusText = exception.Message;
+        }
+#pragma warning disable CA1031 // An older service build simply does not expose the shield yet.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            ShieldAvailable = false;
+            ShieldStatusText = "This service build does not expose Axiom Shield.";
+        }
+    }
+
+    private async Task WaitForElevatedServiceAsync()
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(true);
+            try
+            {
+                var status = await _client!
+                    .SendAsync<ProtectionStatus>(IpcCommandTypes.ProtectionStatus, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                if (status.ServiceElevated)
+                {
+                    ApplyStatus(status);
+                    return;
+                }
+            }
+            catch (ServiceUnavailableException)
+            {
+                // The service is restarting after installation; keep waiting.
+            }
+        }
+
+        ShieldStatusText = "The Axiom service did not come up. Check Windows Services for 'Axiom'.";
+    }
+
+    private void ApplyStatus(ProtectionStatus status)
+    {
+        ShieldAvailable = true;
+        ShieldEnabled = status.Enabled;
+        ServiceElevated = status.ServiceElevated;
+        AgentLockdown = status.AgentLockdown;
+        ServiceAccountText = status.AccountName;
+        WritesEnabled = status.WriteGateOpen;
+        WritePathText = status.WriteGateOpen ? "enabled (Axiom Shield)" : "read-only";
+
+        Pending.Clear();
+        foreach (var app in status.Pending)
+        {
+            Pending.Add(new PendingAppRow(app));
+        }
+
+        PendingCount = status.Pending.Count;
+        HasPending = PendingCount > 0;
+        AgentPathCount = status.AgentPaths.Count;
+        AgentLockdownHintText = AgentPathCount == 0
+            ? "No agent executable is connected right now."
+            : $"{AgentPathCount} agent executable(s) detected. Lockdown blocks internet access and keeps localhost reachable.";
+
+        ShieldStatusText = !string.IsNullOrWhiteSpace(status.LastError)
+            ? status.LastError!
+            : status.Enabled
+                ? $"Protection is on · {status.OwnedRuleCount} Axiom rule(s) · {status.Pending.Count} application(s) waiting for a decision."
+                : "Protection is off. Axiom only observes.";
+
+        ShieldHintText = !status.ServiceElevated
+            ? "Enable installs the Axiom Windows service (one administrator approval). Until then Axiom can read rules but cannot enforce them."
+            : status.Enabled
+                ? "Ask policy: a new outbound application waits above until you choose Block or Allow. Every block is a Windows Firewall rule named Axiom::…."
+                : "The service runs elevated and can enforce. Turn protection on to start the ask policy.";
+    }
+
     private static FirewallProfile BuildProfiles(bool domain, bool privateProfile, bool publicProfile)
     {
         var profiles = FirewallProfile.None;
@@ -488,6 +899,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             StatusText = snapshot.Rules.Count == 0
                 ? "0 owned rules. Axiom has not created any Windows Firewall rule on this host."
                 : $"{snapshot.Rules.Count} owned rules read at {DateTimeOffset.Now:HH:mm:ss}.";
+
+            await RefreshShieldAsync().ConfigureAwait(true);
         }
         catch (ServiceUnavailableException exception)
         {

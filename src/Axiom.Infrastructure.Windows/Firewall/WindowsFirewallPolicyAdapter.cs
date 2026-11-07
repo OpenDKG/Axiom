@@ -76,8 +76,16 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
 
     public void Dispose() => _com.Dispose();
 
-    /// <summary>True only when both explicit write-gate variables are present.</summary>
+    /// <summary>
+    /// True when the test override is present, or when the elevated service holds persisted user
+    /// consent for the shield. An interactive process never writes: only the service can.
+    /// </summary>
     public static bool IsWriteGateOpen =>
+        EnvironmentGateOpen ||
+        (ProtectionWriteConsent.Granted && ProtectionWriteConsent.IsServiceHost);
+
+    /// <summary>Explicit test/debug override; both variables must be present.</summary>
+    public static bool EnvironmentGateOpen =>
         string.Equals(
             Environment.GetEnvironmentVariable(WriteEnableVariable)
             ?? Environment.GetEnvironmentVariable(LegacyIdentity.ProductName + "_ENABLE_FIREWALL_WRITES"),
@@ -94,8 +102,10 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
         if (!IsWriteGateOpen)
         {
             throw new NotSupportedException(
-                $"Firewall writes are disabled. Set {WriteEnableVariable}=1 and " +
-                $"{WriteConfirmVariable}=yes only on an isolated test VM.");
+                ProtectionWriteConsent.Granted
+                    ? "Firewall writes require the elevated Axiom service. Start it as a Windows service."
+                    : $"Firewall writes are disabled. Enable Axiom Shield in the app, or set " +
+                      $"{WriteEnableVariable}=1 and {WriteConfirmVariable}=yes on an isolated test VM.");
         }
     }
 

@@ -1,8 +1,77 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Axiom.UI.Avalonia.Views.FirewallView">
-  <Grid RowDefinitions="Auto,Auto,*" Margin="24,18,24,24">
+  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="24,18,24,24">
     <Border Grid.Row="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
+            CornerRadius="8" Padding="16" Margin="0,0,0,12">
+      <StackPanel Spacing="10">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Grid.Column="0" Spacing="3">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <TextBlock Text="Axiom Shield" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                <TextBlock Text="{Binding ShieldBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="9" FontWeight="Bold" />
+              </Border>
+              <TextBlock Text="{Binding ServiceAccountText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Text="{Binding ShieldStatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding ShieldHintText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" TextWrapping="Wrap" />
+          </StackPanel>
+          <Button Grid.Column="1" Content="{Binding ShieldActionText}" Command="{Binding ToggleShieldCommand}"
+                  Padding="12,6" VerticalAlignment="Top"
+                  Background="{DynamicResource Axiom.Accent}" Foreground="{DynamicResource Axiom.Window}" />
+        </Grid>
+
+        <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="6" Padding="10" IsVisible="{Binding HasPending}">
+          <StackPanel Spacing="4">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="Waiting for your decision" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <TextBlock Grid.Column="1" Text="{Binding PendingCount, StringFormat={}{0} pending}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            </Grid>
+            <ScrollViewer MaxHeight="132" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <ItemsControl ItemsSource="{Binding Pending}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Grid ColumnDefinitions="2*,84,64,Auto,Auto" Margin="0,2">
+                      <StackPanel Grid.Column="0" Spacing="0" ToolTip.Tip="{Binding Tooltip}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <TextBlock Text="{Binding AppName}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                          <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="3" Padding="4,0"
+                                  IsVisible="{Binding IsAgent}">
+                            <TextBlock Text="{Binding AgentText}" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource Axiom.Accent}" />
+                          </Border>
+                        </StackPanel>
+                        <TextBlock Text="{Binding AppPath}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="1" Text="{Binding SocketText}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="2" Text="{Binding FirstSeenText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+                      <Button Grid.Column="3" Content="Block" Padding="8,3" Margin="6,0,0,0"
+                              Background="{DynamicResource Axiom.DangerBackground}" Foreground="{DynamicResource Axiom.TextPrimary}"
+                              Command="{Binding $parent[ItemsControl].DataContext.BlockPendingCommand}"
+                              CommandParameter="{Binding}" />
+                      <Button Grid.Column="4" Content="Allow" Padding="8,3" Margin="6,0,0,0"
+                              Command="{Binding $parent[ItemsControl].DataContext.AllowPendingCommand}"
+                              CommandParameter="{Binding}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </StackPanel>
+        </Border>
+
+        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShieldEnabled}">
+          <StackPanel Grid.Column="0" Spacing="2">
+            <TextBlock Text="Agent network lockdown" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <TextBlock Text="{Binding AgentLockdownHintText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          </StackPanel>
+          <Button Grid.Column="1" Content="{Binding AgentLockdownActionText}" Command="{Binding ToggleAgentLockdownCommand}"
+                  Padding="12,5" VerticalAlignment="Center" />
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="1" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
             CornerRadius="8" Padding="16">
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Grid.Column="0" Spacing="4">
@@ -22,10 +91,10 @@
       </Grid>
     </Border>
 
-    <TextBlock Grid.Row="1" Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11"
+    <TextBlock Grid.Row="2" Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11"
                TextWrapping="Wrap" Margin="2,10,0,0" />
 
-    <Grid Grid.Row="2" ColumnDefinitions="1.35*,7,1*" Margin="0,10,0,0">
+    <Grid Grid.Row="3" ColumnDefinitions="1.35*,7,1*" Margin="0,10,0,0">
       <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
               CornerRadius="8" Padding="0">
         <Grid RowDefinitions="Auto,Auto,*">

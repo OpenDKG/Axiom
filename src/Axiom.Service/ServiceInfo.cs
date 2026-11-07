@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Security.Principal;
 using Axiom.Contracts;
+using Axiom.Core.Protection;
 
 namespace Axiom.Service;
 
@@ -16,8 +17,9 @@ public static class ServiceInfo
     public static void MarkStarted() => StartedUtc = DateTimeOffset.UtcNow;
 
     /// <summary>
-    /// SID allowed to call the pipe. The installer (FND-009) writes the interactive user's SID to
-    /// AXIOM_ALLOWED_SID; in console development mode the current user is used.
+    /// SID allowed to call the pipe. An installed service persists the interactive user's SID in the
+    /// shield state; AXIOM_ALLOWED_SID overrides it, and console development falls back to the
+    /// current user.
     /// </summary>
     public static string ResolveAllowedSid()
     {
@@ -26,6 +28,12 @@ public static class ServiceInfo
         if (!string.IsNullOrWhiteSpace(configured))
         {
             return configured.Trim();
+        }
+
+        var persisted = new ProtectionSettingsStore().Load().AllowedSid;
+        if (!string.IsNullOrWhiteSpace(persisted))
+        {
+            return persisted.Trim();
         }
 
         return WindowsIdentity.GetCurrent().User?.Value
