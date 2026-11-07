@@ -1,10 +1,10 @@
-# Axiom — Avalonia Migration Baseline
+﻿# Axiom â€” Avalonia Migration Baseline
 
 Status: baseline captured; first Avalonia shell and service boundary implemented
 Branch: `feature/avalonia-windows-first`
 Baseline commit: `61d5520` (`feat(agents): add opt-in incremental auto-sync`)
 Date: 2026-11-07
-Scope: Windows-first WPF → Avalonia UI migration. Linux/macOS firewall and monitoring backends are
+Scope: Windows-first WPF â†’ Avalonia UI migration. Linux/macOS firewall and monitoring backends are
 out of scope for this stage.
 
 ## 1. Environment
@@ -14,7 +14,7 @@ out of scope for this stage.
 | OS | Windows 10 IoT Enterprise LTSC 2021 |
 | OS build | 10.0.19044 |
 | .NET SDK | 10.0.403 (`global.json` rollForward `latestFeature`) |
-| Screen | 1920 × 1080 |
+| Screen | 1920 Ã— 1080 |
 | Desktop DPI | 96 (100%) |
 | GPU | NVIDIA GeForce RTX 3060 |
 | WPF rendering | software rendering by default (`App` sets `RenderMode.SoftwareOnly` unless `AXIOM_HARDWARE_RENDER=1`) |
@@ -86,13 +86,13 @@ Not captured yet:
 
 `MainWindow.xaml` is a frameless WPF window:
 
-- Reference size 1460 × 900; minimum 1080 × 720.
+- Reference size 1460 Ã— 900; minimum 1080 Ã— 720.
 - Custom `WindowChrome` title bar, 38 px caption height, drag/maximize/restore/close handlers.
 - 236 px navigation rail; 64 px page header; 30 px status strip.
 - Navigation order: Overview, Connections, Applications, Events, Agents, Firewall, Security,
   Privacy Shield, AI Analyst, Support, Settings.
 - Agents is omitted from the Microsoft Store package.
-- Header theme selector has Dark · Graphite, Dark · Midnight, Light · Clean and Light · Warm.
+- Header theme selector has Dark Â· Graphite, Dark Â· Midnight, Light Â· Clean and Light Â· Warm.
 - Status strip combines monitoring, firewall, storage, data-source, mode, firewall-badge and IPC
   text.
 - Single-instance mutex and a show-window event signal an existing instance.
@@ -113,7 +113,7 @@ starter community feed. `scripts/publish-standalone.ps1` still publishes the WPF
 | Applications | `AppsView` / `AppsViewModel` | Grouped executables, socket counts, paths, context menu | Block inbound/outbound, end task, copy path | firewall writes disabled, service unavailable, owned-rule capability, confirmation |
 | Events | `EventsView` / `EventsViewModel` | Persisted history, range/category/search, grouped rows, paging | Refresh, export CSV | loading, empty, no service, query error, export success/failure, retention |
 | Agents | `AgentsView` / `AgentsViewModel` | DKG/Blackbox cards, harness status, activity, findings, hook evidence, sessions, verified graph, auto-sync | Configure, test protection, refresh, open dashboard, sync, auto-sync, install hooks, module actions, mode, uninstall | connected/hooked/trust required/audit only/degraded/offline, graph synced/syncing, missing DKG, no Blackbox |
-| Firewall | `FirewallRulesView` / `FirewallRulesViewModel` | Owned rules, editor, defaults, capability and read-back status | Refresh, apply rule, browse, remove, save/reset defaults, recheck policy | service required, writes disabled, applying, read-back mismatch, empty, error |
+| Firewall | `FirewallRulesView` / `FirewallRulesViewModel` + Axiom Shield | Shield consent, ask queue, agent lockdown, owned rules, editor, defaults, capability and read-back status | Enable/disable shield, block/allow pending, agent lockdown, refresh, apply rule, browse, remove, save/reset defaults, recheck policy | service required, UAC cancelled, shield off, no pending, applying, read-back mismatch, empty, error |
 | Security | `SecurityView` / `SecurityViewModel` | Module probes, file scan, reputation, community feed, protected agents | Refresh, scan, check hash, module actions, test/refresh feed, mode, uninstall | installed/missing/action required/verified/degraded, permission required, no network |
 | Privacy Shield | `PrivacyShieldView` / `PrivacyShieldViewModel` | Resolver profile/categories/port/upstream, custom lists, source catalog, live stats/blocked history, adapter DNS | Apply, enable/disable, refresh, import, clear form/history, update sources, set/restore adapter DNS | service required, disabled, active, unavailable, source failure, resolver limit, UAC cancelled |
 | AI Analyst | `AiAnalystView` / `AiAnalystViewModel` | Provider/model/key, redaction, analysis history, findings | Save settings, analyze current activity, clear history | disabled, missing key, loading, request error, redacted output, no data |
@@ -134,7 +134,7 @@ starter community feed. `scripts/publish-standalone.ps1` still publishes the WPF
 
 ## 6. Observed baseline findings
 
-1. **Minimum-width layout is clipped.** At 1080 × 720 the Overview KPI row and activity table extend
+1. **Minimum-width layout is clipped.** At 1080 Ã— 720 the Overview KPI row and activity table extend
    past the right edge; Connections/Events tables also clip columns. A responsive layout is required,
    not just a resized screenshot.
 2. **Service mode needs an explicit host path in an unpackaged worktree build.** The desktop stays
@@ -150,7 +150,7 @@ One uncontrolled memory sample in service mode was approximately 306 MB working 
 private for the desktop and 595 MB working set for the service process. These are not a performance
 baseline and must be remeasured with a fixed workload, resolution, mode and idle period.
 
-### Avalonia slice sample (2026-11-07, 96 DPI, 1460×900, service mode)
+### Avalonia slice sample (2026-11-07, 96 DPI, 1460Ã—900, service mode)
 
 After 35 seconds of idle live monitoring with the service running:
 
@@ -170,7 +170,7 @@ resolution, mode and idle period before drawing conclusions.
 - [ ] Keyboard focus, tooltips, context menus and copy/export behavior match.
 - [ ] Sorting, filtering, grouping, paging and scroll retention are preserved.
 - [ ] Local persistence and privacy semantics are unchanged.
-- [ ] 1460×900 and 1080×720 screenshots match the reference; 125/150/200% checked manually.
+- [ ] 1460Ã—900 and 1080Ã—720 screenshots match the reference; 125/150/200% checked manually.
 - [ ] Headless test covers primary navigation/state transitions.
 - [ ] No new privileged, firewall-write, DNS, upload or hook path was introduced.
 
@@ -221,7 +221,7 @@ partial), Blackbox settings, DKG log and first-run onboarding.
 The Avalonia window now uses the Axiom custom title bar (no native caption) with drag, double-click
 maximize, minimize, maximize and close, on top of a native resizable border.
 
-At 1080×720 the Avalonia shell fits all eleven navigation destinations and the Overview KPI row;
+At 1080Ã—720 the Avalonia shell fits all eleven navigation destinations and the Overview KPI row;
 longer content scrolls inside its card. This addresses the baseline WPF clipping for the shell and
 KPI row. The 125/150/200% DPI passes are still uncaptured.
 

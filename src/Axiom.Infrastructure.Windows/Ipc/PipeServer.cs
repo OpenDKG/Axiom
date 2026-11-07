@@ -7,6 +7,7 @@ using Axiom.Contracts.History;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
 using Axiom.Contracts.Privacy;
+using Axiom.Contracts.Protection;
 using Axiom.Infrastructure.Windows.Firewall;
 
 namespace Axiom.Infrastructure.Windows.Ipc;
@@ -51,6 +52,16 @@ public sealed class PipeServer
 
     private readonly Func<CancellationToken, Task<PrivacyShieldStatus>>? _privacyHistoryClear;
 
+    private readonly Func<CancellationToken, Task<ProtectionStatus>>? _protectionStatus;
+
+    private readonly Func<ProtectionEnableRequest, string, CancellationToken, Task<ProtectionStatus>>? _protectionEnable;
+
+    private readonly Func<string, CancellationToken, Task<ProtectionStatus>>? _protectionDisable;
+
+    private readonly Func<ProtectionDecideRequest, string, CancellationToken, Task<ProtectionStatus>>? _protectionDecide;
+
+    private readonly Func<ProtectionLockdownRequest, string, CancellationToken, Task<ProtectionStatus>>? _protectionLockdown;
+
     private readonly Action<string>? _log;
 
     public PipeServer(
@@ -67,6 +78,11 @@ public sealed class PipeServer
         Func<PrivacyShieldSettings, CancellationToken, Task<PrivacyShieldStatus>>? privacyConfigure = null,
         Func<CancellationToken, Task<PrivacyShieldStatus>>? privacySourcesUpdate = null,
         Func<CancellationToken, Task<PrivacyShieldStatus>>? privacyHistoryClear = null,
+        Func<CancellationToken, Task<ProtectionStatus>>? protectionStatus = null,
+        Func<ProtectionEnableRequest, string, CancellationToken, Task<ProtectionStatus>>? protectionEnable = null,
+        Func<string, CancellationToken, Task<ProtectionStatus>>? protectionDisable = null,
+        Func<ProtectionDecideRequest, string, CancellationToken, Task<ProtectionStatus>>? protectionDecide = null,
+        Func<ProtectionLockdownRequest, string, CancellationToken, Task<ProtectionStatus>>? protectionLockdown = null,
         Action<string>? log = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
@@ -85,6 +101,11 @@ public sealed class PipeServer
         _privacyConfigure = privacyConfigure;
         _privacySourcesUpdate = privacySourcesUpdate;
         _privacyHistoryClear = privacyHistoryClear;
+        _protectionStatus = protectionStatus;
+        _protectionEnable = protectionEnable;
+        _protectionDisable = protectionDisable;
+        _protectionDecide = protectionDecide;
+        _protectionLockdown = protectionLockdown;
         _log = log;
     }
 
@@ -436,6 +457,105 @@ public sealed class PipeServer
                     await WriteResultAsync(stream, envelope.Id, report, cancellationToken).ConfigureAwait(false);
                     break;
 
+                case IpcCommandTypes.ProtectionStatus:
+                    if (_protectionStatus is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Axiom Shield is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var protectionStatus = await _protectionStatus(cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, protectionStatus, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.ProtectionEnable:
+                    if (_protectionEnable is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Axiom Shield is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var enableRequest = DeserializePayload<ProtectionEnableRequest>(envelope.Payload)
+                                        ?? new ProtectionEnableRequest();
+                    var enabledStatus = await _protectionEnable(enableRequest, actorSid, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, enabledStatus, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.ProtectionDisable:
+                    if (_protectionDisable is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Axiom Shield is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var disabledStatus = await _protectionDisable(actorSid, cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, disabledStatus, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.ProtectionDecide:
+                    if (_protectionDecide is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Axiom Shield is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var decideRequest = DeserializePayload<ProtectionDecideRequest>(envelope.Payload);
+                    if (decideRequest is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Decision payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var decidedStatus = await _protectionDecide(decideRequest, actorSid, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, decidedStatus, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.ProtectionLockdown:
+                    if (_protectionLockdown is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Axiom Shield is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var lockdownRequest = DeserializePayload<ProtectionLockdownRequest>(envelope.Payload)
+                                          ?? new ProtectionLockdownRequest();
+                    var lockdownStatus = await _protectionLockdown(lockdownRequest, actorSid, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, lockdownStatus, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.PrivacyStatus:
                     if (_privacyStatus is null)
                     {
@@ -587,6 +707,31 @@ public sealed class PipeServer
         if (_privacyHistoryClear is not null)
         {
             commands.Add(IpcCommandTypes.PrivacyHistoryClear);
+        }
+
+        if (_protectionStatus is not null)
+        {
+            commands.Add(IpcCommandTypes.ProtectionStatus);
+        }
+
+        if (_protectionEnable is not null)
+        {
+            commands.Add(IpcCommandTypes.ProtectionEnable);
+        }
+
+        if (_protectionDisable is not null)
+        {
+            commands.Add(IpcCommandTypes.ProtectionDisable);
+        }
+
+        if (_protectionDecide is not null)
+        {
+            commands.Add(IpcCommandTypes.ProtectionDecide);
+        }
+
+        if (_protectionLockdown is not null)
+        {
+            commands.Add(IpcCommandTypes.ProtectionLockdown);
         }
 
         if (WindowsFirewallPolicyAdapter.IsWriteGateOpen)

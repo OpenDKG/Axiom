@@ -50,14 +50,20 @@ lists only names with the `Axiom::` prefix and offers targeted removal when writ
 
 ## Write gate
 
-The service refuses write commands unless both variables are set on the service process:
+Writes require the Axiom Shield to be on: the Firewall page installs and starts the Axiom Windows
+service once (administrator approval) and persists consent in
+`%ProgramData%\Axiom\protection.json`. Only the non-interactive service can then create or remove
+`Axiom::` rules. The interactive desktop process never writes, even with consent.
+
+The legacy test override still exists for an isolated VM: set both variables on the service process.
 
 ```text
 AXIOM_ENABLE_FIREWALL_WRITES=1
 AXIOM_FIREWALL_WRITE_CONFIRM=yes
 ```
 
-Unset them (or restart the service without them) to return to read-only behaviour.
+Turn the shield off in the app (or remove the service) to return to read-only behaviour. Turning it
+off removes every Axiom-owned rule.
 
 ## Do not
 

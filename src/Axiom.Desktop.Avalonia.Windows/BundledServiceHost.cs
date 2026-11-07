@@ -24,6 +24,13 @@ internal sealed class BundledServiceHost : IDisposable
 
         HideExistingServiceWindows();
 
+        // An installed Windows service owns the pipe. Starting a second, interactive copy next to
+        // it would create two pipe servers and two history writers, so never spawn in that case.
+        if (IsServiceRegistered())
+        {
+            return true;
+        }
+
         if (Process.GetProcessesByName("Axiom.Service").Length > 0)
         {
             return true;
@@ -42,6 +49,36 @@ internal sealed class BundledServiceHost : IDisposable
             return _owned is not null;
         }
 #pragma warning disable CA1031 // A missing service must fall back to in-process monitoring.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return false;
+        }
+    }
+
+    private static bool IsServiceRegistered()
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = Path.Combine(Environment.SystemDirectory, "sc.exe"),
+                Arguments = "query Axiom",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+
+            if (process is null)
+            {
+                return false;
+            }
+
+            process.WaitForExit(5000);
+            return process.ExitCode == 0;
+        }
+#pragma warning disable CA1031 // Detection is best-effort; a failure means "not installed".
         catch (Exception)
 #pragma warning restore CA1031
         {

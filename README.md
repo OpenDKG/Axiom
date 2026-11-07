@@ -2,7 +2,7 @@
 
 **Open-Source Firewall, Network Monitor & Local Agent Protection**
 
-**Version:** 0.6.5 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.7.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -21,12 +21,29 @@ the enforcement authority. There is no account, no cloud, no advertising and no 
 Axiom brings together four surfaces:
 
 - **Network visibility and history** for TCP/UDP IPv4/IPv6 sockets and applications.
-- **Owned firewall rules** with explicit writes, read-back verification and recovery.
+- **Axiom Shield** — one switch that installs the elevated local service and turns the ask policy
+  on: every new outbound application waits for Block or Allow, and blocks are Axiom-owned Windows
+  Firewall rules with read-back verification and recovery.
 - **Local privacy controls** including Privacy Shield DNS filtering and a read-only AI analyst.
-- **Agent protection** through Blackbox-compatible lifecycle hooks and a local audit view.
+- **Agent protection** through Blackbox-compatible lifecycle hooks, an agent network lockdown
+  (localhost only) and a local audit view.
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.7.0
+
+- **Axiom Shield.** Turn protection on from the Firewall page. Axiom installs and starts its Windows
+  service (one administrator approval), then enforces through Windows Firewall. The desktop app
+  stays unprivileged.
+- **Ask policy.** Every new outbound application is listed with its path, socket count and first-seen
+  time until you choose **Block** or **Allow**. A block is an Axiom-owned rule; allow is recorded so
+  the application is not asked again.
+- **Agent network lockdown.** One switch blocks internet access for detected agent executables
+  (OpenCode, Codex, Claude and similar) while keeping localhost reachable, so the local Blackbox
+  guard keeps working.
+- Disabling the shield removes every Axiom-owned rule and clears the decisions.
+- Includes the 0.6.5 Overview layout and agent activity panel.
 
 ## What's in 0.6.5
 
@@ -137,8 +154,10 @@ agent-level guardrails and signed threat-intelligence context respectively.
   Group Policy remains authoritative.
 - The application never performs wildcard deletes, never resets the Windows Firewall and never
   disables Defender, BFE or another product's filters.
-- Write operations are disabled by default. They require an explicit test-VM gate on the service and
-  are audited locally; a normal install remains read-only.
+- Write operations are off by default. **Axiom Shield** turns them on with explicit user consent:
+  it installs and starts the Axiom Windows service (one administrator approval) and only then may
+  create or remove `Axiom::{id}::{OUT|IN}` rules. Every change is confirmed, read back and audited;
+  disabling the shield removes every Axiom-owned rule.
 
 ### Privacy by default
 

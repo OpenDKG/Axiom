@@ -1,0 +1,386 @@
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
+using System.Security.Principal;
+using Axiom.Contracts.Firewall;
+using Axiom.Contracts.Protection;
+using Axiom.Core.Firewall;
+using Axiom.Core.Protection;
+using Axiom.Infrastructure.Windows.Firewall;
+using Microsoft.Extensions.Logging;
+
+namespace Axiom.Service;
+
+/// <summary>
+/// Axiom Shield: persisted consent, the ask policy and the owned-rule decisions. All writes go
+/// through <see cref="FirewallRuleCoordinator"/> so every change is validated, applied, read back
+/// and audited. Nothing is deleted unless it carries an Axiom rule name.
+/// </summary>
+public sealed partial class ProtectionController(
+    ProtectionSettingsStore store,
+    ConnectionSnapshotCache snapshots,
+    FirewallRuleCoordinator coordinator,
+    ILogger<ProtectionController> logger)
+{
+    public ProtectionSettings Settings => store.Load();
+
+    [LoggerMessage(EventId = 4101, Level = LogLevel.Warning, Message = "Axiom Shield rule apply failed for {Path}")]
+    private static partial void LogRuleFailure(ILogger logger, string path, Exception exception);
+
+    [LoggerMessage(EventId = 4102, Level = LogLevel.Information, Message = "Axiom Shield enabled by {Actor}; policy {Policy}")]
+    private static partial void LogEnabled(ILogger logger, string actor, string policy);
+
+    [LoggerMessage(EventId = 4103, Level = LogLevel.Information, Message = "Axiom Shield disabled by {Actor}; {Failures} rule(s) could not be removed")]
+    private static partial void LogDisabled(ILogger logger, string actor, int failures);
+
+    public async Task<ProtectionStatus> GetStatusAsync(string? error, CancellationToken cancellationToken)
+    {
+        var settings = store.Load();
+        var decisions = settings.Decisions ?? [];
+        var connections = snapshots.Latest?.Connections ?? [];
+        var rules = await coordinator.ListAsync(cancellationToken).ConfigureAwait(false);
+
+        return new ProtectionStatus
+        {
+            Enabled = settings.Enabled,
+            ServiceElevated = ProtectionWriteConsent.IsServiceHost,
+            WriteGateOpen = WindowsFirewallPolicyAdapter.IsWriteGateOpen,
+            AccountName = CurrentAccount(),
+            DefaultPolicy = settings.DefaultPolicy,
+            Pending = settings.Enabled
+                ? PendingAppDetector.Detect(connections, decisions)
+                : [],
+            Decisions = decisions,
+            AgentPaths = connections
+                .Select(connection => connection.AppPath)
+                .Where(path => AgentExecutables.IsAgentPath(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            AgentLockdown = settings.AgentLockdown,
+            OwnedRuleCount = rules.Count,
+            LastError = error,
+        };
+    }
+
+    public async Task<ProtectionStatus> EnableAsync(string defaultPolicy, string actor, CancellationToken cancellationToken)
+    {
+        if (!ProtectionWriteConsent.IsServiceHost)
+        {
+            return await GetStatusAsync(
+                "Axiom Shield needs the Axiom Windows service. Approve the administrator prompt to install it.",
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var settings = store.Load() with
+        {
+            Enabled = true,
+            DefaultPolicy = string.IsNullOrWhiteSpace(defaultPolicy) ? "ask" : defaultPolicy,
+            EnabledUtc = DateTimeOffset.UtcNow,
+        };
+
+        if (!store.Save(settings))
+        {
+            return await GetStatusAsync(
+                $"Shield state could not be written to {store.FilePath}.",
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        ProtectionWriteConsent.Set(true);
+        LogEnabled(logger, actor, settings.DefaultPolicy);
+        return await GetStatusAsync(null, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ProtectionStatus> DisableAsync(string actor, CancellationToken cancellationToken)
+    {
+        var settings = store.Load();
+        var failures = 0;
+
+        foreach (var rule in await coordinator.ListAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var removed = await coordinator
+                .RemoveAsync(rule.ManagedRuleId, actor, cancellationToken)
+                .ConfigureAwait(false);
+            if (!removed.Success)
+            {
+                failures++;
+            }
+        }
+
+        var disabled = settings with
+        {
+            Enabled = false,
+            AgentLockdown = false,
+            Decisions = [],
+            EnabledUtc = null,
+        };
+
+        ProtectionWriteConsent.Set(false);
+        _ = store.Save(disabled);
+
+        LogDisabled(logger, actor, failures);
+
+        return await GetStatusAsync(
+            failures == 0 ? null : $"{failures} Axiom-owned rule(s) could not be removed.",
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ProtectionStatus> DecideAsync(
+        ProtectionDecideRequest request,
+        string actor,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var settings = store.Load();
+        if (!settings.Enabled)
+        {
+            return await GetStatusAsync("Axiom Shield is off.", cancellationToken).ConfigureAwait(false);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.AppPath) ||
+            !Path.IsPathFullyQualified(request.AppPath))
+        {
+            return await GetStatusAsync(
+                "A decision needs an absolute executable path.",
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var ruleId = RuleIdentity.ForApp(request.AppPath, FirewallDirection.Outbound);
+        string? error = null;
+
+        if (request.Action == ProtectionDecisionAction.Block)
+        {
+            var spec = new RuleSpec
+            {
+                ManagedRuleId = ruleId,
+                AppPath = request.AppPath,
+                Direction = FirewallDirection.Outbound,
+                Action = FirewallAction.Block,
+                Profiles = FirewallProfile.All,
+                Protocol = NetworkProtocol.Any,
+                CreatedBy = actor,
+                Description = $"Axiom Shield block for {request.AppName}",
+            };
+
+            var result = await coordinator.ApplyAsync(spec, actor, cancellationToken).ConfigureAwait(false);
+            if (!result.Success)
+            {
+                return await GetStatusAsync(
+                    $"Block failed: {result.ErrorCode} - {result.ErrorMessage}",
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            var existing = (await coordinator.ListAsync(cancellationToken).ConfigureAwait(false))
+                .FirstOrDefault(rule => rule.ManagedRuleId == ruleId);
+            if (existing is not null)
+            {
+                var removed = await coordinator
+                    .RemoveAsync(ruleId, actor, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!removed.Success)
+                {
+                    error = $"Could not remove the existing block: {removed.ErrorMessage}";
+                }
+            }
+        }
+
+        var decisions = (settings.Decisions ?? [])
+            .Where(decision => !string.Equals(decision.AppPath, request.AppPath, StringComparison.OrdinalIgnoreCase))
+            .Append(new ProtectionDecision
+            {
+                AppPath = request.AppPath,
+                AppName = request.AppName,
+                Action = request.Action,
+                DecidedUtc = DateTimeOffset.UtcNow,
+                ManagedRuleId = request.Action == ProtectionDecisionAction.Block ? ruleId : null,
+            })
+            .ToList();
+
+        if (!store.Save(settings with { Decisions = decisions }))
+        {
+            error = $"Decision was applied but could not be saved to {store.FilePath}.";
+        }
+
+        return await GetStatusAsync(error, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ProtectionStatus> SetAgentLockdownAsync(
+        bool enabled,
+        string actor,
+        CancellationToken cancellationToken)
+    {
+        var settings = store.Load();
+        if (!settings.Enabled)
+        {
+            return await GetStatusAsync("Enable Axiom Shield before locking agents down.", cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var decisions = (settings.Decisions ?? []).ToList();
+        string? error = null;
+
+        if (enabled)
+        {
+            var agentPaths = (snapshots.Latest?.Connections ?? [])
+                .Select(connection => connection.AppPath)
+                .Where(path => AgentExecutables.IsAgentPath(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (agentPaths.Count == 0)
+            {
+                return await GetStatusAsync(
+                    "No agent executable is connected right now, so there is nothing to lock down.",
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (var path in agentPaths)
+            {
+                var ruleId = RuleIdentity.ForApp(path, FirewallDirection.Outbound);
+                var spec = new RuleSpec
+                {
+                    ManagedRuleId = ruleId,
+                    AppPath = path,
+                    Direction = FirewallDirection.Outbound,
+                    Action = FirewallAction.Block,
+                    Profiles = FirewallProfile.All,
+                    Protocol = NetworkProtocol.Any,
+                    RemoteAddresses = NonLoopbackRanges.All,
+                    CreatedBy = actor,
+                    Description = "Axiom Shield agent lockdown (localhost only)",
+                };
+
+                RuleApplyResult result;
+                try
+                {
+                    result = await coordinator.ApplyAsync(spec, actor, cancellationToken).ConfigureAwait(false);
+                }
+#pragma warning disable CA1031 // One agent must not abort the whole lockdown.
+                catch (Exception exception)
+#pragma warning restore CA1031
+                {
+                    LogRuleFailure(logger, path, exception);
+                    error = $"Agent lockdown failed for {Path.GetFileName(path)}: {exception.Message}";
+                    continue;
+                }
+
+                if (!result.Success)
+                {
+                    error = $"Agent lockdown failed for {Path.GetFileName(path)}: {result.ErrorMessage}";
+                    continue;
+                }
+
+                decisions.RemoveAll(decision =>
+                    string.Equals(decision.AppPath, path, StringComparison.OrdinalIgnoreCase));
+                decisions.Add(new ProtectionDecision
+                {
+                    AppPath = path,
+                    AppName = Path.GetFileName(path),
+                    Action = ProtectionDecisionAction.Block,
+                    DecidedUtc = DateTimeOffset.UtcNow,
+                    IsAgentLockdown = true,
+                    ManagedRuleId = ruleId,
+                });
+            }
+        }
+        else
+        {
+            foreach (var decision in decisions.Where(decision => decision.IsAgentLockdown).ToList())
+            {
+                await coordinator.RemoveAsync(
+                    RuleIdentity.ForApp(decision.AppPath, FirewallDirection.Outbound),
+                    actor,
+                    cancellationToken).ConfigureAwait(false);
+                decisions.Remove(decision);
+            }
+        }
+
+        if (!store.Save(settings with { AgentLockdown = enabled, Decisions = decisions }))
+        {
+            error ??= $"Lockdown state could not be written to {store.FilePath}.";
+        }
+
+        return await GetStatusAsync(error, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Re-applies the agent lockdown to executables that appeared after the switch was enabled.
+    /// Idempotent: the deterministic rule id is upserted, so repeated calls are cheap.
+    /// </summary>
+    public async Task ReconcileAgentLockdownAsync(string actor, CancellationToken cancellationToken)
+    {
+        var settings = store.Load();
+        if (!settings.Enabled || !settings.AgentLockdown)
+        {
+            return;
+        }
+
+        var agentPaths = (snapshots.Latest?.Connections ?? [])
+            .Select(connection => connection.AppPath)
+            .Where(path => AgentExecutables.IsAgentPath(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var known = (settings.Decisions ?? [])
+            .Where(decision => decision.IsAgentLockdown)
+            .Select(decision => decision.AppPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var updated = (settings.Decisions ?? []).ToList();
+        var changed = false;
+
+        foreach (var path in agentPaths.Where(path => !known.Contains(path)))
+        {
+            var ruleId = RuleIdentity.ForApp(path, FirewallDirection.Outbound);
+            var spec = new RuleSpec
+            {
+                ManagedRuleId = ruleId,
+                AppPath = path,
+                Direction = FirewallDirection.Outbound,
+                Action = FirewallAction.Block,
+                Profiles = FirewallProfile.All,
+                Protocol = NetworkProtocol.Any,
+                RemoteAddresses = NonLoopbackRanges.All,
+                CreatedBy = actor,
+                Description = "Axiom Shield agent lockdown (localhost only)",
+            };
+
+            var result = await coordinator.ApplyAsync(spec, actor, cancellationToken).ConfigureAwait(false);
+            if (!result.Success)
+            {
+                continue;
+            }
+
+            updated.Add(new ProtectionDecision
+            {
+                AppPath = path,
+                AppName = Path.GetFileName(path),
+                Action = ProtectionDecisionAction.Block,
+                DecidedUtc = DateTimeOffset.UtcNow,
+                IsAgentLockdown = true,
+                ManagedRuleId = ruleId,
+            });
+            changed = true;
+        }
+
+        if (changed)
+        {
+            _ = store.Save(settings with { Decisions = updated });
+        }
+    }
+
+    private static string CurrentAccount()
+    {
+        try
+        {
+            return WindowsIdentity.GetCurrent().Name;
+        }
+#pragma warning disable CA1031 // The account name is display-only.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return "unknown";
+        }
+    }
+}
