@@ -69,7 +69,13 @@ public partial class App : Application
             MainWindow? window = null;
             var interaction = new AvaloniaUserInteraction(() => window);
             var theme = new WindowsThemeService();
-            RequestedThemeVariant = theme.Current == UiTheme.Light ? ThemeVariant.Light : ThemeVariant.Dark;
+            RequestedThemeVariant = theme.Current switch
+            {
+                UiTheme.Light => ThemeVariant.Light,
+                UiTheme.DarkMidnight => AxiomThemeVariants.DarkMidnight,
+                UiTheme.LightWarm => AxiomThemeVariants.LightWarm,
+                _ => ThemeVariant.Dark,
+            };
             var autostart = new WindowsAutostartService();
             var protector = new DpapiApiKeyProtector();
             _shell = new ShellViewModel(

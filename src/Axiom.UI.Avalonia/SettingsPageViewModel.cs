@@ -38,7 +38,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
             : "LIVE — local socket inventory, no telemetry";
 
         _theme.Changed += OnThemeChanged;
-        CurrentThemeText = _theme.Current == UiTheme.Light ? "Light" : "Dark";
+        CurrentThemeText = ThemeLabel(_theme.Current);
 
         var startup = _startupSettings.Load();
         _updatingStartup = true;
@@ -144,8 +144,22 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private void UseLightTheme() => _theme.Apply(UiTheme.Light);
 
+    [RelayCommand]
+    private void UseDarkMidnightTheme() => _theme.Apply(UiTheme.DarkMidnight);
+
+    [RelayCommand]
+    private void UseLightWarmTheme() => _theme.Apply(UiTheme.LightWarm);
+
     private void OnThemeChanged(object? sender, EventArgs e) =>
-        CurrentThemeText = _theme.Current == UiTheme.Light ? "Light" : "Dark";
+        CurrentThemeText = ThemeLabel(_theme.Current);
+
+    private static string ThemeLabel(UiTheme theme) => theme switch
+    {
+        UiTheme.Light => "Light",
+        UiTheme.DarkMidnight => "Dark Midnight",
+        UiTheme.LightWarm => "Light Warm",
+        _ => "Dark",
+    };
 
     private void SaveStartupPreferences() =>
         _startupSettings.Save(new StartupSettings(

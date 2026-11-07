@@ -6,6 +6,8 @@ public enum UiTheme
 {
     Dark,
     Light,
+    DarkMidnight,
+    LightWarm,
 }
 
 /// <summary>Host theme application and persistence.</summary>

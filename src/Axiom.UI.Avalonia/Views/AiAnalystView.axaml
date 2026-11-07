@@ -3,43 +3,43 @@
              xmlns:converters="using:Avalonia.Data.Converters"
              x:Class="Axiom.UI.Avalonia.Views.AiAnalystView">
   <Grid RowDefinitions="Auto,Auto,*" Margin="24,18,24,24">
-    <Border Grid.Row="0" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1"
+    <Border Grid.Row="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
             CornerRadius="8" Padding="14">
       <StackPanel Spacing="8">
         <Grid ColumnDefinitions="Auto,*,Auto">
-          <CheckBox Grid.Column="0" Content="Enable AI analyst" IsChecked="{Binding Enabled}" Foreground="#E6EDF3" />
-          <TextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="#9BA9B8" FontSize="11"
+          <CheckBox Grid.Column="0" Content="Enable AI analyst" IsChecked="{Binding Enabled}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <TextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11"
                      TextWrapping="Wrap" VerticalAlignment="Center" Margin="12,0" />
-          <TextBlock Grid.Column="2" Text="{Binding CredentialsText}" Foreground="#8A98A8" FontSize="10"
+          <TextBlock Grid.Column="2" Text="{Binding CredentialsText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10"
                      VerticalAlignment="Center" />
         </Grid>
 
         <Grid ColumnDefinitions="1.1*,10,1*,10,1*">
           <StackPanel Grid.Column="0" Spacing="4">
-            <TextBlock Text="Provider" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Text="Provider" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding Provider}" />
           </StackPanel>
           <StackPanel Grid.Column="2" Spacing="4">
-            <TextBlock Text="Endpoint" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Text="Endpoint" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             <TextBox Text="{Binding Endpoint}" PlaceholderText="https://… or http://127.0.0.1:…" />
           </StackPanel>
           <StackPanel Grid.Column="4" Spacing="4">
-            <TextBlock Text="Model" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Text="Model" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             <TextBox Text="{Binding Model}" PlaceholderText="model name" />
           </StackPanel>
         </Grid>
 
         <Grid ColumnDefinitions="1*,10,1*,10,1*">
           <StackPanel Grid.Column="0" Spacing="4">
-            <TextBlock Text="API key (optional)" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Text="API key (optional)" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             <TextBox Text="{Binding ApiKeyInput}" PasswordChar="●" PlaceholderText="stored with DPAPI" />
           </StackPanel>
           <StackPanel Grid.Column="2" Spacing="4">
-            <TextBlock Text="Verifier model (optional)" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Text="Verifier model (optional)" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             <TextBox Text="{Binding VerifierModel}" />
           </StackPanel>
           <StackPanel Grid.Column="4" Spacing="4">
-            <TextBlock Text="Max connections / tokens" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Text="Max connections / tokens" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             <Grid ColumnDefinitions="*,8,*">
               <NumericUpDown Grid.Column="0" Value="{Binding MaxConnections}" Minimum="1" Maximum="50" />
               <NumericUpDown Grid.Column="2" Value="{Binding MaxTokens}" Minimum="256" Maximum="4000" />
@@ -48,43 +48,43 @@
         </Grid>
 
         <StackPanel Orientation="Horizontal" Spacing="16">
-          <CheckBox Content="Redact local paths" IsChecked="{Binding RedactPaths}" Foreground="#D6DEE7" />
-          <CheckBox Content="Automatic analysis" IsChecked="{Binding AutomaticAnalysis}" Foreground="#D6DEE7" />
-          <TextBlock Text="Interval (minutes)" Foreground="#8A98A8" FontSize="10" VerticalAlignment="Center" />
+          <CheckBox Content="Redact local paths" IsChecked="{Binding RedactPaths}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <CheckBox Content="Automatic analysis" IsChecked="{Binding AutomaticAnalysis}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <TextBlock Text="Interval (minutes)" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" VerticalAlignment="Center" />
           <NumericUpDown Value="{Binding AnalysisIntervalMinutes}" Minimum="5" Maximum="60" Width="110" />
-          <TextBlock Text="Max requests/hour" Foreground="#8A98A8" FontSize="10" VerticalAlignment="Center" />
+          <TextBlock Text="Max requests/hour" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" VerticalAlignment="Center" />
           <NumericUpDown Value="{Binding MaxRequestsPerHour}" Minimum="1" Maximum="60" Width="110" />
         </StackPanel>
 
         <WrapPanel Orientation="Horizontal">
           <Button Content="Save settings" Command="{Binding SaveSettingsCommand}" Margin="0,0,8,0" Padding="12,6" />
           <Button Content="Analyze now" Command="{Binding AnalyzeCommand}" IsEnabled="{Binding CanAnalyze}"
-                  Margin="0,0,8,0" Padding="12,6" Background="#1F6FEB" Foreground="#E6EDF3" />
+                  Margin="0,0,8,0" Padding="12,6" Background="{DynamicResource Axiom.AccentStrong}" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <Button Content="Clear history" Command="{Binding ClearHistoryCommand}" Padding="12,6" />
         </WrapPanel>
-        <TextBlock Text="{Binding SettingsStatus}" FontSize="10" Foreground="#8A98A8" />
+        <TextBlock Text="{Binding SettingsStatus}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
       </StackPanel>
     </Border>
 
-    <TextBlock Grid.Row="1" Text="{Binding PrivacyText}" Foreground="#8A98A8" FontSize="10"
+    <TextBlock Grid.Row="1" Text="{Binding PrivacyText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10"
                TextWrapping="Wrap" Margin="2,10,0,0" />
 
     <Grid Grid.Row="2" ColumnDefinitions="320,10,*" Margin="0,10,0,0">
-      <Border Grid.Column="0" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1"
+      <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
               CornerRadius="8" Padding="10">
         <Grid RowDefinitions="Auto,*">
           <TextBlock Grid.Row="0" Text="Saved findings" FontSize="13" FontWeight="SemiBold"
-                     Foreground="#E6EDF3" Margin="4,2,4,8" />
+                     Foreground="{DynamicResource Axiom.TextPrimary}" Margin="4,2,4,8" />
           <ListBox Grid.Row="1" Classes="data-list" ItemsSource="{Binding History}"
                    SelectedItem="{Binding SelectedFinding}" Background="Transparent" BorderThickness="0"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <StackPanel Spacing="2" Margin="0,3">
-                  <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="#E6EDF3"
+                  <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}"
                              TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" />
                   <TextBlock Text="{Binding AnalysisTimestampUtc, StringFormat={}{0:HH:mm:ss}}" FontSize="9"
-                             Foreground="#8A98A8" />
+                             Foreground="{DynamicResource Axiom.TextMuted}" />
                 </StackPanel>
               </DataTemplate>
             </ListBox.ItemTemplate>
@@ -92,60 +92,60 @@
         </Grid>
       </Border>
 
-      <Border Grid.Column="2" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1"
+      <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
               CornerRadius="8" Padding="16">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <Grid>
           <StackPanel Spacing="8" IsVisible="{Binding SelectedFinding, Converter={x:Static converters:ObjectConverters.IsNotNull}}">
             <TextBlock Text="{Binding SelectedFinding.Summary}" FontSize="14" FontWeight="SemiBold"
-                       Foreground="#E6EDF3" TextWrapping="Wrap" />
+                       Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
             <WrapPanel Orientation="Horizontal">
-              <Border Background="#123236" CornerRadius="4" Padding="6,2" Margin="0,0,6,0">
-                <TextBlock Text="{Binding SelectedFinding.Status}" Foreground="#5EEAD4" FontSize="9" FontWeight="Bold" />
+              <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,2" Margin="0,0,6,0">
+                <TextBlock Text="{Binding SelectedFinding.Status}" Foreground="{DynamicResource Axiom.Accent}" FontSize="9" FontWeight="Bold" />
               </Border>
-              <Border Background="#1A2430" CornerRadius="4" Padding="6,2" Margin="0,0,6,0">
-                <TextBlock Text="{Binding SelectedFinding.Severity, StringFormat=Severity: {0}}" Foreground="#D6DEE7" FontSize="9" />
+              <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="6,2" Margin="0,0,6,0">
+                <TextBlock Text="{Binding SelectedFinding.Severity, StringFormat=Severity: {0}}" Foreground="{DynamicResource Axiom.TextPrimary}" FontSize="9" />
               </Border>
-              <Border Background="#1A2430" CornerRadius="4" Padding="6,2">
-                <TextBlock Text="{Binding SelectedFinding.Confidence, StringFormat=Confidence: {0}}" Foreground="#D6DEE7" FontSize="9" />
+              <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="6,2">
+                <TextBlock Text="{Binding SelectedFinding.Confidence, StringFormat=Confidence: {0}}" Foreground="{DynamicResource Axiom.TextPrimary}" FontSize="9" />
               </Border>
             </WrapPanel>
-            <TextBlock Text="{Binding SelectedFinding.Model, StringFormat=Model: {0}}" FontSize="10" Foreground="#8A98A8" />
-            <TextBlock Text="{Binding SelectedFinding.AnalysisTimestampUtc, StringFormat=Analyzed: {0}}" FontSize="10" Foreground="#8A98A8" />
+            <TextBlock Text="{Binding SelectedFinding.Model, StringFormat=Model: {0}}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Text="{Binding SelectedFinding.AnalysisTimestampUtc, StringFormat=Analyzed: {0}}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
 
-            <TextBlock Text="Observations" FontSize="12" FontWeight="SemiBold" Foreground="#E6EDF3" Margin="0,6,0,0" />
+            <TextBlock Text="Observations" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
             <ItemsControl ItemsSource="{Binding SelectedFinding.Observations}">
               <ItemsControl.ItemTemplate>
-                <DataTemplate><TextBlock Text="{Binding}" FontSize="11" Foreground="#9BA9B8" TextWrapping="Wrap" Margin="0,1" /></DataTemplate>
+                <DataTemplate><TextBlock Text="{Binding}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" Margin="0,1" /></DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <TextBlock Text="Alternative explanations" FontSize="12" FontWeight="SemiBold" Foreground="#E6EDF3" Margin="0,6,0,0" />
+            <TextBlock Text="Alternative explanations" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
             <ItemsControl ItemsSource="{Binding SelectedFinding.AlternativeExplanations}">
               <ItemsControl.ItemTemplate>
-                <DataTemplate><TextBlock Text="{Binding}" FontSize="11" Foreground="#9BA9B8" TextWrapping="Wrap" Margin="0,1" /></DataTemplate>
+                <DataTemplate><TextBlock Text="{Binding}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" Margin="0,1" /></DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <TextBlock Text="Missing evidence" FontSize="12" FontWeight="SemiBold" Foreground="#E6EDF3" Margin="0,6,0,0" />
+            <TextBlock Text="Missing evidence" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
             <ItemsControl ItemsSource="{Binding SelectedFinding.MissingEvidence}">
               <ItemsControl.ItemTemplate>
-                <DataTemplate><TextBlock Text="{Binding}" FontSize="11" Foreground="#9BA9B8" TextWrapping="Wrap" Margin="0,1" /></DataTemplate>
+                <DataTemplate><TextBlock Text="{Binding}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" Margin="0,1" /></DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
 
             <TextBlock Text="Recommended actions (text only; nothing is applied)" FontSize="12" FontWeight="SemiBold"
-                       Foreground="#E6EDF3" Margin="0,6,0,0" />
+                       Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
             <ItemsControl ItemsSource="{Binding SelectedFinding.RecommendedActions}">
               <ItemsControl.ItemTemplate>
-                <DataTemplate><TextBlock Text="{Binding}" FontSize="11" Foreground="#9BA9B8" TextWrapping="Wrap" Margin="0,1" /></DataTemplate>
+                <DataTemplate><TextBlock Text="{Binding}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" Margin="0,1" /></DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
           </StackPanel>
 
           <TextBlock IsVisible="{Binding SelectedFinding, Converter={x:Static converters:ObjectConverters.IsNull}}"
                      Text="No finding selected. Run an analysis or choose a saved finding."
-                     Foreground="#8A98A8" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                     Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Grid>
         </ScrollViewer>
       </Border>

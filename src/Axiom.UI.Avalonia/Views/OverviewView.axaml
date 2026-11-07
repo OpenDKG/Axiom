@@ -4,70 +4,70 @@
              x:Class="Axiom.UI.Avalonia.Views.OverviewView">
   <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="24,18,24,24" Spacing="14">
-      <TextBlock Text="{Binding StatusText}" Foreground="#9BA9B8" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
 
       <Grid ColumnDefinitions="*,12,*,12,*,12,*">
-        <Border Grid.Column="0" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1" CornerRadius="8" Padding="16">
+        <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
           <StackPanel Spacing="4">
-            <TextBlock Text="ACTIVE SOCKETS" Foreground="#8A98A8" FontSize="11" />
-            <TextBlock Text="{Binding ConnectionsText}" Foreground="#E6EDF3" FontSize="26" FontWeight="SemiBold" />
-            <TextBlock Text="{Binding SourceBadgeText}" Foreground="#5EEAD4" FontSize="11" />
+            <TextBlock Text="ACTIVE SOCKETS" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
+            <TextBlock Text="{Binding ConnectionsText}" Foreground="{DynamicResource Axiom.TextPrimary}" FontSize="26" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding SourceBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="11" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="2" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1" CornerRadius="8" Padding="16">
+        <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
           <StackPanel Spacing="4">
-            <TextBlock Text="PROCESSES" Foreground="#8A98A8" FontSize="11" />
-            <TextBlock Text="{Binding ProcessesText}" Foreground="#E6EDF3" FontSize="26" FontWeight="SemiBold" />
-            <TextBlock Text="with at least one socket" Foreground="#9BA9B8" FontSize="11" />
+            <TextBlock Text="PROCESSES" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
+            <TextBlock Text="{Binding ProcessesText}" Foreground="{DynamicResource Axiom.TextPrimary}" FontSize="26" FontWeight="SemiBold" />
+            <TextBlock Text="with at least one socket" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="4" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1" CornerRadius="8" Padding="16">
+        <Border Grid.Column="4" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
           <StackPanel Spacing="4">
-            <TextBlock Text="LOOPBACK" Foreground="#8A98A8" FontSize="11" />
-            <TextBlock Text="{Binding LoopbackText}" Foreground="#E6EDF3" FontSize="26" FontWeight="SemiBold" />
-            <TextBlock Text="local-only endpoints" Foreground="#9BA9B8" FontSize="11" />
+            <TextBlock Text="LOOPBACK" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
+            <TextBlock Text="{Binding LoopbackText}" Foreground="{DynamicResource Axiom.TextPrimary}" FontSize="26" FontWeight="SemiBold" />
+            <TextBlock Text="local-only endpoints" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="6" Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1" CornerRadius="8" Padding="16">
+        <Border Grid.Column="6" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
           <StackPanel Spacing="4">
-            <TextBlock Text="THROUGHPUT" Foreground="#8A98A8" FontSize="11" />
-            <TextBlock Text="{Binding DownloadText}" Foreground="#E6EDF3" FontSize="20" FontWeight="SemiBold" />
-            <TextBlock Text="{Binding UploadText, StringFormat=Upload: {0}}" Foreground="#9BA9B8" FontSize="11" />
+            <TextBlock Text="THROUGHPUT" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
+            <TextBlock Text="{Binding DownloadText}" Foreground="{DynamicResource Axiom.TextPrimary}" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding UploadText, StringFormat=Upload: {0}}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" />
           </StackPanel>
         </Border>
       </Grid>
 
-      <Border Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
         <StackPanel Spacing="6">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
-              <TextBlock Text="System-wide throughput" FontSize="14" FontWeight="SemiBold" Foreground="#E6EDF3" />
-              <TextBlock Text="{Binding BucketLabel}" FontSize="10" Foreground="#8A98A8" />
+              <TextBlock Text="System-wide throughput" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <TextBlock Text="{Binding BucketLabel}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             </StackPanel>
             <ComboBox Grid.Column="1" ItemsSource="{Binding RangeOptions}" SelectedItem="{Binding SelectedRange}" Width="92" />
           </Grid>
           <controls:TrafficChartControl Height="150" UploadSeries="{Binding UploadSeries}" DownloadSeries="{Binding DownloadSeries}" />
           <Grid ColumnDefinitions="Auto,Auto,*">
-            <TextBlock Grid.Column="0" Text="{Binding DownloadText, StringFormat=Down: {0}}" Foreground="#1F6FEB" FontSize="10" Margin="0,0,14,0" />
-            <TextBlock Grid.Column="1" Text="{Binding UploadText, StringFormat=Up: {0}}" Foreground="#5EEAD4" FontSize="10" Margin="0,0,14,0" />
-            <TextBlock Grid.Column="2" Text="{Binding RangeNote}" Foreground="#8A98A8" FontSize="10" TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" MaxWidth="520" />
+            <TextBlock Grid.Column="0" Text="{Binding DownloadText, StringFormat=Down: {0}}" Foreground="{DynamicResource Axiom.AccentStrong}" FontSize="10" Margin="0,0,14,0" />
+            <TextBlock Grid.Column="1" Text="{Binding UploadText, StringFormat=Up: {0}}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" Margin="0,0,14,0" />
+            <TextBlock Grid.Column="2" Text="{Binding RangeNote}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" MaxWidth="520" />
           </Grid>
         </StackPanel>
       </Border>
 
-      <Border Background="#161B22" BorderBrush="#2E3A47" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
         <StackPanel Spacing="10">
-          <TextBlock Text="Live sockets" FontSize="16" FontWeight="SemiBold" Foreground="#E6EDF3" />
-          <TextBlock Text="{Binding SourceText}" Foreground="#8A98A8" FontSize="11" />
+          <TextBlock Text="Live sockets" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <TextBlock Text="{Binding SourceText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
           <ListBox Classes="data-list" ItemsSource="{Binding Connections}" Height="390" Background="Transparent" BorderThickness="0"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid ColumnDefinitions="180,80,220,*" Margin="0,3">
-                  <TextBlock Grid.Column="0" Text="{Binding AppDisplayName}" Foreground="#E6EDF3" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="1" Text="{Binding ProtocolText}" Foreground="#9BA9B8" />
-                  <TextBlock Grid.Column="2" Text="{Binding RemoteEndpoint}" Foreground="#9BA9B8" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="3" Text="{Binding State}" Foreground="#9BA9B8" />
+                  <TextBlock Grid.Column="0" Text="{Binding AppDisplayName}" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" Text="{Binding ProtocolText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                  <TextBlock Grid.Column="2" Text="{Binding RemoteEndpoint}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="3" Text="{Binding State}" Foreground="{DynamicResource Axiom.TextSecondary}" />
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>

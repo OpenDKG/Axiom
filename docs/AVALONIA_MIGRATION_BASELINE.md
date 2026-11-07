@@ -193,7 +193,7 @@ Implemented in `Axiom.UI.Avalonia` with real data, real service calls and explic
 | Page | Data source | State covered |
 |---|---|---|
 | Overview | `ConnectionMonitor` + `TrafficEngine` | live, service mode, offline, measured throughput chart, 5m/1h/24h/7d/30d ranges |
-| Connections | `ConnectionMonitor` | live, service mode, offline with last capture timestamp |
+| Connections | `ConnectionMonitor` | full socket columns, search, protocol/new/loopback filters, live, service mode, offline with last capture timestamp |
 | Applications | `ConnectionMonitor` / `AppGrouping` | live inventory, read-only, service mode |
 | Events | service `history.query` | live, empty, service required, service offline, CSV export |
 | Firewall | service `rules.query` | available, read-only, service offline, apply/remove gated |
@@ -202,7 +202,7 @@ Implemented in `Axiom.UI.Avalonia` with real data, real service calls and explic
 | Security | local module probes + file scan + feed | module status, scan, hash lookup, community feed, agent hook install |
 | Agents | Blackbox dashboard + local probes | health, verified sync, hook evidence, activity, findings, mode/settings |
 | Support | bundled destinations | external links, clipboard, no configured destination |
-| Settings | per-user stores + Windows host | theme, startup, tray notification preference, build/runtime |
+| Settings | per-user stores + Windows host | four palettes (Dark, Light, Dark Midnight, Light Warm), startup, tray notification preference, build/runtime |
 
 Host infrastructure implemented in `Axiom.Desktop.Avalonia.Windows`:
 

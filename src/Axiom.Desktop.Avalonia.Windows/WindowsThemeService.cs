@@ -2,6 +2,7 @@
 using Avalonia;
 using Avalonia.Styling;
 using Axiom.Presentation;
+using Axiom.UI.Avalonia;
 
 namespace Axiom.Desktop.Avalonia.Windows;
 
@@ -24,11 +25,17 @@ public sealed class WindowsThemeService : IThemeService
 
         if (Application.Current is { } application)
         {
-            application.RequestedThemeVariant = theme == UiTheme.Light
-                ? ThemeVariant.Light
-                : ThemeVariant.Dark;
+            application.RequestedThemeVariant = VariantFor(theme);
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
     }
+
+    private static ThemeVariant VariantFor(UiTheme theme) => theme switch
+    {
+        UiTheme.Light => ThemeVariant.Light,
+        UiTheme.DarkMidnight => AxiomThemeVariants.DarkMidnight,
+        UiTheme.LightWarm => AxiomThemeVariants.LightWarm,
+        _ => ThemeVariant.Dark,
+    };
 }
