@@ -123,6 +123,28 @@ public sealed class AvaloniaPageTests
         Assert.True(page.Pending[0].IsAgent);
     }
 
+    [Theory]
+    [InlineData("PROTECTED", true, false, false)]
+    [InlineData("VERIFIED BLOCKING", true, false, false)]
+    [InlineData("HOOK LOADED", true, false, false)]
+    [InlineData("HOOK INSTALLED", false, true, false)]
+    [InlineData("TRUST REQUIRED", false, true, false)]
+    [InlineData("DETECTED", false, true, false)]
+    [InlineData("AUDIT ONLY", false, true, false)]
+    [InlineData("DEGRADED", false, false, true)]
+    [InlineData("OFFLINE", false, false, true)]
+    [InlineData("FAIL", false, false, true)]
+    [InlineData("NOT DETECTED", false, false, false)]
+    public void Protected_agent_tone_matches_hook_state(string status, bool ok, bool warn, bool fail)
+    {
+        var agent = new ProtectedAgent("opencode", @"C:\temp", status, "detail");
+
+        Assert.Equal(ok, agent.ToneOk);
+        Assert.Equal(warn, agent.ToneWarn);
+        Assert.Equal(fail, agent.ToneFail);
+        Assert.Equal(!ok && !warn && !fail, agent.ToneIdle);
+    }
+
     private sealed class ShieldClient(ProtectionStatus status) : IServiceRequestClient
     {
         public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
