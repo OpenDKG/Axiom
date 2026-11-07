@@ -232,3 +232,13 @@ Still outstanding:
 - Hosted Linux/macOS CI verification for `.github/workflows/portable.yml`; the workflow exists but
   has not run on a hosted runner from this workstation.
 - Installer/MSIX packaging and the separately approved release cutover.
+
+A parity test package can be produced without touching the WPF release:
+
+```powershell
+dotnet publish src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj -p:PublishProfile=win-x64-selfcontained
+```
+
+The verified test artifact is a 52.4 MB self-contained single EXE in
+`artifacts/publish/avalonia-win-x64/`, with `community/feed.json` copied beside it. The published EXE
+started and answered as a normal window on this workstation. It is a test artifact, not a release.

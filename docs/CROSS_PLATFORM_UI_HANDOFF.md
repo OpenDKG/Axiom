@@ -118,7 +118,8 @@ never rendered as live protection.
 1. Add 125/150/200% DPI evidence at 1080×720 and 1460×900.
 2. Run and verify `.github/workflows/portable.yml` on hosted Ubuntu and macOS runners.
 3. Measure performance with a fixed workload, resolution, mode and idle period.
-4. Build an installer test package and run a separate cutover review.
+4. Turn the verified `win-x64-selfcontained` test package into the installer/MSIX layout and run a
+   separate cutover review. The WPF 0.5.3 package remains the published application.
 
 The Avalonia window already uses the Axiom custom title bar with native resize border, drag,
 double-click maximize and explicit minimize/maximize/close buttons.

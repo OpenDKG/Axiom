@@ -20,4 +20,18 @@
     <ProjectReference Include="..\Axiom.Infrastructure.Windows\Axiom.Infrastructure.Windows.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\community\feed.json"
+             Link="community\feed.json"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      PublishSingleFile adds the ILLink task package during publish restore. Referencing it here
+      keeps packages.lock.json identical for normal restore and standalone publish.
+    -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
 </Project>

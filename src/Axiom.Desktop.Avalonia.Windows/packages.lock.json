@@ -16,6 +16,12 @@
           "Avalonia.X11": "12.1.5"
         }
       },
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[10.0.14, )",
+        "resolved": "10.0.14",
+        "contentHash": "YlTamXppEQls6DYWt7RdUuwWDb0lyw/vXCaGeQpLCpsLmfwGuCkOz/vIGgMTV7ECsJcavkCOkxZXv9s8rdAHkQ=="
+      },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Direct",
         "requested": "[10.0.0, )",
