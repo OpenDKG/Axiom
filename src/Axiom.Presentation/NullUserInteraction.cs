@@ -29,6 +29,9 @@ public sealed class NullUserInteraction : IUserInteraction
         string typeName,
         CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 
+    public Task<string?> PickFolderAsync(string title, CancellationToken cancellationToken) =>
+        Task.FromResult<string?>(null);
+
     public Task CopyTextAsync(string text, CancellationToken cancellationToken) =>
         throw new NotSupportedException("The host does not provide clipboard access.");
 

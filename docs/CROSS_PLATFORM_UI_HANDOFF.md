@@ -113,16 +113,13 @@ never rendered as live protection.
 - Do not move `Axiom.UI`/`Axiom.Desktop` out of the solution until parity and a separate cutover
   approval.
 
-## 7. Remaining before parity
+## 7. Remaining before cutover
 
-1. Port Security and Agents with all module probes, file scan, reputation, community feed and
-   protected-agent state, plus their native dialogs.
-2. Port `FirstRunWindow` onboarding and the donation window.
-3. Replace native Windows chrome with the Axiom custom title bar and native snap behaviour.
-4. Add 125/150/200% DPI evidence at 1080×720 and 1460×900.
-5. Add Linux/macOS CI that builds/tests `Axiom.Portable.slnx` only.
-6. Measure performance with a fixed workload, resolution, mode and idle period.
-7. Build an installer test package and run a separate cutover review.
+1. Replace native Windows chrome with the Axiom custom title bar and native snap behaviour.
+2. Add 125/150/200% DPI evidence at 1080×720 and 1460×900.
+3. Add Linux/macOS CI that builds/tests `Axiom.Portable.slnx` only.
+4. Measure performance with a fixed workload, resolution, mode and idle period.
+5. Build an installer test package and run a separate cutover review.
 
 ## 8. Adding a Linux/macOS host later
 

@@ -26,6 +26,12 @@
     <DataTemplate DataType="local:PrivacyShieldPageViewModel">
       <views:PrivacyShieldView />
     </DataTemplate>
+    <DataTemplate DataType="local:SecurityPageViewModel">
+      <views:SecurityView />
+    </DataTemplate>
+    <DataTemplate DataType="local:AgentsPageViewModel">
+      <views:AgentsView />
+    </DataTemplate>
     <DataTemplate DataType="local:AiAnalystPageViewModel">
       <views:AiAnalystView />
     </DataTemplate>

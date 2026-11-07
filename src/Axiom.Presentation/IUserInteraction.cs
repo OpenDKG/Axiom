@@ -31,6 +31,9 @@ public interface IUserInteraction
         string typeName,
         CancellationToken cancellationToken);
 
+    /// <summary>Native folder picker. Returns null when the user cancels.</summary>
+    Task<string?> PickFolderAsync(string title, CancellationToken cancellationToken);
+
     Task CopyTextAsync(string text, CancellationToken cancellationToken);
 
     Task OpenExternalAsync(string url, CancellationToken cancellationToken);

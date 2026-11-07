@@ -71,6 +71,7 @@ public partial class App : Application
             var theme = new WindowsThemeService();
             RequestedThemeVariant = theme.Current == UiTheme.Light ? ThemeVariant.Light : ThemeVariant.Dark;
             var autostart = new WindowsAutostartService();
+            var protector = new DpapiApiKeyProtector();
             _shell = new ShellViewModel(
                 source,
                 new AvaloniaUiTimerFactory(),
@@ -80,8 +81,12 @@ public partial class App : Application
                 new ProcessActions(),
                 theme,
                 autostart,
-                new DpapiApiKeyProtector(),
-                new WindowsDnsAdapterHelper());
+                protector,
+                new WindowsDnsAdapterHelper(),
+                new AvaloniaSecurityDialogs(() => window),
+                new AvaloniaShellActions(() => desktop.Shutdown()),
+                new AvaloniaBlackboxDialogs(() => window, interaction),
+                new Axiom.Persistence.AgentSessionReader());
 
             window = new MainWindow { DataContext = _shell };
             _window = window;
@@ -98,6 +103,12 @@ public partial class App : Application
             if (startMinimized)
             {
                 window.Hide();
+            }
+
+            if (!startMinimized && !autostartArgument && !OnboardingStore.IsCompleted)
+            {
+                Dispatcher.UIThread.Post(async () =>
+                    await FirstRunDialog.ShowAsync(window, protector).ConfigureAwait(true));
             }
 
             desktop.Exit += (_, _) => Cleanup();

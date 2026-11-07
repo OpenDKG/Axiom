@@ -187,6 +187,8 @@ Implemented in `Axiom.UI.Avalonia` with real data, real service calls and explic
 | Firewall | service `rules.query` | available, read-only, service offline, apply/remove gated |
 | Privacy Shield | service `privacy.status/configure` | active, disabled, service required, service offline, UAC-gated adapter DNS |
 | AI Analyst | local monitor + configured provider | disabled, configured, manual/automatic, DPAPI-protected key |
+| Security | local module probes + file scan + feed | module status, scan, hash lookup, community feed, agent hook install |
+| Agents | Blackbox dashboard + local probes | health, verified sync, hook evidence, activity, findings, mode/settings |
 | Support | bundled destinations | external links, clipboard, no configured destination |
 | Settings | per-user stores + Windows host | theme, startup, tray notification preference, build/runtime |
 
@@ -200,14 +202,14 @@ Host infrastructure implemented in `Axiom.Desktop.Avalonia.Windows`:
 - native confirm, save/open dialogs, clipboard and external links;
 - Windows autostart registration, theme application, DPAPI key protection, UAC DNS helper.
 
-Not yet migrated:
+All eleven parity pages are now listed in the Avalonia navigation. Native setup dialogs are
+implemented in Avalonia: reputation provider, community feed, agent hook installation (complete vs
+partial), Blackbox settings, DKG log and first-run onboarding.
 
-- **Security** page (module probes, file scan, reputation, community feed, protected agents) and its
-  `ReputationSetupWindow`, `CommunitySetupWindow` and `AgentHookInstallWindow`.
-- **Agents** page and its `BlackboxSettingsWindow` and `DkgLogWindow`.
-- `FirstRunWindow` onboarding and donation window.
+Still outstanding:
+
 - Custom Axiom window chrome; the Avalonia host currently uses native Windows chrome.
-- Installer/MSIX packaging and the release cutover.
-
-These pages are deliberately not listed in the Avalonia navigation until they are ported with their
-real commands and security gates; no placeholder page is shown.
+- Windows 10 19044 DPI evidence at 125/150/200% and 1080×720.
+- Performance measurement with a fixed workload/resolution/mode/idle period.
+- Linux/macOS CI for `Axiom.Portable.slnx`.
+- Installer/MSIX packaging and the separately approved release cutover.

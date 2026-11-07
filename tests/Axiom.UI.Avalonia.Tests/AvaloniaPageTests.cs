@@ -10,12 +10,13 @@ namespace Axiom.UI.Avalonia.Tests;
 public sealed class AvaloniaPageTests
 {
     [Fact]
-    public void Shell_exposes_only_pages_with_real_implementations()
+    public void Shell_exposes_all_eleven_parity_pages()
     {
         var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
 
-        Assert.Equal(9, shell.Pages.Count);
-        Assert.DoesNotContain(shell.Pages, page => page.Title is "Security" or "Agents");
+        Assert.Equal(11, shell.Pages.Count);
+        Assert.Contains(shell.Pages, page => page.Title == "Security");
+        Assert.Contains(shell.Pages, page => page.Title == "Agents");
         Assert.False(shell.IsServiceMode);
 
         shell.Dispose();

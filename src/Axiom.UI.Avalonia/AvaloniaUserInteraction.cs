@@ -136,6 +136,24 @@ public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUser
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
 
+    public async Task<string?> PickFolderAsync(string title, CancellationToken cancellationToken)
+    {
+        var owner = ownerProvider();
+        if (owner is null)
+        {
+            return null;
+        }
+
+        var folders = await owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+        }).ConfigureAwait(true);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return folders.Count == 0 ? null : folders[0].TryGetLocalPath();
+    }
+
     public async Task CopyTextAsync(string text, CancellationToken cancellationToken)
     {
         var owner = ownerProvider()

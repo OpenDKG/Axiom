@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Axiom.Contracts.Agents;
 using Axiom.Contracts.Monitoring;
 using Axiom.Presentation;
 
@@ -29,7 +30,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         IThemeService? themeService = null,
         IAutostartService? autostartService = null,
         IApiKeyProtector? apiKeyProtector = null,
-        IDnsAdapterHelper? dnsAdapterHelper = null)
+        IDnsAdapterHelper? dnsAdapterHelper = null,
+        ISecurityDialogService? securityDialogs = null,
+        IShellActions? shellActions = null,
+        IBlackboxDialogService? blackboxDialogs = null,
+        IAgentSessionSource? agentSessions = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(timers);
@@ -55,6 +60,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             interaction,
             dnsAdapterHelper ?? new UnsupportedDnsAdapterHelper(),
             timers);
+        Security = new SecurityPageViewModel(
+            interaction,
+            securityDialogs ?? new UnsupportedSecurityDialogs(),
+            apiKeyProtector ?? new UnsupportedApiKeyProtector(),
+            timers,
+            shellActions ?? new UnsupportedShellActions());
+        Agents = new AgentsPageViewModel(
+            Security,
+            agentSessions,
+            interaction,
+            blackboxDialogs ?? new UnsupportedBlackboxDialogs(),
+            timers);
         AiAnalyst = new AiAnalystPageViewModel(
             _monitor,
             apiKeyProtector ?? new UnsupportedApiKeyProtector(),
@@ -65,7 +82,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             IsServiceMode,
             themeService ?? new FixedThemeService(),
             autostartService ?? new UnsupportedAutostartService());
-        Pages = [Overview, Connections, Apps, Events, Firewall, PrivacyShield, AiAnalyst, Support, Settings];
+        Pages = [Overview, Connections, Apps, Events, Firewall, PrivacyShield, Security, Agents, AiAnalyst, Support, Settings];
         _selectedPage = Overview;
         _monitor.Updated += OnMonitorUpdated;
     }
@@ -81,6 +98,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public FirewallPageViewModel Firewall { get; }
 
     public PrivacyShieldPageViewModel PrivacyShield { get; }
+
+    public SecurityPageViewModel Security { get; }
+
+    public AgentsPageViewModel Agents { get; }
 
     public AiAnalystPageViewModel AiAnalyst { get; }
 
@@ -147,6 +168,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Events.Dispose();
         Firewall.Dispose();
         PrivacyShield.Dispose();
+        Security.Dispose();
+        Agents.Dispose();
         AiAnalyst.Dispose();
         Settings.Dispose();
         _traffic.Dispose();
