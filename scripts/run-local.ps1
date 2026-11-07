@@ -43,4 +43,4 @@ if (-not $dotnet) {
 
 if (-not $dotnet) { throw "dotnet CLI not found on PATH. Install the .NET 10 SDK (global.json) or use -Standalone." }
 
-& $dotnet run --project (Join-Path $root "src\Axiom.Desktop\Axiom.Desktop.csproj") -c Release
+& $dotnet run --project (Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj") -c Release

@@ -60,7 +60,7 @@ if (-not $OutputDir) {
 }
 
 $dotnet = Resolve-Dotnet
-$project = Join-Path $root "src\Axiom.Desktop\Axiom.Desktop.csproj"
+$project = Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj"
 $serviceProject = Join-Path $root "src\Axiom.Service\Axiom.Service.csproj"
 
 Write-Host "Publishing Axiom $Version (win-x64)..." -ForegroundColor Cyan

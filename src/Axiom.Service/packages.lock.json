@@ -323,20 +323,20 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.5.3, )"
+          "Axiom.Contracts": "[0.6.0, )"
         }
       },
       "axiom.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.5.3, )",
-          "Axiom.Core": "[0.5.3, )"
+          "Axiom.Contracts": "[0.6.0, )",
+          "Axiom.Core": "[0.6.0, )"
         }
       },
       "axiom.persistence": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.5.3, )",
+          "Axiom.Contracts": "[0.6.0, )",
           "Microsoft.Data.Sqlite": "[10.0.14, )"
         }
       },

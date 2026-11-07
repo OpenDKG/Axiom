@@ -1,6 +1,6 @@
 # Axiom — Cross-Platform UI Handoff
 
-Status: Windows-first Avalonia migration in progress; WPF remains the release application.
+Status: Windows-first Avalonia cutover completed in 0.6.0; WPF remains in source as a fallback.
 Branch: `feature/avalonia-windows-first`
 Audience: the Linux/macOS contributor who will add platform hosts after the Windows port reaches
 parity and the cutover is approved.
@@ -113,13 +113,12 @@ never rendered as live protection.
 - Do not move `Axiom.UI`/`Axiom.Desktop` out of the solution until parity and a separate cutover
   approval.
 
-## 7. Remaining before cutover
+## 7. Remaining after the 0.6.0 cutover
 
 1. Add 125/150/200% DPI evidence at 1080×720 and 1460×900.
 2. Run and verify `.github/workflows/portable.yml` on hosted Ubuntu and macOS runners.
 3. Measure performance with a fixed workload, resolution, mode and idle period.
-4. Turn the verified `win-x64-selfcontained` test package into the installer/MSIX layout and run a
-   separate cutover review. The WPF 0.5.3 package remains the published application.
+4. Verify rollback from the 0.6.0 installer to the WPF 0.5.3 package on a clean VM.
 
 The Avalonia window already uses the Axiom custom title bar with native resize border, drag,
 double-click maximize and explicit minimize/maximize/close buttons. The exact DPI, performance,

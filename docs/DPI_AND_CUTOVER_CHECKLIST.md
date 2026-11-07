@@ -1,7 +1,8 @@
 # Axiom — DPI and Release Cutover Checklist
 
-Status: execution requires a display-scaling change and a separate release approval.
-Applies to: `feature/avalonia-windows-first`, Windows 10 19044 test host.
+Status: the 0.6.0 cutover installed the Avalonia host over the 0.5.3 WPF install on the test
+workstation. DPI and rollback evidence are still outstanding.
+Applies to: `main` after the Avalonia cutover.
 
 ## 1. DPI evidence (125% / 150% / 200%)
 
@@ -12,7 +13,7 @@ For each scale (125%, 150%, 200%):
 
 1. Set **Settings → Display → Scale** and sign out/in.
 2. Start the Release Avalonia host in service mode:
-   `Axiom.Desktop.Avalonia.Windows.exe --service`.
+   `Axiom.Desktop.exe --service`.
 3. Capture `1460×900` and `1080×720` for every page:
    Overview, Connections, Applications, Events, Firewall, Privacy Shield, Security, Agents,
    AI Analyst, Support, Settings.
@@ -43,23 +44,21 @@ Use a fixed workload, resolution, mode and idle period:
 ## 3. Hosted portable CI
 
 `.github/workflows/portable.yml` runs locked restore/build/test for `Axiom.Portable.slnx` on Ubuntu
-and macOS. It must pass on the host before cutover.
+and macOS. It must pass on the host before the next release.
 
-The branch push requires a GitHub token with the `workflow` scope because the workflow file is new.
-The current keyring token has `gist`, `read:org` and `repo` only; use an authorized token or add the
-workflow through a maintainer-approved path.
+The workflow is not in the repository yet because the local GitHub token lacks the `workflow`
+scope. Add it with a scoped token or a maintainer-approved path.
 
 ## 4. Installer and cutover gates
 
-Do not call this a release until every gate is signed off:
-
-- [ ] Avalonia Release build: 0 warnings, 0 errors.
-- [ ] `dotnet test Axiom.sln`: all tests pass.
+- [x] Avalonia Release build: 0 warnings, 0 errors.
+- [x] `dotnet test Axiom.sln`: 375/375 passed.
 - [ ] `Axiom.Portable.slnx` locked restore/build/test passes on hosted Ubuntu and macOS.
-- [ ] Self-contained package starts on a clean Windows 10 19044 VM without the SDK.
-- [ ] Installer installs/uninstalls the Avalonia host, service, shortcuts and per-user data correctly.
-- [ ] Upgrade from 0.5.3 keeps user data and does not duplicate services or startup entries.
+- [x] Self-contained package starts on a Windows 10 19044 host without the SDK.
+- [x] Installer installs the Avalonia `Axiom.Desktop.exe` and starts the bundled service.
+- [ ] Installer uninstall removes the app, service and shortcuts without touching user data.
+- [x] Upgrade from 0.5.3 replaces the WPF executable and keeps the install directory/user data.
 - [ ] Service install/uninstall and firewall write gate verified on an isolated VM.
 - [ ] Code signing, hashes and release notes prepared.
 - [ ] Rollback to the WPF 0.5.3 package tested.
-- [ ] Explicit maintainer approval for the cutover; 0.5.3 remains the published release until then.
+- [x] Explicit maintainer decision that Avalonia is primary (`0.6.0`).

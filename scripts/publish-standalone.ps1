@@ -3,9 +3,8 @@
     Publishes the standalone (self-contained) Windows x64 shell.
 
 .DESCRIPTION
-    Produces a single Axiom.Desktop.exe (internal executable name) that runs without a .NET runtime installed.
-    WPF does not support trimming, so PublishTrimmed stays false. The output lands in
-    artifacts\publish\win-x64 by default.
+    Produces a single Axiom.Desktop.exe (Avalonia Windows host) that runs without a .NET runtime
+    installed. The output lands in artifacts\publish\win-x64 by default.
 
 .PARAMETER Output
     Optional output directory; defaults to the publish profile value.
@@ -22,7 +21,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $root "src\Axiom.Desktop\Axiom.Desktop.csproj"
+$project = Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj"
 
 $arguments = @(
     "publish", $project,

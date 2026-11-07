@@ -2,7 +2,7 @@
 
 **Open-Source Firewall, Network Monitor & Local Agent Protection**
 
-**Version:** 0.5.3 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.6.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -28,19 +28,20 @@ Axiom brings together four surfaces:
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
 
-## What's in 0.5.3
+## What's in 0.6.0
 
-- Native **verified threat graph** for the local Blackbox DKG: category hubs, severity rings,
-  verified-rule totals and a local sample of the graph served by the dashboard.
-- Live **verified graph sync** card with downloaded/compiled counts, triples, verified rules and
-  lookup health. Local state fallback keeps the card accurate when the dashboard is busy with a
-  long node read.
-- **Privacy Shield** now fits all three catalogued sources: the local rule cap is 500,000 unique
-  domains, and every selected source keeps a reserved share so WindowsSpyBlocker telemetry is not
-  starved by HaGeZi or OISD.
-- Suggested upstream DNS values and resolver verification guidance on the Privacy Shield page.
-- Includes the 0.5.2 branding, ZCode/DeepSeek Harness, auto-provisioning, context-menu and activity
-  work.
+- **Avalonia is now the primary Windows UI.** The installer ships `Axiom.Desktop.exe` from
+  `Axiom.Desktop.Avalonia.Windows`; the WPF application remains in source as a fallback.
+- All eleven pages are ported: Overview, Connections, Applications, Events, Firewall, Privacy Shield,
+  Security, Agents, AI Analyst, Support and Settings.
+- Live throughput chart, full socket filters and grouping, session first-observed events, top
+  applications, native verified threat graph, selectable threat details, protected workspaces and
+  agent module cards.
+- Four real palettes (Dark, Light, Dark Midnight, Light Warm), custom Axiom title bar, tray icon,
+  single-instance handling and 1080×720 shell fit.
+- Ported context menus for applications, connections, overview sockets and agent evidence.
+- Installer, MSIX and release scripts now publish the Avalonia host as `Axiom.Desktop.exe`.
+- Includes the 0.5.3 verified threat graph and Privacy Shield source-fit work.
 
 ## What it covers
 
@@ -238,7 +239,7 @@ offline Blackbox does not stop local monitoring.
 ## How it works
 
 ```text
-Unprivileged WPF UI
+Unprivileged Avalonia UI (WPF fallback retained in source)
    │  local Named Pipe (explicit ACL, client SID check)
    ▼
 Windows Service
@@ -272,7 +273,7 @@ Windows Service
 ## Platform and requirements
 
 - Windows 10 x64 (19041+) is the current development/test host. Windows 11 x64 uses the same
-  .NET/WPF code path, but Windows 11 VM validation is still in the test matrix.
+  .NET/Avalonia code path, but Windows 11 VM validation is still in the test matrix.
 - .NET 10 SDK for building; the published self-contained build needs no .NET runtime.
 - No administrator rights are required for the UI or for read-only console development.
 - Firewall rule writes and ETW kernel tracing require an elevated service or an isolated test VM.
@@ -301,9 +302,10 @@ dotnet test Axiom.sln -c Release --no-build
 The standalone build produces one self-contained `Axiom.Desktop.exe` in
 `artifacts\publish\win-x64`.
 
-WPF software rendering is enabled by default because some GPU drivers leave the client area blank
-after a driver reset. Set `AXIOM_HARDWARE_RENDER=1` before starting the app to opt in to hardware
-acceleration on a machine where it is known to work.
+The legacy WPF fallback keeps software rendering enabled by default because some GPU drivers leave
+the client area blank after a driver reset. Set `AXIOM_HARDWARE_RENDER=1` before starting the legacy
+app to opt in to hardware acceleration on a machine where it is known to work. The Avalonia host
+uses its normal platform renderer.
 
 ### Installation (no administrator)
 
@@ -373,8 +375,11 @@ src/
   Axiom.Infrastructure.Windows/ # IP Helper, process identity, Named Pipe server
   Axiom.Persistence/            # SQLite schema, queries, retention
   Axiom.Service/                # Worker host, monitoring, history writer, pipe
-  Axiom.UI/                     # WPF library: views, view models, theme
-  Axiom.Desktop/                # composition root / the only UI executable
+  Axiom.Presentation/           # portable view models, state and feature services
+  Axiom.UI.Avalonia/            # Avalonia views, controls, themes and host services
+  Axiom.Desktop.Avalonia.Windows/ # primary Windows composition root / Axiom.Desktop.exe
+  Axiom.UI/                     # WPF fallback library: views, view models, theme
+  Axiom.Desktop/                # WPF fallback composition root
 tests/                                  # unit and Windows integration tests
 docs/                                   # architecture, security, test matrix, licensing, ADRs
 scripts/                                # local run, service mode, standalone publish

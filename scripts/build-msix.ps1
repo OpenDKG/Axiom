@@ -153,7 +153,7 @@ $OutputDir = Assert-UnderArtifacts $OutputDir
 
 $dotnet = Resolve-Dotnet
 $makeappx = Resolve-MakeAppx $MakeAppxPath
-$desktopProject = Join-Path $root "src\Axiom.Desktop\Axiom.Desktop.csproj"
+$desktopProject = Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj"
 $serviceProject = Join-Path $root "src\Axiom.Service\Axiom.Service.csproj"
 $desktopOut = Join-Path $root "artifacts\msix\publish\desktop"
 $serviceOut = Join-Path $root "artifacts\msix\publish\service"

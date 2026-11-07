@@ -231,7 +231,9 @@ Still outstanding:
 - A controlled performance run with a fixed workload/resolution/mode/idle period.
 - Hosted Linux/macOS CI verification for `.github/workflows/portable.yml`; the workflow exists but
   has not run on a hosted runner from this workstation.
-- Installer/MSIX packaging and the separately approved release cutover.
+- ~~Installer/MSIX packaging and the separately approved release cutover.~~ Completed in 0.6.0:
+  the installer embeds `Axiom.Desktop.exe` from the Avalonia host, and an upgrade from the 0.5.3
+  WPF install was tested on this workstation. The release zip/MSIX scripts now publish Avalonia.
 
 A parity test package can be produced without touching the WPF release:
 
