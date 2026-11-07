@@ -19,7 +19,9 @@ public sealed record DnsPolicyDecision(
 /// </summary>
 public sealed class PrivacyShieldPolicy
 {
-    public const int MaxRules = 300_000;
+    // The three catalogued lists currently produce roughly 367k unique domains. Keep headroom
+    // for list growth and for future sources without making one large source starve another.
+    public const int MaxRules = 500_000;
 
     /// <summary>Wire/storage limit for user-entered lists in the initial IPC-backed UI.</summary>
     public const int MaxSettingsDomains = 5_000;

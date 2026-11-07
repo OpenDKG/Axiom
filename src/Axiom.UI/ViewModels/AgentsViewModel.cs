@@ -30,11 +30,15 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private const int ActivityMax = 20_000;
 
-    private const int VerifiedGraphPageSize = 16;
+    private const int VerifiedGraphPageSize = 80;
+
+    private const int VerifiedGraphPreviewSize = 12;
 
     private static readonly TimeSpan ActivityRefreshInterval = TimeSpan.FromSeconds(15);
 
     private static readonly TimeSpan VerifiedGraphRefreshInterval = TimeSpan.FromSeconds(60);
+
+    private static readonly TimeSpan AutoSyncInterval = TimeSpan.FromMinutes(15);
 
     private static readonly Regex SecretPattern = new(
         @"(?i)\b(token|secret|password|passwd|api[_-]?key|authorization)\b\s*[:=]\s*(""[^""]*""|'[^']*'|[^\s,}\]]+)",
@@ -49,6 +53,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         RegexOptions.Compiled);
 
     private readonly BlackboxDashboardClient _client = new();
+
+    private readonly BlackboxAutoSyncStore _autoSyncStore = new();
 
     private readonly AgentEvidenceStore _agentEvidence = new();
 
@@ -78,14 +84,37 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private bool _verifiedGraphInitialized;
 
+    private bool _pageActive;
+
+    private bool _autoSyncRunning;
+
+    private DateTimeOffset _lastAutoSyncAttempt = DateTimeOffset.MinValue;
+
     public AgentsViewModel(SecurityViewModel security, IAgentSessionSource? agentSessions = null)
         : base("Agents", "DKG, Blackbox and the workspaces they protect", "\uE99A")
     {
         Security = security ?? throw new ArgumentNullException(nameof(security));
         _agentSessions = agentSessions;
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
-        _timer.Tick += async (_, _) => await RefreshAsync().ConfigureAwait(true);
+        var autoSync = _autoSyncStore.Load();
+        _isAutoSyncEnabled = autoSync.Enabled;
+        _lastAutoSyncAttempt = autoSync.LastAttemptUtc;
+        _autoSyncStatusText = autoSync.Enabled
+            ? string.IsNullOrWhiteSpace(autoSync.LastStatus)
+                ? "Auto-sync is on; checks every 15 minutes for new verified assets."
+                : autoSync.LastStatus
+            : "Auto-sync is off.";
+
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+        _timer.Tick += async (_, _) =>
+        {
+            if (_pageActive)
+            {
+                await RefreshAsync().ConfigureAwait(true);
+            }
+
+            await MaybeAutoSyncAsync().ConfigureAwait(true);
+        };
     }
 
     public SecurityViewModel Security { get; }
@@ -104,8 +133,6 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     public ObservableCollection<BlackboxAuditEntry> Activity { get; } = [];
 
     public ObservableCollection<BlackboxFinding> Findings { get; } = [];
-
-    public ObservableCollection<BlackboxGraphThreat> VerifiedGraphThreats { get; } = [];
 
     public ObservableCollection<AgentEvidenceEvent> HookEvidence { get; } = [];
 
@@ -186,7 +213,26 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     private string _verifiedGraphListStatus = "No verified threats loaded.";
 
     [ObservableProperty]
+    private IReadOnlyList<BlackboxGraphThreat> _verifiedGraphThreats = [];
+
+    [ObservableProperty]
+    private IReadOnlyList<BlackboxGraphThreat> _verifiedGraphPreview = [];
+
+    [ObservableProperty]
+    private IReadOnlyDictionary<string, int> _verifiedGraphCategoryTotals =
+        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+    [ObservableProperty]
+    private int _verifiedGraphTotal;
+
+    [ObservableProperty]
     private bool _isVerifiedSyncRunning;
+
+    [ObservableProperty]
+    private bool _isAutoSyncEnabled;
+
+    [ObservableProperty]
+    private string _autoSyncStatusText = "Auto-sync is off.";
 
     [ObservableProperty]
     private string _summaryText = "No activity has been loaded.";
@@ -213,6 +259,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             return;
         }
 
+        _pageActive = true;
         _timer.Start();
         _lastSessionRefresh = DateTimeOffset.MinValue;
         _activityInitialized = false;
@@ -220,7 +267,14 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         _ = RefreshAsync();
     }
 
-    public void Deactivate() => _timer.Stop();
+    public void Deactivate()
+    {
+        _pageActive = false;
+        if (!IsAutoSyncEnabled)
+        {
+            _timer.Stop();
+        }
+    }
 
     public void Dispose()
     {
@@ -356,6 +410,92 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     partial void OnIsVerifiedSyncRunningChanged(bool value) =>
         SyncVerifiedGraphCommand.NotifyCanExecuteChanged();
+
+    partial void OnIsAutoSyncEnabledChanged(bool value)
+    {
+        AutoSyncStatusText = value
+            ? "Auto-sync is on; checks every 15 minutes for new verified assets."
+            : "Auto-sync is off.";
+
+        if (value)
+        {
+            _timer.Start();
+        }
+        else if (!_pageActive)
+        {
+            _timer.Stop();
+        }
+
+        PersistAutoSync();
+    }
+
+    private async Task MaybeAutoSyncAsync()
+    {
+        if (!IsAutoSyncEnabled || _autoSyncRunning || !IsAvailable)
+        {
+            return;
+        }
+
+        if (IsVerifiedSyncRunning ||
+            string.Equals(VerifiedSyncState, "SYNCING", StringComparison.Ordinal) ||
+            string.Equals(VerifiedSyncState, "NODE OFFLINE", StringComparison.Ordinal) ||
+            string.Equals(VerifiedSyncState, "UNAVAILABLE", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastAutoSyncAttempt < AutoSyncInterval)
+        {
+            return;
+        }
+
+        _autoSyncRunning = true;
+        _lastAutoSyncAttempt = now;
+        AutoSyncStatusText = "Auto-sync: checking for new verified assets…";
+        PersistAutoSync();
+        try
+        {
+            var result = await _client.RequestSyncAsync(CancellationToken.None).ConfigureAwait(true);
+            if (!result.Ok)
+            {
+                AutoSyncStatusText = $"Auto-sync: {result.Message}";
+                return;
+            }
+
+            AutoSyncStatusText = "Auto-sync requested; existing assets stay local and only new data is fetched.";
+            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            if (_pageActive)
+            {
+                await RefreshAsync().ConfigureAwait(true);
+            }
+        }
+        catch (Exception exception) when (exception is
+            HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            AutoSyncStatusText = $"Auto-sync could not reach the dashboard: {exception.Message}";
+        }
+        finally
+        {
+            _autoSyncRunning = false;
+            PersistAutoSync();
+        }
+    }
+
+    private void PersistAutoSync()
+    {
+        try
+        {
+            _autoSyncStore.Save(new BlackboxAutoSyncSettings(
+                IsAutoSyncEnabled,
+                _lastAutoSyncAttempt,
+                AutoSyncStatusText));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AutoSyncStatusText = $"Auto-sync setting could not be saved: {exception.Message}";
+        }
+    }
 
     [RelayCommand]
     private async Task LoadMoreActivityAsync()
@@ -1003,12 +1143,19 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
     {
         try
         {
-            return await _client.GetVerifiedSyncAsync(CancellationToken.None).ConfigureAwait(true);
+            var dashboard = await _client.GetVerifiedSyncAsync(CancellationToken.None).ConfigureAwait(true);
+            var local = BlackboxLocalState.TryReadSync();
+            if (local is not null && local.VerifiedRules > dashboard.VerifiedRules)
+            {
+                return local;
+            }
+
+            return dashboard;
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
         {
-            return null;
+            return BlackboxLocalState.TryReadSync();
         }
     }
 
@@ -1024,7 +1171,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
         {
-            return null;
+            return BlackboxLocalState.TryReadGraph();
         }
     }
 
@@ -1044,11 +1191,13 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         }
 
         var state = sync.State.Trim().ToLowerInvariant();
+        var hasCompiledRules = sync.VerifiedRules > 0 || (sync.CompiledAssets ?? 0) > 0;
+        var nodeUnavailableWithRules = sync.IsOffline && hasCompiledRules;
         VerifiedSyncState = state switch
         {
             "synced" => "SYNCED",
             "syncing" => "SYNCING",
-            "unavailable" => "NODE OFFLINE",
+            "unavailable" => nodeUnavailableWithRules ? "DEGRADED" : "NODE OFFLINE",
             "unknown" => "UNKNOWN",
             _ => state.Length == 0 ? "UNKNOWN" : state.ToUpperInvariant(),
         };
@@ -1068,7 +1217,9 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             : $"Verified-answer lookups: {sync.Lookups.Label}";
 
         var detail = sync.IsOffline
-            ? "The local DKG node is not answering. Downloaded data is not synchronized, so verified graph coverage is not available."
+            ? nodeUnavailableWithRules
+                ? "The node probe timed out, but the last compiled verified rules remain loaded. The graph may be catching up."
+                : "The local DKG node is not answering. Downloaded data is not synchronized, so verified graph coverage is not available."
             : sync.IsSyncing
                 ? (string.IsNullOrWhiteSpace(sync.PhaseText)
                     ? "The local dashboard is syncing the verified graph."
@@ -1089,22 +1240,28 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private void ApplyVerifiedGraph(BlackboxGraphPage page)
     {
-        VerifiedGraphThreats.Clear();
-        foreach (var threat in page.Threats.Take(VerifiedGraphPageSize))
-        {
-            VerifiedGraphThreats.Add(threat);
-        }
+        var threats = page.Threats
+            .Take(VerifiedGraphPageSize)
+            .ToList();
 
-        if (page.Total == 0 && page.Threats.Count == 0)
+        VerifiedGraphThreats = threats;
+        VerifiedGraphPreview = threats.Take(VerifiedGraphPreviewSize).ToList();
+        VerifiedGraphCategoryTotals = page.CategoryTotals;
+        VerifiedGraphTotal = page.Total;
+
+        if (page.Total == 0 && threats.Count == 0)
         {
-            VerifiedGraphListStatus = string.Equals(VerifiedSyncState, "NODE OFFLINE", StringComparison.Ordinal)
-                ? "The verified graph is not loaded while the local DKG node is offline."
-                : "The verified graph currently contains no threats.";
+            VerifiedGraphListStatus = VerifiedSyncState switch
+            {
+                "NODE OFFLINE" => "The verified graph is not loaded while the local DKG node is offline.",
+                "DEGRADED" => "The graph sample could not be read while the node probe timed out.",
+                _ => "The verified graph currently contains no threats.",
+            };
             return;
         }
 
-        VerifiedGraphListStatus = page.Partial || page.Total > VerifiedGraphThreats.Count
-            ? $"Showing {VerifiedGraphThreats.Count} of {page.Total} verified threat(s)."
+        VerifiedGraphListStatus = page.Partial || page.Total > VerifiedGraphPreview.Count
+            ? $"Showing {VerifiedGraphPreview.Count} of {page.Total} verified threat(s); the graph above uses {threats.Count} loaded node(s)."
             : $"Showing all {page.Total} verified threat(s).";
     }
 

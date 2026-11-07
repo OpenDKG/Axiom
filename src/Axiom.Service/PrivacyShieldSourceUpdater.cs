@@ -20,6 +20,10 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
 {
     private const int MaxBytes = 20 * 1024 * 1024;
 
+    // Keep room for every selected source so a large list cannot consume the whole cap before a
+    // smaller telemetry list such as WindowsSpyBlocker is imported.
+    private const int SourceReserve = 10_000;
+
     private readonly HttpClient _http;
 
     public PrivacyShieldSourceUpdater(HttpClient? httpClient = null)
@@ -49,11 +53,19 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var success = true;
 
-        foreach (var source in sources)
+        for (var sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var source = sources[sourceIndex];
+            var remainingSources = sources.Count - sourceIndex - 1;
+            var reserve = Math.Min(
+                SourceReserve,
+                PrivacyShieldPolicy.MaxRules / Math.Max(2, sources.Count * 2));
+            var sourceLimit = Math.Max(
+                1,
+                PrivacyShieldPolicy.MaxRules - (remainingSources * reserve));
 
-            if (rules.Count >= PrivacyShieldPolicy.MaxRules)
+            if (rules.Count >= sourceLimit)
             {
                 statuses.Add(new PrivacyShieldSourceStatus(
                     source.Id,
@@ -79,7 +91,7 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
                 var added = 0;
                 foreach (var domain in domains)
                 {
-                    if (rules.Count >= PrivacyShieldPolicy.MaxRules)
+                    if (rules.Count >= sourceLimit)
                     {
                         break;
                     }

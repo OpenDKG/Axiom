@@ -2,7 +2,7 @@
 
 **Open-Source Firewall, Network Monitor & Local Agent Protection**
 
-**Version:** 0.5.2 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.5.3 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -28,15 +28,19 @@ Axiom brings together four surfaces:
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
 
-## What's in 0.5.2
+## What's in 0.5.3
 
-- New blue Axiom shield, wordmark, Windows icon and Microsoft Store artwork.
-- ZCode and DeepSeek Harness support alongside OpenCode/OpenChamber, Codex, Claude Code, Cursor,
-  GitHub Copilot CLI, Gemini CLI, Windsurf Cascade and Cline.
-- Automatic Axiom-managed hook provisioning for detected harnesses.
-- Theme-aware right-click menus and refined minimize/maximize/close controls.
-- Complete local agent activity history with framework attribution, install visibility and copy
-  actions.
+- Native **verified threat graph** for the local Blackbox DKG: category hubs, severity rings,
+  verified-rule totals and a local sample of the graph served by the dashboard.
+- Live **verified graph sync** card with downloaded/compiled counts, triples, verified rules and
+  lookup health. Local state fallback keeps the card accurate when the dashboard is busy with a
+  long node read.
+- **Privacy Shield** now fits all three catalogued sources: the local rule cap is 500,000 unique
+  domains, and every selected source keeps a reserved share so WindowsSpyBlocker telemetry is not
+  starved by HaGeZi or OISD.
+- Suggested upstream DNS values and resolver verification guidance on the Privacy Shield page.
+- Includes the 0.5.2 branding, ZCode/DeepSeek Harness, auto-provisioning, context-menu and activity
+  work.
 
 Windows is the reference platform. A Linux build monitors TCP/UDP sockets from `/proc`, keeps the
 same local history, IPC protocol and MCP tools, and ships a loopback browser UI. Per-executable
@@ -72,9 +76,13 @@ exact capability matrix and macOS follow-up.
   evidence feed. Sessions, API steps, tool calls, package installs, file access and threats can be
   filtered and copied from the UI.
 - The **Verified graph sync** card mirrors the local dashboard's state machine: downloaded versus
-  compiled assets, triples, verified rules and verified-answer lookup health. **Sync now** triggers
-  the dashboard's own `POST /api/sync`; Axiom does not run a second DKG sync loop. Missing values
-  stay unknown and an offline node is never shown as a clean graph.
+  compiled assets, triples, verified rules and verified-answer lookup health. It draws the verified
+  threat graph natively from the same local `/api/graph` data, grouped by the dashboard's categories
+  and coloured by severity. **Sync now** triggers the dashboard's own `POST /api/sync`; Axiom does
+  not run a second DKG sync loop. **Auto-sync** checks every 15 minutes and asks for the incremental
+  catch-up only, so existing local assets stay in place and new graph entries are fetched without
+  repeating the full download. Missing values stay unknown and an offline node is never shown as a
+  clean graph.
 - Agent configuration, sessions and databases are fingerprinted during install, hook repair and
   uninstall. Unexpected deletions or edits are reported and, where possible, restored.
 - **Codex still requires its own `/hooks` trust approval.** Axiom installs the definitions but does

@@ -187,6 +187,7 @@ public sealed class UserStateProtection
                 LocalFile("Axiom/community-feed.json", "Axiom settings"),
                 LocalFile("Axiom/onboarding.json", "Axiom settings"),
                 LocalFile("Axiom/startup.json", "Axiom settings"),
+                LocalFile("Axiom/blackbox-auto-sync.json", "Axiom Blackbox auto-sync settings"),
                 LocalFile("Axiom/privacy-shield.json", "Axiom Privacy Shield settings"),
                 LocalFile("Axiom/privacy-shield-blocked.jsonl", "Axiom Privacy Shield blocked history"),
                 LocalFile("Axiom/ai-analyst.json", "Axiom AI analyst settings"),
