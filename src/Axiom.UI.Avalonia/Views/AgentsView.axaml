@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.AgentsView">
@@ -27,6 +27,12 @@
     <Style Selector="TextBlock.tone-idle">
       <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
     </Style>
+    <Style Selector="Border.sq-on">
+      <Setter Property="Background" Value="{DynamicResource Axiom.Success}" />
+    </Style>
+    <Style Selector="Border.sq-off">
+      <Setter Property="Background" Value="{DynamicResource Axiom.Border}" />
+    </Style>
   </UserControl.Styles>
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24,18,24,24" Spacing="14">
@@ -35,7 +41,13 @@
         <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
                 CornerRadius="8" Padding="14">
           <StackPanel Spacing="4">
-            <TextBlock Text="{Binding Security.DkgBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
+                      Classes.sq-on="{Binding Security.DkgConnected}"
+                      Classes.sq-off="{Binding !Security.DkgConnected}"
+                      ToolTip.Tip="{Binding Security.DkgHealthLabel}" />
+              <TextBlock Text="{Binding Security.DkgBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            </StackPanel>
             <TextBlock Text="Decentralized Knowledge Graph (DKG): optional local knowledge infrastructure and provenance. This status reflects a local node probe."
                        FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </StackPanel>
@@ -43,7 +55,13 @@
         <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
                 CornerRadius="8" Padding="14">
           <StackPanel Spacing="4">
-            <TextBlock Text="{Binding Security.BlackboxBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
+                      Classes.sq-on="{Binding Security.BlackboxConnected}"
+                      Classes.sq-off="{Binding !Security.BlackboxConnected}"
+                      ToolTip.Tip="{Binding Security.BlackboxHealthLabel}" />
+              <TextBlock Text="{Binding Security.BlackboxBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            </StackPanel>
             <TextBlock Text="Guardian Agent Blackbox by Umanitek: optional local agent-safety module. Connection alone does not prove every agent is protected."
                        FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </StackPanel>
@@ -146,7 +164,7 @@
                 </StackPanel>
               </StackPanel>
             </StackPanel>
-            <Button Grid.Column="1" Content="Install/repair agent hooks…"
+            <Button Grid.Column="1" Content="Install/repair agent hooksâ€¦"
                     Command="{Binding Security.InstallAgentHooksCommand}" Padding="12,6"
                     VerticalAlignment="Top" />
           </Grid>
@@ -224,6 +242,61 @@
             <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GraphHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </Grid>
           <TextBlock Text="{Binding ProtectionTestText}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0" Spacing="2">
+              <TextBlock Text="Module health" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <TextBlock Text="One square per loopback health check. Green = connected, muted = not running."
+                         FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            </StackPanel>
+            <Border Grid.Column="1" Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2" VerticalAlignment="Top">
+              <TextBlock Text="{Binding Security.ModuleActivitySummary}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
+            </Border>
+          </Grid>
+          <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto" RowSpacing="6">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="DKG" FontSize="10"
+                       Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+              <ItemsControl ItemsSource="{Binding Security.Activity}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Width="7" Height="12" CornerRadius="1" Margin="1,0"
+                            Classes.sq-on="{Binding DkgConnected}"
+                            Classes.sq-off="{Binding !DkgConnected}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Blackbox" FontSize="10"
+                       Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+              <ItemsControl ItemsSource="{Binding Security.Activity}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Width="7" Height="12" CornerRadius="1" Margin="1,0"
+                            Classes.sq-on="{Binding BlackboxConnected}"
+                            Classes.sq-off="{Binding !BlackboxConnected}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Grid>
+          <TextBlock Text="{Binding HealthStatusText}" FontSize="10"
+                     Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
 
