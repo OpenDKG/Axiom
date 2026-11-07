@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using Avalonia.Threading;
 using Axiom.Contracts.Monitoring;
 using Axiom.Presentation;
@@ -18,7 +18,7 @@ public sealed class HeadlessNavigationTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(11, shell.Pages.Count);
+        Assert.Equal(12, shell.Pages.Count);
         foreach (var page in shell.Pages)
         {
             shell.SelectedPage = page;

@@ -174,6 +174,33 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private string _activityBreakdownText = "No activity loaded.";
 
     [ObservableProperty]
+    private int _sessionCount;
+
+    [ObservableProperty]
+    private int _apiCallCount;
+
+    [ObservableProperty]
+    private int _toolCallCount;
+
+    [ObservableProperty]
+    private int _installCount;
+
+    [ObservableProperty]
+    private int _fileAccessCount;
+
+    [ObservableProperty]
+    private int _threatCount;
+
+    [ObservableProperty]
+    private int _findingCount;
+
+    [ObservableProperty]
+    private int _blockedFindingCount;
+
+    [ObservableProperty]
+    private int _flaggedFindingCount;
+
+    [ObservableProperty]
     private string _selectedActivityFilter = "All Activity";
 
     [ObservableProperty]
@@ -1128,6 +1155,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         var files = _allActivity.Count(entry => entry.Category == "file");
         var threats = _allActivity.Count(entry => entry.IsThreat);
 
+        SessionCount = sessions;
+        ApiCallCount = apiCalls;
+        ToolCallCount = toolCalls;
+        InstallCount = installs;
+        FileAccessCount = files;
+        ThreatCount = threats;
+
         ActivityBreakdownText =
             $"{sessions} sessions · {apiCalls} API calls · {toolCalls} tool calls · " +
             $"{installs} installs · {files} file accesses · {threats} threats";
@@ -1155,6 +1189,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         var fileAccess = _allFindings.Count(finding =>
             string.Equals(finding.Category, "fileaccess", StringComparison.OrdinalIgnoreCase));
         var unresolved = _allFindings.Count(finding => !finding.IsBlocked);
+
+        FindingCount = _allFindings.Count;
+        BlockedFindingCount = blocked;
+        FlaggedFindingCount = flagged;
 
         ProtectedPathViolationsText = $"{fileAccess} protected-path finding(s)";
         UnresolvedText = $"{unresolved} unresolved or unverified finding(s)";

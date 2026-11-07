@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
@@ -16,9 +16,10 @@ public sealed class AvaloniaPageTests
     {
         var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
 
-        Assert.Equal(11, shell.Pages.Count);
+        Assert.Equal(12, shell.Pages.Count);
         Assert.Contains(shell.Pages, page => page.Title == "Security");
         Assert.Contains(shell.Pages, page => page.Title == "Agents");
+        Assert.Contains(shell.Pages, page => page.Title == "Agent Stats");
         Assert.False(shell.IsServiceMode);
 
         shell.Dispose();

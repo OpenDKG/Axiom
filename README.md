@@ -2,7 +2,7 @@
 
 **Open-Source Firewall, Network Monitor & Local Agent Protection**
 
-**Version:** 0.7.3 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.7.4 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,15 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.7.4
+
+- New **Agent Stats** tab between Agents and Firewall. It collects every agent statistic that used
+  to be buried in the Agents tab: session, API-call, tool-call, install, file-access and threat
+  counters, a findings summary, the local Blackbox activity feed with filters and details, agent
+  sessions, hook evidence and findings.
+- The **Agents** tab is now only about state and control: modules, protection status, workspaces and
+  hooks, health and the verified graph. No behaviour history remains there.
 
 ## What's in 0.7.3
 
