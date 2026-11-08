@@ -77,6 +77,16 @@ public sealed record LiveConnection
     /// <summary>Null means "not measured"; IP Helper cannot provide byte counts.</summary>
     public double? EstimatedDownloadBytesPerSecond { get; init; }
 
+    /// <summary>
+    /// Cumulative TCP payload bytes sent on this socket since Windows extended TCP statistics were
+    /// enabled for it. Null means "not measured": UDP has no equivalent, the provider may not
+    /// support it, and a non-elevated run cannot enable collection.
+    /// </summary>
+    public long? ObservedBytesSent { get; init; }
+
+    /// <summary>Cumulative TCP payload bytes received, with the same limits as <see cref="ObservedBytesSent"/>.</summary>
+    public long? ObservedBytesReceived { get; init; }
+
     public bool IsLoopback { get; init; }
 
     public bool IsNew { get; init; }

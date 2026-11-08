@@ -39,8 +39,18 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
 
     public IReadOnlyList<string> ProtocolOptions { get; } = ["All", "TCP", "UDP"];
 
+    public IReadOnlyList<string> GroupSortOptions { get; } = ["Total traffic", "Sent", "Received", "Sockets", "Name"];
+
     [ObservableProperty]
     private bool _isGroupedByApp;
+
+    [ObservableProperty]
+    private string _groupSort = "Total traffic";
+
+    [ObservableProperty]
+    private bool _groupSortDescending = true;
+
+    public string GroupSortDirectionText => GroupSortDescending ? "Descending" : "Ascending";
 
     [ObservableProperty]
     private string _statusText = "Connecting to the socket inventory…";
@@ -73,6 +83,17 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
     partial void OnOnlyNewChanged(bool value) => ApplyFilters();
 
     partial void OnOnlyLoopbackChanged(bool value) => ApplyFilters();
+
+    partial void OnGroupSortChanged(string value) => ApplyFilters();
+
+    partial void OnGroupSortDescendingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(GroupSortDirectionText));
+        ApplyFilters();
+    }
+
+    [RelayCommand]
+    private void ToggleGroupSortDirection() => GroupSortDescending = !GroupSortDescending;
 
     partial void OnSelectedConnectionChanged(ConnectionRow? value) => _selectedKey = value?.Source.RemoteEndpoint is { } remote
         ? $"{value.ProcessId}|{value.ProtocolText}|{value.LocalEndpoint}|{remote}"
@@ -181,19 +202,32 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         }
 
         Groups.Clear();
-        foreach (var group in VisibleConnections
-                     .GroupBy(
-                         row => row.PathText.Length > 0 ? row.PathText : row.AppDisplayName,
-                         StringComparer.OrdinalIgnoreCase)
-                     .OrderByDescending(group => group.Count())
-                     .ThenBy(group => group.First().AppDisplayName, StringComparer.OrdinalIgnoreCase))
+        var traffic = _monitor.AppTraffic.ToDictionary(
+            item => item.Key,
+            StringComparer.OrdinalIgnoreCase);
+        var grouped = VisibleConnections
+            .GroupBy(
+                row => row.Source.AppPath.Length > 0
+                    ? row.Source.AppPath
+                    : $"pid:{row.ProcessId}",
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var rows = group.ToList();
+                traffic.TryGetValue(group.Key, out var totals);
+                return new ConnectionAppGroup(
+                    group.Key,
+                    rows[0].AppDisplayName,
+                    rows[0].Source.AppPath,
+                    rows,
+                    totals?.BytesSent ?? rows.Sum(row => row.ObservedBytesSent ?? 0),
+                    totals?.BytesReceived ?? rows.Sum(row => row.ObservedBytesReceived ?? 0),
+                    totals?.SinceUtc);
+            });
+
+        foreach (var group in SortGroups(grouped))
         {
-            var rows = group.ToList();
-            Groups.Add(new ConnectionAppGroup(
-                group.Key,
-                rows[0].AppDisplayName,
-                rows[0].PathText,
-                rows));
+            Groups.Add(group);
         }
 
         if (_selectedKey is not null)
@@ -208,5 +242,29 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         {
             StatusText = $"Live read-only · {_monitor.SourceName} · {VisibleRowsText}";
         }
+    }
+
+    private IEnumerable<ConnectionAppGroup> SortGroups(IEnumerable<ConnectionAppGroup> groups)
+    {
+        var ordered = GroupSort switch
+        {
+            "Sent" => GroupSortDescending
+                ? groups.OrderByDescending(group => group.HasMeasurement).ThenByDescending(group => group.BytesSent)
+                : groups.OrderByDescending(group => group.HasMeasurement).ThenBy(group => group.BytesSent),
+            "Received" => GroupSortDescending
+                ? groups.OrderByDescending(group => group.HasMeasurement).ThenByDescending(group => group.BytesReceived)
+                : groups.OrderByDescending(group => group.HasMeasurement).ThenBy(group => group.BytesReceived),
+            "Sockets" => GroupSortDescending
+                ? groups.OrderByDescending(group => group.SocketCount)
+                : groups.OrderBy(group => group.SocketCount),
+            "Name" => GroupSortDescending
+                ? groups.OrderByDescending(group => group.Name, StringComparer.OrdinalIgnoreCase)
+                : groups.OrderBy(group => group.Name, StringComparer.OrdinalIgnoreCase),
+            _ => GroupSortDescending
+                ? groups.OrderByDescending(group => group.HasMeasurement).ThenByDescending(group => group.TotalBytes)
+                : groups.OrderByDescending(group => group.HasMeasurement).ThenBy(group => group.TotalBytes),
+        };
+
+        return ordered.ThenBy(group => group.Name, StringComparer.OrdinalIgnoreCase);
     }
 }

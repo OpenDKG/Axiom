@@ -17,4 +17,10 @@ public sealed record ConnectionSnapshot
 
     /// <summary>Known blind spots of this capture, shown to the operator instead of hidden.</summary>
     public IReadOnlyList<string> Limitations { get; init; } = [];
+
+    /// <summary>
+    /// Cumulative TCP traffic per executable, accumulated by the service across polls. Empty when
+    /// the active source cannot measure bytes.
+    /// </summary>
+    public IReadOnlyList<AppTrafficTotals> AppTraffic { get; init; } = [];
 }

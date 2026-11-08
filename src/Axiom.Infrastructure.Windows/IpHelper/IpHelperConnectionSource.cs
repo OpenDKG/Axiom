@@ -19,7 +19,7 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
 
     private static readonly string[] StaticLimitations =
     [
-        "Byte counts are not exposed by the IP Helper tables; traffic measurement arrives with FND-004.",
+        "Per-connection TCP bytes come from Windows extended TCP statistics, enabled when Axiom first sees a connection; the counters start then, and UDP or connections shorter than one poll are not counted.",
         "Connections shorter than the poll interval can be missed; they are not reconstructed.",
         "The UDP owner table has no remote endpoint, so UDP peer and direction stay unknown.",
         "Rows with PID 0 are TIME_WAIT or kernel sockets without an owning process.",
@@ -27,6 +27,8 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
     ];
 
     private readonly ProcessIdentityResolver _identities;
+
+    private readonly TcpConnectionByteReader _byteReader = new();
 
     private readonly ConcurrentDictionary<string, DateTimeOffset> _firstSeen = new(StringComparer.Ordinal);
 
@@ -51,6 +53,7 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
     {
         var capturedUtc = DateTimeOffset.UtcNow;
         var problems = new List<string>();
+        _byteReader.BeginCapture();
 
         var tcp = new List<TcpObservation>(512);
         tcp.AddRange(TryQuery(ReadTcpV4, "IPv4 TCP table", problems));
@@ -97,9 +100,16 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
         }
 
         PruneFirstSeen(capturedUtc, connections);
+        _byteReader.EndCapture();
 
         var limitations = new List<string>(StaticLimitations.Length + problems.Count + 1);
         limitations.AddRange(StaticLimitations);
+
+        if (_byteReader.IsUnavailable)
+        {
+            limitations.Add(
+                "Per-connection TCP byte counters are unavailable in this process; run the Axiom service with elevation to measure them.");
+        }
 
         if (unresolvedPaths > 0)
         {
@@ -148,7 +158,8 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
             row.LocalAddress,
             row.RemoteAddress,
             quality,
-            capturedUtc);
+            capturedUtc,
+            row.Bytes);
     }
 
     private LiveConnection MapUdp(UdpObservation row, DateTimeOffset capturedUtc)
@@ -166,7 +177,8 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
             row.LocalAddress,
             remoteAddress: null,
             DataQuality.Partial,
-            capturedUtc);
+            capturedUtc,
+            bytes: null);
     }
 
     private LiveConnection Create(
@@ -180,7 +192,8 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
         IPAddress localAddress,
         IPAddress? remoteAddress,
         DataQuality quality,
-        DateTimeOffset capturedUtc)
+        DateTimeOffset capturedUtc,
+        TcpByteCounts? bytes)
     {
         var key = $"{protocol}|{localEndpoint}|{remoteEndpoint}|{processId}";
         var firstSeen = _firstSeen.GetOrAdd(key, capturedUtc);
@@ -201,6 +214,8 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
             FirstObservedUtc = firstSeen,
             EstimatedUploadBytesPerSecond = null,
             EstimatedDownloadBytesPerSecond = null,
+            ObservedBytesSent = bytes?.Sent,
+            ObservedBytesReceived = bytes?.Received,
             IsLoopback = isLoopback,
             IsNew = capturedUtc - firstSeen < NewConnectionWindow,
             RuleStatus = ConnectionRuleStatus.Unknown,
@@ -238,33 +253,45 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
         }
     }
 
-    private static IEnumerable<TcpObservation> ReadTcpV4()
+    private IEnumerable<TcpObservation> ReadTcpV4()
     {
         foreach (var row in NativeMethods.QueryTcpV4())
         {
+            var bytes = MeasureBytes(row.State, row.RemotePort, row.OwningPid)
+                ? _byteReader.TryRead(row)
+                : null;
             yield return new TcpObservation(
                 EndpointFormatter.Ipv4Address(row.LocalAddress),
                 EndpointFormatter.HostPort(row.LocalPort),
                 EndpointFormatter.Ipv4Address(row.RemoteAddress),
                 EndpointFormatter.HostPort(row.RemotePort),
                 row.State,
-                (int)row.OwningPid);
+                (int)row.OwningPid,
+                bytes);
         }
     }
 
-    private static IEnumerable<TcpObservation> ReadTcpV6()
+    private IEnumerable<TcpObservation> ReadTcpV6()
     {
         foreach (var row in NativeMethods.QueryTcpV6())
         {
+            var bytes = MeasureBytes(row.State, row.RemotePort, row.OwningPid)
+                ? _byteReader.TryRead(row)
+                : null;
             yield return new TcpObservation(
                 EndpointFormatter.Ipv6Address(row.LocalAddress, row.LocalScopeId),
                 EndpointFormatter.HostPort(row.LocalPort),
                 EndpointFormatter.Ipv6Address(row.RemoteAddress, row.RemoteScopeId),
                 EndpointFormatter.HostPort(row.RemotePort),
                 row.State,
-                (int)row.OwningPid);
+                (int)row.OwningPid,
+                bytes);
         }
     }
+
+    /// <summary>Listeners, kernel rows and rows without a remote peer cannot report data counters.</summary>
+    private static bool MeasureBytes(uint state, uint remotePort, uint processId) =>
+        processId > 4 && remotePort != 0 && !EndpointFormatter.IsListening(state);
 
     private static IEnumerable<UdpObservation> ReadUdpV4()
     {
@@ -312,7 +339,8 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
         IPAddress RemoteAddress,
         ushort RemotePort,
         uint State,
-        int ProcessId);
+        int ProcessId,
+        TcpByteCounts? Bytes);
 
     private readonly record struct UdpObservation(
         IPAddress LocalAddress,

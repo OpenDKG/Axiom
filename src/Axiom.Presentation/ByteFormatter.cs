@@ -73,4 +73,18 @@ public static class ByteFormatter
             CultureInfo.InvariantCulture,
             $"{value.ToString(unit == 0 ? "0" : "0.0", CultureInfo.InvariantCulture)} {ByteUnits[unit]}");
     }
+
+    /// <summary>Megabytes for per-application totals; never invents a value for missing data.</summary>
+    public static string Megabytes(long bytes)
+    {
+        if (bytes <= 0)
+        {
+            return "0.00 MB";
+        }
+
+        var megabytes = bytes / (1024d * 1024d);
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{(megabytes >= 100 ? megabytes.ToString("0.0", CultureInfo.InvariantCulture) : megabytes.ToString("0.00", CultureInfo.InvariantCulture))} MB");
+    }
 }

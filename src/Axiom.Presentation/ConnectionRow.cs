@@ -72,6 +72,18 @@ public sealed class ConnectionRow : ObservableObject
         ? ByteFormatter.Rate(download)
         : "—";
 
+    public long? ObservedBytesSent => _source.ObservedBytesSent;
+
+    public long? ObservedBytesReceived => _source.ObservedBytesReceived;
+
+    public string SentTotalText => _source.ObservedBytesSent is long sent
+        ? ByteFormatter.Megabytes(sent)
+        : "—";
+
+    public string ReceivedTotalText => _source.ObservedBytesReceived is long received
+        ? ByteFormatter.Megabytes(received)
+        : "—";
+
     public string RuleStatusText => _source.RuleStatus switch
     {
         ConnectionRuleStatus.BlockedByOwnedRule => "Blocked (owned)",

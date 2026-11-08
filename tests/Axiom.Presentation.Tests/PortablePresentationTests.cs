@@ -31,6 +31,14 @@ public sealed class PortablePresentationTests
     }
 
     [Fact]
+    public void Byte_formatter_reports_megabytes_for_app_totals()
+    {
+        Assert.Equal("0.00 MB", ByteFormatter.Megabytes(0));
+        Assert.Equal("1.00 MB", ByteFormatter.Megabytes(1024 * 1024));
+        Assert.Equal("1.50 MB", ByteFormatter.Megabytes(1024 * 1024 * 3 / 2));
+    }
+
+    [Fact]
     public void App_grouping_skips_unowned_pid_zero_rows()
     {
         var snapshot = Snapshot(

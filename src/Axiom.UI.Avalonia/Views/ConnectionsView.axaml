@@ -5,13 +5,17 @@
   <Grid RowDefinitions="Auto,Auto,*" Margin="24,18,24,24">
     <Border Grid.Row="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
             CornerRadius="8" Padding="12">
-      <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10">
         <TextBox Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="Search app, path, PID or endpoint" />
         <ComboBox Grid.Column="1" ItemsSource="{Binding ProtocolOptions}" SelectedItem="{Binding ProtocolFilter}" Width="96" />
         <CheckBox Grid.Column="2" Content="Only new" IsChecked="{Binding OnlyNew}" Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
         <CheckBox Grid.Column="3" Content="Loopback" IsChecked="{Binding OnlyLoopback}" Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
         <CheckBox Grid.Column="4" Content="Group by app" IsChecked="{Binding IsGroupedByApp}" Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
-        <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding VisibleRowsText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" VerticalAlignment="Center" />
+        <ComboBox Grid.Column="5" ItemsSource="{Binding GroupSortOptions}" SelectedItem="{Binding GroupSort}" Width="128"
+                  IsVisible="{Binding IsGroupedByApp}" ToolTip.Tip="Sort applications by measured TCP traffic" />
+        <Button Grid.Column="6" Content="{Binding GroupSortDirectionText}" Command="{Binding ToggleGroupSortDirectionCommand}"
+                Padding="10,4" IsVisible="{Binding IsGroupedByApp}" ToolTip.Tip="Switch between highest and lowest first" />
+        <controls:AxiomSelectableTextBlock Grid.Column="7" Text="{Binding VisibleRowsText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" VerticalAlignment="Center" />
       </Grid>
     </Border>
 
@@ -111,7 +115,9 @@
                           <controls:AxiomSelectableTextBlock Text="{Binding PathText}" FontSize="9"
                                      Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
-                        <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="1">
+                        <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="1" ToolTip.Tip="{Binding TrafficTooltip}">
+                          <controls:AxiomSelectableTextBlock Text="{Binding TrafficText}" FontSize="11" FontWeight="SemiBold"
+                                     HorizontalAlignment="Right" Foreground="{DynamicResource Axiom.Accent}" />
                           <controls:AxiomSelectableTextBlock Text="{Binding CountText}" FontSize="9" HorizontalAlignment="Right"
                                      Foreground="{DynamicResource Axiom.TextSecondary}" />
                           <controls:AxiomSelectableTextBlock Text="{Binding ProtocolText}" FontSize="9" HorizontalAlignment="Right"

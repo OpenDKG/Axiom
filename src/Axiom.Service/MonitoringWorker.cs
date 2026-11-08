@@ -19,6 +19,8 @@ public sealed partial class MonitoringWorker(
     private DateTimeOffset _rulesUtc = DateTimeOffset.MinValue;
     private bool _rulesAvailable;
 
+    private readonly AppTrafficAccumulator _traffic = new();
+
     [LoggerMessage(EventId = 1001, Level = LogLevel.Information, Message = "Monitoring source: {Source}, interval {Interval}")]
     private static partial void LogSource(ILogger logger, string source, TimeSpan interval);
 
@@ -44,6 +46,7 @@ public sealed partial class MonitoringWorker(
             {
                 var snapshot = await source.CaptureAsync(stoppingToken).ConfigureAwait(false);
                 snapshot = await ApplyOwnedRulesAsync(snapshot, stoppingToken).ConfigureAwait(false);
+                snapshot = _traffic.Apply(snapshot, DateTimeOffset.UtcNow);
                 cache.Update(snapshot);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

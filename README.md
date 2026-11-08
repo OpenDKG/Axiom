@@ -201,6 +201,9 @@ Axiom reports only its own firewall rules rather than the effective Windows defa
   are marked as partial instead of being guessed.
 - Local and remote endpoints, connection state, direction, loopback detection and the first time a
   flow was observed.
+- **Group by app** with cumulative TCP megabytes sent and received per application and sorting by
+  total, sent or received traffic in either direction. TCP totals come from Windows extended TCP
+  statistics; UDP and flows shorter than one poll are marked as not measured instead of guessed.
 - A sortable, filterable, virtualized table that stays responsive with hundreds of processes and
   thousands of rows.
 
