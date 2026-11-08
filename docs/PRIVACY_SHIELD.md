@@ -23,15 +23,27 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
 - A Privacy Shield page with profile/category controls, custom allow/block lists, local list import,
   verified source catalog, resolver status, **live statistics (2-second refresh while selected)** and
   explicit UAC DNS integration.
-- A bounded local **blocked-query history** (last 1,000 entries) containing only the blocked domain,
-  category and timestamp. It is stored in
-  `%LOCALAPPDATA%\Axiom\privacy-shield-blocked.jsonl`, never includes allowed queries, and has a
-  clear action. This is the one deliberate DNS history exception; it is local and user-clearable.
-- A catalog of **HTTPS-only, license-labelled** sources (HaGeZi, OISD, WindowsSpyBlocker). A source
-  update downloads with a 20 MB/45 s bound, parses and normalizes domains, then atomically replaces
-  the previous ruleset only if every selected source succeeds. The previous rules file is retained.
-  The local cap is 500,000 unique domains, and every selected source keeps a reserved share so a
-  large list cannot starve a smaller telemetry list such as WindowsSpyBlocker.
+- A bounded local **blocked-query history** (last 1,000 entries) containing the blocked domain,
+  category, timestamp and, when Windows exposes it, the requesting application name/path. It is
+  stored in `%LOCALAPPDATA%\Axiom\privacy-shield-blocked.jsonl`, never includes allowed queries, and
+  has a clear action. This is the one deliberate DNS history exception; it is local and
+  user-clearable. Recent blocks are refreshed every 2 seconds and can be **Allowed** or **Blocked**
+  directly from the row. Allow adds the domain to the custom allowlist; Block removes it from the
+  allowlist and adds it to the custom blocklist.
+- Application attribution is best-effort: Axiom maps the loopback UDP/TCP source port to the owning
+  PID through the Windows owner tables. Protected or already-exited processes may show
+  `unknown app`.
+- A catalog of **five HTTPS-only, license-labelled** sources (HaGeZi Multi PRO, OISD Big,
+  WindowsSpyBlocker, The Block List Project Ads and Tracking). A source update downloads with a
+  20 MB/45 s bound, parses and normalizes domains, then atomically replaces the previous ruleset only
+  if every selected source succeeds. The previous rules file is retained. The local cap is 500,000
+  unique domains, and every selected source keeps a reserved share so a large list cannot starve a
+  smaller telemetry list such as WindowsSpyBlocker.
+- Licenses: HaGeZi and OISD are GPL-3.0, WindowsSpyBlocker is MIT, and the two Block List Project
+  lists are Unlicense. Axiom downloads them from the upstream URL at runtime and does not bundle the
+  list bytes; no separate approval is required beyond the license and attribution terms. Upstream
+  terms must be rechecked before adding or redistributing a list. See
+  [third-party notices](../THIRD_PARTY_NOTICES.md).
 - Per-user settings in `%LOCALAPPDATA%\Axiom\privacy-shield.json`. Settings contain no DNS query history; the separate bounded blocked-query history described above is the only DNS history.
 
 ## DNS-only boundary

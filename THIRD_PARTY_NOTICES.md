@@ -81,6 +81,24 @@ runtime, which are MIT licensed (https://github.com/dotnet/runtime/blob/main/LIC
 | xunit.extensibility.execution | 2.9.3 | Apache-2.0 |
 | xunit.runner.visualstudio | 2.8.2 | Apache-2.0 |
 
+## Privacy Shield blocklist sources (downloaded at runtime, not bundled)
+
+Privacy Shield does not ship these list bytes. It downloads them only when the user selects a
+source and presses **Update sources now**. The source URL, license label and no-endorsement notice
+are shown in the app. Re-check the upstream license before adding or redistributing a list.
+
+| Source | License | Upstream |
+|---|---|---|
+| HaGeZi Multi PRO | GPL-3.0 | https://github.com/hagezi/dns-blocklists |
+| OISD Big | GPL-3.0 | https://github.com/sjhgvr/oisd |
+| WindowsSpyBlocker telemetry | MIT | https://github.com/crazy-max/WindowsSpyBlocker |
+| The Block List Project - Ads | Unlicense | https://github.com/blocklistproject/Lists |
+| The Block List Project - Tracking | Unlicense | https://github.com/blocklistproject/Lists |
+
+No provider endorses Axiom. A listing is a filtering decision, not a malware finding or a legal
+claim. GPL-3.0 and MIT sources require their own attribution/notice terms; Unlicense sources are
+public-domain dedications. Axiom is GPL-3.0-or-later and only references the upstream URLs.
+
 ## Notes
 
 - SQLite itself is in the public domain; the SQLitePCLRaw.* packages that bundle it are

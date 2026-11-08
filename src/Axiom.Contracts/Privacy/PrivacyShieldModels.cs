@@ -80,7 +80,18 @@ public sealed record PrivacyShieldTopDomain(string Domain, long Count);
 public sealed record PrivacyShieldBlockedEvent(
     string Domain,
     PrivacyCategory Category,
-    DateTimeOffset BlockedUtc);
+    DateTimeOffset BlockedUtc)
+{
+    /// <summary>Name of the process whose DNS query was blocked, when Windows exposes it.</summary>
+    public string AppName { get; init; } = string.Empty;
+
+    /// <summary>Local executable path, when readable; empty for protected or exited processes.</summary>
+    public string AppPath { get; init; } = string.Empty;
+
+    public string AppDisplay => string.IsNullOrWhiteSpace(AppName) ? "unknown app" : AppName;
+
+    public string CategoryText => Category.ToString();
+}
 
 public sealed record PrivacyShieldSourceInfo(
     string Id,
@@ -130,6 +141,20 @@ public static class PrivacyShieldSourceCatalog
             "MIT",
             PrivacyCategory.Telemetry,
             "Windows telemetry-focused hosts list; inspect upstream changes before updating."),
+        new(
+            "blocklistproject-ads",
+            "The Block List Project - Ads",
+            "https://blocklistproject.github.io/Lists/ads.txt",
+            "Unlicense",
+            PrivacyCategory.Ads,
+            "Public-domain ads list; no attribution or permission gate, but review upstream changes."),
+        new(
+            "blocklistproject-tracking",
+            "The Block List Project - Tracking",
+            "https://blocklistproject.github.io/Lists/tracking.txt",
+            "Unlicense",
+            PrivacyCategory.Tracking,
+            "Public-domain tracking list; no attribution or permission gate, but review upstream changes."),
     ];
 }
 

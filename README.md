@@ -283,9 +283,15 @@ installer only after an explicit confirmation; nothing runs silently. Setup step
 An optional, default-disabled local DNS filter with Basic/Balanced/Strict profiles, custom allow and
 block lists and a loopback resolver. It never changes adapter DNS settings automatically; manual
 adapter configuration and rollback are documented in [Privacy Shield](docs/PRIVACY_SHIELD.md).
-Counters are in memory; a bounded local history of blocked domains/categories/timestamps is kept and can be cleared. Allowed queries are never stored. DoH/DoT/DoQ, hardcoded IPs and VPN traffic
-are not covered. Optional catalogued HTTPS sources are bounded and atomically updated; VM test
-coverage is tracked in [the VM test plan](docs/PRIVACY_SHIELD_VM_TEST_PLAN.md).
+Five HTTPS sources are catalogued with their licenses: HaGeZi Multi PRO and OISD Big (GPL-3.0),
+WindowsSpyBlocker (MIT), and The Block List Project Ads/Tracking (Unlicense). They are downloaded at
+runtime, not bundled; no separate approval is required beyond the license and attribution terms.
+Counters are in memory; a bounded local history of blocked domains/categories/timestamps and the
+requesting application (when Windows exposes it) is kept and can be cleared. Recent blocks refresh
+every 2 seconds and offer Allow/Block actions. Allowed queries are never stored. DoH/DoT/DoQ,
+hardcoded IPs and VPN traffic are not covered. Optional catalogued HTTPS sources are bounded and
+atomically updated; VM test coverage is tracked in
+[the VM test plan](docs/PRIVACY_SHIELD_VM_TEST_PLAN.md).
 
 ### AI Security Analyst
 

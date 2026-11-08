@@ -61,6 +61,32 @@ public sealed partial class PrivacyShieldSourceRow : ObservableObject
     private string _errorText = string.Empty;
 }
 
+/// <summary>A blocked DNS event with the current allow/block action for that domain.</summary>
+public sealed class BlockedEventRow(PrivacyShieldBlockedEvent blocked, bool isAllowed)
+{
+    public string Domain => blocked.Domain;
+
+    public string AppDisplay => blocked.AppDisplay;
+
+    public string AppPath => blocked.AppPath;
+
+    public string CategoryText => blocked.CategoryText;
+
+    public DateTimeOffset TimestampUtc => blocked.BlockedUtc;
+
+    public bool IsAllowed => isAllowed;
+
+    public bool CanAllow => !isAllowed;
+
+    public bool CanBlock => isAllowed;
+
+    public string StateText => isAllowed ? "allowed" : "blocked";
+
+    public string Tooltip => string.IsNullOrWhiteSpace(blocked.AppPath)
+        ? $"{blocked.Domain}\nBlocked app: {blocked.AppDisplay}\nCategory: {blocked.CategoryText}"
+        : $"{blocked.Domain}\nBlocked app: {blocked.AppDisplay}\nPath: {blocked.AppPath}\nCategory: {blocked.CategoryText}";
+}
+
 /// <summary>
 /// Privacy Shield is an opt-in local DNS filter. It never changes adapter DNS settings; the user
 /// must point Windows at the displayed loopback resolver explicitly.
@@ -144,9 +170,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     public ObservableCollection<PrivacyShieldTopDomain> TopBlocked { get; } = [];
 
-    public ObservableCollection<PrivacyShieldBlockedEvent> RecentBlocked { get; } = [];
+    public ObservableCollection<BlockedEventRow> RecentBlocked { get; } = [];
 
-    public ObservableCollection<PrivacyShieldBlockedEvent> BlockedHistory { get; } = [];
+    public ObservableCollection<BlockedEventRow> BlockedHistory { get; } = [];
 
     public ObservableCollection<PrivacyShieldSourceRow> Sources { get; } =
         new(PrivacyShieldSourceCatalog.All.Select(source => new PrivacyShieldSourceRow(source)));
@@ -553,9 +579,50 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     }
 
     [RelayCommand]
-    private async Task ClearBlockedHistoryAsync()
+    private Task AllowBlockedDomainAsync(BlockedEventRow? row) => SetBlockedDomainDecisionAsync(row, allow: true);
+
+    [RelayCommand]
+    private Task BlockBlockedDomainAsync(BlockedEventRow? row) => SetBlockedDomainDecisionAsync(row, allow: false);
+
+    private async Task SetBlockedDomainDecisionAsync(BlockedEventRow? row, bool allow)
     {
-        if (_client is null || IsBusy)
+        if (row is null || _client is null || IsBusy)
+        {
+            return;
+        }
+
+        var allowed = PrivacyShieldPolicy.ParseList(AllowedDomainsText).ToList();
+        var blocked = PrivacyShieldPolicy.ParseList(BlockedDomainsText).ToList();
+        if (allow)
+        {
+            if (!allowed.Contains(row.Domain, StringComparer.OrdinalIgnoreCase))
+            {
+                allowed.Add(row.Domain);
+            }
+
+            blocked.RemoveAll(domain => string.Equals(domain, row.Domain, StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            blocked.RemoveAll(domain => string.Equals(domain, row.Domain, StringComparison.OrdinalIgnoreCase));
+            blocked.Add(row.Domain);
+            allowed.RemoveAll(domain => string.Equals(domain, row.Domain, StringComparison.OrdinalIgnoreCase));
+        }
+
+        AllowedDomainsText = string.Join(Environment.NewLine, allowed);
+        BlockedDomainsText = string.Join(Environment.NewLine, blocked);
+        await ApplyAsync().ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(LastErrorText))
+        {
+            LastErrorText = allow
+                ? $"{row.Domain}: allowed. Use Block to block it again."
+                : $"{row.Domain}: blocked in the custom list. Allow removes this custom block.";
+        }
+    }
+
+    [RelayCommand]
+    private async Task ClearBlockedHistoryAsync()
+    {        if (_client is null || IsBusy)
         {
             return;
         }
@@ -708,16 +775,18 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             TopBlocked.Add(domain);
         }
 
+        var allowedDomains = status.Settings.AllowedDomains.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         RecentBlocked.Clear();
         foreach (var blocked in status.RecentBlocked)
         {
-            RecentBlocked.Add(blocked);
+            RecentBlocked.Add(new BlockedEventRow(blocked, allowedDomains.Contains(blocked.Domain)));
         }
 
         BlockedHistory.Clear();
         foreach (var blocked in status.BlockedHistory)
         {
-            BlockedHistory.Add(blocked);
+            BlockedHistory.Add(new BlockedEventRow(blocked, allowedDomains.Contains(blocked.Domain)));
         }
     }
 
