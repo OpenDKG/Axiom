@@ -68,6 +68,8 @@ public sealed partial class PipeServerWorker(
                 protection.DisableAsync(actorSid, cancellationToken),
             protectionDecide: (request, actorSid, cancellationToken) =>
                 protection.DecideAsync(request, actorSid, cancellationToken),
+            protectionDismiss: (request, cancellationToken) =>
+                protection.DismissAsync(request, cancellationToken),
             protectionLockdown: (request, actorSid, cancellationToken) =>
                 protection.SetAgentLockdownAsync(request.Enabled, actorSid, cancellationToken),
             log: message => LogMessage(logger, message));

@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Security.Principal;
 using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Protection;
@@ -37,6 +37,22 @@ public sealed partial class ProtectionController(
         var decisions = settings.Decisions ?? [];
         var connections = snapshots.Latest?.Connections ?? [];
         var rules = await coordinator.ListAsync(cancellationToken).ConfigureAwait(false);
+        var now = DateTimeOffset.UtcNow;
+        var detected = settings.Enabled
+            ? PendingAppDetector.Detect(connections, decisions, now: now)
+            : [];
+        var queue = settings.Enabled
+            ? PendingAppLedger.Merge(settings.Pending, settings.Dismissals, detected, decisions, now)
+            : new PendingQueueResult([], [], false);
+
+        if (settings.Enabled && queue.Changed)
+        {
+            _ = store.Save(settings with
+            {
+                Pending = queue.Pending,
+                Dismissals = queue.Dismissals,
+            });
+        }
 
         return new ProtectionStatus
         {
@@ -45,9 +61,7 @@ public sealed partial class ProtectionController(
             WriteGateOpen = WindowsFirewallPolicyAdapter.IsWriteGateOpen,
             AccountName = CurrentAccount(),
             DefaultPolicy = settings.DefaultPolicy,
-            Pending = settings.Enabled
-                ? PendingAppDetector.Detect(connections, decisions)
-                : [],
+            Pending = queue.Pending,
             Decisions = decisions,
             AgentPaths = connections
                 .Select(connection => connection.AppPath)
@@ -110,6 +124,8 @@ public sealed partial class ProtectionController(
             Enabled = false,
             AgentLockdown = false,
             Decisions = [],
+            Pending = [],
+            Dismissals = [],
             EnabledUtc = null,
         };
 
@@ -196,11 +212,68 @@ public sealed partial class ProtectionController(
                 ManagedRuleId = request.Action == ProtectionDecisionAction.Block ? ruleId : null,
             })
             .ToList();
+        var pending = (settings.Pending ?? [])
+            .Where(item => !string.Equals(item.AppPath, request.AppPath, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var dismissals = (settings.Dismissals ?? [])
+            .Where(item => !string.Equals(item.AppPath, request.AppPath, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
-        if (!store.Save(settings with { Decisions = decisions }))
+        if (!store.Save(settings with
+            {
+                Decisions = decisions,
+                Pending = pending,
+                Dismissals = dismissals,
+            }))
         {
             error = $"Decision was applied but could not be saved to {store.FilePath}.";
         }
+
+        return await GetStatusAsync(error, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ProtectionStatus> DismissAsync(
+        ProtectionDismissRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var settings = store.Load();
+        if (!settings.Enabled)
+        {
+            return await GetStatusAsync("Axiom Shield is off.", cancellationToken).ConfigureAwait(false);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.AppPath) ||
+            !Path.IsPathFullyQualified(request.AppPath))
+        {
+            return await GetStatusAsync(
+                "Dismiss needs an absolute executable path.",
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var pending = (settings.Pending ?? [])
+            .Where(item => !string.Equals(item.AppPath, request.AppPath, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var dismissals = (settings.Dismissals ?? [])
+            .Where(item => !string.Equals(item.AppPath, request.AppPath, StringComparison.OrdinalIgnoreCase))
+            .Append(new ProtectionDismissal
+            {
+                AppPath = request.AppPath,
+                DismissedUtc = now,
+            })
+            .OrderByDescending(item => item.DismissedUtc)
+            .Take(200)
+            .ToList();
+
+        var error = store.Save(settings with
+        {
+            Pending = pending,
+            Dismissals = dismissals,
+        })
+            ? null
+            : $"Dismissal could not be saved to {store.FilePath}.";
 
         return await GetStatusAsync(error, cancellationToken).ConfigureAwait(false);
     }

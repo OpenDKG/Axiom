@@ -127,11 +127,23 @@ public sealed partial class PendingAppRow(ProtectionPendingApp app) : Observable
         : string.Join(", ", app.RemoteEndpoints);
 
     public string RemoteText => app.RemoteEndpoints.Count == 0
-        ? "Outbound connection · remote endpoint not reported"
-        : "Outbound → " + string.Join(", ", app.RemoteEndpoints);
+        ? (app.IsConnected
+            ? "Outbound connection · remote endpoint not reported"
+            : "Connection ended · last remote endpoint not reported")
+        : (app.IsConnected ? "Outbound → " : "Ended · last outbound → ") +
+          string.Join(", ", app.RemoteEndpoints);
+
+    public bool IsConnected => app.IsConnected;
+
+    public string ConnectionText => app.IsConnected
+        ? "connected"
+        : app.LastSeenUtc is { } lastSeen
+            ? $"ended · last seen {lastSeen.ToLocalTime():HH:mm:ss}"
+            : "connection ended";
 
     public string TriggerText =>
         "Trigger: Axiom Shield ask policy. This executable opened a new outbound connection and has no Block/Allow decision yet. " +
+        "It stays listed after the connection ends until you choose Block, Allow or Dismiss. " +
         "It is not a malware, VirusTotal or community-feed verdict. Block creates an outbound firewall rule; Allow records a decision.";
 
     /// <summary>True when an alert pointed at this application, so the row stands out.</summary>
@@ -314,11 +326,21 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     [NotifyCanExecuteChangedFor(nameof(ToggleShieldCommand))]
     [NotifyCanExecuteChangedFor(nameof(BlockPendingCommand))]
     [NotifyCanExecuteChangedFor(nameof(AllowPendingCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DismissPendingCommand))]
+    [NotifyCanExecuteChangedFor(nameof(BlockFocusedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AllowFocusedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DismissFocusedCommand))]
     [NotifyCanExecuteChangedFor(nameof(ToggleAgentLockdownCommand))]
     private bool _isShieldBusy;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ToggleAgentLockdownCommand))]
+    [NotifyCanExecuteChangedFor(nameof(BlockPendingCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AllowPendingCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DismissPendingCommand))]
+    [NotifyCanExecuteChangedFor(nameof(BlockFocusedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AllowFocusedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DismissFocusedCommand))]
     [NotifyPropertyChangedFor(nameof(ShieldBadgeText))]
     [NotifyPropertyChangedFor(nameof(ShieldActionText))]
     private bool _shieldEnabled;
@@ -357,6 +379,11 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     private string _alertFocusText = string.Empty;
 
     private string[] _alertFocusPaths = [];
+
+    [ObservableProperty]
+    private bool _hasSingleFocusedPending;
+
+    private PendingAppRow? _focusedPending;
 
     [ObservableProperty]
     private int _agentPathCount;
@@ -694,6 +721,22 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         DecidePendingAsync(row, ProtectionDecisionAction.Allow);
 
     [RelayCommand(CanExecute = nameof(CanDecidePending))]
+    private Task DismissPendingAsync(PendingAppRow? row) =>
+        row is null ? Task.CompletedTask : DismissPendingCoreAsync(row);
+
+    [RelayCommand(CanExecute = nameof(CanDecidePending))]
+    private Task BlockFocusedAsync() =>
+        _focusedPending is { } row ? DecidePendingAsync(row, ProtectionDecisionAction.Block) : Task.CompletedTask;
+
+    [RelayCommand(CanExecute = nameof(CanDecidePending))]
+    private Task AllowFocusedAsync() =>
+        _focusedPending is { } row ? DecidePendingAsync(row, ProtectionDecisionAction.Allow) : Task.CompletedTask;
+
+    [RelayCommand(CanExecute = nameof(CanDecidePending))]
+    private Task DismissFocusedAsync() =>
+        _focusedPending is { } row ? DismissPendingCoreAsync(row) : Task.CompletedTask;
+
+    [RelayCommand(CanExecute = nameof(CanDecidePending))]
     private Task ToggleDecisionAsync(ShieldDecisionRow? row) =>
         row is { CanToggle: true }
             ? row.IsBlock
@@ -829,7 +872,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         if (_alertFocusPaths.Length == 0)
         {
             HasAlertFocus = false;
+            HasSingleFocusedPending = false;
             AlertFocusText = string.Empty;
+            _focusedPending = null;
             return;
         }
 
@@ -839,9 +884,12 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             row.IsFocused = focusSet.Contains(row.AppPath);
         }
 
-        var matched = Pending.Where(row => row.IsFocused).Select(row => row.AppName).ToList();
+        var matched = Pending.Where(row => row.IsFocused).ToList();
+        _focusedPending = matched.Count == 1 ? matched[0] : null;
+        HasSingleFocusedPending = _focusedPending is not null;
+
         var names = matched.Count > 0
-            ? string.Join(", ", matched.Take(3))
+            ? string.Join(", ", matched.Take(3).Select(row => row.AppName))
             : string.Join(", ", _alertFocusPaths
                 .Select(Path.GetFileName)
                 .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -853,22 +901,23 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         if (matched.Count == 0)
         {
             AlertFocusText =
-                $"From the alert: {names}{suffix}. The application is not waiting now (its connection ended or it was decided). " +
-                "Nothing was blocked automatically; Block creates an outbound firewall rule and Allow records a decision.";
+                $"From the alert: {names}{suffix}. No pending decision remains for this application " +
+                "(it was already decided or dismissed). Nothing was blocked automatically.";
         }
         else if (matched.Count == 1)
         {
-            var app = Pending.First(row => row.IsFocused);
+            var app = matched[0];
             AlertFocusText =
                 $"From the alert: {app.AppName} opened an outbound connection to {app.RemoteSummary}. " +
-                "Axiom Shield has no Block/Allow decision yet, so nothing is blocked. " +
-                "This is not a malware or community-feed verdict; Block adds an outbound firewall rule, Allow records a decision.";
+                $"{app.ConnectionText}. Axiom Shield is still waiting for a Block/Allow decision; " +
+                "use Allow, Block or Dismiss below. Nothing is blocked automatically, and this is not a malware verdict.";
         }
         else
         {
             AlertFocusText =
-                $"From the alert: {names}{suffix} opened new outbound connections and have no Block/Allow decision yet. " +
-                "Nothing is blocked. This is not a malware or community-feed verdict; Block adds outbound firewall rules, Allow records decisions.";
+                $"From the alert: {names}{suffix} are still waiting for a Block/Allow decision. " +
+                "Use Allow, Block or Dismiss on each row below. Nothing is blocked automatically; " +
+                "a dismissed application returns when it opens a new connection.";
         }
 
         // The page reuses one ScrollViewer, so a previous visit may leave it scrolled past the
@@ -883,6 +932,54 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
     /// <summary>Raised when an alert focus should scroll the Firewall page back to the banner.</summary>
     public event EventHandler? AlertFocusRequested;
+
+    private async Task DismissPendingCoreAsync(PendingAppRow row)
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        IsShieldBusy = true;
+        StatusText = $"{row.AppName}: dismissing the pending decision...";
+        try
+        {
+            var status = await _client
+                .SendAsync<ProtectionStatus>(
+                    IpcCommandTypes.ProtectionDismiss,
+                    new ProtectionDismissRequest
+                    {
+                        AppPath = row.AppPath,
+                        AppName = row.AppName,
+                    },
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+
+            ApplyStatus(status);
+            StatusText = status.LastError
+                ?? $"{row.AppName}: dismissed. It will appear again if it opens a new connection.";
+            if (_alertFocusPaths.Contains(row.AppPath, StringComparer.OrdinalIgnoreCase))
+            {
+                DismissAlertFocus();
+            }
+
+            await RefreshAsync().ConfigureAwait(true);
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            StatusText = exception.Message;
+        }
+#pragma warning disable CA1031 // The page must show an IPC failure instead of crashing.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            StatusText = $"Dismiss failed: {exception.Message}";
+        }
+        finally
+        {
+            IsShieldBusy = false;
+        }
+    }
 
     private async Task DecidePendingAsync(PendingAppRow? row, ProtectionDecisionAction action)
     {

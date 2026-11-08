@@ -35,12 +35,21 @@
                 Background="{DynamicResource Axiom.AccentSoft}"
                 BorderBrush="{DynamicResource Axiom.Accent}"
                 BorderThickness="1" CornerRadius="6" Padding="10">
-          <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Spacing="8">
             <controls:AxiomSelectableTextBlock Text="{Binding AlertFocusText}" FontSize="10.5"
                        Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-            <Button Grid.Column="1" Content="Dismiss" Command="{Binding DismissAlertFocusCommand}"
-                    Padding="8,2" Margin="8,0,0,0" FontSize="10" VerticalAlignment="Top" />
-          </Grid>
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="Allow" Command="{Binding AllowFocusedCommand}"
+                      IsVisible="{Binding HasSingleFocusedPending}" Padding="10,3" Margin="0,0,6,0" />
+              <Button Content="Block" Command="{Binding BlockFocusedCommand}"
+                      IsVisible="{Binding HasSingleFocusedPending}" Padding="10,3" Margin="0,0,6,0"
+                      Background="{DynamicResource Axiom.DangerBackground}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <Button Content="Dismiss" Command="{Binding DismissFocusedCommand}"
+                      IsVisible="{Binding HasSingleFocusedPending}" Padding="10,3" Margin="0,0,6,0" />
+              <Button Content="Clear alert" Command="{Binding DismissAlertFocusCommand}"
+                      Padding="10,3" />
+            </WrapPanel>
+          </StackPanel>
         </Border>
 
         <controls:AxiomSelectableTextBlock Text="{Binding IgnoredMicrosoftText}" IsVisible="{Binding HasIgnoredMicrosoft}"
@@ -53,7 +62,7 @@
                 <controls:AxiomSelectableTextBlock Text="Why Axiom Shield is asking" FontSize="10" FontWeight="SemiBold"
                            Foreground="{DynamicResource Axiom.Accent}" />
                 <controls:AxiomSelectableTextBlock
-                           Text="Axiom Shield lists every executable that opened a new outbound connection and has no Block/Allow decision yet. This is not a malware verdict, a VirusTotal result or a community-feed match. Block creates an outbound Windows Firewall rule for this executable; Allow records an allow decision and removes any existing Axiom block."
+                           Text="Axiom Shield lists every executable that opened a new outbound connection and has no Block/Allow decision yet. It stays listed after the connection ends until you choose Block, Allow or Dismiss. Dismiss hides it until the application opens a new connection. This is not a malware verdict, a VirusTotal result or a community-feed match. Block creates an outbound Windows Firewall rule for this executable; Allow records an allow decision and removes any existing Axiom block."
                            FontSize="9.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
               </StackPanel>
             </Border>
@@ -68,7 +77,7 @@
                   <DataTemplate>
                     <Border Classes="pending-row" Classes.focused="{Binding IsFocused}"
                             Margin="0,1" Padding="4,2" CornerRadius="4" Background="Transparent">
-                      <Grid ColumnDefinitions="2*,84,64,Auto,Auto" Margin="0,2">
+                      <Grid ColumnDefinitions="2*,84,64,Auto,Auto,Auto" Margin="0,2">
                         <StackPanel Grid.Column="0" Spacing="0" ToolTip.Tip="{Binding Tooltip}">
                           <StackPanel Orientation="Horizontal" Spacing="6">
                             <controls:AxiomSelectableTextBlock Text="{Binding AppName}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
@@ -81,6 +90,9 @@
                           <controls:AxiomSelectableTextBlock Text="{Binding RemoteText}" FontSize="8.5"
                                      Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis"
                                      ToolTip.Tip="{Binding TriggerText}" />
+                          <controls:AxiomSelectableTextBlock Text="{Binding ConnectionText}" FontSize="8.5"
+                                     Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis"
+                                     IsVisible="{Binding !IsConnected}" />
                         </StackPanel>
                         <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding SocketText}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
                         <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding FirstSeenText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
@@ -90,6 +102,10 @@
                                 CommandParameter="{Binding}" />
                         <Button Grid.Column="4" Content="Allow" Padding="8,3" Margin="6,0,0,0"
                                 Command="{Binding $parent[ItemsControl].DataContext.AllowPendingCommand}"
+                                CommandParameter="{Binding}" />
+                        <Button Grid.Column="5" Content="Dismiss" Padding="8,3" Margin="6,0,0,0"
+                                ToolTip.Tip="Hide this pending decision until the application opens a new connection."
+                                Command="{Binding $parent[ItemsControl].DataContext.DismissPendingCommand}"
                                 CommandParameter="{Binding}" />
                       </Grid>
                     </Border>

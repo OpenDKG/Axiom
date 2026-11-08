@@ -52,6 +52,12 @@ public sealed class ProtectionSettingsStore
                 Decisions = (settings.Decisions ?? [])
                     .Where(decision => !string.IsNullOrWhiteSpace(decision.AppPath))
                     .ToList(),
+                Pending = (settings.Pending ?? [])
+                    .Where(item => !string.IsNullOrWhiteSpace(item.AppPath))
+                    .ToList(),
+                Dismissals = (settings.Dismissals ?? [])
+                    .Where(item => !string.IsNullOrWhiteSpace(item.AppPath))
+                    .ToList(),
             };
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
@@ -104,4 +110,10 @@ public sealed record ProtectionSettings
     public string? AllowedSid { get; init; }
 
     public IReadOnlyList<ProtectionDecision>? Decisions { get; init; } = [];
+
+    /// <summary>Durable ask queue. Entries remain until Block/Allow/Dismiss even if the socket ends.</summary>
+    public IReadOnlyList<ProtectionPendingApp>? Pending { get; init; } = [];
+
+    /// <summary>Dismissed applications, kept to suppress re-showing until a new connection appears.</summary>
+    public IReadOnlyList<ProtectionDismissal>? Dismissals { get; init; } = [];
 }
