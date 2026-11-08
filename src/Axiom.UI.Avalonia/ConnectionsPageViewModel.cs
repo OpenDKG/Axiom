@@ -42,7 +42,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
     public IReadOnlyList<string> GroupSortOptions { get; } = ["Total traffic", "Sent", "Received", "Sockets", "Name"];
 
     [ObservableProperty]
-    private bool _isGroupedByApp;
+    private bool _isGroupedByApp = true;
 
     [ObservableProperty]
     private string _groupSort = "Total traffic";

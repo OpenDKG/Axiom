@@ -24,7 +24,7 @@ public sealed class ConnectionsGroupingTests
         await monitor.PollAsync();
         var page = new ConnectionsPageViewModel(monitor);
 
-        page.IsGroupedByApp = true;
+        Assert.True(page.IsGroupedByApp);
 
         Assert.Equal(3, page.Groups.Count);
         Assert.Equal("browser.exe", page.Groups[0].Name);
