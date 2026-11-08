@@ -124,10 +124,13 @@ the Axiom hook entries and script.
 
 ### Host sessions
 
-The Agents page reads Claude's live session descriptors and Codex's local `state_*.sqlite` thread
-metadata, groups the rows by provider and shows host-owned names instead of submitted prompts. Raw
-session ids are hashed before they reach the view model. The reader is read-only, bounded and
-fail-open; missing or locked host data never blocks hook installation or protection status.
+The Agents and Agent Stats pages read Claude's live session descriptors, Codex's local
+`state_*.sqlite` thread metadata and OpenCode/OpenChamber's read-only `opencode.db` (`session_v2`)
+rows, group them by provider and show host-owned names instead of submitted prompts. A session is
+marked **live** when its host process is running or its data changed within the last five minutes;
+older rows are historical, not errors. Raw session ids are hashed before they reach the view model.
+The reader is read-only, bounded and fail-open; missing or locked host data never blocks hook
+installation or protection status.
 
 ### Cursor
 

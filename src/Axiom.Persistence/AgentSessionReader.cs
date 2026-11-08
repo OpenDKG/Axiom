@@ -10,8 +10,9 @@ using Axiom.Contracts.Agents;
 namespace Axiom.Persistence;
 
 /// <summary>
-/// Reads host-owned Claude session descriptors and Codex thread metadata. Read-only, bounded and
-/// fail-open; it never writes to the agent databases or stores raw session identifiers in the UI.
+/// Reads host-owned Claude session descriptors, Codex thread metadata and OpenCode/OpenChamber
+/// session rows. Read-only, bounded and fail-open; it never writes to the agent databases or
+/// stores raw session identifiers in the UI.
 /// </summary>
 public sealed class AgentSessionReader : IAgentSessionSource
 {
@@ -25,14 +26,18 @@ public sealed class AgentSessionReader : IAgentSessionSource
 
     private readonly string? _codexHome;
 
+    private readonly string? _opencodeDb;
+
     public AgentSessionReader(
         string? userProfile = null,
         string? claudeHome = null,
-        string? codexHome = null)
+        string? codexHome = null,
+        string? opencodeDb = null)
     {
         _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _claudeHome = claudeHome;
         _codexHome = codexHome;
+        _opencodeDb = opencodeDb;
     }
 
     public IReadOnlyList<AgentSessionInfo> Read()
@@ -51,6 +56,14 @@ public sealed class AgentSessionReader : IAgentSessionSource
             result.AddRange(ReadCodex());
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or SqliteException)
+        {
+        }
+
+        try
+        {
+            result.AddRange(ReadOpenCode());
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SqliteException)
         {
         }
 
@@ -242,6 +255,120 @@ public sealed class AgentSessionReader : IAgentSessionSource
                 lastSeen,
                 live);
         }
+    }
+
+    private IEnumerable<AgentSessionInfo> ReadOpenCode()
+    {
+        var path = _opencodeDb ?? Path.Combine(
+            _userProfile,
+            ".local",
+            "share",
+            "opencode",
+            "opencode.db");
+        if (!File.Exists(path))
+        {
+            yield break;
+        }
+
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = path,
+            Mode = SqliteOpenMode.ReadOnly,
+            DefaultTimeout = 1,
+            Pooling = false,
+        }.ToString();
+
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+
+        var table = TableExists(connection, "session_v2")
+            ? "session_v2"
+            : TableExists(connection, "session") ? "session" : null;
+        if (table is null)
+        {
+            yield break;
+        }
+
+        var columns = ReadColumns(connection, table);
+        if (!columns.Contains("id") || !columns.Contains("time_updated"))
+        {
+            yield break;
+        }
+
+        var titleParts = new List<string>();
+        if (columns.Contains("title"))
+        {
+            titleParts.Add("NULLIF(title, '')");
+        }
+
+        if (columns.Contains("slug"))
+        {
+            titleParts.Add("NULLIF(slug, '')");
+        }
+
+        titleParts.Add("'OpenCode session'");
+        var titleColumn = "COALESCE(" + string.Join(", ", titleParts) + ")";
+        var directoryColumn = columns.Contains("directory") ? "directory" : "''";
+        var archivedFilter = columns.Contains("time_archived")
+            ? "WHERE time_archived IS NULL OR time_archived = 0"
+            : string.Empty;
+        var query = connection.CreateCommand();
+        query.CommandText =
+            $"SELECT id, {titleColumn}, {directoryColumn}, time_updated FROM {table} " +
+            $"{archivedFilter} ORDER BY time_updated DESC LIMIT 16";
+
+        var now = DateTimeOffset.UtcNow;
+        using var rows = query.ExecuteReader();
+        while (rows.Read())
+        {
+            if (rows.IsDBNull(0))
+            {
+                continue;
+            }
+
+            var raw = rows.IsDBNull(3) ? 0L : rows.GetInt64(3);
+            if (raw <= 0)
+            {
+                continue;
+            }
+
+            var lastSeen = DateTimeOffset.FromUnixTimeMilliseconds(raw);
+            var live = now - lastSeen <= ActiveWindow;
+            if (!live && now - lastSeen > HistoryWindow)
+            {
+                continue;
+            }
+
+            yield return new AgentSessionInfo(
+                "opencode",
+                SessionKey("opencode", rows.GetString(0)),
+                Truncate(rows.IsDBNull(1) ? null : rows.GetString(1), 120),
+                rows.IsDBNull(2) ? string.Empty : rows.GetString(2),
+                lastSeen,
+                live);
+        }
+    }
+
+    private static bool TableExists(SqliteConnection connection, string table)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = $name LIMIT 1";
+        command.Parameters.AddWithValue("$name", table);
+        return command.ExecuteScalar() is not null;
+    }
+
+    private static HashSet<string> ReadColumns(SqliteConnection connection, string table)
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info({table})";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            columns.Add(reader.GetString(1));
+        }
+
+        return columns;
     }
 
     private static string SessionKey(string framework, string id)

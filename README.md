@@ -84,6 +84,10 @@ agent-level guardrails and signed threat-intelligence context respectively.
   (`now ↑ … · ↓ …` or `now idle`). Sort by total, sent, received, sockets or name in either
   direction from the action toolbar. Expanded groups and their rows survive the one-second refresh;
   UDP-only apps say `traffic not measured`.
+- **Agent sessions now include OpenCode/OpenChamber.** The Agents and Agent Stats session cards read
+  Claude Code, Codex and OpenCode/OpenChamber metadata (read-only). A session shows **live** when its
+  host process runs or its data changed in the last five minutes, so the active OpenCode session no
+  longer appears as historical; raw session ids stay hashed.
 - **Buttons follow the active theme.** The Fluent grey default is replaced by Axiom palette
   surfaces, themed borders, accent hover/press and disabled states, with an accent primary style
   for Apply/Analyze/Export/Configure/Shield. All four themes use the same styles.
