@@ -79,8 +79,12 @@ public sealed class TrafficEngine : IDisposable
             var firstTimestamp = DateTimeOffset.UtcNow.AddSeconds(-(BucketCount - 1));
             for (var i = 0; i < BucketCount; i++)
             {
-                UploadSeries.Add(double.NaN);
-                DownloadSeries.Add(double.NaN);
+                if (IsLive)
+                {
+                    UploadSeries.Add(double.NaN);
+                    DownloadSeries.Add(double.NaN);
+                }
+
                 Samples.Add(new ThroughputSample(firstTimestamp.AddSeconds(i), double.NaN, double.NaN));
             }
         }
@@ -101,7 +105,28 @@ public sealed class TrafficEngine : IDisposable
         }
 
         _range = range;
+        RefreshSeries();
         Updated?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// The five-minute series is the only measured throughput the app keeps. For longer ranges the
+    /// chart is cleared instead of continuing to draw the live five-minute curve under a new label.
+    /// </summary>
+    private void RefreshSeries()
+    {
+        UploadSeries.Clear();
+        DownloadSeries.Clear();
+        if (!IsLive)
+        {
+            return;
+        }
+
+        foreach (var sample in Samples)
+        {
+            UploadSeries.Add(sample.Upload);
+            DownloadSeries.Add(sample.Download);
+        }
     }
 
     public void Dispose()
@@ -172,14 +197,21 @@ public sealed class TrafficEngine : IDisposable
     {
         if (Samples.Count == BucketCount)
         {
-            UploadSeries.RemoveAt(0);
-            DownloadSeries.RemoveAt(0);
+            if (IsLive && UploadSeries.Count > 0 && DownloadSeries.Count > 0)
+            {
+                UploadSeries.RemoveAt(0);
+                DownloadSeries.RemoveAt(0);
+            }
+
             Samples.RemoveAt(0);
         }
 
-        UploadSeries.Add(upload);
-        DownloadSeries.Add(download);
         Samples.Add(new ThroughputSample(timestamp, upload, download));
+        if (IsLive)
+        {
+            UploadSeries.Add(upload);
+            DownloadSeries.Add(download);
+        }
     }
 
     private static Dictionary<string, (long Sent, long Received)> ReadCounters()

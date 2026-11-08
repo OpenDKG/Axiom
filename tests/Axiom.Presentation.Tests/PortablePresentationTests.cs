@@ -106,6 +106,27 @@ public sealed class PortablePresentationTests
         SourceName = "test source",
     };
 
+    [Fact]
+    public void Traffic_range_switch_clears_historical_series_and_restores_the_live_window()
+    {
+        using var traffic = new TrafficEngine(new FakeTimerFactory());
+        traffic.Start();
+        var liveCount = traffic.UploadSeries.Count;
+        Assert.True(liveCount > 1);
+
+        traffic.SetRange(TrafficRange.LastHour);
+
+        Assert.False(traffic.IsLive);
+        Assert.Empty(traffic.UploadSeries);
+        Assert.Empty(traffic.DownloadSeries);
+
+        traffic.SetRange(TrafficRange.LastFiveMinutes);
+
+        Assert.True(traffic.IsLive);
+        Assert.Equal(liveCount, traffic.UploadSeries.Count);
+        Assert.Equal(liveCount, traffic.DownloadSeries.Count);
+    }
+
     private sealed class FakeSource : IConnectionSnapshotSource
     {
         public string Name => "test source";
