@@ -19,7 +19,7 @@
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
           <Button Content="Refresh" Command="{Binding RefreshCommand}" Padding="12,6" />
-          <Button Content="Apply" Command="{Binding ApplyCommand}" Padding="12,6" Background="{DynamicResource Axiom.Accent}" Foreground="{DynamicResource Axiom.AccentContrast}" />
+          <Button Content="Apply" Command="{Binding ApplyCommand}" Classes="primary" Padding="12,6" />
           <Button Content="Disable" Command="{Binding DisableCommand}" Padding="12,6" />
         </StackPanel>
       </Grid>

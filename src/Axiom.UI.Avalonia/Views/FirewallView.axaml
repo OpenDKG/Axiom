@@ -27,8 +27,7 @@
             <controls:AxiomSelectableTextBlock Text="{Binding ShieldHintText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" TextWrapping="Wrap" />
           </StackPanel>
           <Button Grid.Column="1" Content="{Binding ShieldActionText}" Command="{Binding ToggleShieldCommand}"
-                  Padding="12,6" VerticalAlignment="Top"
-                  Background="{DynamicResource Axiom.Accent}" Foreground="{DynamicResource Axiom.Window}" />
+                  Classes="primary" Padding="12,6" VerticalAlignment="Top" />
         </Grid>
 
         <Border IsVisible="{Binding HasAlertFocus}"

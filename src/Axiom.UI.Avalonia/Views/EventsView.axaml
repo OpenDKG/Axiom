@@ -24,8 +24,7 @@
         <Button Grid.Column="7" Content="Refresh" Command="{Binding RefreshCommand}"
                 VerticalAlignment="Bottom" Padding="12,6" />
         <Button Grid.Column="8" Content="Export CSV" Command="{Binding ExportCsvCommand}"
-                IsEnabled="{Binding CanExport}" VerticalAlignment="Bottom" Padding="12,6"
-                Background="{DynamicResource Axiom.Accent}" Foreground="{DynamicResource Axiom.AccentContrast}" />
+                IsEnabled="{Binding CanExport}" Classes="primary" VerticalAlignment="Bottom" Padding="12,6" />
       </Grid>
       <controls:AxiomSelectableTextBlock Text="Times are stored in UTC and shown in local time. Byte counts are not stored yet."
                  Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" TextWrapping="Wrap" Margin="0,6,0,0" />

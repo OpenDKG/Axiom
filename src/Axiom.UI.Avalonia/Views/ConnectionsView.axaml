@@ -5,17 +5,13 @@
   <Grid RowDefinitions="Auto,Auto,*" Margin="24,18,24,24">
     <Border Grid.Row="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
             CornerRadius="8" Padding="12">
-      <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10">
         <TextBox Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="Search app, path, PID or endpoint" />
         <ComboBox Grid.Column="1" ItemsSource="{Binding ProtocolOptions}" SelectedItem="{Binding ProtocolFilter}" Width="96" />
         <CheckBox Grid.Column="2" Content="Only new" IsChecked="{Binding OnlyNew}" Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
         <CheckBox Grid.Column="3" Content="Loopback" IsChecked="{Binding OnlyLoopback}" Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
         <CheckBox Grid.Column="4" Content="Group by app" IsChecked="{Binding IsGroupedByApp}" Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
-        <ComboBox Grid.Column="5" ItemsSource="{Binding GroupSortOptions}" SelectedItem="{Binding GroupSort}" Width="128"
-                  IsVisible="{Binding IsGroupedByApp}" ToolTip.Tip="Sort applications by measured TCP traffic" />
-        <Button Grid.Column="6" Content="{Binding GroupSortDirectionText}" Command="{Binding ToggleGroupSortDirectionCommand}"
-                Padding="10,4" IsVisible="{Binding IsGroupedByApp}" ToolTip.Tip="Switch between highest and lowest first" />
-        <controls:AxiomSelectableTextBlock Grid.Column="7" Text="{Binding VisibleRowsText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" VerticalAlignment="Center" />
+        <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding VisibleRowsText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" VerticalAlignment="Center" />
       </Grid>
     </Border>
 
@@ -24,16 +20,27 @@
 
     <Border Grid.Row="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
       <Grid RowDefinitions="Auto,Auto,*">
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
-          <Button Content="Block outbound" Padding="10,4"
-                  Command="{Binding BlockOutboundCommand}" CommandParameter="{Binding SelectedConnection}" />
-          <Button Content="Block inbound" Padding="10,4"
-                  Command="{Binding BlockInboundCommand}" CommandParameter="{Binding SelectedConnection}" />
-          <Button Content="End task" Padding="10,4"
-                  Command="{Binding EndTaskCommand}" CommandParameter="{Binding SelectedConnection}" />
-          <Button Content="Copy path" Padding="10,4"
-                  Command="{Binding CopyPathCommand}" CommandParameter="{Binding SelectedConnection}" />
-        </StackPanel>
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,8">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+            <Button Content="Block outbound" Padding="10,4"
+                    Command="{Binding BlockOutboundCommand}" CommandParameter="{Binding SelectedConnection}" />
+            <Button Content="Block inbound" Padding="10,4"
+                    Command="{Binding BlockInboundCommand}" CommandParameter="{Binding SelectedConnection}" />
+            <Button Content="End task" Padding="10,4"
+                    Command="{Binding EndTaskCommand}" CommandParameter="{Binding SelectedConnection}" />
+            <Button Content="Copy path" Padding="10,4"
+                    Command="{Binding CopyPathCommand}" CommandParameter="{Binding SelectedConnection}" />
+          </StackPanel>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                      IsVisible="{Binding IsGroupedByApp}">
+            <controls:AxiomSelectableTextBlock Text="Sort" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}"
+                                               VerticalAlignment="Center" />
+            <ComboBox ItemsSource="{Binding GroupSortOptions}" SelectedItem="{Binding GroupSort}" Width="128"
+                      ToolTip.Tip="Sort applications by measured TCP traffic" />
+            <Button Content="{Binding GroupSortDirectionText}" Command="{Binding ToggleGroupSortDirectionCommand}"
+                    Padding="10,4" ToolTip.Tip="Switch between highest and lowest first" />
+          </StackPanel>
+        </Grid>
         <Grid Grid.Row="1" ColumnDefinitions="1.4*,60,60,1.1*,1.1*,40,80,70,1*" Margin="0,0,0,8"
               IsVisible="{Binding !IsGroupedByApp}">
           <controls:AxiomSelectableTextBlock Grid.Column="0" Text="APPLICATION" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />

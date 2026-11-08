@@ -99,7 +99,7 @@
             </StackPanel>
             <StackPanel Grid.Column="1" Spacing="6" HorizontalAlignment="Right">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Button Content="Configure" Command="{Binding ConfigureCommand}" Padding="12,6" Background="{DynamicResource Axiom.Accent}" Foreground="{DynamicResource Axiom.AccentContrast}" />
+                <Button Content="Configure" Command="{Binding ConfigureCommand}" Classes="primary" Padding="12,6" />
                 <Button Content="Test Protection" Command="{Binding TestProtectionCommand}" Padding="12,6" />
                 <Button Content="Refresh" Command="{Binding RefreshAllCommand}" Padding="12,6" />
                 <Button Content="Open Dashboard" Command="{Binding OpenDashboardCommand}" Padding="12,6" />
