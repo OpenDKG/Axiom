@@ -64,7 +64,7 @@ internal static class SetupDefaults
 
             var client = new IpcPipeClient(
                 connectTimeout: TimeSpan.FromSeconds(2),
-                requestTimeout: TimeSpan.FromSeconds(30));
+                requestTimeout: TimeSpan.FromMinutes(5));
 
             if (!await WaitForServiceAsync(client, report, cancellationToken).ConfigureAwait(false))
             {
@@ -114,6 +114,30 @@ internal static class SetupDefaults
                 report(privacy.Running
                     ? "Privacy Shield: resolver enabled on port 53 (Balanced, five sources selected)."
                     : "Privacy Shield: enabled, but the resolver is not running yet: " + privacy.Detail);
+
+                if (privacy.Running)
+                {
+                    try
+                    {
+                        report("Privacy Shield: downloading and compiling the five blocklist sources...");
+                        var updated = await client
+                            .SendAsync<PrivacyShieldStatus>(
+                                IpcCommandTypes.PrivacySourcesUpdate,
+                                null,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                        var entries = updated.Sources.Sum(source => source.Entries);
+                        marker["privacyEntries"] = entries;
+                        report(updated.LastError is { Length: > 0 } error
+                            ? "Privacy Shield blocklists: " + error
+                            : $"Privacy Shield blocklists: {entries:N0} entries compiled.");
+                    }
+                    catch (Exception exception) when (exception is IpcClientException or IOException)
+                    {
+                        report("Privacy Shield blocklists could not be downloaded; starter rules remain: " +
+                               exception.Message);
+                    }
+                }
             }
             catch (Exception exception) when (exception is IpcClientException or IOException)
             {
