@@ -21,9 +21,10 @@ This Draft feature stacks on PR #99, #97 and #96.
   visible by design.
 - Status information comes from the existing UI `TrafficEngine` and `ConnectionMonitor`; no extra telemetry polling. No remote upload, no firewall changes.
 - Closing the app hides it to the notification area while **Show tray icon** is enabled and exits when
-  it is disabled. Minimize keeps the app running normally. Autostart is opt-in from Settings (off by
-  default); the Run entry uses `--autostart`, and Start minimized uses `--start-minimized`. A second
-  launch focuses the existing instance instead of starting another tray/service.
+  it is disabled. Minimize keeps the app running normally. Autostart is opt-in from Settings, but a
+  **complete installation** turns it on with `--autostart`; a partial installation leaves it off.
+  Start minimized uses `--start-minimized`, and a second launch focuses the existing instance
+  instead of starting another tray/service.
 
 ## What it does *not* do
 

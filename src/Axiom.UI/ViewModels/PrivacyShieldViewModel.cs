@@ -63,7 +63,8 @@ public sealed partial class PrivacyShieldSourceRow : ObservableObject
 }
 
 /// <summary>
-/// Privacy Shield is an opt-in local DNS filter. It never changes adapter DNS settings; the user
+/// Privacy Shield is a local DNS filter. Complete installation enables the resolver; a partial
+/// installation leaves it opt-in. It never changes adapter DNS settings; the user
 /// must point Windows at the displayed loopback resolver explicitly.
 /// </summary>
 public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatablePage, IDisposable
@@ -80,7 +81,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
     private bool _statsRefreshing;
 
     public PrivacyShieldViewModel(bool serviceMode)
-        : base("Privacy Shield", "Optional local DNS filtering; disabled by default", "\uE72E")
+        : base("Privacy Shield", "Local DNS filtering · complete installation enables the resolver", "\uE72E")
     {
         _client = serviceMode ? new ServicePipeClient() : null;
         Profiles =

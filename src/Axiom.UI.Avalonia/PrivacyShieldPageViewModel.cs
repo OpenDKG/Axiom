@@ -90,8 +90,9 @@ public sealed class BlockedEventRow(PrivacyShieldBlockedEvent blocked, bool isAl
 }
 
 /// <summary>
-/// Privacy Shield is an opt-in local DNS filter. It never changes adapter DNS settings; the user
-/// must point Windows at the displayed loopback resolver explicitly.
+/// Privacy Shield is a local DNS filter. Complete installation enables the resolver; a partial
+/// installation leaves it opt-in. The service never changes adapter DNS settings; the user must
+/// point Windows at the displayed loopback resolver explicitly.
 /// </summary>
 public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivatablePage, IDisposable
 {
@@ -108,7 +109,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         IUserInteraction ui,
         IDnsAdapterHelper dnsHelper,
         IUiTimerFactory timers)
-        : base("Privacy Shield", "Optional local DNS filtering; disabled by default", "P")
+        : base("Privacy Shield", "Local DNS filtering · complete installation enables the resolver", "P")
     {
         ArgumentNullException.ThrowIfNull(ui);
         ArgumentNullException.ThrowIfNull(dnsHelper);

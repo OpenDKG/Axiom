@@ -15,7 +15,8 @@ public partial class SetupWindow : Window
         InstallDirText.Text = options.InstallDir;
         ShortcutCheck.IsChecked = options.CreateShortcut;
         LaunchCheck.IsChecked = options.StartAfterInstall;
-        HooksCheck.IsChecked = options.CompleteInstallation;
+        CompleteRadio.IsChecked = options.CompleteInstallation;
+        PartialRadio.IsChecked = !options.CompleteInstallation;
         AgreeCheck.Checked += OnAgreementChanged;
         AgreeCheck.Unchecked += OnAgreementChanged;
         InstallButton.IsEnabled = false;
@@ -48,7 +49,7 @@ public partial class SetupWindow : Window
         {
             CreateShortcut = ShortcutCheck.IsChecked == true,
             StartAfterInstall = LaunchCheck.IsChecked == true,
-            CompleteInstallation = HooksCheck.IsChecked == true,
+            CompleteInstallation = CompleteRadio.IsChecked == true,
         };
 
         var progress = new Progress<string>(message =>
@@ -65,6 +66,11 @@ public partial class SetupWindow : Window
             CloseButton.Content = "Close";
             CloseButton.IsEnabled = true;
             AgreeCheck.IsEnabled = true;
+
+            if (result.Warning is { Length: > 0 } warning)
+            {
+                MessageBox.Show(this, warning, "Axiom Setup", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
 
             if (options.StartAfterInstall)
             {

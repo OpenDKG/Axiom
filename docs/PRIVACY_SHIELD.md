@@ -119,7 +119,9 @@ the field empty keeps the current Windows DNS servers. After enabling the resolv
 
 ## Safety and recovery
 
-- Privacy Shield is off by default and never enables itself during install, update or first run.
+- A **complete installation** enables Privacy Shield once, during setup, with the Balanced profile
+  and all five sources selected. A **partial installation** leaves it off. Updates and later starts
+  never enable it by themselves, and no mode changes adapter DNS silently.
 - Stopping the resolver leaves the Windows adapter pointing at a non-responsive loopback address
   if the user manually configured it. Restore the adapter DNS or set a real upstream before
   stopping the resolver.

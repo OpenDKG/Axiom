@@ -1,0 +1,328 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Text.Json;
+using Axiom.Contracts.Ipc;
+using Axiom.Contracts.Privacy;
+using Axiom.Contracts.Protection;
+using Microsoft.Win32;
+
+namespace Axiom.Setup;
+
+internal sealed record CompleteDefaultsResult(bool Applied, string? Warning);
+
+/// <summary>
+/// Applies the complete-installation protection profile: registers the elevated service, turns on
+/// Axiom Shield and the Privacy Shield resolver, enables notifications/tray/background-window
+/// hiding and per-user autostart. Partial installation never calls this type.
+/// </summary>
+internal static class SetupDefaults
+{
+    public const string ProfileFileName = "install-profile.json";
+
+    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+
+    private const string AutostartValueName = "Axiom";
+
+    private static readonly JsonSerializerOptions ProfileJsonOptions = new()
+    {
+        WriteIndented = true,
+    };
+
+    public static async Task<CompleteDefaultsResult> ApplyCompleteAsync(
+        string installDir,
+        Action<string> report,
+        CancellationToken cancellationToken)
+    {
+        var marker = new Dictionary<string, object?>
+        {
+            ["profile"] = "complete",
+            ["startedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            ["serviceInstalled"] = false,
+            ["shieldEnabled"] = false,
+            ["privacyEnabled"] = false,
+        };
+
+        try
+        {
+            report("Complete protection: registering the Axiom Windows service (one elevation prompt).");
+            if (!InstallService(installDir, report))
+            {
+                marker["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                WriteProfile(marker);
+                return new CompleteDefaultsResult(
+                    false,
+                    "Axiom was installed, but complete protection defaults were not applied.\n\n" +
+                    "The Windows service was not registered (elevation was cancelled or failed). " +
+                    "You can enable Axiom Shield later from the Firewall page; it will ask once.");
+            }
+
+            marker["serviceInstalled"] = true;
+            StopInteractiveServiceProcesses(report);
+
+            var client = new IpcPipeClient(
+                connectTimeout: TimeSpan.FromSeconds(2),
+                requestTimeout: TimeSpan.FromSeconds(30));
+
+            if (!await WaitForServiceAsync(client, report, cancellationToken).ConfigureAwait(false))
+            {
+                marker["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                WriteProfile(marker);
+                return new CompleteDefaultsResult(
+                    false,
+                    "Axiom was installed and the service registered, but the local service did not " +
+                    "answer in time. Open Axiom and check the Firewall page.");
+            }
+
+            try
+            {
+                var shield = await client
+                    .SendAsync<ProtectionStatus>(
+                        IpcCommandTypes.ProtectionEnable,
+                        new ProtectionEnableRequest(),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                marker["shieldEnabled"] = shield.Enabled;
+                report(shield.Enabled
+                    ? "Axiom Shield: enabled (default policy: ask)."
+                    : "Axiom Shield: the service kept it disabled; check the Firewall page.");
+            }
+            catch (Exception exception) when (exception is IpcClientException or IOException)
+            {
+                report("Axiom Shield could not be enabled: " + exception.Message);
+            }
+
+            try
+            {
+                var settings = new PrivacyShieldSettings
+                {
+                    Enabled = true,
+                    Profile = PrivacyShieldProfile.Balanced,
+                    Categories = PrivacyShieldCategories.ForProfile(PrivacyShieldProfile.Balanced),
+                    Port = 53,
+                    EnabledSourceIds = PrivacyShieldSourceCatalog.All.Select(source => source.Id).ToArray(),
+                };
+                var privacy = await client
+                    .SendAsync<PrivacyShieldStatus>(
+                        IpcCommandTypes.PrivacyConfigure,
+                        settings,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                marker["privacyEnabled"] = privacy.Enabled && privacy.Running;
+                report(privacy.Running
+                    ? "Privacy Shield: resolver enabled on port 53 (Balanced, five sources selected)."
+                    : "Privacy Shield: enabled, but the resolver is not running yet: " + privacy.Detail);
+            }
+            catch (Exception exception) when (exception is IpcClientException or IOException)
+            {
+                report("Privacy Shield could not be enabled: " + exception.Message);
+            }
+
+            WriteUserDefaults(installDir, report);
+            marker["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            WriteProfile(marker);
+
+            var complete = marker["shieldEnabled"] is true && marker["privacyEnabled"] is true;
+            report(complete
+                ? "Complete protection defaults applied: Shield on, Privacy Shield resolver on, notifications and autostart on."
+                : "Complete protection defaults were partially applied. Review Shield and Privacy Shield in Axiom.");
+
+            return new CompleteDefaultsResult(
+                complete,
+                complete
+                    ? null
+                    : "Axiom was installed, but one or more protection defaults could not be enabled. " +
+                      "Open Axiom and check the Firewall and Privacy Shield pages.");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                              System.Security.SecurityException or InvalidOperationException)
+        {
+            report("Complete protection defaults failed: " + exception.Message);
+            marker["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            WriteProfile(marker);
+            return new CompleteDefaultsResult(
+                false,
+                "Axiom was installed, but complete protection defaults failed: " + exception.Message);
+        }
+    }
+
+    public static void WritePartialProfile()
+    {
+        WriteProfile(new Dictionary<string, object?>
+        {
+            ["profile"] = "partial",
+            ["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            ["serviceInstalled"] = false,
+            ["shieldEnabled"] = false,
+            ["privacyEnabled"] = false,
+        });
+    }
+
+    private static bool InstallService(string installDir, Action<string> report)
+    {
+        var executable = Path.Combine(installDir, "Axiom.Service.exe");
+        if (!File.Exists(executable))
+        {
+            report("Axiom.Service.exe is missing from the install directory.");
+            return false;
+        }
+
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = executable,
+                Arguments = "--install-service",
+                UseShellExecute = true,
+                Verb = "runas",
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            });
+
+            if (process is null)
+            {
+                report("The elevated service installer did not start.");
+                return false;
+            }
+
+            if (!process.WaitForExit(180_000))
+            {
+                report("The elevated service installer did not finish within three minutes.");
+                return false;
+            }
+
+            if (process.ExitCode == 0)
+            {
+                report("Axiom service registered and started.");
+                return true;
+            }
+
+            report($"The elevated service installer exited with code {process.ExitCode}.");
+            return false;
+        }
+        catch (Win32Exception exception) when (exception.NativeErrorCode == 1223)
+        {
+            report("Administrator approval was cancelled; protection defaults were not applied.");
+            return false;
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+        {
+            report("The service installer could not start: " + exception.Message);
+            return false;
+        }
+    }
+
+    private static async Task<bool> WaitForServiceAsync(
+        IpcPipeClient client,
+        Action<string> report,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            try
+            {
+                _ = await client
+                    .SendAsync<ServiceHealth>(IpcCommandTypes.ServiceHealth, null, cancellationToken)
+                    .ConfigureAwait(false);
+                report("Axiom service pipe is reachable.");
+                return true;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (exception is IpcClientException or IOException or TimeoutException)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return false;
+    }
+
+    private static void StopInteractiveServiceProcesses(Action<string> report)
+    {
+        var sessionId = Process.GetCurrentProcess().SessionId;
+        foreach (var process in Process.GetProcessesByName("Axiom.Service"))
+        {
+            try
+            {
+                if (process.SessionId != sessionId)
+                {
+                    continue;
+                }
+
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(3000);
+                report("Stopped the interactive service copy so the Windows service owns the pipe.");
+            }
+#pragma warning disable CA1031 // Best effort; the pipe reconnect handles the rest.
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+    }
+
+    private static void WriteUserDefaults(string installDir, Action<string> report)
+    {
+        try
+        {
+            var directory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Axiom");
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "notifications.txt"), "enabled");
+            File.WriteAllText(Path.Combine(directory, "tray-notifications.txt"), "enabled");
+            File.WriteAllText(Path.Combine(directory, "hide-background-windows.txt"), "enabled");
+
+            var desktop = Path.Combine(installDir, "Axiom.Desktop.exe");
+            File.WriteAllText(
+                Path.Combine(directory, "startup.json"),
+                JsonSerializer.Serialize(new
+                {
+                    startWithWindows = true,
+                    startMinimized = true,
+                    lastKnownExecutablePath = desktop,
+                    updatedUtc = DateTimeOffset.UtcNow,
+                }));
+
+            using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true);
+            key?.SetValue(AutostartValueName, $"\"{desktop}\" --autostart", RegistryValueKind.String);
+            report("Notifications, tray, background-window hiding and start with Windows: enabled.");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                              System.Security.SecurityException)
+        {
+            report("Per-user preferences could not be written: " + exception.Message);
+        }
+    }
+
+    private static void WriteProfile(Dictionary<string, object?> marker)
+    {
+        try
+        {
+            var directory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Axiom");
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(
+                Path.Combine(directory, ProfileFileName),
+                JsonSerializer.Serialize(marker, ProfileJsonOptions));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The install itself succeeded; the marker is diagnostic only.
+        }
+    }
+}

@@ -129,7 +129,8 @@ Axiom reports only its own firewall rules rather than the effective Windows defa
 
 ## What's in 0.7.0
 
-- **Axiom Shield.** Turn protection on from the Firewall page. Axiom installs and starts its Windows
+- **Axiom Shield.** A complete installation turns protection on during setup; a partial installation
+  leaves it off until you enable it on the Firewall page. Axiom installs and starts its Windows
   service (one administrator approval), then enforces through Windows Firewall. The desktop app
   stays unprivileged.
 - **Ask policy.** Every new outbound application is listed with its path, socket count and first-seen
@@ -254,10 +255,11 @@ Axiom reports only its own firewall rules rather than the effective Windows defa
   Group Policy remains authoritative.
 - The application never performs wildcard deletes, never resets the Windows Firewall and never
   disables Defender, BFE or another product's filters.
-- Write operations are off by default. **Axiom Shield** turns them on with explicit user consent:
-  it installs and starts the Axiom Windows service (one administrator approval) and only then may
-  create or remove `Axiom::{id}::{OUT|IN}` rules. Every change is confirmed, read back and audited;
-  disabling the shield removes every Axiom-owned rule.
+- Write operations stay off until consent. A **complete installation** enables **Axiom Shield**
+  during setup: it registers and starts the Axiom Windows service (one administrator approval) and
+  then may create or remove `Axiom::{id}::{OUT|IN}` rules. A **partial installation** leaves Shield
+  off until you enable it. Every change is confirmed, read back and audited; disabling the shield
+  removes every Axiom-owned rule.
 
 ### Privacy by default
 
@@ -284,8 +286,9 @@ installer only after an explicit confirmation; nothing runs silently. Setup step
 
 ### Privacy Shield
 
-An optional, default-disabled local DNS filter with Basic/Balanced/Strict profiles, custom allow and
-block lists and a loopback resolver. It never changes adapter DNS settings automatically; manual
+A local DNS filter with Basic/Balanced/Strict profiles, custom allow and block lists and a loopback
+resolver. A **complete installation** turns it on with the Balanced profile and all five sources; a
+partial installation leaves it off. It never changes adapter DNS settings automatically; manual
 adapter configuration and rollback are documented in [Privacy Shield](docs/PRIVACY_SHIELD.md).
 Five HTTPS sources are catalogued with their licenses: HaGeZi Multi PRO and OISD Big (GPL-3.0),
 WindowsSpyBlocker (MIT), and The Block List Project Ads/Tracking (Unlicense). They are downloaded at
