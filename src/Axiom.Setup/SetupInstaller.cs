@@ -495,7 +495,7 @@ internal static class SetupInstaller
             shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, [workingDirectory],
                 CultureInfo.InvariantCulture);
             shortcutType.InvokeMember("Description", BindingFlags.SetProperty, null, shortcut,
-                ["Axiom - Open-Source Firewall & Security Monitor"], CultureInfo.InvariantCulture);
+                ["Axiom - Free Open-Source Network & AI Agent Security"], CultureInfo.InvariantCulture);
             shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null,
                 CultureInfo.InvariantCulture);
             return true;

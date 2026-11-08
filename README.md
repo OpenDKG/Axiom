@@ -1,8 +1,8 @@
 ﻿# Axiom
 
-**Open-Source Firewall, Network Monitor & Local Agent Protection**
+**Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.7.6 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.8.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,44 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.8.0
+
+- **Axiom is now positioned as free, open-source network and AI-agent security.** The app title,
+  header, footer and installer/shortcut descriptions use the new product description.
+- **AI Analyst works with the OpenChamber/OpenCode installation you already have.** A built-in
+  `opencode://local` provider starts the local OpenCode CLI in headless plan mode, so no Ollama, LM
+  Studio, extra API key or separate local server is required. The default model is
+  `opencode-go/deepseek-v4.1-flash`; OpenAI-compatible, OpenAI, Anthropic, DeepSeek and Z.ai providers
+  remain available.
+- **AI evidence v2.** The analyst now receives parent process and parent chain, Authenticode signer
+  status and subject, product/version, sanitised command line, observed duration, well-known remote
+  port names, local host/subnet/gateway context, Axiom-owned firewall rule status and an aggregated
+  30-day local flow baseline. It no longer reports baseline truncation or `ruleStatus Unknown`.
+- **Copy and progress in AI Analyst.** Copy result and Copy all export every field as text. An
+  indeterminate progress bar, elapsed seconds and Cancel are shown while the agent is working; the
+  result panel returns to the top when a new finding arrives.
+- **Settings notifications and window privacy.** Notifications, the tray icon and background console
+  window hiding are separate switches. Axiom can hide Node, PowerShell, Python, cmd, DKG, OpenCode
+  and conhost windows that belong to processes it launched, without touching the user's own windows.
+- **Axiom Shield usability.** Remembered Shield decisions now support Block and Unblock from a button
+  or the right-click menu. Pending rows show the remote `IP:port`, the trigger explanation and a
+  clear "not a malware verdict" note; Microsoft-signed processes are filtered with a visible count.
+- **Alerts that lead somewhere.** A Shield alert navigates to Firewall, highlights the exact
+  application and scrolls to it. Alerts are kept in the bell history even when notifications are off.
+- **Window and lifecycle polish.** Native resize cursors, drag resize, Win+arrow snap, edge snap,
+  double-click maximize/restore, working caption buttons, a 900×600 minimum, responsive status/Firewall
+  layouts, close-to-tray, start-minimized and clean `ShutdownRequested` handling.
+- **DKG startup and evidence.** When the local DKG node is installed, Axiom starts it on launch if it
+  is not already answering, verifies the supervisor/worker and `/api/status`, and never starts it in
+  Standard mode.
+- **Branding and rendering.** The high-resolution lockup uses high-quality interpolation and the
+  exact 3:1 aspect ratio, with layout rounding enabled for a crisp header.
+
+**Known gaps in 0.8.0:** ETW telemetry is not integrated yet, so SNI, TLS certificate subjects, DNS
+query names, exact per-connection byte counts and TIME_WAIT ownership remain missing evidence.
+There is no reputation/threat-intelligence feed, command lines are sanitised and truncated, and
+Axiom reports only its own firewall rules rather than the effective Windows default policy.
 
 ## What's in 0.7.6
 
@@ -215,10 +253,13 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 ### Privacy by default
 
-- All processing is local. The standard build has no outbound network calls.
+- All processing is local by default. The standard build makes no outbound network call unless the
+  optional AI Analyst, reputation feed or another optional module is explicitly enabled.
 - No accounts, cloud sync, analytics, advertising or data sales.
 - Only connection metadata is stored: no packet payload, TLS content, DNS queries, credentials or
-  tokens.
+  tokens. The optional AI evidence package adds process parent/signature/product metadata, a
+  sanitised command line, a local 30-day flow baseline and host context; packet contents and
+  credentials are never included.
 - Optional intelligence modules (file reputation, threat feeds, DKG/Blackbox) are separate, off by
   default, and never sit on the per-connection enforcement path.
 
@@ -244,9 +285,11 @@ coverage is tracked in [the VM test plan](docs/PRIVACY_SHIELD_VM_TEST_PLAN.md).
 
 ### AI Security Analyst
 
-An optional, default-disabled read-only analyst for the current bounded connection snapshot. It
-uses an OpenAI-compatible provider (cloud HTTPS or a local loopback endpoint), protects the API key
-with Windows DPAPI, redacts local paths by default and stores only bounded structured findings. It
+An optional, default-disabled read-only analyst for the current bounded connection snapshot. The
+primary seamless provider uses the **OpenChamber/OpenCode CLI already signed in on the PC**
+(`opencode://local`), so no separate local inference server is needed; OpenAI-compatible, OpenAI,
+Anthropic, DeepSeek and Z.ai providers remain available. API keys are protected with Windows DPAPI,
+local paths are redacted by default and only bounded structured findings are stored. The analyst
 cannot change firewall rules, execute commands or read arbitrary files. See
 [AI Security Analyst](docs/AI_ANALYST.md).
 
