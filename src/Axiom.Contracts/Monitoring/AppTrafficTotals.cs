@@ -16,4 +16,10 @@ public sealed record AppTrafficTotals(
     DateTimeOffset UpdatedUtc)
 {
     public long TotalBytes => BytesSent + BytesReceived;
+
+    /// <summary>Bytes per second measured for the latest poll; zero when the app was idle.</summary>
+    public double SentBytesPerSecond { get; init; }
+
+    /// <summary>Bytes per second measured for the latest poll; zero when the app was idle.</summary>
+    public double ReceivedBytesPerSecond { get; init; }
 }

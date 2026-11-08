@@ -12,6 +12,8 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
     private readonly ConnectionMonitor _monitor;
     private readonly IUserInteraction _ui;
     private readonly ConnectionActionService _actions;
+    private readonly Dictionary<string, ConnectionAppGroup> _groupIndex =
+        new(StringComparer.OrdinalIgnoreCase);
     private string? _selectedKey;
 
     public ConnectionsPageViewModel(
@@ -201,34 +203,38 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
             VisibleConnections.Add(row);
         }
 
-        Groups.Clear();
         var traffic = _monitor.AppTraffic.ToDictionary(
             item => item.Key,
             StringComparer.OrdinalIgnoreCase);
-        var grouped = VisibleConnections
-            .GroupBy(
-                row => row.Source.AppPath.Length > 0
-                    ? row.Source.AppPath
-                    : $"pid:{row.ProcessId}",
-                StringComparer.OrdinalIgnoreCase)
-            .Select(group =>
-            {
-                var rows = group.ToList();
-                traffic.TryGetValue(group.Key, out var totals);
-                return new ConnectionAppGroup(
-                    group.Key,
-                    rows[0].AppDisplayName,
-                    rows[0].Source.AppPath,
-                    rows,
-                    totals?.BytesSent ?? rows.Sum(row => row.ObservedBytesSent ?? 0),
-                    totals?.BytesReceived ?? rows.Sum(row => row.ObservedBytesReceived ?? 0),
-                    totals?.SinceUtc);
-            });
+        var desired = SortGroups(
+                VisibleConnections
+                    .GroupBy(
+                        row => row.Source.AppPath.Length > 0
+                            ? row.Source.AppPath
+                            : $"pid:{row.ProcessId}",
+                        StringComparer.OrdinalIgnoreCase)
+                    .Select(group =>
+                    {
+                        var rows = group.ToList();
+                        traffic.TryGetValue(group.Key, out var totals);
+                        var sent = totals?.BytesSent ?? rows.Sum(row => row.ObservedBytesSent ?? 0);
+                        var received = totals?.BytesReceived ?? rows.Sum(row => row.ObservedBytesReceived ?? 0);
+                        return new GroupSnapshot(
+                            group.Key,
+                            rows[0].AppDisplayName,
+                            rows[0].Source.AppPath,
+                            rows,
+                            sent,
+                            received,
+                            totals?.SentBytesPerSecond ?? 0,
+                            totals?.ReceivedBytesPerSecond ?? 0,
+                            totals?.SinceUtc,
+                            totals?.SinceUtc is not null ||
+                            rows.Any(row => row.ObservedBytesSent is not null));
+                    }))
+            .ToList();
 
-        foreach (var group in SortGroups(grouped))
-        {
-            Groups.Add(group);
-        }
+        SyncGroups(desired);
 
         if (_selectedKey is not null)
         {
@@ -244,7 +250,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         }
     }
 
-    private IEnumerable<ConnectionAppGroup> SortGroups(IEnumerable<ConnectionAppGroup> groups)
+    private IEnumerable<GroupSnapshot> SortGroups(IEnumerable<GroupSnapshot> groups)
     {
         var ordered = GroupSort switch
         {
@@ -255,8 +261,8 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
                 ? groups.OrderByDescending(group => group.HasMeasurement).ThenByDescending(group => group.BytesReceived)
                 : groups.OrderByDescending(group => group.HasMeasurement).ThenBy(group => group.BytesReceived),
             "Sockets" => GroupSortDescending
-                ? groups.OrderByDescending(group => group.SocketCount)
-                : groups.OrderBy(group => group.SocketCount),
+                ? groups.OrderByDescending(group => group.Rows.Count)
+                : groups.OrderBy(group => group.Rows.Count),
             "Name" => GroupSortDescending
                 ? groups.OrderByDescending(group => group.Name, StringComparer.OrdinalIgnoreCase)
                 : groups.OrderBy(group => group.Name, StringComparer.OrdinalIgnoreCase),
@@ -266,5 +272,67 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         };
 
         return ordered.ThenBy(group => group.Name, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Keeps one <see cref="ConnectionAppGroup"/> instance per executable across refreshes, so an
+    /// expanded group and its row list survive the one-second poll instead of being recreated.
+    /// </summary>
+    private void SyncGroups(IReadOnlyList<GroupSnapshot> desired)
+    {
+        var wanted = desired.Select(item => item.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        for (var index = Groups.Count - 1; index >= 0; index--)
+        {
+            var existing = Groups[index];
+            if (!wanted.Contains(existing.Key))
+            {
+                _groupIndex.Remove(existing.Key);
+                Groups.RemoveAt(index);
+            }
+        }
+
+        for (var index = 0; index < desired.Count; index++)
+        {
+            var item = desired[index];
+            if (!_groupIndex.TryGetValue(item.Key, out var group))
+            {
+                group = new ConnectionAppGroup(item.Key);
+                _groupIndex[item.Key] = group;
+                Groups.Insert(Math.Min(index, Groups.Count), group);
+            }
+            else
+            {
+                var current = Groups.IndexOf(group);
+                if (current != index)
+                {
+                    Groups.Move(current, index);
+                }
+            }
+
+            group.Update(
+                item.Name,
+                item.Path,
+                item.Rows,
+                item.BytesSent,
+                item.BytesReceived,
+                item.SentBytesPerSecond,
+                item.ReceivedBytesPerSecond,
+                item.SinceUtc);
+        }
+    }
+
+    private sealed record GroupSnapshot(
+        string Key,
+        string Name,
+        string Path,
+        IReadOnlyList<ConnectionRow> Rows,
+        long BytesSent,
+        long BytesReceived,
+        double SentBytesPerSecond,
+        double ReceivedBytesPerSecond,
+        DateTimeOffset? SinceUtc,
+        bool HasMeasurement)
+    {
+        public long TotalBytes => BytesSent + BytesReceived;
     }
 }

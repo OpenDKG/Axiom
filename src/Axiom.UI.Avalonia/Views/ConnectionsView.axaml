@@ -106,6 +106,7 @@
                 <Border BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1" Padding="4,4"
                         HorizontalAlignment="Stretch">
                   <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
                             Foreground="{DynamicResource Axiom.TextPrimary}">
                     <Expander.Header>
                       <Grid ColumnDefinitions="*,Auto" Margin="0,2">
@@ -114,14 +115,18 @@
                                      Foreground="{DynamicResource Axiom.TextPrimary}" />
                           <controls:AxiomSelectableTextBlock Text="{Binding PathText}" FontSize="9"
                                      Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                          <StackPanel Orientation="Horizontal" Spacing="7">
+                            <controls:AxiomSelectableTextBlock Text="{Binding CountText}" FontSize="9"
+                                       Foreground="{DynamicResource Axiom.TextSecondary}" />
+                            <controls:AxiomSelectableTextBlock Text="{Binding ProtocolText}" FontSize="9"
+                                       Foreground="{DynamicResource Axiom.TextMuted}" />
+                          </StackPanel>
                         </StackPanel>
                         <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="1" ToolTip.Tip="{Binding TrafficTooltip}">
                           <controls:AxiomSelectableTextBlock Text="{Binding TrafficText}" FontSize="11" FontWeight="SemiBold"
                                      HorizontalAlignment="Right" Foreground="{DynamicResource Axiom.Accent}" />
-                          <controls:AxiomSelectableTextBlock Text="{Binding CountText}" FontSize="9" HorizontalAlignment="Right"
-                                     Foreground="{DynamicResource Axiom.TextSecondary}" />
-                          <controls:AxiomSelectableTextBlock Text="{Binding ProtocolText}" FontSize="9" HorizontalAlignment="Right"
-                                     Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Text="{Binding RateText}" IsVisible="{Binding HasRateText}" FontSize="9.5"
+                                     HorizontalAlignment="Right" Foreground="{DynamicResource Axiom.TextSecondary}" />
                         </StackPanel>
                       </Grid>
                     </Expander.Header>

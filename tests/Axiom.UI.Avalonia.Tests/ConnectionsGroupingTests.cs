@@ -32,6 +32,7 @@ public sealed class ConnectionsGroupingTests
         Assert.Contains("MB", page.Groups[0].TrafficText);
         Assert.Contains("5.00 MB", page.Groups[0].TrafficText);
         Assert.Contains("60.00 MB", page.Groups[0].TrafficText);
+        Assert.Equal("now idle", page.Groups[0].RateText);
 
         page.GroupSort = "Sent";
         page.GroupSortDescending = false;
@@ -66,6 +67,33 @@ public sealed class ConnectionsGroupingTests
         monitor.Dispose();
     }
 
+    [Fact]
+    public async Task Expanded_group_survives_refresh_and_shows_the_latest_rate()
+    {
+        var path = @"C:\Apps\browser.exe";
+        var source = new ScriptedSource(Snapshot(
+            [Traffic(path, "browser.exe", 5 * 1024 * 1024, 60 * 1024 * 1024, 1_500_000, 3_000_000)],
+            Connection(path, "browser.exe", 42, "127.0.0.1:5000")));
+        var monitor = new ConnectionMonitor(source, new FakeTimerFactory());
+        await monitor.PollAsync();
+        var page = new ConnectionsPageViewModel(monitor);
+        var group = Assert.Single(page.Groups);
+        group.IsExpanded = true;
+
+        source.Snapshot = Snapshot(
+            [Traffic(path, "browser.exe", 6 * 1024 * 1024, 63 * 1024 * 1024, 2_000_000, 4_000_000)],
+            Connection(path, "browser.exe", 42, "127.0.0.1:5000"));
+        await monitor.PollAsync();
+
+        Assert.Same(group, Assert.Single(page.Groups));
+        Assert.True(group.IsExpanded);
+        Assert.Contains("6.00 MB", group.TrafficText);
+        Assert.Contains("MB/s", group.RateText);
+
+        page.Dispose();
+        monitor.Dispose();
+    }
+
     private static ConnectionSnapshot Snapshot(
         IReadOnlyList<AppTrafficTotals> traffic,
         params LiveConnection[] connections) => new()
@@ -81,14 +109,20 @@ public sealed class ConnectionsGroupingTests
         string path,
         string name,
         long sent,
-        long received) => new(
+        long received,
+        double sentRate = 0,
+        double receivedRate = 0) => new(
         path,
         name,
         path,
         sent,
         received,
         DateTimeOffset.UnixEpoch,
-        DateTimeOffset.UnixEpoch);
+        DateTimeOffset.UnixEpoch)
+    {
+        SentBytesPerSecond = sentRate,
+        ReceivedBytesPerSecond = receivedRate,
+    };
 
     private static LiveConnection Connection(
         string path,
@@ -114,12 +148,14 @@ public sealed class ConnectionsGroupingTests
 
     private sealed class ScriptedSource(ConnectionSnapshot snapshot) : IConnectionSnapshotSource
     {
+        public ConnectionSnapshot Snapshot { get; set; } = snapshot;
+
         public string Name => "test";
 
         public TimeSpan PollInterval => TimeSpan.FromSeconds(1);
 
         public Task<ConnectionSnapshot> CaptureAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(snapshot);
+            Task.FromResult(Snapshot);
     }
 
     private sealed class FakeTimerFactory : IUiTimerFactory

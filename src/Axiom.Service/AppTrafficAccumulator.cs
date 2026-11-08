@@ -18,12 +18,25 @@ public sealed class AppTrafficAccumulator
 
     private readonly Dictionary<string, AppTotals> _apps = new(StringComparer.OrdinalIgnoreCase);
 
+    private DateTimeOffset _lastApplyUtc;
+
     public ConnectionSnapshot Apply(ConnectionSnapshot snapshot, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
         lock (_gate)
         {
+            var elapsedSeconds = _lastApplyUtc == default
+                ? 0
+                : Math.Max(0.1, (now - _lastApplyUtc).TotalSeconds);
+            _lastApplyUtc = now;
+
+            foreach (var totals in _apps.Values)
+            {
+                totals.SentRate = 0;
+                totals.ReceivedRate = 0;
+            }
+
             var live = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var connection in snapshot.Connections)
@@ -62,6 +75,12 @@ public sealed class AppTrafficAccumulator
 
                 totals.Sent += deltaSent;
                 totals.Received += deltaReceived;
+                if (elapsedSeconds > 0)
+                {
+                    totals.SentRate += deltaSent / elapsedSeconds;
+                    totals.ReceivedRate += deltaReceived / elapsedSeconds;
+                }
+
                 totals.UpdatedUtc = now;
                 _apps[appKey] = totals;
             }
@@ -91,7 +110,11 @@ public sealed class AppTrafficAccumulator
                     pair.Value.Sent,
                     pair.Value.Received,
                     pair.Value.SinceUtc,
-                    pair.Value.UpdatedUtc))
+                    pair.Value.UpdatedUtc)
+                {
+                    SentBytesPerSecond = pair.Value.SentRate,
+                    ReceivedBytesPerSecond = pair.Value.ReceivedRate,
+                })
                 .OrderByDescending(item => item.TotalBytes)
                 .ThenBy(item => item.AppName, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -118,5 +141,9 @@ public sealed class AppTrafficAccumulator
         public long Sent { get; set; }
 
         public long Received { get; set; }
+
+        public double SentRate { get; set; }
+
+        public double ReceivedRate { get; set; }
     }
 }
