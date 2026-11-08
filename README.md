@@ -21,7 +21,7 @@ the enforcement authority. There is no account, no cloud, no advertising and no 
 Axiom brings together four surfaces:
 
 - **Network visibility and history** for TCP/UDP IPv4/IPv6 sockets and applications.
-- **Axiom Shield** â€” one switch that installs the elevated local service and turns the ask policy
+- **Axiom Shield** — one switch that installs the elevated local service and turns the ask policy
   on: every new outbound application waits for Block or Allow, and blocks are Axiom-owned Windows
   Firewall rules with read-back verification and recovery.
 - **Local privacy controls** including Privacy Shield DNS filtering and a read-only AI analyst.
@@ -67,11 +67,41 @@ agent-level guardrails and signed threat-intelligence context respectively.
   Standard mode.
 - **Branding and rendering.** The high-resolution lockup uses high-quality interpolation and the
   exact 3:1 aspect ratio, with layout rounding enabled for a crisp header.
+- **Privacy Shield is live and actionable.** Blocked DNS queries are attributed to the requesting
+  application through the Windows UDP/TCP owner tables and shown in a 2-second list with app
+  name/path, category and time. Each row offers **Allow** and **Block**: Allow adds a custom
+  allowlist entry and turns the row into Block, Block reverses it. The catalog has five
+  licence-labelled sources — HaGeZi Multi PRO and OISD Big (GPL-3.0), WindowsSpyBlocker (MIT), and
+  The Block List Project Ads/Tracking (Unlicense) — downloaded from upstream at runtime, never
+  bundled.
+- **Privacy Shield survives upgrades and explains zero statistics.** Installed-service settings and
+  compiled rules live in `%ProgramData%\Axiom\` with a one-time copy from the old service profile;
+  the blocked-query history stays in the service profile. When the resolver runs but no adapter
+  points at `127.0.0.1`, the statistics panel says so and points to the UAC helper; the adapter row
+  shows `127.0.0.1 · Privacy Shield`, including after an app restart.
+- **Connections grouped by application with real traffic totals.** The page opens grouped and shows
+  cumulative TCP megabytes sent/received plus the realtime rate from the latest poll
+  (`now ↑ … · ↓ …` or `now idle`). Sort by total, sent, received, sockets or name in either
+  direction from the action toolbar. Expanded groups and their rows survive the one-second refresh;
+  UDP-only apps say `traffic not measured`.
+- **Buttons follow the active theme.** The Fluent grey default is replaced by Axiom palette
+  surfaces, themed borders, accent hover/press and disabled states, with an accent primary style
+  for Apply/Analyze/Export/Configure/Shield. All four themes use the same styles.
+- **Installer profiles: Complete versus Partial.** The setup explains both before writing anything.
+  **Complete** uses one UAC prompt to register and start the service, then enables Axiom Shield
+  (`ask` policy), the Privacy Shield resolver (Balanced, five sources downloaded and compiled up to
+  the 500,000-entry cap), notifications, tray icon, background-console hiding and start with
+  Windows, and installs Blackbox, DKG and agent hooks. **Partial** stays administrator-free with
+  every module opt-in. The applied profile is recorded in
+  `%LOCALAPPDATA%\Axiom\install-profile.json`; a declined elevation produces a warning instead of
+  silently claiming complete protection.
 
 **Known gaps in 0.8.0:** ETW telemetry is not integrated yet, so SNI, TLS certificate subjects, DNS
-query names, exact per-connection byte counts and TIME_WAIT ownership remain missing evidence.
-There is no reputation/threat-intelligence feed, command lines are sanitised and truncated, and
-Axiom reports only its own firewall rules rather than the effective Windows default policy.
+query names, per-packet byte counts and TIME_WAIT ownership remain missing evidence. Axiom measures
+per-application totals from Windows extended TCP statistics only (TCP, one-second poll; UDP is not
+measured). There is no reputation/threat-intelligence feed, command lines are sanitised and
+truncated, and Axiom reports only its own firewall rules rather than the effective Windows default
+policy.
 
 ## What's in 0.7.6
 
