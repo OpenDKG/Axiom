@@ -40,6 +40,14 @@ public static class PendingAppDetector
                 SocketCount = group.Count(),
                 FirstObservedUtc = group.Min(connection => connection.FirstObservedUtc),
                 IsAgent = AgentExecutables.IsAgentPath(group.Key),
+                RemoteEndpoints = group
+                    .Select(connection => connection.RemoteEndpoint)
+                    .Where(endpoint =>
+                        !string.IsNullOrWhiteSpace(endpoint) &&
+                        !string.Equals(endpoint, "—", StringComparison.Ordinal))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(5)
+                    .ToList(),
             })
             .OrderByDescending(item => item.IsAgent)
             .ThenByDescending(item => item.FirstObservedUtc)

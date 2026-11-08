@@ -19,6 +19,12 @@ public sealed record ProtectionPendingApp
     public required DateTimeOffset FirstObservedUtc { get; init; }
 
     public bool IsAgent { get; init; }
+
+    /// <summary>
+    /// Remote endpoints observed for this executable, newest snapshot only. Empty when Windows did
+    /// not report them. This is context for the operator, not a verdict.
+    /// </summary>
+    public IReadOnlyList<string> RemoteEndpoints { get; init; } = [];
 }
 
 /// <summary>A decision the operator made for one executable path.</summary>

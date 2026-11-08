@@ -30,6 +30,7 @@ public partial class App : Application
     private EventWaitHandle? _showWindowEvent;
     private Thread? _showWindowThread;
     private volatile bool _exiting;
+    private volatile bool _allowExit;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -44,6 +45,17 @@ public partial class App : Application
                 SignalExistingInstance();
                 desktop.Shutdown();
                 return;
+            }
+
+            // Provision Axiom-managed hooks for detected harnesses without a second setup dialog.
+            // Existing user-authored hooks are preserved; host-owned trust stays host-owned.
+            try
+            {
+                AgentHookMaintenance.ProvisionDetectedHooks();
+            }
+            catch
+            {
+                // Hook maintenance is best-effort and must not block startup.
             }
 
             var useService = arguments.Any(argument =>
@@ -100,6 +112,23 @@ public partial class App : Application
             window = new MainWindow { DataContext = _shell };
             _window = window;
             desktop.MainWindow = window;
+            AxiomAlertService.Configure(
+                () => _window,
+                ShowWindow,
+                (page, focusApps) => _shell?.NavigateToPage(page, focusApps));
+            desktop.ShutdownRequested += (_, _) => _allowExit = true;
+            window.Closing += (_, args) =>
+            {
+                if (_allowExit || !TraySettingsStore.Enabled)
+                {
+                    return;
+                }
+
+                // Closing with tray notifications enabled keeps Axiom in the notification area so
+                // an alert can still be shown next to the clock.
+                args.Cancel = true;
+                window.Hide();
+            };
 
             CreateTrayIcon(desktop);
             _shell.Start();
@@ -111,7 +140,9 @@ public partial class App : Application
             window.Show();
             if (startMinimized)
             {
-                window.Hide();
+                // The desktop lifetime shows MainWindow right after framework initialization, so
+                // hiding here would be undone. Post the hide to run once startup has finished.
+                Dispatcher.UIThread.Post(window.Hide, DispatcherPriority.Loaded);
             }
 
             if (!startMinimized && !autostartArgument && !OnboardingStore.IsCompleted)
@@ -223,7 +254,7 @@ public partial class App : Application
             _tray = new TrayIcon
             {
                 Icon = icon,
-                ToolTipText = "Axiom — local-only network monitor",
+                ToolTipText = "Axiom - Free Open-Source Network & AI Agent Security",
                 IsVisible = true,
             };
 
@@ -240,7 +271,11 @@ public partial class App : Application
                 TraySettingsStore.SetEnabled(notificationsItem.IsChecked);
 
             var exitItem = new NativeMenuItem("Exit Axiom");
-            exitItem.Click += (_, _) => desktop.Shutdown();
+            exitItem.Click += (_, _) =>
+            {
+                _allowExit = true;
+                desktop.Shutdown();
+            };
 
             menu.Add(openItem);
             menu.Add(notificationsItem);

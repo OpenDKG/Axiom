@@ -1,58 +1,98 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.FirewallView">
-  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="24,18,24,24">
+  <UserControl.Styles>
+    <Style Selector="Border.pending-row.focused">
+      <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+  </UserControl.Styles>
+  <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="24,18,24,24">
     <Border Grid.Row="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
             CornerRadius="8" Padding="16" Margin="0,0,0,12">
       <StackPanel Spacing="10">
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel Grid.Column="0" Spacing="3">
             <StackPanel Orientation="Horizontal" Spacing="10">
-              <TextBlock Text="Axiom Shield" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <controls:AxiomSelectableTextBlock Text="Axiom Shield" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
               <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
-                <TextBlock Text="{Binding ShieldBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="9" FontWeight="Bold" />
+                <controls:AxiomSelectableTextBlock Text="{Binding ShieldBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="9" FontWeight="Bold" />
               </Border>
-              <TextBlock Text="{Binding ServiceAccountText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+              <controls:AxiomSelectableTextBlock Text="{Binding ServiceAccountText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
             </StackPanel>
-            <TextBlock Text="{Binding ShieldStatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding ShieldHintText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Text="{Binding ShieldStatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Text="{Binding ShieldHintText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" TextWrapping="Wrap" />
           </StackPanel>
           <Button Grid.Column="1" Content="{Binding ShieldActionText}" Command="{Binding ToggleShieldCommand}"
                   Padding="12,6" VerticalAlignment="Top"
                   Background="{DynamicResource Axiom.Accent}" Foreground="{DynamicResource Axiom.Window}" />
         </Grid>
 
+        <Border IsVisible="{Binding HasAlertFocus}"
+                Background="{DynamicResource Axiom.AccentSoft}"
+                BorderBrush="{DynamicResource Axiom.Accent}"
+                BorderThickness="1" CornerRadius="6" Padding="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <controls:AxiomSelectableTextBlock Text="{Binding AlertFocusText}" FontSize="10.5"
+                       Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+            <Button Grid.Column="1" Content="Dismiss" Command="{Binding DismissAlertFocusCommand}"
+                    Padding="8,2" Margin="8,0,0,0" FontSize="10" VerticalAlignment="Top" />
+          </Grid>
+        </Border>
+
+        <controls:AxiomSelectableTextBlock Text="{Binding IgnoredMicrosoftText}" IsVisible="{Binding HasIgnoredMicrosoft}"
+                   FontSize="9.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+
         <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="6" Padding="10" IsVisible="{Binding HasPending}">
           <StackPanel Spacing="4">
+            <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="8">
+              <StackPanel Spacing="2">
+                <controls:AxiomSelectableTextBlock Text="Why Axiom Shield is asking" FontSize="10" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Axiom.Accent}" />
+                <controls:AxiomSelectableTextBlock
+                           Text="Axiom Shield lists every executable that opened a new outbound connection and has no Block/Allow decision yet. This is not a malware verdict, a VirusTotal result or a community-feed match. Block creates an outbound Windows Firewall rule for this executable; Allow records an allow decision and removes any existing Axiom block."
+                           FontSize="9.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
             <Grid ColumnDefinitions="*,Auto">
-              <TextBlock Text="Waiting for your decision" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <TextBlock Grid.Column="1" Text="{Binding PendingCount, StringFormat={}{0} pending}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+              <controls:AxiomSelectableTextBlock Text="New outbound applications" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding PendingCount, StringFormat={}{0} pending}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             </Grid>
+
             <ScrollViewer MaxHeight="132" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
               <ItemsControl ItemsSource="{Binding Pending}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
-                    <Grid ColumnDefinitions="2*,84,64,Auto,Auto" Margin="0,2">
-                      <StackPanel Grid.Column="0" Spacing="0" ToolTip.Tip="{Binding Tooltip}">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                          <TextBlock Text="{Binding AppName}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                          <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="3" Padding="4,0"
-                                  IsVisible="{Binding IsAgent}">
-                            <TextBlock Text="{Binding AgentText}" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource Axiom.Accent}" />
-                          </Border>
+                    <Border Classes="pending-row" Classes.focused="{Binding IsFocused}"
+                            Margin="0,1" Padding="4,2" CornerRadius="4" Background="Transparent">
+                      <Grid ColumnDefinitions="2*,84,64,Auto,Auto" Margin="0,2">
+                        <StackPanel Grid.Column="0" Spacing="0" ToolTip.Tip="{Binding Tooltip}">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <controls:AxiomSelectableTextBlock Text="{Binding AppName}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                            <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="3" Padding="4,0"
+                                    IsVisible="{Binding IsAgent}">
+                              <controls:AxiomSelectableTextBlock Text="{Binding AgentText}" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource Axiom.Accent}" />
+                            </Border>
+                          </StackPanel>
+                          <controls:AxiomSelectableTextBlock Text="{Binding AppPath}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                          <controls:AxiomSelectableTextBlock Text="{Binding RemoteText}" FontSize="8.5"
+                                     Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis"
+                                     ToolTip.Tip="{Binding TriggerText}" />
                         </StackPanel>
-                        <TextBlock Text="{Binding AppPath}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
-                      </StackPanel>
-                      <TextBlock Grid.Column="1" Text="{Binding SocketText}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
-                      <TextBlock Grid.Column="2" Text="{Binding FirstSeenText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
-                      <Button Grid.Column="3" Content="Block" Padding="8,3" Margin="6,0,0,0"
-                              Background="{DynamicResource Axiom.DangerBackground}" Foreground="{DynamicResource Axiom.TextPrimary}"
-                              Command="{Binding $parent[ItemsControl].DataContext.BlockPendingCommand}"
-                              CommandParameter="{Binding}" />
-                      <Button Grid.Column="4" Content="Allow" Padding="8,3" Margin="6,0,0,0"
-                              Command="{Binding $parent[ItemsControl].DataContext.AllowPendingCommand}"
-                              CommandParameter="{Binding}" />
-                    </Grid>
+                        <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding SocketText}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+                        <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding FirstSeenText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+                        <Button Grid.Column="3" Content="Block" Padding="8,3" Margin="6,0,0,0"
+                                Background="{DynamicResource Axiom.DangerBackground}" Foreground="{DynamicResource Axiom.TextPrimary}"
+                                Command="{Binding $parent[ItemsControl].DataContext.BlockPendingCommand}"
+                                CommandParameter="{Binding}" />
+                        <Button Grid.Column="4" Content="Allow" Padding="8,3" Margin="6,0,0,0"
+                                Command="{Binding $parent[ItemsControl].DataContext.AllowPendingCommand}"
+                                CommandParameter="{Binding}" />
+                      </Grid>
+                    </Border>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
@@ -62,12 +102,64 @@
 
         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShieldEnabled}">
           <StackPanel Grid.Column="0" Spacing="2">
-            <TextBlock Text="Agent network lockdown" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <TextBlock Text="{Binding AgentLockdownHintText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Text="Agent network lockdown" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="{Binding AgentLockdownHintText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </StackPanel>
           <Button Grid.Column="1" Content="{Binding AgentLockdownActionText}" Command="{Binding ToggleAgentLockdownCommand}"
                   Padding="12,5" VerticalAlignment="Center" />
         </Grid>
+
+        <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="6" Padding="10" IsVisible="{Binding HasDecisions}">
+          <StackPanel Spacing="4">
+            <Grid ColumnDefinitions="*,Auto">
+              <controls:AxiomSelectableTextBlock Text="Remembered Shield decisions" FontSize="11" FontWeight="SemiBold"
+                         Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding DecisionCount, StringFormat={}{0} decision(s)}"
+                         FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            </Grid>
+            <controls:AxiomSelectableTextBlock
+                       Text="Use Block or Unblock on any remembered decision. Block creates an Axiom outbound rule; Unblock removes that rule and records an allow decision. Only Axiom-owned rules are changed. Agent-lockdown decisions are managed by the lockdown button."
+                       FontSize="9.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+            <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <ItemsControl ItemsSource="{Binding Decisions}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Grid ColumnDefinitions="2*,70,90,Auto" Margin="0,2">
+                      <Grid.ContextMenu>
+                        <ContextMenu>
+                          <MenuItem Header="{Binding $parent[ContextMenu].PlacementTarget.DataContext.ActionMenuText}"
+                                    IsEnabled="{Binding $parent[ContextMenu].PlacementTarget.DataContext.CanToggle}"
+                                    Command="{Binding $parent[ContextMenu].PlacementTarget.DataContext.ToggleDecisionCommand}"
+                                    CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                        </ContextMenu>
+                      </Grid.ContextMenu>
+                      <StackPanel Grid.Column="0" Spacing="0" ToolTip.Tip="{Binding Tooltip}">
+                        <controls:AxiomSelectableTextBlock Text="{Binding AppName}" FontSize="10.5"
+                                   Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                        <controls:AxiomSelectableTextBlock Text="{Binding AppPath}" FontSize="8.5"
+                                   Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding ActionText}" FontSize="9.5"
+                                 Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+                      <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding DecidedText}" FontSize="9"
+                                 Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+                      <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4">
+                        <Button Content="{Binding ActionMenuText}" Padding="8,2"
+                                IsVisible="{Binding CanToggle}"
+                                ToolTip.Tip="{Binding ActionHint}"
+                                Command="{Binding $parent[ItemsControl].DataContext.ToggleDecisionCommand}"
+                                CommandParameter="{Binding}" />
+                        <controls:AxiomSelectableTextBlock Text="{Binding RuleText}" FontSize="9"
+                                   Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center"
+                                   IsVisible="{Binding !CanToggle}" />
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </StackPanel>
+        </Border>
       </StackPanel>
     </Border>
 
@@ -76,22 +168,22 @@
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Grid.Column="0" Spacing="4">
           <StackPanel Orientation="Horizontal" Spacing="10">
-            <TextBlock Text="Windows Firewall · Axiom-owned rules" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="Windows Firewall · Axiom-owned rules" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
-              <TextBlock Text="{Binding NoticeBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="9" FontWeight="Bold" />
+              <controls:AxiomSelectableTextBlock Text="{Binding NoticeBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="9" FontWeight="Bold" />
             </Border>
           </StackPanel>
-          <TextBlock Text="{Binding NoticeText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding NoticeText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" TextWrapping="Wrap" />
         </StackPanel>
         <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Right">
-          <TextBlock Text="{Binding CapabilityStatusText}" Foreground="{DynamicResource Axiom.TextPrimary}" FontSize="12" HorizontalAlignment="Right" />
-          <TextBlock Text="{Binding WritePathText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" HorizontalAlignment="Right" />
+          <controls:AxiomSelectableTextBlock Text="{Binding CapabilityStatusText}" Foreground="{DynamicResource Axiom.TextPrimary}" FontSize="12" HorizontalAlignment="Right" />
+          <controls:AxiomSelectableTextBlock Text="{Binding WritePathText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" HorizontalAlignment="Right" />
           <Button Content="Recheck" Command="{Binding RefreshCommand}" HorizontalAlignment="Right" Padding="12,5" Margin="0,4,0,0" />
         </StackPanel>
       </Grid>
     </Border>
 
-    <TextBlock Grid.Row="2" Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11"
+    <controls:AxiomSelectableTextBlock Grid.Row="2" Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11"
                TextWrapping="Wrap" Margin="2,10,0,0" />
 
     <Grid Grid.Row="3" ColumnDefinitions="1.35*,7,1*" Margin="0,10,0,0">
@@ -100,44 +192,53 @@
         <Grid RowDefinitions="Auto,Auto,*">
           <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,12,16,8">
             <StackPanel Grid.Column="0">
-              <TextBlock Text="Owned rules" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <TextBlock Text="{Binding CapabilityDetail}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Text="Owned rules" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <controls:AxiomSelectableTextBlock Text="{Binding CapabilityDetail}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             </StackPanel>
-            <TextBlock Grid.Column="1" Text="{Binding OwnedRuleCountText}" FontSize="16" FontWeight="SemiBold"
+            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding OwnedRuleCountText}" FontSize="16" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.Accent}" VerticalAlignment="Center" />
           </Grid>
 
           <Grid Grid.Row="1" ColumnDefinitions="1.3*,60,54,1.2*,56,70,70,Auto" Margin="16,4,16,6">
-            <TextBlock Grid.Column="0" Text="APPLICATION" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Column="1" Text="DIR" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Column="2" Text="ACTION" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Column="3" Text="PROFILES" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Column="4" Text="PROTO" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Column="5" Text="PORTS" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Column="6" Text="STATE" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="APPLICATION" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="DIR" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="2" Text="ACTION" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="3" Text="PROFILES" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="4" Text="PROTO" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="5" Text="PORTS" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="6" Text="STATE" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
           </Grid>
 
-          <ListBox Grid.Row="2" Classes="data-list" ItemsSource="{Binding Rules}" Background="Transparent"
+          <ListBox Grid.Row="2" Classes="data-list" ItemsSource="{Binding Rules}" Background="Transparent" MaxHeight="520"
                    BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid ColumnDefinitions="1.3*,60,54,1.2*,56,70,70,Auto" Margin="0,3">
-                  <TextBlock Grid.Column="0" Text="{Binding Application}" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="1" Text="{Binding DirectionText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                  <TextBlock Grid.Column="2" Text="{Binding ActionText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                  <TextBlock Grid.Column="3" Text="{Binding ProfilesText}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="4" Text="{Binding ProtocolText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                  <TextBlock Grid.Column="5" Text="{Binding PortsText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                  <TextBlock Grid.Column="6" Text="{Binding StateText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                  <Button Grid.Column="7" Content="Remove" Padding="8,2" Margin="6,0,0,0"
-                          Command="{Binding $parent[ListBox].DataContext.RemoveRuleCommand}"
-                          CommandParameter="{Binding}" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding Application}" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding DirectionText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding ActionText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding ProfilesText}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding ProtocolText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding PortsText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="6" Text="{Binding StateText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                  <Panel Grid.Column="7">
+                    <Button Content="Unblock" Padding="8,2" Margin="6,0,0,0"
+                            IsVisible="{Binding CanUnblock}"
+                            ToolTip.Tip="Remove the Axiom block and record an allow decision."
+                            Command="{Binding $parent[ListBox].DataContext.UnblockRuleCommand}"
+                            CommandParameter="{Binding}" />
+                    <Button Content="Remove" Padding="8,2" Margin="6,0,0,0"
+                            IsVisible="{Binding !CanUnblock}"
+                            ToolTip.Tip="Remove this rule only. For a Shield block, use Unblock in Remembered Shield decisions."
+                            Command="{Binding $parent[ListBox].DataContext.RemoveRuleCommand}"
+                            CommandParameter="{Binding}" />
+                  </Panel>
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
 
-          <TextBlock Grid.Row="2" Text="No Axiom-owned rules were found on this host." Foreground="{DynamicResource Axiom.TextMuted}"
+          <controls:AxiomSelectableTextBlock Grid.Row="2" Text="No Axiom-owned rules were found on this host." Foreground="{DynamicResource Axiom.TextMuted}"
                      FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
                      IsVisible="{Binding IsEmpty}" />
         </Grid>
@@ -148,63 +249,62 @@
 
       <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
               CornerRadius="8" Padding="16">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Spacing="10">
-            <TextBlock Text="Rule defaults" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <TextBlock Text="{Binding DefaultsStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-            <StackPanel Orientation="Horizontal" Spacing="12">
-              <CheckBox Content="Domain" IsChecked="{Binding DefaultDomain}" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <CheckBox Content="Private" IsChecked="{Binding DefaultPrivate}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+        <StackPanel Spacing="10">
+            <controls:AxiomSelectableTextBlock Text="Rule defaults" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="{Binding DefaultsStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <WrapPanel>
+              <CheckBox Content="Domain" Margin="0,0,12,0" IsChecked="{Binding DefaultDomain}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <CheckBox Content="Private" Margin="0,0,12,0" IsChecked="{Binding DefaultPrivate}" Foreground="{DynamicResource Axiom.TextPrimary}" />
               <CheckBox Content="Public" IsChecked="{Binding DefaultPublic}" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            </StackPanel>
+            </WrapPanel>
             <ComboBox ItemsSource="{Binding ProtocolOptions}" SelectedItem="{Binding DefaultProtocolText}" Width="120" HorizontalAlignment="Left" />
-            <TextBox Text="{Binding DefaultPortsText}" PlaceholderText="Remote ports, e.g. 443,8000-8100" />
-            <TextBox Text="{Binding DefaultAddressesText}" PlaceholderText="Remote addresses or CIDR" />
+            <TextBox Text="{Binding DefaultPortsText}" PlaceholderText="Remote ports, e.g. 443,8000-8100" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+            <TextBox Text="{Binding DefaultAddressesText}" PlaceholderText="Remote addresses or CIDR" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
             <StackPanel Orientation="Horizontal" Spacing="8">
               <Button Content="Save defaults" Command="{Binding SaveDefaultsCommand}" Padding="12,6" />
               <Button Content="Reset" Command="{Binding ResetDefaultsCommand}" Padding="12,6" />
             </StackPanel>
 
             <Border Height="1" Background="{DynamicResource Axiom.Border}" Margin="0,6" />
-            <TextBlock Text="New owned rule" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <TextBlock Text="{Binding NewRuleWriteHint}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Text="New owned rule" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="{Binding NewRuleWriteHint}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             <Grid ColumnDefinitions="*,Auto">
-              <TextBox Grid.Column="0" Text="{Binding NewRulePath}" PlaceholderText="Absolute executable path" />
+              <TextBox Grid.Column="0" Text="{Binding NewRulePath}" PlaceholderText="Absolute executable path" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
               <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseNewRuleExecutableCommand}" Margin="8,0,0,0" Padding="12,6" />
             </Grid>
             <Grid ColumnDefinitions="*,10,*">
               <StackPanel Grid.Column="0" Spacing="4">
-                <TextBlock Text="Direction" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+                <controls:AxiomSelectableTextBlock Text="Direction" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
                 <ComboBox ItemsSource="{Binding DirectionOptions}" SelectedItem="{Binding NewRuleDirectionText}" />
               </StackPanel>
               <StackPanel Grid.Column="2" Spacing="4">
-                <TextBlock Text="Action" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+                <controls:AxiomSelectableTextBlock Text="Action" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
                 <ComboBox ItemsSource="{Binding ActionOptions}" SelectedItem="{Binding NewRuleActionText}" />
               </StackPanel>
             </Grid>
-            <StackPanel Orientation="Horizontal" Spacing="12">
-              <CheckBox Content="Domain" IsChecked="{Binding NewRuleDomain}" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <CheckBox Content="Private" IsChecked="{Binding NewRulePrivate}" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <CheckBox Content="Public" IsChecked="{Binding NewRulePublic}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <WrapPanel>
+              <CheckBox Content="Domain" Margin="0,0,12,0" IsChecked="{Binding NewRuleDomain}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <CheckBox Content="Private" Margin="0,0,12,0" IsChecked="{Binding NewRulePrivate}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <CheckBox Content="Public" Margin="0,0,12,0" IsChecked="{Binding NewRulePublic}" Foreground="{DynamicResource Axiom.TextPrimary}" />
               <CheckBox Content="Enabled" IsChecked="{Binding NewRuleEnabled}" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            </StackPanel>
+            </WrapPanel>
             <Grid ColumnDefinitions="*,10,*">
               <StackPanel Grid.Column="0" Spacing="4">
-                <TextBlock Text="Protocol" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+                <controls:AxiomSelectableTextBlock Text="Protocol" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
                 <ComboBox ItemsSource="{Binding ProtocolOptions}" SelectedItem="{Binding NewRuleProtocolText}" />
               </StackPanel>
               <StackPanel Grid.Column="2" Spacing="4">
-                <TextBlock Text="Remote ports" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
-                <TextBox Text="{Binding NewRulePortsText}" />
+                <controls:AxiomSelectableTextBlock Text="Remote ports" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+                <TextBox Text="{Binding NewRulePortsText}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
               </StackPanel>
             </Grid>
-            <TextBox Text="{Binding NewRuleAddressesText}" PlaceholderText="Remote addresses or CIDR" />
+            <TextBox Text="{Binding NewRuleAddressesText}" PlaceholderText="Remote addresses or CIDR" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
             <Button Content="Apply rule" Command="{Binding ApplyNewRuleCommand}" Padding="12,6"
                     HorizontalAlignment="Left" Background="{DynamicResource Axiom.DangerBackground}" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <TextBlock Text="{Binding NewRuleStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Text="{Binding NewRuleStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </StackPanel>
-        </ScrollViewer>
       </Border>
     </Grid>
   </Grid>
+</ScrollViewer>
 </UserControl>

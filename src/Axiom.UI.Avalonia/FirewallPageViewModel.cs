@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Avalonia.Threading;
 using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Protection;
@@ -53,10 +54,58 @@ public sealed class FirewallRuleRow(ManagedRule rule)
 
     public string Tooltip =>
         $"{rule.Spec.AppPath}\nRule: {rule.OsRuleName}\nCreated by: {rule.Spec.CreatedBy}";
+
+    public string AppPath => rule.Spec.AppPath;
+
+    public bool IsBlock => rule.Spec.Action == FirewallAction.Block;
+
+    /// <summary>Agent lockdown rules are re-applied while lockdown stays on, so do not offer Unblock here.</summary>
+    public bool IsAgentLockdownRule =>
+        rule.Spec.Description?.Contains("agent lockdown", StringComparison.OrdinalIgnoreCase) == true;
+
+    public bool CanUnblock => IsBlock && !IsAgentLockdownRule;
+}
+
+/// <summary>One remembered Shield decision, with the action that can reverse a block.</summary>
+public sealed class ShieldDecisionRow(ProtectionDecision decision)
+{
+    public string AppPath => decision.AppPath;
+
+    public string AppName => decision.AppName;
+
+    public string ActionText => decision.Action == ProtectionDecisionAction.Block ? "Blocked" : "Allowed";
+
+    public string DecidedText =>
+        decision.DecidedUtc.ToLocalTime().ToString("MM-dd HH:mm", CultureInfo.InvariantCulture);
+
+    public bool IsBlock => decision.Action == ProtectionDecisionAction.Block;
+
+    public bool IsAgentLockdown => decision.IsAgentLockdown;
+
+    public bool CanUnblock => IsBlock && !IsAgentLockdown;
+
+    public bool CanBlock => !IsBlock && !IsAgentLockdown;
+
+    public bool CanToggle => CanBlock || CanUnblock;
+
+    public string ActionMenuText => IsBlock ? "Unblock" : "Block";
+
+    public string ActionHint => IsBlock
+        ? "Remove the Axiom block and record an allow decision."
+        : "Create an Axiom outbound block rule for this application.";
+
+    public string RuleText => decision.IsAgentLockdown
+        ? "Agent lockdown"
+        : decision.ManagedRuleId is null
+            ? "No Axiom rule"
+            : "Axiom rule";
+
+    public string Tooltip =>
+        $"{decision.AppPath}\nAction: {ActionText}\nDecided: {DecidedText}\n{RuleText}";
 }
 
 /// <summary>One outbound application that is waiting for a Block/Allow decision.</summary>
-public sealed class PendingAppRow(ProtectionPendingApp app)
+public sealed partial class PendingAppRow(ProtectionPendingApp app) : ObservableObject
 {
     public string AppPath => app.AppPath;
 
@@ -71,6 +120,23 @@ public sealed class PendingAppRow(ProtectionPendingApp app)
     public string AgentText => app.IsAgent ? "agent" : string.Empty;
 
     public string Tooltip => app.AppPath;
+
+    /// <summary>Remote endpoints for this pending executable, or a clear "not reported" phrase.</summary>
+    public string RemoteSummary => app.RemoteEndpoints.Count == 0
+        ? "an unreported remote endpoint"
+        : string.Join(", ", app.RemoteEndpoints);
+
+    public string RemoteText => app.RemoteEndpoints.Count == 0
+        ? "Outbound connection · remote endpoint not reported"
+        : "Outbound → " + string.Join(", ", app.RemoteEndpoints);
+
+    public string TriggerText =>
+        "Trigger: Axiom Shield ask policy. This executable opened a new outbound connection and has no Block/Allow decision yet. " +
+        "It is not a malware, VirusTotal or community-feed verdict. Block creates an outbound firewall rule; Allow records a decision.";
+
+    /// <summary>True when an alert pointed at this application, so the row stands out.</summary>
+    [ObservableProperty]
+    private bool _isFocused;
 }
 
 /// <summary>
@@ -81,14 +147,16 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 {
     private readonly IServiceRequestClient? _client;
     private readonly IUserInteraction _ui;
+    private readonly ConnectionMonitor? _monitor;
     private readonly FirewallDefaultsStore _defaultsStore = FirewallDefaultsStore.Shared;
 
-    public FirewallPageViewModel(IServiceRequestClient? serviceClient, IUserInteraction ui)
+    public FirewallPageViewModel(IServiceRequestClient? serviceClient, IUserInteraction ui, ConnectionMonitor? monitor = null)
         : base("Firewall", "Owned rules, defaults and rule editor", "F")
     {
         ArgumentNullException.ThrowIfNull(ui);
         _client = serviceClient;
         _ui = ui;
+        _monitor = monitor;
 
         ApplyDefaults(_defaultsStore.Load());
         CopyDefaultsToNewRule();
@@ -110,6 +178,26 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     public ObservableCollection<FirewallRuleRow> Rules { get; } = [];
 
     public ObservableCollection<PendingAppRow> Pending { get; } = [];
+
+    public ObservableCollection<ShieldDecisionRow> Decisions { get; } = [];
+
+    [ObservableProperty]
+    private bool _hasDecisions;
+
+    [ObservableProperty]
+    private int _decisionCount;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IgnoredMicrosoftText))]
+    [NotifyPropertyChangedFor(nameof(HasIgnoredMicrosoft))]
+    private int _ignoredMicrosoftCount;
+
+    /// <summary>Explanation shown when Microsoft-signed processes were removed from the ask list.</summary>
+    public string IgnoredMicrosoftText => IgnoredMicrosoftCount == 0
+        ? string.Empty
+        : $"{IgnoredMicrosoftCount} Microsoft-signed process(es) are not prompted.";
+
+    public bool HasIgnoredMicrosoft => IgnoredMicrosoftCount > 0;
 
     public IReadOnlyList<string> ProtocolOptions { get; } = ["Any", "TCP", "UDP"];
 
@@ -261,6 +349,14 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private bool _hasPending;
+
+    [ObservableProperty]
+    private bool _hasAlertFocus;
+
+    [ObservableProperty]
+    private string _alertFocusText = string.Empty;
+
+    private string[] _alertFocusPaths = [];
 
     [ObservableProperty]
     private int _agentPathCount;
@@ -597,6 +693,197 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     private Task AllowPendingAsync(PendingAppRow? row) =>
         DecidePendingAsync(row, ProtectionDecisionAction.Allow);
 
+    [RelayCommand(CanExecute = nameof(CanDecidePending))]
+    private Task ToggleDecisionAsync(ShieldDecisionRow? row) =>
+        row is { CanToggle: true }
+            ? row.IsBlock
+                ? ConfirmAndUnblockAsync(row.AppPath, row.AppName)
+                : ConfirmAndBlockAsync(row.AppPath, row.AppName)
+            : Task.CompletedTask;
+
+    [RelayCommand(CanExecute = nameof(CanDecidePending))]
+    private Task UnblockRuleAsync(FirewallRuleRow? row) =>
+        row is { CanUnblock: true }
+            ? ConfirmAndUnblockAsync(row.AppPath, row.Application)
+            : Task.CompletedTask;
+
+    private async Task ConfirmAndBlockAsync(string appPath, string appName)
+    {
+        var confirmed = await _ui.ConfirmAsync(
+            "Block this application",
+            $"Create an Axiom outbound Windows Firewall block rule for:\n{appPath}\n\n" +
+            "Only the Axiom-owned rule is changed. You can unblock it from Remembered Shield decisions at any time.",
+            "Block",
+            destructive: true,
+            CancellationToken.None).ConfigureAwait(true);
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await ApplyDecisionAsync(appPath, appName, ProtectionDecisionAction.Block).ConfigureAwait(true);
+    }
+
+    private async Task ConfirmAndUnblockAsync(string appPath, string appName)
+    {
+        var confirmed = await _ui.ConfirmAsync(
+            "Unblock this application",
+            $"Remove the Axiom outbound block rule for:\n{appPath}\n\n" +
+            "This restores network access and records an allow decision. Only the Axiom-owned rule is changed; other Windows Firewall rules are not touched.",
+            "Unblock",
+            destructive: false,
+            CancellationToken.None).ConfigureAwait(true);
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await ApplyDecisionAsync(appPath, appName, ProtectionDecisionAction.Allow).ConfigureAwait(true);
+    }
+
+    private async Task ApplyDecisionAsync(
+        string appPath,
+        string appName,
+        ProtectionDecisionAction action)
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        IsShieldBusy = true;
+        StatusText = action == ProtectionDecisionAction.Block
+            ? $"{appName}: applying block..."
+            : $"{appName}: removing the Axiom block...";
+        try
+        {
+            var status = await _client
+                .SendAsync<ProtectionStatus>(
+                    IpcCommandTypes.ProtectionDecide,
+                    new ProtectionDecideRequest
+                    {
+                        AppPath = appPath,
+                        AppName = appName,
+                        Action = action,
+                    },
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+
+            ApplyStatus(status);
+            StatusText = status.LastError
+                ?? (action == ProtectionDecisionAction.Block
+                    ? $"{appName}: blocked (Axiom firewall rule applied)."
+                    : $"{appName}: unblocked (allow decision recorded).");
+            DismissAlertFocus();
+            await RefreshAsync().ConfigureAwait(true);
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            StatusText = exception.Message;
+        }
+#pragma warning disable CA1031 // The page must show an IPC failure instead of crashing.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            StatusText = action == ProtectionDecisionAction.Block
+                ? $"Block failed: {exception.Message}"
+                : $"Unblock failed: {exception.Message}";
+        }
+        finally
+        {
+            IsShieldBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Highlights the applications an alert was about and explains what triggered the navigation.
+    /// The pending list is transient, so the banner also reports apps that are no longer waiting.
+    /// </summary>
+    public void FocusPendingApps(IReadOnlyList<string> appPaths)
+    {
+        ArgumentNullException.ThrowIfNull(appPaths);
+        _alertFocusPaths = appPaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        ApplyAlertFocus(true);
+
+        // Pull the current pending decisions; the page may have been opened long before the alert.
+        _ = RefreshAsync();
+    }
+
+    /// <summary>Applies a fresh protection snapshot while the Firewall page is visible.</summary>
+    public void UpdateProtectionStatus(ProtectionStatus status) => ApplyStatus(status);
+
+    [RelayCommand]
+    private void DismissAlertFocus()
+    {
+        _alertFocusPaths = [];
+        ApplyAlertFocus();
+    }
+
+    private void ApplyAlertFocus(bool requestScroll = false)
+    {
+        if (_alertFocusPaths.Length == 0)
+        {
+            HasAlertFocus = false;
+            AlertFocusText = string.Empty;
+            return;
+        }
+
+        var focusSet = new HashSet<string>(_alertFocusPaths, StringComparer.OrdinalIgnoreCase);
+        foreach (var row in Pending)
+        {
+            row.IsFocused = focusSet.Contains(row.AppPath);
+        }
+
+        var matched = Pending.Where(row => row.IsFocused).Select(row => row.AppName).ToList();
+        var names = matched.Count > 0
+            ? string.Join(", ", matched.Take(3))
+            : string.Join(", ", _alertFocusPaths
+                .Select(Path.GetFileName)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Take(3));
+        var total = matched.Count > 0 ? matched.Count : _alertFocusPaths.Length;
+        var suffix = total > 3 ? $" (+{total - 3} more)" : string.Empty;
+
+        HasAlertFocus = true;
+        if (matched.Count == 0)
+        {
+            AlertFocusText =
+                $"From the alert: {names}{suffix}. The application is not waiting now (its connection ended or it was decided). " +
+                "Nothing was blocked automatically; Block creates an outbound firewall rule and Allow records a decision.";
+        }
+        else if (matched.Count == 1)
+        {
+            var app = Pending.First(row => row.IsFocused);
+            AlertFocusText =
+                $"From the alert: {app.AppName} opened an outbound connection to {app.RemoteSummary}. " +
+                "Axiom Shield has no Block/Allow decision yet, so nothing is blocked. " +
+                "This is not a malware or community-feed verdict; Block adds an outbound firewall rule, Allow records a decision.";
+        }
+        else
+        {
+            AlertFocusText =
+                $"From the alert: {names}{suffix} opened new outbound connections and have no Block/Allow decision yet. " +
+                "Nothing is blocked. This is not a malware or community-feed verdict; Block adds outbound firewall rules, Allow records decisions.";
+        }
+
+        // The page reuses one ScrollViewer, so a previous visit may leave it scrolled past the
+        // banner. Ask the view to scroll to the top only when a new alert focus arrives.
+        if (requestScroll)
+        {
+            Dispatcher.UIThread.Post(
+                () => AlertFocusRequested?.Invoke(this, EventArgs.Empty),
+                DispatcherPriority.Background);
+        }
+    }
+
+    /// <summary>Raised when an alert focus should scroll the Firewall page back to the banner.</summary>
+    public event EventHandler? AlertFocusRequested;
+
     private async Task DecidePendingAsync(PendingAppRow? row, ProtectionDecisionAction action)
     {
         if (_client is null || row is null)
@@ -639,6 +926,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             ApplyStatus(status);
             StatusText = status.LastError
                 ?? $"{row.AppName}: {(action == ProtectionDecisionAction.Block ? "blocked" : "allowed")}.";
+            DismissAlertFocus();
             await RefreshAsync().ConfigureAwait(true);
         }
         catch (ServiceUnavailableException exception)
@@ -782,13 +1070,33 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         WritePathText = status.WriteGateOpen ? "enabled (Axiom Shield)" : "read-only";
 
         Pending.Clear();
+        var focusSet = new HashSet<string>(_alertFocusPaths, StringComparer.OrdinalIgnoreCase);
+        var ignoredMicrosoft = 0;
         foreach (var app in status.Pending)
         {
-            Pending.Add(new PendingAppRow(app));
+            if (ShieldProcessFilter.IsIgnored(app.AppPath))
+            {
+                ignoredMicrosoft++;
+                continue;
+            }
+
+            var enriched = ProtectionAlertContext.Enrich(app, _monitor?.Connections);
+            Pending.Add(new PendingAppRow(enriched) { IsFocused = focusSet.Contains(app.AppPath) });
         }
 
-        PendingCount = status.Pending.Count;
+        PendingCount = Pending.Count;
+        IgnoredMicrosoftCount = ignoredMicrosoft;
         HasPending = PendingCount > 0;
+
+        Decisions.Clear();
+        foreach (var decision in status.Decisions.OrderByDescending(item => item.DecidedUtc))
+        {
+            Decisions.Add(new ShieldDecisionRow(decision));
+        }
+
+        DecisionCount = Decisions.Count;
+        HasDecisions = DecisionCount > 0;
+        ApplyAlertFocus();
         AgentPathCount = status.AgentPaths.Count;
         AgentLockdownHintText = AgentPathCount == 0
             ? "No agent executable is connected right now."
@@ -797,7 +1105,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         ShieldStatusText = !string.IsNullOrWhiteSpace(status.LastError)
             ? status.LastError!
             : status.Enabled
-                ? $"Protection is on · {status.OwnedRuleCount} Axiom rule(s) · {status.Pending.Count} application(s) waiting for a decision."
+                ? $"Protection is on · {status.OwnedRuleCount} Axiom rule(s) · {PendingCount} new outbound application(s) with no Block/Allow decision."
                 : "Protection is off. Axiom only observes.";
 
         ShieldHintText = !status.ServiceElevated
