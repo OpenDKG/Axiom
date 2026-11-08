@@ -1440,8 +1440,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         SessionStatusText = SessionGroups.Count == 0
-            ? "No live Claude Code or Codex session descriptors were found. Hooks can still be installed and trusted."
-            : $"{SessionGroups.Sum(group => group.Sessions.Count)} host session(s) from Claude Code/Codex metadata. Raw session ids are not displayed.";
+            ? "No Claude Code or Codex session descriptors were found. Hooks can still be installed and trusted; OpenCode/OpenChamber history is not read here."
+            : $"{SessionGroups.Sum(group => group.Sessions.Count)} host session(s) from Claude Code/Codex metadata. 'Not running' is a historical session, not an error; OpenCode/OpenChamber history is not read here.";
     }
 
     private static string ProviderLabel(string framework) =>
@@ -1638,7 +1638,14 @@ public sealed record AgentSessionRow(
     string Title,
     string Workspace,
     string LastSeen,
-    bool Live);
+    bool Live)
+{
+    public string LiveText => Live ? "live" : "not running";
+
+    public string LiveTooltip => Live
+        ? "The host process is running, or the session file changed in the last 5 minutes."
+        : "Historical session: the host process is not running and its file has not changed for 5 minutes. This is normal and is not caused by deleted OpenCode/OpenChamber history.";
+}
 
 public sealed record AgentSessionGroup(string Provider, IReadOnlyList<AgentSessionRow> Sessions);
 

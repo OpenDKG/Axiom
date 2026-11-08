@@ -52,6 +52,47 @@ public sealed class UserStateProtectionTests
     }
 
     [Fact]
+    public void Newly_created_protected_file_is_reported_but_not_deleted_by_restore()
+    {
+        using var temp = new TempTree();
+        var protection = new UserStateProtection(temp.Root, temp.Root, temp.Root);
+        var snapshot = protection.Capture();
+
+        var settings = Path.Combine(temp.Root, ".config", "openchamber", "discovered-apps.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settings)!);
+        File.WriteAllText(settings, "{}");
+
+        var changes = protection.Verify(snapshot, []);
+        Assert.Contains(changes, change => change.Path == settings && change.Reason == "created");
+
+        var failures = protection.Restore(snapshot, changes);
+
+        Assert.Contains(settings, failures);
+        Assert.True(File.Exists(settings));
+        Assert.Equal("{}", File.ReadAllText(settings));
+    }
+
+    [Fact]
+    public void Live_opencode_database_and_sidecars_are_not_tracked()
+    {
+        using var temp = new TempTree();
+        var protection = new UserStateProtection(temp.Root, temp.Root, temp.Root);
+        var snapshot = protection.Capture();
+
+        var data = Path.Combine(temp.Root, ".local", "share", "opencode");
+        Directory.CreateDirectory(data);
+        File.WriteAllText(Path.Combine(data, "opencode.db"), "database");
+        File.WriteAllText(Path.Combine(data, "opencode.db-wal"), "live session history");
+        File.WriteAllText(Path.Combine(data, "opencode.db-shm"), "shared memory");
+
+        var changes = protection.Verify(snapshot, []);
+
+        Assert.DoesNotContain(changes, change => change.Path.EndsWith("opencode.db", StringComparison.Ordinal));
+        Assert.DoesNotContain(changes, change => change.Path.EndsWith("opencode.db-wal", StringComparison.Ordinal));
+        Assert.DoesNotContain(changes, change => change.Path.EndsWith("opencode.db-shm", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Explicitly_allowed_hook_path_is_ignored()
     {
         using var temp = new TempTree();
@@ -154,7 +195,7 @@ public sealed class UserStateProtectionTests
     public void Metadata_only_database_change_is_detected()
     {
         using var temp = new TempTree();
-        var database = Path.Combine(temp.Root, ".local", "share", "opencode", "opencode.db");
+        var database = Path.Combine(temp.Root, ".codex", "thread_history_1.sqlite");
         Directory.CreateDirectory(Path.GetDirectoryName(database)!);
         File.WriteAllText(database, "database");
 

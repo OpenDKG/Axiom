@@ -35,7 +35,10 @@ public sealed class OpenCodeLifecycleTests
         Assert.Contains("session.step.started", v2, StringComparison.Ordinal);
         Assert.Contains("pre_api_request", v2, StringComparison.Ordinal);
         Assert.Contains("__axiomBlackboxHooksInstalled", v2, StringComparison.Ordinal);
+        Assert.Contains("response.status === 401", v2, StringComparison.Ordinal);
+        Assert.Contains("retryDelay = 60000", v2, StringComparison.Ordinal);
         Assert.Contains("startLifecycle", v1, StringComparison.Ordinal);
+        Assert.Contains("async server()", v1, StringComparison.Ordinal);
         Assert.Contains("event == \"session_start\"", bridge, StringComparison.Ordinal);
         Assert.Contains("event == \"pre_api_request\"", bridge, StringComparison.Ordinal);
     }

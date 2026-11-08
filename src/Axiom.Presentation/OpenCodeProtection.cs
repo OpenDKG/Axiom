@@ -255,6 +255,11 @@ public sealed class OpenCodeProtection
 
             export default {
               id: "axiom-blackbox-v1",
+              // OpenCode 2 also loads flat plugin files and requires a server() member. The
+              // directory plugin is the V2 entrypoint, so this legacy file deliberately does
+              // nothing there instead of registering the guard twice.
+              async server() {
+              },
               async setup(context) {
                 // V2 loads the directory plugin and passes ctx.app.version. Do not register twice.
                 if (context?.app?.version?.startsWith("2.")) return
@@ -469,10 +474,19 @@ public sealed class OpenCodeProtection
             }
           }
 
+          let retryDelay = 2000
           const connect = async () => {
             try {
               const response = await fetch(`http://127.0.0.1:${port}/api/event`, { headers })
+              if (response.status === 401 || response.status === 403) {
+                // The managed server rotates its password and a plugin worker may not see the
+                // current value. Poll slowly instead of hammering the server every two seconds.
+                retryDelay = 60000
+                setTimeout(connect, retryDelay)
+                return
+              }
               if (!response.ok || !response.body) throw new Error("event stream unavailable")
+              retryDelay = 2000
               const reader = response.body.getReader()
               const decoder = new TextDecoder()
               let buffer = ""
