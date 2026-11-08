@@ -53,6 +53,10 @@ agent-level guardrails and signed threat-intelligence context respectively.
 - **Axiom Shield usability.** Remembered Shield decisions now support Block and Unblock from a button
   or the right-click menu. Pending rows show the remote `IP:port`, the trigger explanation and a
   clear "not a malware verdict" note; Microsoft-signed processes are filtered with a visible count.
+- **Durable Shield ask queue.** A pending application stays listed after its connection ends until
+  the user chooses Allow, Block or Dismiss, and every pending application remains visible. Dismiss
+  hides it until the application opens a new connection. The alert banner and each row expose
+  Allow/Block/Dismiss.
 - **Alerts that lead somewhere.** A Shield alert navigates to Firewall, highlights the exact
   application and scrolls to it. Alerts are kept in the bell history even when notifications are off.
 - **Window and lifecycle polish.** Native resize cursors, drag resize, Win+arrow snap, edge snap,
