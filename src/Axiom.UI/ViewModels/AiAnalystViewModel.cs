@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
+using System.Text;
+using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -25,36 +27,69 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
 
     private readonly AiAnalystSettingsStore _settingsStore = new();
 
+    private readonly ServicePipeClient? _serviceClient;
+
     private readonly AiFindingStore _findingStore = new();
 
     private readonly DispatcherTimer _autoTimer = new() { Interval = TimeSpan.FromSeconds(60) };
+
+    private readonly DispatcherTimer _busyTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
     private readonly HashSet<string> _autoSeen = new(StringComparer.Ordinal);
 
     private readonly Queue<DateTimeOffset> _requestTimes = new();
 
     private DateTimeOffset _lastAutoAttempt = DateTimeOffset.MinValue;
+    private DateTimeOffset _analysisStartedUtc;
+    private CancellationTokenSource? _analysisCts;
 
     private string _apiKey = string.Empty;
     private bool _apiKeyDirty;
 
-    public AiAnalystViewModel(ConnectionMonitor monitor)
+    private static readonly Dictionary<AiProviderKind, (string Endpoint, string Model)> ProviderPresets =
+        new Dictionary<AiProviderKind, (string Endpoint, string Model)>
+        {
+            [AiProviderKind.OpenChamberLocal] = ("opencode://local", "opencode-go/deepseek-v4.1-flash"),
+            [AiProviderKind.OpenAi] = ("https://api.openai.com/v1/chat/completions", "gpt-5.1"),
+            [AiProviderKind.Anthropic] = ("https://api.anthropic.com/v1/messages", "claude-sonnet-4-5"),
+            [AiProviderKind.DeepSeek] = ("https://api.deepseek.com/chat/completions", "deepseek-chat"),
+            [AiProviderKind.Zai] = ("https://api.z.ai/api/paas/v4/chat/completions", "glm-5.3"),
+            [AiProviderKind.OpenCodeZen] = ("https://opencode.ai/zen/v1/chat/completions", "deepseek-v4.1-flash"),
+        };
+
+    public AiAnalystViewModel(ConnectionMonitor monitor, ServicePipeClient? serviceClient = null)
         : base("AI Analyst", "Optional, evidence-based investigation with no enforcement", "\uE9D9")
     {
         _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
+        _serviceClient = serviceClient;
         Providers =
         [
-            new(AiProviderKind.OpenAiCompatible, "OpenAI-compatible / cloud"),
-            new(AiProviderKind.LocalOpenAiCompatible, "OpenAI-compatible / local (HTTP loopback)"),
+            new(AiProviderKind.OpenChamberLocal, "OpenChamber / OpenCode (no install, uses your login)"),
+            new(AiProviderKind.OpenAiCompatible, "OpenAI-compatible / cloud (custom)"),
+            new(AiProviderKind.LocalOpenAiCompatible, "OpenAI-compatible / local (Ollama, LM Studio)"),
+            new(AiProviderKind.OpenAi, "OpenAI (api.openai.com)"),
+            new(AiProviderKind.Anthropic, "Anthropic Claude"),
+            new(AiProviderKind.DeepSeek, "DeepSeek"),
+            new(AiProviderKind.Zai, "Z.ai (GLM)"),
+            new(AiProviderKind.OpenCodeZen, "OpenCode Zen (cloud)"),
         ];
 
         _autoTimer.Tick += (_, _) => _ = AutomaticTickAsync();
+        _busyTimer.Tick += (_, _) => OnPropertyChanged(nameof(BusyText));
         var (settings, key) = _settingsStore.Load();
         _apiKey = key;
         Enabled = settings.Enabled;
         Provider = Providers.FirstOrDefault(option => option.Value == settings.Provider) ?? Providers[0];
         Endpoint = settings.Endpoint;
         Model = settings.Model;
+        if (settings.Provider == AiProviderKind.OpenChamberLocal &&
+            !Endpoint.StartsWith("opencode://", StringComparison.OrdinalIgnoreCase))
+        {
+            Endpoint = ProviderPresets[AiProviderKind.OpenChamberLocal].Endpoint;
+            Model = string.IsNullOrWhiteSpace(Model)
+                ? ProviderPresets[AiProviderKind.OpenChamberLocal].Model
+                : Model;
+        }
         RedactPaths = settings.RedactPaths;
         MaxConnections = settings.MaxConnections;
         MaxTokens = settings.MaxTokens;
@@ -69,6 +104,8 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
             History.Add(finding);
         }
 
+        History.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasHistory));
+
         SelectedFinding = History.FirstOrDefault();
         UpdateCredentialsText();
         UpdateStatus();
@@ -78,18 +115,36 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
 
     public ObservableCollection<AiFinding> History { get; } = [];
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(Endpoint) && !string.IsNullOrWhiteSpace(Model);
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(Model) &&
+        (IsOpenCodeProvider || !string.IsNullOrWhiteSpace(Endpoint));
+
+    public bool IsOpenCodeProvider => Provider?.Value == AiProviderKind.OpenChamberLocal;
 
     public bool CanAnalyze => !IsBusy;
 
-    public string CredentialsText => string.IsNullOrWhiteSpace(_apiKey)
-        ? "No API key stored. A local endpoint may not require one."
-        : "API key is stored with Windows DPAPI; it is never shown or logged.";
+    public bool HasHistory => History.Count > 0;
+
+    public bool CanCancel => IsBusy;
+
+    public bool CanCopyResult => SelectedFinding is not null;
+
+    public string BusyText => IsBusy
+        ? $"Agent is analyzing… {Math.Max(0, (int)(DateTimeOffset.UtcNow - _analysisStartedUtc).TotalSeconds)} s"
+        : string.Empty;
+
+    public string CredentialsText => IsOpenCodeProvider
+        ? "Uses the OpenChamber/OpenCode CLI already signed in on this PC; no separate API key is needed."
+        : string.IsNullOrWhiteSpace(_apiKey)
+            ? "No API key stored. A local endpoint may not require one."
+            : "API key is stored with Windows DPAPI; it is never shown or logged.";
 
     public string PrivacyText =>
-        "Evidence is bounded and contains process names, PIDs, endpoints, direction, state and " +
-        "quality. Local paths are reduced to file names when redaction is enabled. Packet contents, " +
-        "credentials, browser cookies, agent histories and arbitrary files are never sent.";
+        "Evidence is bounded and contains process names, PIDs, parent process chains, executable " +
+        "metadata (signer, product, version), sanitised command lines, endpoints, direction, state, " +
+        "quality and a local 30-day flow baseline. Local paths are reduced to file names when redaction " +
+        "is enabled. Packet contents, credentials, browser cookies, agent histories and arbitrary files " +
+        "are never sent.";
 
     public string AutomaticText =>
         "Automatic analysis is opt-in. When enabled, only new non-loopback destinations are considered, " +
@@ -100,12 +155,16 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
     private bool _enabled;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOpenCodeProvider))]
+    [NotifyPropertyChangedFor(nameof(IsConfigured))]
     private AiProviderOption _provider;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsConfigured))]
     private string _endpoint = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsConfigured))]
     private string _model = string.Empty;
 
     [ObservableProperty]
@@ -131,6 +190,7 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanAnalyze))]
+    [NotifyPropertyChangedFor(nameof(CanCancel))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -140,7 +200,36 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
     private string _settingsStatus = "No provider request has been made.";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCopyResult))]
     private AiFinding? _selectedFinding;
+
+    partial void OnProviderChanged(AiProviderOption value)
+    {
+        if (ProviderPresets.TryGetValue(value.Value, out var preset))
+        {
+            Endpoint = preset.Endpoint;
+            Model = preset.Model;
+        }
+
+        UpdateCredentialsText();
+        UpdateStatus();
+    }
+
+    partial void OnIsBusyChanged(bool value)
+    {
+        if (value)
+        {
+            _analysisStartedUtc = DateTimeOffset.UtcNow;
+            _busyTimer.Start();
+        }
+        else
+        {
+            _busyTimer.Stop();
+        }
+
+        OnPropertyChanged(nameof(BusyText));
+        OnPropertyChanged(nameof(CanCancel));
+    }
 
     partial void OnAutomaticAnalysisChanged(bool value)
     {
@@ -167,6 +256,9 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
     public void Dispose()
     {
         _autoTimer.Stop();
+        _busyTimer.Stop();
+        _analysisCts?.Cancel();
+        _analysisCts?.Dispose();
         _client.Dispose();
     }
 
@@ -219,6 +311,16 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
             return;
         }
 
+        if (!IsOpenCodeProvider &&
+            Endpoint.Contains(":4096", StringComparison.Ordinal) &&
+            Endpoint.Contains("/v1/chat/completions", StringComparison.OrdinalIgnoreCase))
+        {
+            StatusText =
+                "Port 4096 is OpenChamber's UI, not an OpenAI-compatible API. " +
+                "Use a local Ollama/LM Studio endpoint or choose a cloud provider.";
+            return;
+        }
+
         var sourceConnections = connections ??
                                 _monitor.Connections.Select(row => row.Source).ToArray();
         if (sourceConnections.Count == 0)
@@ -239,21 +341,33 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         }
 
         _apiKeyDirty = false;
+        using var analysisCts = new CancellationTokenSource();
+        _analysisCts = analysisCts;
         IsBusy = true;
         StatusText = automatic
             ? "Automatic analysis of new non-loopback activity is running..."
             : "Preparing bounded evidence and requesting analysis...";
         try
         {
+            var baseline = await AiEvidenceBaselineCollector
+                .TryLoadAsync(_serviceClient, sourceConnections, analysisCts.Token)
+                .ConfigureAwait(true);
             var evidence = AiEvidenceBuilder.Build(
                 sourceConnections,
                 _monitor.SourceName,
                 _monitor.Limitations,
                 settings.MaxConnections,
-                settings.RedactPaths);
+                settings.RedactPaths,
+                baseline);
             var finding = await _client
-                .AnalyzeAsync(settings, _apiKey, evidence, CancellationToken.None)
+                .AnalyzeAsync(settings, _apiKey, evidence, analysisCts.Token)
                 .ConfigureAwait(true);
+
+            if (analysisCts.IsCancellationRequested)
+            {
+                StatusText = "Analysis cancelled. No finding was saved.";
+                return;
+            }
 
             _findingStore.Save(finding);
             History.Insert(0, finding);
@@ -272,6 +386,7 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         }
         finally
         {
+            _analysisCts = null;
             IsBusy = false;
         }
     }
@@ -350,6 +465,102 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         StatusText = "Local AI finding history cleared.";
     }
 
+    [RelayCommand]
+    private void CopyResult()
+    {
+        if (SelectedFinding is { } finding)
+        {
+            CopyText(FormatFinding(finding), "Analysis result copied to the clipboard.");
+        }
+    }
+
+    [RelayCommand]
+    private void CopyAllResults()
+    {
+        if (History.Count == 0)
+        {
+            return;
+        }
+
+        CopyText(
+            string.Join(Environment.NewLine + Environment.NewLine, History.Select(FormatFinding)),
+            $"{History.Count} analysis result(s) copied to the clipboard.");
+    }
+
+    [RelayCommand]
+    private void CancelAnalysis()
+    {
+        _analysisCts?.Cancel();
+        StatusText = "Cancelling the AI analysis…";
+    }
+
+    private void CopyText(string text, string successMessage)
+    {
+        try
+        {
+            Clipboard.SetText(text);
+            StatusText = successMessage;
+        }
+#pragma warning disable CA1031 // Clipboard can be owned by another process or unavailable.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            StatusText = "Clipboard is unavailable. Select the text manually and copy it.";
+        }
+    }
+
+    private static string FormatFinding(AiFinding finding)
+    {
+        var text = new StringBuilder();
+        text.AppendLine("Axiom AI Analyst");
+        text.AppendLine("Finding: " + finding.FindingId);
+        text.AppendLine("Analyzed: " + finding.AnalysisTimestampUtc.ToString("O"));
+        text.AppendLine("Model: " + finding.Model);
+        if (!string.IsNullOrWhiteSpace(finding.VerifierModel))
+        {
+            text.AppendLine("Verifier model: " + finding.VerifierModel);
+            text.AppendLine("Verifier status: " + finding.VerifierStatus);
+            if (!string.IsNullOrWhiteSpace(finding.VerifierSummary))
+            {
+                text.AppendLine("Verifier summary: " + finding.VerifierSummary);
+            }
+        }
+
+        text.AppendLine("Status: " + finding.Status);
+        text.AppendLine("Severity: " + finding.Severity);
+        text.AppendLine("Confidence: " + finding.Confidence);
+        text.AppendLine("Human reviewed: " + (finding.HumanReviewed ? "yes" : "no"));
+        if (!string.IsNullOrWhiteSpace(finding.Error))
+        {
+            text.AppendLine("Error: " + finding.Error);
+        }
+
+        text.AppendLine();
+        text.AppendLine("Summary:");
+        text.AppendLine(finding.Summary);
+        AppendSection(text, "Observations", finding.Observations);
+        AppendSection(text, "Evidence references", finding.EvidenceReferences);
+        AppendSection(text, "Alternative explanations", finding.AlternativeExplanations);
+        AppendSection(text, "Missing evidence", finding.MissingEvidence);
+        AppendSection(text, "Recommended actions (text only; nothing is applied)", finding.RecommendedActions);
+        return text.ToString().TrimEnd();
+    }
+
+    private static void AppendSection(StringBuilder text, string title, IReadOnlyList<string> values)
+    {
+        if (values.Count == 0)
+        {
+            return;
+        }
+
+        text.AppendLine();
+        text.AppendLine(title + ":");
+        foreach (var value in values)
+        {
+            text.AppendLine("- " + value);
+        }
+    }
+
     private AiAnalystSettings BuildSettings() => new()
     {
         Enabled = Enabled,
@@ -376,6 +587,14 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         else if (!IsConfigured)
         {
             StatusText = "AI analyst is enabled but endpoint/model is incomplete.";
+        }
+        else if (!IsOpenCodeProvider &&
+                 Endpoint.Contains(":4096", StringComparison.Ordinal) &&
+                 Endpoint.Contains("/v1/chat/completions", StringComparison.OrdinalIgnoreCase))
+        {
+            StatusText =
+                "Port 4096 is OpenChamber's UI, not an OpenAI-compatible API. " +
+                "Set an Ollama/LM Studio endpoint or choose a cloud provider.";
         }
         else
         {

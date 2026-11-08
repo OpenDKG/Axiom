@@ -119,6 +119,39 @@ public sealed class AiAnalystTests
     }
 
     [Fact]
+    public async Task Anthropic_requests_use_the_messages_api_and_x_api_key()
+    {
+        var handler = new CaptureHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"content":[{"type":"text","text":"{\"status\":\"SUSPICIOUS\",\"severity\":\"medium\",\"confidence\":\"low\",\"summary\":\"test\"}"}]}""",
+                Encoding.UTF8,
+                "application/json"),
+        });
+        using var http = new HttpClient(handler);
+        using var client = new AiAnalystClient(http);
+        var settings = NewSettings() with
+        {
+            Provider = AiProviderKind.Anthropic,
+            Endpoint = "https://api.anthropic.com/v1/messages",
+            Model = "claude-test",
+        };
+        var evidence = AiEvidenceBuilder.Build([NewConnection("app.exe", "203.0.113.10:443")], "test", [], 5, true);
+
+        var finding = await client.AnalyzeAsync(settings, "secret", evidence, CancellationToken.None);
+
+        Assert.Equal("secret", handler.ApiKey);
+        Assert.Null(handler.Authorization);
+        Assert.NotNull(handler.Body);
+        using var request = JsonDocument.Parse(handler.Body!);
+        Assert.True(request.RootElement.TryGetProperty("system", out _));
+        var messages = request.RootElement.GetProperty("messages");
+        Assert.Equal("user", messages[0].GetProperty("role").GetString());
+        Assert.Equal("SUSPICIOUS", finding.Status);
+        Assert.Equal("claude-test", finding.Model);
+    }
+
+    [Fact]
     public async Task Cloud_http_endpoint_is_rejected()
     {
         using var client = new AiAnalystClient();
@@ -129,6 +162,52 @@ public sealed class AiAnalystTests
 
         Assert.Equal("INSUFFICIENT_DATA", finding.Status);
         Assert.Contains("HTTPS", finding.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Provider_json_is_extracted_from_prose_and_a_fenced_block()
+    {
+        const string content =
+            "Here is the result:\n```json\n" +
+            "{\"status\":\"SUSPICIOUS\",\"severity\":\"medium\",\"confidence\":\"low\",\"summary\":\"test\"}\n" +
+            "```\nDone.";
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(new
+                {
+                    choices = new[] { new { message = new { content } } },
+                }),
+                Encoding.UTF8,
+                "application/json"),
+        });
+        using var http = new HttpClient(handler);
+        using var client = new AiAnalystClient(http);
+        var evidence = AiEvidenceBuilder.Build([NewConnection("app.exe", "203.0.113.10:443")], "test", [], 5, true);
+
+        var finding = await client.AnalyzeAsync(NewSettings(), "secret", evidence, CancellationToken.None);
+
+        Assert.Equal("SUSPICIOUS", finding.Status);
+        Assert.Equal("medium", finding.Severity);
+        Assert.Null(finding.Error);
+    }
+
+    [Fact]
+    public void Evidence_adds_service_annotations_duration_and_host_context()
+    {
+        var evidence = AiEvidenceBuilder.Build(
+            [NewConnection("app.exe", "203.0.113.10:443")],
+            "test",
+            ["source limitation"],
+            5,
+            redactPaths: true);
+
+        var connection = Assert.Single(evidence.Connections);
+        Assert.Equal("https", connection.RemotePortService);
+        Assert.True(connection.ObservedDurationSeconds >= 0);
+        Assert.NotNull(evidence.Host);
+        Assert.Contains(evidence.Limitations, item => item.Contains("source limitation", StringComparison.Ordinal));
+        Assert.Contains(evidence.Limitations, item => item.Contains("ETW", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -211,5 +290,26 @@ public sealed class AiAnalystTests
             HttpRequestMessage request,
             CancellationToken cancellationToken) =>
             Task.FromResult(respond(request));
+    }
+
+    private sealed class CaptureHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+    {
+        public string? Body { get; private set; }
+
+        public string? ApiKey { get; private set; }
+
+        public string? Authorization { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Body = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            ApiKey = request.Headers.TryGetValues("x-api-key", out var keys) ? keys.FirstOrDefault() : null;
+            Authorization = request.Headers.Authorization?.ToString();
+            return respond(request);
+        }
     }
 }

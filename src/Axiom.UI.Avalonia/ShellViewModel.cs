@@ -29,6 +29,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private bool _isProbingProtection;
     private bool _updatingTheme;
     private ProtectionStatus? _protection;
+    private readonly HashSet<string> _notifiedPendingApps = new(StringComparer.OrdinalIgnoreCase);
 
     public ShellViewModel(
         IConnectionSnapshotSource source,
@@ -77,7 +78,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             IsServiceMode ? serviceClient : null,
             timers,
             interaction);
-        Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction);
+        Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction, _monitor);
         PrivacyShield = new PrivacyShieldPageViewModel(
             IsServiceMode ? serviceClient : null,
             interaction,
@@ -88,7 +89,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             securityDialogs ?? new UnsupportedSecurityDialogs(),
             apiKeyProtector ?? new UnsupportedApiKeyProtector(),
             timers,
-            shellActions ?? new UnsupportedShellActions());
+            shellActions ?? new UnsupportedShellActions(),
+            serviceClient);
         Agents = new AgentsPageViewModel(
             Security,
             agentSessions,
@@ -98,20 +100,24 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         AiAnalyst = new AiAnalystPageViewModel(
             _monitor,
             apiKeyProtector ?? new UnsupportedApiKeyProtector(),
-            timers);
+            timers,
+            interaction,
+            IsServiceMode ? serviceClient : null);
         Support = new SupportPageViewModel(interaction);
         Settings = new SettingsPageViewModel(
             _monitor,
             IsServiceMode,
             _theme,
-            autostartService ?? new UnsupportedAutostartService());
+            autostartService ?? new UnsupportedAutostartService(),
+            Firewall);
         Overview.AgentActivity = Agents;
         AgentStats = new AgentStatsPageViewModel(Agents);
-        Pages = [Overview, Connections, Apps, Events, Agents, AgentStats, Firewall, Security, PrivacyShield, AiAnalyst, Support, Settings];
+        Pages = [Overview, Agents, AgentStats, Security, PrivacyShield, Firewall, AiAnalyst, Connections, Apps, Events, Support, Settings];
         _selectedPage = Overview;
         _selectedTheme = ThemeLabel(_theme.Current);
         _theme.Changed += OnThemeChanged;
         _monitor.Updated += OnMonitorUpdated;
+        AlertCenter.Changed += OnAlertCenterChanged;
     }
 
     public IReadOnlyList<string> Themes { get; } =
@@ -252,6 +258,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         _monitor.Updated -= OnMonitorUpdated;
         _theme.Changed -= OnThemeChanged;
+        AlertCenter.Changed -= OnAlertCenterChanged;
         _cancellation.Cancel();
         _cancellation.Dispose();
         Overview.Dispose();
@@ -296,6 +303,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 .SendAsync<ProtectionStatus>(IpcCommandTypes.ProtectionStatus, null, _cancellation.Token)
                 .ConfigureAwait(true);
             RefreshStatus();
+            NotifyNewPendingApps(_protection);
+            if (_protection is not null && ReferenceEquals(SelectedPage, Firewall))
+            {
+                Firewall.UpdateProtectionStatus(_protection);
+            }
         }
         catch (ServiceUnavailableException)
         {
@@ -313,6 +325,121 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Raises the tray toast when Axiom Shield starts waiting on new applications. A burst of
+    /// pending sockets is aggregated into one alert so the notification area cannot be flooded.
+    /// </summary>
+    private void NotifyNewPendingApps(ProtectionStatus? protection)
+    {
+        if (protection is not { Enabled: true } || protection.Pending.Count == 0)
+        {
+            return;
+        }
+
+        var pending = protection.Pending
+            .Where(app => !ShieldProcessFilter.IsIgnored(app.AppPath))
+            .ToList();
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        var current = new HashSet<string>(
+            pending.Select(app => app.AppPath),
+            StringComparer.OrdinalIgnoreCase);
+        var newApps = pending
+            .Where(app => !_notifiedPendingApps.Contains(app.AppPath))
+            .Select(app => ProtectionAlertContext.Enrich(app, _monitor.Connections))
+            .ToList();
+
+        // Decisions already made drop out, so an application that appears again can alert again.
+        _notifiedPendingApps.IntersectWith(current);
+        foreach (var app in newApps)
+        {
+            _notifiedPendingApps.Add(app.AppPath);
+        }
+
+        if (newApps.Count == 0)
+        {
+            return;
+        }
+
+        var names = string.Join(", ", newApps.Take(3).Select(app => app.AppName));
+        var suffix = newApps.Count > 3 ? $" (+{newApps.Count - 3} more)" : string.Empty;
+        var message = newApps.Count == 1
+            ? $"{newApps[0].AppName} opened an outbound connection to {RemoteSummary(newApps[0])} and has no Block/Allow decision yet. " +
+              "This is not a malware verdict and nothing is blocked. Open Firewall to review the connection and decide."
+            : $"{newApps.Count} new outbound applications have no Block/Allow decision yet: {names}{suffix}. " +
+              "This is not a malware verdict and nothing is blocked. Open Firewall to review them.";
+
+        AxiomAlertService.Show(
+            "Axiom Shield decision needed",
+            message,
+            page: typeof(FirewallPageViewModel),
+            focusApps: newApps.Select(app => app.AppPath).ToList());
+    }
+
+    private static string RemoteSummary(ProtectionPendingApp app) =>
+        app.RemoteEndpoints.Count == 0
+            ? "an unreported remote endpoint"
+            : string.Join(", ", app.RemoteEndpoints);
+
+    /// <summary>
+    /// Selects the page a tray alert points at and highlights the applications it was about.
+    /// Called from the alert's Open action or the notification history on the UI thread.
+    /// </summary>
+    public void NavigateToPage(Type pageViewModelType, IReadOnlyList<string>? focusApps = null)
+    {
+        ArgumentNullException.ThrowIfNull(pageViewModelType);
+        foreach (var page in Pages)
+        {
+            if (!pageViewModelType.IsInstanceOfType(page))
+            {
+                continue;
+            }
+
+            SelectedPage = page;
+            if (focusApps is { Count: > 0 } && page == Firewall)
+            {
+                Firewall.FocusPendingApps(focusApps);
+            }
+
+            return;
+        }
+    }
+
+    public ObservableCollection<AlertRecord> Alerts => AlertCenter.Items;
+
+    public int UnreadAlertCount => AlertCenter.UnreadCount;
+
+    public bool HasUnreadAlerts => UnreadAlertCount > 0;
+
+    public bool HasAlerts => Alerts.Count > 0;
+
+    [RelayCommand]
+    private void MarkAllAlertsRead() => AlertCenter.MarkAllRead();
+
+    [RelayCommand]
+    private void ClearAlerts() => AlertCenter.Clear();
+
+    /// <summary>Opens the page an alert belongs to and highlights what it was about.</summary>
+    public void OpenAlert(AlertRecord alert)
+    {
+        ArgumentNullException.ThrowIfNull(alert);
+        AlertCenter.MarkRead(alert);
+        if (alert.Page is not null)
+        {
+            NavigateToPage(alert.Page, alert.FocusApps);
+        }
+    }
+
+    private void OnAlertCenterChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(UnreadAlertCount));
+        OnPropertyChanged(nameof(HasUnreadAlerts));
+        OnPropertyChanged(nameof(HasAlerts));
+    }
+
     private void RefreshStatus()
     {
         StatusMonitoringText = _monitor.LastError is null
@@ -327,8 +454,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         if (_protection is { Enabled: true } protection)
         {
-            StatusFirewallText = protection.Pending.Count > 0
-                ? $"Protection: ON · {protection.OwnedRuleCount} rule(s) · {protection.Pending.Count} to decide"
+            var awaiting = protection.Pending.Count(app => !ShieldProcessFilter.IsIgnored(app.AppPath));
+            StatusFirewallText = awaiting > 0
+                ? $"Protection: ON · {protection.OwnedRuleCount} rule(s) · {awaiting} awaiting decision"
                 : $"Protection: ON · {protection.OwnedRuleCount} rule(s)";
             StatusFirewallBadgeText = "SHIELD ON";
         }

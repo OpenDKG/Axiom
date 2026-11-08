@@ -6,15 +6,24 @@ or modify agent configuration.
 
 ## What is implemented
 
+- **Seamless OpenChamber/OpenCode provider.** The built-in `opencode://local` provider runs the
+  already-installed and signed-in OpenCode CLI in headless plan mode
+  (`opencode run --format json --agent plan`). It needs no Ollama, LM Studio, extra API key or
+  separate HTTP server. The default model is `opencode-go/deepseek-v4.1-flash`.
 - Provider-neutral OpenAI-compatible chat-completions adapter:
   - HTTPS cloud endpoint;
   - HTTP is allowed only for a loopback local inference endpoint;
   - configurable endpoint, model, API key, path redaction, connection limit and token limit.
 - API keys are protected with Windows DPAPI for the current user; they are never shown, logged or
-  written to findings.
-- Manual **Analyze current activity** action builds a bounded evidence package from the current
-  read-only monitor snapshot:
-  - application name, PID, protocol, direction, state, endpoints, quality and first-observation time;
+  written to findings. The OpenChamber/OpenCode provider uses the existing OpenCode login instead.
+- Bounded evidence v2 from the current read-only monitor snapshot:
+  - application name, PID, parent PID/name/chain, protocol, direction, state, endpoints, quality and
+    first-observation time;
+  - Authenticode signer status and subject, product and file version;
+  - sanitised and truncated command line (secret-like arguments are masked);
+  - observed duration, well-known remote port service names and local host/subnet/gateway context;
+  - Axiom-owned firewall rule status (`NoOwnedRule`, `AllowedByOwnedRule`, `BlockedByOwnedRule`);
+  - aggregated 30-day local flow baseline (first/last seen, flow-row count and typical remotes);
   - paths are reduced to file names when redaction is enabled;
   - no packet contents, credentials, cookies, agent histories or arbitrary files.
 - Structured result contract with status, severity, confidence, observations, evidence references,
@@ -23,6 +32,9 @@ or modify agent configuration.
   responses are stored.
 - The model result is sanitized: unknown/SAFE-like statuses become `UNKNOWN`, list lengths are
   bounded, and no action field exists in the result contract.
+- Copy result / Copy all export every field as plain text. An indeterminate progress bar, elapsed
+  seconds and Cancel are shown while the agent is running; the result panel returns to the top when
+  a new finding arrives.
 - Optional automatic analysis:
   - default off;
   - only new non-loopback destinations are considered;
@@ -30,7 +42,7 @@ or modify agent configuration.
   - configurable minimum interval and hourly request limit;
   - no request is made while the analyst is disabled or unconfigured.
 - Optional second verifier model:
-  - uses a separate request/context and the same endpoint/key;
+  - uses a separate request/context and the same provider;
   - records verifier status and summary without changing the primary finding;
   - verifier failure is surfaced, not treated as agreement.
 - Existing MCP server remains separate and read-only. No second MCP server and no MCP write tool is
@@ -64,18 +76,25 @@ plain text for a human to review; they are never executed.
 
 - A model finding is one source, not proof of compromise. `INSUFFICIENT_DATA`, `UNKNOWN`,
   `LOW_OBSERVED_RISK`, `SUSPICIOUS` and `SUPPORTED_ALERT` are not equivalent to a confirmed incident.
-- Missing ETW bytes, WFP block evidence and reputation stores remain visible as missing evidence.
+- ETW telemetry is not integrated yet, so SNI, TLS certificate subjects, DNS query names, exact
+  per-connection byte counts and TIME_WAIT ownership remain missing evidence.
+- There is no reputation or threat-intelligence feed; no score is invented.
+- Command lines are sanitised and truncated, and protected processes may not expose them.
+- Axiom reports only its own firewall rules; effective Windows default policy and third-party rules
+  remain outside `ruleStatus`.
+- File hashes and full Authenticode chain details are not part of the evidence package.
 - Provider APIs and model availability can change; verify the endpoint and model at configuration
   time.
-- DNS/Domain attribution is not included in the default evidence package.
 
 ## Verification
 
 - `AiAnalystSettingsStore` DPAPI round trip and `AiFindingStore` history tests are in the UI test
   suite.
 - `AiEvidenceBuilder`/client unit tests cover redaction, structured parsing, invalid provider
-  responses, HTTPS enforcement, status normalization and the optional verifier request.
+  responses, HTTPS enforcement, status normalization, baseline aggregation and the optional verifier
+  request.
+- The OpenChamber/OpenCode path was exercised end to end in the installed app: `Analyze now` returned
+  a valid structured finding with model `opencode-go/deepseek-v4.1-flash`, signer/parent evidence and
+  baseline rows, without an API key or a separate local server.
+- Copy result/all and Cancel were verified in the installed Avalonia UI.
 - The existing MCP and firewall tests remain unchanged; the AI path has no write capability.
-- Automatic analysis is bounded and opt-in; its timer is not exercised by unit tests because no
-  provider request is allowed in the test suite.
-- The AI Analyst page was opened in the real WPF shell with the provider disabled.

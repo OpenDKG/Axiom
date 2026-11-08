@@ -50,7 +50,7 @@
             <TextBlock Text="Provider" Style="{StaticResource Caption}" VerticalAlignment="Center" />
             <ComboBox Grid.Column="1" ItemsSource="{Binding Providers}" SelectedItem="{Binding Provider, Mode=TwoWay}" DisplayMemberPath="Label" Margin="0,0,0,8" />
             <TextBlock Grid.Row="1" Text="Endpoint" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-            <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource FilterTextBox}" Text="{Binding Endpoint, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" ToolTip="Full chat-completions URL, for example a provider API endpoint or a loopback local endpoint." />
+            <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource FilterTextBox}" Text="{Binding Endpoint, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding IsOpenCodeProvider}" Margin="0,0,0,8" ToolTip="Full chat-completions URL, or opencode://local for the built-in OpenChamber / OpenCode CLI provider." />
             <TextBlock Grid.Row="2" Text="Model" Style="{StaticResource Caption}" VerticalAlignment="Center" />
             <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource FilterTextBox}" Text="{Binding Model, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
             <TextBlock Grid.Row="3" Text="API key" Style="{StaticResource Caption}" VerticalAlignment="Center" />
@@ -97,6 +97,13 @@
             <Button Style="{StaticResource GhostButton}" Content="Save provider settings" Command="{Binding SaveSettingsCommand}" Margin="0,0,8,0" />
             <Button Style="{StaticResource PrimaryButton}" Content="Analyze current activity" Command="{Binding AnalyzeCommand}" IsEnabled="{Binding CanAnalyze}" />
           </StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,10,0,0"
+                      Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}">
+            <ProgressBar IsIndeterminate="True" Width="150" Height="4" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding BusyText}" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,0,0,0" />
+            <Button Style="{StaticResource GhostButton}" Content="Cancel" Command="{Binding CancelAnalysisCommand}"
+                    IsEnabled="{Binding CanCancel}" Margin="10,0,0,0" />
+          </StackPanel>
           <TextBlock Text="{Binding PrivacyText}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,0" />
         </StackPanel>
       </Border>
@@ -109,7 +116,13 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="Latest finding" Style="{StaticResource SectionTitle}" />
-            <Button Grid.Column="1" Style="{StaticResource GhostButton}" Content="Clear history" Command="{Binding ClearHistoryCommand}" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+              <Button Style="{StaticResource GhostButton}" Content="Copy result" Command="{Binding CopyResultCommand}"
+                      IsEnabled="{Binding CanCopyResult}" Margin="0,0,8,0" />
+              <Button Style="{StaticResource GhostButton}" Content="Copy all" Command="{Binding CopyAllResultsCommand}"
+                      IsEnabled="{Binding HasHistory}" Margin="0,0,8,0" />
+              <Button Style="{StaticResource GhostButton}" Content="Clear history" Command="{Binding ClearHistoryCommand}" />
+            </StackPanel>
           </Grid>
           <StackPanel DataContext="{Binding SelectedFinding}" Margin="0,10,0,0">
             <TextBlock Text="{Binding Summary}" Style="{StaticResource BodyMuted}" TextWrapping="Wrap" />

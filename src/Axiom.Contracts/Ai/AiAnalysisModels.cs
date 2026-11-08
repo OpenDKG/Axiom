@@ -5,6 +5,12 @@ public enum AiProviderKind
 {
     OpenAiCompatible = 0,
     LocalOpenAiCompatible = 1,
+    OpenAi = 2,
+    Anthropic = 3,
+    DeepSeek = 4,
+    Zai = 5,
+    OpenCodeZen = 6,
+    OpenChamberLocal = 7,
 }
 
 public sealed record AiAnalystSettings
@@ -81,7 +87,29 @@ public sealed record AiEvidencePackage(
     string SourceName,
     string PrivacyMode,
     IReadOnlyList<string> Limitations,
-    IReadOnlyList<AiEvidenceConnection> Connections);
+    IReadOnlyList<AiEvidenceConnection> Connections)
+{
+    /// <summary>Local host context that helps the analyst interpret private and public endpoints.</summary>
+    public AiEvidenceHostContext? Host { get; init; }
+
+    /// <summary>Number of days covered by the local flow baseline, or 0 when unavailable.</summary>
+    public int BaselineWindowDays { get; init; }
+
+    public int BaselineRowsConsidered { get; init; }
+
+    public int BaselineTotalCount { get; init; }
+
+    public bool BaselineTruncated { get; init; }
+
+    public string BaselineNote { get; init; } = string.Empty;
+}
+
+public sealed record AiEvidenceHostContext(
+    IReadOnlyList<string> LocalAddresses,
+    IReadOnlyList<string> SubnetPrefixes,
+    IReadOnlyList<string> Gateways,
+    string DnsSuffix,
+    string Note);
 
 public sealed record AiEvidenceConnection(
     string Reference,
@@ -96,4 +124,58 @@ public sealed record AiEvidenceConnection(
     bool IsLoopback,
     bool IsNew,
     DateTimeOffset FirstObservedUtc,
-    string Quality);
+    string Quality)
+{
+    /// <summary>Parent process resolved from the Windows process snapshot.</summary>
+    public int? ParentProcessId { get; init; }
+
+    public string ParentProcessName { get; init; } = string.Empty;
+
+    /// <summary>Immediate parent chain, oldest last, for example "node.exe (18612) &lt;- code.exe (9000)".</summary>
+    public string ParentChain { get; init; } = string.Empty;
+
+    /// <summary>Authenticode signer subject, or empty when the image is unsigned/unreadable.</summary>
+    public string SignerName { get; init; } = string.Empty;
+
+    public string ProductName { get; init; } = string.Empty;
+
+    public string FileVersion { get; init; } = string.Empty;
+
+    public bool? IsSigned { get; init; }
+
+    /// <summary>Valid, Untrusted, Unsigned or Unavailable.</summary>
+    public string SignatureStatus { get; init; } = string.Empty;
+
+    /// <summary>Sanitised command line from the elevated service, when available.</summary>
+    public string CommandLine { get; init; } = string.Empty;
+
+    /// <summary>Windows service names hosted by this process, usually only for svchost.exe.</summary>
+    public string HostedServices { get; init; } = string.Empty;
+
+    /// <summary>Windows service names hosted by the immediate parent, when it is svchost.exe.</summary>
+    public string ParentHostedServices { get; init; } = string.Empty;
+
+    /// <summary>Why the process attribution is complete, unowned or unavailable.</summary>
+    public string Ownership { get; init; } = string.Empty;
+
+    /// <summary>Time since Axiom first observed this flow, not the OS TCP start time.</summary>
+    public int ObservedDurationSeconds { get; init; }
+
+    /// <summary>Well-known service name for the remote port, when known.</summary>
+    public string RemotePortService { get; init; } = string.Empty;
+
+    public string RuleStatus { get; init; } = string.Empty;
+
+    /// <summary>Rows in the 30-day local history for this exact app/protocol/remote/direction.</summary>
+    public int? BaselineFlowRows { get; init; }
+
+    public DateTimeOffset? BaselineFirstSeenUtc { get; init; }
+
+    public DateTimeOffset? BaselineLastSeenUtc { get; init; }
+
+    /// <summary>Rows in the 30-day local history for this application, across remote endpoints.</summary>
+    public int? BaselineAppFlowRows { get; init; }
+
+    /// <summary>Most frequent remote endpoints for this application in the local history.</summary>
+    public IReadOnlyList<string> BaselineTypicalRemotes { get; init; } = [];
+}
