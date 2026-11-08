@@ -187,7 +187,7 @@ public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUser
     private static StackPanel BuildContent(string message, Control action)
     {
         var panel = new StackPanel { Spacing = 16, Margin = new Thickness(22) };
-        panel.Children.Add(new TextBlock
+        panel.Children.Add(new SelectableTextBlock
         {
             Text = message,
             TextWrapping = TextWrapping.Wrap,

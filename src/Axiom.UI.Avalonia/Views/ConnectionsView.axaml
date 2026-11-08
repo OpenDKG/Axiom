@@ -1,20 +1,21 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.ConnectionsView">
   <Grid RowDefinitions="Auto,Auto,*" Margin="24,18,24,24">
     <Border Grid.Row="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
             CornerRadius="8" Padding="12">
       <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12">
-        <TextBox Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="Search app, path, PID, local or remoteâ€¦" />
+        <TextBox Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="Search app, path, PID or endpoint" />
         <ComboBox Grid.Column="1" ItemsSource="{Binding ProtocolOptions}" SelectedItem="{Binding ProtocolFilter}" Width="96" />
         <CheckBox Grid.Column="2" Content="Only new" IsChecked="{Binding OnlyNew}" Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
         <CheckBox Grid.Column="3" Content="Loopback" IsChecked="{Binding OnlyLoopback}" Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
         <CheckBox Grid.Column="4" Content="Group by app" IsChecked="{Binding IsGroupedByApp}" Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
-        <TextBlock Grid.Column="5" Text="{Binding VisibleRowsText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" VerticalAlignment="Center" />
+        <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding VisibleRowsText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" VerticalAlignment="Center" />
       </Grid>
     </Border>
 
-    <TextBlock Grid.Row="1" Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11"
+    <controls:AxiomSelectableTextBlock Grid.Row="1" Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11"
                TextWrapping="Wrap" Margin="2,8,0,8" />
 
     <Border Grid.Row="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
@@ -31,15 +32,15 @@
         </StackPanel>
         <Grid Grid.Row="1" ColumnDefinitions="1.4*,60,60,1.1*,1.1*,40,80,70,1*" Margin="0,0,0,8"
               IsVisible="{Binding !IsGroupedByApp}">
-          <TextBlock Grid.Column="0" Text="APPLICATION" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
-          <TextBlock Grid.Column="1" Text="PID" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
-          <TextBlock Grid.Column="2" Text="PROTO" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
-          <TextBlock Grid.Column="3" Text="LOCAL" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
-          <TextBlock Grid.Column="4" Text="REMOTE" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
-          <TextBlock Grid.Column="5" Text="DIR" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
-          <TextBlock Grid.Column="6" Text="STATE" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
-          <TextBlock Grid.Column="7" Text="QUALITY" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
-          <TextBlock Grid.Column="8" Text="RULE" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+          <controls:AxiomSelectableTextBlock Grid.Column="0" Text="APPLICATION" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+          <controls:AxiomSelectableTextBlock Grid.Column="1" Text="PID" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+          <controls:AxiomSelectableTextBlock Grid.Column="2" Text="PROTO" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+          <controls:AxiomSelectableTextBlock Grid.Column="3" Text="LOCAL" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+          <controls:AxiomSelectableTextBlock Grid.Column="4" Text="REMOTE" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+          <controls:AxiomSelectableTextBlock Grid.Column="5" Text="DIR" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+          <controls:AxiomSelectableTextBlock Grid.Column="6" Text="STATE" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+          <controls:AxiomSelectableTextBlock Grid.Column="7" Text="QUALITY" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
+          <controls:AxiomSelectableTextBlock Grid.Column="8" Text="RULE" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" />
         </Grid>
         <ListBox Grid.Row="2" Classes="data-list" ItemsSource="{Binding VisibleConnections}"
                  SelectedItem="{Binding SelectedConnection}" Background="Transparent" BorderThickness="0"
@@ -77,20 +78,20 @@
                               CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                   </ContextMenu>
                 </Grid.ContextMenu>
-                <TextBlock Grid.Column="0" Text="{Binding AppDisplayName}" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="1" Text="{Binding ProcessId}" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                <TextBlock Grid.Column="2" Text="{Binding ProtocolText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                <TextBlock Grid.Column="3" Text="{Binding LocalEndpoint}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="4" Text="{Binding RemoteEndpoint}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="5" Text="{Binding DirectionText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                <TextBlock Grid.Column="6" Text="{Binding State}" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                <TextBlock Grid.Column="7" Text="{Binding QualityText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                <TextBlock Grid.Column="8" Text="{Binding RuleStatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding AppDisplayName}" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding ProcessId}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding ProtocolText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding LocalEndpoint}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding RemoteEndpoint}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding DirectionText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                <controls:AxiomSelectableTextBlock Grid.Column="6" Text="{Binding State}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                <controls:AxiomSelectableTextBlock Grid.Column="7" Text="{Binding QualityText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                <controls:AxiomSelectableTextBlock Grid.Column="8" Text="{Binding RuleStatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
               </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
-        <TextBlock Grid.Row="2" Text="No socket matches these filters." Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11"
+        <controls:AxiomSelectableTextBlock Grid.Row="2" Text="No socket matches these filters." Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11"
                    HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsEmpty}" />
 
         <ScrollViewer Grid.Row="1" Grid.RowSpan="2" IsVisible="{Binding IsGroupedByApp}"
@@ -105,15 +106,15 @@
                     <Expander.Header>
                       <Grid ColumnDefinitions="*,Auto" Margin="0,2">
                         <StackPanel Grid.Column="0" Spacing="1">
-                          <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
+                          <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
                                      Foreground="{DynamicResource Axiom.TextPrimary}" />
-                          <TextBlock Text="{Binding PathText}" FontSize="9"
+                          <controls:AxiomSelectableTextBlock Text="{Binding PathText}" FontSize="9"
                                      Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="1">
-                          <TextBlock Text="{Binding CountText}" FontSize="9" HorizontalAlignment="Right"
+                          <controls:AxiomSelectableTextBlock Text="{Binding CountText}" FontSize="9" HorizontalAlignment="Right"
                                      Foreground="{DynamicResource Axiom.TextSecondary}" />
-                          <TextBlock Text="{Binding ProtocolText}" FontSize="9" HorizontalAlignment="Right"
+                          <controls:AxiomSelectableTextBlock Text="{Binding ProtocolText}" FontSize="9" HorizontalAlignment="Right"
                                      Foreground="{DynamicResource Axiom.TextMuted}" />
                         </StackPanel>
                       </Grid>
@@ -146,13 +147,13 @@
                                           CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                               </ContextMenu>
                             </Grid.ContextMenu>
-                            <TextBlock Grid.Column="0" Text="{Binding ProcessId}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                            <TextBlock Grid.Column="1" Text="{Binding ProtocolText}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                            <TextBlock Grid.Column="2" Text="{Binding LocalEndpoint}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="3" Text="{Binding RemoteEndpoint}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="4" Text="{Binding DirectionText}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                            <TextBlock Grid.Column="5" Text="{Binding State}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                            <TextBlock Grid.Column="6" Text="{Binding QualityText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
+                            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding ProcessId}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding ProtocolText}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                            <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding LocalEndpoint}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                            <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding RemoteEndpoint}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                            <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding DirectionText}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                            <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding State}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                            <controls:AxiomSelectableTextBlock Grid.Column="6" Text="{Binding QualityText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
                           </Grid>
                         </DataTemplate>
                       </ListBox.ItemTemplate>

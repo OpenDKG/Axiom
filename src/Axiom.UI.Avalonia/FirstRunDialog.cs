@@ -4,6 +4,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
@@ -126,35 +128,44 @@ public sealed class FirstRunDialog : Window
     private ScrollViewer BuildContent(Button skip)
     {
         var panel = new StackPanel { Spacing = 12, Margin = new Thickness(24) };
-        panel.Children.Add(new TextBlock
+        panel.Children.Add(new Image
+        {
+            Source = new Bitmap(AssetLoader.Open(new Uri("avares://Axiom.UI.Avalonia/Assets/axiom-lockup.png"))),
+            Width = 220,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 4),
+        });
+        panel.Children.Add(new SelectableTextBlock
         {
             Text = "Set up Axiom",
             FontSize = 22,
             FontWeight = FontWeight.SemiBold,
             Foreground = ForegroundBrush,
         });
-        panel.Children.Add(new TextBlock
+        panel.Children.Add(new SelectableTextBlock
         {
             Text = "Axiom core is already installed. Choose optional components below. Nothing is downloaded or installed until you click Apply and accept the terms.",
             Foreground = MutedBrush,
-                FontSize = 12,
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
         });
         panel.Children.Add(Card(
             "Components (Modify)",
-            new TextBlock { Text = "Local service — history, firewall inventory and secure IPC (built in)", Foreground = MutedBrush, FontSize = 11 },
-            new TextBlock { Text = "Local file scanner — SHA-256 on demand, no upload (built in)", Foreground = MutedBrush, FontSize = 11 },
+            new SelectableTextBlock { Text = "Local service — history, firewall inventory and secure IPC (built in)", Foreground = MutedBrush, FontSize = 11, TextWrapping = TextWrapping.Wrap },
+            new SelectableTextBlock { Text = "Local file scanner — SHA-256 on demand, no upload (built in)", Foreground = MutedBrush, FontSize = 11, TextWrapping = TextWrapping.Wrap },
             _dkg,
             _blackbox,
             _community));
         panel.Children.Add(Card(
             "Before you apply",
-            new TextBlock
+            new SelectableTextBlock
             {
                 Text = "Selected installers run in a visible PowerShell window. They may download hundreds of MB, " +
                        "create a local testnet wallet/config and a scheduled task, and may ask for UAC or third-party terms. " +
                        "Axiom does not hide, bundle or vouch for third-party code.",
                 Foreground = MutedBrush,
-                        FontSize = 11,
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
             }));
         panel.Children.Add(_accept);
         panel.Children.Add(new StackPanel
@@ -171,7 +182,7 @@ public sealed class FirstRunDialog : Window
     private static Border Card(string title, params Control[] children)
     {
         var panel = new StackPanel { Spacing = 8 };
-        panel.Children.Add(new TextBlock { Text = title, Foreground = ForegroundBrush, FontSize = 13, FontWeight = FontWeight.SemiBold });
+        panel.Children.Add(new SelectableTextBlock { Text = title, Foreground = ForegroundBrush, FontSize = 13, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
         foreach (var child in children)
         {
             panel.Children.Add(child);

@@ -19,7 +19,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         IUserInteraction? ui = null,
         IServiceRequestClient? serviceClient = null,
         IProcessActions? processActions = null)
-        : base("Connections", "Sockets read from this Windows host Â· read-only", "C")
+        : base("Connections", "Sockets read from this Windows host · read-only", "C")
     {
         _monitor = monitor;
         _ui = ui ?? new NullUserInteraction();
@@ -43,7 +43,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
     private bool _isGroupedByApp;
 
     [ObservableProperty]
-    private string _statusText = "Connecting to the socket inventoryâ€¦";
+    private string _statusText = "Connecting to the socket inventory…";
 
     [ObservableProperty]
     private string _visibleRowsText = "0 sockets";
@@ -125,7 +125,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
 
     private async Task CopyAsync(ConnectionRow? row, string? value)
     {
-        if (row is null || string.IsNullOrWhiteSpace(value) || value == "â€”")
+        if (row is null || string.IsNullOrWhiteSpace(value) || value == "—")
         {
             return;
         }
@@ -153,13 +153,13 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         if (_monitor.LastError is { } error)
         {
             var captured = _monitor.LastCaptureUtc is { } timestamp
-                ? $" Â· last capture {timestamp.ToLocalTime():HH:mm:ss}"
+                ? $" · last capture {timestamp.ToLocalTime():HH:mm:ss}"
                 : string.Empty;
             StatusText = $"Unavailable: {error}{captured}";
             return;
         }
 
-        StatusText = $"Live read-only Â· {_monitor.SourceName} Â· {_monitor.PollInterval.TotalSeconds:0} s";
+        StatusText = $"Live read-only · {_monitor.SourceName} · {_monitor.PollInterval.TotalSeconds:0} s";
     }
 
     private void ApplyFilters()
@@ -206,7 +206,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         VisibleRowsText = $"{VisibleConnections.Count} of {_monitor.Connections.Count} sockets";
         if (_monitor.LastError is null)
         {
-            StatusText = $"Live read-only Â· {_monitor.SourceName} Â· {VisibleRowsText}";
+            StatusText = $"Live read-only · {_monitor.SourceName} · {VisibleRowsText}";
         }
     }
 }

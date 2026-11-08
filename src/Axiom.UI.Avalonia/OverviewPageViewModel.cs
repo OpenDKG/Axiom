@@ -93,6 +93,8 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
 
     public ObservableCollection<double> DownloadSeries => _traffic.DownloadSeries;
 
+    public bool HasLiveTraffic => _traffic.IsLive;
+
     public IReadOnlyList<string> RangeOptions { get; } = ["5m", "1h", "24h", "7d", "30d"];
 
     [ObservableProperty]
@@ -102,7 +104,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private string _rangeNote = "Measured on active network interfaces. Per-app rates require separate telemetry.";
 
     [ObservableProperty]
-    private string _bucketLabel = "1 s samples Â· rolling 5m Â· system-wide";
+    private string _bucketLabel = "1 s samples · rolling 5m · system-wide";
 
     partial void OnSelectedRangeChanged(string value) => ApplyRange(value);
 
@@ -124,6 +126,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         });
         BucketLabel = _traffic.BucketLabel;
         RangeNote = _traffic.RangeNote;
+        OnPropertyChanged(nameof(HasLiveTraffic));
         UpdateLiveCounters();
     }
 
@@ -137,19 +140,19 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private string _loopbackText = "0";
 
     [ObservableProperty]
-    private string _uploadText = "â€”";
+    private string _uploadText = "—";
 
     [ObservableProperty]
-    private string _downloadText = "â€”";
+    private string _downloadText = "—";
 
     [ObservableProperty]
-    private string _sourceText = "IP Helper Â· TCP/UDP IPv4/IPv6";
+    private string _sourceText = "IP Helper · TCP/UDP IPv4/IPv6";
 
     [ObservableProperty]
     private string _sourceBadgeText = "live from IP Helper";
 
     [ObservableProperty]
-    private string _statusText = "Starting the read-only connection monitorâ€¦";
+    private string _statusText = "Starting the read-only connection monitor…";
 
     public void Refresh()
     {
@@ -337,7 +340,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
 
     private async Task CopyAsync(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value) || value == "â€”")
+        if (string.IsNullOrWhiteSpace(value) || value == "—")
         {
             return;
         }

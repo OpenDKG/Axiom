@@ -4,7 +4,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Axiom.UI.ViewModels"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="Axiom — Open-Source Firewall &amp; Security Monitor"
+        Title="Axiom — Free Open-Source Network &amp; AI Agent Security"
         Icon="/Axiom.UI;component/Resources/axiom.ico"
         Height="900"
         Width="1460"
@@ -57,7 +57,7 @@
                  RenderOptions.BitmapScalingMode="HighQuality" />
           <TextBlock Text="AXIOM" FontWeight="SemiBold" FontSize="11"
                      Margin="10,0,10,0" VerticalAlignment="Center" />
-          <TextBlock Text="Network activity &amp; security" Style="{StaticResource Caption}"
+          <TextBlock Text="Free Open-Source Network &amp; AI Agent Security" Style="{StaticResource Caption}"
                      VerticalAlignment="Center" />
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,4,0">
@@ -108,7 +108,7 @@
               <TextBlock Text="{Binding VersionText}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
             </StackPanel>
           </Grid>
-          <TextBlock Text="Open-source firewall &amp; network monitor"
+          <TextBlock Text="Free Open-Source Network &amp; AI Agent Security"
                      Style="{StaticResource Caption}"
                      TextWrapping="Wrap"
                      Margin="0,8,0,0" />
