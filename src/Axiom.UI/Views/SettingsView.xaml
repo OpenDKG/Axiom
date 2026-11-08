@@ -77,11 +77,21 @@
         <StackPanel>
           <TextBlock Text="System tray &amp; notifications" Style="{StaticResource SectionTitle}" />
           <CheckBox Style="{StaticResource AppCheckBox}"
-                    Content="Show Windows notifications when network monitoring fails"
-                    IsChecked="{Binding TrayNotificationsEnabled, Mode=TwoWay}"
+                    Content="Show notifications"
+                    IsChecked="{Binding NotificationsEnabled, Mode=TwoWay}"
                     Margin="0,12,0,0"
-                    AutomationProperties.Name="Enable monitoring problem notifications" />
-          <TextBlock Text="The icon next to the Windows clock shows measured upload/download on hover and in its menu. A red exclamation warns about an actual monitoring failure, even with pop-up notifications disabled. This does not assert malware detection."
+                    AutomationProperties.Name="Enable notifications" />
+          <CheckBox Style="{StaticResource AppCheckBox}"
+                    Content="Show tray icon and keep Axiom in the notification area"
+                    IsChecked="{Binding TrayNotificationsEnabled, Mode=TwoWay}"
+                    Margin="0,8,0,0"
+                    AutomationProperties.Name="Show tray icon" />
+          <CheckBox Style="{StaticResource AppCheckBox}"
+                    Content="Hide background console windows (Node, PowerShell, Python)"
+                    IsChecked="{Binding HideBackgroundWindows, Mode=TwoWay}"
+                    Margin="0,8,0,0"
+                    AutomationProperties.Name="Hide background console windows" />
+          <TextBlock Text="Notifications and the tray icon are separate. The icon next to the Windows clock shows measured upload/download on hover and in its menu. A red exclamation warns about an actual monitoring failure, even with pop-up notifications disabled. This does not assert malware detection."
                      Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,9,0,0" />
         </StackPanel>
       </Border>

@@ -63,7 +63,17 @@ public sealed partial class SettingsViewModel : PageViewModel, IDisposable
     [ObservableProperty]
     private bool _trayNotificationsEnabled = TraySettingsStore.Enabled;
 
+    [ObservableProperty]
+    private bool _notificationsEnabled = NotificationSettingsStore.Enabled;
+
+    [ObservableProperty]
+    private bool _hideBackgroundWindows = BackgroundWindowSettingsStore.Enabled;
+
     partial void OnTrayNotificationsEnabledChanged(bool value) => TraySettingsStore.SetEnabled(value);
+
+    partial void OnNotificationsEnabledChanged(bool value) => NotificationSettingsStore.SetEnabled(value);
+
+    partial void OnHideBackgroundWindowsChanged(bool value) => BackgroundWindowSettingsStore.SetEnabled(value);
 
 
     private readonly StartupSettingsStore _startupSettings = new();
