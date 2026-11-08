@@ -51,7 +51,7 @@ internal static class ServiceInstaller
             return create;
         }
 
-        _ = RunSc($"description {ServiceInfo.ServiceName} \"Axiom local network monitor and shield\"");
+        _ = RunSc($"description {ServiceInfo.ServiceName} \"Axiom - Free Open-Source Network & AI Agent Security\"");
         _ = RunSc($"failure {ServiceInfo.ServiceName} reset= 86400 actions= restart/5000");
         var start = RunSc($"start {ServiceInfo.ServiceName}");
 

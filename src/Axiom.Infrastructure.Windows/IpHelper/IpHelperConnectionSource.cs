@@ -205,6 +205,16 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
             IsNew = capturedUtc - firstSeen < NewConnectionWindow,
             RuleStatus = ConnectionRuleStatus.Unknown,
             Quality = quality,
+            ParentProcessId = identity.ParentProcessId,
+            ParentProcessName = identity.ParentProcessName,
+            ParentChain = identity.ParentChain,
+            CommandLine = identity.CommandLine,
+            SignerName = identity.SignerName,
+            SignatureStatus = identity.SignatureStatus,
+            ProductName = identity.ProductName,
+            FileVersion = identity.FileVersion,
+            HostedServices = identity.HostedServices,
+            ParentHostedServices = identity.ParentHostedServices,
         };
     }
 

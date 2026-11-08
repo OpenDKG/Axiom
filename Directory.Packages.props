@@ -19,6 +19,9 @@
     <!-- MIT. Local SQLite storage; used from FND-005 onwards. -->
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
 
+    <!-- MIT. WMI queries for command lines and service-host metadata in the Windows service. -->
+    <PackageVersion Include="System.Management" Version="10.0.14" />
+
     <!-- MIT. Windows service lifetime for the worker host (FND-003). -->
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.14" />
 

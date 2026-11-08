@@ -252,13 +252,140 @@ public sealed class HistoryStore
             }
         }
 
+        var baseline = query.IncludeBaseline
+            ? await QueryBaselineAsync(connection, where, from, to, search, total, cancellationToken)
+                  .ConfigureAwait(false)
+            : null;
+
         return new HistoryPage
         {
             Rows = rows,
             TotalCount = total,
             DatabasePath = DatabasePath,
             QueriedUtc = DateTimeOffset.UtcNow,
+            Baseline = baseline,
         };
+    }
+
+    private static async Task<HistoryBaseline> QueryBaselineAsync(
+        SqliteConnection connection,
+        string where,
+        string from,
+        string to,
+        string? search,
+        int totalFlows,
+        CancellationToken cancellationToken)
+    {
+        var apps = new List<HistoryBaselineApp>();
+        var flows = new List<HistoryBaselineFlow>();
+        var remotes = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = $"""
+                WITH ranked AS (
+                    SELECT a.app_key,
+                           f.remote_endpoint,
+                           COUNT(*) AS cnt,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY a.app_key
+                               ORDER BY COUNT(*) DESC, f.remote_endpoint ASC) AS rn
+                    FROM flows f
+                    JOIN apps a ON a.id = f.app_id
+                    {where}
+                    GROUP BY a.app_key, f.remote_endpoint
+                )
+                SELECT app_key, remote_endpoint
+                FROM ranked
+                WHERE rn <= 3
+                ORDER BY app_key, rn;
+                """;
+            AddRangeParameters(command, from, to, search);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var appKey = reader.GetString(0);
+                if (!remotes.TryGetValue(appKey, out var list))
+                {
+                    list = [];
+                    remotes[appKey] = list;
+                }
+
+                list.Add(reader.GetString(1));
+            }
+        }
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = $"""
+                SELECT a.app_key,
+                       a.display_name,
+                       a.executable_path,
+                       COUNT(*) AS row_count,
+                       MIN(f.first_seen_utc),
+                       MAX(f.last_seen_utc)
+                FROM flows f
+                JOIN apps a ON a.id = f.app_id
+                {where}
+                GROUP BY a.app_key
+                ORDER BY row_count DESC
+                LIMIT 200;
+                """;
+            AddRangeParameters(command, from, to, search);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var appKey = reader.GetString(0);
+                apps.Add(new HistoryBaselineApp(
+                    appKey,
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    (int)reader.GetInt64(3),
+                    ParseStorage(reader.GetString(4)),
+                    ParseStorage(reader.GetString(5)),
+                    remotes.TryGetValue(appKey, out var list) ? list : []));
+            }
+        }
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = $"""
+                SELECT a.app_key,
+                       f.protocol,
+                       f.remote_endpoint,
+                       f.direction,
+                       COUNT(*) AS row_count,
+                       MIN(f.first_seen_utc),
+                       MAX(f.last_seen_utc)
+                FROM flows f
+                JOIN apps a ON a.id = f.app_id
+                {where}
+                GROUP BY a.app_key, f.protocol, f.remote_endpoint, f.direction
+                ORDER BY row_count DESC
+                LIMIT 5000;
+                """;
+            AddRangeParameters(command, from, to, search);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                flows.Add(new HistoryBaselineFlow(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    (int)reader.GetInt64(4),
+                    ParseStorage(reader.GetString(5)),
+                    ParseStorage(reader.GetString(6))));
+            }
+        }
+
+        return new HistoryBaseline(
+            apps,
+            flows,
+            totalFlows,
+            DateTimeOffset.UtcNow,
+            "Aggregated local flow history. It records observed flow rows, not packet counts, " +
+            "payloads or byte volumes.");
     }
 
     /// <summary>Persists an owned firewall rule and one audit row in the same transaction.</summary>

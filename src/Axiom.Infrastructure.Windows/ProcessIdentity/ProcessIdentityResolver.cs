@@ -12,7 +12,33 @@ public sealed record ProcessIdentityInfo(
     int ProcessId,
     string DisplayName,
     string ExecutablePath,
-    bool IsResolved);
+    bool IsResolved)
+{
+    public int? ParentProcessId { get; init; }
+
+    public string ParentProcessName { get; init; } = string.Empty;
+
+    public string ParentChain { get; init; } = string.Empty;
+
+    /// <summary>Sanitised command line, or empty when WMI cannot expose it.</summary>
+    public string CommandLine { get; init; } = string.Empty;
+
+    /// <summary>Authenticode signer subject, or empty when unsigned/unreadable.</summary>
+    public string SignerName { get; init; } = string.Empty;
+
+    /// <summary>Valid, Untrusted, Unsigned or Unavailable.</summary>
+    public string SignatureStatus { get; init; } = "Unavailable";
+
+    public string ProductName { get; init; } = string.Empty;
+
+    public string FileVersion { get; init; } = string.Empty;
+
+    /// <summary>Windows service names hosted by this process, usually only for svchost.exe.</summary>
+    public string HostedServices { get; init; } = string.Empty;
+
+    /// <summary>Windows service names hosted by the immediate parent, when it is svchost.exe.</summary>
+    public string ParentHostedServices { get; init; } = string.Empty;
+}
 
 /// <summary>
 /// Resolves PID to executable name/path with a short-lived cache. Access denied and protected
@@ -25,6 +51,7 @@ public sealed class ProcessIdentityResolver
     private readonly Dictionary<int, CachedIdentity> _cache = [];
     private readonly Lock _gate = new();
     private readonly TimeSpan _cacheLifetime = TimeSpan.FromSeconds(30);
+    private readonly ProcessMetadataProvider _metadata = new();
 
     public ProcessIdentityInfo Resolve(int processId)
     {
@@ -67,7 +94,7 @@ public sealed class ProcessIdentityResolver
         [Out] char[] executableName,
         ref int size);
 
-    private static ProcessIdentityInfo Query(int processId)
+    private ProcessIdentityInfo Query(int processId)
     {
         if (processId == 0)
         {
@@ -83,16 +110,43 @@ public sealed class ProcessIdentityResolver
         if (!string.IsNullOrEmpty(path))
         {
             var fileName = Path.GetFileName(path);
-            return new ProcessIdentityInfo(processId, fileName, path, true);
+            return WithMetadata(new ProcessIdentityInfo(processId, fileName, path, true), processId, path);
         }
 
         var processName = TryQueryProcessName(processId);
         if (!string.IsNullOrEmpty(processName))
         {
-            return new ProcessIdentityInfo(processId, $"{processName}.exe", string.Empty, false);
+            return WithMetadata(
+                new ProcessIdentityInfo(processId, $"{processName}.exe", string.Empty, false),
+                processId,
+                string.Empty);
         }
 
-        return new ProcessIdentityInfo(processId, $"PID {processId}", string.Empty, false);
+        return WithMetadata(
+            new ProcessIdentityInfo(processId, $"PID {processId}", string.Empty, false),
+            processId,
+            string.Empty);
+    }
+
+    private ProcessIdentityInfo WithMetadata(
+        ProcessIdentityInfo identity,
+        int processId,
+        string path)
+    {
+        var metadata = _metadata.Resolve(processId, path);
+        return identity with
+        {
+            ParentProcessId = metadata.ParentProcessId,
+            ParentProcessName = metadata.ParentProcessName,
+            ParentChain = metadata.ParentChain,
+            CommandLine = metadata.CommandLine,
+            SignerName = metadata.SignerName,
+            SignatureStatus = metadata.SignatureStatus,
+            ProductName = metadata.ProductName,
+            FileVersion = metadata.FileVersion,
+            HostedServices = metadata.HostedServices,
+            ParentHostedServices = metadata.ParentHostedServices,
+        };
     }
 
     private static string? TryQueryImagePath(int processId)

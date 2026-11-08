@@ -14,6 +14,12 @@ public sealed record HistoryQuery
     public int Limit { get; init; } = 200;
 
     public int Offset { get; init; }
+
+    /// <summary>
+    /// When true, the store also returns aggregated 30-day baseline data instead of transferring
+    /// every flow row. The normal row query is still bounded by <see cref="Limit"/>.
+    /// </summary>
+    public bool IncludeBaseline { get; init; }
 }
 
 public sealed record HistoryRow
@@ -50,4 +56,32 @@ public sealed record HistoryPage
     public required string DatabasePath { get; init; }
 
     public required DateTimeOffset QueriedUtc { get; init; }
+
+    /// <summary>Aggregated baseline, present only when <see cref="HistoryQuery.IncludeBaseline"/> is set.</summary>
+    public HistoryBaseline? Baseline { get; init; }
 }
+
+public sealed record HistoryBaseline(
+    IReadOnlyList<HistoryBaselineApp> Apps,
+    IReadOnlyList<HistoryBaselineFlow> Flows,
+    int TotalFlows,
+    DateTimeOffset GeneratedUtc,
+    string Note);
+
+public sealed record HistoryBaselineApp(
+    string AppKey,
+    string DisplayName,
+    string ExecutablePath,
+    int FlowRows,
+    DateTimeOffset FirstSeenUtc,
+    DateTimeOffset LastSeenUtc,
+    IReadOnlyList<string> TypicalRemotes);
+
+public sealed record HistoryBaselineFlow(
+    string AppKey,
+    string Protocol,
+    string RemoteEndpoint,
+    string Direction,
+    int FlowRows,
+    DateTimeOffset FirstSeenUtc,
+    DateTimeOffset LastSeenUtc);
