@@ -93,6 +93,8 @@
           <StackPanel Spacing="6">
             <controls:AxiomSelectableTextBlock Text="Resolver statistics" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <controls:AxiomSelectableTextBlock Text="{Binding StatsText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="{Binding StatsHintText}" IsVisible="{Binding HasStatsHint}" FontSize="9.5"
+                                                Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" MaxWidth="380" />
             <controls:AxiomSelectableTextBlock Text="{Binding DetailText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" MaxWidth="380" />
             <controls:AxiomSelectableTextBlock Text="{Binding LastUpdatedText}" FontSize="9" Foreground="{DynamicResource Axiom.Accent}" />
           </StackPanel>

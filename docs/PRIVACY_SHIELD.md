@@ -25,8 +25,10 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
   explicit UAC DNS integration.
 - A bounded local **blocked-query history** (last 1,000 entries) containing the blocked domain,
   category, timestamp and, when Windows exposes it, the requesting application name/path. It is
-  stored in `%LOCALAPPDATA%\Axiom\privacy-shield-blocked.jsonl`, never includes allowed queries, and
-  has a clear action. This is the one deliberate DNS history exception; it is local and
+  stored in the service account's local profile
+  (`%LOCALAPPDATA%\Axiom\privacy-shield-blocked.jsonl` as seen by that account), never includes
+  allowed queries, and has a clear action. It is deliberately not shared machine-wide because it is
+  the only DNS data kept. This is the one deliberate DNS history exception; it is local and
   user-clearable. Recent blocks are refreshed every 2 seconds and can be **Allowed** or **Blocked**
   directly from the row. Allow adds the domain to the custom allowlist; Block removes it from the
   allowlist and adds it to the custom blocklist.
@@ -44,7 +46,12 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
   list bytes; no separate approval is required beyond the license and attribution terms. Upstream
   terms must be rechecked before adding or redistributing a list. See
   [third-party notices](../THIRD_PARTY_NOTICES.md).
-- Per-user settings in `%LOCALAPPDATA%\Axiom\privacy-shield.json`. Settings contain no DNS query history; the separate bounded blocked-query history described above is the only DNS history.
+- Settings and the compiled ruleset live in `%ProgramData%\Axiom\privacy-shield.json` and
+  `privacy-shield-rules.json` when the installed service runs them, so the state survives service
+  reinstalls and is not hidden in the LocalSystem profile. A portable/interactive run keeps
+  `%LOCALAPPDATA%\Axiom\`; existing service data is copied to ProgramData once on first start.
+  Settings contain no DNS query history; the separate bounded blocked-query history described above
+  is the only DNS history.
 
 ## DNS-only boundary
 
@@ -58,14 +65,20 @@ Privacy Shield is **not a VPN, proxy or network gateway**. It filters DNS name r
    not pass through Axiom.
 
 If adapter DNS is not pointed at the resolver, normal Windows DNS bypasses Privacy Shield entirely
-and the counters remain zero. Manual queries to `127.0.0.1` still work for testing, but they do not
-prove that system-wide traffic is filtered.
+and the counters remain zero. The page states this explicitly: when the resolver is running but no
+adapter DNS points at `127.0.0.1`, **Resolver statistics** explains that nothing uses the resolver
+and points to the UAC helper. Once an adapter points at it, the adapter row shows
+`127.0.0.1 · Privacy Shield` and the hint disappears as soon as the first query arrives.
+Manual queries to `127.0.0.1` still work for testing, but they do not prove that system-wide
+traffic is filtered.
 
 ## What is not implemented
 
 - A WFP callout driver, hosts-file editing or LAN-wide resolver.
 - DNS-over-HTTPS, DNS-over-TLS or DNS-over-QUIC interception.
-- Per-process DNS attribution. Socket history and DNS counters are separate.
+- Full per-process attribution for every query: Axiom resolves the loopback source port through the
+  Windows owner tables for **blocked** queries only. Protected or already-exited processes may show
+  `unknown app`.
 - Automatic adapter DNS changes by the service itself. A separate explicit UAC helper can save and
   change one selected adapter; it never elevates silently.
 

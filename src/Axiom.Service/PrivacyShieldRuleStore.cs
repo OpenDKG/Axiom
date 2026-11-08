@@ -22,10 +22,7 @@ public sealed class PrivacyShieldRuleStore
 
     public PrivacyShieldRuleStore(string? path = null)
     {
-        _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Axiom",
-            "privacy-shield-rules.json");
+        _path = path ?? PrivacyShieldPaths.Resolve("privacy-shield-rules.json");
     }
 
     public string RulesPath => _path;

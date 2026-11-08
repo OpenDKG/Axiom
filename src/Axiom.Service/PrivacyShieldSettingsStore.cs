@@ -19,10 +19,7 @@ public sealed class PrivacyShieldSettingsStore
 
     public PrivacyShieldSettingsStore(string? path = null)
     {
-        _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Axiom",
-            "privacy-shield.json");
+        _path = path ?? PrivacyShieldPaths.Resolve("privacy-shield.json");
     }
 
     public string SettingsPath => _path;
