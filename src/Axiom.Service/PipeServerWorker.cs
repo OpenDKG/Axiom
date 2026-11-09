@@ -36,6 +36,8 @@ public sealed partial class PipeServerWorker(
             () => cache.Latest,
             () => CreateHealth(cache),
             historyQuery: (query, cancellationToken) => history.QueryAsync(query, cancellationToken),
+            throughputHistory: (query, cancellationToken) =>
+                history.QueryThroughputAsync(query, cancellationToken),
             rulesQuery: async cancellationToken =>
             {
                 var capability = await firewall.GetCapabilitiesAsync(cancellationToken).ConfigureAwait(false);

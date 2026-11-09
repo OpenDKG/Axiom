@@ -9,9 +9,10 @@ public enum TrafficRange
 {
     LastFiveMinutes = 0,
     LastHour = 1,
-    LastDay = 2,
-    LastWeek = 3,
-    LastMonth = 4,
+    LastTwelveHours = 2,
+    LastDay = 3,
+    LastWeek = 4,
+    LastMonth = 5,
 }
 
 /// <summary>One timestamped system-wide throughput sample. NaN means the sample is unavailable.</summary>
@@ -21,8 +22,9 @@ public sealed record ThroughputSample(
     double Download);
 
 /// <summary>
-/// Genuine local, system-wide interface throughput for a rolling five-minute window. Persistent
-/// history is not yet available; older ranges stay unavailable instead of being synthesized.
+/// Genuine local, system-wide interface throughput. The five-minute window is sampled live in the
+/// desktop process; longer ranges come from the service's persisted per-minute history and stay
+/// empty (gaps) where nothing was measured.
 /// </summary>
 public sealed class TrafficEngine : IDisposable
 {
@@ -32,6 +34,9 @@ public sealed class TrafficEngine : IDisposable
     private Dictionary<string, (long Sent, long Received)> _previous = new(StringComparer.Ordinal);
     private long _lastTimestamp;
     private TrafficRange _range = TrafficRange.LastFiveMinutes;
+    private bool _historyLoaded;
+    private int _historyBucketSeconds = 60;
+    private string? _historyDetail;
 
     public TrafficEngine(IUiTimerFactory timers)
     {
@@ -49,22 +54,35 @@ public sealed class TrafficEngine : IDisposable
 
     public TrafficRange Range => _range;
     public bool IsLive => _range == TrafficRange.LastFiveMinutes;
-    public double LatestUpload => IsLive && Samples.Count > 0 ? Samples[^1].Upload : double.NaN;
-    public double LatestDownload => IsLive && Samples.Count > 0 ? Samples[^1].Download : double.NaN;
+    public double LatestUpload => Samples.Count > 0 ? Samples[^1].Upload : double.NaN;
+    public double LatestDownload => Samples.Count > 0 ? Samples[^1].Download : double.NaN;
+
+    /// <summary>True when a historical range has at least one bucket with a measurement.</summary>
+    public bool HasHistoryData =>
+        !IsLive && _historyLoaded &&
+        (UploadSeries.Any(double.IsFinite) || DownloadSeries.Any(double.IsFinite));
+
+    /// <summary>Width of one stored history bucket for a range, in seconds.</summary>
+    public static int BucketSecondsFor(TrafficRange range) => range switch
+    {
+        TrafficRange.LastHour => 60,
+        TrafficRange.LastTwelveHours => 300,
+        TrafficRange.LastDay => 300,
+        TrafficRange.LastWeek => 3_600,
+        TrafficRange.LastMonth => 21_600,
+        _ => 1,
+    };
 
     public string BucketLabel => _range switch
     {
         TrafficRange.LastFiveMinutes => "1 s samples · rolling 5m · system-wide",
-        TrafficRange.LastHour => "1h · historical byte samples not recorded",
-        TrafficRange.LastDay => "24h · historical byte samples not recorded",
-        TrafficRange.LastWeek => "7d · historical byte samples not recorded",
-        TrafficRange.LastMonth => "30d · historical byte samples not recorded",
-        _ => "No historical data",
+        _ => $"{FormatBucket(_historyBucketSeconds)} buckets · {RangeText(_range)} · system-wide",
     };
 
     public string RangeNote => IsLive
         ? "Measured on active network interfaces. Per-app rates require separate telemetry."
-        : "No historical byte data yet. Showing no data instead of simulated traffic.";
+        : _historyDetail ??
+          "Reading system-wide throughput history from the local Axiom service…";
 
     public void Start()
     {
@@ -109,13 +127,55 @@ public sealed class TrafficEngine : IDisposable
     }
 
     /// <summary>
-    /// The five-minute series is the only measured throughput the app keeps. For longer ranges the
-    /// chart is cleared instead of continuing to draw the live five-minute curve under a new label.
+    /// Replaces the series with persisted history. A bucket without measured seconds becomes a NaN
+    /// point, so the chart draws a gap instead of an invented zero.
     /// </summary>
+    public void SetHistory(
+        TrafficRange range,
+        int bucketSeconds,
+        IReadOnlyList<double> upload,
+        IReadOnlyList<double> download,
+        string? detail)
+    {
+        if (range != _range)
+        {
+            return;
+        }
+
+        _historyLoaded = true;
+        _historyBucketSeconds = Math.Max(1, bucketSeconds);
+        _historyDetail = detail;
+
+        UploadSeries.Clear();
+        DownloadSeries.Clear();
+        foreach (var value in upload)
+        {
+            UploadSeries.Add(value);
+        }
+
+        foreach (var value in download)
+        {
+            DownloadSeries.Add(value);
+        }
+
+        Updated?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetHistoryUnavailable(string reason)
+    {
+        _historyLoaded = false;
+        _historyDetail = reason;
+        UploadSeries.Clear();
+        DownloadSeries.Clear();
+        Updated?.Invoke(this, EventArgs.Empty);
+    }
+
     private void RefreshSeries()
     {
         UploadSeries.Clear();
         DownloadSeries.Clear();
+        _historyLoaded = false;
+        _historyDetail = null;
         if (!IsLive)
         {
             return;
@@ -127,6 +187,23 @@ public sealed class TrafficEngine : IDisposable
             DownloadSeries.Add(sample.Download);
         }
     }
+
+    private static string RangeText(TrafficRange range) => range switch
+    {
+        TrafficRange.LastHour => "last 1h",
+        TrafficRange.LastTwelveHours => "last 12h",
+        TrafficRange.LastDay => "last 24h",
+        TrafficRange.LastWeek => "last 7d",
+        TrafficRange.LastMonth => "last 30d",
+        _ => "last 5m",
+    };
+
+    private static string FormatBucket(int seconds) => seconds switch
+    {
+        < 60 => "1 s",
+        < 3_600 => $"{seconds / 60} min",
+        _ => $"{seconds / 3_600} h",
+    };
 
     public void Dispose()
     {

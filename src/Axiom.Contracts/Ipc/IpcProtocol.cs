@@ -36,6 +36,7 @@ public static class IpcCommandTypes
     public const string RuleVerify = "rule.verify";
     public const string RulesQuery = "rules.query";
     public const string HistoryQuery = "history.query";
+    public const string ThroughputHistory = "traffic.history";
     public const string PrivacyStatus = "privacy.status";
     public const string PrivacyConfigure = "privacy.configure";
     public const string PrivacySourcesUpdate = "privacy.sources.update";
@@ -61,6 +62,7 @@ public static class IpcCommandTypes
         RuleVerify,
         RulesQuery,
         HistoryQuery,
+        ThroughputHistory,
         PrivacyStatus,
         PrivacyConfigure,
         PrivacySourcesUpdate,

@@ -17,7 +17,7 @@ namespace Axiom.Persistence;
 /// </summary>
 public sealed class HistoryStore
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
 
     public static readonly TimeSpan DefaultRetention = TimeSpan.FromDays(30);
 
@@ -73,6 +73,13 @@ public sealed class HistoryStore
             key            TEXT    NOT NULL PRIMARY KEY,
             value_json     TEXT    NOT NULL,
             schema_version INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS throughput_buckets (
+            bucket_start_unix INTEGER NOT NULL PRIMARY KEY,
+            upload_bytes      INTEGER NOT NULL DEFAULT 0,
+            download_bytes    INTEGER NOT NULL DEFAULT 0,
+            measured_seconds  REAL    NOT NULL DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS firewall_rules (
@@ -264,6 +271,107 @@ public sealed class HistoryStore
             DatabasePath = DatabasePath,
             QueriedUtc = DateTimeOffset.UtcNow,
             Baseline = baseline,
+        };
+    }
+
+    /// <summary>
+    /// Stores the absolute byte totals observed for one minute. The sampler owns the minute
+    /// accumulator, so writing the same bucket again replaces its partial value.
+    /// </summary>
+    public async Task RecordThroughputAsync(
+        DateTimeOffset bucketStartUtc,
+        long uploadBytes,
+        long downloadBytes,
+        double measuredSeconds,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO throughput_buckets(bucket_start_unix, upload_bytes, download_bytes, measured_seconds)
+            VALUES ($bucket, $upload, $download, $measured)
+            ON CONFLICT(bucket_start_unix) DO UPDATE SET
+                upload_bytes = excluded.upload_bytes,
+                download_bytes = excluded.download_bytes,
+                measured_seconds = excluded.measured_seconds;
+            """;
+        command.Parameters.AddWithValue("$bucket", bucketStartUtc.ToUnixTimeSeconds());
+        command.Parameters.AddWithValue("$upload", uploadBytes);
+        command.Parameters.AddWithValue("$download", downloadBytes);
+        command.Parameters.AddWithValue("$measured", measuredSeconds);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Aggregates persisted throughput into contiguous buckets. Buckets without a measurement stay
+    /// present with zero bytes and zero measured seconds so a chart can draw a gap instead of
+    /// pretending the network was idle.
+    /// </summary>
+    public async Task<ThroughputHistory> QueryThroughputAsync(
+        ThroughputHistoryQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var windowSeconds = Math.Max(60, (long)(query.ToUtc - query.FromUtc).TotalSeconds);
+        var bucketSeconds = Math.Clamp(query.BucketSeconds, 60, 21_600);
+
+        // Keep the response bounded even if a caller asks for a month of minute rows.
+        while (windowSeconds / bucketSeconds > 2_000)
+        {
+            bucketSeconds *= 2;
+        }
+
+        var fromUnix = query.FromUtc.ToUnixTimeSeconds() / bucketSeconds * bucketSeconds;
+        var toUnix = Math.Max(fromUnix, query.ToUtc.ToUnixTimeSeconds());
+
+        var measured = new Dictionary<long, (long Upload, long Download, double Seconds)>();
+        await using (var connection = new SqliteConnection(_connectionString))
+        {
+            await connection.OpenAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT (bucket_start_unix / $bucket) * $bucket AS start_unix,
+                       SUM(upload_bytes),
+                       SUM(download_bytes),
+                       SUM(measured_seconds)
+                FROM throughput_buckets
+                WHERE bucket_start_unix >= $from AND bucket_start_unix <= $to
+                GROUP BY start_unix
+                ORDER BY start_unix;
+                """;
+            command.Parameters.AddWithValue("$bucket", bucketSeconds);
+            command.Parameters.AddWithValue("$from", fromUnix);
+            command.Parameters.AddWithValue("$to", toUnix);
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                measured[reader.GetInt64(0)] = (reader.GetInt64(1), reader.GetInt64(2), reader.GetDouble(3));
+            }
+        }
+
+        var points = new List<ThroughputPoint>();
+        for (var start = fromUnix; start <= toUnix; start += bucketSeconds)
+        {
+            var values = measured.GetValueOrDefault(start);
+            points.Add(new ThroughputPoint
+            {
+                StartUtc = DateTimeOffset.FromUnixTimeSeconds(start),
+                UploadBytes = values.Upload,
+                DownloadBytes = values.Download,
+                MeasuredSeconds = values.Seconds,
+            });
+        }
+
+        return new ThroughputHistory
+        {
+            Points = points,
+            BucketSeconds = bucketSeconds,
+            QueriedUtc = DateTimeOffset.UtcNow,
+            Detail = "Recorded by the Axiom service; history starts when the service first ran.",
         };
     }
 
@@ -578,6 +686,16 @@ public sealed class HistoryStore
         {
             deleteApps.CommandText = "DELETE FROM apps WHERE id NOT IN (SELECT DISTINCT app_id FROM flows);";
             await deleteApps.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using (var deleteThroughput = connection.CreateCommand())
+        {
+            deleteThroughput.CommandText =
+                "DELETE FROM throughput_buckets WHERE bucket_start_unix < $cutoff;";
+            deleteThroughput.Parameters.AddWithValue(
+                "$cutoff",
+                nowUtc.Subtract(retention).ToUnixTimeSeconds());
+            await deleteThroughput.ExecuteNonQueryAsync(cancellationToken);
         }
 
         return deleted;

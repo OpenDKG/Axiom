@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.8.1 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.9.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,20 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.9.0
+
+- **System-wide throughput now has real history.** The Overview range picker offers **5m, 1h, 12h,
+  24h, 7d and 30d**. The 5-minute view remains the live 1-second measurement in the desktop process;
+  every longer range is read from the Axiom service, which samples the same interface counters and
+  stores one row per minute in the local SQLite history.
+- **Honest rates and honest gaps.** A bucket is drawn as bytes divided by the seconds actually
+  observed in it, and a minute without a measurement stays a gap instead of an invented idle line.
+  History starts when the service first runs and follows the existing 30-day retention (about a few
+  MB of rows per month).
+- **Clear failures.** Without the service the chart says that history is unavailable and why,
+  instead of drawing nothing under a working label. An open historical range refreshes itself every
+  30 seconds; the live counters keep updating while a longer range is selected.
 
 ## What's in 0.8.1
 

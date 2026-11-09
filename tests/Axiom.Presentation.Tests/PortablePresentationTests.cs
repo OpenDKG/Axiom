@@ -115,24 +115,45 @@ public sealed class PortablePresentationTests
     };
 
     [Fact]
-    public void Traffic_range_switch_clears_historical_series_and_restores_the_live_window()
+    public void Traffic_range_switch_clears_the_live_series_and_accepts_persisted_history()
     {
         using var traffic = new TrafficEngine(new FakeTimerFactory());
         traffic.Start();
         var liveCount = traffic.UploadSeries.Count;
         Assert.True(liveCount > 1);
+        Assert.True(traffic.IsLive);
 
         traffic.SetRange(TrafficRange.LastHour);
 
         Assert.False(traffic.IsLive);
         Assert.Empty(traffic.UploadSeries);
         Assert.Empty(traffic.DownloadSeries);
+        Assert.False(traffic.HasHistoryData);
+        Assert.Contains("1 min", traffic.BucketLabel, StringComparison.Ordinal);
+
+        traffic.SetHistory(
+            TrafficRange.LastHour,
+            60,
+            [1_024d, double.NaN, 2_048d],
+            [4_096d, double.NaN, 8_192d],
+            "service history");
+
+        Assert.Equal(3, traffic.UploadSeries.Count);
+        Assert.True(traffic.HasHistoryData);
+        Assert.Equal("service history", traffic.RangeNote);
+        Assert.Equal(TrafficRange.LastHour, traffic.Range);
+
+        // History for a range that is no longer selected must not replace the visible series.
+        traffic.SetRange(TrafficRange.LastDay);
+        traffic.SetHistory(TrafficRange.LastHour, 60, [9d], [9d], "stale");
+        Assert.Empty(traffic.UploadSeries);
 
         traffic.SetRange(TrafficRange.LastFiveMinutes);
 
         Assert.True(traffic.IsLive);
         Assert.Equal(liveCount, traffic.UploadSeries.Count);
         Assert.Equal(liveCount, traffic.DownloadSeries.Count);
+        Assert.False(traffic.HasHistoryData);
     }
 
     private sealed class FakeSource : IConnectionSnapshotSource

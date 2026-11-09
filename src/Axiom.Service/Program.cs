@@ -48,6 +48,8 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<Monito
 builder.Services.AddSingleton<HistoryWriter>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<HistoryWriter>());
 
+builder.Services.AddHostedService<ThroughputRecorderWorker>();
+
 builder.Services.AddSingleton<PipeServerWorker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<PipeServerWorker>());
 
