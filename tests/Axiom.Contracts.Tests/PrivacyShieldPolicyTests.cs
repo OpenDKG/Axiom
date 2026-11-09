@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Privacy;
 using Xunit;
 
@@ -83,11 +83,11 @@ public sealed class PrivacyShieldPolicyTests
     }
 
     [Fact]
-    public void Source_catalog_has_five_license_cleared_entries()
+    public void Source_catalog_has_six_license_cleared_entries()
     {
         var sources = PrivacyShieldSourceCatalog.All;
 
-        Assert.Equal(5, sources.Count);
+        Assert.Equal(6, sources.Count);
         Assert.Equal(
             sources.Count,
             sources.Select(source => source.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
@@ -95,5 +95,13 @@ public sealed class PrivacyShieldPolicyTests
             source.License is "GPL-3.0" or "MIT" or "Unlicense",
             source.License));
         Assert.All(sources, source => Assert.StartsWith("https://", source.Url, StringComparison.Ordinal));
+
+        // Only the dedicated malware list may claim the malware category, so a shared indicator is
+        // never an ad or tracker mislabelled as malware.
+        var malware = sources.Where(source =>
+            source.Category.HasFlag(PrivacyCategory.Malware)).ToArray();
+        Assert.Single(malware);
+        Assert.Equal("urlhaus-domains", malware[0].Id);
+        Assert.Equal(PrivacyCategory.Malware, malware[0].Category);
     }
 }

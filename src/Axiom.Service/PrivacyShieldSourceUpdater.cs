@@ -50,7 +50,7 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
 
         var rules = new List<PrivacyShieldStoredRule>();
         var statuses = new List<PrivacyShieldSourceStatus>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var index = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var success = true;
 
         for (var sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
@@ -89,6 +89,8 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
                 }
 
                 var added = 0;
+                var upgraded = 0;
+                var now = DateTimeOffset.UtcNow;
                 foreach (var domain in domains)
                 {
                     if (rules.Count >= sourceLimit)
@@ -96,15 +98,25 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
                         break;
                     }
 
-                    if (seen.Add(domain))
+                    if (index.TryGetValue(domain, out var existingIndex))
                     {
-                        rules.Add(new PrivacyShieldStoredRule(
-                            domain,
-                            source.Id,
-                            source.Category,
-                            DateTimeOffset.UtcNow));
-                        added++;
+                        // A malware source upgrades a duplicate already listed as an ad or tracker,
+                        // so a blocked malware domain is never categorised as advertising. The first
+                        // source keeps the attribution; the category only grows.
+                        var existing = rules[existingIndex];
+                        var merged = existing.Category | source.Category;
+                        if (merged != existing.Category)
+                        {
+                            rules[existingIndex] = existing with { Category = merged };
+                            upgraded++;
+                        }
+
+                        continue;
                     }
+
+                    index[domain] = rules.Count;
+                    rules.Add(new PrivacyShieldStoredRule(domain, source.Id, source.Category, now));
+                    added++;
                 }
 
                 statuses.Add(new PrivacyShieldSourceStatus(
@@ -112,8 +124,8 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
                     source.Name,
                     source.License,
                     Enabled: true,
-                    Entries: added,
-                    UpdatedUtc: DateTimeOffset.UtcNow,
+                    Entries: added + upgraded,
+                    UpdatedUtc: now,
                     Error: null));
             }
             catch (Exception exception) when (exception is

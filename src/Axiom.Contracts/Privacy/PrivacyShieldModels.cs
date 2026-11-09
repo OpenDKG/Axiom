@@ -132,8 +132,8 @@ public static class PrivacyShieldSourceCatalog
             "OISD Big",
             "https://big.oisd.nl/domainswild",
             "GPL-3.0",
-            PrivacyCategory.Ads | PrivacyCategory.Tracking | PrivacyCategory.Malware,
-            "Balanced ads/tracking/malware list with wildcard domains."),
+            PrivacyCategory.Ads | PrivacyCategory.Tracking,
+            "Balanced ads/tracking list with wildcard domains; malware is covered by the dedicated malware source."),
         new(
             "windowsspyblocker",
             "WindowsSpyBlocker telemetry",
@@ -155,6 +155,15 @@ public static class PrivacyShieldSourceCatalog
             "Unlicense",
             PrivacyCategory.Tracking,
             "Public-domain tracking list; no attribution or permission gate, but review upstream changes."),
+        new(
+            "urlhaus-domains",
+            "URLhaus malicious domains",
+            "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-domains.txt",
+            "MIT",
+            PrivacyCategory.Malware,
+            "Malware-only domains from the abuse.ch URLhaus feed, compiled by malware-filter (MIT, " +
+            "updated every 12 hours). Axiom may propose a blocked domain from this list for community " +
+            "sharing, but only when an agent actually fetched it and sharing is on."),
     ];
 }
 
