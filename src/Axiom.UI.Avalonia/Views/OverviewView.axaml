@@ -48,20 +48,20 @@
           </Grid>
           <Grid>
             <controls:TrafficChartControl Height="150" UploadSeries="{Binding UploadSeries}" DownloadSeries="{Binding DownloadSeries}" />
-            <Border IsVisible="{Binding !HasLiveTraffic}"
+            <Border IsVisible="{Binding ShowNoDataOverlay}"
                     Background="{DynamicResource Axiom.Surface}"
                     BorderBrush="{DynamicResource Axiom.Border}"
                     BorderThickness="1"
                     CornerRadius="6"
                     Padding="12">
-              <controls:AxiomSelectableTextBlock Text="No historical byte data for this range yet. Only the live five-minute window is measured."
+              <controls:AxiomSelectableTextBlock Text="{Binding NoDataText}"
                          Foreground="{DynamicResource Axiom.TextMuted}"
                          FontSize="11"
                          TextWrapping="Wrap"
                          HorizontalAlignment="Center"
                          VerticalAlignment="Center"
                          TextAlignment="Center"
-                         MaxWidth="420" />
+                         MaxWidth="460" />
             </Border>
           </Grid>
           <Grid ColumnDefinitions="Auto,Auto,*">

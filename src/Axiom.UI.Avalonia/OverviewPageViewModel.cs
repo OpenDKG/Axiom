@@ -2,6 +2,8 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Axiom.Contracts.Firewall;
+using Axiom.Contracts.Ipc;
+using Axiom.Contracts.Monitoring;
 using Axiom.Presentation;
 using CommunityToolkit.Mvvm.Input;
 
@@ -13,8 +15,12 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private readonly TrafficEngine _traffic;
     private readonly IUserInteraction _ui;
     private readonly ConnectionActionService _actions;
+    private readonly IServiceRequestClient? _serviceClient;
     private readonly List<NewConnectionMarkerEvent> _sessionEvents = [];
     private readonly HashSet<string> _seenEventKeys = new(StringComparer.Ordinal);
+
+    private int _rangeRequest;
+    private DateTimeOffset _lastHistoryUtc = DateTimeOffset.MinValue;
 
     public OverviewPageViewModel(
         ConnectionMonitor monitor,
@@ -27,6 +33,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         _monitor = monitor;
         _traffic = traffic;
         _ui = ui ?? new NullUserInteraction();
+        _serviceClient = serviceClient;
         _actions = new ConnectionActionService(
             serviceClient,
             _ui,
@@ -95,7 +102,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
 
     public bool HasLiveTraffic => _traffic.IsLive;
 
-    public IReadOnlyList<string> RangeOptions { get; } = ["5m", "1h", "24h", "7d", "30d"];
+    public IReadOnlyList<string> RangeOptions { get; } = ["5m", "1h", "12h", "24h", "7d", "30d"];
 
     [ObservableProperty]
     private string _selectedRange = "5m";
@@ -105,6 +112,12 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
 
     [ObservableProperty]
     private string _bucketLabel = "1 s samples · rolling 5m · system-wide";
+
+    [ObservableProperty]
+    private bool _showNoDataOverlay;
+
+    [ObservableProperty]
+    private string _noDataText = "No measured throughput yet.";
 
     partial void OnSelectedRangeChanged(string value) => ApplyRange(value);
 
@@ -116,18 +129,128 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
 
     private void ApplyRange(string range)
     {
-        _traffic.SetRange(range switch
-        {
-            "1h" => TrafficRange.LastHour,
-            "24h" => TrafficRange.LastDay,
-            "7d" => TrafficRange.LastWeek,
-            "30d" => TrafficRange.LastMonth,
-            _ => TrafficRange.LastFiveMinutes,
-        });
+        var trafficRange = MapRange(range);
+        _traffic.SetRange(trafficRange);
         BucketLabel = _traffic.BucketLabel;
         RangeNote = _traffic.RangeNote;
         OnPropertyChanged(nameof(HasLiveTraffic));
         UpdateLiveCounters();
+
+        var generation = ++_rangeRequest;
+        if (trafficRange == TrafficRange.LastFiveMinutes)
+        {
+            ShowNoDataOverlay = false;
+            return;
+        }
+
+        _ = LoadHistoryAsync(trafficRange, generation);
+    }
+
+    private static TrafficRange MapRange(string range) => range switch
+    {
+        "1h" => TrafficRange.LastHour,
+        "12h" => TrafficRange.LastTwelveHours,
+        "24h" => TrafficRange.LastDay,
+        "7d" => TrafficRange.LastWeek,
+        "30d" => TrafficRange.LastMonth,
+        _ => TrafficRange.LastFiveMinutes,
+    };
+
+    private static TimeSpan RangeSpan(TrafficRange range) => range switch
+    {
+        TrafficRange.LastHour => TimeSpan.FromHours(1),
+        TrafficRange.LastTwelveHours => TimeSpan.FromHours(12),
+        TrafficRange.LastDay => TimeSpan.FromDays(1),
+        TrafficRange.LastWeek => TimeSpan.FromDays(7),
+        TrafficRange.LastMonth => TimeSpan.FromDays(30),
+        _ => TimeSpan.FromMinutes(5),
+    };
+
+    private static string RangeLabel(TrafficRange range) => range switch
+    {
+        TrafficRange.LastHour => "1h",
+        TrafficRange.LastTwelveHours => "12h",
+        TrafficRange.LastDay => "24h",
+        TrafficRange.LastWeek => "7d",
+        TrafficRange.LastMonth => "30d",
+        _ => "5m",
+    };
+
+    /// <summary>
+    /// Loads persisted system-wide throughput from the service. Only the 5-minute window is
+    /// sampled in this process; every longer range is real history or an explicit gap.
+    /// </summary>
+    private async Task LoadHistoryAsync(TrafficRange range, int generation)
+    {
+        _lastHistoryUtc = DateTimeOffset.UtcNow;
+        ShowNoDataOverlay = true;
+        NoDataText = $"Loading {RangeLabel(range)} system-wide throughput from the Axiom service…";
+
+        if (_serviceClient is null)
+        {
+            ShowHistoryFailure("the local Axiom service is not connected");
+            return;
+        }
+
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var history = await _serviceClient
+                .SendAsync<ThroughputHistory>(
+                    IpcCommandTypes.ThroughputHistory,
+                    new ThroughputHistoryQuery
+                    {
+                        FromUtc = now.Subtract(RangeSpan(range)),
+                        ToUtc = now,
+                        BucketSeconds = TrafficEngine.BucketSecondsFor(range),
+                    },
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+
+            if (generation != _rangeRequest)
+            {
+                return;
+            }
+
+            var upload = new List<double>(history.Points.Count);
+            var download = new List<double>(history.Points.Count);
+            foreach (var point in history.Points)
+            {
+                // Rate = bytes / seconds actually observed, so a partially sampled bucket is not
+                // drawn as a full-bucket average and an unmeasured bucket stays a gap.
+                var measured = point.MeasuredSeconds > 0.5;
+                upload.Add(measured ? point.UploadBytes / point.MeasuredSeconds : double.NaN);
+                download.Add(measured ? point.DownloadBytes / point.MeasuredSeconds : double.NaN);
+            }
+
+            _traffic.SetHistory(range, history.BucketSeconds, upload, download, history.Detail);
+            BucketLabel = _traffic.BucketLabel;
+            RangeNote = _traffic.RangeNote;
+            ShowNoDataOverlay = !_traffic.HasHistoryData;
+            NoDataText = _traffic.HasHistoryData
+                ? string.Empty
+                : "No system-wide throughput recorded for this range yet. History starts when the Axiom service first runs and is stored locally for 30 days.";
+        }
+        catch (Exception exception) when (exception is
+                     ServiceUnavailableException or TimeoutException or
+                     System.Text.Json.JsonException or System.IO.IOException)
+        {
+            if (generation != _rangeRequest)
+            {
+                return;
+            }
+
+            ShowHistoryFailure(exception.Message);
+        }
+    }
+
+    private void ShowHistoryFailure(string reason)
+    {
+        _traffic.SetHistoryUnavailable($"History unavailable: {reason}");
+        BucketLabel = _traffic.BucketLabel;
+        RangeNote = _traffic.RangeNote;
+        ShowNoDataOverlay = true;
+        NoDataText = $"System-wide throughput history is unavailable because {reason}";
     }
 
     [ObservableProperty]
@@ -175,6 +298,13 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
             : $"Monitor unavailable: {_monitor.LastError}";
 
         UpdateLiveCounters();
+
+        // A selected historical range refreshes itself without polling the service every second.
+        if (!_traffic.IsLive &&
+            DateTimeOffset.UtcNow - _lastHistoryUtc >= TimeSpan.FromSeconds(30))
+        {
+            _ = LoadHistoryAsync(_traffic.Range, ++_rangeRequest);
+        }
     }
 
     private void UpdateLiveCounters()
@@ -182,6 +312,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         var window = SelectedRange switch
         {
             "1h" => TimeSpan.FromHours(1),
+            "12h" => TimeSpan.FromHours(12),
             "24h" => TimeSpan.FromDays(1),
             "7d" => TimeSpan.FromDays(7),
             "30d" => TimeSpan.FromDays(30),

@@ -149,6 +149,61 @@ public sealed class AvaloniaPageTests
         Assert.True(page.Pending[0].IsAgent);
     }
 
+    [Fact]
+    public async Task Overview_loads_persisted_history_for_longer_ranges()
+    {
+        using var monitor = new ConnectionMonitor(new FakeSource(), new FakeTimerFactory());
+        using var traffic = new TrafficEngine(new FakeTimerFactory());
+        var page = new OverviewPageViewModel(monitor, traffic, null, new ThroughputClient());
+
+        Assert.Contains("12h", page.RangeOptions);
+        Assert.Equal("5m", page.SelectedRange);
+
+        page.SelectedRange = "12h";
+
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+        while (page.UploadSeries.Count == 0 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.False(page.ShowNoDataOverlay);
+        Assert.Equal(3, page.UploadSeries.Count);
+        Assert.True(double.IsFinite(page.UploadSeries[0]));
+
+        // A bucket without measured seconds stays a gap instead of a fake zero.
+        Assert.True(double.IsNaN(page.DownloadSeries[1]));
+
+        Assert.Contains("service history", page.RangeNote, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("12h", page.BucketLabel, StringComparison.Ordinal);
+
+        page.Dispose();
+    }
+
+    [Fact]
+    public async Task Overview_explains_missing_history_without_the_service()
+    {
+        using var monitor = new ConnectionMonitor(new FakeSource(), new FakeTimerFactory());
+        using var traffic = new TrafficEngine(new FakeTimerFactory());
+        var page = new OverviewPageViewModel(monitor, traffic, null, new OfflineClient());
+
+        page.SelectedRange = "1h";
+
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+        while (page.ShowNoDataOverlay && page.UploadSeries.Count == 0 &&
+               !page.NoDataText.Contains("unavailable", StringComparison.OrdinalIgnoreCase) &&
+               DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(page.ShowNoDataOverlay);
+        Assert.Contains("unavailable", page.NoDataText, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(page.UploadSeries);
+
+        page.Dispose();
+    }
+
     [Theory]
     [InlineData("PROTECTED", true, false, false)]
     [InlineData("VERIFIED BLOCKING", true, false, false)]
@@ -169,6 +224,51 @@ public sealed class AvaloniaPageTests
         Assert.Equal(warn, agent.ToneWarn);
         Assert.Equal(fail, agent.ToneFail);
         Assert.Equal(!ok && !warn && !fail, agent.ToneIdle);
+    }
+
+    private sealed class ThroughputClient : IServiceRequestClient
+    {
+        public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
+        {
+            if (command != IpcCommandTypes.ThroughputHistory)
+            {
+                throw new ServiceUnavailableException(IpcErrorCodes.NotSupported, "not supported");
+            }
+
+            var query = (ThroughputHistoryQuery)payload!;
+            object result = new ThroughputHistory
+            {
+                BucketSeconds = query.BucketSeconds,
+                QueriedUtc = DateTimeOffset.UtcNow,
+                Detail = "service history recorded locally",
+                Points =
+                [
+                    new ThroughputPoint
+                    {
+                        StartUtc = DateTimeOffset.UtcNow.AddMinutes(-2),
+                        UploadBytes = 1_200,
+                        DownloadBytes = 2_400,
+                        MeasuredSeconds = 60,
+                    },
+                    new ThroughputPoint
+                    {
+                        StartUtc = DateTimeOffset.UtcNow.AddMinutes(-1),
+                        UploadBytes = 0,
+                        DownloadBytes = 0,
+                        MeasuredSeconds = 0,
+                    },
+                    new ThroughputPoint
+                    {
+                        StartUtc = DateTimeOffset.UtcNow,
+                        UploadBytes = 600,
+                        DownloadBytes = 300,
+                        MeasuredSeconds = 30,
+                    },
+                ],
+            };
+
+            return Task.FromResult((T)result);
+        }
     }
 
     private sealed class ShieldClient(ProtectionStatus status) : IServiceRequestClient
