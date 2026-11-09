@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
@@ -89,6 +89,36 @@ public sealed class BlockedEventRow(PrivacyShieldBlockedEvent blocked, bool isAl
         : $"{blocked.Domain}\nBlocked app: {blocked.AppDisplay}\nPath: {blocked.AppPath}\nCategory: {blocked.CategoryText}";
 }
 
+/// <summary>One (domain, app) pair in the live list, so a chatty app cannot flood the page.</summary>
+public sealed class RecentBlockedGroup(
+    string domain,
+    string appDisplay,
+    string categoryText,
+    int count,
+    DateTimeOffset lastUtc,
+    BlockedEventRow latest)
+{
+    public string Domain => domain;
+
+    public string AppDisplay => appDisplay;
+
+    public string CategoryText => categoryText;
+
+    public int Count => count;
+
+    public string CountText => count > 1 ? $"{count}x" : string.Empty;
+
+    public DateTimeOffset LastUtc => lastUtc;
+
+    public BlockedEventRow Latest => latest;
+
+    public bool CanAllow => latest.CanAllow;
+
+    public bool CanBlock => latest.CanBlock;
+
+    public string Tooltip => $"{latest.Tooltip}\nSeen {count} time(s) in the live window.";
+}
+
 /// <summary>
 /// Privacy Shield is a local DNS filter. Complete installation enables the resolver; a partial
 /// installation leaves it opt-in. The service never changes adapter DNS settings; the user must
@@ -152,6 +182,28 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     public ObservableCollection<BlockedEventRow> RecentBlocked { get; } = [];
 
     public ObservableCollection<BlockedEventRow> BlockedHistory { get; } = [];
+
+    /// <summary>Grouped live list: one row per (domain, app), newest first, bounded.</summary>
+    public ObservableCollection<RecentBlockedGroup> RecentBlockedGroups { get; } = [];
+
+    [ObservableProperty]
+    private bool _showAllRecentBlocked;
+
+    [ObservableProperty]
+    private string _recentBlockedSummary = "No blocked queries in the live window.";
+
+    private List<RecentBlockedGroup> _recentGroups = [];
+
+    public string RecentBlockedToggleText => ShowAllRecentBlocked ? "Show top" : "Show all";
+
+    partial void OnShowAllRecentBlockedChanged(bool value)
+    {
+        ApplyRecentGroupView();
+        OnPropertyChanged(nameof(RecentBlockedToggleText));
+    }
+
+    [RelayCommand]
+    private void ToggleRecentBlocked() => ShowAllRecentBlocked = !ShowAllRecentBlocked;
 
     public ObservableCollection<PrivacyShieldSourceRow> Sources { get; } =
         new(PrivacyShieldSourceCatalog.All.Select(source => new PrivacyShieldSourceRow(source)));
@@ -801,11 +853,48 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             RecentBlocked.Add(new BlockedEventRow(blocked, allowedDomains.Contains(blocked.Domain)));
         }
 
+        // Viber and similar apps can emit dozens of blocks a minute. Group by domain and app so the
+        // page shows what is happening instead of a growing wall of identical rows.
+        _recentGroups = RecentBlocked
+            .GroupBy(row => (row.Domain, row.AppDisplay))
+            .Select(group => new RecentBlockedGroup(
+                group.Key.Domain,
+                group.Key.AppDisplay,
+                group.First().CategoryText,
+                group.Count(),
+                group.Max(row => row.TimestampUtc),
+                group.OrderByDescending(row => row.TimestampUtc).First()))
+            .OrderByDescending(group => group.Count)
+            .ThenByDescending(group => group.LastUtc)
+            .ToList();
+        ApplyRecentGroupView();
+
         BlockedHistory.Clear();
-        foreach (var blocked in status.BlockedHistory)
+        foreach (var blocked in status.BlockedHistory.Take(250))
         {
             BlockedHistory.Add(new BlockedEventRow(blocked, allowedDomains.Contains(blocked.Domain)));
         }
+    }
+
+    private void ApplyRecentGroupView()
+    {
+        RecentBlockedGroups.Clear();
+        var limit = ShowAllRecentBlocked ? 40 : 6;
+        foreach (var group in _recentGroups.Take(limit))
+        {
+            RecentBlockedGroups.Add(group);
+        }
+
+        if (_recentGroups.Count == 0)
+        {
+            RecentBlockedSummary = "No blocked queries in the live window.";
+            return;
+        }
+
+        var total = _recentGroups.Sum(group => group.Count);
+        RecentBlockedSummary = _recentGroups.Count <= limit
+            ? $"{total} blocks across {_recentGroups.Count} domain/app pairs."
+            : $"{total} blocks across {_recentGroups.Count} domain/app pairs; showing the top {limit}.";
     }
 
     private void UpdateStatsHint(PrivacyShieldStatus status)

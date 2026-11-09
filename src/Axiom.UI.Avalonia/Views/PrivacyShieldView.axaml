@@ -87,7 +87,7 @@
         </StackPanel>
       </Border>
 
-      <Grid Grid.Column="2" RowDefinitions="Auto,10,Auto">
+      <Grid Grid.Column="2" RowDefinitions="Auto,10,Auto,10,Auto">
         <Border Grid.Row="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
                 CornerRadius="8" Padding="14">
           <StackPanel Spacing="6">
@@ -102,34 +102,57 @@
 
         <Border Grid.Row="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
                 CornerRadius="8" Padding="14">
+          <StackPanel Spacing="8">
+            <controls:AxiomSelectableTextBlock Text="Adapter DNS (explicit UAC helper)" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="{Binding ManualSetupText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <ComboBox ItemsSource="{Binding Adapters}" SelectedItem="{Binding SelectedAdapter}"
+                      HorizontalAlignment="Stretch" MaxWidth="380" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Point adapter at resolver" Command="{Binding EnableSystemDnsCommand}" Padding="12,6" />
+              <Button Content="Restore saved DNS" Command="{Binding RestoreSystemDnsCommand}" Padding="12,6" />
+            </StackPanel>
+            <controls:AxiomSelectableTextBlock Text="{Binding DnsHelperStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Row="4" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
+                CornerRadius="8" Padding="14">
           <StackPanel Spacing="8" HorizontalAlignment="Stretch">
-              <controls:AxiomSelectableTextBlock Text="Recently blocked" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <Grid ColumnDefinitions="1.6*,1.1*,70,58,Auto,Auto" Margin="0,1">
+              <Grid ColumnDefinitions="*,Auto">
+                <controls:AxiomSelectableTextBlock Grid.Column="0" Text="Recently blocked" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+                <Button Grid.Column="1" Content="{Binding RecentBlockedToggleText}" Command="{Binding ToggleRecentBlockedCommand}" Padding="9,3" FontSize="10" />
+              </Grid>
+              <controls:AxiomSelectableTextBlock Text="{Binding RecentBlockedSummary}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+              <Grid ColumnDefinitions="1.6*,1.1*,70,34,58,Auto,Auto" Margin="0,1">
                 <controls:AxiomSelectableTextBlock Text="DOMAIN" FontSize="8.5" Foreground="{DynamicResource Axiom.TextMuted}" />
                 <controls:AxiomSelectableTextBlock Grid.Column="1" Text="APP" FontSize="8.5" Foreground="{DynamicResource Axiom.TextMuted}" />
                 <controls:AxiomSelectableTextBlock Grid.Column="2" Text="KIND" FontSize="8.5" Foreground="{DynamicResource Axiom.TextMuted}" />
-                <controls:AxiomSelectableTextBlock Grid.Column="3" Text="TIME" FontSize="8.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                <controls:AxiomSelectableTextBlock Grid.Column="3" Text="N" FontSize="8.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                <controls:AxiomSelectableTextBlock Grid.Column="4" Text="TIME" FontSize="8.5" Foreground="{DynamicResource Axiom.TextMuted}" />
               </Grid>
-              <ItemsControl ItemsSource="{Binding RecentBlocked}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Grid ColumnDefinitions="1.6*,1.1*,70,58,Auto,Auto" Margin="0,1" ToolTip.Tip="{Binding Tooltip}">
-                      <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding Domain}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding AppDisplay}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding CategoryText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding TimestampUtc, StringFormat={}{0:HH:mm:ss}}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                      <Button Grid.Column="4" Content="Allow" Padding="6,2" Margin="4,0,0,0" FontSize="9"
-                              IsVisible="{Binding CanAllow}"
-                              Command="{Binding $parent[ItemsControl].DataContext.AllowBlockedDomainCommand}"
-                              CommandParameter="{Binding}" />
-                      <Button Grid.Column="5" Content="Block" Padding="6,2" Margin="4,0,0,0" FontSize="9"
-                              IsVisible="{Binding CanBlock}"
-                              Command="{Binding $parent[ItemsControl].DataContext.BlockBlockedDomainCommand}"
-                              CommandParameter="{Binding}" />
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding RecentBlockedGroups}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Grid ColumnDefinitions="1.6*,1.1*,70,34,58,Auto,Auto" Margin="0,1" ToolTip.Tip="{Binding Tooltip}">
+                        <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding Domain}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                        <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding AppDisplay}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                        <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding CategoryText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                        <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding CountText}" FontSize="9" Foreground="{DynamicResource Axiom.Accent}" />
+                        <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding LastUtc, StringFormat={}{0:HH:mm:ss}}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
+                        <Button Grid.Column="5" Content="Allow" Padding="6,2" Margin="4,0,0,0" FontSize="9"
+                                IsVisible="{Binding CanAllow}"
+                                Command="{Binding $parent[ItemsControl].DataContext.AllowBlockedDomainCommand}"
+                                CommandParameter="{Binding Latest}" />
+                        <Button Grid.Column="6" Content="Block" Padding="6,2" Margin="4,0,0,0" FontSize="9"
+                                IsVisible="{Binding CanBlock}"
+                                Command="{Binding $parent[ItemsControl].DataContext.BlockBlockedDomainCommand}"
+                                CommandParameter="{Binding Latest}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
               <controls:AxiomSelectableTextBlock Text="Top blocked domains" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
               <ItemsControl ItemsSource="{Binding TopBlocked}">
                 <ItemsControl.ItemTemplate>
@@ -143,41 +166,32 @@
               </ItemsControl>
 
               <Border Height="1" Background="{DynamicResource Axiom.Border}" Margin="0,6" />
-              <controls:AxiomSelectableTextBlock Text="Adapter DNS (explicit UAC helper)" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <controls:AxiomSelectableTextBlock Text="{Binding ManualSetupText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <ComboBox ItemsSource="{Binding Adapters}" SelectedItem="{Binding SelectedAdapter}"
-                        HorizontalAlignment="Stretch" MaxWidth="380" />
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="Point adapter at resolver" Command="{Binding EnableSystemDnsCommand}" Padding="12,6" />
-                <Button Content="Restore saved DNS" Command="{Binding RestoreSystemDnsCommand}" Padding="12,6" />
-              </StackPanel>
-              <controls:AxiomSelectableTextBlock Text="{Binding DnsHelperStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-
-              <Border Height="1" Background="{DynamicResource Axiom.Border}" Margin="0,6" />
               <Grid ColumnDefinitions="*,Auto">
                 <controls:AxiomSelectableTextBlock Grid.Column="0" Text="Blocked query history" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
                 <Button Grid.Column="1" Content="Clear history" Command="{Binding ClearBlockedHistoryCommand}" Padding="10,4" />
               </Grid>
-              <ItemsControl ItemsSource="{Binding BlockedHistory}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Grid ColumnDefinitions="1.6*,1.1*,70,58,Auto,Auto" Margin="0,1" ToolTip.Tip="{Binding Tooltip}">
-                      <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding Domain}" FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding AppDisplay}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding CategoryText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding TimestampUtc, StringFormat={}{0:MM-dd HH:mm}}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                      <Button Grid.Column="4" Content="Allow" Padding="6,2" Margin="4,0,0,0" FontSize="9"
-                              IsVisible="{Binding CanAllow}"
-                              Command="{Binding $parent[ItemsControl].DataContext.AllowBlockedDomainCommand}"
-                              CommandParameter="{Binding}" />
-                      <Button Grid.Column="5" Content="Block" Padding="6,2" Margin="4,0,0,0" FontSize="9"
-                              IsVisible="{Binding CanBlock}"
-                              Command="{Binding $parent[ItemsControl].DataContext.BlockBlockedDomainCommand}"
-                              CommandParameter="{Binding}" />
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding BlockedHistory}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Grid ColumnDefinitions="1.6*,1.1*,70,58,Auto,Auto" Margin="0,1" ToolTip.Tip="{Binding Tooltip}">
+                        <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding Domain}" FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                        <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding AppDisplay}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                        <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding CategoryText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                        <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding TimestampUtc, StringFormat={}{0:MM-dd HH:mm}}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
+                        <Button Grid.Column="4" Content="Allow" Padding="6,2" Margin="4,0,0,0" FontSize="9"
+                                IsVisible="{Binding CanAllow}"
+                                Command="{Binding $parent[ItemsControl].DataContext.AllowBlockedDomainCommand}"
+                                CommandParameter="{Binding}" />
+                        <Button Grid.Column="5" Content="Block" Padding="6,2" Margin="4,0,0,0" FontSize="9"
+                                IsVisible="{Binding CanBlock}"
+                                Command="{Binding $parent[ItemsControl].DataContext.BlockBlockedDomainCommand}"
+                                CommandParameter="{Binding}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
             </StackPanel>
         </Border>
       </Grid>
