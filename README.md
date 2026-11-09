@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.1 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.2 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -31,11 +31,19 @@ Axiom brings together four surfaces:
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
 
+## What's in 0.10.2
+
+- **Corrected the threat-sharing note.** 0.10.1 added a theme-coloured note under the sharing
+  description, but its wording overstated the effect: it implied every report strengthens the graph and
+  that Axiom itself detects better because of it. The note now says what actually happens - reports are
+  community sightings, independent nodes can corroborate them, Blackbox can flag them and curators can
+  promote strong evidence into the verified blocking tier - and states that Axiom's own firewall and DNS
+  filtering still decide only from local lists and rules.
+
 ## What's in 0.10.1
 
-- **Threat sharing now explains why it helps.** Under the sharing description, a theme-coloured note says
-  that every confirmed indicator strengthens the shared Blackbox graph, and a stronger graph helps Axiom
-  and every other node recognise malicious infrastructure earlier.
+- **Threat sharing now explains why it helps.** A theme-coloured note was added under the sharing
+  description (its wording was corrected in 0.10.2).
 
 ## What's in 0.10.0
 
