@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
+using System.Runtime;
 using Axiom.Contracts.Privacy;
 using Axiom.Infrastructure.Windows.Dns;
 
@@ -20,12 +21,25 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    private readonly object _rulesGate = new();
+
     private readonly Dictionary<string, string> _sourceErrors =
         new(StringComparer.OrdinalIgnoreCase);
 
     private PrivacyShieldSettings _settings;
 
-    private IReadOnlyList<PrivacyShieldStoredRule> _rules;
+    private IReadOnlyList<PrivacyShieldStoredRule> _rules = [];
+
+    private IReadOnlyDictionary<string, (int Entries, DateTimeOffset? Updated)> _sourceTotals =
+        new Dictionary<string, (int, DateTimeOffset?)>(StringComparer.OrdinalIgnoreCase);
+
+    private Task<IReadOnlyList<PrivacyShieldStoredRule>>? _rulesTask;
+
+    private PrivacyShieldPolicy? _policy;
+
+    private PrivacyShieldSettings? _policySettings;
+
+    private IReadOnlyList<PrivacyShieldStoredRule>? _policyRules;
 
     private DnsProxyServer? _server;
 
@@ -40,17 +54,22 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         _ruleStore = ruleStore ?? new PrivacyShieldRuleStore();
         _sourceUpdater = sourceUpdater ?? new PrivacyShieldSourceUpdater();
         _settings = store.Load();
-        _rules = _ruleStore.Load();
     }
 
-    public Task<PrivacyShieldStatus> GetStatusAsync(CancellationToken cancellationToken)
+    public async Task<PrivacyShieldStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(CreateStatus());
+        SetRules(await EnsureRulesLoadedAsync().ConfigureAwait(false));
+        return CreateStatus();
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        if (_settings.Enabled)
+        {
+            SetRules(await EnsureRulesLoadedAsync().ConfigureAwait(false));
+        }
+
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -70,6 +89,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(requested);
+
+        SetRules(await EnsureRulesLoadedAsync().ConfigureAwait(false));
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -228,7 +249,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 }
                 else
                 {
-                    _rules = result.Rules;
+                    SetRules(result.Rules);
                     _lastError = null;
                     if (_settings.Enabled)
                     {
@@ -321,7 +342,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
         try
         {
-            var policy = PrivacyShieldPolicy.Create(settings, _rules);
+            var policy = GetPolicy(settings);
             server = new DnsProxyServer(
                 policy,
                 upstreams,
@@ -348,6 +369,77 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         _server = null;
     }
 
+    private Task<IReadOnlyList<PrivacyShieldStoredRule>> EnsureRulesLoadedAsync()
+    {
+        lock (_rulesGate)
+        {
+            // The 43 MB compiled ruleset is loaded off the service-startup thread so the pipe,
+            // firewall consent and monitor are available before optional filtering is ready.
+            return _rulesTask ??= Task.Run(() =>
+            {
+                var rules = _ruleStore.Load();
+
+                // Parsing the ruleset leaves large temporary buffers on the large object heap.
+                // Compact once here so that space is returned instead of staying reserved for the
+                // whole service lifetime; a single startup pass costs far less than the retention.
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+                return rules;
+            });
+        }
+    }
+
+    /// <summary>
+    /// Adopts a loaded ruleset once. Re-assigning the same instance is a no-op so a status poll
+    /// does not rebuild the per-source index.
+    /// </summary>
+    private void SetRules(IReadOnlyList<PrivacyShieldStoredRule> rules)
+    {
+        if (ReferenceEquals(_rules, rules))
+        {
+            return;
+        }
+
+        var totals = new Dictionary<string, (int Entries, DateTimeOffset? Updated)>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var rule in rules)
+        {
+            if (!totals.TryGetValue(rule.SourceId, out var total))
+            {
+                total = (0, null);
+            }
+
+            var updated = total.Updated is null || rule.UpdatedUtc > total.Updated
+                ? rule.UpdatedUtc
+                : total.Updated;
+            totals[rule.SourceId] = (total.Entries + 1, updated);
+        }
+
+        _sourceTotals = totals;
+        _rules = rules;
+    }
+
+    /// <summary>
+    /// Builds the compiled policy at most once per (settings, ruleset) pair. The policy holds an
+    /// index of every blocked domain, so rebuilding it for a status poll costs hundreds of MB.
+    /// </summary>
+    private PrivacyShieldPolicy GetPolicy(PrivacyShieldSettings settings)
+    {
+        var policy = _policy;
+        if (policy is not null &&
+            ReferenceEquals(_policySettings, settings) &&
+            ReferenceEquals(_policyRules, _rules))
+        {
+            return policy;
+        }
+
+        policy = PrivacyShieldPolicy.Create(settings, _rules);
+        _policy = policy;
+        _policySettings = settings;
+        _policyRules = _rules;
+        return policy;
+    }
+
     private PrivacyShieldStatus CreateStatus()
     {
         if (_server is not null)
@@ -361,7 +453,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             };
         }
 
-        var ruleCount = PrivacyShieldPolicy.Create(_settings, _rules).RuleCount;
+        var ruleCount = GetPolicy(_settings).RuleCount;
         return new PrivacyShieldStatus
         {
             State = _settings.Enabled ? "Error" : "Disabled",
@@ -387,25 +479,24 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         };
     }
 
-    private PrivacyShieldSourceStatus[] BuildSourceStatuses() =>
-        PrivacyShieldSourceCatalog.All
+    private PrivacyShieldSourceStatus[] BuildSourceStatuses()
+    {
+        var totals = _sourceTotals;
+        return PrivacyShieldSourceCatalog.All
             .Select(source =>
             {
-                var rules = _rules.Where(rule =>
-                    string.Equals(rule.SourceId, source.Id, StringComparison.OrdinalIgnoreCase)).ToArray();
-                DateTimeOffset? updated = rules.Length == 0
-                    ? null
-                    : rules.Max(rule => rule.UpdatedUtc);
+                var total = totals.GetValueOrDefault(source.Id);
                 return new PrivacyShieldSourceStatus(
                     source.Id,
                     source.Name,
                     source.License,
                     _settings.EnabledSourceIds.Contains(source.Id, StringComparer.OrdinalIgnoreCase),
-                    rules.Length,
-                    updated,
+                    total.Entries,
+                    total.Updated,
                     _sourceErrors.GetValueOrDefault(source.Id));
             })
             .ToArray();
+    }
 
     private static PrivacyShieldSettings Normalize(PrivacyShieldSettings settings)
     {

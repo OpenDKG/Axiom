@@ -210,6 +210,63 @@ public sealed class PrivacyShieldTests
         }
     }
 
+    [Fact]
+    public async Task Status_reports_cached_per_source_totals_across_repeated_polls()
+    {
+        var directory = CreateTemporaryDirectory();
+        var rulesPath = Path.Combine(directory, "rules.json");
+        var settingsPath = Path.Combine(directory, "settings.json");
+        var updated = DateTimeOffset.UtcNow.AddHours(-1);
+        var rules = new[]
+        {
+            new PrivacyShieldStoredRule("a.example", "hagezi-pro", PrivacyCategory.Ads, updated),
+            new PrivacyShieldStoredRule(
+                "b.example", "hagezi-pro", PrivacyCategory.Ads, updated.AddMinutes(5)),
+            new PrivacyShieldStoredRule("c.example", "oisd-big", PrivacyCategory.Tracking, updated),
+        };
+        Assert.True(new PrivacyShieldRuleStore(rulesPath).Save(rules));
+        Assert.True(new PrivacyShieldSettingsStore(settingsPath).Save(new PrivacyShieldSettings
+        {
+            Enabled = false,
+            Categories = PrivacyCategory.None,
+            EnabledSourceIds = ["hagezi-pro", "oisd-big"],
+        }));
+
+        try
+        {
+            await using var controller = new PrivacyShieldController(
+                new PrivacyShieldSettingsStore(settingsPath),
+                new PrivacyShieldRuleStore(rulesPath));
+
+            var first = await controller.GetStatusAsync(CancellationToken.None);
+            var second = await controller.GetStatusAsync(CancellationToken.None);
+
+            var hagezi = first.Sources.Single(source => source.Id == "hagezi-pro");
+            Assert.Equal(2, hagezi.Entries);
+            Assert.True(hagezi.Enabled);
+            Assert.Equal(updated.AddMinutes(5), hagezi.UpdatedUtc);
+
+            var oisd = first.Sources.Single(source => source.Id == "oisd-big");
+            Assert.Equal(1, oisd.Entries);
+            Assert.True(oisd.Enabled);
+            Assert.Equal(updated, oisd.UpdatedUtc);
+
+            var unused = first.Sources.Single(source => source.Id == "blocklistproject-ads");
+            Assert.Equal(0, unused.Entries);
+            Assert.Null(unused.UpdatedUtc);
+            Assert.False(unused.Enabled);
+
+            Assert.Equal(
+                first.Sources.Select(source => (source.Id, source.Entries, source.UpdatedUtc)),
+                second.Sources.Select(source => (source.Id, source.Entries, source.UpdatedUtc)));
+            Assert.Equal(3, second.RuleCount);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static PrivacyShieldSettings EnabledSettings(int port) => new()
     {
         Enabled = true,

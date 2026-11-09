@@ -38,9 +38,16 @@ public sealed class PrivacyShieldRuleStore
 
         try
         {
-            return JsonSerializer.Deserialize<List<PrivacyShieldStoredRule>>(
-                       File.ReadAllText(_path),
-                       JsonOptions)
+            // Stream the ruleset instead of reading a ~43 MB string first; the string alone would
+            // add roughly 86 MB to the large object heap for the life of the process.
+            using var stream = new FileStream(
+                _path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 64 * 1024,
+                FileOptions.SequentialScan);
+            return JsonSerializer.Deserialize<List<PrivacyShieldStoredRule>>(stream, JsonOptions)
                    ?? [];
         }
         catch (Exception exception) when (exception is

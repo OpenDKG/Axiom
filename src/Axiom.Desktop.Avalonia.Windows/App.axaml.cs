@@ -26,6 +26,7 @@ public partial class App : Application
     private BundledServiceHost? _serviceHost;
     private MainWindow? _window;
     private TrayIcon? _tray;
+    private ModuleWindowHider? _moduleWindowHider;
     private Mutex? _singleInstanceMutex;
     private EventWaitHandle? _showWindowEvent;
     private Thread? _showWindowThread;
@@ -119,7 +120,7 @@ public partial class App : Application
             desktop.ShutdownRequested += (_, _) => _allowExit = true;
             window.Closing += (_, args) =>
             {
-                if (_allowExit || !TraySettingsStore.Enabled)
+                if (_allowExit || _tray is null || !TraySettingsStore.Enabled)
                 {
                     return;
                 }
@@ -130,7 +131,6 @@ public partial class App : Application
                 window.Hide();
             };
 
-            CreateTrayIcon(desktop);
             _shell.Start();
 
             var autostartArgument = HasArgument(arguments, "--autostart");
@@ -138,7 +138,24 @@ public partial class App : Application
                                  (autostartArgument && new StartupSettingsStore().Load().StartMinimized);
 
             window.Show();
-            if (startMinimized)
+            CreateTrayIcon(desktop);
+            _moduleWindowHider = new ModuleWindowHider();
+            _moduleWindowHider.Start();
+
+            if (_tray is null)
+            {
+                // Some shells need the main window to exist before a tray icon can register.
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3)).ConfigureAwait(true);
+                    if (_tray is null)
+                    {
+                        CreateTrayIcon(desktop);
+                    }
+                });
+            }
+
+            if (startMinimized && _tray is not null)
             {
                 // The desktop lifetime shows MainWindow right after framework initialization, so
                 // hiding here would be undone. Post the hide to run once startup has finished.
@@ -251,7 +268,7 @@ public partial class App : Application
         {
             var icon = new WindowIcon(AssetLoader.Open(
                 new Uri("avares://Axiom.UI.Avalonia/Assets/axiom-icon.png")));
-            _tray = new TrayIcon
+            var tray = new TrayIcon
             {
                 Icon = icon,
                 ToolTipText = "Axiom - Free Open-Source Network & AI Agent Security",
@@ -281,14 +298,32 @@ public partial class App : Application
             menu.Add(notificationsItem);
             menu.Add(new NativeMenuItemSeparator());
             menu.Add(exitItem);
-            _tray.Menu = menu;
-            _tray.Clicked += (_, _) => ShowWindow();
+            tray.Menu = menu;
+            tray.Clicked += (_, _) => ShowWindow();
+
+            // A TrayIcon that is not part of the application's TrayIcons collection is never
+            // registered with the shell: it stays invisible without raising an error. Attaching it
+            // last also guarantees the icon, tooltip and menu exist before the native icon shows.
+            TrayIcon.SetIcons(this, new TrayIcons { tray });
+            _tray = tray;
         }
 #pragma warning disable CA1031 // A missing tray must not prevent the monitor from opening.
-        catch (Exception)
+        catch (Exception exception)
 #pragma warning restore CA1031
         {
             _tray = null;
+            try
+            {
+                var path = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Axiom",
+                    "tray-error.log");
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.AppendAllText(path, $"{DateTimeOffset.UtcNow:O} {exception}\n");
+            }
+            catch (Exception logException) when (logException is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 
@@ -305,11 +340,14 @@ public partial class App : Application
         if (_tray is not null)
         {
             _tray.IsVisible = false;
+            TrayIcon.SetIcons(this, null);
             _tray.Dispose();
             _tray = null;
         }
 
         _shell?.Dispose();
         _serviceHost?.Dispose();
+        _moduleWindowHider?.Dispose();
+        _moduleWindowHider = null;
     }
 }

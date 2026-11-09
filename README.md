@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.8.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.8.1 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,40 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.8.1
+
+A post-reboot fix release for the 0.8.0 installation. Everything below was reproduced on a machine
+where Axiom started from its login entry and corrected there.
+
+- **The tray icon is actually registered.** A `TrayIcon` created in code stays detached until it is
+  part of the application's `TrayIcons` collection, and a detached icon is never sent to the shell:
+  Axiom reported that it runs in the background but nothing appeared next to the clock. The icon is
+  now attached after the window shows and is detached on exit. A shell failure is written to
+  `%LOCALAPPDATA%\Axiom\tray-error.log`, and close-to-tray is disabled instead of stranding the app.
+- **Module consoles stay hidden.** When the Blackbox installer starts the DKG node and dashboard
+  from its own login tasks, their `node.exe` console used to stay open because the existing hider
+  only followed descendants of the desktop process. The new module hider matches the Axiom and
+  Blackbox module command lines (including `%LOCALAPPDATA%\hermes\blackbox`) and hides their
+  top-level window; an unrelated user Node.js window is never touched.
+- **Core protection comes up first.** The 43 MB Privacy Shield ruleset is loaded on a background
+  task instead of the service constructor, so the service pipe, the firewall consent and the monitor
+  are available while the optional DKG/Blackbox modules are still loading. Measured cold start on
+  the installed service: process running in 0.5 s and the resolver answering in 3.9 s.
+- **The resolver no longer grows the service.** The compiled DNS policy (about 190 MB of managed
+  objects for 300,000 domains) is built once and reused until the settings or the ruleset change; a
+  status poll no longer rebuilds it. The ruleset is streamed from disk instead of read into a 43 MB
+  string, and the large object heap is compacted once after the startup load. The service now idles
+  at 230-285 MB working set instead of 500-900 MB with spikes toward 1.6 GB.
+- **Memory attribution.** The DKG and Blackbox `node.exe` workers are separate processes
+  (`%LOCALAPPDATA%\hermes\...` and `%LOCALAPPDATA%\Axiom\modules\dkg\...`); their several hundred MB
+  is not part of the Axiom service footprint.
+- **Task Manager grouping is an OS limit.** Task Manager groups by executable, so `Axiom.Service.exe`
+  and the module `node.exe` workers cannot be folded into the `Axiom.Desktop.exe` group, and Axiom
+  cannot change that grouping.
+
+**Known gaps in 0.8.1** are the same as for 0.8.0: no ETW telemetry yet, TCP-only traffic totals, no
+reputation feed, and Axiom reports only its own firewall rules.
 
 ## What's in 0.8.0
 
