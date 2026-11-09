@@ -38,7 +38,10 @@ timeout or a failed launch. Nothing is installed silently. Close the PowerShell 
 it reports success, then click **Check again**. **Restart Axiom** is available for a clean restart
 after installation.
 The activity strip shows the last 30 loopback checks; it is a health indicator, not module event
-content.
+content. The Agents page also shows a **Threat sharing** card that reads the dashboard's `report`
+setting (`off · opt in` or `on · signed, redacted`) and can enable or disable signed, redacted
+community sharing after confirmation. Only privacy-safe indicators are shared; prompts, commands,
+file paths, credentials, model content and raw session ids are never sent.
 
 Agent workspace labels are deliberately not interchangeable:
 
