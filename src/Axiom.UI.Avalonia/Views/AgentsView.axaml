@@ -116,7 +116,7 @@
             <Grid ColumnDefinitions="3,*" ColumnSpacing="9">
               <Border Grid.Column="0" Background="{DynamicResource Axiom.Success}" CornerRadius="2" />
               <controls:AxiomSelectableTextBlock Grid.Column="1"
-                         Text="Sharing also gives back: every confirmed indicator makes the shared Blackbox graph stronger, and a stronger graph means Axiom - and every other node - recognises malicious infrastructure earlier."
+                         Text="Reports join the shared Blackbox graph as community sightings: independent nodes can corroborate the same indicator, which lets Blackbox flag it across the network and gives the curators evidence to promote it into the verified blocking tier. Axiom's own firewall and DNS filtering still decide only from local lists and rules."
                          FontSize="10" Foreground="{DynamicResource Axiom.Success}" TextWrapping="Wrap" />
             </Grid>
           </Border>
