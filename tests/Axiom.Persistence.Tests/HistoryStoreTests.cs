@@ -25,7 +25,7 @@ public sealed class HistoryStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Initialize_creates_schema_version_two()
+    public async Task Initialize_creates_schema_version_three()
     {
         var store = CreateStore();
 
@@ -37,7 +37,7 @@ public sealed class HistoryStoreTests : IDisposable
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT MAX(version) FROM schema_migrations;";
-        Assert.Equal(2L, Convert.ToInt64(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(3L, Convert.ToInt64(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Fact]
@@ -205,6 +205,78 @@ public sealed class HistoryStoreTests : IDisposable
 
         Assert.Equal(1, page.TotalCount);
         Assert.Equal("new.exe", page.Rows[0].AppDisplayName);
+    }
+
+    [Fact]
+    public async Task Throughput_history_aggregates_minutes_and_keeps_unmeasured_gaps()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var start = DateTimeOffset.FromUnixTimeSeconds(
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 60 * 60);
+
+        await store.RecordThroughputAsync(start, 600, 1_200, 60);
+        await store.RecordThroughputAsync(start.AddMinutes(1), 300, 600, 30);
+
+        // The sampler owns the minute; a later write replaces the earlier partial value.
+        await store.RecordThroughputAsync(start.AddMinutes(1), 400, 800, 40);
+
+        var history = await store.QueryThroughputAsync(new ThroughputHistoryQuery
+        {
+            FromUtc = start,
+            ToUtc = start.AddMinutes(3),
+            BucketSeconds = 60,
+        });
+
+        Assert.Equal(60, history.BucketSeconds);
+        Assert.Equal(4, history.Points.Count);
+        Assert.Equal(600, history.Points[0].UploadBytes);
+        Assert.Equal(1_200, history.Points[0].DownloadBytes);
+        Assert.Equal(60, history.Points[0].MeasuredSeconds);
+        Assert.Equal(400, history.Points[1].UploadBytes);
+        Assert.Equal(40, history.Points[1].MeasuredSeconds);
+
+        // A minute without a measurement stays explicit instead of looking like zero traffic.
+        Assert.Equal(0, history.Points[2].MeasuredSeconds);
+        Assert.Equal(0, history.Points[2].UploadBytes);
+        Assert.NotNull(history.Detail);
+
+        await store.RecordThroughputAsync(start.AddMinutes(4), 100, 200, 60);
+
+        var fiveMinute = await store.QueryThroughputAsync(new ThroughputHistoryQuery
+        {
+            FromUtc = start,
+            ToUtc = start.AddMinutes(4),
+            BucketSeconds = 300,
+        });
+
+        Assert.Equal(1_100, fiveMinute.Points.Sum(point => point.UploadBytes));
+        Assert.Equal(2_200, fiveMinute.Points.Sum(point => point.DownloadBytes));
+        Assert.Equal(160, fiveMinute.Points.Sum(point => point.MeasuredSeconds));
+    }
+
+    [Fact]
+    public async Task Retention_removes_old_throughput_buckets()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var now = DateTimeOffset.UtcNow;
+        await store.RecordThroughputAsync(now.AddDays(-40), 1_000, 2_000, 60);
+        await store.RecordThroughputAsync(now, 500, 700, 60);
+
+        await store.ApplyRetentionAsync(now, TimeSpan.FromDays(30));
+
+        var history = await store.QueryThroughputAsync(new ThroughputHistoryQuery
+        {
+            FromUtc = now.AddDays(-40).AddMinutes(-5),
+            ToUtc = now.AddMinutes(1),
+            BucketSeconds = 3_600,
+        });
+
+        var totalUpload = history.Points.Sum(point => point.UploadBytes);
+        Assert.Equal(500, totalUpload);
     }
 
     [Fact]

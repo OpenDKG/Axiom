@@ -36,6 +36,8 @@ public sealed class PipeServer
 
     private readonly Func<HistoryQuery, CancellationToken, Task<HistoryPage>>? _historyQuery;
 
+    private readonly Func<ThroughputHistoryQuery, CancellationToken, Task<ThroughputHistory>>? _throughputHistory;
+
     private readonly Func<CancellationToken, Task<FirewallRulesSnapshot>>? _rulesQuery;
 
     private readonly Func<RuleSpec, string, CancellationToken, Task<RuleApplyResult>>? _ruleApply;
@@ -72,6 +74,7 @@ public sealed class PipeServer
         Func<ConnectionSnapshot?> snapshotProvider,
         Func<ServiceHealth> healthProvider,
         Func<HistoryQuery, CancellationToken, Task<HistoryPage>>? historyQuery = null,
+        Func<ThroughputHistoryQuery, CancellationToken, Task<ThroughputHistory>>? throughputHistory = null,
         Func<CancellationToken, Task<FirewallRulesSnapshot>>? rulesQuery = null,
         Func<RuleSpec, string, CancellationToken, Task<RuleApplyResult>>? ruleApply = null,
         Func<Guid, string, CancellationToken, Task<RuleApplyResult>>? ruleRemove = null,
@@ -96,6 +99,7 @@ public sealed class PipeServer
         _snapshotProvider = snapshotProvider ?? throw new ArgumentNullException(nameof(snapshotProvider));
         _healthProvider = healthProvider ?? throw new ArgumentNullException(nameof(healthProvider));
         _historyQuery = historyQuery;
+        _throughputHistory = throughputHistory;
         _rulesQuery = rulesQuery;
         _ruleApply = ruleApply;
         _ruleRemove = ruleRemove;
@@ -359,6 +363,36 @@ public sealed class PipeServer
 
                     var page = await _historyQuery(query, cancellationToken).ConfigureAwait(false);
                     await WriteResultAsync(stream, envelope.Id, page, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.ThroughputHistory:
+                    if (_throughputHistory is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Throughput history is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var throughputQuery = DeserializePayload<ThroughputHistoryQuery>(envelope.Payload);
+                    if (throughputQuery is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Throughput history payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var throughput = await _throughputHistory(throughputQuery, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, throughput, cancellationToken)
+                        .ConfigureAwait(false);
                     break;
 
                 case IpcCommandTypes.RulesQuery:
@@ -715,6 +749,11 @@ public sealed class PipeServer
         if (_historyQuery is not null)
         {
             commands.Add(IpcCommandTypes.HistoryQuery);
+        }
+
+        if (_throughputHistory is not null)
+        {
+            commands.Add(IpcCommandTypes.ThroughputHistory);
         }
 
         if (_rulesQuery is not null)
