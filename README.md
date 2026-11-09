@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.9.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,26 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.0
+
+- **Axiom can propose indicators to the Blackbox community graph, but only honest ones.** With
+  threat sharing on, the Agents page now shows a preview list of indicators Axiom actually observed:
+  malware-list domains that an **agent process** fetched, and high-confidence AI Analyst IOCs. Each
+  candidate carries the exact evidence that qualifies it and can be dismissed before it is sent.
+- **Ads, tracking and telemetry are never proposed.** Blackbox's schema has no ad or spam category,
+  and mass-reporting them would be noise. The Privacy Shield catalog now has a dedicated malware-only
+  source - URLhaus malicious domains via malware-filter (MIT, updated every 12 hours) - so a malware
+  label is real. OISD is labelled as ads/tracking only, and a malware source upgrades the category of
+  a domain already listed by another source.
+- **Nothing is sent by the service.** The service attributes the DNS query, keeps the durable queue
+  and records outcomes. Submission runs the Blackbox reporter (`blackbox report --type ioc`) in the
+  signed-in user's own session, because that profile holds the reporter key, DKG identity and the
+  reporter-terms consent. Blackbox enforces consent, cooldown, the 100/day cap and its high severity
+  floor; Axiom shows the exact outcome per indicator.
+- **Off means off.** With sharing off the queue only exists as a preview and a submission attempt is
+  refused with the CLI's own message. Enabling sharing sends queued indicators automatically (at most
+  once a minute), and the Agents page keeps the last outcomes visible.
 
 ## What's in 0.9.0
 

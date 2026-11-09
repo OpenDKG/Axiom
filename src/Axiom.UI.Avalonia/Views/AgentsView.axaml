@@ -90,20 +90,46 @@
       </Grid>
 
       <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="14">
-        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" RowSpacing="6" ColumnSpacing="16">
-          <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <controls:AxiomSelectableTextBlock Text="Threat sharing" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
-              <controls:AxiomSelectableTextBlock Text="{Binding ThreatSharingStatusText}" FontSize="9" Foreground="{DynamicResource Axiom.Accent}" />
-            </Border>
-          </StackPanel>
-          <Button Grid.Row="0" Grid.Column="1" Content="{Binding ThreatSharingButtonText}"
-                  Command="{Binding ToggleThreatSharingCommand}" IsEnabled="{Binding CanToggleThreatSharing}"
-                  Padding="12,6" VerticalAlignment="Center" />
-          <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.ColumnSpan="2"
-                     Text="When on, Blackbox shares signed, redacted threat indicators with the community verified graph. Prompts, commands, file paths, credentials, model content and raw session ids are never sent. Off by default; needs the Blackbox dashboard."
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <controls:AxiomSelectableTextBlock Text="Threat sharing" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+                <controls:AxiomSelectableTextBlock Text="{Binding ThreatSharingStatusText}" FontSize="9" Foreground="{DynamicResource Axiom.Accent}" />
+              </Border>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <Button Content="Send now" Command="{Binding SubmitThreatShareCommand}" IsEnabled="{Binding CanSubmitThreatShare}" Padding="12,6" />
+              <Button Content="{Binding ThreatSharingButtonText}"
+                      Command="{Binding ToggleThreatSharingCommand}" IsEnabled="{Binding CanToggleThreatSharing}"
+                      Padding="12,6" />
+            </StackPanel>
+          </Grid>
+          <controls:AxiomSelectableTextBlock
+                     Text="Axiom only proposes indicators it can honestly attribute: a malware-list domain that an agent process actually fetched, or a high-confidence AI Analyst IOC. Blackbox signs and shares them, and only while sharing is on. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
                      FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-        </Grid>
+          <controls:AxiomSelectableTextBlock Text="{Binding ThreatShareQueueText}" FontSize="10"
+                     Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+          <ItemsControl ItemsSource="{Binding ThreatShareCandidates}" IsVisible="{Binding HasThreatShareCandidates}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,2">
+                  <StackPanel Grid.Column="0" Spacing="1">
+                    <controls:AxiomSelectableTextBlock Text="{Binding Candidate.Value}" FontSize="11"
+                               Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                    <controls:AxiomSelectableTextBlock Text="{Binding Candidate.Detail}" FontSize="9"
+                               Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Content="Dismiss" Padding="9,3" FontSize="10"
+                          Command="{Binding $parent[UserControl].DataContext.DismissThreatShareCommand}"
+                          CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <controls:AxiomSelectableTextBlock Text="{Binding ThreatShareActionText}" FontSize="10"
+                     Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
+        </StackPanel>
       </Border>
 
       <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">

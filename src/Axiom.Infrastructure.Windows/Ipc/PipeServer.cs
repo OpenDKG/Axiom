@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.IO.Pipes;
 using System.Text.Json;
 using Axiom.Contracts;
@@ -8,6 +8,7 @@ using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
 using Axiom.Contracts.Privacy;
 using Axiom.Contracts.Protection;
+using Axiom.Contracts.Threat;
 using Axiom.Infrastructure.Windows.Firewall;
 
 namespace Axiom.Infrastructure.Windows.Ipc;
@@ -66,6 +67,14 @@ public sealed class PipeServer
 
     private readonly Func<ProtectionLockdownRequest, string, CancellationToken, Task<ProtectionStatus>>? _protectionLockdown;
 
+    private readonly Func<CancellationToken, Task<ThreatShareQueueStatus>>? _threatShareStatus;
+
+    private readonly Func<ThreatShareEnqueueRequest, CancellationToken, Task<ThreatShareQueueStatus>>? _threatShareEnqueue;
+
+    private readonly Func<ThreatShareDismissRequest, CancellationToken, Task<ThreatShareQueueStatus>>? _threatShareDismiss;
+
+    private readonly Func<ThreatShareRecordRequest, CancellationToken, Task<ThreatShareQueueStatus>>? _threatShareRecord;
+
     private readonly Action<string>? _log;
 
     public PipeServer(
@@ -89,6 +98,10 @@ public sealed class PipeServer
         Func<ProtectionDecideRequest, string, CancellationToken, Task<ProtectionStatus>>? protectionDecide = null,
         Func<ProtectionDismissRequest, CancellationToken, Task<ProtectionStatus>>? protectionDismiss = null,
         Func<ProtectionLockdownRequest, string, CancellationToken, Task<ProtectionStatus>>? protectionLockdown = null,
+        Func<CancellationToken, Task<ThreatShareQueueStatus>>? threatShareStatus = null,
+        Func<ThreatShareEnqueueRequest, CancellationToken, Task<ThreatShareQueueStatus>>? threatShareEnqueue = null,
+        Func<ThreatShareDismissRequest, CancellationToken, Task<ThreatShareQueueStatus>>? threatShareDismiss = null,
+        Func<ThreatShareRecordRequest, CancellationToken, Task<ThreatShareQueueStatus>>? threatShareRecord = null,
         Action<string>? log = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
@@ -114,6 +127,10 @@ public sealed class PipeServer
         _protectionDecide = protectionDecide;
         _protectionDismiss = protectionDismiss;
         _protectionLockdown = protectionLockdown;
+        _threatShareStatus = threatShareStatus;
+        _threatShareEnqueue = threatShareEnqueue;
+        _threatShareDismiss = threatShareDismiss;
+        _threatShareRecord = threatShareRecord;
         _log = log;
     }
 
@@ -623,6 +640,109 @@ public sealed class PipeServer
                     await WriteResultAsync(stream, envelope.Id, lockdownStatus, cancellationToken).ConfigureAwait(false);
                     break;
 
+                case IpcCommandTypes.ThreatShareStatus:
+                    if (_threatShareStatus is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Threat sharing is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var shareStatus = await _threatShareStatus(cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, shareStatus, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.ThreatShareEnqueue:
+                    if (_threatShareEnqueue is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Threat sharing is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var enqueueRequest = DeserializePayload<ThreatShareEnqueueRequest>(envelope.Payload);
+                    if (enqueueRequest is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Threat share payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var enqueued = await _threatShareEnqueue(enqueueRequest, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, enqueued, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.ThreatShareDismiss:
+                    if (_threatShareDismiss is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Threat sharing is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var dismissShare = DeserializePayload<ThreatShareDismissRequest>(envelope.Payload);
+                    if (dismissShare is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Threat share dismiss payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var dismissed = await _threatShareDismiss(dismissShare, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, dismissed, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.ThreatShareRecord:
+                    if (_threatShareRecord is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Threat sharing is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var recordRequest = DeserializePayload<ThreatShareRecordRequest>(envelope.Payload);
+                    if (recordRequest is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Threat share record payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var recorded = await _threatShareRecord(recordRequest, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, recorded, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.PrivacyStatus:
                     if (_privacyStatus is null)
                     {
@@ -809,6 +929,26 @@ public sealed class PipeServer
         if (_protectionLockdown is not null)
         {
             commands.Add(IpcCommandTypes.ProtectionLockdown);
+        }
+
+        if (_threatShareStatus is not null)
+        {
+            commands.Add(IpcCommandTypes.ThreatShareStatus);
+        }
+
+        if (_threatShareEnqueue is not null)
+        {
+            commands.Add(IpcCommandTypes.ThreatShareEnqueue);
+        }
+
+        if (_threatShareDismiss is not null)
+        {
+            commands.Add(IpcCommandTypes.ThreatShareDismiss);
+        }
+
+        if (_threatShareRecord is not null)
+        {
+            commands.Add(IpcCommandTypes.ThreatShareRecord);
         }
 
         if (WindowsFirewallPolicyAdapter.IsWriteGateOpen)

@@ -39,8 +39,10 @@ builder.Services.AddSingleton(new ProtectionSettingsStore());
 builder.Services.AddSingleton<ProtectionController>();
 builder.Services.AddHostedService<ProtectionWorker>();
 builder.Services.AddSingleton<PrivacyShieldSettingsStore>();
+builder.Services.AddSingleton<ThreatShareController>();
 builder.Services.AddSingleton<PrivacyShieldController>();
 builder.Services.AddHostedService<PrivacyShieldWorker>();
+builder.Services.AddHostedService<ThreatShareWorker>();
 
 builder.Services.AddSingleton<MonitoringWorker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<MonitoringWorker>());

@@ -17,6 +17,7 @@ public sealed partial class PipeServerWorker(
     FirewallRuleCoordinator coordinator,
     PrivacyShieldController privacyShield,
     ProtectionController protection,
+    ThreatShareController threatShare,
     ILogger<PipeServerWorker> logger) : BackgroundService
 {
     [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "Pipe {Pipe} allows SID {Sid}")]
@@ -74,6 +75,16 @@ public sealed partial class PipeServerWorker(
                 protection.DismissAsync(request, cancellationToken),
             protectionLockdown: (request, actorSid, cancellationToken) =>
                 protection.SetAgentLockdownAsync(request.Enabled, actorSid, cancellationToken),
+            threatShareStatus: cancellationToken => threatShare.GetStatusAsync(cancellationToken),
+            threatShareEnqueue: async (request, cancellationToken) =>
+            {
+                threatShare.Enqueue(request);
+                return await threatShare.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+            },
+            threatShareDismiss: (request, cancellationToken) =>
+                threatShare.DismissAsync(request.Id, cancellationToken),
+            threatShareRecord: (request, cancellationToken) =>
+                threatShare.RecordAsync(request, cancellationToken),
             log: message => LogMessage(logger, message));
 
         await server.RunAsync(stoppingToken).ConfigureAwait(false);

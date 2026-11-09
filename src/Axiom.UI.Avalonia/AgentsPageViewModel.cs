@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -12,6 +12,8 @@ using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts;
 using Axiom.Contracts.Agents;
 using Axiom.Contracts.Blackbox;
+using Axiom.Contracts.Ipc;
+using Axiom.Contracts.Threat;
 using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
@@ -62,6 +64,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private readonly IUiTimer _timer;
     private readonly IUserInteraction _ui;
     private readonly IBlackboxDialogService _dialogs;
+    private readonly IServiceRequestClient? _serviceClient;
+    private readonly ThreatShareCli _cli = new();
+    private ThreatShareQueueStatus? _threatShareStatus;
+    private bool _threatShareSubmitting;
+    private DateTimeOffset _lastThreatShareSubmitUtc = DateTimeOffset.MinValue;
 
     private readonly List<BlackboxAuditEntry> _allActivity = [];
 
@@ -94,7 +101,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         IAgentSessionSource? agentSessions,
         IUserInteraction ui,
         IBlackboxDialogService dialogs,
-        IUiTimerFactory timers)
+        IUiTimerFactory timers,
+        IServiceRequestClient? serviceClient = null)
         : base("Agents", "DKG, Blackbox and the workspaces they protect", "\uE99A")
     {
         Security = security ?? throw new ArgumentNullException(nameof(security));
@@ -104,6 +112,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _agentSessions = agentSessions;
         _ui = ui;
         _dialogs = dialogs;
+        _serviceClient = serviceClient;
 
         var autoSync = _autoSyncStore.Load();
         _isAutoSyncEnabled = autoSync.Enabled;
@@ -232,6 +241,21 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     partial void OnThreatSharingEnabledChanged(bool value) =>
         OnPropertyChanged(nameof(ThreatSharingButtonText));
+
+    /// <summary>Indicators Axiom proposes to share; nothing is sent until sharing is on.</summary>
+    public ObservableCollection<ThreatShareItem> ThreatShareCandidates { get; } = [];
+
+    [ObservableProperty]
+    private string _threatShareQueueText = "Loading the indicator preview...";
+
+    [ObservableProperty]
+    private bool _hasThreatShareCandidates;
+
+    [ObservableProperty]
+    private bool _canSubmitThreatShare;
+
+    [ObservableProperty]
+    private string _threatShareActionText = string.Empty;
 
     [ObservableProperty]
     private string _dkgHealthText = "DKG: unknown";
@@ -423,6 +447,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ApplyHealth(settingsTask.Result, graphTask.Result);
             ApplyHookEvidence();
             await RefreshSessionsAsync().ConfigureAwait(true);
+            await RefreshThreatShareAsync().ConfigureAwait(true);
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
@@ -1009,6 +1034,194 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
     }
 
+    /// <summary>
+    /// Loads Axiom's own indicator preview from the service. The service only holds candidates for
+    /// malware indicators an agent fetched plus high-confidence AI Analyst IOCs; it never sends them
+    /// here, it only reports what is queued and what the last submission did.
+    /// </summary>
+    private async Task RefreshThreatShareAsync()
+    {
+        if (_serviceClient is null)
+        {
+            ThreatShareQueueText = "Indicator preview needs the local Axiom service.";
+            HasThreatShareCandidates = false;
+            CanSubmitThreatShare = false;
+            return;
+        }
+
+        try
+        {
+            var status = await _serviceClient
+                .SendAsync<ThreatShareQueueStatus>(
+                    IpcCommandTypes.ThreatShareStatus,
+                    null,
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyThreatShareStatus(status);
+        }
+        catch (Exception exception) when (exception is
+                     ServiceUnavailableException or TimeoutException or
+                     System.Text.Json.JsonException or System.IO.IOException)
+        {
+            ThreatShareQueueText = "Indicator preview is unavailable: " + exception.Message;
+            HasThreatShareCandidates = false;
+            CanSubmitThreatShare = false;
+        }
+    }
+
+    private void ApplyThreatShareStatus(ThreatShareQueueStatus status)
+    {
+        _threatShareStatus = status;
+        var pending = status.Items
+            .Where(item => item.State == ThreatShareState.Pending)
+            .Take(8)
+            .ToList();
+
+        ThreatShareCandidates.Clear();
+        foreach (var item in pending)
+        {
+            ThreatShareCandidates.Add(item);
+        }
+
+        HasThreatShareCandidates = pending.Count > 0;
+        CanSubmitThreatShare = status.Pending > 0 &&
+                               ThreatSharingEnabled &&
+                               status.TodaySubmitted < status.DailyLimit;
+
+        var consent = ThreatShareCli.ConsentPresent()
+            ? string.Empty
+            : " Blackbox still needs the reporter terms accepted in its own settings.";
+
+        ThreatShareQueueText =
+            $"{status.Pending} waiting for review, {status.Submitted} shared in total, " +
+            $"{status.TodaySubmitted}/{status.DailyLimit} today. " +
+            (ThreatSharingEnabled
+                ? "Sharing is on; queued indicators are signed and sent by Blackbox from this session."
+                : "Sharing is off; nothing is sent until you enable it.") +
+            consent;
+
+        if (ThreatSharingEnabled && status.Pending > 0 &&
+            DateTimeOffset.UtcNow - _lastThreatShareSubmitUtc >= TimeSpan.FromMinutes(1))
+        {
+            _ = SubmitThreatShareAsync();
+        }
+    }
+
+    [RelayCommand]
+    private async Task SubmitThreatShareAsync()
+    {
+        if (_serviceClient is null || _threatShareSubmitting)
+        {
+            return;
+        }
+
+        if (!ThreatSharingEnabled)
+        {
+            ThreatShareActionText = "Turn threat sharing on before submitting indicators.";
+            return;
+        }
+
+        if (_threatShareStatus is not { } status)
+        {
+            return;
+        }
+
+        _threatShareSubmitting = true;
+        _lastThreatShareSubmitUtc = DateTimeOffset.UtcNow;
+        CanSubmitThreatShare = false;
+        ThreatShareActionText = "Submitting through the Blackbox reporter...";
+        try
+        {
+            var pending = status.Items
+                .Where(item => item.State == ThreatShareState.Pending)
+                .Take(Math.Max(0, status.DailyLimit - status.TodaySubmitted))
+                .ToList();
+
+            if (pending.Count == 0)
+            {
+                ThreatShareActionText = "Nothing is waiting for review, or the daily cap is reached.";
+                return;
+            }
+
+            var shared = 0;
+            var rejected = 0;
+            ThreatShareQueueStatus? latest = null;
+            foreach (var item in pending)
+            {
+                var (submitted, outcome) = await _cli
+                    .ReportAsync(item.Candidate, CancellationToken.None)
+                    .ConfigureAwait(true);
+                latest = await _serviceClient
+                    .SendAsync<ThreatShareQueueStatus>(
+                        IpcCommandTypes.ThreatShareRecord,
+                        new ThreatShareRecordRequest
+                        {
+                            Id = item.Candidate.Id,
+                            Submitted = submitted,
+                            Outcome = outcome,
+                        },
+                        CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                if (submitted)
+                {
+                    shared++;
+                }
+                else
+                {
+                    rejected++;
+                    if (outcome.Contains("cap", StringComparison.OrdinalIgnoreCase))
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (latest is not null)
+            {
+                ApplyThreatShareStatus(latest);
+            }
+
+            ThreatShareActionText = $"Submitted {shared}, rejected {rejected}.";
+        }
+        catch (Exception exception) when (exception is
+                     ServiceUnavailableException or TimeoutException or
+                     System.Text.Json.JsonException or System.IO.IOException)
+        {
+            ThreatShareActionText = "Submission failed: " + exception.Message;
+        }
+        finally
+        {
+            _threatShareSubmitting = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task DismissThreatShareAsync(ThreatShareItem? item)
+    {
+        if (_serviceClient is null || item is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var status = await _serviceClient
+                .SendAsync<ThreatShareQueueStatus>(
+                    IpcCommandTypes.ThreatShareDismiss,
+                    new ThreatShareDismissRequest { Id = item.Candidate.Id },
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyThreatShareStatus(status);
+            ThreatShareActionText = $"Dismissed {item.Candidate.Value}.";
+        }
+        catch (Exception exception) when (exception is
+                     ServiceUnavailableException or TimeoutException or
+                     System.Text.Json.JsonException or System.IO.IOException)
+        {
+            ThreatShareActionText = "Could not dismiss the indicator: " + exception.Message;
+        }
+    }
     [RelayCommand]
     private async Task SetBlackboxModeAsync(string? mode)
     {

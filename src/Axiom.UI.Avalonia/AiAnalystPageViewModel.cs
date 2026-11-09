@@ -1,10 +1,12 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Ai;
+using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.Threat;
 using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
@@ -489,11 +491,42 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
                     : "Analysis completed. Review evidence and uncertainty before acting.")
                 : "Analysis returned no reliable result: " + finding.Error;
             UpdateStatus();
+
+            // Only a high-confidence malicious finding proposes indicators, and only into the
+            // Agents-page review list. Nothing leaves the machine until the user turns sharing on.
+            await QueueThreatShareCandidatesAsync(finding).ConfigureAwait(true);
         }
         finally
         {
             _analysisCts = null;
             IsBusy = false;
+        }
+    }
+
+    private async Task QueueThreatShareCandidatesAsync(AiFinding finding)
+    {
+        if (_serviceClient is null || finding.Error is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var candidate in ThreatShareIocExtractor.Extract(finding))
+            {
+                await _serviceClient
+                    .SendAsync<ThreatShareQueueStatus>(
+                        IpcCommandTypes.ThreatShareEnqueue,
+                        candidate,
+                        CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
+        }
+        catch (Exception exception) when (exception is
+                     ServiceUnavailableException or TimeoutException or
+                     System.Text.Json.JsonException or System.IO.IOException)
+        {
+            // The preview list is optional; an offline service must not affect the analyst result.
         }
     }
 
