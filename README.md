@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.2 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.3 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,16 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.3
+
+- **Agent tool fetches are attributed to the agent.** Agents fetch through tools (curl, git, nslookup),
+  so the DNS query belongs to the tool child, not the agent process. Axiom now walks the parent chain
+  (up to six levels) once per process and remembers the nearest agent ancestor, so a malware-list
+  domain fetched that way is still a truthful etched-by-tool sighting.
+- **Verified live.** With the adapter pointed at the resolver, a malware-list domain fetched by an agent
+  tool produced a candidate, was submitted by the desktop, and the DKG accepted it: the report is in
+  the community's shared memory (ioc:domain:win.down.55kantu.com, stage eported · monitor).
 
 ## What's in 0.10.2
 
