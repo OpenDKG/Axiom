@@ -36,9 +36,10 @@ agent-level guardrails and signed threat-intelligence context respectively.
 - **Blocked query history is grouped by application.** Each app is one expandable row with its block
   and domain counts; opening it lists every blocked domain with category, count, last time and the same
   Allow/Block actions. The list scrolls inside its card.
-- **A stopped resolver can no longer leave an adapter without DNS.** When any adapter still points at
-  127.0.0.1 but Privacy Shield is not running, the adapter card shows a warning and Axiom raises a
-  forced alert that links to the page. The adapter list is refreshed, so the check follows real DNS state.
+- **A stopped resolver can no longer leave an adapter without DNS.** On disable, service stop or a
+  failed resolver start, the service restores the saved adapter DNS itself (no UAC prompt), and falls
+  back to DHCP when no snapshot exists. The UI also warns and alerts while any adapter still points at
+  127.0.0.1 but the resolver is not running, and the adapter list is refreshed from real DNS state.
 - **Incident:** the LAN outage came from disabling Privacy Shield while Ethernet DNS stayed at
   127.0.0.1; Ethernet was restored to DHCP and the new warning covers that case.
 
