@@ -253,6 +253,9 @@ policy.
   user-authored hooks are preserved and backed up.
 - Supported harnesses: **OpenCode/OpenChamber, Codex, Claude Code, Cursor, GitHub Copilot CLI,
   Gemini CLI, Windsurf Cascade, Cline, ZCode and DeepSeek Harness**.
+- **Agent sessions** include Claude Code, Codex and OpenCode/OpenChamber metadata. The OpenCode
+  database is read-only; a session is **live** when its host process runs or its data changed in the
+  last five minutes, and raw session ids stay hashed.
 - Uses five lifecycle points where the host supports them: session start, user prompt, pre-tool,
   post-tool and stop. ZCode uses its user-level `hooks.events`; DeepSeek Harness uses its Claude
   Code-compatible bridge.
