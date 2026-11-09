@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.3 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.4 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,18 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.4
+
+- **Privacy Shield live list is grouped and bounded.** Blocked queries fold into one row per
+  domain and app with a count, the top six are shown by default, **Show all** opens up to 40, and the
+  lists scroll inside the card instead of growing the page. Blocked history is capped at 250 rows.
+- **Adapter DNS sits above the lists.** The explicit UAC helper is its own card directly under the
+  resolver statistics, so it no longer ends up below the blocking lists.
+- **Power usage traced to the Blackbox dashboard.** A long-running dashboard process was busy-looping
+  at about 200% CPU; restarting it returned to idle (Axiom's service stayed near 0% at idle).
+  Known limitation: Codex CLI on Windows reports hook failures and never executes them, so Codex
+  tool calls are not audited until that is fixed upstream.
 
 ## What's in 0.10.3
 
