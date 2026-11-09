@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Ipc;
@@ -21,7 +22,8 @@ public sealed record PrivacyShieldAdapterOption(
     string Name,
     string Description,
     string DnsText,
-    bool HasDefaultRoute)
+    bool HasDefaultRoute,
+    bool UsesResolver = false)
 {
     public string DisplayName => HasDefaultRoute
         ? $"{Name} — default route · DNS {DnsText}"
@@ -61,9 +63,36 @@ public sealed partial class PrivacyShieldSourceRow : ObservableObject
     private string _errorText = string.Empty;
 }
 
+/// <summary>A blocked DNS event with the current allow/block action for that domain.</summary>
+public sealed class BlockedEventRow(PrivacyShieldBlockedEvent blocked, bool isAllowed)
+{
+    public string Domain => blocked.Domain;
+
+    public string AppDisplay => blocked.AppDisplay;
+
+    public string AppPath => blocked.AppPath;
+
+    public string CategoryText => blocked.CategoryText;
+
+    public DateTimeOffset TimestampUtc => blocked.BlockedUtc;
+
+    public bool IsAllowed => isAllowed;
+
+    public bool CanAllow => !isAllowed;
+
+    public bool CanBlock => isAllowed;
+
+    public string StateText => isAllowed ? "allowed" : "blocked";
+
+    public string Tooltip => string.IsNullOrWhiteSpace(blocked.AppPath)
+        ? $"{blocked.Domain}\nBlocked app: {blocked.AppDisplay}\nCategory: {blocked.CategoryText}"
+        : $"{blocked.Domain}\nBlocked app: {blocked.AppDisplay}\nPath: {blocked.AppPath}\nCategory: {blocked.CategoryText}";
+}
+
 /// <summary>
-/// Privacy Shield is an opt-in local DNS filter. It never changes adapter DNS settings; the user
-/// must point Windows at the displayed loopback resolver explicitly.
+/// Privacy Shield is a local DNS filter. Complete installation enables the resolver; a partial
+/// installation leaves it opt-in. The service never changes adapter DNS settings; the user must
+/// point Windows at the displayed loopback resolver explicitly.
 /// </summary>
 public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivatablePage, IDisposable
 {
@@ -80,7 +109,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         IUserInteraction ui,
         IDnsAdapterHelper dnsHelper,
         IUiTimerFactory timers)
-        : base("Privacy Shield", "Optional local DNS filtering; disabled by default", "P")
+        : base("Privacy Shield", "Local DNS filtering · complete installation enables the resolver", "P")
     {
         ArgumentNullException.ThrowIfNull(ui);
         ArgumentNullException.ThrowIfNull(dnsHelper);
@@ -97,31 +126,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         ];
         _selectedProfile = Profiles[1];
         ApplyProfileCategories(PrivacyShieldProfile.Balanced);
-        Adapters = new ObservableCollection<PrivacyShieldAdapterOption>(
-            NetworkInterface.GetAllNetworkInterfaces()
-                .Where(network => network.OperationalStatus == OperationalStatus.Up &&
-                                  network.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                .Select(network =>
-                {
-                    var properties = network.GetIPProperties();
-                    var dns = properties.DnsAddresses
-                        .Where(address => !IPAddress.IsLoopback(address))
-                        .Select(address => address.ToString())
-                        .Distinct()
-                        .ToArray();
-                    var hasDefaultRoute = properties.GatewayAddresses.Any(gateway =>
-                        !gateway.Address.Equals(IPAddress.Any) &&
-                        !gateway.Address.Equals(IPAddress.IPv6Any) &&
-                        !IPAddress.IsLoopback(gateway.Address));
-                    return new PrivacyShieldAdapterOption(
-                        network.Name,
-                        network.Description,
-                        dns.Length == 0 ? "automatic" : string.Join(", ", dns),
-                        hasDefaultRoute);
-                })
-                .OrderByDescending(adapter => adapter.HasDefaultRoute)
-                .ThenBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
-                .ToArray());
+        Adapters = new ObservableCollection<PrivacyShieldAdapterOption>(BuildAdapterOptions());
         _selectedAdapter = Adapters.FirstOrDefault();
 
         if (_client is null)
@@ -144,9 +149,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     public ObservableCollection<PrivacyShieldTopDomain> TopBlocked { get; } = [];
 
-    public ObservableCollection<PrivacyShieldBlockedEvent> RecentBlocked { get; } = [];
+    public ObservableCollection<BlockedEventRow> RecentBlocked { get; } = [];
 
-    public ObservableCollection<PrivacyShieldBlockedEvent> BlockedHistory { get; } = [];
+    public ObservableCollection<BlockedEventRow> BlockedHistory { get; } = [];
 
     public ObservableCollection<PrivacyShieldSourceRow> Sources { get; } =
         new(PrivacyShieldSourceCatalog.All.Select(source => new PrivacyShieldSourceRow(source)));
@@ -158,6 +163,24 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     [ObservableProperty]
     private string _dnsHelperStatusText = "No adapter DNS change has been made.";
+
+    partial void OnSelectedAdapterChanged(PrivacyShieldAdapterOption? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        var already = $"Adapter '{value.Name}' already sends DNS to the Privacy Shield resolver at 127.0.0.1.";
+        if (value.UsesResolver && DnsHelperStatusText == "No adapter DNS change has been made.")
+        {
+            DnsHelperStatusText = already;
+        }
+        else if (!value.UsesResolver && DnsHelperStatusText == already)
+        {
+            DnsHelperStatusText = "No adapter DNS change has been made.";
+        }
+    }
 
     public string StarterRulesText =>
         $"{PrivacyShieldPolicy.StarterRulesAll.Count} starter rules (manually reviewed, not a third-party list)";
@@ -221,6 +244,12 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private string _statsText = "No queries observed.";
 
     [ObservableProperty]
+    private string _statsHintText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasStatsHint;
+
+    [ObservableProperty]
     private string _lastUpdatedText = "Not refreshed.";
 
     [ObservableProperty]
@@ -241,6 +270,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     public void Activate()
     {
+        RefreshAdapters();
         _statsTimer?.Start();
         _ = RefreshAsync();
     }
@@ -264,6 +294,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         IsBusy = true;
         try
         {
+            RefreshAdapters();
             var status = await _client
                 .SendAsync<PrivacyShieldStatus>(IpcCommandTypes.PrivacyStatus, null, CancellationToken.None)
                 .ConfigureAwait(true);
@@ -464,6 +495,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         {
             DnsHelperStatusText = "Elevation was cancelled or the DNS helper failed: " + exception.Message;
         }
+
+        RefreshAdapters();
     }
 
     [RelayCommand]
@@ -496,6 +529,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         {
             DnsHelperStatusText = "Elevation was cancelled or the DNS restore failed: " + exception.Message;
         }
+
+        RefreshAdapters();
     }
 
     [RelayCommand]
@@ -550,6 +585,48 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         AllowedDomainsText = string.Empty;
         BlockedDomainsText = string.Empty;
         LastErrorText = "Custom allow/block lists cleared in the form. Apply to save.";
+    }
+
+    [RelayCommand]
+    private Task AllowBlockedDomainAsync(BlockedEventRow? row) => SetBlockedDomainDecisionAsync(row, allow: true);
+
+    [RelayCommand]
+    private Task BlockBlockedDomainAsync(BlockedEventRow? row) => SetBlockedDomainDecisionAsync(row, allow: false);
+
+    private async Task SetBlockedDomainDecisionAsync(BlockedEventRow? row, bool allow)
+    {
+        if (row is null || _client is null || IsBusy)
+        {
+            return;
+        }
+
+        var allowed = PrivacyShieldPolicy.ParseList(AllowedDomainsText).ToList();
+        var blocked = PrivacyShieldPolicy.ParseList(BlockedDomainsText).ToList();
+        if (allow)
+        {
+            if (!allowed.Contains(row.Domain, StringComparer.OrdinalIgnoreCase))
+            {
+                allowed.Add(row.Domain);
+            }
+
+            blocked.RemoveAll(domain => string.Equals(domain, row.Domain, StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            blocked.RemoveAll(domain => string.Equals(domain, row.Domain, StringComparison.OrdinalIgnoreCase));
+            blocked.Add(row.Domain);
+            allowed.RemoveAll(domain => string.Equals(domain, row.Domain, StringComparison.OrdinalIgnoreCase));
+        }
+
+        AllowedDomainsText = string.Join(Environment.NewLine, allowed);
+        BlockedDomainsText = string.Join(Environment.NewLine, blocked);
+        await ApplyAsync().ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(LastErrorText))
+        {
+            LastErrorText = allow
+                ? $"{row.Domain}: allowed. Use Block to block it again."
+                : $"{row.Domain}: blocked in the custom list. Allow removes this custom block.";
+        }
     }
 
     [RelayCommand]
@@ -699,6 +776,14 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         StatsText = status.Running
             ? $"{status.Queries:N0} queries observed."
             : "No queries observed.";
+        UpdateStatsHint(status);
+        if (SelectedAdapter is { UsesResolver: true } activeAdapter &&
+            DnsHelperStatusText == "No adapter DNS change has been made.")
+        {
+            DnsHelperStatusText =
+                $"Adapter '{activeAdapter.Name}' already sends DNS to the Privacy Shield resolver at 127.0.0.1.";
+        }
+
         LastUpdatedText = $"Updated {DateTimeOffset.Now:HH:mm:ss}";
         LastErrorText = status.LastError ?? string.Empty;
 
@@ -708,17 +793,102 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             TopBlocked.Add(domain);
         }
 
+        var allowedDomains = status.Settings.AllowedDomains.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         RecentBlocked.Clear();
         foreach (var blocked in status.RecentBlocked)
         {
-            RecentBlocked.Add(blocked);
+            RecentBlocked.Add(new BlockedEventRow(blocked, allowedDomains.Contains(blocked.Domain)));
         }
 
         BlockedHistory.Clear();
         foreach (var blocked in status.BlockedHistory)
         {
-            BlockedHistory.Add(blocked);
+            BlockedHistory.Add(new BlockedEventRow(blocked, allowedDomains.Contains(blocked.Domain)));
         }
+    }
+
+    private void UpdateStatsHint(PrivacyShieldStatus status)
+    {
+        if (!status.Running || status.Queries > 0)
+        {
+            StatsHintText = string.Empty;
+            HasStatsHint = false;
+            return;
+        }
+
+        var pointed = Adapters
+            .Where(adapter => adapter.UsesResolver)
+            .Select(adapter => adapter.Name)
+            .ToArray();
+        StatsHintText = pointed.Length > 0
+            ? $"No DNS query yet. {string.Join(", ", pointed)} already sends DNS to 127.0.0.1, " +
+              "so the next query will appear here. Counters reset when the resolver restarts."
+            : "The resolver is running but nothing uses it: no adapter DNS points at 127.0.0.1. " +
+              "Select the default-route adapter below and press \"Point adapter at resolver\" " +
+              "(Windows asks for elevation). Until then Windows bypasses Privacy Shield and these " +
+              "counters stay at zero.";
+        HasStatsHint = true;
+    }
+
+    private static PrivacyShieldAdapterOption[] BuildAdapterOptions() =>
+        NetworkInterface.GetAllNetworkInterfaces()
+            .Where(network => network.OperationalStatus == OperationalStatus.Up &&
+                              network.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+            .Select(network =>
+            {
+                var properties = network.GetIPProperties();
+                var usesResolver = properties.DnsAddresses.Any(IPAddress.IsLoopback);
+                var resolverAddress = properties.DnsAddresses
+                    .Where(IPAddress.IsLoopback)
+                    .OrderBy(address => address.AddressFamily == AddressFamily.InterNetwork ? 0 : 1)
+                    .Select(address => address.ToString())
+                    .FirstOrDefault();
+                var otherDns = properties.DnsAddresses
+                    .Where(address => !IPAddress.IsLoopback(address))
+                    .Select(address => address.ToString())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var dnsText = usesResolver
+                    ? $"{resolverAddress} · Privacy Shield" +
+                      (otherDns.Length == 0 ? string.Empty : ", " + string.Join(", ", otherDns))
+                    : otherDns.Length == 0
+                        ? "automatic"
+                        : string.Join(", ", otherDns);
+
+                var hasDefaultRoute = properties.GatewayAddresses.Any(gateway =>
+                    !gateway.Address.Equals(IPAddress.Any) &&
+                    !gateway.Address.Equals(IPAddress.IPv6Any) &&
+                    !IPAddress.IsLoopback(gateway.Address));
+                return new PrivacyShieldAdapterOption(
+                    network.Name,
+                    network.Description,
+                    dnsText,
+                    hasDefaultRoute,
+                    usesResolver);
+            })
+            .OrderByDescending(adapter => adapter.HasDefaultRoute)
+            .ThenBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private void RefreshAdapters()
+    {
+        var selectedName = SelectedAdapter?.Name;
+        var options = BuildAdapterOptions();
+        if (Adapters.SequenceEqual(options))
+        {
+            return;
+        }
+
+        Adapters.Clear();
+        foreach (var option in options)
+        {
+            Adapters.Add(option);
+        }
+
+        SelectedAdapter = Adapters.FirstOrDefault(adapter =>
+                              string.Equals(adapter.Name, selectedName, StringComparison.OrdinalIgnoreCase))
+                          ?? Adapters.FirstOrDefault();
     }
 
     private void ApplyProfileCategories(PrivacyShieldProfile profile)

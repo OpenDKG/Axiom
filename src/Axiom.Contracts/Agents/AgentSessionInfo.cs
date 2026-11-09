@@ -10,7 +10,7 @@ public sealed record AgentSessionInfo(
     DateTimeOffset LastSeenUtc,
     bool HostLive);
 
-/// <summary>Read-only source for Claude/Codex host session descriptors and thread metadata.</summary>
+/// <summary>Read-only source for Claude, Codex and OpenCode/OpenChamber host session metadata.</summary>
 public interface IAgentSessionSource
 {
     IReadOnlyList<AgentSessionInfo> Read();

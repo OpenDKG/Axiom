@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using Axiom.Contracts.Privacy;
+using Axiom.Infrastructure.Windows.IpHelper;
 
 namespace Axiom.Infrastructure.Windows.Dns;
 
@@ -46,6 +48,9 @@ public sealed class DnsProxyServer : IAsyncDisposable
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly ConcurrentQueue<PrivacyShieldBlockedEvent> _recentBlocked = new();
+
+    private static readonly ConcurrentDictionary<int, CachedAppIdentity> AppCache = new();
+    private static readonly TimeSpan AppCacheLifetime = TimeSpan.FromSeconds(30);
 
     private long _queries;
 
@@ -280,7 +285,11 @@ public sealed class DnsProxyServer : IAsyncDisposable
                 if (decision.Blocked)
                 {
                     Interlocked.Increment(ref _blocked);
-                    RecordBlocked(parsed.Domain, decision.Category);
+                    RecordBlocked(
+                        parsed.Domain,
+                        decision.Category,
+                        client.Client.RemoteEndPoint as IPEndPoint,
+                        tcp: true);
                     response = DnsProtocol.BuildResponse(query, parsed.QuestionEnd, 3);
                 }
                 else
@@ -410,7 +419,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
         if (decision.Blocked)
         {
             Interlocked.Increment(ref _blocked);
-            RecordBlocked(parsed.Domain, decision.Category);
+            RecordBlocked(parsed.Domain, decision.Category, request.RemoteEndPoint, tcp: false);
             await SendAsync(
                 client,
                 DnsProtocol.BuildResponse(query, parsed.QuestionEnd, 3),
@@ -483,17 +492,26 @@ public sealed class DnsProxyServer : IAsyncDisposable
         }
     }
 
-    private void RecordBlocked(string domain, PrivacyCategory category)
+    private void RecordBlocked(
+        string domain,
+        PrivacyCategory category,
+        IPEndPoint? source,
+        bool tcp)
     {
         if (_blockedDomains.Count < 256 || _blockedDomains.ContainsKey(domain))
         {
             _blockedDomains.AddOrUpdate(domain, 1, (_, count) => count + 1);
         }
 
+        var app = ResolveApp(source, tcp);
         var blocked = new PrivacyShieldBlockedEvent(
             domain,
             category,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow)
+        {
+            AppName = app.Name,
+            AppPath = app.Path,
+        };
         _recentBlocked.Enqueue(blocked);
         while (_recentBlocked.Count > 50)
         {
@@ -509,4 +527,108 @@ public sealed class DnsProxyServer : IAsyncDisposable
             // History persistence is best effort and must never fail a DNS response.
         }
     }
+
+    private static (string Name, string Path) ResolveApp(IPEndPoint? source, bool tcp)
+    {
+        if (source is null || source.Port <= 0)
+        {
+            return (string.Empty, string.Empty);
+        }
+
+        var processId = FindOwningProcess(source, tcp);
+        if (processId <= 4)
+        {
+            return (string.Empty, string.Empty);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (AppCache.TryGetValue(processId, out var cached) &&
+            now - cached.ResolvedUtc < AppCacheLifetime)
+        {
+            return (cached.Name, cached.Path);
+        }
+
+        var name = string.Empty;
+        var path = string.Empty;
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            name = process.ProcessName + ".exe";
+            try
+            {
+                path = process.MainModule?.FileName ?? string.Empty;
+            }
+            catch (Exception exception) when (exception is
+                         System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
+            {
+                // Protected or exiting process; the name is still useful.
+            }
+        }
+        catch (Exception exception) when (exception is
+                     ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+        }
+
+        AppCache[processId] = new CachedAppIdentity(name, path, now);
+        if (AppCache.Count > 256)
+        {
+            foreach (var pair in AppCache)
+            {
+                if (now - pair.Value.ResolvedUtc > AppCacheLifetime)
+                {
+                    AppCache.TryRemove(pair.Key, out _);
+                }
+            }
+        }
+
+        return (name, path);
+    }
+
+    private static int FindOwningProcess(IPEndPoint source, bool tcp)
+    {
+        try
+        {
+            if (tcp)
+            {
+                if (source.AddressFamily == AddressFamily.InterNetworkV6)
+                {
+                    return NativeMethods.QueryTcpV6()
+                        .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
+                                      row.State == 5 &&
+                                      row.OwningPid > 4)
+                        .Select(row => (int)row.OwningPid)
+                        .FirstOrDefault();
+                }
+
+                return NativeMethods.QueryTcpV4()
+                    .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
+                                  row.State == 5 &&
+                                  row.OwningPid > 4)
+                    .Select(row => (int)row.OwningPid)
+                    .FirstOrDefault();
+            }
+
+            if (source.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                return NativeMethods.QueryUdpV6()
+                    .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
+                                  row.OwningPid > 4)
+                    .Select(row => (int)row.OwningPid)
+                    .FirstOrDefault();
+            }
+
+            return NativeMethods.QueryUdpV4()
+                .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
+                              row.OwningPid > 4)
+                .Select(row => (int)row.OwningPid)
+                .FirstOrDefault();
+        }
+        catch (Exception exception) when (exception is
+                     System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return 0;
+        }
+    }
+
+    private sealed record CachedAppIdentity(string Name, string Path, DateTimeOffset ResolvedUtc);
 }

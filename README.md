@@ -1,8 +1,8 @@
 ﻿# Axiom
 
-**Open-Source Firewall, Network Monitor & Local Agent Protection**
+**Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.7.6 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.8.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -21,7 +21,7 @@ the enforcement authority. There is no account, no cloud, no advertising and no 
 Axiom brings together four surfaces:
 
 - **Network visibility and history** for TCP/UDP IPv4/IPv6 sockets and applications.
-- **Axiom Shield** â€” one switch that installs the elevated local service and turns the ask policy
+- **Axiom Shield** — one switch that installs the elevated local service and turns the ask policy
   on: every new outbound application waits for Block or Allow, and blocks are Axiom-owned Windows
   Firewall rules with read-back verification and recovery.
 - **Local privacy controls** including Privacy Shield DNS filtering and a read-only AI analyst.
@@ -30,6 +30,86 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.8.0
+
+- **Axiom is now positioned as free, open-source network and AI-agent security.** The app title,
+  header, footer and installer/shortcut descriptions use the new product description.
+- **AI Analyst works with the OpenChamber/OpenCode installation you already have.** A built-in
+  `opencode://local` provider starts the local OpenCode CLI in headless plan mode, so no Ollama, LM
+  Studio, extra API key or separate local server is required. The default model is
+  `opencode-go/deepseek-v4.1-flash`; OpenAI-compatible, OpenAI, Anthropic, DeepSeek and Z.ai providers
+  remain available.
+- **AI evidence v2.** The analyst now receives parent process and parent chain, Authenticode signer
+  status and subject, product/version, sanitised command line, observed duration, well-known remote
+  port names, local host/subnet/gateway context, Axiom-owned firewall rule status and an aggregated
+  30-day local flow baseline. It no longer reports baseline truncation or `ruleStatus Unknown`.
+- **Copy and progress in AI Analyst.** Copy result and Copy all export every field as text. An
+  indeterminate progress bar, elapsed seconds and Cancel are shown while the agent is working; the
+  result panel returns to the top when a new finding arrives.
+- **Settings notifications and window privacy.** Notifications, the tray icon and background console
+  window hiding are separate switches. Axiom can hide Node, PowerShell, Python, cmd, DKG, OpenCode
+  and conhost windows that belong to processes it launched, without touching the user's own windows.
+- **Axiom Shield usability.** Remembered Shield decisions now support Block and Unblock from a button
+  or the right-click menu. Pending rows show the remote `IP:port`, the trigger explanation and a
+  clear "not a malware verdict" note; Microsoft-signed processes are filtered with a visible count.
+- **Durable Shield ask queue.** A pending application stays listed after its connection ends until
+  the user chooses Allow, Block or Dismiss, and every pending application remains visible. Dismiss
+  hides it until the application opens a new connection. The alert banner and each row expose
+  Allow/Block/Dismiss.
+- **Alerts that lead somewhere.** A Shield alert navigates to Firewall, highlights the exact
+  application and scrolls to it. Alerts are kept in the bell history even when notifications are off.
+- **Window and lifecycle polish.** Native resize cursors, drag resize, Win+arrow snap, edge snap,
+  double-click maximize/restore, working caption buttons, a 900×600 minimum, responsive status/Firewall
+  layouts, close-to-tray, start-minimized and clean `ShutdownRequested` handling.
+- **DKG startup and evidence.** When the local DKG node is installed, Axiom starts it on launch if it
+  is not already answering, verifies the supervisor/worker and `/api/status`, and never starts it in
+  Standard mode.
+- **Branding and rendering.** The high-resolution lockup uses high-quality interpolation and the
+  exact 3:1 aspect ratio, with layout rounding enabled for a crisp header.
+- **Privacy Shield is live and actionable.** Blocked DNS queries are attributed to the requesting
+  application through the Windows UDP/TCP owner tables and shown in a 2-second list with app
+  name/path, category and time. Each row offers **Allow** and **Block**: Allow adds a custom
+  allowlist entry and turns the row into Block, Block reverses it. The catalog has five
+  licence-labelled sources — HaGeZi Multi PRO and OISD Big (GPL-3.0), WindowsSpyBlocker (MIT), and
+  The Block List Project Ads/Tracking (Unlicense) — downloaded from upstream at runtime, never
+  bundled.
+- **Privacy Shield survives upgrades and explains zero statistics.** Installed-service settings and
+  compiled rules live in `%ProgramData%\Axiom\` with a one-time copy from the old service profile;
+  the blocked-query history stays in the service profile. When the resolver runs but no adapter
+  points at `127.0.0.1`, the statistics panel says so and points to the UAC helper; the adapter row
+  shows `127.0.0.1 · Privacy Shield`, including after an app restart.
+- **Connections grouped by application with real traffic totals.** The page opens grouped and shows
+  cumulative TCP megabytes sent/received plus the realtime rate from the latest poll
+  (`now ↑ … · ↓ …` or `now idle`). Sort by total, sent, received, sockets or name in either
+  direction from the action toolbar. Expanded groups and their rows survive the one-second refresh;
+  UDP-only apps say `traffic not measured`.
+- **Agent sessions now include OpenCode/OpenChamber.** The Agents and Agent Stats session cards read
+  Claude Code, Codex and OpenCode/OpenChamber metadata (read-only). A session shows **live** when its
+  host process runs or its data changed in the last five minutes, so the active OpenCode session no
+  longer appears as historical; raw session ids stay hashed.
+- **Threat sharing is visible on the Agents page.** A card mirrors the Blackbox dashboard state
+  (`off · opt in` or `on · signed, redacted`) and offers **Enable/Disable threat sharing** with a
+  confirmation when enabling. It reads and writes the dashboard's signed, redacted `report` setting;
+  prompts, commands, file paths, credentials, model content and raw session ids are never sent.
+- **Buttons follow the active theme.** The Fluent grey default is replaced by Axiom palette
+  surfaces, themed borders, accent hover/press and disabled states, with an accent primary style
+  for Apply/Analyze/Export/Configure/Shield. All four themes use the same styles.
+- **Installer profiles: Complete versus Partial.** The setup explains both before writing anything.
+  **Complete** uses one UAC prompt to register and start the service, then enables Axiom Shield
+  (`ask` policy), the Privacy Shield resolver (Balanced, five sources downloaded and compiled up to
+  the 500,000-entry cap), notifications, tray icon, background-console hiding and start with
+  Windows, and installs Blackbox, DKG and agent hooks. **Partial** stays administrator-free with
+  every module opt-in. The applied profile is recorded in
+  `%LOCALAPPDATA%\Axiom\install-profile.json`; a declined elevation produces a warning instead of
+  silently claiming complete protection.
+
+**Known gaps in 0.8.0:** ETW telemetry is not integrated yet, so SNI, TLS certificate subjects, DNS
+query names, per-packet byte counts and TIME_WAIT ownership remain missing evidence. Axiom measures
+per-application totals from Windows extended TCP statistics only (TCP, one-second poll; UDP is not
+measured). There is no reputation/threat-intelligence feed, command lines are sanitised and
+truncated, and Axiom reports only its own firewall rules rather than the effective Windows default
+policy.
 
 ## What's in 0.7.6
 
@@ -87,7 +167,8 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 ## What's in 0.7.0
 
-- **Axiom Shield.** Turn protection on from the Firewall page. Axiom installs and starts its Windows
+- **Axiom Shield.** A complete installation turns protection on during setup; a partial installation
+  leaves it off until you enable it on the Firewall page. Axiom installs and starts its Windows
   service (one administrator approval), then enforces through Windows Firewall. The desktop app
   stays unprivileged.
 - **Ask policy.** Every new outbound application is listed with its path, socket count and first-seen
@@ -159,6 +240,10 @@ agent-level guardrails and signed threat-intelligence context respectively.
   are marked as partial instead of being guessed.
 - Local and remote endpoints, connection state, direction, loopback detection and the first time a
   flow was observed.
+- **Group by app** with cumulative TCP megabytes sent and received per application, the realtime
+  rate from the latest poll, and sorting by total, sent or received traffic in either direction.
+  TCP totals come from Windows extended TCP statistics; UDP and flows shorter than one poll are
+  marked as not measured instead of guessed.
 - A sortable, filterable, virtualized table that stays responsive with hundreds of processes and
   thousands of rows.
 
@@ -208,17 +293,21 @@ agent-level guardrails and signed threat-intelligence context respectively.
   Group Policy remains authoritative.
 - The application never performs wildcard deletes, never resets the Windows Firewall and never
   disables Defender, BFE or another product's filters.
-- Write operations are off by default. **Axiom Shield** turns them on with explicit user consent:
-  it installs and starts the Axiom Windows service (one administrator approval) and only then may
-  create or remove `Axiom::{id}::{OUT|IN}` rules. Every change is confirmed, read back and audited;
-  disabling the shield removes every Axiom-owned rule.
+- Write operations stay off until consent. A **complete installation** enables **Axiom Shield**
+  during setup: it registers and starts the Axiom Windows service (one administrator approval) and
+  then may create or remove `Axiom::{id}::{OUT|IN}` rules. A **partial installation** leaves Shield
+  off until you enable it. Every change is confirmed, read back and audited; disabling the shield
+  removes every Axiom-owned rule.
 
 ### Privacy by default
 
-- All processing is local. The standard build has no outbound network calls.
+- All processing is local by default. The standard build makes no outbound network call unless the
+  optional AI Analyst, reputation feed or another optional module is explicitly enabled.
 - No accounts, cloud sync, analytics, advertising or data sales.
 - Only connection metadata is stored: no packet payload, TLS content, DNS queries, credentials or
-  tokens.
+  tokens. The optional AI evidence package adds process parent/signature/product metadata, a
+  sanitised command line, a local 30-day flow baseline and host context; packet contents and
+  credentials are never included.
 - Optional intelligence modules (file reputation, threat feeds, DKG/Blackbox) are separate, off by
   default, and never sit on the per-connection enforcement path.
 
@@ -235,18 +324,27 @@ installer only after an explicit confirmation; nothing runs silently. Setup step
 
 ### Privacy Shield
 
-An optional, default-disabled local DNS filter with Basic/Balanced/Strict profiles, custom allow and
-block lists and a loopback resolver. It never changes adapter DNS settings automatically; manual
+A local DNS filter with Basic/Balanced/Strict profiles, custom allow and block lists and a loopback
+resolver. A **complete installation** turns it on with the Balanced profile and all five sources; a
+partial installation leaves it off. It never changes adapter DNS settings automatically; manual
 adapter configuration and rollback are documented in [Privacy Shield](docs/PRIVACY_SHIELD.md).
-Counters are in memory; a bounded local history of blocked domains/categories/timestamps is kept and can be cleared. Allowed queries are never stored. DoH/DoT/DoQ, hardcoded IPs and VPN traffic
-are not covered. Optional catalogued HTTPS sources are bounded and atomically updated; VM test
-coverage is tracked in [the VM test plan](docs/PRIVACY_SHIELD_VM_TEST_PLAN.md).
+Five HTTPS sources are catalogued with their licenses: HaGeZi Multi PRO and OISD Big (GPL-3.0),
+WindowsSpyBlocker (MIT), and The Block List Project Ads/Tracking (Unlicense). They are downloaded at
+runtime, not bundled; no separate approval is required beyond the license and attribution terms.
+Counters are in memory; a bounded local history of blocked domains/categories/timestamps and the
+requesting application (when Windows exposes it) is kept and can be cleared. Recent blocks refresh
+every 2 seconds and offer Allow/Block actions. Allowed queries are never stored. DoH/DoT/DoQ,
+hardcoded IPs and VPN traffic are not covered. Optional catalogued HTTPS sources are bounded and
+atomically updated; VM test coverage is tracked in
+[the VM test plan](docs/PRIVACY_SHIELD_VM_TEST_PLAN.md).
 
 ### AI Security Analyst
 
-An optional, default-disabled read-only analyst for the current bounded connection snapshot. It
-uses an OpenAI-compatible provider (cloud HTTPS or a local loopback endpoint), protects the API key
-with Windows DPAPI, redacts local paths by default and stores only bounded structured findings. It
+An optional, default-disabled read-only analyst for the current bounded connection snapshot. The
+primary seamless provider uses the **OpenChamber/OpenCode CLI already signed in on the PC**
+(`opencode://local`), so no separate local inference server is needed; OpenAI-compatible, OpenAI,
+Anthropic, DeepSeek and Z.ai providers remain available. API keys are protected with Windows DPAPI,
+local paths are redacted by default and only bounded structured findings are stored. The analyst
 cannot change firewall rules, execute commands or read arbitrary files. See
 [AI Security Analyst](docs/AI_ANALYST.md).
 

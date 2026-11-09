@@ -12,7 +12,11 @@ using Axiom.UI.Services;
 
 namespace Axiom.Setup;
 
-internal sealed record SetupInstallResult(bool Success, string Message, IReadOnlyList<string> Log);
+internal sealed record SetupInstallResult(
+    bool Success,
+    string Message,
+    IReadOnlyList<string> Log,
+    string? Warning = null);
 
 internal static class SetupInstaller
 {
@@ -257,6 +261,20 @@ internal static class SetupInstaller
                     Report("Partial installation selected: no Blackbox, DKG or agent hook files were changed.");
                 }
 
+                string? warning = null;
+                if (options.CompleteInstallation)
+                {
+                    var defaults = await SetupDefaults
+                        .ApplyCompleteAsync(options.InstallDir, Report, cancellationToken)
+                        .ConfigureAwait(false);
+                    warning = defaults.Warning;
+                }
+                else
+                {
+                    SetupDefaults.WritePartialProfile();
+                    Report("Partial installation: Axiom Shield, Privacy Shield, autostart and optional modules stay off until you enable them.");
+                }
+
                 if (!OnboardingStore.IsCompleted)
                 {
                     OnboardingStore.Save(new OnboardingSettings(
@@ -289,7 +307,7 @@ internal static class SetupInstaller
                     Report("Started Axiom");
                 }
 
-                return new SetupInstallResult(true, "Axiom was installed successfully.", log);
+                return new SetupInstallResult(true, "Axiom was installed successfully.", log, warning);
             }
             finally
             {
@@ -495,7 +513,7 @@ internal static class SetupInstaller
             shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, [workingDirectory],
                 CultureInfo.InvariantCulture);
             shortcutType.InvokeMember("Description", BindingFlags.SetProperty, null, shortcut,
-                ["Axiom - Open-Source Firewall & Security Monitor"], CultureInfo.InvariantCulture);
+                ["Axiom - Free Open-Source Network & AI Agent Security"], CultureInfo.InvariantCulture);
             shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null,
                 CultureInfo.InvariantCulture);
             return true;

@@ -88,6 +88,65 @@ public sealed class AgentSessionReaderTests
         }
     }
 
+    [Fact]
+    public void Reads_OpenCode_sessions_and_marks_the_recent_one_live()
+    {
+        var root = NewRoot();
+        try
+        {
+            var database = Path.Combine(root, "opencode.db");
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            using (var connection = new SqliteConnection($"Data Source={database}"))
+            {
+                connection.Open();
+                using var create = connection.CreateCommand();
+                create.CommandText = """
+                    CREATE TABLE session_v2 (
+                        id TEXT PRIMARY KEY,
+                        slug TEXT,
+                        title TEXT,
+                        directory TEXT,
+                        time_updated INTEGER NOT NULL,
+                        time_archived INTEGER
+                    );
+                    """;
+                create.ExecuteNonQuery();
+
+                using var insert = connection.CreateCommand();
+                insert.CommandText = """
+                    INSERT INTO session_v2(id, slug, title, directory, time_updated, time_archived)
+                    VALUES ('ses_current_secret', 'current', 'Live work', 'C:/work/live', $now, NULL),
+                           ('ses_old_secret', 'old', 'Old work', 'C:/work/old', $old, NULL);
+                    """;
+                insert.Parameters.AddWithValue("$now", now);
+                insert.Parameters.AddWithValue("$old", now - (long)TimeSpan.FromDays(2).TotalMilliseconds);
+                insert.ExecuteNonQuery();
+            }
+
+            var reader = new AgentSessionReader(
+                root,
+                Path.Combine(root, ".claude"),
+                Path.Combine(root, ".codex"),
+                database);
+            var rows = reader.Read();
+
+            var live = Assert.Single(rows, row => row.Title == "Live work");
+            Assert.Equal("opencode", live.Framework);
+            Assert.Equal("C:/work/live", live.Workspace);
+            Assert.True(live.HostLive);
+            Assert.Equal(24, live.SessionKey.Length);
+            Assert.DoesNotContain("ses_current_secret", live.SessionKey, StringComparison.Ordinal);
+
+            var old = Assert.Single(rows, row => row.Title == "Old work");
+            Assert.False(old.HostLive);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string NewRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), $"axiom-sessions-{Guid.NewGuid():N}");

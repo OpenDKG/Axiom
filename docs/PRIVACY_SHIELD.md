@@ -23,16 +23,35 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
 - A Privacy Shield page with profile/category controls, custom allow/block lists, local list import,
   verified source catalog, resolver status, **live statistics (2-second refresh while selected)** and
   explicit UAC DNS integration.
-- A bounded local **blocked-query history** (last 1,000 entries) containing only the blocked domain,
-  category and timestamp. It is stored in
-  `%LOCALAPPDATA%\Axiom\privacy-shield-blocked.jsonl`, never includes allowed queries, and has a
-  clear action. This is the one deliberate DNS history exception; it is local and user-clearable.
-- A catalog of **HTTPS-only, license-labelled** sources (HaGeZi, OISD, WindowsSpyBlocker). A source
-  update downloads with a 20 MB/45 s bound, parses and normalizes domains, then atomically replaces
-  the previous ruleset only if every selected source succeeds. The previous rules file is retained.
-  The local cap is 500,000 unique domains, and every selected source keeps a reserved share so a
-  large list cannot starve a smaller telemetry list such as WindowsSpyBlocker.
-- Per-user settings in `%LOCALAPPDATA%\Axiom\privacy-shield.json`. Settings contain no DNS query history; the separate bounded blocked-query history described above is the only DNS history.
+- A bounded local **blocked-query history** (last 1,000 entries) containing the blocked domain,
+  category, timestamp and, when Windows exposes it, the requesting application name/path. It is
+  stored in the service account's local profile
+  (`%LOCALAPPDATA%\Axiom\privacy-shield-blocked.jsonl` as seen by that account), never includes
+  allowed queries, and has a clear action. It is deliberately not shared machine-wide because it is
+  the only DNS data kept. This is the one deliberate DNS history exception; it is local and
+  user-clearable. Recent blocks are refreshed every 2 seconds and can be **Allowed** or **Blocked**
+  directly from the row. Allow adds the domain to the custom allowlist; Block removes it from the
+  allowlist and adds it to the custom blocklist.
+- Application attribution is best-effort: Axiom maps the loopback UDP/TCP source port to the owning
+  PID through the Windows owner tables. Protected or already-exited processes may show
+  `unknown app`.
+- A catalog of **five HTTPS-only, license-labelled** sources (HaGeZi Multi PRO, OISD Big,
+  WindowsSpyBlocker, The Block List Project Ads and Tracking). A source update downloads with a
+  20 MB/45 s bound, parses and normalizes domains, then atomically replaces the previous ruleset only
+  if every selected source succeeds. The previous rules file is retained. The local cap is 500,000
+  unique domains, and every selected source keeps a reserved share so a large list cannot starve a
+  smaller telemetry list such as WindowsSpyBlocker.
+- Licenses: HaGeZi and OISD are GPL-3.0, WindowsSpyBlocker is MIT, and the two Block List Project
+  lists are Unlicense. Axiom downloads them from the upstream URL at runtime and does not bundle the
+  list bytes; no separate approval is required beyond the license and attribution terms. Upstream
+  terms must be rechecked before adding or redistributing a list. See
+  [third-party notices](../THIRD_PARTY_NOTICES.md).
+- Settings and the compiled ruleset live in `%ProgramData%\Axiom\privacy-shield.json` and
+  `privacy-shield-rules.json` when the installed service runs them, so the state survives service
+  reinstalls and is not hidden in the LocalSystem profile. A portable/interactive run keeps
+  `%LOCALAPPDATA%\Axiom\`; existing service data is copied to ProgramData once on first start.
+  Settings contain no DNS query history; the separate bounded blocked-query history described above
+  is the only DNS history.
 
 ## DNS-only boundary
 
@@ -46,14 +65,20 @@ Privacy Shield is **not a VPN, proxy or network gateway**. It filters DNS name r
    not pass through Axiom.
 
 If adapter DNS is not pointed at the resolver, normal Windows DNS bypasses Privacy Shield entirely
-and the counters remain zero. Manual queries to `127.0.0.1` still work for testing, but they do not
-prove that system-wide traffic is filtered.
+and the counters remain zero. The page states this explicitly: when the resolver is running but no
+adapter DNS points at `127.0.0.1`, **Resolver statistics** explains that nothing uses the resolver
+and points to the UAC helper. Once an adapter points at it, the adapter row shows
+`127.0.0.1 · Privacy Shield` and the hint disappears as soon as the first query arrives.
+Manual queries to `127.0.0.1` still work for testing, but they do not prove that system-wide
+traffic is filtered.
 
 ## What is not implemented
 
 - A WFP callout driver, hosts-file editing or LAN-wide resolver.
 - DNS-over-HTTPS, DNS-over-TLS or DNS-over-QUIC interception.
-- Per-process DNS attribution. Socket history and DNS counters are separate.
+- Full per-process attribution for every query: Axiom resolves the loopback source port through the
+  Windows owner tables for **blocked** queries only. Protected or already-exited processes may show
+  `unknown app`.
 - Automatic adapter DNS changes by the service itself. A separate explicit UAC helper can save and
   change one selected adapter; it never elevates silently.
 
@@ -94,7 +119,9 @@ the field empty keeps the current Windows DNS servers. After enabling the resolv
 
 ## Safety and recovery
 
-- Privacy Shield is off by default and never enables itself during install, update or first run.
+- A **complete installation** enables Privacy Shield once, during setup, with the Balanced profile
+  and all five sources selected. A **partial installation** leaves it off. Updates and later starts
+  never enable it by themselves, and no mode changes adapter DNS silently.
 - Stopping the resolver leaves the Windows adapter pointing at a non-responsive loopback address
   if the user manually configured it. Restore the adapter DNS or set a real upstream before
   stopping the resolver.

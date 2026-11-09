@@ -1,35 +1,42 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.SettingsView">
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <Grid ColumnDefinitions="*,14,*" Margin="24,18,24,24">
       <StackPanel Grid.Column="0" Spacing="14">
         <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
           <StackPanel Spacing="8">
-            <TextBlock Text="Appearance" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <TextBlock Text="{Binding CurrentThemeText, StringFormat=Current theme: {0}}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" />
+            <controls:AxiomSelectableTextBlock Text="Appearance" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="{Binding CurrentThemeText, StringFormat=Current theme: {0}}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" />
             <WrapPanel Orientation="Horizontal">
               <Button Content="Dark" Command="{Binding UseDarkThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
               <Button Content="Light" Command="{Binding UseLightThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
               <Button Content="Dark Midnight" Command="{Binding UseDarkMidnightThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
               <Button Content="Light Warm" Command="{Binding UseLightWarmThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
             </WrapPanel>
-            <CheckBox Content="Show tray notifications" IsChecked="{Binding TrayNotificationsEnabled}"
+            <CheckBox Content="Show notifications" IsChecked="{Binding NotificationsEnabled}"
                       Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
-            <TextBlock Text="Notifications are optional and stay local." FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <CheckBox Content="Show tray icon" IsChecked="{Binding TrayNotificationsEnabled}"
+                      Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <CheckBox Content="Hide background console windows (Node, PowerShell, Python)" IsChecked="{Binding HideBackgroundWindows}"
+                      Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <Button Content="Test alert (preview only; ignores off switch)" Command="{Binding TestNotificationCommand}"
+                    HorizontalAlignment="Left" Padding="10,4" Margin="0,4,0,0" />
+            <controls:AxiomSelectableTextBlock Text="Notifications are optional and stay local. The tray icon and close-to-tray behaviour are separate." FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </StackPanel>
         </Border>
 
         <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
           <StackPanel Spacing="8">
-            <TextBlock Text="Startup" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="Startup" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <CheckBox Content="Start with Windows" IsChecked="{Binding StartWithWindows}"
                       IsEnabled="{Binding IsAutostartSupported}" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <CheckBox Content="Start minimized" IsChecked="{Binding StartMinimized}" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <TextBlock Text="{Binding StartupStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <controls:AxiomSelectableTextBlock Text="{Binding StartupStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             <Button Content="Repair startup entry" Command="{Binding RepairStartupCommand}"
                     IsEnabled="{Binding CanRepairStartup}" Padding="12,6" HorizontalAlignment="Left" />
-            <TextBlock Text="Only the per-user Axiom startup value is written. No machine-wide entry is created."
+            <controls:AxiomSelectableTextBlock Text="Only the per-user Axiom startup value is written. No machine-wide entry is created."
                        FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </StackPanel>
         </Border>
@@ -38,26 +45,26 @@
       <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
               CornerRadius="8" Padding="16" VerticalAlignment="Top">
         <StackPanel Spacing="8">
-          <TextBlock Text="Build information" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <controls:AxiomSelectableTextBlock Text="Build information" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7">
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="Milestone" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding MilestoneText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="Protocol" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ProtocolText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-            <TextBlock Grid.Row="2" Grid.Column="0" Text="Data mode" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding DataModeText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-            <TextBlock Grid.Row="3" Grid.Column="0" Text="Collector" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding CollectorText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-            <TextBlock Grid.Row="4" Grid.Column="0" Text="Polling" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding PollText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <TextBlock Grid.Row="5" Grid.Column="0" Text="Storage" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding StorageText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-            <TextBlock Grid.Row="6" Grid.Column="0" Text="OS" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding OsText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-            <TextBlock Grid.Row="7" Grid.Column="0" Text="Process" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding ProcessText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="Milestone" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding MilestoneText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Protocol" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ProtocolText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="Data mode" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding DataModeText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="Collector" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding CollectorText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="Polling" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding PollText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="0" Text="Storage" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="1" Text="{Binding StorageText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="0" Text="OS" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="1" Text="{Binding OsText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="7" Grid.Column="0" Text="Process" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="7" Grid.Column="1" Text="{Binding ProcessText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
           </Grid>
-          <TextBlock Text="Local only · no telemetry · no remote access" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" Margin="0,6,0,0" />
+          <controls:AxiomSelectableTextBlock Text="Local only · no telemetry · no remote access" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" Margin="0,6,0,0" />
         </StackPanel>
       </Border>
     </Grid>

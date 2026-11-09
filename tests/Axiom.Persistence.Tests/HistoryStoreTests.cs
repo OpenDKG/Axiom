@@ -229,6 +229,41 @@ public sealed class HistoryStoreTests : IDisposable
         Assert.Equal(0, page.TotalCount);
     }
 
+    [Fact]
+    public async Task Baseline_aggregates_without_transferring_every_row()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var now = DateTimeOffset.UtcNow;
+        await store.UpsertAsync(Snapshot(
+            now,
+            ("chrome.exe", @"C:\Program Files\Chrome\chrome.exe", 100, "203.0.113.10:443"),
+            ("chrome.exe", @"C:\Program Files\Chrome\chrome.exe", 100, "203.0.113.11:443"),
+            ("codex.exe", @"C:\Tools\codex.exe", 200, "198.51.100.7:443")));
+
+        var page = await store.QueryAsync(new HistoryQuery
+        {
+            FromUtc = now.AddMinutes(-1),
+            ToUtc = now.AddMinutes(1),
+            Limit = 1,
+            IncludeBaseline = true,
+        });
+
+        var baseline = Assert.IsType<HistoryBaseline>(page.Baseline);
+        Assert.Equal(3, baseline.TotalFlows);
+        Assert.Equal(2, baseline.Apps.Count);
+        Assert.Single(page.Rows);
+
+        var chrome = baseline.Apps.Single(app => app.DisplayName == "chrome.exe");
+        Assert.Equal(2, chrome.FlowRows);
+        Assert.Equal(2, chrome.TypicalRemotes.Count);
+        Assert.Equal(
+            2,
+            baseline.Flows.Count(flow =>
+                flow.AppKey.EndsWith("chrome.exe", StringComparison.OrdinalIgnoreCase)));
+    }
+
     private HistoryStore CreateStore() =>
         new(Path.Combine(_directory, "axiom.db"));
 

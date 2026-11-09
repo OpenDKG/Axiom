@@ -185,7 +185,7 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
             rows.Children.Add(row);
         }
         var panel = new StackPanel { Spacing = 10, Margin = new Thickness(20) };
-        panel.Children.Add(new TextBlock
+        panel.Children.Add(new SelectableTextBlock
         {
             Text = "Blackbox reads and writes only its local dashboard. Protected paths are stored by Blackbox, not Axiom.",
             Foreground = Muted,

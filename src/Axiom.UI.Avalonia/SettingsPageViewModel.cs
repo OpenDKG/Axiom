@@ -12,6 +12,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 {
     private readonly IThemeService _theme;
     private readonly IAutostartService _autostart;
+    private readonly FirewallPageViewModel? _firewall;
     private readonly StartupSettingsStore _startupSettings = new();
     private bool _updatingStartup;
 
@@ -19,7 +20,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         ConnectionMonitor monitor,
         bool serviceMode,
         IThemeService theme,
-        IAutostartService autostart)
+        IAutostartService autostart,
+        FirewallPageViewModel? firewall = null)
         : base("Settings", "Appearance and build information", "G")
     {
         ArgumentNullException.ThrowIfNull(monitor);
@@ -27,6 +29,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         ArgumentNullException.ThrowIfNull(autostart);
         _theme = theme;
         _autostart = autostart;
+        _firewall = firewall;
 
         CollectorText = monitor.SourceName;
         PollText = $"{monitor.PollInterval.TotalSeconds:0} s · read-only";
@@ -46,6 +49,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         StartWithWindows = autostart.IsSupported && autostart.IsEnabled;
         StartMinimized = startup.StartMinimized;
         TrayNotificationsEnabled = TraySettingsStore.Enabled;
+        NotificationsEnabled = NotificationSettingsStore.Enabled;
+        HideBackgroundWindows = BackgroundWindowSettingsStore.Enabled;
         _updatingStartup = false;
         UpdateStartupStatus();
     }
@@ -77,6 +82,12 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     private bool _trayNotificationsEnabled = true;
 
     [ObservableProperty]
+    private bool _notificationsEnabled = true;
+
+    [ObservableProperty]
+    private bool _hideBackgroundWindows = true;
+
+    [ObservableProperty]
     private bool _startWithWindows;
 
     [ObservableProperty]
@@ -90,6 +101,28 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     partial void OnTrayNotificationsEnabledChanged(bool value) =>
         TraySettingsStore.SetEnabled(value);
+
+    partial void OnNotificationsEnabledChanged(bool value) =>
+        NotificationSettingsStore.SetEnabled(value);
+
+    partial void OnHideBackgroundWindowsChanged(bool value) =>
+        BackgroundWindowSettingsStore.SetEnabled(value);
+
+    [RelayCommand]
+    private void TestNotification()
+    {
+        // Point the test at a real pending decision so the click can demonstrate the highlight.
+        var pending = _firewall?.Pending.FirstOrDefault();
+        AxiomAlertService.Show(
+            "Axiom alert test",
+            pending is null
+                ? "This is a test alert. A real Shield alert names the executable, the remote endpoint it contacted and the fact that no Block/Allow decision exists yet. Axiom never blocks automatically."
+                : $"Test alert: {pending.AppName} opened an outbound connection to {pending.RemoteSummary} and has no Block/Allow decision yet. This is not a malware verdict and nothing is blocked.",
+            force: true,
+            page: typeof(FirewallPageViewModel),
+            focusApps: pending is null ? null : [pending.AppPath],
+            lifetime: TimeSpan.FromSeconds(20));
+    }
 
     partial void OnStartWithWindowsChanged(bool value)
     {

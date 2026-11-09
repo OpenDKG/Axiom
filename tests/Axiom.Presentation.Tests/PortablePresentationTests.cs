@@ -31,6 +31,14 @@ public sealed class PortablePresentationTests
     }
 
     [Fact]
+    public void Byte_formatter_reports_megabytes_for_app_totals()
+    {
+        Assert.Equal("0.00 MB", ByteFormatter.Megabytes(0));
+        Assert.Equal("1.00 MB", ByteFormatter.Megabytes(1024 * 1024));
+        Assert.Equal("1.50 MB", ByteFormatter.Megabytes(1024 * 1024 * 3 / 2));
+    }
+
+    [Fact]
     public void App_grouping_skips_unowned_pid_zero_rows()
     {
         var snapshot = Snapshot(
@@ -105,6 +113,27 @@ public sealed class PortablePresentationTests
         ProcessCount = connections.Select(connection => connection.ProcessId).Distinct().Count(),
         SourceName = "test source",
     };
+
+    [Fact]
+    public void Traffic_range_switch_clears_historical_series_and_restores_the_live_window()
+    {
+        using var traffic = new TrafficEngine(new FakeTimerFactory());
+        traffic.Start();
+        var liveCount = traffic.UploadSeries.Count;
+        Assert.True(liveCount > 1);
+
+        traffic.SetRange(TrafficRange.LastHour);
+
+        Assert.False(traffic.IsLive);
+        Assert.Empty(traffic.UploadSeries);
+        Assert.Empty(traffic.DownloadSeries);
+
+        traffic.SetRange(TrafficRange.LastFiveMinutes);
+
+        Assert.True(traffic.IsLive);
+        Assert.Equal(liveCount, traffic.UploadSeries.Count);
+        Assert.Equal(liveCount, traffic.DownloadSeries.Count);
+    }
 
     private sealed class FakeSource : IConnectionSnapshotSource
     {

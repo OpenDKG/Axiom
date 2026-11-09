@@ -30,6 +30,8 @@ public sealed class PrivacyShieldBlockedHistoryStore
 
     public PrivacyShieldBlockedHistoryStore(string? path = null)
     {
+        // History is deliberately kept in the service account's local profile: blocked domains
+        // reveal browsing habits, so the file is not shared machine-wide like the settings.
         _path = path ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Axiom",

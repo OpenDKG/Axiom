@@ -15,13 +15,15 @@ public static class PendingAppDetector
     public static IReadOnlyList<ProtectionPendingApp> Detect(
         IEnumerable<LiveConnection>? connections,
         IReadOnlyCollection<ProtectionDecision>? decisions,
-        int limit = DefaultLimit)
+        int limit = DefaultLimit,
+        DateTimeOffset? now = null)
     {
         if (connections is null || limit <= 0)
         {
             return [];
         }
 
+        var capturedUtc = now ?? DateTimeOffset.UtcNow;
         var decided = new HashSet<string>(
             (decisions ?? []).Select(decision => decision.AppPath),
             StringComparer.OrdinalIgnoreCase);
@@ -40,6 +42,17 @@ public static class PendingAppDetector
                 SocketCount = group.Count(),
                 FirstObservedUtc = group.Min(connection => connection.FirstObservedUtc),
                 IsAgent = AgentExecutables.IsAgentPath(group.Key),
+                RemoteEndpoints = group
+                    .Select(connection => connection.RemoteEndpoint)
+                    .Where(endpoint =>
+                        !string.IsNullOrWhiteSpace(endpoint) &&
+                        !string.Equals(endpoint, "—", StringComparison.Ordinal))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(5)
+                    .ToList(),
+                IsConnected = true,
+                LastSeenUtc = capturedUtc,
+                LatestConnectionFirstObservedUtc = group.Max(connection => connection.FirstObservedUtc),
             })
             .OrderByDescending(item => item.IsAgent)
             .ThenByDescending(item => item.FirstObservedUtc)

@@ -18,7 +18,7 @@ internal static class ProcessWindowHider
 
     public static void Start(int rootProcessId, TimeSpan? duration = null)
     {
-        if (rootProcessId <= 0)
+        if (rootProcessId <= 0 || !BackgroundWindowSettingsStore.Enabled)
         {
             return;
         }

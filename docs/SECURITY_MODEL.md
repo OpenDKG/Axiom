@@ -109,9 +109,10 @@ submission. See [STORE.md](STORE.md).
 
 ## 8. Privacy Shield (FND-020, initial local resolver)
 
-- Disabled by default; enabling is an explicit UI action. The service itself never changes adapter
-  DNS, the hosts file, firewall state or agent configuration. A separate explicit UAC helper can
-  change one selected adapter after the user approves Windows elevation.
+- Off after a **partial installation**; a **complete installation** enables it during setup with
+  the Balanced profile and five sources. The service itself never changes adapter DNS, the hosts
+  file, firewall state or agent configuration. A separate explicit UAC helper can change one
+  selected adapter after the user approves Windows elevation.
 - The resolver binds UDP and TCP loopback only (`127.0.0.1`, and `::1` when available). It is not a
   LAN resolver. TCP is used for TCP queries and oversized/truncated UDP fallback.
 - Blocked queries are answered locally with NXDOMAIN. Allowed queries are forwarded to the current

@@ -30,6 +30,7 @@ public enum ConnectionRuleStatus
     BlockedByOwnedRule = 2,
     BlockedByExternalPolicy = 3,
     AllowedByDefaultPolicy = 4,
+    AllowedByOwnedRule = 5,
 }
 
 /// <summary>Attribution quality of a single observation.</summary>
@@ -76,6 +77,16 @@ public sealed record LiveConnection
     /// <summary>Null means "not measured"; IP Helper cannot provide byte counts.</summary>
     public double? EstimatedDownloadBytesPerSecond { get; init; }
 
+    /// <summary>
+    /// Cumulative TCP payload bytes sent on this socket since Windows extended TCP statistics were
+    /// enabled for it. Null means "not measured": UDP has no equivalent, the provider may not
+    /// support it, and a non-elevated run cannot enable collection.
+    /// </summary>
+    public long? ObservedBytesSent { get; init; }
+
+    /// <summary>Cumulative TCP payload bytes received, with the same limits as <see cref="ObservedBytesSent"/>.</summary>
+    public long? ObservedBytesReceived { get; init; }
+
     public bool IsLoopback { get; init; }
 
     public bool IsNew { get; init; }
@@ -83,4 +94,31 @@ public sealed record LiveConnection
     public ConnectionRuleStatus RuleStatus { get; init; } = ConnectionRuleStatus.Unknown;
 
     public DataQuality Quality { get; init; } = DataQuality.Observed;
+
+    /// <summary>Immediate parent PID, when the Windows process table exposes it.</summary>
+    public int? ParentProcessId { get; init; }
+
+    public string ParentProcessName { get; init; } = string.Empty;
+
+    /// <summary>Immediate parent chain, oldest last.</summary>
+    public string ParentChain { get; init; } = string.Empty;
+
+    /// <summary>Sanitised command line from the elevated service, or empty when unavailable.</summary>
+    public string CommandLine { get; init; } = string.Empty;
+
+    /// <summary>Authenticode signer subject, or empty when unsigned/unreadable.</summary>
+    public string SignerName { get; init; } = string.Empty;
+
+    /// <summary>Valid, Untrusted, Unsigned or Unavailable.</summary>
+    public string SignatureStatus { get; init; } = "Unavailable";
+
+    public string ProductName { get; init; } = string.Empty;
+
+    public string FileVersion { get; init; } = string.Empty;
+
+    /// <summary>Windows service names hosted by this process, usually only for svchost.exe.</summary>
+    public string HostedServices { get; init; } = string.Empty;
+
+    /// <summary>Windows service names hosted by the immediate parent, when it is svchost.exe.</summary>
+    public string ParentHostedServices { get; init; } = string.Empty;
 }

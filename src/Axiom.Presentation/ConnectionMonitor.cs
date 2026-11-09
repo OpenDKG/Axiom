@@ -32,6 +32,8 @@ public sealed class ConnectionMonitor : IDisposable
 
     public DateTimeOffset? LastCaptureUtc { get; private set; }
 
+    public IReadOnlyList<AppTrafficTotals> AppTraffic { get; private set; } = [];
+
     public int ProcessCount { get; private set; }
 
     public IReadOnlyList<string> Limitations { get; private set; } = [];
@@ -104,6 +106,7 @@ public sealed class ConnectionMonitor : IDisposable
     {
         LastCaptureUtc = snapshot.CapturedUtc;
         ProcessCount = snapshot.ProcessCount;
+        AppTraffic = snapshot.AppTraffic;
         Limitations = snapshot.Limitations;
 
         var seen = new HashSet<string>(StringComparer.Ordinal);

@@ -47,6 +47,7 @@ public static class IpcCommandTypes
     public const string ProtectionEnable = "protection.enable";
     public const string ProtectionDisable = "protection.disable";
     public const string ProtectionDecide = "protection.decide";
+    public const string ProtectionDismiss = "protection.dismiss";
     public const string ProtectionLockdown = "protection.lockdown";
 
     public static IReadOnlyList<string> All { get; } =
@@ -71,6 +72,7 @@ public static class IpcCommandTypes
         ProtectionEnable,
         ProtectionDisable,
         ProtectionDecide,
+        ProtectionDismiss,
         ProtectionLockdown,
     ];
 }

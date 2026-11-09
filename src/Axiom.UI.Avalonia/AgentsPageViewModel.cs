@@ -219,6 +219,21 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private string _blackboxHealthText = "Dashboard: unknown";
 
     [ObservableProperty]
+    private string _threatSharingStatusText = "checking…";
+
+    [ObservableProperty]
+    private bool _threatSharingEnabled;
+
+    [ObservableProperty]
+    private bool _canToggleThreatSharing;
+
+    public string ThreatSharingButtonText =>
+        ThreatSharingEnabled ? "Disable threat sharing" : "Enable threat sharing";
+
+    partial void OnThreatSharingEnabledChanged(bool value) =>
+        OnPropertyChanged(nameof(ThreatSharingButtonText));
+
+    [ObservableProperty]
     private string _dkgHealthText = "DKG: unknown";
 
     [ObservableProperty]
@@ -415,6 +430,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ActivityStatusText = $"Blackbox is unavailable: {exception.Message}";
             HealthStatusText = "Blackbox dashboard is offline or not responding.";
             SummaryText = "No live Blackbox data is available.";
+            ThreatSharingStatusText = "offline · dashboard unavailable";
+            CanToggleThreatSharing = false;
         }
         finally
         {
@@ -929,6 +946,70 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     }
 
     [RelayCommand]
+    private async Task ToggleThreatSharingAsync()
+    {
+        if (!CanToggleThreatSharing)
+        {
+            return;
+        }
+
+        var enable = !ThreatSharingEnabled;
+        if (enable)
+        {
+            var confirmed = await _ui.ConfirmAsync(
+                "Enable threat sharing",
+                "Allow Blackbox to send signed, redacted threat indicators to the community verified graph?\n\n" +
+                "It never sends prompts, commands, file paths, credentials, model content or raw session ids. " +
+                "Threat sharing is off by default.",
+                "Enable sharing",
+                destructive: false,
+                CancellationToken.None).ConfigureAwait(true);
+
+            if (!confirmed)
+            {
+                return;
+            }
+        }
+
+        CanToggleThreatSharing = false;
+        try
+        {
+            var result = await _client
+                .SaveSettingsAsync(
+                    new JsonObject { ["report"] = enable },
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+
+            if (!result.Ok)
+            {
+                ThreatSharingStatusText = "failed · " + (result.Errors.Count == 0
+                    ? "Blackbox rejected the update."
+                    : string.Join("; ", result.Errors));
+                return;
+            }
+
+            var settings = result.Settings ??
+                           await _client.GetSettingsAsync(CancellationToken.None).ConfigureAwait(true);
+            var saved = ReadBool(settings, "report", enable);
+            ThreatSharingEnabled = saved;
+            ThreatSharingStatusText = saved ? "on · signed, redacted" : "off · opt in";
+            HealthStatusText = saved
+                ? "Threat sharing enabled, persisted and verified."
+                : "Threat sharing disabled and verified.";
+        }
+        catch (Exception exception) when (exception is
+                     HttpRequestException or TaskCanceledException or InvalidDataException or
+                     System.Text.Json.JsonException)
+        {
+            ThreatSharingStatusText = "failed · " + exception.Message;
+        }
+        finally
+        {
+            CanToggleThreatSharing = true;
+        }
+    }
+
+    [RelayCommand]
     private async Task SetBlackboxModeAsync(string? mode)
     {
         if (mode is not ("audit" or "block"))
@@ -1364,6 +1445,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         var mode = ReadString(settings, "mode") ?? "unknown";
         var report = ReadBool(settings, "report", false);
         BlackboxHealthText = $"Dashboard online · mode {mode} · community sharing {(report ? "ON" : "off")}";
+        ThreatSharingEnabled = report;
+        ThreatSharingStatusText = report ? "on · signed, redacted" : "off · opt in";
+        CanToggleThreatSharing = true;
 
         var dkgUrl = ReadString(graph, "dkg_url") ?? "unknown";
         var reachable = ReadBool(graph, "node_reachable", false);
@@ -1440,8 +1524,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         SessionStatusText = SessionGroups.Count == 0
-            ? "No live Claude Code or Codex session descriptors were found. Hooks can still be installed and trusted."
-            : $"{SessionGroups.Sum(group => group.Sessions.Count)} host session(s) from Claude Code/Codex metadata. Raw session ids are not displayed.";
+            ? "No Claude Code, Codex or OpenCode/OpenChamber sessions were found. Hooks can still be installed and trusted."
+            : $"{SessionGroups.Sum(group => group.Sessions.Count)} host session(s) from Claude Code, Codex and OpenCode/OpenChamber metadata. 'Not running' is a historical session, not an error.";
     }
 
     private static string ProviderLabel(string framework) =>
@@ -1449,6 +1533,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         {
             "claude" or "claude-code" => "Claude Code",
             "codex" => "Codex",
+            "opencode" or "openchamber" => "OpenCode / OpenChamber",
             _ => framework,
         };
 
@@ -1638,7 +1723,14 @@ public sealed record AgentSessionRow(
     string Title,
     string Workspace,
     string LastSeen,
-    bool Live);
+    bool Live)
+{
+    public string LiveText => Live ? "live" : "not running";
+
+    public string LiveTooltip => Live
+        ? "Session data was updated within the last 5 minutes, or its host process is running."
+        : "Historical session: no update in the last 5 minutes and no visible host process. The session data is kept.";
+}
 
 public sealed record AgentSessionGroup(string Provider, IReadOnlyList<AgentSessionRow> Sessions);
 

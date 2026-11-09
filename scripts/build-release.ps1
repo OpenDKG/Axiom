@@ -117,8 +117,12 @@ if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Compress-Archive -Path $files -DestinationPath $zipPath -Force
 
 $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash
+$setupHash = (Get-FileHash $publicSetupExe -Algorithm SHA256).Hash
 $checksumPath = Join-Path $OutputDir "SHA256SUMS.txt"
-"$hash  $zipName" | Set-Content $checksumPath -Encoding ASCII
+@(
+    "$hash  $zipName",
+    "$setupHash  Axiom-Setup.exe"
+) | Set-Content $checksumPath -Encoding ASCII
 
 Write-Host "Release: $zipPath" -ForegroundColor Green
 Write-Host "Checksum: $checksumPath"

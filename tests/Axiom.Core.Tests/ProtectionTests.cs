@@ -96,6 +96,7 @@ public sealed class ProtectionTests
         Assert.Equal(@"C:\Apps\new.exe", only.AppPath);
         Assert.Equal(2, only.SocketCount);
         Assert.Equal(now, only.FirstObservedUtc);
+        Assert.Equal(["203.0.113.5:443"], only.RemoteEndpoints);
     }
 
     [Fact]

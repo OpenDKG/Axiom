@@ -112,6 +112,42 @@
 
   <Application.Styles>
     <FluentTheme />
+    <Style Selector="Button">
+      <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+    </Style>
+    <Style Selector="Button /template/ ContentPresenter">
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+    </Style>
+    <Style Selector="Button:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.Border}" />
+    </Style>
+    <Style Selector="Button:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.AccentStrong}" />
+      <Setter Property="Opacity" Value="0.88" />
+    </Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+      <Setter Property="Opacity" Value="0.78" />
+    </Style>
     <Style Selector="ListBox.data-list > ListBoxItem:selected">
       <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
       <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />

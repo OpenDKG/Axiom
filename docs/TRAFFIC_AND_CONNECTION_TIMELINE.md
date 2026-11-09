@@ -9,7 +9,9 @@ Baseline inspected: `main`, November 4, 2026. Keep all work in reviewable draft 
   1h/24h/7d series were deterministic *fake* data and must not be shown as real history.
 - `HistoryStore` persists observed network flow metadata and retains it up to 30 days,
   but the existing `traffic_buckets` are not populated with actual throughput.
-- IP Helper owner tables supply observed socket metadata, not per-process byte counters.
+- IP Helper owner tables supply observed socket metadata. Per-connection byte totals are read from
+  Windows extended TCP statistics with collection enabled by the elevated service; UDP and flows
+  shorter than one poll stay unmeasured and are shown as such.
 - A yellow line is a **newly observed connection**, not a traffic spike, block or security alert.
 - The service currently has no GeoIP data or complete alert stream. Never invent either.
 

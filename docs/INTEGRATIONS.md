@@ -38,7 +38,10 @@ timeout or a failed launch. Nothing is installed silently. Close the PowerShell 
 it reports success, then click **Check again**. **Restart Axiom** is available for a clean restart
 after installation.
 The activity strip shows the last 30 loopback checks; it is a health indicator, not module event
-content.
+content. The Agents page also shows a **Threat sharing** card that reads the dashboard's `report`
+setting (`off · opt in` or `on · signed, redacted`) and can enable or disable signed, redacted
+community sharing after confirmation. Only privacy-safe indicators are shared; prompts, commands,
+file paths, credentials, model content and raw session ids are never sent.
 
 Agent workspace labels are deliberately not interchangeable:
 
@@ -124,10 +127,13 @@ the Axiom hook entries and script.
 
 ### Host sessions
 
-The Agents page reads Claude's live session descriptors and Codex's local `state_*.sqlite` thread
-metadata, groups the rows by provider and shows host-owned names instead of submitted prompts. Raw
-session ids are hashed before they reach the view model. The reader is read-only, bounded and
-fail-open; missing or locked host data never blocks hook installation or protection status.
+The Agents and Agent Stats pages read Claude's live session descriptors, Codex's local
+`state_*.sqlite` thread metadata and OpenCode/OpenChamber's read-only `opencode.db` (`session_v2`)
+rows, group them by provider and show host-owned names instead of submitted prompts. A session is
+marked **live** when its host process is running or its data changed within the last five minutes;
+older rows are historical, not errors. Raw session ids are hashed before they reach the view model.
+The reader is read-only, bounded and fail-open; missing or locked host data never blocks hook
+installation or protection status.
 
 ### Cursor
 

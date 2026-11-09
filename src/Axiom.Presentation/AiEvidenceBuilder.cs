@@ -17,7 +17,8 @@ public static class AiEvidenceBuilder
         string sourceName,
         IReadOnlyList<string> limitations,
         int maxConnections,
-        bool redactPaths)
+        bool redactPaths,
+        AiEvidenceBaseline? baseline = null)
     {
         ArgumentNullException.ThrowIfNull(connections);
 
@@ -30,10 +31,11 @@ public static class AiEvidenceBuilder
             .ToArray();
 
         var evidence = new List<AiEvidenceConnection>(selected.Length);
+        var capturedUtc = DateTimeOffset.UtcNow;
         for (var index = 0; index < selected.Length; index++)
         {
             var connection = selected[index];
-            evidence.Add(new AiEvidenceConnection(
+            var item = new AiEvidenceConnection(
                 $"connection-{index + 1}",
                 connection.AppDisplayName,
                 redactPaths && connection.AppPath.Length > 0
@@ -48,16 +50,53 @@ public static class AiEvidenceBuilder
                 connection.IsLoopback,
                 connection.IsNew,
                 connection.FirstObservedUtc,
-                connection.Quality.ToString()));
+                connection.Quality.ToString());
+            evidence.Add(AiEvidenceContext.Enrich(item, connection, capturedUtc));
+            var appKey = AiEvidenceBaselineCollector.AppKey(
+                connection.AppPath,
+                connection.AppDisplayName,
+                connection.ProcessId);
+            var flowKey = AiEvidenceBaselineCollector.FlowKey(
+                appKey,
+                connection.Protocol.ToString(),
+                connection.RemoteEndpoint,
+                connection.Direction.ToString());
+
+            if (baseline is not null)
+            {
+                baseline.Flows.TryGetValue(flowKey, out var flow);
+                baseline.Apps.TryGetValue(appKey, out var app);
+                evidence[^1] = evidence[^1] with
+                {
+                    BaselineFlowRows = flow?.Rows ?? 0,
+                    BaselineFirstSeenUtc = flow?.FirstSeenUtc,
+                    BaselineLastSeenUtc = flow?.LastSeenUtc,
+                    BaselineAppFlowRows = app?.Rows ?? 0,
+                    BaselineTypicalRemotes = app?.TypicalRemotes ?? [],
+                };
+            }
         }
 
+        var combinedLimitations = limitations
+            .Concat(AiEvidenceContext.KnownLimitations())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
         return new AiEvidencePackage(
-            "1",
-            DateTimeOffset.UtcNow,
+            "2",
+            capturedUtc,
             sourceName,
             redactPaths ? "paths-redacted" : "full-path",
-            limitations,
-            evidence);
+            combinedLimitations,
+            evidence)
+        {
+            Host = AiEvidenceContext.CollectHost(),
+            BaselineWindowDays = baseline?.WindowDays ?? 0,
+            BaselineRowsConsidered = baseline?.RowsConsidered ?? 0,
+            BaselineTotalCount = baseline?.TotalCount ?? 0,
+            BaselineTruncated = baseline?.Truncated ?? false,
+            BaselineNote = baseline?.Note ?? "Local flow history baseline was not available.",
+        };
     }
 
     public static string DescribeConnectionCount(AiEvidencePackage evidence) =>

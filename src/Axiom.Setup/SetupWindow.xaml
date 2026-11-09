@@ -24,7 +24,7 @@
              Width="190" Height="63" Stretch="Uniform" HorizontalAlignment="Left"
              RenderOptions.BitmapScalingMode="HighQuality" Margin="0,0,0,12" />
       <TextBlock Text="Axiom Setup" FontSize="24" FontWeight="SemiBold" />
-      <TextBlock Text="Install Axiom for this Windows user. No administrator rights, Windows service registration or firewall change is used."
+      <TextBlock Text="Install Axiom for this Windows user. Partial installation needs no administrator rights. Complete installation uses one Windows elevation prompt to register the local service."
                  Style="{StaticResource BodyMuted}"
                  TextWrapping="Wrap"
                  Margin="0,8,0,0" />
@@ -72,42 +72,46 @@
                       Content="Start Axiom after installation"
                       IsChecked="True"
                       Margin="0,8,0,0" />
-            <CheckBox x:Name="HooksCheck"
-                      Style="{StaticResource AppCheckBox}"
-                      Content="Complete installation: install Axiom, agent hooks, Blackbox and DKG"
-                      IsChecked="True"
-                      Margin="0,14,0,0" />
-            <TextBlock Text="Blackbox and DKG use their official third-party installers. They may download large packages, show prompts/terms and require network access. Axiom starts them and installs agent hooks after the Blackbox runtime is ready."
-                       Style="{StaticResource Caption}"
-                       TextWrapping="Wrap"
-                       Margin="0,6,0,0" />
-            <TextBlock Text="MCP server definitions, selected models, favorites, sessions and Antigravity/Gemini history are never modified by Axiom. Only Axiom-owned hook files and the marker-owned hook entry may change."
-                       Style="{StaticResource Caption}"
-                       TextWrapping="Wrap"
-                       Margin="0,6,0,0" />
+            <TextBlock Text="Installation type" Style="{StaticResource SectionTitle}" Margin="0,14,0,0" />
+            <RadioButton x:Name="CompleteRadio" GroupName="InstallType" IsChecked="True" Margin="0,8,0,0"
+                         Foreground="{DynamicResource Brush.TextPrimary}">
+              <StackPanel>
+                <TextBlock Text="Complete installation (recommended)" FontWeight="SemiBold" />
+                <TextBlock Text="Installs Axiom and asks Windows once for administrator approval to register the local service. Every protection module is then on by default:"
+                           Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                <TextBlock Text="•  Axiom Shield: firewall decisions with the safe 'ask' policy&#x0a;•  Privacy Shield: resolver on port 53, Balanced profile, all five licence-labelled sources&#x0a;•  Notifications, tray icon, background-console hiding and start with Windows&#x0a;•  Blackbox, DKG and agent hooks for the supported coding agents"
+                           Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                <TextBlock Text="Windows-wide DNS filtering still needs the one-click 'Point adapter at resolver' step on the Privacy Shield page, because Windows asks for elevation for adapter changes."
+                           Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0" FontStyle="Italic" />
+              </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="PartialRadio" GroupName="InstallType" Margin="0,10,0,0"
+                         Foreground="{DynamicResource Brush.TextPrimary}">
+              <StackPanel>
+                <TextBlock Text="Partial installation" FontWeight="SemiBold" />
+                <TextBlock Text="Installs only the desktop app, local history service and monitor. No administrator prompt, Windows service registration, firewall rules, DNS resolver, autostart, Blackbox, DKG or agent hooks. Every module stays opt-in and can be enabled later from Axiom."
+                           Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0" />
+              </StackPanel>
+            </RadioButton>
             <TextBlock Text="Complete installation may write only:"
                        Style="{StaticResource Caption}"
                        FontWeight="SemiBold"
-                       Margin="0,8,0,0" />
+                       Margin="0,10,0,0" />
             <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto" Margin="0,3,0,0">
-              <TextBlock Text="%USERPROFILE%\.config\opencode\plugins\axiom-blackbox.ts&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-guard-bridge.py&#x0a;%USERPROFILE%\.codex\hooks.json (axiom-codex-hook.py entry only)&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-codex-hook.py&#x0a;%USERPROFILE%\.claude\settings.json (axiom-claude-hook.py PreToolUse entry only)&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-claude-hook.py&#x0a;%USERPROFILE%\.cursor\hooks.json (axiom-cursor-hook.py preToolUse entry only)&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-cursor-hook.py&#x0a;%USERPROFILE%\.copilot\hooks\axiom.json&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-copilot-hook.py&#x0a;%USERPROFILE%\.gemini\settings.json (BeforeTool entry only)&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-gemini-hook.py&#x0a;%USERPROFILE%\.codeium\windsurf\hooks.json (three Cascade pre-hooks only)&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-windsurf-hook.py&#x0a;%USERPROFILE%\Documents\Cline\Hooks\PreToolUse.py&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox, dkg and dkg-home&#x0a;%USERPROFILE%\.local\bin\blackbox.cmd&#x0a;%USERPROFILE%\.hermes\config.yaml, .hermes\blackbox and .hermes\plugins\blackbox (Blackbox mode/plugin only)&#x0a;%LOCALAPPDATA%\hermes\config.yaml, plugins, blackbox, bin, installs, cache, logs, backups and image/audio caches (official installer)&#x0a;Scheduled task: Agent Blackbox DKG node"
+              <TextBlock Text="%USERPROFILE%\.config\opencode\plugins\axiom-blackbox.ts&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-guard-bridge.py&#x0a;%USERPROFILE%\.codex\hooks.json (axiom-codex-hook.py entry only)&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-codex-hook.py&#x0a;%USERPROFILE%\.claude\settings.json (axiom-claude-hook.py PreToolUse entry only)&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-claude-hook.py&#x0a;%USERPROFILE%\.cursor\hooks.json (axiom-cursor-hook.py preToolUse entry only)&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-cursor-hook.py&#x0a;%USERPROFILE%\.copilot\hooks\axiom.json&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-copilot-hook.py&#x0a;%USERPROFILE%\.gemini\settings.json (BeforeTool entry only)&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-gemini-hook.py&#x0a;%USERPROFILE%\.codeium\windsurf\hooks.json (three Cascade pre-hooks only)&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox\agent-blackbox\axiom-windsurf-hook.py&#x0a;%USERPROFILE%\Documents\Cline\Hooks\PreToolUse.py&#x0a;%LOCALAPPDATA%\Axiom\modules\blackbox, dkg and dkg-home&#x0a;%USERPROFILE%\.local\bin\blackbox.cmd&#x0a;%USERPROFILE%\.hermes\config.yaml, .hermes\blackbox and .hermes\plugins\blackbox (Blackbox mode/plugin only)&#x0a;%LOCALAPPDATA%\hermes\config.yaml, plugins, blackbox, bin, installs, cache, logs, backups and image/audio caches (official installer)&#x0a;%LOCALAPPDATA%\Axiom\notifications.txt, tray-notifications.txt, hide-background-windows.txt, startup.json and install-profile.json&#x0a;HKCU\Software\Microsoft\Windows\CurrentVersion\Run: Axiom (start with Windows)&#x0a;%ProgramData%\Axiom\protection.json (Axiom Shield consent/decisions)&#x0a;%ProgramData%\Axiom\privacy-shield.json and privacy-shield-rules.json (Privacy Shield settings)&#x0a;Windows service: Axiom Service (LocalSystem)&#x0a;Scheduled task: Agent Blackbox DKG node"
                        Style="{StaticResource Caption}"
                        FontFamily="Consolas"
                        FontSize="11"
                        TextWrapping="Wrap"
                        Margin="0" />
             </ScrollViewer>
-            <TextBlock Text="Uncheck for Partial installation: core Axiom only. No Blackbox, DKG, OpenCode, OpenChamber, Codex, Claude Code, Cursor, Copilot, Gemini, Windsurf or Cline files will be installed or changed."
-                       Style="{StaticResource Caption}"
-                       TextWrapping="Wrap"
-                       Margin="0,6,0,0" />
           </StackPanel>
         </Border>
 
         <Border Style="{StaticResource Card}" Margin="0,12,0,0">
           <StackPanel>
             <TextBlock Text="What is included" Style="{StaticResource SectionTitle}" />
-            <TextBlock Text="Core: desktop application, local history service, system monitor, tray, four themes, Support page and the bundled community feed. Complete installation also runs the official Blackbox and DKG installers and starts their local services. VirusTotal is optional and its API key is configured later on the Security page."
+            <TextBlock Text="Core: desktop application, local history service, system monitor, tray, four themes, Support page and the bundled community feed. Complete installation also registers the Windows service, enables Axiom Shield and the Privacy Shield resolver, turns on notifications and start with Windows, and runs the official Blackbox and DKG installers plus agent hooks. VirusTotal is optional and its API key is configured later on the Security page."
                        Style="{StaticResource Caption}"
                        TextWrapping="Wrap"
                        Margin="0,7,0,0" />

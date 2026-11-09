@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.AgentsView">
@@ -15,16 +15,16 @@
     <Style Selector="Ellipse.tone-idle">
       <Setter Property="Fill" Value="{DynamicResource Axiom.TextMuted}" />
     </Style>
-    <Style Selector="TextBlock.tone-ok">
+    <Style Selector=":is(TextBlock).tone-ok">
       <Setter Property="Foreground" Value="{DynamicResource Axiom.Success}" />
     </Style>
-    <Style Selector="TextBlock.tone-warn">
+    <Style Selector=":is(TextBlock).tone-warn">
       <Setter Property="Foreground" Value="{DynamicResource Axiom.Warning}" />
     </Style>
-    <Style Selector="TextBlock.tone-fail">
+    <Style Selector=":is(TextBlock).tone-fail">
       <Setter Property="Foreground" Value="{DynamicResource Axiom.Critical}" />
     </Style>
-    <Style Selector="TextBlock.tone-idle">
+    <Style Selector=":is(TextBlock).tone-idle">
       <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
     </Style>
     <Style Selector="Border.sq-on">
@@ -45,54 +45,87 @@
       <Grid ColumnDefinitions="*,14,*">
         <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
                 CornerRadius="8" Padding="14">
-          <StackPanel Spacing="4">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
-                      Classes.sq-on="{Binding Security.DkgConnected}"
-                      Classes.sq-off="{Binding !Security.DkgConnected}"
-                      ToolTip.Tip="{Binding Security.DkgHealthLabel}" />
-              <TextBlock Text="{Binding Security.DkgBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+            <Border Grid.Column="0" Background="#0B1024" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
+              <Image Source="avares://Axiom.UI.Avalonia/Assets/origintrail-logo.png"
+                     Width="104" Height="23" Stretch="Uniform" />
+            </Border>
+            <StackPanel Grid.Column="1" Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
+                        Classes.sq-on="{Binding Security.DkgConnected}"
+                        Classes.sq-off="{Binding !Security.DkgConnected}"
+                        ToolTip.Tip="{Binding Security.DkgHealthLabel}" />
+                <controls:AxiomSelectableTextBlock Text="{Binding Security.DkgBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              </StackPanel>
+              <controls:AxiomSelectableTextBlock Text="Decentralized Knowledge Graph (DKG): optional local knowledge infrastructure and provenance. This status reflects a local node probe."
+                         FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Text="origintrail.io" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             </StackPanel>
-            <TextBlock Text="Decentralized Knowledge Graph (DKG): optional local knowledge infrastructure and provenance. This status reflects a local node probe."
-                       FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-          </StackPanel>
+          </Grid>
         </Border>
         <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
                 CornerRadius="8" Padding="14">
-          <StackPanel Spacing="4">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
-                      Classes.sq-on="{Binding Security.BlackboxConnected}"
-                      Classes.sq-off="{Binding !Security.BlackboxConnected}"
-                      ToolTip.Tip="{Binding Security.BlackboxHealthLabel}" />
-              <TextBlock Text="{Binding Security.BlackboxBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+            <Border Grid.Column="0" Background="#0B1024" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
+              <Image Source="avares://Axiom.UI.Avalonia/Assets/blackbox-logo.png"
+                     Width="104" Height="18" Stretch="Uniform" />
+            </Border>
+            <StackPanel Grid.Column="1" Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
+                        Classes.sq-on="{Binding Security.BlackboxConnected}"
+                        Classes.sq-off="{Binding !Security.BlackboxConnected}"
+                        ToolTip.Tip="{Binding Security.BlackboxHealthLabel}" />
+                <controls:AxiomSelectableTextBlock Text="{Binding Security.BlackboxBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              </StackPanel>
+              <controls:AxiomSelectableTextBlock Text="Guardian Agent Blackbox by Umanitek: optional local agent-safety module. Connection alone does not prove every agent is protected."
+                         FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+              <Image Source="avares://Axiom.UI.Avalonia/Assets/umanitek-logo.png"
+                     Width="92" Height="20" Stretch="Uniform" HorizontalAlignment="Left"
+                     ToolTip.Tip="Umanitek" />
             </StackPanel>
-            <TextBlock Text="Guardian Agent Blackbox by Umanitek: optional local agent-safety module. Connection alone does not prove every agent is protected."
-                       FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-          </StackPanel>
+          </Grid>
         </Border>
       </Grid>
+
+      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="14">
+        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" RowSpacing="6" ColumnSpacing="16">
+          <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <controls:AxiomSelectableTextBlock Text="Threat sharing" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+              <controls:AxiomSelectableTextBlock Text="{Binding ThreatSharingStatusText}" FontSize="9" Foreground="{DynamicResource Axiom.Accent}" />
+            </Border>
+          </StackPanel>
+          <Button Grid.Row="0" Grid.Column="1" Content="{Binding ThreatSharingButtonText}"
+                  Command="{Binding ToggleThreatSharingCommand}" IsEnabled="{Binding CanToggleThreatSharing}"
+                  Padding="12,6" VerticalAlignment="Center" />
+          <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.ColumnSpan="2"
+                     Text="When on, Blackbox shares signed, redacted threat indicators with the community verified graph. Prompts, commands, file paths, credentials, model content and raw session ids are never sent. Off by default; needs the Blackbox dashboard."
+                     FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+        </Grid>
+      </Border>
 
       <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="4">
-              <TextBlock Text="{Binding Security.AgentStatusTitle}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <TextBlock Text="{Binding Security.AgentStatusText}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding Security.AgentHookInstallHint}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Text="{Binding Security.AgentStatusTitle}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <controls:AxiomSelectableTextBlock Text="{Binding Security.AgentStatusText}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Text="{Binding Security.AgentHookInstallHint}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             </StackPanel>
             <StackPanel Grid.Column="1" Spacing="6" HorizontalAlignment="Right">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Button Content="Configure" Command="{Binding ConfigureCommand}" Padding="12,6" Background="{DynamicResource Axiom.Accent}" Foreground="{DynamicResource Axiom.AccentContrast}" />
+                <Button Content="Configure" Command="{Binding ConfigureCommand}" Classes="primary" Padding="12,6" />
                 <Button Content="Test Protection" Command="{Binding TestProtectionCommand}" Padding="12,6" />
                 <Button Content="Refresh" Command="{Binding RefreshAllCommand}" Padding="12,6" />
                 <Button Content="Open Dashboard" Command="{Binding OpenDashboardCommand}" Padding="12,6" />
               </StackPanel>
-              <TextBlock Text="{Binding Security.AgentStatusBadge}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" HorizontalAlignment="Right" />
+              <controls:AxiomSelectableTextBlock Text="{Binding Security.AgentStatusBadge}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" HorizontalAlignment="Right" />
             </StackPanel>
           </Grid>
-          <TextBlock Text="{Binding Security.LastCheckedText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
-          <TextBlock Text="{Binding Security.InstallStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding Security.LastCheckedText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+          <controls:AxiomSelectableTextBlock Text="{Binding Security.InstallStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
 
@@ -105,13 +138,13 @@
                 <Grid ColumnDefinitions="Auto,*,Auto">
                   <Border Grid.Column="0" Width="32" Height="32" CornerRadius="8"
                           Background="{DynamicResource Axiom.SurfaceAlt}" Margin="0,0,12,0">
-                    <TextBlock Text="{Binding Glyph}" FontSize="14" Foreground="{DynamicResource Axiom.TextSecondary}"
+                    <controls:AxiomSelectableTextBlock Text="{Binding Glyph}" FontSize="14" Foreground="{DynamicResource Axiom.TextSecondary}"
                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                   </Border>
                   <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                    <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
                                Foreground="{DynamicResource Axiom.TextPrimary}" />
-                    <TextBlock Text="{Binding Detail}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}"
+                    <controls:AxiomSelectableTextBlock Text="{Binding Detail}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}"
                                TextWrapping="Wrap" />
                   </StackPanel>
                   <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
@@ -132,7 +165,7 @@
                             Command="{Binding $parent[ItemsControl].DataContext.Security.SetBlackboxModeCommand}"
                             CommandParameter="block" />
                     <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2">
-                      <TextBlock Text="{Binding Status}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                      <controls:AxiomSelectableTextBlock Text="{Binding Status}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
                     </Border>
                   </StackPanel>
                 </Grid>
@@ -146,34 +179,34 @@
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
-              <TextBlock Text="Protected workspaces" FontSize="14" FontWeight="SemiBold"
+              <controls:AxiomSelectableTextBlock Text="Protected workspaces" FontSize="14" FontWeight="SemiBold"
                          Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <TextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber, Codex, Claude Code, ZCode and DeepSeek Harness. Installed hooks are not proof of runtime blocking."
+              <controls:AxiomSelectableTextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber, Codex, Claude Code, ZCode and DeepSeek Harness. Installed hooks are not proof of runtime blocking."
                          FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
               <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,2,0,0">
                 <StackPanel Orientation="Horizontal" Spacing="5">
                   <Ellipse Width="7" Height="7" VerticalAlignment="Center" Classes="tone-ok" />
-                  <TextBlock Text="Hooked / verified" FontSize="9" Classes="tone-ok" />
+                  <controls:AxiomSelectableTextBlock Text="Hooked / verified" FontSize="9" Classes="tone-ok" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="5">
                   <Ellipse Width="7" Height="7" VerticalAlignment="Center" Classes="tone-warn" />
-                  <TextBlock Text="Needs test" FontSize="9" Classes="tone-warn" />
+                  <controls:AxiomSelectableTextBlock Text="Needs test" FontSize="9" Classes="tone-warn" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="5">
                   <Ellipse Width="7" Height="7" VerticalAlignment="Center" Classes="tone-fail" />
-                  <TextBlock Text="Failed / offline" FontSize="9" Classes="tone-fail" />
+                  <controls:AxiomSelectableTextBlock Text="Failed / offline" FontSize="9" Classes="tone-fail" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="5">
                   <Ellipse Width="7" Height="7" VerticalAlignment="Center" Classes="tone-idle" />
-                  <TextBlock Text="Not detected" FontSize="9" Classes="tone-idle" />
+                  <controls:AxiomSelectableTextBlock Text="Not detected" FontSize="9" Classes="tone-idle" />
                 </StackPanel>
               </StackPanel>
             </StackPanel>
-            <Button Grid.Column="1" Content="Install/repair agent hooksâ€¦"
+            <Button Grid.Column="1" Content="Install/repair agent hooks…"
                     Command="{Binding Security.InstallAgentHooksCommand}" Padding="12,6"
                     VerticalAlignment="Top" />
           </Grid>
-          <TextBlock Text="{Binding Security.AgentsStatusText}" FontSize="10"
+          <controls:AxiomSelectableTextBlock Text="{Binding Security.AgentsStatusText}" FontSize="10"
                      Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <ItemsControl ItemsSource="{Binding Security.ProtectedAgents}">
             <ItemsControl.ItemTemplate>
@@ -183,13 +216,13 @@
                   <Grid ColumnDefinitions="84,*,Auto">
                     <Border Grid.Column="0" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4"
                             Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Top">
-                      <TextBlock Text="{Binding KindText}" FontSize="10" FontWeight="SemiBold"
+                      <controls:AxiomSelectableTextBlock Text="{Binding KindText}" FontSize="10" FontWeight="SemiBold"
                                  Foreground="{DynamicResource Axiom.Accent}" />
                     </Border>
                     <StackPanel Grid.Column="1" Margin="10,0,10,0" Spacing="2">
-                      <TextBlock Text="{Binding TargetText}" FontSize="9"
+                      <controls:AxiomSelectableTextBlock Text="{Binding TargetText}" FontSize="9"
                                  Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Text="{Binding Detail}" FontSize="9"
+                      <controls:AxiomSelectableTextBlock Text="{Binding Detail}" FontSize="9"
                                  Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
@@ -198,7 +231,7 @@
                                 IsEnabled="{Binding CanTest}"
                                 Command="{Binding $parent[ItemsControl].DataContext.Security.TestAgentCommand}"
                                 CommandParameter="{Binding}" />
-                        <TextBlock Text="{Binding TestResult}" FontSize="8"
+                        <controls:AxiomSelectableTextBlock Text="{Binding TestResult}" FontSize="8"
                                    Foreground="{DynamicResource Axiom.TextMuted}" MaxWidth="220"
                                    TextWrapping="Wrap" />
                       </StackPanel>
@@ -210,7 +243,7 @@
                                    Classes.tone-warn="{Binding ToneWarn}"
                                    Classes.tone-fail="{Binding ToneFail}"
                                    Classes.tone-idle="{Binding ToneIdle}" />
-                          <TextBlock Text="{Binding DisplayStatus}" FontSize="9"
+                          <controls:AxiomSelectableTextBlock Text="{Binding DisplayStatus}" FontSize="9"
                                      Classes.tone-ok="{Binding ToneOk}"
                                      Classes.tone-warn="{Binding ToneWarn}"
                                      Classes.tone-fail="{Binding ToneFail}"
@@ -236,17 +269,17 @@
       <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Text="Blackbox health" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="Blackbox health" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <Button Grid.Column="1" Content="View DKG log" Command="{Binding ViewDkgLogCommand}" Padding="10,4" />
           </Grid>
-          <TextBlock Text="{Binding HealthStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding HealthStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
           <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnSpacing="12">
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding BlackboxHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DkgHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding AxiomDkgHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GraphHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="{Binding BlackboxHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DkgHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="{Binding AxiomDkgHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GraphHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </Grid>
-          <TextBlock Text="{Binding ProtectionTestText}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding ProtectionTestText}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
 
@@ -254,16 +287,16 @@
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
-              <TextBlock Text="Module health" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <TextBlock Text="One square per 5 s loopback check, last 30 kept. Green = connected, muted = not running, outlined = waiting for a sample."
+              <controls:AxiomSelectableTextBlock Text="Module health" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <controls:AxiomSelectableTextBlock Text="One square per 5 s loopback check, last 30 kept. Green = connected, muted = not running, outlined = waiting for a sample."
                          FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             </StackPanel>
             <Border Grid.Column="1" Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2" VerticalAlignment="Top">
-              <TextBlock Text="{Binding Security.ModuleActivitySummary}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
+              <controls:AxiomSelectableTextBlock Text="{Binding Security.ModuleActivitySummary}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
             </Border>
           </Grid>
           <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto" RowSpacing="6">
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="DKG" FontSize="10"
+            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="DKG" FontSize="10"
                        Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
             <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
               <ItemsControl ItemsSource="{Binding Security.ModuleHealthSlots}">
@@ -283,7 +316,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
             </StackPanel>
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="Blackbox" FontSize="10"
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Blackbox" FontSize="10"
                        Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
             <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
               <ItemsControl ItemsSource="{Binding Security.ModuleHealthSlots}">
@@ -304,7 +337,7 @@
               </ItemsControl>
             </StackPanel>
           </Grid>
-          <TextBlock Text="{Binding HealthStatusText}" FontSize="10"
+          <controls:AxiomSelectableTextBlock Text="{Binding HealthStatusText}" FontSize="10"
                      Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
@@ -313,25 +346,25 @@
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
-              <TextBlock Text="Verified graph sync" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <TextBlock Text="{Binding VerifiedSyncStateDetail}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Text="Verified graph sync" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <controls:AxiomSelectableTextBlock Text="{Binding VerifiedSyncStateDetail}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
-              <TextBlock Text="{Binding VerifiedSyncState}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" VerticalAlignment="Center" />
+              <controls:AxiomSelectableTextBlock Text="{Binding VerifiedSyncState}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" VerticalAlignment="Center" />
               <Button Content="Sync now" Command="{Binding SyncVerifiedGraphCommand}" Padding="10,4" />
             </StackPanel>
           </Grid>
           <ProgressBar Value="{Binding VerifiedSyncPercent}" Maximum="100" Height="6" />
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Grid.Column="0" Text="{Binding VerifiedSyncCountsText}" FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" />
-            <TextBlock Grid.Column="1" Text="{Binding VerifiedSyncProgressText}" FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding VerifiedSyncCountsText}" FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding VerifiedSyncProgressText}" FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" />
           </Grid>
-          <TextBlock Text="{Binding VerifiedSyncLookupText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
-          <TextBlock Text="{Binding VerifiedGraphListStatus}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding VerifiedSyncLookupText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+          <controls:AxiomSelectableTextBlock Text="{Binding VerifiedGraphListStatus}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <CheckBox Content="Auto-sync verified graph every 15 minutes"
                     IsChecked="{Binding IsAutoSyncEnabled}"
                     Foreground="{DynamicResource Axiom.TextPrimary}" />
-          <TextBlock Text="{Binding AutoSyncStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding AutoSyncStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
 
@@ -349,8 +382,8 @@
 
       <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
         <StackPanel Spacing="6">
-          <TextBlock Text="Verified graph threats" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-          <TextBlock Text="{Binding VerifiedGraphListStatus}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="Verified graph threats" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <controls:AxiomSelectableTextBlock Text="{Binding VerifiedGraphListStatus}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <Grid ColumnDefinitions="*,12,320">
             <ListBox Grid.Column="0" Classes="data-list" ItemsSource="{Binding VerifiedGraphThreats}"
                      SelectedItem="{Binding SelectedThreat}" MaxHeight="200"
@@ -359,19 +392,19 @@
               <ListBox.ItemTemplate>
                 <DataTemplate>
                   <Grid ColumnDefinitions="*,110,80,90" Margin="0,2">
-                    <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="1" Text="{Binding CategoryLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                    <TextBlock Grid.Column="2" Text="{Binding SeverityLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <TextBlock Grid.Column="3" Text="{Binding Source}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding CategoryLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding SeverityLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding Source}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
                   </Grid>
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
             <Border Grid.Column="2" Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="6" Padding="10">
               <StackPanel Spacing="6">
-                <TextBlock Text="{Binding SelectedThreatTitle}" FontSize="11" FontWeight="SemiBold"
+                <controls:AxiomSelectableTextBlock Text="{Binding SelectedThreatTitle}" FontSize="11" FontWeight="SemiBold"
                            Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding SelectedThreatDetail}" FontSize="10"
+                <controls:AxiomSelectableTextBlock Text="{Binding SelectedThreatDetail}" FontSize="10"
                            Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
               </StackPanel>
             </Border>

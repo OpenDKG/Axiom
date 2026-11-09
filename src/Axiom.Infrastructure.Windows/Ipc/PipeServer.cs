@@ -60,6 +60,8 @@ public sealed class PipeServer
 
     private readonly Func<ProtectionDecideRequest, string, CancellationToken, Task<ProtectionStatus>>? _protectionDecide;
 
+    private readonly Func<ProtectionDismissRequest, CancellationToken, Task<ProtectionStatus>>? _protectionDismiss;
+
     private readonly Func<ProtectionLockdownRequest, string, CancellationToken, Task<ProtectionStatus>>? _protectionLockdown;
 
     private readonly Action<string>? _log;
@@ -82,6 +84,7 @@ public sealed class PipeServer
         Func<ProtectionEnableRequest, string, CancellationToken, Task<ProtectionStatus>>? protectionEnable = null,
         Func<string, CancellationToken, Task<ProtectionStatus>>? protectionDisable = null,
         Func<ProtectionDecideRequest, string, CancellationToken, Task<ProtectionStatus>>? protectionDecide = null,
+        Func<ProtectionDismissRequest, CancellationToken, Task<ProtectionStatus>>? protectionDismiss = null,
         Func<ProtectionLockdownRequest, string, CancellationToken, Task<ProtectionStatus>>? protectionLockdown = null,
         Action<string>? log = null)
     {
@@ -105,6 +108,7 @@ public sealed class PipeServer
         _protectionEnable = protectionEnable;
         _protectionDisable = protectionDisable;
         _protectionDecide = protectionDecide;
+        _protectionDismiss = protectionDismiss;
         _protectionLockdown = protectionLockdown;
         _log = log;
     }
@@ -537,6 +541,35 @@ public sealed class PipeServer
                     await WriteResultAsync(stream, envelope.Id, decidedStatus, cancellationToken).ConfigureAwait(false);
                     break;
 
+                case IpcCommandTypes.ProtectionDismiss:
+                    if (_protectionDismiss is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Axiom Shield is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var dismissRequest = DeserializePayload<ProtectionDismissRequest>(envelope.Payload);
+                    if (dismissRequest is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Dismiss payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var dismissedStatus = await _protectionDismiss(dismissRequest, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, dismissedStatus, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.ProtectionLockdown:
                     if (_protectionLockdown is null)
                     {
@@ -727,6 +760,11 @@ public sealed class PipeServer
         if (_protectionDecide is not null)
         {
             commands.Add(IpcCommandTypes.ProtectionDecide);
+        }
+
+        if (_protectionDismiss is not null)
+        {
+            commands.Add(IpcCommandTypes.ProtectionDismiss);
         }
 
         if (_protectionLockdown is not null)

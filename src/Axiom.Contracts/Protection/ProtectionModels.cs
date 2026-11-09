@@ -19,6 +19,37 @@ public sealed record ProtectionPendingApp
     public required DateTimeOffset FirstObservedUtc { get; init; }
 
     public bool IsAgent { get; init; }
+
+    /// <summary>
+    /// Remote endpoints observed for this executable, newest snapshot only. Empty when Windows did
+    /// not report them. This is context for the operator, not a verdict.
+    /// </summary>
+    public IReadOnlyList<string> RemoteEndpoints { get; init; } = [];
+
+    /// <summary>True while at least one live connection for this application is still observed.</summary>
+    public bool IsConnected { get; init; } = true;
+
+    /// <summary>Last time Axiom observed this application, including after its connection ended.</summary>
+    public DateTimeOffset? LastSeenUtc { get; init; }
+
+    /// <summary>Newest first-observation time of any current connection, used for dismissals.</summary>
+    public DateTimeOffset? LatestConnectionFirstObservedUtc { get; init; }
+}
+
+/// <summary>Remove a pending ask without recording Block or Allow.</summary>
+public sealed record ProtectionDismissRequest
+{
+    public required string AppPath { get; init; }
+
+    public string AppName { get; init; } = string.Empty;
+}
+
+/// <summary>An application the operator dismissed from the ask queue.</summary>
+public sealed record ProtectionDismissal
+{
+    public required string AppPath { get; init; }
+
+    public required DateTimeOffset DismissedUtc { get; init; }
 }
 
 /// <summary>A decision the operator made for one executable path.</summary>

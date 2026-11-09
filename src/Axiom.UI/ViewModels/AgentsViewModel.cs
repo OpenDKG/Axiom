@@ -1355,8 +1355,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         }
 
         SessionStatusText = SessionGroups.Count == 0
-            ? "No live Claude Code or Codex session descriptors were found. Hooks can still be installed and trusted."
-            : $"{SessionGroups.Sum(group => group.Sessions.Count)} host session(s) from Claude Code/Codex metadata. Raw session ids are not displayed.";
+            ? "No Claude Code, Codex or OpenCode/OpenChamber sessions were found. Hooks can still be installed and trusted."
+            : $"{SessionGroups.Sum(group => group.Sessions.Count)} host session(s) from Claude Code, Codex and OpenCode/OpenChamber metadata. Raw session ids are not displayed.";
     }
 
     private static string ProviderLabel(string framework) =>
@@ -1364,6 +1364,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         {
             "claude" or "claude-code" => "Claude Code",
             "codex" => "Codex",
+            "opencode" or "openchamber" => "OpenCode / OpenChamber",
             _ => framework,
         };
 

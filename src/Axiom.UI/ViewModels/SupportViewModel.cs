@@ -47,13 +47,13 @@ public sealed partial class SupportViewModel : PageViewModel
             "Use Overview, Connections and Applications to inspect live sockets, remote endpoints and per-application activity. These pages are read-only."),
         new(
             "2. Review firewall rules",
-            "Open Firewall to see only rules owned by Axiom. Writes are disabled by default; the explicit test-VM gate is required before any rule can be created or removed."),
+            "Open Firewall to see only rules owned by Axiom. Writes are off until you consent: complete installation enables Axiom Shield during setup, while partial installation leaves it off. The explicit test-VM gate is still required before any rule can be created or removed."),
         new(
             "3. Make one deliberate change",
             "On Applications, select a process and choose Block outbound only when you understand the effect. Verify connectivity and remove the owned rule from Firewall if needed."),
         new(
             "4. Filter DNS only if needed",
-            "Privacy Shield is opt-in. It starts a loopback resolver; adapter DNS changes require the separate UAC helper and can break name resolution."),
+            "Privacy Shield runs a loopback resolver. Complete installation enables it; partial installation leaves it off. Adapter DNS changes require the separate UAC helper and can break name resolution."),
         new(
             "5. Inspect local files and optional modules",
             "Security provides a local SHA-256 file scan and optional reputation/community features. DKG, Blackbox and agent hooks are separate third-party integrations and are never installed silently."),

@@ -304,6 +304,11 @@
           "SQLitePCLRaw.core": "2.1.13"
         }
       },
+      "System.CodeDom": {
+        "type": "Transitive",
+        "resolved": "10.0.14",
+        "contentHash": "oJYTzyBcc2g06mU699LaJfm964mdlFg6l7BPeqdu8bmK6Fdy9fL9BWugGsZAqWtjnNWp4tanZZ9DlZwHJmmhgg=="
+      },
       "System.Diagnostics.EventLog": {
         "type": "Transitive",
         "resolved": "10.0.14",
@@ -323,20 +328,21 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.6.1, )"
+          "Axiom.Contracts": "[0.8.0, )"
         }
       },
       "axiom.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.6.1, )",
-          "Axiom.Core": "[0.6.1, )"
+          "Axiom.Contracts": "[0.8.0, )",
+          "Axiom.Core": "[0.8.0, )",
+          "System.Management": "[10.0.14, )"
         }
       },
       "axiom.persistence": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.6.1, )",
+          "Axiom.Contracts": "[0.8.0, )",
           "Microsoft.Data.Sqlite": "[10.0.14, )"
         }
       },
@@ -380,6 +386,15 @@
           "Microsoft.Extensions.Logging.EventSource": "10.0.14",
           "Microsoft.Extensions.Options": "10.0.14"
         }
+      },
+      "System.Management": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.14, )",
+        "resolved": "10.0.14",
+        "contentHash": "ywAltakc72Oe7liNatclpyq8oiLYx0VMSjQvphlsbPbiQ9glrV3JKvn5M2xFbsOzzh8sV3QAiUdmu2AV/ffN7Q==",
+        "dependencies": {
+          "System.CodeDom": "10.0.14"
+        }
       }
     },
     "net10.0-windows7.0/win-x64": {
@@ -399,6 +414,15 @@
         "contentHash": "riMCsgbGKGonluQzaRRrx5ney0QNkEmepNTrHD3QpqU/ICZpCJsyAWNi6JESTxqYkc+9kNQ55aZaH/n3xOjSlg==",
         "dependencies": {
           "System.Diagnostics.EventLog": "10.0.14"
+        }
+      },
+      "System.Management": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.14, )",
+        "resolved": "10.0.14",
+        "contentHash": "ywAltakc72Oe7liNatclpyq8oiLYx0VMSjQvphlsbPbiQ9glrV3JKvn5M2xFbsOzzh8sV3QAiUdmu2AV/ffN7Q==",
+        "dependencies": {
+          "System.CodeDom": "10.0.14"
         }
       }
     }

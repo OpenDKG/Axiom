@@ -81,4 +81,19 @@ public sealed class PrivacyShieldPolicyTests
         Assert.False(policy.Evaluate("safe.custom.example").Blocked);
         Assert.False(policy.Evaluate("other.example").Blocked);
     }
+
+    [Fact]
+    public void Source_catalog_has_five_license_cleared_entries()
+    {
+        var sources = PrivacyShieldSourceCatalog.All;
+
+        Assert.Equal(5, sources.Count);
+        Assert.Equal(
+            sources.Count,
+            sources.Select(source => source.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.All(sources, source => Assert.True(
+            source.License is "GPL-3.0" or "MIT" or "Unlicense",
+            source.License));
+        Assert.All(sources, source => Assert.StartsWith("https://", source.Url, StringComparison.Ordinal));
+    }
 }

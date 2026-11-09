@@ -49,27 +49,28 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.5.3, )"
+          "Axiom.Contracts": "[0.7.6, )"
         }
       },
       "axiom.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.5.3, )",
-          "Axiom.Core": "[0.5.3, )"
+          "Axiom.Contracts": "[0.7.6, )",
+          "Axiom.Core": "[0.7.6, )",
+          "System.Management": "[10.0.14, )"
         }
       },
       "axiom.persistence": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.5.3, )",
+          "Axiom.Contracts": "[0.7.6, )",
           "Microsoft.Data.Sqlite": "[10.0.14, )"
         }
       },
       "axiom.ui": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.5.3, )",
+          "Axiom.Contracts": "[0.7.6, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
@@ -89,6 +90,25 @@
           "SQLitePCLRaw.bundle_e_sqlite3": "2.1.13",
           "SQLitePCLRaw.core": "2.1.13"
         }
+      },
+      "System.Management": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.14, )",
+        "resolved": "10.0.14",
+        "contentHash": "ywAltakc72Oe7liNatclpyq8oiLYx0VMSjQvphlsbPbiQ9glrV3JKvn5M2xFbsOzzh8sV3QAiUdmu2AV/ffN7Q=="
+      }
+    },
+    "net10.0-windows7.0/win-x64": {
+      "SQLitePCLRaw.lib.e_sqlite3": {
+        "type": "Transitive",
+        "resolved": "2.1.13",
+        "contentHash": "D2UAuiGxFYBqeRXjjjGgvJ5UQifzn6wefmSqeKU7XcNGKLbJRP6X7kcPZ6opOBJGdCIlgbSxTvDpBbLvsN594A=="
+      },
+      "System.Management": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.14, )",
+        "resolved": "10.0.14",
+        "contentHash": "ywAltakc72Oe7liNatclpyq8oiLYx0VMSjQvphlsbPbiQ9glrV3JKvn5M2xFbsOzzh8sV3QAiUdmu2AV/ffN7Q=="
       }
     }
   }

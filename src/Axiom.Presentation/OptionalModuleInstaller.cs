@@ -231,6 +231,7 @@ public sealed class OptionalModuleInstaller
                 return false;
             }
 
+            BackgroundWindowHider.HideDescendants(TimeSpan.FromSeconds(20));
             return true;
         }
         catch (Exception exception) when (exception is
@@ -321,6 +322,7 @@ public sealed class OptionalModuleInstaller
                 return false;
             }
 
+            BackgroundWindowHider.HideDescendants(TimeSpan.FromSeconds(20));
             return true;
         }
         catch (Exception exception) when (exception is

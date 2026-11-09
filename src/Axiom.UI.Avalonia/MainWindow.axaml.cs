@@ -18,50 +18,14 @@ public partial class MainWindow : Window
 
     private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed || WindowState == WindowState.Maximized)
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             return;
         }
 
-        const double edge = 6;
-        var point = e.GetPosition(this);
-        var left = point.X <= edge;
-        var right = point.X >= Bounds.Width - edge;
-        var top = point.Y <= edge;
-        var bottom = point.Y >= Bounds.Height - edge;
-
-        if (top && left)
-        {
-            BeginResizeDrag(WindowEdge.NorthWest, e);
-        }
-        else if (top && right)
-        {
-            BeginResizeDrag(WindowEdge.NorthEast, e);
-        }
-        else if (bottom && left)
-        {
-            BeginResizeDrag(WindowEdge.SouthWest, e);
-        }
-        else if (bottom && right)
-        {
-            BeginResizeDrag(WindowEdge.SouthEast, e);
-        }
-        else if (top)
-        {
-            BeginResizeDrag(WindowEdge.North, e);
-        }
-        else if (bottom)
-        {
-            BeginResizeDrag(WindowEdge.South, e);
-        }
-        else if (left)
-        {
-            BeginResizeDrag(WindowEdge.West, e);
-        }
-        else if (right)
-        {
-            BeginResizeDrag(WindowEdge.East, e);
-        }
+        // Selectable text handles the pointer before the row does. Keep row selection working when
+        // the user clicks text inside a ListBox item, while still allowing the text selection.
+        SelectContainingListItem(e.Source as Visual);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -73,30 +37,21 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-        {
-            return;
-        }
-
-        // Caption buttons handle their own clicks; do not start a window drag from them.
-        if (FindButton(e.Source as Visual) is not null)
-        {
-            return;
-        }
-
-        if (e.ClickCount == 2)
-        {
-            ToggleMaximize();
-            return;
-        }
-
-        BeginMoveDrag(e);
-    }
-
     private void OnMinimizeClicked(object? sender, RoutedEventArgs e) =>
         WindowState = WindowState.Minimized;
+
+    private void OnAlertsClicked(object? sender, RoutedEventArgs e) =>
+        AlertsPopup.IsOpen = !AlertsPopup.IsOpen;
+
+    private void OnAlertItemClicked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: AlertRecord alert } && DataContext is ShellViewModel shell)
+        {
+            shell.OpenAlert(alert);
+        }
+
+        AlertsPopup.IsOpen = false;
+    }
 
     private void OnMaximizeClicked(object? sender, RoutedEventArgs e) => ToggleMaximize();
 
@@ -120,18 +75,17 @@ public partial class MainWindow : Window
             WindowState == WindowState.Maximized ? "Restore" : "Maximize");
     }
 
-    private static Button? FindButton(Visual? visual)
+    private static void SelectContainingListItem(Visual? visual)
     {
         while (visual is not null)
         {
-            if (visual is Button button)
+            if (visual is ListBoxItem item && item.GetVisualParent() is ListBox list)
             {
-                return button;
+                list.SelectedItem = item.DataContext;
+                return;
             }
 
             visual = visual.GetVisualParent();
         }
-
-        return null;
     }
 }

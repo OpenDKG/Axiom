@@ -77,6 +77,7 @@ public sealed class ConnectionRow : ObservableObject
         ConnectionRuleStatus.BlockedByOwnedRule => "Blocked (owned)",
         ConnectionRuleStatus.BlockedByExternalPolicy => "Blocked (external)",
         ConnectionRuleStatus.AllowedByDefaultPolicy => "Allowed by default",
+        ConnectionRuleStatus.AllowedByOwnedRule => "Allowed (owned)",
         ConnectionRuleStatus.NoOwnedRule => "No rule",
         _ => "Not verified",
     };

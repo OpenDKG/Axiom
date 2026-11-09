@@ -11,6 +11,7 @@ using Axiom.Contracts;
 using Axiom.Contracts.Blackbox;
 using Axiom.Contracts.Community;
 using Axiom.Contracts.Files;
+using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Modules;
 using Axiom.Contracts.Reputation;
 using Axiom.Presentation;
@@ -82,6 +83,17 @@ public sealed partial class FileScanRow : ObservableObject
 
     [ObservableProperty]
     private string _verdictText = "Not checked";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanBlockFromCommunity))]
+    private bool _isCommunityMatch;
+
+    [ObservableProperty]
+    private string _communityText = string.Empty;
+
+    public bool CanBlockFromCommunity =>
+        IsCommunityMatch &&
+        Path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed record CommunityFeedRow(string Sha256, string Name, string Verdict, string Source);
@@ -227,6 +239,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     private CommunityFeedSettings _communitySettings = new(false, string.Empty, string.Empty);
 
     private bool _communityConnected;
+    private readonly HashSet<string> _notifiedCommunityHashes = new(StringComparer.OrdinalIgnoreCase);
+    private bool _dkgAutoStartAttempted;
 
     private readonly IUiTimer _activityTimer;
 
@@ -234,13 +248,15 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     private readonly IUserInteraction _ui;
     private readonly ISecurityDialogService _dialogs;
     private readonly IShellActions _shell;
+    private readonly ConnectionActionService _actions;
 
     public SecurityPageViewModel(
         IUserInteraction ui,
         ISecurityDialogService dialogs,
         IApiKeyProtector protector,
         IUiTimerFactory timers,
-        IShellActions shell)
+        IShellActions shell,
+        IServiceRequestClient? serviceClient = null)
         : base("Security", "Optional intelligence and protection modules", "\uE8D7")
     {
         ArgumentNullException.ThrowIfNull(ui);
@@ -251,6 +267,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         _ui = ui;
         _dialogs = dialogs;
         _shell = shell;
+        _actions = new ConnectionActionService(serviceClient, _ui, new UnsupportedProcessActions());
         _reputationStore = new ReputationSettingsStore(protector);
         _communityStore = new CommunityFeedSettingsStore(protector);
 
@@ -318,6 +335,12 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private string _fileScanStatus = "No folder scanned.";
+
+    [ObservableProperty]
+    private bool _hasCommunityMatches;
+
+    [ObservableProperty]
+    private string _communityMatchesText = "No community feed matches in the scanned files.";
 
     [ObservableProperty]
     private string _communityStatusText = "Not configured.";
@@ -500,6 +523,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             await Task.WhenAll(dkgTask, blackboxTask).ConfigureAwait(true);
 
             Rebuild(dkgTask.Result, blackboxTask.Result);
+            TryStartInstalledDkgOnLaunch(dkgTask.Result);
             LastCheckedText = $"Checked {DateTimeOffset.Now:HH:mm:ss}";
             await RefreshAgentsAsync(blackboxTask.Result.IsConnected).ConfigureAwait(true);
             ApplyHookTestStates();
@@ -513,9 +537,32 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         }
     }
 
-    private async Task SampleHealthAsync()
+    /// <summary>
+    /// Starts an installed local DKG node once per session so the verified graph does not stay
+    /// offline after Axiom restarts. A node that already answers is left untouched.
+    /// </summary>
+    private void TryStartInstalledDkgOnLaunch(OptionalModuleStatus dkg)
     {
-        try
+        if (_dkgAutoStartAttempted || dkg.IsConnected)
+        {
+            return;
+        }
+
+        _dkgAutoStartAttempted = true;
+        if (DistributionContext.IsStorePackage || !_installer.IsDkgAvailable)
+        {
+            return;
+        }
+
+        if (_installer.StartDkg())
+        {
+            InstallStatusText = "Starting the installed DKG node...";
+            DkgBrandLabel = "OriginTrail DKG – starting";
+        }
+    }
+
+    private async Task SampleHealthAsync()
+    {        try
         {
             var dkgTask = _probe.ProbeDkgAsync(CancellationToken.None);
             var blackboxTask = _probe.ProbeBlackboxAsync(CancellationToken.None);
@@ -533,6 +580,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     private void AppendHealthSample(bool dkgConnected, bool blackboxConnected)
     {
+        ApplyBrandLabels(dkgConnected, blackboxConnected);
+
         // The 15 s full refresh and the 5 s health timer share the history. Skip a sample that would
         // land on top of one taken seconds ago so the strip stays one square per interval.
         if (_activityHistory.Count > 0 &&
@@ -867,6 +916,75 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         }
     }
 
+    private void ApplyCommunityMatches()
+    {
+        var byHash = new Dictionary<string, CommunityFeedRow>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in CommunityEntries)
+        {
+            byHash[entry.Sha256] = entry;
+        }
+
+        var matches = 0;
+        var matchedHashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var newlyMatched = new List<FileScanRow>();
+        foreach (var row in FileScanResults)
+        {
+            if (row.Sha256 is { Length: 64 } hash && byHash.TryGetValue(hash, out var entry))
+            {
+                var verdict = string.IsNullOrWhiteSpace(entry.Verdict) || entry.Verdict == "—"
+                    ? "listed"
+                    : entry.Verdict;
+                var source = string.IsNullOrWhiteSpace(entry.Source) || entry.Source == "—"
+                    ? "community feed"
+                    : entry.Source;
+                row.CommunityText = $"COMMUNITY MATCH: {verdict} · {source}";
+                row.IsCommunityMatch = true;
+                matches++;
+                matchedHashes.Add(hash);
+                if (_notifiedCommunityHashes.Add(hash))
+                {
+                    newlyMatched.Add(row);
+                }
+            }
+            else
+            {
+                row.CommunityText = string.Empty;
+                row.IsCommunityMatch = false;
+            }
+        }
+
+        _notifiedCommunityHashes.IntersectWith(matchedHashes);
+
+        HasCommunityMatches = matches > 0;
+        CommunityMatchesText = matches == 0
+            ? "No community feed matches in the scanned files."
+            : $"{matches} scanned file(s) match the community feed. Review before running; blocking is optional and never automatic.";
+
+        if (newlyMatched.Count > 0)
+        {
+            var names = string.Join(", ", newlyMatched.Take(3).Select(row => row.Name));
+            var suffix = newlyMatched.Count > 3 ? $" (+{newlyMatched.Count - 3} more)" : string.Empty;
+            AxiomAlertService.Show(
+                "Community feed alert",
+                $"{newlyMatched.Count} scanned file(s) match the community feed: {names}{suffix}. " +
+                "Open Security to review; blocking is optional.",
+                page: typeof(SecurityPageViewModel));
+        }
+    }
+
+    [RelayCommand]
+    private async Task BlockCommunityMatchAsync(FileScanRow? row)
+    {
+        if (row is null || !row.CanBlockFromCommunity)
+        {
+            return;
+        }
+
+        FileScanStatus = await _actions
+            .BlockAsync(row.Name, row.Path, FirewallDirection.Outbound)
+            .ConfigureAwait(true);
+    }
+
     [RelayCommand]
     private async Task CheckHashAsync(FileScanRow? row)
     {
@@ -989,6 +1107,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 }
             }
 
+            ApplyCommunityMatches();
+
             _communityConnected = true;
             ReplaceCommunityModule();
             CommunityStatusText = updateEntries
@@ -1033,6 +1153,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             {
                 FileScanResults.Add(new FileScanRow(entry));
             }
+
+            ApplyCommunityMatches();
 
             FileScanStatus = $"{entries.Count} file(s) scanned locally. Hashes are not uploaded.";
         }
@@ -1139,6 +1261,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 _communitySettings = new CommunityFeedSettings(false, string.Empty, string.Empty);
                 _communityConnected = false;
                 CommunityEntries.Clear();
+                _notifiedCommunityHashes.Clear();
+                ApplyCommunityMatches();
                 InstallStatusText = "Community feed settings removed.";
                 break;
         }
@@ -1408,8 +1532,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 agent.Status is "VERIFIED BLOCKING" or "HOOK LOADED" or "AUDIT ONLY");
             AgentsStatusText = ProtectedAgents.Count == 0
                 ? "No agent workspace was reported."
-                : $"{runtimeObserved} of {ProtectedAgents.Count} recognized agent workspace(s) have observed hook " +
-                  "activity. Installed hooks alone are not proof of runtime blocking.";
+                : $"Hook activity observed in {runtimeObserved} of {ProtectedAgents.Count} recognized agent workspaces. " +
+                  "Installed hooks alone are not proof of runtime blocking.";
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)

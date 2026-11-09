@@ -26,6 +26,31 @@ public sealed class AvaloniaPageTests
     }
 
     [Fact]
+    public void Navigation_pages_follow_the_requested_order()
+    {
+        var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
+
+        Assert.Equal(
+            [
+                "Overview",
+                "Agents",
+                "Agent Stats",
+                "Security",
+                "Privacy Shield",
+                "Firewall",
+                "AI Analyst",
+                "Connections",
+                "Applications",
+                "Events",
+                "Support",
+                "Settings",
+            ],
+            shell.Pages.Select(page => page.Title));
+
+        shell.Dispose();
+    }
+
+    [Fact]
     public void Events_page_requires_the_service_instead_of_generating_rows()
     {
         var page = new EventsPageViewModel(null, new FakeTimerFactory(), new NullUserInteraction());

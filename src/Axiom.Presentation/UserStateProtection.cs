@@ -7,7 +7,8 @@ namespace Axiom.Presentation;
 public sealed record UserStateFileSpec(
     string Path,
     string Category,
-    bool HashContent = true);
+    bool HashContent = true,
+    bool Volatile = false);
 
 public sealed record UserStateDirectorySpec(
     string Path,
@@ -104,14 +105,14 @@ public sealed class UserStateProtection
                 HomeFile(".config/openchamber/preferences.json", "OpenChamber settings"),
                 HomeFile(".config/openchamber/relay-identity.json", "OpenChamber credentials"),
                 HomeFile(".config/openchamber/git-credential-endpoint.json", "OpenChamber credentials"),
-                HomeFile(".config/openchamber/message-queue.json", "OpenChamber sessions"),
+                HomeFile(".config/openchamber/message-queue.json", "OpenChamber sessions", Volatile: true),
                 HomeFile(".config/openchamber/opencode.managed.json", "OpenChamber config"),
                 HomeFile(".config/openchamber/discovered-apps.json", "OpenChamber config"),
                 HomeFile(".local/share/opencode/account.json", "OpenCode credentials"),
                 HomeFile(".local/share/opencode/auth.json", "OpenCode credentials"),
-                HomeFile(".local/share/opencode/opencode.db", "OpenCode database", HashContent: false),
-                HomeFile(".local/share/opencode/opencode.db-shm", "OpenCode database", HashContent: false),
-                HomeFile(".local/share/opencode/opencode.db-wal", "OpenCode database", HashContent: false),
+                HomeFile(".local/share/opencode/opencode.db", "OpenCode database", HashContent: false, Volatile: true),
+                HomeFile(".local/share/opencode/opencode.db-shm", "OpenCode database", HashContent: false, Volatile: true),
+                HomeFile(".local/share/opencode/opencode.db-wal", "OpenCode database", HashContent: false, Volatile: true),
 
                 // Codex configuration, credentials and databases.
                 HomeFile(".codex/config.toml", "Codex config"),
@@ -183,6 +184,8 @@ public sealed class UserStateProtection
                 // Axiom's own user settings.
                 LocalFile("Axiom/theme.txt", "Axiom settings"),
                 LocalFile("Axiom/tray-notifications.txt", "Axiom settings"),
+                LocalFile("Axiom/notifications.txt", "Axiom settings"),
+                LocalFile("Axiom/hide-background-windows.txt", "Axiom settings"),
                 LocalFile("Axiom/reputation.json", "Axiom settings"),
                 LocalFile("Axiom/community-feed.json", "Axiom settings"),
                 LocalFile("Axiom/onboarding.json", "Axiom settings"),
@@ -291,6 +294,13 @@ public sealed class UserStateProtection
         var files = new Dictionary<string, UserStateFile>(StringComparer.OrdinalIgnoreCase);
         foreach (var spec in ProtectedFiles)
         {
+            if (spec.Volatile)
+            {
+                // Live agent databases, WAL/SHM sidecars and message queues change on every
+                // turn. They cannot be restored meaningfully and deleting them loses history.
+                continue;
+            }
+
             files[spec.Path] = CaptureFile(spec);
         }
 
@@ -380,7 +390,9 @@ public sealed class UserStateProtection
             foreach (var (relativePath, beforeEntry) in before.Entries)
             {
                 var entryPath = Path.Combine(path, relativePath);
-                if (allowed.Contains(Path.GetFullPath(entryPath)) || IsAxiomBackupPath(entryPath))
+                if (allowed.Contains(Path.GetFullPath(entryPath)) ||
+                    IsAxiomBackupPath(entryPath) ||
+                    IsVolatilePath(entryPath))
                 {
                     continue;
                 }
@@ -404,6 +416,7 @@ public sealed class UserStateProtection
                 var entryPath = Path.Combine(path, relativePath);
                 if (allowed.Contains(Path.GetFullPath(entryPath)) ||
                     IsAxiomBackupPath(entryPath) ||
+                    IsVolatilePath(entryPath) ||
                     (after.Entries[relativePath].IsDirectory && IsAllowedAncestor(entryPath, allowed)))
                 {
                     continue;
@@ -444,11 +457,11 @@ public sealed class UserStateProtection
 
                 if (!before.Exists)
                 {
-                    if (File.Exists(change.Path))
-                    {
-                        File.Delete(change.Path);
-                    }
-
+                    // A file that did not exist when the snapshot was taken belongs to whatever
+                    // wrote it afterwards. That is usually the running agent itself: a new session
+                    // part, a database WAL/SHM sidecar or a queued message. Deleting it here would
+                    // destroy live user history, so report it and leave it in place.
+                    failures.Add(change.Path);
                     continue;
                 }
 
@@ -473,8 +486,12 @@ public sealed class UserStateProtection
     private static string Normalize(string relativePath) =>
         relativePath.Replace('/', Path.DirectorySeparatorChar);
 
-    private UserStateFileSpec HomeFile(string relativePath, string category, bool HashContent = true) =>
-        new(Path.Combine(_userProfile, Normalize(relativePath)), category, HashContent);
+    private UserStateFileSpec HomeFile(
+        string relativePath,
+        string category,
+        bool HashContent = true,
+        bool Volatile = false) =>
+        new(Path.Combine(_userProfile, Normalize(relativePath)), category, HashContent, Volatile);
 
     private UserStateFileSpec LocalFile(string relativePath, string category, bool HashContent = true) =>
         new(Path.Combine(_localAppData, Normalize(relativePath)), category, HashContent);
@@ -730,6 +747,17 @@ public sealed class UserStateProtection
                     hash);
             }
         }
+    }
+
+    private HashSet<string>? _volatilePaths;
+
+    private bool IsVolatilePath(string path)
+    {
+        _volatilePaths ??= ProtectedFiles
+            .Where(file => file.Volatile)
+            .Select(file => file.Path)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return _volatilePaths.Contains(path);
     }
 
     private static bool IsAxiomBackupPath(string path) =>

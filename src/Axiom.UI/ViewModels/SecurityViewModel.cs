@@ -1165,8 +1165,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 agent.Status is "VERIFIED BLOCKING" or "HOOK LOADED" or "AUDIT ONLY");
             AgentsStatusText = ProtectedAgents.Count == 0
                 ? "No agent workspace was reported."
-                : $"{runtimeObserved} of {ProtectedAgents.Count} recognized agent workspace(s) have observed hook " +
-                  "activity. Installed hooks alone are not proof of runtime blocking.";
+                : $"Hook activity observed in {runtimeObserved} of {ProtectedAgents.Count} recognized agent workspaces. " +
+                  "Installed hooks alone are not proof of runtime blocking.";
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)

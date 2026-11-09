@@ -2,11 +2,14 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:Axiom.UI.Avalonia"
         xmlns:views="using:Axiom.UI.Avalonia.Views"
+        xmlns:chrome="using:Avalonia.Controls.Chrome"
         x:Class="Axiom.UI.Avalonia.MainWindow"
-        Title="Axiom — Open-Source Firewall &amp; Security Monitor"
-        Width="1460" Height="900" MinWidth="1080" MinHeight="720"
+        Title="Axiom — Free Open-Source Network &amp; AI Agent Security"
+        Width="1460" Height="900" MinWidth="900" MinHeight="600"
         Background="{DynamicResource Axiom.Window}" Foreground="{DynamicResource Axiom.TextPrimary}"
-        WindowDecorations="None"
+        UseLayoutRounding="True"
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
         WindowStartupLocation="CenterScreen">
   <Window.Styles>
     <Style Selector="Button.caption">
@@ -76,28 +79,103 @@
 
   <Grid ColumnDefinitions="236,*" RowDefinitions="38,*">
     <Border Grid.Row="0" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}"
-            BorderThickness="0,0,0,1" PointerPressed="OnTitleBarPointerPressed">
+            BorderThickness="0,0,0,1" chrome:WindowDecorationProperties.ElementRole="TitleBar">
       <Grid ColumnDefinitions="*,Auto" Margin="14,0,4,0">
         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png" Width="20" Height="20" Stretch="Uniform" />
+          <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png" Width="20" Height="20" Stretch="Uniform"
+                 RenderOptions.BitmapInterpolationMode="HighQuality" />
           <TextBlock Text="AXIOM" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-          <TextBlock Text="Network activity &amp; security" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+          <TextBlock Text="Free Open-Source Network &amp; AI Agent Security" FontSize="10"
+                     Foreground="{DynamicResource Axiom.TextMuted}" />
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0" VerticalAlignment="Stretch">
+          <Button x:Name="AlertsButton" Classes="caption" Click="OnAlertsClicked" ToolTip.Tip="Notifications"
+                  chrome:WindowDecorationProperties.ElementRole="User">
+            <Grid Width="46" Height="38">
+              <TextBlock Text="&#xE7E7;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                         Foreground="{DynamicResource Axiom.TextPrimary}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <Border IsVisible="{Binding HasUnreadAlerts}" Background="#C42B1C" CornerRadius="7"
+                      MinWidth="14" Height="14" Padding="3,0" Margin="0,5,7,0"
+                      HorizontalAlignment="Right" VerticalAlignment="Top">
+                <TextBlock Text="{Binding UnreadAlertCount}" FontSize="8" FontWeight="Bold"
+                           Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+            </Grid>
+          </Button>
           <Button Classes="caption" Content="&#xE921;" ToolTip.Tip="Minimize"
+                  chrome:WindowDecorationProperties.ElementRole="MinimizeButton"
                   Click="OnMinimizeClicked" />
           <Button x:Name="MaximizeButton" Classes="caption" Content="&#xE922;" ToolTip.Tip="Maximize"
+                  chrome:WindowDecorationProperties.ElementRole="MaximizeButton"
                   Click="OnMaximizeClicked" />
           <Button Classes="caption close" Content="&#xE8BB;" ToolTip.Tip="Close"
+                  chrome:WindowDecorationProperties.ElementRole="CloseButton"
                   Click="OnCloseClicked" />
         </StackPanel>
       </Grid>
     </Border>
 
+    <Popup x:Name="AlertsPopup"
+           PlacementTarget="{Binding #AlertsButton}"
+           Placement="BottomEdgeAlignedRight"
+           IsLightDismissEnabled="True"
+           HorizontalOffset="0" VerticalOffset="4">
+      <Border Width="430" MaxHeight="470" Background="{DynamicResource Axiom.Surface}"
+              BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
+              CornerRadius="8" Padding="12">
+        <Grid RowDefinitions="Auto,*,Auto">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <TextBlock Text="Notifications" FontSize="13" FontWeight="SemiBold"
+                         Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,1"
+                      IsVisible="{Binding HasUnreadAlerts}">
+                <TextBlock Text="{Binding UnreadAlertCount}" FontSize="9"
+                           Foreground="{DynamicResource Axiom.Accent}" />
+              </Border>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+              <Button Content="Mark all read" Command="{Binding MarkAllAlertsReadCommand}" Padding="8,3" FontSize="10" />
+              <Button Content="Clear" Command="{Binding ClearAlertsCommand}" Padding="8,3" FontSize="10" />
+            </StackPanel>
+          </Grid>
+
+          <ScrollViewer Grid.Row="1" Margin="0,8,0,0" MaxHeight="350" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Alerts}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Padding="8" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
+                    <StackPanel Spacing="3">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="1" Text="{Binding TimeText}" FontSize="9"
+                                   Foreground="{DynamicResource Axiom.TextMuted}" Margin="8,0,0,0" />
+                      </Grid>
+                      <TextBlock Text="{Binding Message}" FontSize="10"
+                                 Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+                      <Button Content="{Binding ActionText}" Click="OnAlertItemClicked"
+                              Padding="8,3" FontSize="10" HorizontalAlignment="Left" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+          <TextBlock Grid.Row="1" Text="No alerts yet." IsVisible="{Binding !HasAlerts}" Margin="0,10,0,0"
+                     FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" HorizontalAlignment="Center" />
+          <TextBlock Grid.Row="2" Text="Kept locally for this run. Clicking an alert opens its page and highlights the event."
+                     FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,8,0,0" TextWrapping="Wrap" />
+        </Grid>
+      </Border>
+    </Popup>
+
     <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,*,Auto">
         <StackPanel Grid.Row="0" Margin="20,14,20,12" Spacing="8">
-          <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-lockup.png" Width="160" Height="54" Stretch="Uniform" HorizontalAlignment="Left" />
+          <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-lockup.png" Height="54" Stretch="Uniform"
+                 HorizontalAlignment="Left" RenderOptions.BitmapInterpolationMode="HighQuality" />
           <TextBlock Text="LIVE · READ-ONLY" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" FontWeight="SemiBold" />
           <TextBlock Text="{Binding VersionText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
         </StackPanel>
@@ -122,7 +200,8 @@
           <Border Height="1" Background="{DynamicResource Axiom.Border}" />
           <Grid ColumnDefinitions="Auto,*">
             <Image Grid.Column="0" Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png"
-                   Width="40" Height="40" Stretch="Uniform" />
+                   Width="40" Height="40" Stretch="Uniform"
+                   RenderOptions.BitmapInterpolationMode="HighQuality" />
             <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center" Spacing="2">
               <TextBlock Text="Axiom" FontWeight="SemiBold" FontSize="13"
                          Foreground="{DynamicResource Axiom.TextPrimary}" />
@@ -130,7 +209,7 @@
                          Foreground="{DynamicResource Axiom.TextMuted}" />
             </StackPanel>
           </Grid>
-          <TextBlock Text="Open-source firewall &amp; network monitor" FontSize="10"
+          <TextBlock Text="Free Open-Source Network &amp; AI Agent Security" FontSize="10"
                      Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Button Content="GitHub" Command="{Binding OpenGitHubCommand}" Padding="10,4" FontSize="11" />
@@ -162,12 +241,13 @@
 
       <Border Grid.Row="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
         <Grid Margin="24,0,20,0" ColumnDefinitions="*,Auto">
-          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="16">
-            <TextBlock Text="{Binding StatusMonitoringText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" />
-            <TextBlock Text="{Binding StatusStorageText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" />
-            <TextBlock Text="{Binding StatusFirewallText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" />
+          <WrapPanel VerticalAlignment="Center" ItemHeight="13"
+                     ClipToBounds="False">
+            <TextBlock Text="{Binding StatusMonitoringText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
+            <TextBlock Text="{Binding StatusStorageText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
+            <TextBlock Text="{Binding StatusFirewallText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
             <TextBlock Text="{Binding StatusSourceText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" />
-          </StackPanel>
+          </WrapPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
             <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2">
               <StackPanel Orientation="Horizontal" Spacing="5">

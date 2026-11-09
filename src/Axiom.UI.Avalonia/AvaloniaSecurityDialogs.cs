@@ -162,7 +162,7 @@ public sealed class AvaloniaSecurityDialogs(Func<Window?> ownerProvider) : ISecu
     private static StackPanel Form(string description, IReadOnlyList<Control> fields, IReadOnlyList<Control> actions)
     {
         var panel = new StackPanel { Spacing = 10, Margin = new Thickness(22) };
-        panel.Children.Add(new TextBlock
+        panel.Children.Add(new SelectableTextBlock
         {
             Text = description,
             TextWrapping = TextWrapping.Wrap,
