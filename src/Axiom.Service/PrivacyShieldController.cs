@@ -19,6 +19,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private readonly PrivacyShieldBlockedHistoryStore _blockedHistory = new();
 
+    private readonly ThreatShareController? _threatShare;
+
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private readonly object _rulesGate = new();
@@ -48,11 +50,13 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     public PrivacyShieldController(
         PrivacyShieldSettingsStore store,
         PrivacyShieldRuleStore? ruleStore = null,
-        PrivacyShieldSourceUpdater? sourceUpdater = null)
+        PrivacyShieldSourceUpdater? sourceUpdater = null,
+        ThreatShareController? threatShare = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _ruleStore = ruleStore ?? new PrivacyShieldRuleStore();
         _sourceUpdater = sourceUpdater ?? new PrivacyShieldSourceUpdater();
+        _threatShare = threatShare;
         _settings = store.Load();
     }
 
@@ -347,7 +351,11 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 policy,
                 upstreams,
                 settings.Port,
-                _blockedHistory.Append);
+                blocked =>
+                {
+                    _blockedHistory.Append(blocked);
+                    _threatShare?.ObserveBlocked(blocked);
+                });
             return true;
         }
         catch (Exception exception) when (exception is

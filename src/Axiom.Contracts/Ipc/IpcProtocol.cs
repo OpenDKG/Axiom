@@ -50,6 +50,10 @@ public static class IpcCommandTypes
     public const string ProtectionDecide = "protection.decide";
     public const string ProtectionDismiss = "protection.dismiss";
     public const string ProtectionLockdown = "protection.lockdown";
+    public const string ThreatShareStatus = "threatshare.status";
+    public const string ThreatShareEnqueue = "threatshare.enqueue";
+    public const string ThreatShareDismiss = "threatshare.dismiss";
+    public const string ThreatShareRecord = "threatshare.record";
 
     public static IReadOnlyList<string> All { get; } =
     [
@@ -76,6 +80,10 @@ public static class IpcCommandTypes
         ProtectionDecide,
         ProtectionDismiss,
         ProtectionLockdown,
+        ThreatShareStatus,
+        ThreatShareEnqueue,
+        ThreatShareDismiss,
+        ThreatShareRecord,
     ];
 }
 
