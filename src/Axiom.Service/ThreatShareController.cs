@@ -45,8 +45,9 @@ public sealed class ThreatShareController : IAsyncDisposable
     }
 
     /// <summary>
-    /// A blocked malware domain is only shareable when an agent actually fetched it: only then is
-    /// the Blackbox "fetched-by-tool" context true. Ads, tracking and telemetry never qualify.
+    /// A blocked malware domain is only shareable when an agent actually fetched it: directly, or
+    /// through a tool process it spawned. Only then is the Blackbox "fetched-by-tool" context true.
+    /// Ads, tracking and telemetry never qualify.
     /// </summary>
     public static ThreatShareEnqueueRequest? CreateFromBlocked(PrivacyShieldBlockedEvent blocked)
     {
@@ -55,7 +56,9 @@ public sealed class ThreatShareController : IAsyncDisposable
             return null;
         }
 
-        if (!AgentProcessMatcher.IsAgentProcess(blocked.AppName, blocked.AppPath))
+        var fetchedDirectly = AgentProcessMatcher.IsAgentProcess(blocked.AppName, blocked.AppPath);
+        var fetchedByTool = AgentProcessMatcher.IsAgentProcess(blocked.AgentName, blocked.AgentPath);
+        if (!fetchedDirectly && !fetchedByTool)
         {
             return null;
         }
@@ -65,6 +68,10 @@ public sealed class ThreatShareController : IAsyncDisposable
             return null;
         }
 
+        var via = fetchedDirectly
+            ? blocked.AppDisplay
+            : $"{blocked.AppDisplay} via {blocked.AgentDisplay}";
+
         return new ThreatShareEnqueueRequest
         {
             IndicatorType = "domain",
@@ -72,7 +79,7 @@ public sealed class ThreatShareController : IAsyncDisposable
             Reason = "malware-delivery",
             Context = "fetched-by-tool",
             Source = ThreatShareSource.PrivacyShield,
-            Detail = $"Blocked for {blocked.AppDisplay} by the malware list.",
+            Detail = $"Blocked for {via} by the malware list.",
             ObservedUtc = blocked.BlockedUtc,
         };
     }

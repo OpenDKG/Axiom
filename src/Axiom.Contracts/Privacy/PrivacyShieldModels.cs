@@ -88,6 +88,16 @@ public sealed record PrivacyShieldBlockedEvent(
     /// <summary>Local executable path, when readable; empty for protected or exited processes.</summary>
     public string AppPath { get; init; } = string.Empty;
 
+    /// <summary>
+    /// The nearest ancestor that is a known agent, when the query came through that agent's tool
+    /// (an agent shells out to curl, git or nslookup, so the querying process is the tool child).
+    /// </summary>
+    public string AgentName { get; init; } = string.Empty;
+
+    public string AgentPath { get; init; } = string.Empty;
+
+    public string AgentDisplay => string.IsNullOrWhiteSpace(AgentName) ? "unknown agent" : AgentName;
+
     public string AppDisplay => string.IsNullOrWhiteSpace(AppName) ? "unknown app" : AppName;
 
     public string CategoryText => Category.ToString();

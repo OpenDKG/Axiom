@@ -43,6 +43,44 @@ public sealed class ThreatShareTests
     }
 
     [Fact]
+    public void An_agent_tool_child_qualifies_through_its_agent_ancestor()
+    {
+        // A real agent shells out to curl/git/nslookup, so the DNS query belongs to the tool child
+        // while the agent is an ancestor. That is still a truthful "fetched by tool" sighting.
+        var viaTool = new PrivacyShieldBlockedEvent(
+            "malware.example",
+            PrivacyCategory.Malware,
+            DateTimeOffset.UtcNow)
+        {
+            AppName = "nslookup.exe",
+            AppPath = @"C:\Windows\System32\nslookup.exe",
+            AgentName = "opencode.exe",
+            AgentPath = @"C:\Users\me\AppData\Local\Programs\@openchamberelectron\resources\opencode-cli\opencode.exe",
+        };
+
+        var candidate = ThreatShareController.CreateFromBlocked(viaTool);
+
+        Assert.NotNull(candidate);
+        Assert.Contains("via opencode.exe", candidate!.Detail, StringComparison.Ordinal);
+        Assert.Equal("fetched-by-tool", candidate.Context);
+    }
+
+    [Fact]
+    public void A_tool_child_without_an_agent_ancestor_stays_local()
+    {
+        var unrelated = new PrivacyShieldBlockedEvent(
+            "malware.example",
+            PrivacyCategory.Malware,
+            DateTimeOffset.UtcNow)
+        {
+            AppName = "nslookup.exe",
+            AppPath = @"C:\Windows\System32\nslookup.exe",
+        };
+
+        Assert.Null(ThreatShareController.CreateFromBlocked(unrelated));
+    }
+
+    [Fact]
     public async Task Queue_deduplicates_and_persists_pending_candidates()
     {
         var directory = Path.Combine(Path.GetTempPath(), "axiom-threat-share", Guid.NewGuid().ToString("N"));

@@ -106,7 +106,7 @@
             </StackPanel>
           </Grid>
           <controls:AxiomSelectableTextBlock
-                     Text="Axiom only proposes indicators it can honestly attribute: a malware-list domain that an agent process actually fetched, or a high-confidence AI Analyst IOC. Blackbox signs and shares them, and only while sharing is on. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
+                     Text="Axiom only proposes indicators it can honestly attribute: a malware-list domain that an agent actually fetched (directly or through a tool it ran, such as curl or git), or a high-confidence AI Analyst IOC. Blackbox signs and shares them, and only while sharing is on. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
                      FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <Border Background="{DynamicResource Axiom.SurfaceAlt}"
                   BorderBrush="{DynamicResource Axiom.Border}"

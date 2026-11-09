@@ -1,10 +1,12 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using Axiom.Contracts.Privacy;
+using Axiom.Contracts.Threat;
 using Axiom.Infrastructure.Windows.IpHelper;
 
 namespace Axiom.Infrastructure.Windows.Dns;
@@ -511,6 +513,8 @@ public sealed class DnsProxyServer : IAsyncDisposable
         {
             AppName = app.Name,
             AppPath = app.Path,
+            AgentName = app.AgentName,
+            AgentPath = app.AgentPath,
         };
         _recentBlocked.Enqueue(blocked);
         while (_recentBlocked.Count > 50)
@@ -528,24 +532,26 @@ public sealed class DnsProxyServer : IAsyncDisposable
         }
     }
 
-    private static (string Name, string Path) ResolveApp(IPEndPoint? source, bool tcp)
+    private static (string Name, string Path, string AgentName, string AgentPath) ResolveApp(
+        IPEndPoint? source,
+        bool tcp)
     {
         if (source is null || source.Port <= 0)
         {
-            return (string.Empty, string.Empty);
+            return (string.Empty, string.Empty, string.Empty, string.Empty);
         }
 
         var processId = FindOwningProcess(source, tcp);
         if (processId <= 4)
         {
-            return (string.Empty, string.Empty);
+            return (string.Empty, string.Empty, string.Empty, string.Empty);
         }
 
         var now = DateTimeOffset.UtcNow;
         if (AppCache.TryGetValue(processId, out var cached) &&
             now - cached.ResolvedUtc < AppCacheLifetime)
         {
-            return (cached.Name, cached.Path);
+            return (cached.Name, cached.Path, cached.AgentName, cached.AgentPath);
         }
 
         var name = string.Empty;
@@ -569,7 +575,12 @@ public sealed class DnsProxyServer : IAsyncDisposable
         {
         }
 
-        AppCache[processId] = new CachedAppIdentity(name, path, now);
+        // Agents usually fetch through a tool process (curl, git, nslookup), so the querying process
+        // is not the agent itself. Walk the parent chain once per process (cached) and remember the
+        // nearest agent ancestor; that is what makes "fetched by tool" provable.
+        var (agentName, agentPath) = FindAgentAncestor(processId);
+
+        AppCache[processId] = new CachedAppIdentity(name, path, agentName, agentPath, now);
         if (AppCache.Count > 256)
         {
             foreach (var pair in AppCache)
@@ -581,8 +592,120 @@ public sealed class DnsProxyServer : IAsyncDisposable
             }
         }
 
-        return (name, path);
+        return (name, path, agentName, agentPath);
     }
+
+    private static (string Name, string Path) FindAgentAncestor(int processId)
+    {
+        var current = processId;
+        for (var depth = 0; depth < 6 && current > 4; depth++)
+        {
+            var parent = ParentProcessId(current);
+            if (parent <= 4 || parent == current)
+            {
+                return (string.Empty, string.Empty);
+            }
+
+            try
+            {
+                using var process = Process.GetProcessById(parent);
+                var name = process.ProcessName + ".exe";
+                var path = string.Empty;
+                try
+                {
+                    path = process.MainModule?.FileName ?? string.Empty;
+                }
+                catch (Exception exception) when (exception is
+                             System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
+                {
+                }
+
+                if (AgentProcessMatcher.IsAgentProcess(name, path))
+                {
+                    return (name, path);
+                }
+            }
+            catch (Exception exception) when (exception is
+                         ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                // Exited or protected parent; keep walking with the pid we have.
+            }
+
+            current = parent;
+        }
+
+        return (string.Empty, string.Empty);
+    }
+
+    private static int ParentProcessId(int processId)
+    {
+        var snapshot = CreateToolhelp32Snapshot(Th32CsSnapProcess, 0);
+        if (snapshot == IntPtr.Zero || snapshot == InvalidHandleValue)
+        {
+            return 0;
+        }
+
+        try
+        {
+            var entry = new ProcessEntry32 { Size = (uint)Marshal.SizeOf<ProcessEntry32>() };
+            if (!Process32First(snapshot, ref entry))
+            {
+                return 0;
+            }
+
+            do
+            {
+                if (entry.ProcessId == (uint)processId)
+                {
+                    return (int)entry.ParentProcessId;
+                }
+
+                entry.Size = (uint)Marshal.SizeOf<ProcessEntry32>();
+            }
+            while (Process32Next(snapshot, ref entry));
+        }
+        finally
+        {
+            CloseHandle(snapshot);
+        }
+
+        return 0;
+    }
+
+    private const uint Th32CsSnapProcess = 0x00000002;
+
+    private static readonly IntPtr InvalidHandleValue = new(-1);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ProcessEntry32
+    {
+        public uint Size;
+        public uint Usage;
+        public uint ProcessId;
+        public IntPtr DefaultHeapId;
+        public uint ModuleId;
+        public uint Threads;
+        public uint ParentProcessId;
+        public int PriorityClassBase;
+        public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string ExeFile;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32First(IntPtr snapshot, ref ProcessEntry32 entry);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32Next(IntPtr snapshot, ref ProcessEntry32 entry);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(IntPtr handle);
 
     private static int FindOwningProcess(IPEndPoint source, bool tcp)
     {
@@ -630,5 +753,10 @@ public sealed class DnsProxyServer : IAsyncDisposable
         }
     }
 
-    private sealed record CachedAppIdentity(string Name, string Path, DateTimeOffset ResolvedUtc);
+    private sealed record CachedAppIdentity(
+        string Name,
+        string Path,
+        string AgentName,
+        string AgentPath,
+        DateTimeOffset ResolvedUtc);
 }
