@@ -108,6 +108,18 @@
           <controls:AxiomSelectableTextBlock
                      Text="Axiom only proposes indicators it can honestly attribute: a malware-list domain that an agent process actually fetched, or a high-confidence AI Analyst IOC. Blackbox signs and shares them, and only while sharing is on. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
                      FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <Border Background="{DynamicResource Axiom.SurfaceAlt}"
+                  BorderBrush="{DynamicResource Axiom.Border}"
+                  BorderThickness="1"
+                  CornerRadius="6"
+                  Padding="10,7">
+            <Grid ColumnDefinitions="3,*" ColumnSpacing="9">
+              <Border Grid.Column="0" Background="{DynamicResource Axiom.Success}" CornerRadius="2" />
+              <controls:AxiomSelectableTextBlock Grid.Column="1"
+                         Text="Sharing also gives back: every confirmed indicator makes the shared Blackbox graph stronger, and a stronger graph means Axiom - and every other node - recognises malicious infrastructure earlier."
+                         FontSize="10" Foreground="{DynamicResource Axiom.Success}" TextWrapping="Wrap" />
+            </Grid>
+          </Border>
           <controls:AxiomSelectableTextBlock Text="{Binding ThreatShareQueueText}" FontSize="10"
                      Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
           <ItemsControl ItemsSource="{Binding ThreatShareCandidates}" IsVisible="{Binding HasThreatShareCandidates}">
