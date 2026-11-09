@@ -119,6 +119,59 @@ public sealed class RecentBlockedGroup(
     public string Tooltip => $"{latest.Tooltip}\nSeen {count} time(s) in the live window.";
 }
 
+/// <summary>One domain inside an application's retained history group.</summary>
+public sealed class BlockedHistoryDomainRow(
+    string domain,
+    string categoryText,
+    int count,
+    DateTimeOffset lastUtc,
+    BlockedEventRow latest)
+{
+    public string Domain => domain;
+
+    public string CategoryText => categoryText;
+
+    public int Count => count;
+
+    public string CountText => count > 1 ? $"{count}x" : string.Empty;
+
+    public DateTimeOffset LastUtc => lastUtc;
+
+    public BlockedEventRow Latest => latest;
+
+    public bool CanAllow => latest.CanAllow;
+
+    public bool CanBlock => latest.CanBlock;
+
+    public string Tooltip => $"{latest.Tooltip}\nSeen {count} time(s) in the retained history.";
+}
+
+/// <summary>One application in the retained history, expandable to its blocked domains.</summary>
+public sealed class BlockedHistoryAppGroup(
+    string appDisplay,
+    string appPath,
+    IReadOnlyList<BlockedHistoryDomainRow> domains,
+    DateTimeOffset lastUtc)
+{
+    public string AppDisplay => appDisplay;
+
+    public string AppPath => appPath;
+
+    public IReadOnlyList<BlockedHistoryDomainRow> Domains => domains;
+
+    public int TotalBlocks => domains.Sum(domain => domain.Count);
+
+    public int DomainCount => domains.Count;
+
+    public DateTimeOffset LastUtc => lastUtc;
+
+    public string SummaryText => $"{TotalBlocks} blocks · {DomainCount} domains";
+
+    public string Tooltip => string.IsNullOrWhiteSpace(appPath)
+        ? appDisplay
+        : $"{appDisplay}\n{appPath}";
+}
+
 /// <summary>
 /// Privacy Shield is a local DNS filter. Complete installation enables the resolver; a partial
 /// installation leaves it opt-in. The service never changes adapter DNS settings; the user must
@@ -181,7 +234,16 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     public ObservableCollection<BlockedEventRow> RecentBlocked { get; } = [];
 
-    public ObservableCollection<BlockedEventRow> BlockedHistory { get; } = [];
+    public ObservableCollection<BlockedHistoryAppGroup> BlockedHistoryGroups { get; } = [];
+
+    [ObservableProperty]
+    private string _blockedHistorySummary = "No blocked query history yet.";
+
+    [ObservableProperty]
+    private bool _hasDnsOutageRisk;
+
+    [ObservableProperty]
+    private string _dnsOutageWarningText = string.Empty;
 
     /// <summary>Grouped live list: one row per (domain, app), newest first, bounded.</summary>
     public ObservableCollection<RecentBlockedGroup> RecentBlockedGroups { get; } = [];
@@ -193,6 +255,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private string _recentBlockedSummary = "No blocked queries in the live window.";
 
     private List<RecentBlockedGroup> _recentGroups = [];
+
+    private bool _dnsOutageAlerted;
 
     public string RecentBlockedToggleText => ShowAllRecentBlocked ? "Show top" : "Show all";
 
@@ -869,10 +933,73 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             .ToList();
         ApplyRecentGroupView();
 
-        BlockedHistory.Clear();
-        foreach (var blocked in status.BlockedHistory.Take(250))
+        BlockedHistoryGroups.Clear();
+        var historyRows = status.BlockedHistory
+            .Select(blocked => new BlockedEventRow(blocked, allowedDomains.Contains(blocked.Domain)))
+            .ToList();
+
+        foreach (var appGroup in historyRows
+                     .GroupBy(row => row.AppDisplay, StringComparer.OrdinalIgnoreCase)
+                     .OrderByDescending(group => group.Count())
+                     .ThenByDescending(group => group.Max(row => row.TimestampUtc)))
         {
-            BlockedHistory.Add(new BlockedEventRow(blocked, allowedDomains.Contains(blocked.Domain)));
+            var domains = appGroup
+                .GroupBy(row => row.Domain, StringComparer.OrdinalIgnoreCase)
+                .Select(domainGroup => new BlockedHistoryDomainRow(
+                    domainGroup.Key,
+                    domainGroup.First().CategoryText,
+                    domainGroup.Count(),
+                    domainGroup.Max(row => row.TimestampUtc),
+                    domainGroup.OrderByDescending(row => row.TimestampUtc).First()))
+                .OrderByDescending(domain => domain.Count)
+                .ThenByDescending(domain => domain.LastUtc)
+                .ToList();
+
+            BlockedHistoryGroups.Add(new BlockedHistoryAppGroup(
+                appGroup.Key,
+                appGroup.Select(row => row.AppPath).FirstOrDefault(path => !string.IsNullOrWhiteSpace(path))
+                ?? string.Empty,
+                domains,
+                appGroup.Max(row => row.TimestampUtc)));
+        }
+
+        BlockedHistorySummary = historyRows.Count == 0
+            ? "No blocked query history yet."
+            : $"{historyRows.Count} blocks from {BlockedHistoryGroups.Count} apps; open an app to see its domains.";
+        RefreshAdapters();
+    }
+
+
+    /// <summary>
+    /// A stopped resolver plus an adapter pointed at 127.0.0.1 means every name lookup on that
+    /// adapter fails. Surface it instead of leaving the user with a dead LAN and no explanation.
+    /// </summary>
+    private void UpdateDnsOutageWarning()
+    {
+        var risky = Adapters.FirstOrDefault(adapter => adapter.UsesResolver);
+        if (_resolverActive || risky is null)
+        {
+            HasDnsOutageRisk = false;
+            DnsOutageWarningText = string.Empty;
+            _dnsOutageAlerted = false;
+            return;
+        }
+
+        HasDnsOutageRisk = true;
+        DnsOutageWarningText =
+            $"Adapter '{risky.Name}' sends DNS to 127.0.0.1, but the Privacy Shield resolver is not " +
+            "running. Names will not resolve on that adapter until you start Privacy Shield or " +
+            "restore the saved DNS.";
+
+        if (!_dnsOutageAlerted)
+        {
+            _dnsOutageAlerted = true;
+            AxiomAlertService.Show(
+                "Privacy Shield DNS is not answering",
+                $"{risky.Name} points at 127.0.0.1 while the resolver is stopped. Restore the saved DNS " +
+                "or start Privacy Shield.",
+                force: true,
+                page: typeof(PrivacyShieldPageViewModel));
         }
     }
 
@@ -964,20 +1091,20 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     {
         var selectedName = SelectedAdapter?.Name;
         var options = BuildAdapterOptions();
-        if (Adapters.SequenceEqual(options))
+        if (!Adapters.SequenceEqual(options))
         {
-            return;
+            Adapters.Clear();
+            foreach (var option in options)
+            {
+                Adapters.Add(option);
+            }
+
+            SelectedAdapter = Adapters.FirstOrDefault(adapter =>
+                                  string.Equals(adapter.Name, selectedName, StringComparison.OrdinalIgnoreCase))
+                              ?? Adapters.FirstOrDefault();
         }
 
-        Adapters.Clear();
-        foreach (var option in options)
-        {
-            Adapters.Add(option);
-        }
-
-        SelectedAdapter = Adapters.FirstOrDefault(adapter =>
-                              string.Equals(adapter.Name, selectedName, StringComparison.OrdinalIgnoreCase))
-                          ?? Adapters.FirstOrDefault();
+        UpdateDnsOutageWarning();
     }
 
     private void ApplyProfileCategories(PrivacyShieldProfile profile)
