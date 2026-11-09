@@ -96,7 +96,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             agentSessions,
             interaction,
             blackboxDialogs ?? new UnsupportedBlackboxDialogs(),
-            timers);
+            timers,
+            serviceClient);
         AiAnalyst = new AiAnalystPageViewModel(
             _monitor,
             apiKeyProtector ?? new UnsupportedApiKeyProtector(),
