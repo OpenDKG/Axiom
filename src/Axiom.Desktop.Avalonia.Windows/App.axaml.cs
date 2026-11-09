@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Threading;
@@ -26,6 +26,7 @@ public partial class App : Application
     private BundledServiceHost? _serviceHost;
     private MainWindow? _window;
     private TrayIcon? _tray;
+    private ModuleWindowHider? _moduleWindowHider;
     private Mutex? _singleInstanceMutex;
     private EventWaitHandle? _showWindowEvent;
     private Thread? _showWindowThread;
@@ -138,6 +139,8 @@ public partial class App : Application
 
             window.Show();
             CreateTrayIcon(desktop);
+            _moduleWindowHider = new ModuleWindowHider();
+            _moduleWindowHider.Start();
 
             if (_tray is null)
             {
@@ -344,5 +347,7 @@ public partial class App : Application
 
         _shell?.Dispose();
         _serviceHost?.Dispose();
+        _moduleWindowHider?.Dispose();
+        _moduleWindowHider = null;
     }
 }
