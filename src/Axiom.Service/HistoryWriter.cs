@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Contracts.Monitoring;
 using Axiom.Persistence;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -6,17 +7,21 @@ using Microsoft.Extensions.Logging;
 namespace Axiom.Service;
 
 /// <summary>
-/// Persists the latest snapshot every two seconds (not per poll) and applies retention hourly.
-/// The database is local SQLite in WAL mode; no payload or DNS content is stored.
+/// Persists the stable part of the latest snapshot every two minutes and applies retention every
+/// six hours. The database is local SQLite in WAL mode; no payload or DNS content is stored.
+/// Short-lived sockets are skipped so a busy machine does not write a page per connection.
 /// </summary>
 public sealed partial class HistoryWriter(
     ConnectionSnapshotCache cache,
     HistoryStore store,
     ILogger<HistoryWriter> logger) : BackgroundService
 {
-    private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(2);
+    private readonly HashSet<string> _previousKeys = new(StringComparer.OrdinalIgnoreCase);
 
-    private static readonly TimeSpan RetentionInterval = TimeSpan.FromHours(1);
+    private ConnectionSnapshot? _lastPersistable;
+    private static readonly TimeSpan FlushInterval = TimeSpan.FromMinutes(2);
+
+    private static readonly TimeSpan RetentionInterval = TimeSpan.FromHours(6);
 
     [LoggerMessage(EventId = 3001, Level = LogLevel.Information, Message = "History database: {Path}")]
     private static partial void LogDatabase(ILogger logger, string path);
@@ -26,6 +31,14 @@ public sealed partial class HistoryWriter(
 
     [LoggerMessage(EventId = 3003, Level = LogLevel.Information, Message = "Retention removed {Rows} flow rows")]
     private static partial void LogRetention(ILogger logger, int rows);
+
+    private static string ConnectionKey(LiveConnection connection) =>
+        string.Join(
+            '\u001f',
+            connection.AppPath,
+            connection.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            connection.Protocol.ToString(),
+            connection.RemoteEndpoint);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -55,9 +68,34 @@ public sealed partial class HistoryWriter(
             var snapshot = cache.Latest;
             if (snapshot is not null && revision != lastRevision)
             {
+                // Persist a connection only after it survived one refresh cycle. Short-lived
+                // sockets (the bulk of the churn) never reach SQLite, which keeps page writes low.
+                var stable = new List<LiveConnection>();
+                var currentKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var connection in snapshot.Connections)
+                {
+                    var key = ConnectionKey(connection);
+                    currentKeys.Add(key);
+                    if (_previousKeys.Contains(key))
+                    {
+                        stable.Add(connection);
+                    }
+                }
+
+                _previousKeys.Clear();
+                foreach (var key in currentKeys)
+                {
+                    _previousKeys.Add(key);
+                }
+
+                var persistable = stable.Count == snapshot.Connections.Count
+                    ? snapshot
+                    : snapshot with { Connections = stable };
+                _lastPersistable = persistable;
+
                 try
                 {
-                    await store.UpsertAsync(snapshot, stoppingToken).ConfigureAwait(false);
+                    await store.UpsertAsync(persistable, cancellationToken: stoppingToken).ConfigureAwait(false);
                     lastRevision = revision;
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -96,5 +134,20 @@ public sealed partial class HistoryWriter(
             }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
+
+        // One last write on shutdown keeps the final stable snapshot in history.
+        if (_lastPersistable is { } last)
+        {
+            try
+            {
+                await store.UpsertAsync(last, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // Best effort on shutdown; the host is already stopping.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                LogWriteFailure(logger, exception);
+            }
+        }
     }
 }

@@ -115,7 +115,7 @@ public sealed class HistoryStoreTests : IDisposable
 
         var first = new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.Zero);
         await store.UpsertAsync(Snapshot(first, ("chrome.exe", @"C:\chrome.exe", 100, "203.0.113.10:443")));
-        await store.UpsertAsync(Snapshot(first.AddSeconds(5), ("chrome.exe", @"C:\chrome.exe", 100, "203.0.113.10:443")));
+        await store.UpsertAsync(Snapshot(first.AddSeconds(5), ("chrome.exe", @"C:\chrome.exe", 100, "203.0.113.10:443")), forceRefresh: true);
 
         var page = await store.QueryAsync(new HistoryQuery
         {
@@ -346,6 +346,47 @@ public sealed class HistoryStoreTests : IDisposable
             ToUtc = now.AddMinutes(1),
             Search = search,
         });
+
+    [Fact]
+    public async Task History_groups_ephemeral_local_ports_into_one_remote_row()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var first = new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.Zero);
+        await store.UpsertAsync(SnapshotWithLocal(first, "192.0.2.10:50000"));
+        await store.UpsertAsync(SnapshotWithLocal(first.AddSeconds(30), "192.0.2.10:50001"));
+
+        var page = await Query(store, first, string.Empty);
+
+        Assert.Equal(1, page.TotalCount);
+        Assert.Equal("192.0.2.10", page.Rows[0].LocalEndpoint);
+    }
+
+    private static ConnectionSnapshot SnapshotWithLocal(DateTimeOffset capturedUtc, string local) =>
+        new()
+        {
+            CapturedUtc = capturedUtc,
+            SourceName = "test",
+            ProcessCount = 1,
+            Connections =
+            [
+                new LiveConnection
+                {
+                    AppDisplayName = "chrome.exe",
+                    AppPath = @"C:\chrome.exe",
+                    ProcessId = 100,
+                    Protocol = TransportProtocol.Tcp,
+                    LocalEndpoint = local,
+                    RemoteEndpoint = "203.0.113.10:443",
+                    State = "Established",
+                    Direction = ConnectionDirection.Outbound,
+                    InterfaceName = string.Empty,
+                    FirstObservedUtc = capturedUtc,
+                    Quality = DataQuality.Observed,
+                },
+            ],
+        };
 
     private static ConnectionSnapshot Snapshot(
         DateTimeOffset capturedUtc,

@@ -13,7 +13,7 @@ public sealed class PrivacyShieldBlockedHistoryTests
         var path = Path.Combine(Path.GetTempPath(), $"axiom-blocked-{Guid.NewGuid():N}.jsonl");
         try
         {
-            var store = new PrivacyShieldBlockedHistoryStore(path);
+            using var store = new PrivacyShieldBlockedHistoryStore(path);
             var first = new PrivacyShieldBlockedEvent(
                 "first.example",
                 PrivacyCategory.Ads,
@@ -30,6 +30,8 @@ public sealed class PrivacyShieldBlockedHistoryTests
             Assert.Equal(2, loaded.Count);
             Assert.Equal("second.example", loaded[0].Domain);
             Assert.Equal("first.example", loaded[1].Domain);
+            store.Flush();
+            Assert.True(File.Exists(path));
             Assert.DoesNotContain("allowed.example", File.ReadAllText(path), StringComparison.Ordinal);
 
             store.Clear();
