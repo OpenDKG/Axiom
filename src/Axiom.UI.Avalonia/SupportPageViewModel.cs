@@ -45,7 +45,9 @@ public sealed partial class SupportPageViewModel : PageViewModel
             "Use Overview, Connections and Applications to inspect live sockets, remote endpoints and per-application activity. These pages are read-only."),
         new(
             "2. Review firewall rules",
-            "Open Firewall to see only rules owned by Axiom. Writes are off until you consent: complete installation enables Axiom Shield during setup, while partial installation leaves it off. The explicit test-VM gate is still required before any rule can be created or removed."),
+            OperatingSystem.IsWindows()
+                ? "Open Firewall to see only rules owned by Axiom. Writes are off until you consent: complete installation enables Axiom Shield during setup, while partial installation leaves it off. The explicit test-VM gate is still required before any rule can be created or removed."
+                : "Open Firewall to see the rules owned by Axiom. Rules are enforced by the AxiomFilter network extension, which macOS asks you to approve once in System Settings > General > Login Items & Extensions."),
         new(
             "3. Make one deliberate change",
             "On Applications, select a process and choose Block outbound only when you understand the effect. Verify connectivity and remove the owned rule from Firewall if needed."),

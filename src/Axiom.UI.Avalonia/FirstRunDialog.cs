@@ -22,8 +22,8 @@ public sealed class FirstRunDialog : Window
     private static readonly IBrush ForegroundBrush = new SolidColorBrush(Color.Parse("#E6EDF3"));
     private static readonly IBrush MutedBrush = new SolidColorBrush(Color.Parse("#9BA9B8"));
 
-    private readonly CheckBox _dkg = new() { Content = "OriginTrail DKG testnet (npm package, local node)", Foreground = ForegroundBrush };
-    private readonly CheckBox _blackbox = new() { Content = "Blackbox (Umanitek official installer; large third-party download)", Foreground = ForegroundBrush };
+    private readonly CheckBox _dkg = new() { Content = "OriginTrail DKG testnet (npm package, local node)", Foreground = ForegroundBrush, IsVisible = OperatingSystem.IsWindows() };
+    private readonly CheckBox _blackbox = new() { Content = "Blackbox (Umanitek official installer; large third-party download)", Foreground = ForegroundBrush, IsVisible = OperatingSystem.IsWindows() };
     private readonly CheckBox _community = new() { Content = "Axiom starter community feed (bundled, offline)", IsChecked = true, Foreground = ForegroundBrush };
     private readonly CheckBox _accept = new()
     {
@@ -92,8 +92,8 @@ public sealed class FirstRunDialog : Window
         var settings = new OnboardingSettings(
             Completed: true,
             Skipped: false,
-            Dkg: dialog._dkg.IsChecked == true,
-            Blackbox: dialog._blackbox.IsChecked == true);
+            Dkg: OperatingSystem.IsWindows() && dialog._dkg.IsChecked == true,
+            Blackbox: OperatingSystem.IsWindows() && dialog._blackbox.IsChecked == true);
         OnboardingStore.Save(settings);
 
         if (dialog._community.IsChecked == true)
@@ -164,7 +164,7 @@ public sealed class FirstRunDialog : Window
                     ? "Selected installers run in a visible PowerShell window. They may download hundreds of MB, " +
                       "create a local testnet wallet/config and a scheduled task, and may ask for UAC or third-party terms. " +
                       "Axiom does not hide, bundle or vouch for third-party code."
-                    : "Guided installers for the optional modules are not available on macOS yet; install them manually " +
+                    : "The OriginTrail DKG and Blackbox modules have no guided installer on macOS yet; install them manually " +
                       "if you want them. Axiom does not hide, bundle or vouch for third-party code.",
                 Foreground = MutedBrush,
                 FontSize = 11,
