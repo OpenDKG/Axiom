@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: build.sh substitutes @VERSION@, @BUILD@ and @APP_GROUP@. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.axiom.firewall.filter</string>
+	<key>CFBundleExecutable</key>
+	<string>com.axiom.firewall.filter</string>
+	<key>CFBundleName</key>
+	<string>AxiomFilter</string>
+	<key>CFBundleDisplayName</key>
+	<string>Axiom Firewall Filter</string>
+	<key>CFBundlePackageType</key>
+	<string>SYSX</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@BUILD@</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>MacOSX</string>
+	</array>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Axiom. Licensed under the GNU GPL.</string>
+	<key>NSSystemExtensionUsageDescription</key>
+	<string>Axiom uses a network content filter to enforce your firewall rules and show which apps use the network.</string>
+	<key>NetworkExtension</key>
+	<dict>
+		<!-- Must be prefixed by an app group listed in the extension's entitlements. -->
+		<key>NEMachServiceName</key>
+		<string>@APP_GROUP@.filter</string>
+		<key>NEProviderClasses</key>
+		<dict>
+			<key>com.apple.networkextension.filter-data</key>
+			<string>AxiomFilter.FilterDataProvider</string>
+		</dict>
+	</dict>
+</dict>
+</plist>
