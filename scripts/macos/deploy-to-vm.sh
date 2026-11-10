@@ -8,5 +8,5 @@ tar cf - --exclude=macos/build build/macos/osx-x64/publish scripts/macos macos s
   | $S 'tar xf - -C ~/axiom'
 $S "cd ~/axiom && AXIOM_BUILD=${AXIOM_BUILD:-10} scripts/macos/package-app.sh osx-x64 --skip-publish --build-filter 2>&1 | tail -15"
 if [[ "${INSTALL:-1}" == 1 ]]; then
-  $S 'osascript -e "quit app \"Axiom\"" 2>/dev/null; sleep 2; sudo -n rm -rf /Applications/Axiom.app && sudo -n ditto ~/axiom/build/macos/osx-x64/Axiom.app /Applications/Axiom.app && codesign --verify --deep --strict /Applications/Axiom.app && echo INSTALLED'
+  $S 'osascript -e "quit app \"Axiom\"" 2>/dev/null; sleep 2; sudo -n rm -rf /Applications/Axiom.app && sudo -n ditto ~/axiom/build/macos/osx-x64/Axiom.app /Applications/Axiom.app && codesign --verify --deep --strict /Applications/Axiom.app && echo INSTALLED && (sudo -n launchctl print system/com.axiom.service >/dev/null 2>&1 \&\& sudo -n launchctl kickstart -k system/com.axiom.service \&\& echo DAEMON-RESTARTED || true)'
 fi
