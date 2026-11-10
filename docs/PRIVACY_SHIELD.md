@@ -72,6 +72,19 @@ and points to the UAC helper. Once an adapter points at it, the adapter row show
 Manual queries to `127.0.0.1` still work for testing, but they do not prove that system-wide
 traffic is filtered.
 
+### Browser secure DNS (DoH)
+
+A browser switched to its own DNS-over-HTTPS provider stops asking Windows, so even a correctly
+pointed adapter sees none of its queries. The page reads the Chrome and Edge
+`User Data\<profile>\Preferences` files and Firefox `Profiles\<profile>\prefs.js`, and shows a
+warning when a profile uses secure DNS (`dns_over_https.mode` `secure`, or `automatic` with a
+custom template) or Firefox `network.trr.mode` 2 or 3. The warning names the browser and profile
+and where to turn secure DNS off.
+
+This is detection only; no browser setting is changed and nothing is written to the profile. It
+does not read Windows system DoH: that applies to a configured public DNS server, and an adapter
+pointed at `127.0.0.1` has no DoH template.
+
 ## What is not implemented
 
 - A WFP callout driver, hosts-file editing or LAN-wide resolver.

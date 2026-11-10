@@ -95,6 +95,17 @@
             <controls:AxiomSelectableTextBlock Text="{Binding StatsText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <controls:AxiomSelectableTextBlock Text="{Binding StatsHintText}" IsVisible="{Binding HasStatsHint}" FontSize="9.5"
                                                 Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" MaxWidth="380" />
+            <Border IsVisible="{Binding HasDohBypass}" Background="{DynamicResource Axiom.SurfaceAlt}"
+                    BorderBrush="{DynamicResource Axiom.Warning}" BorderThickness="1" CornerRadius="6" Padding="9,6">
+              <StackPanel Spacing="3">
+                <controls:AxiomSelectableTextBlock Text="Browser secure DNS (DoH) bypass" FontSize="10" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Axiom.Warning}" />
+                <controls:AxiomSelectableTextBlock Text="{Binding DohBypassText}" FontSize="10"
+                                                   Foreground="{DynamicResource Axiom.Warning}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+            <controls:AxiomSelectableTextBlock Text="{Binding DohBypassText}" IsVisible="{Binding !HasDohBypass}" FontSize="9.5"
+                                               Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" MaxWidth="380" />
             <controls:AxiomSelectableTextBlock Text="{Binding DetailText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" MaxWidth="380" />
             <controls:AxiomSelectableTextBlock Text="{Binding LastUpdatedText}" FontSize="9" Foreground="{DynamicResource Axiom.Accent}" />
           </StackPanel>
