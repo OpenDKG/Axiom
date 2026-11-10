@@ -98,6 +98,7 @@
               <Button Content="Third-party notices" Command="{Binding ViewThirdPartyNoticesCommand}" Padding="12,6" Margin="0,0,8,8" />
               <Button Content="Contributors" Command="{Binding ViewContributorsCommand}" Padding="12,6" Margin="0,0,8,8" />
               <Button Content="Source code" Command="{Binding OpenSourceCommand}" Padding="12,6" Margin="0,0,8,8" />
+              <Button Content="OpenDKG website" Command="{Binding OpenAffiliationCommand}" Padding="12,6" Margin="0,0,8,8" />
             </WrapPanel>
             <controls:AxiomSelectableTextBlock Text="{Binding AboutAffiliation}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
             <controls:AxiomSelectableTextBlock Text="The complete license, notice and third-party texts are bundled with this installation and stay readable offline." FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />

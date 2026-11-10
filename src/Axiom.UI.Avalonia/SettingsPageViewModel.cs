@@ -112,17 +112,22 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         _ui.ShowDocumentAsync("Axiom contributors", AxiomDocuments.Authors, CancellationToken.None);
 
     [RelayCommand]
-    private async Task OpenSourceAsync()
+    private Task OpenSourceAsync() => OpenExternalAsync(AxiomDocuments.SourceUrl, "Source code", "repository");
+
+    [RelayCommand]
+    private Task OpenAffiliationAsync() => OpenExternalAsync(AxiomDocuments.AffiliationUrl, "OpenDKG", "website");
+
+    private async Task OpenExternalAsync(string url, string title, string label)
     {
         try
         {
-            await _ui.OpenExternalAsync(AxiomDocuments.SourceUrl, CancellationToken.None).ConfigureAwait(true);
+            await _ui.OpenExternalAsync(url, CancellationToken.None).ConfigureAwait(true);
         }
         catch (Exception exception) when (exception is NotSupportedException or InvalidOperationException)
         {
             await _ui.ShowMessageAsync(
-                "Source code",
-                $"This build cannot open a browser. The repository is {AxiomDocuments.SourceUrl}.",
+                title,
+                $"This build cannot open a browser. The {label} is {url}.",
                 CancellationToken.None).ConfigureAwait(true);
         }
     }

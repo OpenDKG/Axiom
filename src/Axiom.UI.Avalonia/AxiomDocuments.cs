@@ -29,6 +29,8 @@ public static class AxiomDocuments
 
     public const string AffiliationLabel = "OpenDKG Initiative";
 
+    public const string AffiliationUrl = "https://opendkg.org";
+
     /// <summary>Approved affiliation wording. It states no ownership, copyright or publishing claim.</summary>
     public const string AffiliationText =
         "Axiom is an independent open-source project affiliated with the OpenDKG initiative.";

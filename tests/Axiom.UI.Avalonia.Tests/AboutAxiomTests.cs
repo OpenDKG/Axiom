@@ -32,6 +32,7 @@ public sealed class AboutAxiomTests
             Assert.Contains("dreddster", page.AboutContributors, StringComparison.Ordinal);
             Assert.Contains("brxtrac", page.AboutContributors, StringComparison.Ordinal);
             Assert.Equal("OpenDKG Initiative", page.AboutAffiliationLabel);
+            Assert.Equal("https://opendkg.org", AxiomDocuments.AffiliationUrl);
             Assert.Equal("Axiom is an independent open-source project affiliated with the OpenDKG initiative.", page.AboutAffiliation);
             Assert.Equal("https://github.com/a-51-50/Axiom", page.AboutSource);
             Assert.Contains("2026 The Axiom contributors", page.AboutCopyright, StringComparison.Ordinal);
@@ -53,12 +54,15 @@ public sealed class AboutAxiomTests
             await page.ViewThirdPartyNoticesCommand.ExecuteAsync(null);
             await page.ViewContributorsCommand.ExecuteAsync(null);
             await page.OpenSourceCommand.ExecuteAsync(null);
+            await page.OpenAffiliationCommand.ExecuteAsync(null);
 
             Assert.Equal(3, interaction.Documents.Count);
             Assert.Contains("GNU GENERAL PUBLIC LICENSE", interaction.Documents[0].Text, StringComparison.Ordinal);
             Assert.Equal("Third-party notices", interaction.Documents[1].Title);
             Assert.Equal("Axiom contributors", interaction.Documents[2].Title);
-            Assert.Equal("https://github.com/a-51-50/Axiom", Assert.Single(interaction.OpenedUrls));
+            Assert.Equal(2, interaction.OpenedUrls.Count);
+            Assert.Equal("https://github.com/a-51-50/Axiom", interaction.OpenedUrls[0]);
+            Assert.Equal("https://opendkg.org", interaction.OpenedUrls[1]);
         }
         finally
         {
