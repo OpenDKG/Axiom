@@ -36,7 +36,7 @@ public sealed class GeminiProtection
         "blackbox",
         "agent-blackbox");
 
-    private string PythonPath => Path.Combine(BlackboxAgentRoot, "venv", "Scripts", "python.exe");
+    private string PythonPath => AgentPlatform.VenvPython(BlackboxAgentRoot);
 
     public string HookScriptPath => Path.Combine(BlackboxAgentRoot, Marker);
 
@@ -249,7 +249,7 @@ public sealed class GeminiProtection
         return true;
     }
 
-    private static string BuildHookScript() => """
+    private static string BuildHookScript() => AgentPlatform.AdaptHookScript("""
         # Managed by Axiom. Calls the local Blackbox guard for Gemini CLI BeforeTool hooks.
         import contextlib
         import datetime
@@ -321,5 +321,5 @@ public sealed class GeminiProtection
 
         if __name__ == "__main__":
             main()
-        """;
+        """);
 }

@@ -196,17 +196,23 @@ public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUser
             return null;
         }
 
+        // macOS and Linux executables have no extension (and .app bundles are packages), so an
+        // ".exe" filter would hide every valid choice there.
+        var unfiltered = !OperatingSystem.IsWindows() &&
+                         string.Equals(extension.TrimStart('.'), "exe", StringComparison.OrdinalIgnoreCase);
         var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = title,
             AllowMultiple = false,
-            FileTypeFilter =
-            [
-                new FilePickerFileType(typeName)
-                {
-                    Patterns = [$"*.{extension.TrimStart('.')}"],
-                },
-            ],
+            FileTypeFilter = unfiltered
+                ? null
+                :
+                [
+                    new FilePickerFileType(typeName)
+                    {
+                        Patterns = [$"*.{extension.TrimStart('.')}"],
+                    },
+                ],
         }).ConfigureAwait(true);
 
         cancellationToken.ThrowIfCancellationRequested();

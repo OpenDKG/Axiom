@@ -292,6 +292,12 @@ public sealed class OptionalModuleUninstaller
 
     private static bool RunPowerShellScript(string script)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            // The uninstall scripts are PowerShell; nothing was installed by them elsewhere.
+            return false;
+        }
+
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
             "powershell.exe",
@@ -314,6 +320,11 @@ public sealed class OptionalModuleUninstaller
 
     private static void StartPowerShell(string script)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
             "powershell.exe",

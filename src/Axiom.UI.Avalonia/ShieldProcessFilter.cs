@@ -51,7 +51,8 @@ internal static class ShieldProcessFilter
             IsUnder(path, Path.Combine(ProgramFiles, "Microsoft")) ||
             IsUnder(path, Path.Combine(ProgramFilesX86, "Microsoft")) ||
             IsUnder(path, Path.Combine(ProgramFiles, "WindowsApps")) ||
-            IsUnder(path, Path.Combine(ProgramData, "Microsoft")))
+            IsUnder(path, Path.Combine(ProgramData, "Microsoft")) ||
+            (OperatingSystem.IsMacOS() && IsMacSystemPath(path)))
         {
             return true;
         }
@@ -89,6 +90,16 @@ internal static class ShieldProcessFilter
             return false;
         }
     }
+
+    /// <summary>
+    /// macOS counterpart of the Windows directory: the sealed, SIP-protected system volume
+    /// (Apple daemons and command-line tools), equivalent to ignoring C:\Windows.
+    /// </summary>
+    internal static bool IsMacSystemPath(string path) =>
+        MacSystemRoots.Any(root => path.StartsWith(root + "/", StringComparison.Ordinal));
+
+    private static readonly string[] MacSystemRoots =
+        ["/System", "/usr/libexec", "/usr/sbin", "/usr/bin", "/sbin", "/bin"];
 
     private static bool IsUnder(string path, string root)
     {

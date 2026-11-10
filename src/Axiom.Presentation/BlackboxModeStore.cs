@@ -28,7 +28,7 @@ public sealed class BlackboxModeStore
 
     public string BlackboxRoot { get; }
 
-    public string PythonPath => Path.Combine(BlackboxRoot, "venv", "Scripts", "python.exe");
+    public string PythonPath => AgentPlatform.VenvPython(BlackboxRoot);
 
     public string ConfigPath { get; }
 

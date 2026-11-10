@@ -70,7 +70,9 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public string PollText { get; }
 
-    public string StorageText => @"%LOCALAPPDATA%\Axiom\axiom.db (service mode)";
+    public string StorageText => OperatingSystem.IsMacOS()
+        ? "/Library/Application Support/Axiom/axiom.db (daemon)"
+        : @"%LOCALAPPDATA%\Axiom\axiom.db (service mode)";
 
     public string OsText => Environment.OSVersion.VersionString;
 

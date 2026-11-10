@@ -56,7 +56,7 @@ public sealed class DeepSeekProtection
         "blackbox",
         "agent-blackbox");
 
-    private string PythonPath => Path.Combine(BlackboxAgentRoot, "venv", "Scripts", "python.exe");
+    private string PythonPath => AgentPlatform.VenvPython(BlackboxAgentRoot);
 
     public string HookScriptPath => Path.Combine(BlackboxAgentRoot, "axiom-deepseek-hook.py");
 

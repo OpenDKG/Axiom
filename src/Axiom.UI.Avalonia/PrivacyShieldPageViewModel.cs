@@ -598,9 +598,20 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
     }
 
+    private const string MacDnsNote =
+        "On macOS the Axiom daemon switches system DNS to Privacy Shield automatically while the resolver " +
+        "runs and restores the previous DNS servers when it stops. No manual change is needed.";
+
     [RelayCommand]
     private async Task EnableSystemDnsAsync()
     {
+        if (OperatingSystem.IsMacOS())
+        {
+            // The macOS daemon points system DNS at the resolver itself and restores it on stop.
+            DnsHelperStatusText = MacDnsNote;
+            return;
+        }
+
         if (!_resolverActive)
         {
             DnsHelperStatusText = "Start the Privacy Shield resolver on port 53 first.";
@@ -650,6 +661,13 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     [RelayCommand]
     private async Task RestoreSystemDnsAsync()
     {
+        if (OperatingSystem.IsMacOS())
+        {
+            // The macOS daemon points system DNS at the resolver itself and restores it on stop.
+            DnsHelperStatusText = MacDnsNote;
+            return;
+        }
+
         var confirmed = await _ui.ConfirmAsync(
             "Restore adapter DNS",
             "Restore the adapter DNS settings saved by the Privacy Shield helper? Windows will ask for elevation.",
