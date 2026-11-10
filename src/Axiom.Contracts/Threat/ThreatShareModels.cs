@@ -193,13 +193,26 @@ public static class ThreatShareVocabulary
 
                 return raw;
             case "url":
-                if (!raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
-                    !raw.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+                    !IsShareableHost(uri.IdnHost))
                 {
                     return null;
                 }
 
-                return raw.TrimEnd('/');
+                // Scheme, host, non-default port and path only: credentials, query strings and
+                // fragments can contain tokens or presigned secrets and never leave the machine.
+                var hostForUrl = uri.IdnHost.TrimEnd('.').ToLowerInvariant();
+                if (hostForUrl.Contains(':', StringComparison.Ordinal) &&
+                    !hostForUrl.StartsWith('['))
+                {
+                    hostForUrl = "[" + hostForUrl + "]";
+                }
+
+                var port = uri.IsDefaultPort ? string.Empty : ":" + uri.Port;
+                var normalizedUrl = $"{uri.Scheme}://{hostForUrl}{port}{uri.AbsolutePath}"
+                    .TrimEnd('/');
+                return normalizedUrl.Length is > 0 and <= 2_048 ? normalizedUrl : null;
             case "ip":
                 if (!System.Net.IPAddress.TryParse(raw.Trim('[', ']'), out var address))
                 {
@@ -226,26 +239,109 @@ public static class ThreatShareVocabulary
     public static string BuildId(string indicatorType, string normalizedValue) =>
         $"ioc:{indicatorType.ToLowerInvariant()}:{normalizedValue}";
 
-    /// <summary>Loopback, link-local and RFC 1918/ULA addresses are not shareable indicators.</summary>
+    /// <summary>Loopback, link-local, private, documentation, benchmarking and multicast ranges are
+    /// not shareable indicators. IPv4-mapped IPv6 is checked as IPv4.</summary>
     private static bool IsNonPublic(System.Net.IPAddress address)
     {
-        if (System.Net.IPAddress.IsLoopback(address) ||
-            address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6UniqueLocal)
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 &&
+            address.IsIPv4MappedToIPv6)
         {
-            return true;
+            return IsNonPublic(address.MapToIPv4());
         }
 
-        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            if (System.Net.IPAddress.IsLoopback(address) ||
+                address.Equals(System.Net.IPAddress.IPv6Any) ||
+                address.IsIPv6LinkLocal ||
+                address.IsIPv6SiteLocal ||
+                address.IsIPv6UniqueLocal ||
+                address.IsIPv6Multicast)
+            {
+                return true;
+            }
+
+            return InNetwork(address, "64:ff9b::", 96) ||        // IPv4/IPv6 translation
+                   InNetwork(address, "64:ff9b:1::", 48) ||      // local-use translation
+                   InNetwork(address, "100::", 64) ||            // discard-only
+                   InNetwork(address, "2001::", 23) ||           // IETF protocol assignments
+                   InNetwork(address, "2001:db8::", 32) ||       // documentation
+                   InNetwork(address, "2002::", 16) ||           // 6to4
+                   InNetwork(address, "3fff::", 20) ||           // documentation
+                   InNetwork(address, "5f00::", 16);             // segment-routing SIDs
+        }
+
+        var bytes = address.GetAddressBytes();
+        return bytes[0] == 0 ||                                   // this network
+               bytes[0] == 10 ||                                  // private
+               (bytes[0] == 100 && bytes[1] is >= 64 and <= 127) || // CGNAT
+               bytes[0] == 127 ||                                 // loopback
+               (bytes[0] == 169 && bytes[1] == 254) ||            // link-local
+               (bytes[0] == 172 && bytes[1] is >= 16 and <= 31) || // private
+               (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 0) || // IETF protocol assignments
+               (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 2) || // TEST-NET-1
+               (bytes[0] == 192 && bytes[1] == 31 && bytes[2] == 196) || // AS112-v4
+               (bytes[0] == 192 && bytes[1] == 52 && bytes[2] == 193) || // AMT
+               (bytes[0] == 192 && bytes[1] == 88 && bytes[2] == 99) || // 6to4 relay anycast
+               (bytes[0] == 192 && bytes[1] == 168) ||            // private
+               (bytes[0] == 192 && bytes[1] == 175 && bytes[2] == 48) || // AS112 direct delegation
+               (bytes[0] == 198 && bytes[1] is 18 or 19) ||       // benchmarking
+               (bytes[0] == 198 && bytes[1] == 51 && bytes[2] == 100) || // TEST-NET-2
+               (bytes[0] == 203 && bytes[1] == 0 && bytes[2] == 113) || // TEST-NET-3
+               bytes[0] >= 224;                                  // multicast, reserved, broadcast
+    }
+
+    /// <summary>A URL host must be a public IP or a dotted public name; single-label and
+    /// <c>.local</c> names are private by definition.</summary>
+    private static bool IsShareableHost(string host)
+    {
+        host = (host ?? string.Empty).Trim().TrimEnd('.').ToLowerInvariant();
+        if (host.Length is 0 or > 253 ||
+            host is "localhost" or "local" ||
+            host.EndsWith(".localhost", StringComparison.Ordinal) ||
+            host.EndsWith(".local", StringComparison.Ordinal) ||
+            host.Any(character => char.IsWhiteSpace(character) || character is '/' or '@'))
         {
             return false;
         }
 
-        var bytes = address.GetAddressBytes();
-        return bytes[0] == 10 ||
-               (bytes[0] == 172 && bytes[1] is >= 16 and <= 31) ||
-               (bytes[0] == 192 && bytes[1] == 168) ||
-               (bytes[0] == 169 && bytes[1] == 254) ||
-               bytes[0] == 127;
+        if (System.Net.IPAddress.TryParse(host.Trim('[', ']'), out var address))
+        {
+            return !IsNonPublic(address);
+        }
+
+        var dot = host.LastIndexOf('.');
+        return dot > 0 &&
+               dot < host.Length - 1 &&
+               !host.Contains("..", StringComparison.Ordinal) &&
+               !NonDomainTlds.Contains(host[(dot + 1)..]);
+    }
+
+    private static bool InNetwork(System.Net.IPAddress address, string network, int prefixBits) =>
+        HasPrefix(
+            address.GetAddressBytes(),
+            System.Net.IPAddress.Parse(network).GetAddressBytes(),
+            prefixBits);
+
+    private static bool HasPrefix(byte[] address, byte[] prefix, int prefixBits)
+    {
+        var fullBytes = prefixBits / 8;
+        for (var index = 0; index < fullBytes; index++)
+        {
+            if (address[index] != prefix[index])
+            {
+                return false;
+            }
+        }
+
+        var remainingBits = prefixBits % 8;
+        if (remainingBits == 0)
+        {
+            return true;
+        }
+
+        var mask = (byte)(0xFF << (8 - remainingBits));
+        return (address[fullBytes] & mask) == (prefix[fullBytes] & mask);
     }
 }
 
