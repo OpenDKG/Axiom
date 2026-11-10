@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.12 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.13 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,15 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.13
+
+- **Antigravity now has an Axiom hook.** Axiom writes a PreToolUse entry into
+  ~/.gemini/config/hooks.json that runs the Blackbox guard; a deny decision blocks the tool call,
+  and every call is recorded as ntigravity evidence. The Agents page lists Antigravity as a
+  protected harness when the hook is installed.
+- The user's existing hooks.json entries are merged, never replaced. Antigravity must be restarted
+  after the hook is installed (it reads hooks at start).
 
 ## What's in 0.10.12
 
