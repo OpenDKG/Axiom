@@ -138,6 +138,7 @@
                       </Grid>
                     </Expander.Header>
                     <ListBox Classes="data-list" ItemsSource="{Binding Rows}" MaxHeight="240"
+                             SelectionChanged="OnGroupRowSelectionChanged"
                              Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                       <ListBox.ItemTemplate>
