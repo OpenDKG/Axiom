@@ -72,6 +72,19 @@ return one JSON object and never propose or perform a change. The application pa
 structured result and has no firewall/shell/file API in the AI code path. Recommended actions are
 plain text for a human to review; they are never executed.
 
+## Threat sharing
+
+The analyst returns a structured `indicators` array (`type`, `value`, `role`). Axiom proposes only
+`role: malicious` entries from a `SUSPICIOUS` or `SUPPORTED_ALERT` finding at high or critical
+severity, and only when the value matches a remote endpoint Axiom itself put in the evidence
+package. Summary, observations, evidence references and recommended actions are never scanned, so
+a domain named in prose or in a suggested block list cannot become a report. Queued values are shown
+on the Agents page and are signed and sent only after the user presses **Share** or **Send now**.
+
+While the evidence package carries no file hash computed by Axiom, hash indicators are never
+proposed. The Blackbox report still uses the closest available context label (`in-tool-output`) and
+`malware-delivery`; a dedicated observed-endpoint context should be requested from Umanitek.
+
 ## Limitations
 
 - A model finding is one source, not proof of compromise. `INSUFFICIENT_DATA`, `UNKNOWN`,

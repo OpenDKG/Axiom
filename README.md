@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.17 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.18 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,14 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.18
+
+- **AI Analyst indicators are structured and evidence-checked.** The analyst result may now carry
+  an `indicators` array; Axiom proposes only `role: malicious` entries whose value matches a remote
+  endpoint it put in the evidence package. Prose, observations, evidence references and suggested
+  actions are no longer scanned, so a benign domain in a comparison or a block recommendation cannot
+  become a report.
 
 ## What's in 0.10.17
 
