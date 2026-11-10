@@ -23,7 +23,8 @@ public sealed record PrivacyShieldAdapterOption(
     string Description,
     string DnsText,
     bool HasDefaultRoute,
-    bool UsesResolver = false)
+    bool UsesResolver = false,
+    bool HasFallback = false)
 {
     public string DisplayName => HasDefaultRoute
         ? $"{Name} — default route · DNS {DnsText}"
@@ -303,9 +304,10 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     public string ManualSetupText =>
         "The Axiom service never changes adapter DNS silently. The optional UAC helper changes " +
-        "only the selected adapter after you confirm Windows elevation; it saves the previous DNS " +
-        "and can restore it. If you do not use the helper, set the adapter DNS to 127.0.0.1 " +
-        "(port 53) manually. Until Windows DNS points at this resolver, normal traffic bypasses it " +
+        "only the selected adapter after you confirm Windows elevation; it saves the previous DNS, " +
+        "keeps it behind the resolver as a fallback, and can restore it. If you do not use the helper, " +
+        "set the adapter DNS to 127.0.0.1 (port 53) and keep the router's DNS as the second entry " +
+        "manually. Until Windows DNS points at this resolver, normal traffic bypasses it " +
         "and the counters stay at zero. This is DNS filtering only: applications still connect " +
         "directly to destination IPs; traffic is not routed or proxied through Axiom.";
 
@@ -586,7 +588,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         var confirmed = await _ui.ConfirmAsync(
             "Change adapter DNS",
             $"Point adapter '{SelectedAdapter.Name}' at the Privacy Shield loopback resolver 127.0.0.1?\n\n" +
-            "Windows will ask for elevation. The previous DNS settings are saved and can be restored.",
+            "The adapter keeps its current DNS servers behind the resolver as a fallback, so a stopped " +
+            "resolver cannot take the network down. Windows will ask for elevation. The previous DNS " +
+            "settings are saved and can be restored.",
             "Change DNS",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);
@@ -603,7 +607,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                 .EnableAsync(SelectedAdapter.Name, "127.0.0.1", CancellationToken.None)
                 .ConfigureAwait(true);
             DnsHelperStatusText = exitCode == 0
-                ? $"Adapter '{SelectedAdapter.Name}' now uses 127.0.0.1. Original settings were saved."
+                ? $"Adapter '{SelectedAdapter.Name}' now uses 127.0.0.1, with its previous DNS kept as fallback. Original settings were saved."
                 : $"The elevated DNS helper exited with code {exitCode}.";
         }
         catch (Exception exception) when (exception is
@@ -971,8 +975,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
 
     /// <summary>
-    /// A stopped resolver plus an adapter pointed at 127.0.0.1 means every name lookup on that
-    /// adapter fails. Surface it instead of leaving the user with a dead LAN and no explanation.
+    /// A stopped resolver while an adapter points at 127.0.0.1 means names stop resolving unless
+    /// the adapter kept a fallback server. Say which of the two is true instead of leaving the user
+    /// with a dead LAN and no explanation.
     /// </summary>
     private void UpdateDnsOutageWarning()
     {
@@ -986,6 +991,27 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
 
         HasDnsOutageRisk = true;
+        if (risky.HasFallback)
+        {
+            DnsOutageWarningText =
+                $"Adapter '{risky.Name}' sends DNS to 127.0.0.1 first, but the Privacy Shield resolver " +
+                "is not running. Its fallback DNS server still answers, so names keep resolving, but " +
+                "filtering is bypassed until you start Privacy Shield.";
+
+            if (!_dnsOutageAlerted)
+            {
+                _dnsOutageAlerted = true;
+                AxiomAlertService.Show(
+                    "Privacy Shield resolver is stopped",
+                    $"{risky.Name} falls back to its saved DNS server. The network still works, but " +
+                    "Privacy Shield filtering is bypassed.",
+                    force: false,
+                    page: typeof(PrivacyShieldPageViewModel));
+            }
+
+            return;
+        }
+
         DnsOutageWarningText =
             $"Adapter '{risky.Name}' sends DNS to 127.0.0.1, but the Privacy Shield resolver is not " +
             "running. Names will not resolve on that adapter until you start Privacy Shield or " +
@@ -1081,7 +1107,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                     network.Description,
                     dnsText,
                     hasDefaultRoute,
-                    usesResolver);
+                    usesResolver,
+                    otherDns.Length > 0);
             })
             .OrderByDescending(adapter => adapter.HasDefaultRoute)
             .ThenBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
