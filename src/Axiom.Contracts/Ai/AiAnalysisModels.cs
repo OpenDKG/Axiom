@@ -66,6 +66,12 @@ public sealed record AiFinding
 
     public IReadOnlyList<string> RecommendedActions { get; init; } = [];
 
+    /// <summary>
+    /// Values the model wants treated as malicious. Only structured entries are considered for
+    /// sharing, and only when Axiom observed the same value itself; prose is never scanned.
+    /// </summary>
+    public IReadOnlyList<AiIndicator> Indicators { get; init; } = [];
+
     public string Model { get; init; } = string.Empty;
 
     public DateTimeOffset AnalysisTimestampUtc { get; init; } = DateTimeOffset.UtcNow;
@@ -79,6 +85,19 @@ public sealed record AiFinding
     public string VerifierSummary { get; init; } = string.Empty;
 
     public string? Error { get; init; }
+}
+
+/// <summary>
+/// One structured indicator proposed by the model. <see cref="Role"/> is "malicious", "suspicious"
+/// or "unknown"; only "malicious" entries are ever considered for sharing.
+/// </summary>
+public sealed record AiIndicator
+{
+    public string Type { get; init; } = string.Empty;
+
+    public string Value { get; init; } = string.Empty;
+
+    public string Role { get; init; } = "unknown";
 }
 
 public sealed record AiEvidencePackage(

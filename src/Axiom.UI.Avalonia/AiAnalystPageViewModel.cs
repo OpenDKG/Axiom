@@ -492,9 +492,10 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
                 : "Analysis returned no reliable result: " + finding.Error;
             UpdateStatus();
 
-            // Only a high-confidence malicious finding proposes indicators, and only into the
-            // Agents-page review list. Nothing leaves the machine until the user turns sharing on.
-            await QueueThreatShareCandidatesAsync(finding).ConfigureAwait(true);
+            // Only a high-confidence malicious finding proposes indicators, and only values Axiom
+            // itself observed. They go into the Agents-page review list; nothing leaves the machine
+            // until the user presses Share or Send now.
+            await QueueThreatShareCandidatesAsync(finding, evidence).ConfigureAwait(true);
         }
         finally
         {
@@ -503,7 +504,9 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
         }
     }
 
-    private async Task QueueThreatShareCandidatesAsync(AiFinding finding)
+    private async Task QueueThreatShareCandidatesAsync(
+        AiFinding finding,
+        AiEvidencePackage evidence)
     {
         if (_serviceClient is null || finding.Error is not null)
         {
@@ -512,7 +515,7 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
 
         try
         {
-            foreach (var candidate in ThreatShareIocExtractor.Extract(finding))
+            foreach (var candidate in ThreatShareIocExtractor.Extract(finding, evidence))
             {
                 await _serviceClient
                     .SendAsync<ThreatShareQueueStatus>(
