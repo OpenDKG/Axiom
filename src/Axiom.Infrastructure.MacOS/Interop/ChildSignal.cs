@@ -56,7 +56,7 @@ public static class ChildSignal
     [DllImport("libc")]
     private static extern IntPtr signal(int signum, IntPtr handler);
 
-    [DllImport("libc", SetLastError = true)]
+    [DllImport("libc", SetLastError = true, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
     private static extern int execv(
         [MarshalAs(UnmanagedType.LPUTF8Str)] string path,
         [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)] string?[] argv);

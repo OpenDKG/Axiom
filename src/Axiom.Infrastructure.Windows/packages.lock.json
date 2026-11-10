@@ -38,17 +38,6 @@
           "Axiom.Core": "[0.10.6, )"
         }
       }
-    },
-    "net10.0-windows7.0/osx-x64": {
-      "System.Management": {
-        "type": "Direct",
-        "requested": "[10.0.14, )",
-        "resolved": "10.0.14",
-        "contentHash": "ywAltakc72Oe7liNatclpyq8oiLYx0VMSjQvphlsbPbiQ9glrV3JKvn5M2xFbsOzzh8sV3QAiUdmu2AV/ffN7Q==",
-        "dependencies": {
-          "System.CodeDom": "10.0.14"
-        }
-      }
     }
   }
 }
