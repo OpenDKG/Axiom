@@ -123,6 +123,12 @@
                          Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
               <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.UnresolvedText}" FontSize="10"
                          Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ActivityFreshnessText}" FontSize="10"
+                         Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap"
+                         IsVisible="{Binding !AgentActivity.HasStaleAgentActivity}" />
+              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ActivityFreshnessText}" FontSize="10"
+                         Foreground="{DynamicResource Axiom.Warning}" TextWrapping="Wrap"
+                         IsVisible="{Binding AgentActivity.HasStaleAgentActivity}" />
             </StackPanel>
             <Button Grid.Column="1" Content="Load more" Padding="9,4" FontSize="11" Margin="8,0,0,0"
                     VerticalAlignment="Top"
