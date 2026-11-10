@@ -174,9 +174,13 @@ public sealed partial class AppsPageViewModel : PageViewModel, IDisposable
                 .ConfigureAwait(true);
 
             CanWrite = capabilities.FirewallWrites;
-            WriteStatusText = CanWrite
-                ? "Firewall writes are enabled for this service session. Use only on an isolated test VM."
-                : "Firewall writes are disabled. Set the explicit write gate on an isolated VM.";
+            WriteStatusText = OperatingSystem.IsMacOS()
+                ? (CanWrite
+                    ? "Firewall rules are enabled (Axiom Shield is on). Blocks are enforced by the AxiomFilter network extension."
+                    : "Firewall rules are off. Turn on Axiom Shield on the Firewall page to create block rules.")
+                : CanWrite
+                    ? "Firewall writes are enabled for this service session. Use only on an isolated test VM."
+                    : "Firewall writes are disabled. Set the explicit write gate on an isolated VM.";
         }
         catch (ServiceUnavailableException exception)
         {
@@ -209,8 +213,8 @@ public sealed partial class AppsPageViewModel : PageViewModel, IDisposable
         var confirmed = await _ui.ConfirmAsync(
             "Axiom firewall write",
             $"Create a {PlatformText.Firewall} block rule for {app.Name} ({directionText})?\n\n" +
-            "The rule is owned by Axiom and can be removed from the Firewall page. " +
-            "Only continue on an isolated test VM.",
+            "The rule is owned by Axiom and can be removed from the Firewall page." +
+            (OperatingSystem.IsMacOS() ? string.Empty : " Only continue on an isolated test VM."),
             "Create rule",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);

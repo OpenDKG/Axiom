@@ -500,7 +500,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         var confirmed = await _ui.ConfirmAsync(
             "Axiom firewall write",
             $"Create or update the Axiom-owned {action.ToString().ToLowerInvariant()} rule for:\n{path}\n\n" +
-            $"Only this rule is changed. Other {PlatformText.Firewall} rules are not touched. Continue only on an isolated test VM.",
+            $"Only this rule is changed. Other {PlatformText.Firewall} rules are not touched." +
+            (OperatingSystem.IsMacOS() ? string.Empty : " Continue only on an isolated test VM."),
             "Apply rule",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);
