@@ -41,6 +41,8 @@ role or a copyright claim. Future contributors are added here without changing t
 
 Axiom is an independent open-source project affiliated with the OpenDKG initiative.
 
+Website: <https://opendkg.org>
+
 OpenDKG is an affiliated open-source initiative. It is not the legal owner, copyright holder or
 publisher of Axiom, and this document transfers no rights.
 
