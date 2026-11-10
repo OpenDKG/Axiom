@@ -14,6 +14,7 @@ public sealed class AboutAxiomTests
         Assert.Contains("GNU GENERAL PUBLIC LICENSE", AxiomDocuments.License, StringComparison.Ordinal);
         Assert.Contains("Copyright (C) 2026 The Axiom contributors", AxiomDocuments.Notice, StringComparison.Ordinal);
         Assert.Contains("The Axiom contributors", AxiomDocuments.Authors, StringComparison.Ordinal);
+        Assert.Contains("affiliated with the OpenDKG initiative", AxiomDocuments.Authors, StringComparison.Ordinal);
         Assert.False(string.IsNullOrWhiteSpace(AxiomDocuments.ThirdPartyNotices));
         Assert.StartsWith(AxiomDocuments.Notice, AxiomDocuments.LicenseBundle, StringComparison.Ordinal);
     }
@@ -30,6 +31,7 @@ public sealed class AboutAxiomTests
             Assert.Equal("a-51-50", page.AboutCreatedBy);
             Assert.Contains("dreddster", page.AboutContributors, StringComparison.Ordinal);
             Assert.Contains("brxtrac", page.AboutContributors, StringComparison.Ordinal);
+            Assert.Equal("Axiom is an independent open-source project affiliated with the OpenDKG initiative.", page.AboutAffiliation);
             Assert.Equal("https://github.com/a-51-50/Axiom", page.AboutSource);
             Assert.Contains("2026 The Axiom contributors", page.AboutCopyright, StringComparison.Ordinal);
         }

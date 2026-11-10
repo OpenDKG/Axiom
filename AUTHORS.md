@@ -1,4 +1,4 @@
-# Authors and attribution
+﻿# Authors and attribution
 
 Axiom is developed in the public repository <https://github.com/a-51-50/Axiom> and is licensed
 under **GPL-3.0-or-later** (see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE)).
@@ -30,18 +30,20 @@ wording to publish. Naming a creator does not by itself assign copyright.
 
 ## Contributors
 
-- **a-51-50**
-- **dreddster**
-- **brxtrac**
+- **a-51-50** - original creator.
+- **dreddster** - contributor.
+- **brxtrac** - contributor.
 
-The list follows the repository's Git history and collaborator record. Every contributor keeps
-attribution for their work. Being listed does not make a contributor an original creator or a
-copyright holder, and future contributors are added here without changing the creator entry.
+Contributors are credited for their work. Listing a contributor does not imply shared ownership of
+the whole project, an original-creator role or a copyright claim. Future contributors are added
+here without changing the creator entry.
 
 ## Project affiliation
 
-Axiom is independently owned and maintained. No organisational affiliation statement is published
-in this repository yet; one is added only with the project owner's approved wording.
+Axiom is an independent open-source project affiliated with the OpenDKG initiative.
+
+OpenDKG is an affiliated open-source initiative. It is not the legal owner, copyright holder or
+publisher of Axiom, and this document transfers no rights.
 
 ## Related documents
 

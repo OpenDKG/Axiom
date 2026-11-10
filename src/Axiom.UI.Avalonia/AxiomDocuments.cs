@@ -27,6 +27,10 @@ public static class AxiomDocuments
 
     public const string ContributorsLine = "a-51-50, dreddster, brxtrac";
 
+    /// <summary>Approved affiliation wording. It states no ownership, copyright or publishing claim.</summary>
+    public const string AffiliationText =
+        "Axiom is an independent open-source project affiliated with the OpenDKG initiative.";
+
     private static readonly Lazy<string> LicenseDocument = new(() => Read("Axiom.Documents.LICENSE.txt"));
 
     private static readonly Lazy<string> NoticeDocument = new(() => Read("Axiom.Documents.NOTICE.txt"));

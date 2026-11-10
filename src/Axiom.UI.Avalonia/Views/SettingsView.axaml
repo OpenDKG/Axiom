@@ -97,7 +97,8 @@
               <Button Content="Contributors" Command="{Binding ViewContributorsCommand}" Padding="12,6" Margin="0,0,8,8" />
               <Button Content="Source code" Command="{Binding OpenSourceCommand}" Padding="12,6" Margin="0,0,8,8" />
             </WrapPanel>
-            <controls:AxiomSelectableTextBlock Text="Axiom is independently owned and maintained. The complete license, notice and third-party texts are bundled with this installation and stay readable offline." FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Text="{Binding AboutAffiliation}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Text="The complete license, notice and third-party texts are bundled with this installation and stay readable offline." FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </StackPanel>
         </Border>
       </StackPanel>

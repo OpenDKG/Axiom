@@ -739,6 +739,8 @@ scripts/                                # local run, service mode, standalone pu
 
 Copyright (C) 2026 The Axiom contributors.
 
+Axiom is an independent open-source project affiliated with the OpenDKG initiative.
+
 The desktop application, the Windows service and the core libraries are licensed under
 **GNU GPL v3.0 or later**. See [`LICENSE`](LICENSE) for the full text and [`NOTICE`](NOTICE) for the
 copyright and grant. Third-party components and their licenses are listed in

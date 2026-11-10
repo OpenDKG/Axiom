@@ -87,6 +87,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public string AboutContributors => AxiomDocuments.ContributorsLine;
 
+    public string AboutAffiliation => AxiomDocuments.AffiliationText;
+
     public string AboutCopyright => AxiomDocuments.CopyrightLine;
 
     public string AboutLicense => AxiomDocuments.LicenseName;
