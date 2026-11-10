@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.8 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.9 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,13 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.9
+
+- **HaGeZi list is pinned.** The source URL names a commit instead of @latest, and the updater
+  verifies its SHA-256 before rebuilding the ruleset; a mismatch keeps the previous rules.
+- **Single-label entries are rejected.** A list line without a dot can no longer block an entire
+  TLD such as com; invalid lines are skipped like other malformed input.
 
 ## What's in 0.10.8
 
