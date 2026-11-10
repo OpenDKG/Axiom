@@ -13,6 +13,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     private readonly IThemeService _theme;
     private readonly IAutostartService _autostart;
     private readonly FirewallPageViewModel? _firewall;
+    private readonly IUserInteraction _ui;
     private readonly StartupSettingsStore _startupSettings = new();
     private bool _updatingStartup;
 
@@ -21,8 +22,9 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         bool serviceMode,
         IThemeService theme,
         IAutostartService autostart,
-        FirewallPageViewModel? firewall = null)
-        : base("Settings", "Appearance and build information", "G")
+        FirewallPageViewModel? firewall = null,
+        IUserInteraction? userInteraction = null)
+        : base("Settings", "Appearance, build and license information", "G")
     {
         ArgumentNullException.ThrowIfNull(monitor);
         ArgumentNullException.ThrowIfNull(theme);
@@ -30,6 +32,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         _theme = theme;
         _autostart = autostart;
         _firewall = firewall;
+        _ui = userInteraction ?? new NullUserInteraction();
 
         CollectorText = monitor.SourceName;
         PollText = $"{monitor.PollInterval.TotalSeconds:0} s · read-only";
@@ -74,6 +77,55 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     public string ProcessText =>
         $"{RuntimeInformation.ProcessArchitecture} · 64-bit process: " +
         $"{(Environment.Is64BitProcess ? "yes" : "no")}";
+
+    public string AppVersion =>
+        $"v{typeof(SettingsPageViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"}";
+
+    public string AboutTagline => "Free & open-source network and AI agent security";
+
+    public string AboutCreatedBy => AxiomDocuments.CreatorLabel;
+
+    public string AboutContributors => AxiomDocuments.ContributorsLine;
+
+    public string AboutAffiliationLabel => AxiomDocuments.AffiliationLabel;
+
+    public string AboutAffiliation => AxiomDocuments.AffiliationText;
+
+    public string AboutCopyright => AxiomDocuments.CopyrightLine;
+
+    public string AboutLicense => AxiomDocuments.LicenseName;
+
+    public string AboutSource => AxiomDocuments.SourceUrl;
+
+
+
+    [RelayCommand]
+    private Task ViewLicenseAsync() =>
+        _ui.ShowDocumentAsync(AxiomDocuments.LicenseName, AxiomDocuments.LicenseBundle, CancellationToken.None);
+
+    [RelayCommand]
+    private Task ViewThirdPartyNoticesAsync() =>
+        _ui.ShowDocumentAsync("Third-party notices", AxiomDocuments.ThirdPartyNotices, CancellationToken.None);
+
+    [RelayCommand]
+    private Task ViewContributorsAsync() =>
+        _ui.ShowDocumentAsync("Axiom contributors", AxiomDocuments.Authors, CancellationToken.None);
+
+    [RelayCommand]
+    private async Task OpenSourceAsync()
+    {
+        try
+        {
+            await _ui.OpenExternalAsync(AxiomDocuments.SourceUrl, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is NotSupportedException or InvalidOperationException)
+        {
+            await _ui.ShowMessageAsync(
+                "Source code",
+                $"This build cannot open a browser. The repository is {AxiomDocuments.SourceUrl}.",
+                CancellationToken.None).ConfigureAwait(true);
+        }
+    }
 
     [ObservableProperty]
     private string _currentThemeText = "Dark";

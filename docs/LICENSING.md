@@ -7,6 +7,7 @@ The desktop application, the Windows service and the core libraries are licensed
 
 - Full text: [`LICENSE`](../LICENSE)
 - Copyright and grant: [`NOTICE`](../NOTICE)
+- Authors, copyright holders, maintainers and contributors: [`AUTHORS.md`](../AUTHORS.md)
 - Third-party components: [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)
 - Names and logos: [`TRADEMARKS.md`](../TRADEMARKS.md)
 

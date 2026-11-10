@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 Repository: https://github.com/a-51-50/Axiom
 
 Third-party components and their licenses are listed in THIRD_PARTY_NOTICES.md.
+Attribution roles (creators, copyright holders, maintainers, contributors) are described in AUTHORS.md.
 Optional integration modules under integrations/ may use separate licenses
 (for example MIT/Apache-2.0) and must keep their own notices separate from
 the GPL-3.0-or-later desktop/service.

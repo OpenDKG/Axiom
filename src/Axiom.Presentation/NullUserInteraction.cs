@@ -17,6 +17,9 @@ public sealed class NullUserInteraction : IUserInteraction
     public Task ShowMessageAsync(string title, string message, CancellationToken cancellationToken) =>
         Task.CompletedTask;
 
+    public Task ShowDocumentAsync(string title, string document, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
     public Task<string?> PickSaveFileAsync(
         string suggestedFileName,
         string extension,

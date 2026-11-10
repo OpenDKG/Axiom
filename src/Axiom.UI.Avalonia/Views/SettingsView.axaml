@@ -42,8 +42,9 @@
         </Border>
       </StackPanel>
 
-      <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-              CornerRadius="8" Padding="16" VerticalAlignment="Top">
+      <StackPanel Grid.Column="2" Spacing="14" VerticalAlignment="Top">
+        <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
+                CornerRadius="8" Padding="16">
         <StackPanel Spacing="8">
           <controls:AxiomSelectableTextBlock Text="Build information" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7">
@@ -66,7 +67,43 @@
           </Grid>
           <controls:AxiomSelectableTextBlock Text="Local only · no telemetry · no remote access" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" Margin="0,6,0,0" />
         </StackPanel>
-      </Border>
+        </Border>
+
+        <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
+                CornerRadius="8" Padding="16">
+          <StackPanel Spacing="8">
+            <controls:AxiomSelectableTextBlock Text="About Axiom" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <StackPanel Spacing="2">
+              <controls:AxiomSelectableTextBlock Text="AXIOM" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <controls:AxiomSelectableTextBlock Text="{Binding AboutTagline}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+            </StackPanel>
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7" Margin="0,4,0,0">
+              <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="Version" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+              <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AppVersion}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Original creator" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+              <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AboutCreatedBy}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="Contributors" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+              <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AboutContributors}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="Copyright" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+              <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding AboutCopyright}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="License" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+              <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding AboutLicense}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="0" Text="Affiliation" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+              <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="1" Text="{Binding AboutAffiliationLabel}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="0" Text="Source code" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+              <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="1" Text="{Binding AboutSource}" FontSize="11" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
+            </Grid>
+            <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
+              <Button Content="View license" Command="{Binding ViewLicenseCommand}" Padding="12,6" Margin="0,0,8,8" />
+              <Button Content="Third-party notices" Command="{Binding ViewThirdPartyNoticesCommand}" Padding="12,6" Margin="0,0,8,8" />
+              <Button Content="Contributors" Command="{Binding ViewContributorsCommand}" Padding="12,6" Margin="0,0,8,8" />
+              <Button Content="Source code" Command="{Binding OpenSourceCommand}" Padding="12,6" Margin="0,0,8,8" />
+            </WrapPanel>
+            <controls:AxiomSelectableTextBlock Text="{Binding AboutAffiliation}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Text="The complete license, notice and third-party texts are bundled with this installation and stay readable offline." FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
     </Grid>
   </ScrollViewer>
 </UserControl>
