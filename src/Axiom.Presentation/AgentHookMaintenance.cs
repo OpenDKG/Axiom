@@ -58,6 +58,9 @@ public static class AgentHookMaintenance
         var claude = new ClaudeProtection();
         Ensure(() => claude.IsInstalled, () => claude.EnsureInstalled(), refreshExisting);
 
+        var antigravity = new AntigravityProtection();
+        Ensure(() => antigravity.IsInstalled, () => antigravity.EnsureInstalled(), refreshExisting);
+
         var cursor = new CursorProtection();
         Ensure(() => cursor.IsInstalled, () => cursor.EnsureInstalled(), refreshExisting);
 
