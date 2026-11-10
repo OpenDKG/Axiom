@@ -66,7 +66,36 @@ public sealed class MacDnsConfigurator
     public IReadOnlyList<string>? GetDnsServers(string service)
     {
         var result = _runner.Run(NetworkSetup, ["-getdnsservers", service], ToolTimeout);
-        return NetworkSetupParser.ParseDnsServers(result.StandardOutput + "\n" + result.StandardError);
+        var servers = NetworkSetupParser.ParseDnsServers(result.StandardOutput + "\n" + result.StandardError);
+        if (servers is null)
+        {
+            Log($"networksetup -getdnsservers '{service}' exited {result.ExitCode}: " +
+                $"{result.StandardError.Trim()} {result.StandardOutput.Trim()}".Trim());
+        }
+
+        return servers;
+    }
+
+    /// <summary>Delay between reads when networksetup cannot report a service's DNS.</summary>
+    public TimeSpan ReadRetryDelay { get; init; } = TimeSpan.FromMilliseconds(750);
+
+    /// <summary>
+    /// Reads a service's DNS, retrying a few times. Right after the resolver stops, networksetup
+    /// occasionally fails to read the configuration (observed in the VM while configd was still
+    /// applying the previous change), which used to leave system DNS at 127.0.0.1.
+    /// </summary>
+    private IReadOnlyList<string>? GetDnsServersWithRetry(string service)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var servers = GetDnsServers(service);
+            if (servers is not null || attempt >= 4)
+            {
+                return servers;
+            }
+
+            Thread.Sleep(ReadRetryDelay);
+        }
     }
 
     public bool SetDnsServers(string service, IReadOnlyList<string> servers)
@@ -208,17 +237,30 @@ public sealed class MacDnsConfigurator
         {
             var backup = ReadBackup();
             var changed = false;
+            var unknown = false;
             foreach (var service in ListServices().Where(service => service.Enabled))
             {
-                var servers = GetDnsServers(service.Name);
+                var saved = backup?.Services.FirstOrDefault(entry =>
+                    string.Equals(entry.Name, service.Name, StringComparison.Ordinal));
+                var servers = saved is null ? GetDnsServers(service.Name) : GetDnsServersWithRetry(service.Name);
                 Log($"restore check '{service.Name}': {(servers is null ? "unreadable" : string.Join(' ', servers))}");
-                if (servers is null || !IsLoopbackOnly(servers))
+                if (servers is null)
+                {
+                    // Unknown state. A service Axiom redirected (it is in the backup) gets its saved
+                    // servers back anyway: writing them again is harmless, while leaving 127.0.0.1
+                    // behind with the resolver stopped takes name resolution down.
+                    if (saved is null)
+                    {
+                        continue;
+                    }
+
+                    unknown = true;
+                }
+                else if (!IsLoopbackOnly(servers))
                 {
                     continue;
                 }
 
-                var saved = backup?.Services.FirstOrDefault(entry =>
-                    string.Equals(entry.Name, service.Name, StringComparison.Ordinal));
                 var restore = saved?.Servers.Where(server => !IsLoopbackText(server)).ToArray() ?? [];
                 var ok = SetDnsServers(service.Name, restore);
                 Log($"restore '{service.Name}' -> {(restore.Length == 0 ? "automatic" : string.Join(' ', restore))}: {(ok ? "ok" : "failed")}");
@@ -230,9 +272,10 @@ public sealed class MacDnsConfigurator
                 FlushCache();
             }
 
-            var stillRedirected = AnyServiceRedirected();
-            Log($"restore finished: changed={changed} stillRedirected={stillRedirected}");
-            if (backup is not null && !stillRedirected)
+            var stillRedirected = AnyServiceRedirected(backup, out var unreadable);
+            unknown |= unreadable;
+            Log($"restore finished: changed={changed} stillRedirected={stillRedirected} unknown={unknown}");
+            if (backup is not null && !stillRedirected && !unknown)
             {
                 TryDeleteBackup();
             }
@@ -261,10 +304,29 @@ public sealed class MacDnsConfigurator
     private static bool IsLoopbackText(string server) =>
         IPAddress.TryParse(server, out var address) && IPAddress.IsLoopback(address);
 
-    private bool AnyServiceRedirected() =>
-        ListServices()
-            .Where(service => service.Enabled)
-            .Any(service => GetDnsServers(service.Name) is { } servers && IsLoopbackOnly(servers));
+    private bool AnyServiceRedirected(MacDnsBackup? backup, out bool unreadable)
+    {
+        unreadable = false;
+        var redirected = false;
+        foreach (var service in ListServices().Where(service => service.Enabled))
+        {
+            var inBackup = backup?.Services.Any(entry =>
+                string.Equals(entry.Name, service.Name, StringComparison.Ordinal)) == true;
+            var servers = inBackup ? GetDnsServersWithRetry(service.Name) : GetDnsServers(service.Name);
+            if (servers is null)
+            {
+                // Keep the backup while a redirected service cannot be read: without it a later
+                // fail-safe restore can only fall back to automatic DNS.
+                unreadable |= inBackup;
+            }
+            else if (IsLoopbackOnly(servers))
+            {
+                redirected = true;
+            }
+        }
+
+        return redirected;
+    }
 
     private void WriteBackup(MacDnsBackup backup) =>
         FilterRulesFile.WriteAtomic(_backupPath, JsonSerializer.Serialize(backup, BackupJson) + "\n");

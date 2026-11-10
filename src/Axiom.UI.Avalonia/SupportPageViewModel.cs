@@ -53,7 +53,9 @@ public sealed partial class SupportPageViewModel : PageViewModel
             "On Applications, select a process and choose Block outbound only when you understand the effect. Verify connectivity and remove the owned rule from Firewall if needed."),
         new(
             "4. Filter DNS only if needed",
-            $"Privacy Shield runs a loopback resolver. Complete installation enables it; partial installation leaves it off. Adapter DNS changes require the separate {PlatformText.ElevationName} helper and can break name resolution."),
+            OperatingSystem.IsMacOS()
+                ? "Privacy Shield runs a loopback resolver. While it runs, the Axiom daemon points system DNS at it and restores the previous DNS servers when it stops."
+                : $"Privacy Shield runs a loopback resolver. Complete installation enables it; partial installation leaves it off. Adapter DNS changes require the separate {PlatformText.ElevationName} helper and can break name resolution."),
         new(
             "5. Inspect local files and optional modules",
             "Security provides a local SHA-256 file scan and optional reputation/community features. DKG, Blackbox and agent hooks are separate third-party integrations and are never installed silently."),

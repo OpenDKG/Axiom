@@ -52,7 +52,7 @@ internal static class ShieldProcessFilter
             IsUnder(path, Path.Combine(ProgramFilesX86, "Microsoft")) ||
             IsUnder(path, Path.Combine(ProgramFiles, "WindowsApps")) ||
             IsUnder(path, Path.Combine(ProgramData, "Microsoft")) ||
-            (OperatingSystem.IsMacOS() && IsMacSystemPath(path)))
+            (OperatingSystem.IsMacOS() && (IsMacSystemPath(path) || IsInOwnBundle(path, OwnBundleRoot))))
         {
             return true;
         }
@@ -97,6 +97,25 @@ internal static class ShieldProcessFilter
     /// </summary>
     internal static bool IsMacSystemPath(string path) =>
         MacSystemRoots.Any(root => path.StartsWith(root + "/", StringComparison.Ordinal));
+
+    /// <summary>
+    /// True when <paramref name="path"/> lies inside Axiom's own .app bundle. The bundled axiomd
+    /// daemon forwards Privacy Shield queries upstream itself, so prompting for it (and letting the
+    /// user block it) would only break the resolver.
+    /// </summary>
+    internal static bool IsInOwnBundle(string path, string? bundleRoot) =>
+        !string.IsNullOrEmpty(bundleRoot) &&
+        path.StartsWith(bundleRoot + "/", StringComparison.Ordinal);
+
+    /// <summary>Returns "/Applications/Axiom.app" for a base directory inside that bundle.</summary>
+    internal static string? BundleRootOf(string baseDirectory)
+    {
+        var index = baseDirectory.IndexOf(".app/", StringComparison.Ordinal);
+        return index < 0 ? null : baseDirectory[..(index + 4)];
+    }
+
+    private static readonly string? OwnBundleRoot =
+        OperatingSystem.IsMacOS() ? BundleRootOf(AppContext.BaseDirectory) : null;
 
     private static readonly string[] MacSystemRoots =
         ["/System", "/usr/libexec", "/usr/sbin", "/usr/bin", "/sbin", "/bin"];

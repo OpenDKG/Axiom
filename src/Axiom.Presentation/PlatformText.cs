@@ -56,7 +56,9 @@ public static class PlatformText
 
     public static string FirewallRulesTitle => Firewall + " · Axiom-owned rules";
 
-    public static string AdapterDnsTitle => $"Adapter DNS (explicit {ElevationName} helper)";
+    public static string AdapterDnsTitle => Mac
+        ? "System DNS (switched by the Axiom daemon)"
+        : $"Adapter DNS (explicit {ElevationName} helper)";
 
     public static string AskQueueExplanation =>
         "Axiom Shield lists every executable that opened a new outbound connection and has no Block/Allow decision yet. " +

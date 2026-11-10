@@ -330,7 +330,15 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     public string StarterRulesText =>
         $"{PrivacyShieldPolicy.StarterRulesAll.Count} starter rules (manually reviewed, not a third-party list)";
 
-    public string ManualSetupText =>
+    public string ManualSetupText => OperatingSystem.IsMacOS()
+        ? "The Axiom daemon points the DNS servers of every network service at 127.0.0.1 while the " +
+          "Privacy Shield resolver runs, saves the previous servers first, and restores them when the " +
+          "resolver stops, the service stops or Axiom is uninstalled. No manual change or password " +
+          "prompt is needed. This is DNS filtering only: applications still connect directly to " +
+          "destination IPs; traffic is not routed or proxied through Axiom."
+        : ManualSetupTextWindows;
+
+    private static string ManualSetupTextWindows =>
         $"The Axiom service never changes adapter DNS silently. The optional {PlatformText.ElevationName} helper changes " +
         $"only the selected adapter after you confirm {PlatformText.ElevationPrompt}; it saves the previous DNS, " +
         "keeps it behind the resolver as a fallback, and can restore it. If you do not use the helper, " +
@@ -1088,6 +1096,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     }
 
 
+    private static readonly TimeSpan MacDnsOutageGrace = TimeSpan.FromSeconds(8);
+    private DateTimeOffset? _dnsOutageFirstSeenUtc;
+
     /// <summary>
     /// A stopped resolver while an adapter points at 127.0.0.1 means names stop resolving unless
     /// the adapter kept a fallback server. Say which of the two is true instead of leaving the user
@@ -1101,7 +1112,22 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             HasDnsOutageRisk = false;
             DnsOutageWarningText = string.Empty;
             _dnsOutageAlerted = false;
+            _dnsOutageFirstSeenUtc = null;
             return;
+        }
+
+        // On macOS the daemon restores system DNS right after it stops the resolver, and the
+        // system resolver configuration reaches this process a moment later. Only warn when the
+        // adapter still points at 127.0.0.1 after a short grace period, so a normal Disable does
+        // not raise a false "DNS is not answering" alert.
+        if (OperatingSystem.IsMacOS())
+        {
+            var now = DateTimeOffset.UtcNow;
+            _dnsOutageFirstSeenUtc ??= now;
+            if (now - _dnsOutageFirstSeenUtc.Value < MacDnsOutageGrace)
+            {
+                return;
+            }
         }
 
         HasDnsOutageRisk = true;

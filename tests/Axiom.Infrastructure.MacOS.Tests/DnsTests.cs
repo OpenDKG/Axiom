@@ -144,6 +144,51 @@ public sealed class DnsTests
     }
 
     [Fact]
+    public void RestoreRetriesUnreadableServicesAndFallsBackToTheBackup()
+    {
+        using var temp = new TempDirectory();
+        var dns = new Dictionary<string, string[]> { ["Ethernet"] = ["10.0.2.3"], ["Wi-Fi"] = ["9.9.9.9"] };
+        var failEthernetReads = 0;
+        var failWifiAlways = false;
+        var runner = new FakeRunner()
+            .On("networksetup -listallnetworkservices", "Ethernet\nWi-Fi\n")
+            .On("networksetup -getdnsservers", args =>
+            {
+                if ((args[1] == "Ethernet" && failEthernetReads-- > 0) || (args[1] == "Wi-Fi" && failWifiAlways))
+                {
+                    return new ProcessResult(4, string.Empty, "** Error: unable to read the configuration.");
+                }
+
+                return new ProcessResult(0, string.Join('\n', dns[args[1]]), string.Empty);
+            })
+            .On("networksetup -setdnsservers", args =>
+            {
+                dns[args[1]] = args[2] == "Empty" ? [] : args.Skip(2).ToArray();
+                return new ProcessResult(0, string.Empty, string.Empty);
+            })
+            .On("scutil --dns", Scutil);
+        var configurator = new MacDnsConfigurator(runner, Path.Combine(temp.Path, "backup.json"))
+        {
+            ReadRetryDelay = TimeSpan.Zero,
+        };
+
+        Assert.True(configurator.Redirect().Changed);
+
+        // Two failed reads are retried; the service is still restored.
+        failEthernetReads = 2;
+        // A service that stays unreadable is restored from the backup, and the backup is kept.
+        failWifiAlways = true;
+        Assert.True(configurator.RestoreIfNeeded());
+        Assert.Equal(["10.0.2.3"], dns["Ethernet"]);
+        Assert.Equal(["9.9.9.9"], dns["Wi-Fi"]);
+        Assert.NotNull(configurator.ReadBackup());
+
+        failWifiAlways = false;
+        configurator.RestoreIfNeeded();
+        Assert.Null(configurator.ReadBackup());
+    }
+
+    [Fact]
     public void PlatformDoesNotRedirectForNonStandardPort()
     {
         using var temp = new TempDirectory();
