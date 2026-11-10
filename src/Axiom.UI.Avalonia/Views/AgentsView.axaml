@@ -131,6 +131,8 @@
                                Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
                     <controls:AxiomSelectableTextBlock Text="{Binding Candidate.Detail}" FontSize="9"
                                Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                    <controls:AxiomSelectableTextBlock Text="{Binding StateDetail}" IsVisible="{Binding HasStateDetail}"
+                               FontSize="9" Foreground="{DynamicResource Axiom.Warning}" TextWrapping="Wrap" />
                   </StackPanel>
                   <Button Grid.Column="1" Content="Share" Padding="9,3" FontSize="10"
                           IsEnabled="{Binding $parent[UserControl].DataContext.CanSubmitThreatShare}"

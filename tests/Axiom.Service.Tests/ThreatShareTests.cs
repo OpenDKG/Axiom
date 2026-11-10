@@ -124,4 +124,106 @@ public sealed class ThreatShareTests
             Directory.Delete(directory, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task Transient_failure_defers_the_candidate_instead_of_rejecting_it()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "axiom-threat-share", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "queue.json");
+
+        try
+        {
+            await using var controller = new ThreatShareController(new ThreatShareStore(path));
+            controller.Enqueue(Candidate());
+            await controller.FlushAsync(CancellationToken.None);
+
+            var status = await controller.RecordAsync(
+                new ThreatShareRecordRequest
+                {
+                    Id = "ioc:domain:evil.example",
+                    Submitted = false,
+                    Deferred = true,
+                    Outcome = "the Blackbox CLI timed out",
+                },
+                CancellationToken.None);
+
+            var item = Assert.Single(status.Items);
+            Assert.Equal(ThreatShareState.Deferred, item.State);
+            Assert.Equal(1, item.Attempts);
+            Assert.NotNull(item.NextAttemptUtc);
+            Assert.True(item.NextAttemptUtc > DateTimeOffset.UtcNow);
+            Assert.Equal(1, status.Deferred);
+            Assert.Equal(0, status.Pending);
+            Assert.Contains("timed out", item.StateDetail, StringComparison.Ordinal);
+
+            // A restarted service still sees a deferred item, not a lost one.
+            var reloaded = new ThreatShareStore(path).Load();
+            Assert.Equal(ThreatShareState.Deferred, Assert.Single(reloaded).State);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Policy_refusal_is_rejected_and_dismissal_clears_a_deferred_item()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "axiom-threat-share", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "queue.json");
+
+        try
+        {
+            await using var controller = new ThreatShareController(new ThreatShareStore(path));
+            controller.Enqueue(Candidate());
+            await controller.FlushAsync(CancellationToken.None);
+
+            var deferred = await controller.RecordAsync(
+                new ThreatShareRecordRequest
+                {
+                    Id = "ioc:domain:evil.example",
+                    Submitted = false,
+                    Deferred = true,
+                    Outcome = "node offline",
+                },
+                CancellationToken.None);
+            Assert.Equal(1, deferred.Deferred);
+
+            var dismissed = await controller.DismissAsync("ioc:domain:evil.example", CancellationToken.None);
+            Assert.Equal(ThreatShareState.Dismissed, Assert.Single(dismissed.Items).State);
+            Assert.Equal(0, dismissed.Deferred);
+
+            controller.Enqueue(Candidate() with { Value = "refused.example" });
+            await controller.FlushAsync(CancellationToken.None);
+            var rejected = await controller.RecordAsync(
+                new ThreatShareRecordRequest
+                {
+                    Id = "ioc:domain:refused.example",
+                    Submitted = false,
+                    Deferred = false,
+                    Outcome = "invalid indicator",
+                },
+                CancellationToken.None);
+
+            var item = Assert.Single(rejected.Items, value => value.Candidate.Value == "refused.example");
+            Assert.Equal(ThreatShareState.Rejected, item.State);
+            Assert.Equal("invalid indicator", item.Outcome);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static ThreatShareEnqueueRequest Candidate() => new()
+    {
+        IndicatorType = "domain",
+        Value = "evil.example",
+        Reason = "malware-delivery",
+        Context = "fetched-by-tool",
+        Source = ThreatShareSource.PrivacyShield,
+        Detail = "blocked for opencode",
+    };
 }

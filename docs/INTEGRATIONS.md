@@ -43,7 +43,9 @@ setting (`off · opt in` or `on · signed, redacted`) and can enable or disable 
 community sharing after confirmation. Only privacy-safe indicators are queued; prompts, commands,
 file paths, credentials, model content and raw session ids are never sent. A queued indicator is
 signed and sent only when the user presses **Share** on it or **Send now** for the queue — Axiom
-never sends on a timer.
+never sends on a timer. A timeout, missing CLI or offline node marks the item **deferred** with a
+retry time instead of rejecting it; a daily cap leaves it pending for the next day. Only an explicit
+schema or policy refusal is recorded as rejected.
 
 Agent workspace labels are deliberately not interchangeable:
 

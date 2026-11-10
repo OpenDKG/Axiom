@@ -70,6 +70,9 @@ public enum ThreatShareState
     Submitted = 1,
     Rejected = 2,
     Dismissed = 3,
+
+    /// <summary>A transient reporter failure. The candidate stays in the queue with a retry time.</summary>
+    Deferred = 4,
 }
 
 public sealed record ThreatShareItem(
@@ -78,19 +81,40 @@ public sealed record ThreatShareItem(
     string Outcome,
     DateTimeOffset? AttemptedUtc)
 {
+    /// <summary>Number of reporter attempts recorded for this candidate.</summary>
+    public int Attempts { get; init; }
+
+    /// <summary>Earliest time a deferred retry should be attempted.</summary>
+    public DateTimeOffset? NextAttemptUtc { get; init; }
+
     public string StateLabel => State switch
     {
         ThreatShareState.Submitted => "shared",
         ThreatShareState.Rejected => "rejected",
         ThreatShareState.Dismissed => "dismissed",
+        ThreatShareState.Deferred => "deferred",
         _ => "pending review",
     };
+
+    public string StateDetail => State switch
+    {
+        ThreatShareState.Deferred =>
+            (NextAttemptUtc is { } next ? $"retry after {next.ToLocalTime():HH:mm}" : "retry later") +
+            (string.IsNullOrWhiteSpace(Outcome) ? string.Empty : $" · {Outcome}"),
+        ThreatShareState.Rejected => Outcome,
+        _ => string.Empty,
+    };
+
+    public bool HasStateDetail => StateDetail.Length > 0;
 }
 
 /// <summary>The preview list and counters the Agents page shows.</summary>
 public sealed record ThreatShareQueueStatus
 {
     public required int Pending { get; init; }
+
+    /// <summary>Transiently failed candidates that stay queued for a later retry.</summary>
+    public int Deferred { get; init; }
 
     public required int Submitted { get; init; }
 
@@ -114,6 +138,9 @@ public sealed record ThreatShareRecordRequest
     public required string Id { get; init; }
 
     public required bool Submitted { get; init; }
+
+    /// <summary>True for a transient failure that should stay queued instead of being rejected.</summary>
+    public bool Deferred { get; init; }
 
     public string Outcome { get; init; } = string.Empty;
 }
