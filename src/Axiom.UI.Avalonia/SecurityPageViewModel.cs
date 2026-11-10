@@ -109,6 +109,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
         "openchamber" => "OpenChamber",
         "codex" => "Codex",
         "claude" => "Claude Code",
+        "antigravity" => "Antigravity",
         "cursor" => "Cursor",
         "copilot" => "GitHub Copilot CLI",
         "gemini" => "Gemini CLI",

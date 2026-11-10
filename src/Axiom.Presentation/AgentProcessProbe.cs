@@ -15,6 +15,7 @@ public static class AgentProcessProbe
             "copilot" => Running("copilot") || Running("gh"),
             "gemini" => Running("gemini"),
             "windsurf" => Running("Windsurf") || Running("windsurf"),
+            "antigravity" => Running("Antigravity") || Running("antigravity"),
             "cline" => Running("cline") || Running("Code"),
             "opencode" => Running("opencode"),
             "openchamber" => Running("OpenChamber") || Running("openchamber"),
