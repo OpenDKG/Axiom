@@ -24,8 +24,12 @@ public static class PendingAppDetector
         }
 
         var capturedUtc = now ?? DateTimeOffset.UtcNow;
+        var decisionList = (decisions ?? []).ToList();
         var decided = new HashSet<string>(
-            (decisions ?? []).Select(decision => decision.AppPath),
+            decisionList.Select(decision => decision.AppPath),
+            StringComparer.OrdinalIgnoreCase);
+        var decidedFamilies = new HashSet<string>(
+            decisionList.Select(decision => ProtectionPathFamily.Key(decision.AppPath)),
             StringComparer.OrdinalIgnoreCase);
 
         return connections
@@ -33,7 +37,8 @@ public static class PendingAppDetector
                 !connection.IsLoopback &&
                 connection.Direction == ConnectionDirection.Outbound &&
                 !string.IsNullOrWhiteSpace(connection.AppPath) &&
-                !decided.Contains(connection.AppPath))
+                !decided.Contains(connection.AppPath) &&
+                !decidedFamilies.Contains(ProtectionPathFamily.Key(connection.AppPath)))
             .GroupBy(connection => connection.AppPath, StringComparer.OrdinalIgnoreCase)
             .Select(group => new ProtectionPendingApp
             {

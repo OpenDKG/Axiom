@@ -44,6 +44,13 @@ public sealed partial class ProtectionWorker(
                     LogConsent(logger, settings.Enabled);
                 }
 
+                if (settings.Enabled)
+                {
+                    await controller
+                        .ReconcileDecisionsAsync("Axiom Shield", stoppingToken)
+                        .ConfigureAwait(false);
+                }
+
                 if (settings.Enabled && settings.AgentLockdown)
                 {
                     await controller
