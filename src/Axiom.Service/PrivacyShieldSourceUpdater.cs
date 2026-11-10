@@ -81,7 +81,17 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
 
             try
             {
-                var body = await DownloadAsync(source.Url, cancellationToken).ConfigureAwait(false);
+                var bytes = await DownloadAsync(source.Url, cancellationToken).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(source.Sha256))
+                {
+                    var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+                    if (!string.Equals(digest, source.Sha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidDataException("The source content does not match its pinned SHA-256.");
+                    }
+                }
+
+                var body = System.Text.Encoding.UTF8.GetString(bytes);
                 var domains = PrivacyShieldPolicy.ParseList(body, PrivacyShieldPolicy.MaxRules);
                 if (domains.Count == 0)
                 {
@@ -153,7 +163,7 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
 
     public void Dispose() => _http.Dispose();
 
-    private async Task<string> DownloadAsync(string url, CancellationToken cancellationToken)
+    private async Task<byte[]> DownloadAsync(string url, CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps)
@@ -182,6 +192,6 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
             buffer.Write(chunk, 0, read);
         }
 
-        return Encoding.UTF8.GetString(buffer.ToArray());
+        return buffer.ToArray();
     }
 }

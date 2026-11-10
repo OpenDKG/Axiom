@@ -35,6 +35,25 @@ public sealed class PrivacyShieldPolicyTests
     }
 
     [Fact]
+    public void Single_label_domains_are_rejected()
+    {
+        Assert.Null(PrivacyShieldPolicy.NormalizeDomain("com"));
+        Assert.Null(PrivacyShieldPolicy.NormalizeDomain("localhost"));
+        Assert.Equal("example.com", PrivacyShieldPolicy.NormalizeDomain("example.com"));
+        Assert.Empty(PrivacyShieldPolicy.ParseList("com\nlocalhost\n"));
+    }
+
+    [Fact]
+    public void HaGeZi_source_is_pinned_to_a_commit_with_a_digest()
+    {
+        var source = Assert.Single(PrivacyShieldSourceCatalog.All, item => item.Id == "hagezi-pro");
+
+        Assert.Contains("@924bb2a8306e609ae8b0113c2b676f5fde072d16", source.Url, StringComparison.Ordinal);
+        Assert.Equal(64, source.Sha256.Length);
+        Assert.DoesNotContain("@latest", source.Url, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Allow_rule_wins_over_starter_block_rule()
     {
         var policy = PrivacyShieldPolicy.Create(new PrivacyShieldSettings

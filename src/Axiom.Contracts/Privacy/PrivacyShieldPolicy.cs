@@ -199,7 +199,7 @@ public sealed class PrivacyShieldPolicy
             return null;
         }
 
-        if (ascii.Length == 0 || ascii.Length > 253)
+        if (ascii.Length == 0 || ascii.Length > 253 || !ascii.Contains('.'))
         {
             return null;
         }
