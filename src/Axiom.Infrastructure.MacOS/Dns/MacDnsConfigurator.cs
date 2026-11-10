@@ -82,8 +82,18 @@ public sealed class MacDnsConfigurator
             arguments.AddRange(servers);
         }
 
-        return _runner.Run(NetworkSetup, arguments, ToolTimeout).Succeeded;
+        var result = _runner.Run(NetworkSetup, arguments, ToolTimeout);
+        if (!result.Succeeded)
+        {
+            Log($"networksetup {string.Join(' ', arguments)} exited {result.ExitCode}: {result.StandardError.Trim()} {result.StandardOutput.Trim()}");
+        }
+
+        return result.Succeeded;
     }
+
+    // axiomd's stderr goes to /Library/Logs/Axiom/axiomd.log; DNS changes must be traceable there.
+    private static void Log(string message) =>
+        Console.Error.WriteLine("Privacy Shield DNS: " + message);
 
     /// <summary>Current non-loopback system resolvers (from <c>scutil --dns</c>).</summary>
     public IReadOnlyList<IPAddress> DiscoverSystemResolvers()
@@ -123,6 +133,7 @@ public sealed class MacDnsConfigurator
         lock (_gate)
         {
             var services = ListServices().Where(service => service.Enabled).ToList();
+            Log($"redirect: services={string.Join(", ", services.Select(service => service.Name))}");
             if (services.Count == 0)
             {
                 return new RedirectResult(false, [], "No enabled network service was found.");
@@ -200,6 +211,7 @@ public sealed class MacDnsConfigurator
             foreach (var service in ListServices().Where(service => service.Enabled))
             {
                 var servers = GetDnsServers(service.Name);
+                Log($"restore check '{service.Name}': {(servers is null ? "unreadable" : string.Join(' ', servers))}");
                 if (servers is null || !IsLoopbackOnly(servers))
                 {
                     continue;
@@ -208,7 +220,9 @@ public sealed class MacDnsConfigurator
                 var saved = backup?.Services.FirstOrDefault(entry =>
                     string.Equals(entry.Name, service.Name, StringComparison.Ordinal));
                 var restore = saved?.Servers.Where(server => !IsLoopbackText(server)).ToArray() ?? [];
-                changed |= SetDnsServers(service.Name, restore);
+                var ok = SetDnsServers(service.Name, restore);
+                Log($"restore '{service.Name}' -> {(restore.Length == 0 ? "automatic" : string.Join(' ', restore))}: {(ok ? "ok" : "failed")}");
+                changed |= ok;
             }
 
             if (changed)
@@ -216,7 +230,9 @@ public sealed class MacDnsConfigurator
                 FlushCache();
             }
 
-            if (backup is not null && !AnyServiceRedirected())
+            var stillRedirected = AnyServiceRedirected();
+            Log($"restore finished: changed={changed} stillRedirected={stillRedirected}");
+            if (backup is not null && !stillRedirected)
             {
                 TryDeleteBackup();
             }

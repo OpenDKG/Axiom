@@ -155,7 +155,7 @@ public sealed partial class PendingAppRow(ProtectionPendingApp app) : Observable
 /// Firewall page. It reads the capability and owned rules through the service. Apply/Remove stay
 /// disabled unless the service opened its explicit write gate, and every change asks first.
 /// </summary>
-public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
+public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, IActivatablePage
 {
     private readonly IServiceRequestClient? _client;
     private readonly IUserInteraction _ui;
@@ -207,7 +207,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     /// <summary>Explanation shown when Microsoft-signed processes were removed from the ask list.</summary>
     public string IgnoredMicrosoftText => IgnoredMicrosoftCount == 0
         ? string.Empty
-        : $"{IgnoredMicrosoftCount} Microsoft-signed process(es) are not prompted.";
+        : OperatingSystem.IsWindows()
+            ? $"{IgnoredMicrosoftCount} Microsoft-signed process(es) are not prompted."
+            : $"{IgnoredMicrosoftCount} macOS system process(es) are not prompted.";
 
     public bool HasIgnoredMicrosoft => IgnoredMicrosoftCount > 0;
 
@@ -301,7 +303,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     private bool _writesEnabled;
 
     public string NoticeText => WritesEnabled
-        ? "Axiom Shield is on. Rules are read and written through the elevated local service with the documented INetFwPolicy2 COM objects. Every change is confirmed and audited."
+        ? OperatingSystem.IsWindows()
+            ? "Axiom Shield is on. Rules are read and written through the elevated local service with the documented INetFwPolicy2 COM objects. Every change is confirmed and audited."
+            : "Axiom Shield is on. Rules are written by the root axiomd service and enforced by the AxiomFilter network extension. Every change is confirmed and audited."
         : $"This session is read-only for {PlatformText.Firewall} changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
 
     public string NoticeBadgeText => WritesEnabled ? "SHIELD ON" : "READ-ONLY";
@@ -1275,6 +1279,20 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     }
 
     [RelayCommand]
+    /// <summary>Re-reads the owned rules whenever the page is shown: rules created from Connections
+    /// or Applications would otherwise only appear after Recheck.</summary>
+    public void Activate()
+    {
+        if (_client is not null)
+        {
+            _ = RefreshAsync();
+        }
+    }
+
+    public void Deactivate()
+    {
+    }
+
     private async Task RefreshAsync()
     {
         if (_client is null || IsBusy)

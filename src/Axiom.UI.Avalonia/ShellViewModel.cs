@@ -449,7 +449,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             : $"Monitoring: unavailable · {_monitor.LastError}";
 
         StatusSourceText = _protection is { Enabled: true }
-            ? "Data source: local service · traffic not filtered"
+            ? OperatingSystem.IsWindows()
+                ? "Data source: local service · traffic not filtered"
+                : "Data source: local service · Axiom Shield on"
             : IsServiceMode
                 ? "Data source: local service (read-only)"
                 : "Data source: in-process IP Helper (read-only)";
