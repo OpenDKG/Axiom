@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.7 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.8 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,18 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.8
+
+- **Disk writes stay small on an idle desktop.** History persists only connections that survived a
+  refresh, every two minutes instead of every two seconds; only new or changed flows are written;
+  ephemeral local ports collapse into one row per remote; throughput is batched every five minutes;
+  blocked-query history is buffered in RAM for 30 seconds; and retention plus the full last-seen
+  refresh run every six hours.
+- **Measured:** the service wrote about 1.2 MB/s before and about **1.2 KB/s** after, with the
+  desktop closed (roughly 0.1 GB/day instead of more than 100 GB/day).
+- The installer waits for a pending service stop and retries the image copy, so replacing the
+  protected service image no longer fails with exit code 7.
 
 ## What's in 0.10.7
 
