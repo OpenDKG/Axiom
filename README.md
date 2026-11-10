@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.10 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.11 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,14 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.11
+
+- **Shield decisions survive application updates.** An allow or block is matched by a path family
+  that ignores version and hash folders (GoogleUpdater\157.0.8089.0\updater.exe,
+  Codex\bin\<hash>\codex.exe, WindowsApps package folders). The updated executable inherits the
+  decision instead of asking again, and an inherited block creates its outbound rule for the new
+  path.
 
 ## What's in 0.10.10
 
