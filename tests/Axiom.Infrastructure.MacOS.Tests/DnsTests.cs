@@ -7,6 +7,8 @@ namespace Axiom.Infrastructure.MacOS.Tests;
 
 public sealed class DnsTests
 {
+    private static readonly string[] ExpectedScutilServers = ["192.168.64.1", "2001:db8::53", "127.0.0.1", "8.8.8.8"];
+
     private const string Services = """
         An asterisk (*) denotes that a network service is disabled.
         Ethernet
@@ -67,7 +69,7 @@ public sealed class DnsTests
         var servers = NetworkSetupParser.ParseScutilNameservers(Scutil);
 
         Assert.Equal(
-            new[] { "192.168.64.1", "2001:db8::53", "127.0.0.1", "8.8.8.8" },
+            ExpectedScutilServers,
             servers.Select(server => server.ToString()));
     }
 

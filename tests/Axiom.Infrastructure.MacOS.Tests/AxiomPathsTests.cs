@@ -43,6 +43,20 @@ public sealed class AxiomPathsTests
     }
 
     [Fact]
+    public void ServicePrivateDataIsMachineRootOnlyForUnixService()
+    {
+        const string local = "/home/u/.local/share";
+        const string machine = "/Library/Application Support/Axiom";
+
+        Assert.Equal(machine, AxiomPaths.ServicePrivateDataDirectoryFor(AxiomPlatform.MacOS, true, local, machine));
+        Assert.Equal(Path.Combine(local, "Axiom"), AxiomPaths.ServicePrivateDataDirectoryFor(AxiomPlatform.MacOS, false, local, machine));
+        Assert.Equal(machine, AxiomPaths.ServicePrivateDataDirectoryFor(AxiomPlatform.Linux, true, local, machine));
+
+        // Windows keeps the service account's own LocalAppData even as a service.
+        Assert.Equal(Path.Combine(local, "Axiom"), AxiomPaths.ServicePrivateDataDirectoryFor(AxiomPlatform.Windows, true, local, machine));
+    }
+
+    [Fact]
     public void MacServicePathsFollowTheContract()
     {
         var paths = new MacServicePaths("/Library/Application Support/Axiom", "/var/run/axiom", "/var/run/axiom/axiom.sock");

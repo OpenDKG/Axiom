@@ -74,6 +74,28 @@ public static class AxiomPaths
     /// <summary>Data directory for the current process: machine for the service, user otherwise.</summary>
     public static string ProcessDataDirectory => IsServiceProcess ? MachineDataDirectory : UserDataDirectory;
 
+    /// <summary>
+    /// Directory for service state that is private to the service account (threat-share queue,
+    /// Privacy Shield blocked history). On Windows this stays the service account's own
+    /// <c>%LocalAppData%\Axiom</c> as before. On Unix the root daemon has no meaningful per-user
+    /// profile, so the service uses the machine data directory (files are created owner-only there)
+    /// and an interactive run keeps the per-user directory.
+    /// </summary>
+    public static string ServicePrivateDataDirectory => ServicePrivateDataDirectoryFor(
+        CurrentPlatform,
+        CurrentPlatform != AxiomPlatform.Windows && IsServiceProcess,
+        UserBaseDirectory,
+        MachineDataDirectory);
+
+    public static string ServicePrivateDataDirectoryFor(
+        AxiomPlatform platform,
+        bool isService,
+        string localApplicationData,
+        string machineDataDirectory) =>
+        platform != AxiomPlatform.Windows && isService
+            ? machineDataDirectory
+            : Path.Combine(localApplicationData, DirectoryName);
+
     public static string MachineBaseDirectoryFor(AxiomPlatform platform, string? commonApplicationData) =>
         platform switch
         {
