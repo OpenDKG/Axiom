@@ -165,6 +165,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private BlackboxFinding? _selectedFinding;
 
     [ObservableProperty]
+    private bool _hasSelectedFinding;
+
+    [ObservableProperty]
     private AgentEvidenceEvent? _selectedHookEvidence;
 
     [ObservableProperty]
@@ -1486,13 +1489,24 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private void ApplyFindings(BlackboxFindingPage page)
     {
+        var selected = SelectedFinding;
         _allFindings.Clear();
         _allFindings.AddRange(page.Findings.OrderByDescending(finding => finding.Timestamp));
 
-        Findings.Clear();
-        foreach (var finding in _allFindings)
+        // The audit refreshes every 15 seconds. Replacing the items each time would drop the
+        // user's selection while they read a finding, so only rebuild when the page changed.
+        if (!Findings.SequenceEqual(_allFindings))
         {
-            Findings.Add(finding);
+            var selectedKey = selected is null ? null : FindingIdentity(selected);
+            Findings.Clear();
+            foreach (var finding in _allFindings)
+            {
+                Findings.Add(finding);
+            }
+
+            SelectedFinding = selectedKey is null
+                ? null
+                : Findings.FirstOrDefault(finding => FindingIdentity(finding) == selectedKey);
         }
 
         var blocked = _allFindings.Count(finding => finding.IsBlocked);
@@ -1517,6 +1531,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ? "No blocked action observed."
             : $"{lastBlocked.TimeText} · {lastBlocked.Agent} · {lastBlocked.Tool} · {lastBlocked.Identifier}";
     }
+
+    private static string FindingIdentity(BlackboxFinding finding) =>
+        $"{finding.Timestamp?.UtcTicks}|{finding.Identifier}|{finding.Agent}|{finding.Title}";
+
+    partial void OnSelectedFindingChanged(BlackboxFinding? value) => HasSelectedFinding = value is not null;
 
     private async Task<BlackboxVerifiedSync?> TryGetVerifiedSyncAsync()
     {
