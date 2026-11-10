@@ -4,6 +4,68 @@ This integration enables **opt-in, read-only Claude audits** using the
 official [Anthropic Claude Code GitHub Action](https://github.com/anthropics/claude-code-action).
 It is intentionally not triggered on every commit to control model usage costs.
 
+## Option A: hottogo uses their own Claude account (no workflow merge required)
+
+The GitHub repository `a-51-50/Axiom` is **private** and is owned by
+`a-51-50`. The collaborator `hottogo` has **write** permissions, confirmed
+from GitHub on 2026-11-10. Write access is sufficient to read and review the
+repository; it does **not** grant the ability to install a GitHub App on the
+owner's personal account.
+
+1. **Owner (a-51-50):** open https://github.com/apps/claude, configure the
+   *official Claude GitHub App* under the **a-51-50** GitHub account and select
+   **Only select repositories → Axiom**. Review the App's permissions carefully.
+2. **Reviewer (hottogo):** in their own Claude account, connect their GitHub
+   identity `hottogo`. In Claude chats or Projects, use **Add from GitHub**,
+   paste `https://github.com/a-51-50/Axiom` or select it from the list, and
+   choose the files to review. Refresh/sync if files are missing.
+3. Ask Claude to perform a **read-only security review**. The code is private
+   but material selected for review will be sent to Anthropic under that account.
+
+This **does not** require merging the GitHub Actions workflow in this PR.
+It also **does not** use the repository-level API secret, because the reviewer
+uses Claude's own GitHub integration and Claude account.
+
+If the Claude connector fails after the GitHub App is installed, disconnect
+and reconnect the GitHub connector and check the installation's repository
+selection. If a personal-plan account is incorrectly redirected to a
+Team/Enterprise-only **organization settings** screen, this may be a product
+issue rather than a missing GitHub permission. See the
+[Anthropic issue report](https://github.com/anthropics/claude-code/issues/78761);
+merging this workflow will not fix that redirect.
+
+### Fallback: Claude Code locally (no GitHub App needed)
+
+If `hottogo` already uses Claude Code on their computer, they can authenticate
+to GitHub with their own account and run:
+
+```bash
+git clone https://github.com/a-51-50/Axiom.git
+cd Axiom
+claude
+```
+
+Then instruct Claude:
+
+> Read-only repository-wide audit. Do not change, delete, commit, push, or
+> merge any files. Review Axiom firewall, DNS, local/agent telemetry, IPC,
+> process execution, authentication, privacy boundaries and Windows/Avalonia
+> compatibility. Return prioritized, concrete findings with paths, line
+> numbers, reproduction/risk explanations, and suggested remediations.
+
+A read-only instruction is **not** a technical sandbox. The reviewer should
+avoid enabling tools that can write or execute untrusted instructions, and
+review any requested tool permissions before approving them.
+
+## Option B: automated GitHub Actions review (requires this PR)
+
+The workflow described below is a separate mechanism. Once merged, it can run
+Claude in GitHub Actions from issue comments or a PR label. It requires the
+repository owner/admin to install the GitHub App and configure Anthropic API or
+OAuth authentication in **Axiom Actions secrets**. It runs using **that
+configured credential**, not automatically using the account of the commenter.
+Do not put a friend's credentials in GitHub issues or source code.
+
 ## One-time setup (repository administrator)
 
 1. Merge the pull request introducing `.github/workflows/claude-review.yml`.
