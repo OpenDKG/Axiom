@@ -31,6 +31,7 @@ public sealed class AboutAxiomTests
             Assert.Equal("a-51-50", page.AboutCreatedBy);
             Assert.Contains("dreddster", page.AboutContributors, StringComparison.Ordinal);
             Assert.Contains("brxtrac", page.AboutContributors, StringComparison.Ordinal);
+            Assert.Equal("OpenDKG Initiative", page.AboutAffiliationLabel);
             Assert.Equal("Axiom is an independent open-source project affiliated with the OpenDKG initiative.", page.AboutAffiliation);
             Assert.Equal("https://github.com/a-51-50/Axiom", page.AboutSource);
             Assert.Contains("2026 The Axiom contributors", page.AboutCopyright, StringComparison.Ordinal);

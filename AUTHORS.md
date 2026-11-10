@@ -30,13 +30,12 @@ wording to publish. Naming a creator does not by itself assign copyright.
 
 ## Contributors
 
-- **a-51-50** - original creator.
-- **dreddster** - contributor.
-- **brxtrac** - contributor.
+- **dreddster**
+- **brxtrac**
 
-Contributors are credited for their work. Listing a contributor does not imply shared ownership of
-the whole project, an original-creator role or a copyright claim. Future contributors are added
-here without changing the creator entry.
+The original creator is listed above and is not repeated here. Contributors are credited for their
+work. Listing a contributor does not imply shared ownership of the whole project, an original-creator
+role or a copyright claim. Future contributors are added here without changing the creator entry.
 
 ## Project affiliation
 

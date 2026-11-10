@@ -25,7 +25,9 @@ public static class AxiomDocuments
     /// <summary>Confirmed by the repository owner; the public GitHub account is used, not a legal name.</summary>
     public const string CreatorLabel = "a-51-50";
 
-    public const string ContributorsLine = "a-51-50, dreddster, brxtrac";
+    public const string ContributorsLine = "dreddster, brxtrac";
+
+    public const string AffiliationLabel = "OpenDKG Initiative";
 
     /// <summary>Approved affiliation wording. It states no ownership, copyright or publishing claim.</summary>
     public const string AffiliationText =
