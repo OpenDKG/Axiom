@@ -237,7 +237,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private string _blackboxHealthText = "Dashboard: unknown";
 
     [ObservableProperty]
-    private string _threatSharingStatusText = "checking�";
+    private string _threatSharingStatusText = "checking…";
 
     [ObservableProperty]
     private bool _threatSharingEnabled;
@@ -285,10 +285,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private double _verifiedSyncPercent;
 
     [ObservableProperty]
-    private string _verifiedSyncProgressText = "�";
+    private string _verifiedSyncProgressText = "—";
 
     [ObservableProperty]
-    private string _verifiedSyncCountsText = "Downloaded � � compiled � � verified rules �";
+    private string _verifiedSyncCountsText = "Downloaded — · compiled — · verified rules —";
 
     [ObservableProperty]
     private string _verifiedSyncLookupText = "Verified-answer lookups: unknown";
@@ -464,7 +464,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ActivityStatusText = $"Blackbox is unavailable: {exception.Message}";
             HealthStatusText = "Blackbox dashboard is offline or not responding.";
             SummaryText = "No live Blackbox data is available.";
-            ThreatSharingStatusText = "offline � dashboard unavailable";
+            ThreatSharingStatusText = "offline · dashboard unavailable";
             CanToggleThreatSharing = false;
         }
         finally
@@ -492,7 +492,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         IsVerifiedSyncRunning = true;
         VerifiedSyncState = "SYNCING";
-        VerifiedSyncStateDetail = "Requesting a verified-graph sync from the local Blackbox dashboard�";
+        VerifiedSyncStateDetail = "Requesting a verified-graph sync from the local Blackbox dashboard…";
         try
         {
             var result = await _client.RequestSyncAsync(CancellationToken.None).ConfigureAwait(true);
@@ -567,7 +567,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         _autoSyncRunning = true;
         _lastAutoSyncAttempt = now;
-        AutoSyncStatusText = "Auto-sync: checking for new verified assets�";
+        AutoSyncStatusText = "Auto-sync: checking for new verified assets…";
         PersistAutoSync();
         try
         {
@@ -815,13 +815,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             return;
         }
 
-        ProtectionTestText = "Testing�";
+        ProtectionTestText = "Testing…";
         try
         {
             var settings = await _client.GetSettingsAsync(CancellationToken.None).ConfigureAwait(true);
             if (!string.Equals(ReadString(settings, "mode"), "block", StringComparison.OrdinalIgnoreCase))
             {
-                ProtectionTestText = "INCONCLUSIVE � Blackbox is in audit mode. Switch to Block, then retry.";
+                ProtectionTestText = "INCONCLUSIVE — Blackbox is in audit mode. Switch to Block, then retry.";
                 return;
             }
 
@@ -846,7 +846,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                     CancellationToken.None).ConfigureAwait(true);
                 if (!save.Ok)
                 {
-                    ProtectionTestText = "FAIL � could not add the canary to protected paths: " +
+                    ProtectionTestText = "FAIL — could not add the canary to protected paths: " +
                         string.Join("; ", save.Errors);
                     return;
                 }
@@ -855,8 +855,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 var action = ReadString(decision, "action");
                 var message = ReadString(decision, "message");
                 ProtectionTestText = string.Equals(action, "block", StringComparison.OrdinalIgnoreCase)
-                    ? "PASS (guard-level) � Blackbox rejected the canary read. Agent hook execution was not exercised."
-                    : $"FAIL/INCONCLUSIVE � the guard did not block the canary read. {message}".Trim();
+                    ? "PASS (guard-level) — Blackbox rejected the canary read. Agent hook execution was not exercised."
+                    : $"FAIL/INCONCLUSIVE — the guard did not block the canary read. {message}".Trim();
             }
             finally
             {
@@ -873,7 +873,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             System.Text.Json.JsonException or IOException or InvalidOperationException or
             TimeoutException or System.ComponentModel.Win32Exception)
         {
-            ProtectionTestText = $"INCONCLUSIVE � {exception.Message}";
+            ProtectionTestText = $"INCONCLUSIVE — {exception.Message}";
         }
         finally
         {
@@ -1016,7 +1016,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
             if (!result.Ok)
             {
-                ThreatSharingStatusText = "failed � " + (result.Errors.Count == 0
+                ThreatSharingStatusText = "failed · " + (result.Errors.Count == 0
                     ? "Blackbox rejected the update."
                     : string.Join("; ", result.Errors));
                 return;
@@ -1026,7 +1026,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                            await _client.GetSettingsAsync(CancellationToken.None).ConfigureAwait(true);
             var saved = ReadBool(settings, "report", enable);
             ThreatSharingEnabled = saved;
-            ThreatSharingStatusText = saved ? "on � signed, redacted" : "off � opt in";
+            ThreatSharingStatusText = saved ? "on · signed, redacted" : "off · opt in";
             HealthStatusText = saved
                 ? "Threat sharing enabled, persisted and verified."
                 : "Threat sharing disabled and verified.";
@@ -1035,7 +1035,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                      HttpRequestException or TaskCanceledException or InvalidDataException or
                      System.Text.Json.JsonException)
         {
-            ThreatSharingStatusText = "failed � " + exception.Message;
+            ThreatSharingStatusText = "failed · " + exception.Message;
         }
         finally
         {
@@ -1483,8 +1483,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         ThreatCount = threats;
 
         ActivityBreakdownText =
-            $"{sessions} sessions � {apiCalls} API calls � {toolCalls} tool calls � " +
-            $"{installs} installs � {files} file accesses � {threats} threats";
+            $"{sessions} sessions · {apiCalls} API calls · {toolCalls} tool calls · " +
+            $"{installs} installs · {files} file accesses · {threats} threats";
         CanLoadMoreActivity = _allActivity.Count < _activityTotal && _allActivity.Count < ActivityMax;
         ActivityStatusText = _allActivity.Count == 0
             ? "No recorded agent activity yet."
@@ -1542,7 +1542,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             .FirstOrDefault();
         LastBlockedText = lastBlocked is null
             ? "No blocked action observed."
-            : $"{lastBlocked.TimeText} � {lastBlocked.Agent} � {lastBlocked.Tool} � {lastBlocked.Identifier}";
+            : $"{lastBlocked.TimeText} · {lastBlocked.Agent} · {lastBlocked.Tool} · {lastBlocked.Identifier}";
     }
 
     private static string FindingIdentity(BlackboxFinding finding) =>
@@ -1595,8 +1595,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 "The local Blackbox dashboard did not return verified-sync state. " +
                 "Local rules may still protect, but verified graph coverage is unknown.";
             VerifiedSyncPercent = 0;
-            VerifiedSyncProgressText = "�";
-            VerifiedSyncCountsText = "Downloaded � � compiled � � verified rules �";
+            VerifiedSyncProgressText = "—";
+            VerifiedSyncCountsText = "Downloaded — · compiled — · verified rules —";
             VerifiedSyncLookupText = "Verified-answer lookups: unknown";
             return;
         }
@@ -1616,11 +1616,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         VerifiedSyncPercent = sync.DisplayPercent;
         VerifiedSyncProgressText = sync.PercentCompiled is { } compiled
             ? $"{compiled.ToString("0.0", CultureInfo.InvariantCulture)}% compiled"
-            : "compiled �";
+            : "compiled —";
         VerifiedSyncCountsText =
-            $"{CountText(sync.DownloadedAssets)} / {CountText(sync.GraphAssets)} downloaded � " +
-            $"{CountText(sync.CompiledAssets)} / {CountText(sync.GraphAssets)} compiled � " +
-            $"{CountText(sync.DownloadedTriples)} triples � " +
+            $"{CountText(sync.DownloadedAssets)} / {CountText(sync.GraphAssets)} downloaded · " +
+            $"{CountText(sync.CompiledAssets)} / {CountText(sync.GraphAssets)} compiled · " +
+            $"{CountText(sync.DownloadedTriples)} triples · " +
             $"{CountText(sync.VerifiedRules)} verified rules";
 
         VerifiedSyncLookupText = string.IsNullOrWhiteSpace(sync.Lookups.Label)
@@ -1680,35 +1680,35 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         value.ToString("N0", CultureInfo.InvariantCulture);
 
     private static string CountText(int? value) =>
-        value is { } number ? CountText(number) : "�";
+        value is { } number ? CountText(number) : "—";
 
     private static string CountText(long? value) =>
-        value is { } number ? number.ToString("N0", CultureInfo.InvariantCulture) : "�";
+        value is { } number ? number.ToString("N0", CultureInfo.InvariantCulture) : "—";
 
     private void ApplyHealth(JsonObject settings, JsonObject graph)
     {
         var mode = ReadString(settings, "mode") ?? "unknown";
         var report = ReadBool(settings, "report", false);
-        BlackboxHealthText = $"Dashboard online � mode {mode} � community sharing {(report ? "ON" : "off")}";
+        BlackboxHealthText = $"Dashboard online · mode {mode} · community sharing {(report ? "ON" : "off")}";
         ThreatSharingEnabled = report;
-        ThreatSharingStatusText = report ? "on � signed, redacted" : "off � opt in";
+        ThreatSharingStatusText = report ? "on · signed, redacted" : "off · opt in";
         CanToggleThreatSharing = true;
 
         var dkgUrl = ReadString(graph, "dkg_url") ?? "unknown";
         var reachable = ReadBool(graph, "node_reachable", false);
-        DkgHealthText = $"Blackbox DKG: {dkgUrl} � {(reachable ? "reachable" : "offline")}";
+        DkgHealthText = $"Blackbox DKG: {dkgUrl} · {(reachable ? "reachable" : "offline")}";
 
         var dkgModule = Security.Modules.FirstOrDefault(module => module.Name == "OriginTrail DKG");
         AxiomDkgHealthText = dkgModule is null
             ? "Axiom DKG: unknown"
-            : $"Axiom DKG: {dkgModule.Status} � {dkgModule.Detail}";
+            : $"Axiom DKG: {dkgModule.Status} · {dkgModule.Detail}";
 
         var ruleset = graph["ruleset"] as JsonObject;
         var verified = ReadInt(ruleset, "injection") + ReadInt(ruleset, "escalation") +
                        ReadInt(ruleset, "dependency") + ReadInt(ruleset, "fileaccess") +
                        ReadInt(ruleset, "skill") + ReadInt(ruleset, "ioc");
         var community = ReadInt(graph, "community");
-        GraphHealthText = $"Verified graph: {verified} rule(s) � community: {community}";
+        GraphHealthText = $"Verified graph: {verified} rule(s) · community: {community}";
 
         var lastSync = ReadString(graph, "last_sync");
         HealthStatusText = reachable
@@ -1863,7 +1863,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         HasSelectedActivity = true;
-        SelectedActivityTitle = $"{entry.EventLabel} � {entry.Agent}";
+        SelectedActivityTitle = $"{entry.EventLabel} · {entry.Agent}";
         AddActivityDetail("Agent", entry.Agent);
         AddActivityDetail("Event", $"{entry.EventLabel} ({entry.Event})");
         AddActivityDetail("Time", entry.DateTimeText);
@@ -1937,7 +1937,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         var redacted = SecretPattern.Replace(value, "$1=[redacted]");
         redacted = BearerPattern.Replace(redacted, "Bearer [redacted]");
         redacted = LongHexPattern.Replace(redacted, "[redacted-hex]");
-        return redacted.Length <= limit ? redacted : redacted[..limit] + "\n� (truncated)";
+        return redacted.Length <= limit ? redacted : redacted[..limit] + "\n… (truncated)";
     }
 
     private static string FormatDuration(long milliseconds) => milliseconds switch

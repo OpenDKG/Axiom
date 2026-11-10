@@ -29,8 +29,8 @@ public sealed record PrivacyShieldAdapterOption(
     bool HasFallback = false)
 {
     public string DisplayName => HasDefaultRoute
-        ? $"{Name} � default route � DNS {DnsText}"
-        : $"{Name} � DNS {DnsText}";
+        ? $"{Name} — default route · DNS {DnsText}"
+        : $"{Name} — DNS {DnsText}";
 
     public override string ToString() => DisplayName;
 }
@@ -192,7 +192,7 @@ public sealed class BlockedHistoryAppGroup(
 
     public DateTimeOffset LastUtc => lastUtc;
 
-    public string SummaryText => $"{TotalBlocks} blocks � {DomainCount} domains";
+    public string SummaryText => $"{TotalBlocks} blocks · {DomainCount} domains";
 
     public string Tooltip => string.IsNullOrWhiteSpace(appPath)
         ? appDisplay
@@ -225,7 +225,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         IUserInteraction ui,
         IDnsAdapterHelper dnsHelper,
         IUiTimerFactory timers)
-        : base("Privacy Shield", "Local DNS filtering � complete installation enables the resolver", "P")
+        : base("Privacy Shield", "Local DNS filtering · complete installation enables the resolver", "P")
     {
         ArgumentNullException.ThrowIfNull(ui);
         ArgumentNullException.ThrowIfNull(dnsHelper);
@@ -236,9 +236,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
         Profiles =
         [
-            new(PrivacyShieldProfile.Basic, "Basic � Windows telemetry"),
-            new(PrivacyShieldProfile.Balanced, "Balanced � telemetry, ads, tracking"),
-            new(PrivacyShieldProfile.Strict, "Strict � all categories"),
+            new(PrivacyShieldProfile.Basic, "Basic · Windows telemetry"),
+            new(PrivacyShieldProfile.Balanced, "Balanced · telemetry, ads, tracking"),
+            new(PrivacyShieldProfile.Strict, "Strict · all categories"),
         ];
         _selectedProfile = Profiles[1];
         ApplyProfileCategories(PrivacyShieldProfile.Balanced);
@@ -909,7 +909,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                     StringComparer.OrdinalIgnoreCase);
                 source.Entries = state?.Entries ?? 0;
                 source.UpdatedText = state?.UpdatedUtc is { } updated
-                    ? $"updated {updated.ToLocalTime():MM-dd HH:mm} � {state.Entries:N0} entries"
+                    ? $"updated {updated.ToLocalTime():MM-dd HH:mm} · {state.Entries:N0} entries"
                     : "not downloaded";
                 source.ErrorText = state?.Error ?? string.Empty;
             }
@@ -929,8 +929,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         StatusText = status.Running
             ? $"Listening on {status.BindAddress}:{status.Port}; upstream {status.Upstream}."
             : status.Detail;
-        DetailText = $"{status.RuleCount:N0} active rules � {status.Allowed:N0} allowed � " +
-                     $"{status.Blocked:N0} blocked � {status.Errors:N0} errors. " +
+        DetailText = $"{status.RuleCount:N0} active rules · {status.Allowed:N0} allowed · " +
+                     $"{status.Blocked:N0} blocked · {status.Errors:N0} errors. " +
                      "Counts are in memory and reset when the resolver restarts.";
         StatsText = status.Running
             ? $"{status.Queries:N0} queries observed."
@@ -1242,7 +1242,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 var dnsText = usesResolver
-                    ? $"{resolverAddress} � Privacy Shield" +
+                    ? $"{resolverAddress} · Privacy Shield" +
                       (otherDns.Length == 0 ? string.Empty : ", " + string.Join(", ", otherDns))
                     : otherDns.Length == 0
                         ? "automatic"

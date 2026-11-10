@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.15 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.16 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,14 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.16
+
+- **Broken punctuation is repaired.** An earlier encoding conversion had replaced `—`, `·`, `…`
+  and `×` with the Unicode replacement character in the Privacy Shield and Agents pages, which the
+  UI rendered as `?`. The adapter list now reads `Ethernet 2 — default route · DNS 127.0.0.1`,
+  profile names and counters use `·` again, and the same repair restores arrows, box drawing and
+  multiplication signs in the README and the Avalonia migration baseline.
 
 ## What's in 0.10.15
 
@@ -421,7 +429,7 @@ policy.
 
 ## What's in 0.6.1
 
-- Restored the sidebar product footer: Axiom icon, version, description, GitHub and â™¥ Donate.
+- Restored the sidebar product footer: Axiom icon, version, description, GitHub and ♥ Donate.
 - Added the top-bar theme selector and status-bar mode/firewall badges.
 - Includes the 0.6.0 Avalonia cutover.
 
@@ -435,7 +443,7 @@ policy.
   applications, native verified threat graph, selectable threat details, protected workspaces and
   agent module cards.
 - Four real palettes (Dark, Light, Dark Midnight, Light Warm), custom Axiom title bar, tray icon,
-  single-instance handling and 1080Ã—720 shell fit.
+  single-instance handling and 1080×720 shell fit.
 - Ported context menus for applications, connections, overview sockets and agent evidence.
 - Installer, MSIX and release scripts now publish the Avalonia host as `Axiom.Desktop.exe`.
 - Includes the 0.5.3 verified threat graph and Privacy Shield source-fit work.
@@ -659,12 +667,12 @@ offline Blackbox does not stop local monitoring.
 
 ```text
 Unprivileged Avalonia UI (WPF fallback retained in source)
-   â”‚  local Named Pipe (explicit ACL, client SID check)
-   â–¼
+   │  local Named Pipe (explicit ACL, client SID check)
+   ▼
 Windows Service
-   â”œâ”€ IP Helper inventory and process attribution
-   â”œâ”€ bounded aggregation and local SQLite history
-   â””â”€ owned-rule coordinator â†’ Windows Firewall
+   ├─ IP Helper inventory and process attribution
+   ├─ bounded aggregation and local SQLite history
+   └─ owned-rule coordinator → Windows Firewall
 ```
 
 - The UI never runs as administrator and never receives a generic shell or "execute" command.
