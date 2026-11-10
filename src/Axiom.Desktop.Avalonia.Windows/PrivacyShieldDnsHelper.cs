@@ -70,19 +70,44 @@ internal static class PrivacyShieldDnsHelper
 
     public static async Task<int> RestoreAsync(CancellationToken cancellationToken)
     {
-        var backup = Escape(BackupPath);
+        var machineBackup = Escape(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "Axiom",
+            "privacy-shield-dns-backup.json"));
+
         var script = $$"""
             $ErrorActionPreference = 'Stop'
-            $backup = '{{backup}}'
+            # Restore only from the machine-wide snapshot written by the elevated helper. The
+            # per-user copy is writable by any process of the signed-in user and must never be
+            # applied to an adapter from an elevated script.
+            $backup = '{{machineBackup}}'
             if (-not (Test-Path -LiteralPath $backup)) {
-              throw 'No Privacy Shield DNS backup exists.'
+              throw 'No machine-wide Privacy Shield DNS backup exists. The service restores saved DNS automatically when the resolver stops; re-apply the adapter if you need to move it manually.'
+            }
+            $item = Get-Item -LiteralPath $backup -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+              throw 'The DNS backup is a reparse point. Refusing to apply it.'
+            }
+            $ownerSid = (New-Object System.Security.Principal.NTAccount((Get-Acl -LiteralPath $backup).Owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+            if ($ownerSid -notin @('S-1-5-18', 'S-1-5-32-544')) {
+              throw "The DNS backup is owned by $ownerSid, not SYSTEM or Administrators."
             }
             $snapshot = Get-Content -LiteralPath $backup -Raw | ConvertFrom-Json
             foreach ($entry in @($snapshot.interfaces)) {
+              $alias = [string]$entry.interfaceAlias
+              if (-not (Get-NetAdapter -Name $alias -ErrorAction SilentlyContinue)) {
+                continue
+              }
+              foreach ($address in @($entry.serverAddresses)) {
+                $parsed = $null
+                if (-not [System.Net.IPAddress]::TryParse([string]$address, [ref]$parsed)) {
+                  throw "The DNS backup contains an invalid address for '$alias': $address"
+                }
+              }
               if (@($entry.serverAddresses).Count -eq 0) {
-                Set-DnsClientServerAddress -InterfaceAlias $entry.interfaceAlias -ResetServerAddresses
+                Set-DnsClientServerAddress -InterfaceAlias $alias -ResetServerAddresses
               } else {
-                Set-DnsClientServerAddress -InterfaceAlias $entry.interfaceAlias -ServerAddresses @($entry.serverAddresses)
+                Set-DnsClientServerAddress -InterfaceAlias $alias -ServerAddresses @($entry.serverAddresses)
               }
             }
             Write-Host 'Original adapter DNS settings restored.'

@@ -452,6 +452,20 @@ public sealed class PipeServer
                         break;
                     }
 
+                    // A same-user process can reach this pipe. Inbound allow is the one rule shape
+                    // that opens a listening port to the network, so it is not accepted here even
+                    // for the allowed SID; the interactive UI cannot request it either.
+                    if (IpcRulePolicy.IsRejected(spec))
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Inbound allow rules are not accepted over the local pipe.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
                     var applied = await _ruleApply(spec, actorSid, cancellationToken).ConfigureAwait(false);
                     await WriteResultAsync(stream, envelope.Id, applied, cancellationToken).ConfigureAwait(false);
                     break;

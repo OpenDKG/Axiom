@@ -114,4 +114,24 @@ internal static class DnsProtocol
 
     public static ushort ReadId(ReadOnlySpan<byte> query) =>
         BinaryPrimitives.ReadUInt16BigEndian(query[..2]);
+
+    /// <summary>
+    /// True when an upstream reply carries the same transaction id and question as the query.
+    /// Without this check a delayed or mismatched datagram from a compromised upstream is relayed
+    /// to the client.
+    /// </summary>
+    public static bool IsMatchingResponse(ReadOnlySpan<byte> query, int questionEnd, ReadOnlySpan<byte> response)
+    {
+        if (query.Length < HeaderLength ||
+            questionEnd <= HeaderLength ||
+            questionEnd > query.Length ||
+            response.Length < questionEnd)
+        {
+            return false;
+        }
+
+        return response[0] == query[0] &&
+               response[1] == query[1] &&
+               query[12..questionEnd].SequenceEqual(response[12..questionEnd]);
+    }
 }
