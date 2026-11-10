@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.6 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.7 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,24 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.7
+
+- **The service image is protected.** It is installed under `%ProgramFiles%\Axiom\Service` with a
+  SYSTEM/Administrators-only ACL, the copy is hash-checked, and an older install that still points at
+  the user profile is repaired on the next start. A medium-integrity process can no longer replace
+  the LocalSystem binary.
+- **ProgramData is no longer plantable.** `%ProgramData%\Axiom` is created SYSTEM/Administrators
+  only, inheritance is removed, junctions are refused, settings are written through a random temp
+  file, and the legacy migration refuses a junction.
+- **DNS restore trusts only the machine snapshot.** Restore and the SYSTEM failsafe reject a
+  reparse point or a file not owned by SYSTEM/Administrators, accept only parsed IP addresses, and
+  fall back to DHCP when the snapshot cannot cover an adapter.
+- **Upstream DNS replies are validated.** A reply whose transaction id or question does not match
+  the query is dropped and the next upstream is tried.
+- **Inbound allow rules are rejected on the local pipe**, even for the allowed user.
+- Smaller items: a 2 MB cap on the community feed, an accurate lockdown hint (exact files, not
+  renamed copies), and an `https://` URL in the integration documentation.
 
 ## What's in 0.10.6
 
