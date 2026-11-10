@@ -176,11 +176,12 @@
                 <Button Grid.Column="1" Content="Clear history" Command="{Binding ClearBlockedHistoryCommand}" Padding="10,4" />
               </Grid>
               <controls:AxiomSelectableTextBlock Text="{Binding BlockedHistorySummary}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
+              <ScrollViewer x:Name="BlockedHistoryScroll" MaxHeight="260" VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding BlockedHistoryGroups}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                      <Expander HorizontalAlignment="Stretch" Margin="0,2" ToolTip.Tip="{Binding Tooltip}">
+                      <Expander HorizontalAlignment="Stretch" Margin="0,2" ToolTip.Tip="{Binding Tooltip}"
+                                IsExpanded="{Binding IsExpanded, Mode=TwoWay}">
                         <Expander.Header>
                           <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" HorizontalAlignment="Stretch">
                             <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding AppDisplay}" FontSize="10.5" FontWeight="SemiBold"

@@ -1,10 +1,12 @@
-ï»¿// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Ipc;
@@ -27,8 +29,8 @@ public sealed record PrivacyShieldAdapterOption(
     bool HasFallback = false)
 {
     public string DisplayName => HasDefaultRoute
-        ? $"{Name} â€” default route Â· DNS {DnsText}"
-        : $"{Name} â€” DNS {DnsText}";
+        ? $"{Name} — default route · DNS {DnsText}"
+        : $"{Name} — DNS {DnsText}";
 
     public override string ToString() => DisplayName;
 }
@@ -152,8 +154,32 @@ public sealed class BlockedHistoryAppGroup(
     string appDisplay,
     string appPath,
     IReadOnlyList<BlockedHistoryDomainRow> domains,
-    DateTimeOffset lastUtc)
+    DateTimeOffset lastUtc) : INotifyPropertyChanged
 {
+    private bool _isExpanded;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>
+    /// Bound two-way to the Expander. The page refreshes every two seconds and rebuilds this list,
+    /// so the open/closed state has to live on the item instead of the control, otherwise a group
+    /// collapses while the user is reading it.
+    /// </summary>
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (_isExpanded == value)
+            {
+                return;
+            }
+
+            _isExpanded = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsExpanded)));
+        }
+    }
+
     public string AppDisplay => appDisplay;
 
     public string AppPath => appPath;
@@ -166,7 +192,7 @@ public sealed class BlockedHistoryAppGroup(
 
     public DateTimeOffset LastUtc => lastUtc;
 
-    public string SummaryText => $"{TotalBlocks} blocks Â· {DomainCount} domains";
+    public string SummaryText => $"{TotalBlocks} blocks · {DomainCount} domains";
 
     public string Tooltip => string.IsNullOrWhiteSpace(appPath)
         ? appDisplay
@@ -187,13 +213,15 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private bool _updating;
     private bool _resolverActive;
     private bool _statsRefreshing;
+    private readonly HashSet<string> _expandedHistoryApps = new(StringComparer.OrdinalIgnoreCase);
+    private string? _blockedHistorySignature;
 
     public PrivacyShieldPageViewModel(
         IServiceRequestClient? serviceClient,
         IUserInteraction ui,
         IDnsAdapterHelper dnsHelper,
         IUiTimerFactory timers)
-        : base("Privacy Shield", "Local DNS filtering Â· complete installation enables the resolver", "P")
+        : base("Privacy Shield", "Local DNS filtering · complete installation enables the resolver", "P")
     {
         ArgumentNullException.ThrowIfNull(ui);
         ArgumentNullException.ThrowIfNull(dnsHelper);
@@ -204,9 +232,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
         Profiles =
         [
-            new(PrivacyShieldProfile.Basic, "Basic Â· Windows telemetry"),
-            new(PrivacyShieldProfile.Balanced, "Balanced Â· telemetry, ads, tracking"),
-            new(PrivacyShieldProfile.Strict, "Strict Â· all categories"),
+            new(PrivacyShieldProfile.Basic, "Basic · Windows telemetry"),
+            new(PrivacyShieldProfile.Balanced, "Balanced · telemetry, ads, tracking"),
+            new(PrivacyShieldProfile.Strict, "Strict · all categories"),
         ];
         _selectedProfile = Profiles[1];
         ApplyProfileCategories(PrivacyShieldProfile.Balanced);
@@ -870,7 +898,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                     StringComparer.OrdinalIgnoreCase);
                 source.Entries = state?.Entries ?? 0;
                 source.UpdatedText = state?.UpdatedUtc is { } updated
-                    ? $"updated {updated.ToLocalTime():MM-dd HH:mm} Â· {state.Entries:N0} entries"
+                    ? $"updated {updated.ToLocalTime():MM-dd HH:mm} · {state.Entries:N0} entries"
                     : "not downloaded";
                 source.ErrorText = state?.Error ?? string.Empty;
             }
@@ -890,8 +918,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         StatusText = status.Running
             ? $"Listening on {status.BindAddress}:{status.Port}; upstream {status.Upstream}."
             : status.Detail;
-        DetailText = $"{status.RuleCount:N0} active rules Â· {status.Allowed:N0} allowed Â· " +
-                     $"{status.Blocked:N0} blocked Â· {status.Errors:N0} errors. " +
+        DetailText = $"{status.RuleCount:N0} active rules · {status.Allowed:N0} allowed · " +
+                     $"{status.Blocked:N0} blocked · {status.Errors:N0} errors. " +
                      "Counts are in memory and reset when the resolver restarts.";
         StatsText = status.Running
             ? $"{status.Queries:N0} queries observed."
@@ -937,11 +965,31 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             .ToList();
         ApplyRecentGroupView();
 
-        BlockedHistoryGroups.Clear();
         var historyRows = status.BlockedHistory
             .Select(blocked => new BlockedEventRow(blocked, allowedDomains.Contains(blocked.Domain)))
             .ToList();
 
+        UpdateBlockedHistory(historyRows);
+        RefreshAdapters();
+    }
+
+    /// <summary>
+    /// Rebuilds the grouped retained history only when its content changed, and restores the groups
+    /// the user opened. Rebuilding on every two-second tick replaced the items, so every Expander
+    /// closed again and a list could not be read while blocked queries were still arriving.
+    /// </summary>
+    private void UpdateBlockedHistory(List<BlockedEventRow> historyRows)
+    {
+        var signature = BuildBlockedHistorySignature(historyRows);
+        if (string.Equals(signature, _blockedHistorySignature, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _blockedHistorySignature = signature;
+        BlockedHistoryGroups.Clear();
+
+        var knownApps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var appGroup in historyRows
                      .GroupBy(row => row.AppDisplay, StringComparer.OrdinalIgnoreCase)
                      .OrderByDescending(group => group.Count())
@@ -959,18 +1007,66 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                 .ThenByDescending(domain => domain.LastUtc)
                 .ToList();
 
-            BlockedHistoryGroups.Add(new BlockedHistoryAppGroup(
+            var group = new BlockedHistoryAppGroup(
                 appGroup.Key,
                 appGroup.Select(row => row.AppPath).FirstOrDefault(path => !string.IsNullOrWhiteSpace(path))
                 ?? string.Empty,
                 domains,
-                appGroup.Max(row => row.TimestampUtc)));
+                appGroup.Max(row => row.TimestampUtc));
+            group.IsExpanded = _expandedHistoryApps.Contains(group.AppDisplay);
+            group.PropertyChanged += OnBlockedHistoryGroupPropertyChanged;
+            knownApps.Add(group.AppDisplay);
+            BlockedHistoryGroups.Add(group);
         }
+
+        _expandedHistoryApps.RemoveWhere(app => !knownApps.Contains(app));
 
         BlockedHistorySummary = historyRows.Count == 0
             ? "No blocked query history yet."
             : $"{historyRows.Count} blocks from {BlockedHistoryGroups.Count} apps; open an app to see its domains.";
-        RefreshAdapters();
+    }
+
+    private void OnBlockedHistoryGroupPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(BlockedHistoryAppGroup.IsExpanded) ||
+            sender is not BlockedHistoryAppGroup group)
+        {
+            return;
+        }
+
+        if (group.IsExpanded)
+        {
+            _expandedHistoryApps.Add(group.AppDisplay);
+        }
+        else
+        {
+            _expandedHistoryApps.Remove(group.AppDisplay);
+        }
+    }
+
+    private static string BuildBlockedHistorySignature(List<BlockedEventRow> rows)
+    {
+        if (rows.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder();
+        foreach (var row in rows
+                     .OrderBy(row => row.AppDisplay, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(row => row.Domain, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(row => row.TimestampUtc.UtcTicks)
+                     .ThenBy(row => row.CategoryText, StringComparer.Ordinal))
+        {
+            builder.Append(row.AppDisplay).Append('\u001f')
+                .Append(row.AppPath).Append('\u001f')
+                .Append(row.Domain).Append('\u001f')
+                .Append(row.CategoryText).Append('\u001f')
+                .Append(row.CanAllow ? '1' : '0').Append('\u001f')
+                .Append(row.TimestampUtc.UtcTicks).Append('\u001e');
+        }
+
+        return builder.ToString();
     }
 
 
@@ -1092,7 +1188,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 var dnsText = usesResolver
-                    ? $"{resolverAddress} Â· Privacy Shield" +
+                    ? $"{resolverAddress} · Privacy Shield" +
                       (otherDns.Length == 0 ? string.Empty : ", " + string.Join(", ", otherDns))
                     : otherDns.Length == 0
                         ? "automatic"
