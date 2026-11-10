@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.11 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.12 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,14 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.12
+
+- **Antigravity is recognised as an agent executable** for ask-queue priority and agent lockdown. It
+  has no hook integration, so it does not appear in the hook evidence or protected-harness list; the
+  Agents page says so explicitly.
+- The stale-activity hint now explains that an agent keeps the hook it loaded at start, so it has to
+  be restarted after an Axiom update before it reports again.
 
 ## What's in 0.10.11
 

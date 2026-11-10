@@ -219,7 +219,7 @@
             <StackPanel Grid.Column="0" Spacing="2">
               <controls:AxiomSelectableTextBlock Text="Protected workspaces" FontSize="14" FontWeight="SemiBold"
                          Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <controls:AxiomSelectableTextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber, Codex, Claude Code, ZCode and DeepSeek Harness. Installed hooks are not proof of runtime blocking."
+              <controls:AxiomSelectableTextBlock Text="Hermes, OpenClaw, OpenCode, OpenChamber, Codex, Claude Code, ZCode and DeepSeek Harness. Antigravity is detected for lockdown and prioritisation but has no hook integration. Installed hooks are not proof of runtime blocking."
                          FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
               <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,2,0,0">
                 <StackPanel Orientation="Horizontal" Spacing="5">
