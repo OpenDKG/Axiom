@@ -33,10 +33,10 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 ## What's in 0.10.6
 
-- **A dead resolver can no longer take the network down.** Pointing an adapter at the Privacy Shield
-  resolver now keeps the adapter's previous DNS servers behind `127.0.0.1` as a fallback. If the
-  resolver stops or stops answering, Windows fails over and names keep resolving; filtering is
-  bypassed until the resolver is back, and Axiom says so instead of claiming an outage.
+- **One DNS entry is no longer a single point of failure.** Pointing an adapter at the Privacy Shield
+  resolver keeps the adapter's previous DNS servers behind `127.0.0.1` as a fallback. If the resolver
+  stops or stops answering, Windows fails over and names keep resolving; filtering is bypassed until
+  the resolver is back, and the Adapter DNS card says so.
 - Only a family with a real fallback is changed, so the helper never writes a single-server adapter.
 - The Adapter DNS warning now distinguishes a dead network from a silent filtering bypass.
 - The service failsafe from 0.10.5 still restores the saved DNS on disable, stop or a failed start.
