@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.14 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.15 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -31,6 +31,15 @@ Axiom brings together four surfaces:
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
 
+## What's in 0.10.15
+
+- **Browser secure DNS (DoH) is now detected.** Privacy Shield reads the Chrome and Edge
+  `Preferences` files and the Firefox `prefs.js` files and warns when a browser resolves names
+  through its own DoH provider instead of the Axiom resolver. The warning names the browser and
+  profile, and says where to turn secure DNS off. Detection only; no browser setting is changed.
+- The warning is honest about its limits: Windows system DoH is not read, because it applies to a
+  public DNS server and an adapter pointed at 127.0.0.1 has no DoH template.
+
 ## What's in 0.10.14
 
 - The Antigravity row in **Protected workspaces** shows its proper name and detects the running
@@ -40,7 +49,7 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 - **Antigravity now has an Axiom hook.** Axiom writes a PreToolUse entry into
   ~/.gemini/config/hooks.json that runs the Blackbox guard; a deny decision blocks the tool call,
-  and every call is recorded as ntigravity evidence. The Agents page lists Antigravity as a
+  and every call is recorded as antigravity evidence. The Agents page lists Antigravity as a
   protected harness when the hook is installed.
 - The user's existing hooks.json entries are merged, never replaced. Antigravity must be restarted
   after the hook is installed (it reads hooks at start).

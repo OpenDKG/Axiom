@@ -29,8 +29,8 @@ public sealed record PrivacyShieldAdapterOption(
     bool HasFallback = false)
 {
     public string DisplayName => HasDefaultRoute
-        ? $"{Name} — default route · DNS {DnsText}"
-        : $"{Name} — DNS {DnsText}";
+        ? $"{Name} ï¿½ default route ï¿½ DNS {DnsText}"
+        : $"{Name} ï¿½ DNS {DnsText}";
 
     public override string ToString() => DisplayName;
 }
@@ -192,7 +192,7 @@ public sealed class BlockedHistoryAppGroup(
 
     public DateTimeOffset LastUtc => lastUtc;
 
-    public string SummaryText => $"{TotalBlocks} blocks · {DomainCount} domains";
+    public string SummaryText => $"{TotalBlocks} blocks ï¿½ {DomainCount} domains";
 
     public string Tooltip => string.IsNullOrWhiteSpace(appPath)
         ? appDisplay
@@ -215,13 +215,17 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private bool _statsRefreshing;
     private readonly HashSet<string> _expandedHistoryApps = new(StringComparer.OrdinalIgnoreCase);
     private string? _blockedHistorySignature;
+    private DateTimeOffset _lastDohScanUtc = DateTimeOffset.MinValue;
+    private bool _dohScanRunning;
+
+    private static readonly TimeSpan DohScanInterval = TimeSpan.FromSeconds(30);
 
     public PrivacyShieldPageViewModel(
         IServiceRequestClient? serviceClient,
         IUserInteraction ui,
         IDnsAdapterHelper dnsHelper,
         IUiTimerFactory timers)
-        : base("Privacy Shield", "Local DNS filtering · complete installation enables the resolver", "P")
+        : base("Privacy Shield", "Local DNS filtering ï¿½ complete installation enables the resolver", "P")
     {
         ArgumentNullException.ThrowIfNull(ui);
         ArgumentNullException.ThrowIfNull(dnsHelper);
@@ -232,9 +236,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
         Profiles =
         [
-            new(PrivacyShieldProfile.Basic, "Basic · Windows telemetry"),
-            new(PrivacyShieldProfile.Balanced, "Balanced · telemetry, ads, tracking"),
-            new(PrivacyShieldProfile.Strict, "Strict · all categories"),
+            new(PrivacyShieldProfile.Basic, "Basic ï¿½ Windows telemetry"),
+            new(PrivacyShieldProfile.Balanced, "Balanced ï¿½ telemetry, ads, tracking"),
+            new(PrivacyShieldProfile.Strict, "Strict ï¿½ all categories"),
         ];
         _selectedProfile = Profiles[1];
         ApplyProfileCategories(PrivacyShieldProfile.Balanced);
@@ -273,6 +277,12 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     [ObservableProperty]
     private string _dnsOutageWarningText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasDohBypass;
+
+    [ObservableProperty]
+    private string _dohBypassText = DohBypassDetector.NoBypassText;
 
     /// <summary>Grouped live list: one row per (domain, app), newest first, bounded.</summary>
     public ObservableCollection<RecentBlockedGroup> RecentBlockedGroups { get; } = [];
@@ -417,6 +427,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     public void Activate()
     {
         RefreshAdapters();
+        QueueDohScan(force: true);
         _statsTimer?.Start();
         _ = RefreshAsync();
     }
@@ -898,7 +909,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                     StringComparer.OrdinalIgnoreCase);
                 source.Entries = state?.Entries ?? 0;
                 source.UpdatedText = state?.UpdatedUtc is { } updated
-                    ? $"updated {updated.ToLocalTime():MM-dd HH:mm} · {state.Entries:N0} entries"
+                    ? $"updated {updated.ToLocalTime():MM-dd HH:mm} ï¿½ {state.Entries:N0} entries"
                     : "not downloaded";
                 source.ErrorText = state?.Error ?? string.Empty;
             }
@@ -918,8 +929,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         StatusText = status.Running
             ? $"Listening on {status.BindAddress}:{status.Port}; upstream {status.Upstream}."
             : status.Detail;
-        DetailText = $"{status.RuleCount:N0} active rules · {status.Allowed:N0} allowed · " +
-                     $"{status.Blocked:N0} blocked · {status.Errors:N0} errors. " +
+        DetailText = $"{status.RuleCount:N0} active rules ï¿½ {status.Allowed:N0} allowed ï¿½ " +
+                     $"{status.Blocked:N0} blocked ï¿½ {status.Errors:N0} errors. " +
                      "Counts are in memory and reset when the resolver restarts.";
         StatsText = status.Running
             ? $"{status.Queries:N0} queries observed."
@@ -1069,6 +1080,49 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Browser DoH is a property of a profile file, not of the resolver, so it is read off the UI
+    /// thread and refreshed at most every 30 seconds. A browser that resolves names itself leaves
+    /// the resolver's counters at zero without saying why.
+    /// </summary>
+    private void QueueDohScan(bool force = false)
+    {
+        if (_dohScanRunning)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!force && now - _lastDohScanUtc < DohScanInterval)
+        {
+            return;
+        }
+
+        _lastDohScanUtc = now;
+        _dohScanRunning = true;
+        _ = RefreshDohAsync();
+    }
+
+    private async Task RefreshDohAsync()
+    {
+        try
+        {
+            var findings = await Task
+                .Run(() => DohBypassDetector.Detect())
+                .ConfigureAwait(true);
+            DohBypassText = DohBypassDetector.BuildWarningText(findings);
+            HasDohBypass = findings.Count > 0;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            DohBypassText = "Browser secure-DNS settings could not be read: " + exception.Message;
+            HasDohBypass = false;
+        }
+        finally
+        {
+            _dohScanRunning = false;
+        }
+    }
 
     /// <summary>
     /// A stopped resolver while an adapter points at 127.0.0.1 means names stop resolving unless
@@ -1188,7 +1242,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 var dnsText = usesResolver
-                    ? $"{resolverAddress} · Privacy Shield" +
+                    ? $"{resolverAddress} ï¿½ Privacy Shield" +
                       (otherDns.Length == 0 ? string.Empty : ", " + string.Join(", ", otherDns))
                     : otherDns.Length == 0
                         ? "automatic"
@@ -1228,6 +1282,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
 
         UpdateDnsOutageWarning();
+        QueueDohScan();
     }
 
     private void ApplyProfileCategories(PrivacyShieldProfile profile)
