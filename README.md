@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.5 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.6 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,16 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.6
+
+- **A dead resolver can no longer take the network down.** Pointing an adapter at the Privacy Shield
+  resolver now keeps the adapter's previous DNS servers behind `127.0.0.1` as a fallback. If the
+  resolver stops or stops answering, Windows fails over and names keep resolving; filtering is
+  bypassed until the resolver is back, and Axiom says so instead of claiming an outage.
+- Only a family with a real fallback is changed, so the helper never writes a single-server adapter.
+- The Adapter DNS warning now distinguishes a dead network from a silent filtering bypass.
+- The service failsafe from 0.10.5 still restores the saved DNS on disable, stop or a failed start.
 
 ## What's in 0.10.5
 
