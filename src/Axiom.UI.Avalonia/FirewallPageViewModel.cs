@@ -649,8 +649,11 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         {
             var approved = await _ui.ConfirmAsync(
                 "Enable Axiom Shield",
-                "Axiom installs and starts its Windows service so it can create machine-wide firewall rules.\n\n" +
-                "Windows will ask for administrator approval once. The desktop app itself stays unprivileged.",
+                OperatingSystem.IsMacOS()
+                    ? "Axiom installs and starts its background daemon (axiomd) so it can enforce firewall rules through the Axiom network filter.\n\n" +
+                      "macOS will ask for an administrator password once. The desktop app itself stays unprivileged."
+                    : "Axiom installs and starts its Windows service so it can create machine-wide firewall rules.\n\n" +
+                      "Windows will ask for administrator approval once. The desktop app itself stays unprivileged.",
                 "Continue",
                 destructive: false,
                 CancellationToken.None).ConfigureAwait(true);
@@ -665,7 +668,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             ShieldStatusText = "Waiting for the administrator prompt…";
             try
             {
-                var install = ProtectionServiceInstall.InstallAndStart();
+                var install = OperatingSystem.IsMacOS()
+                    ? await ProtectionServiceInstall.InstallAndStartMacAsync(CancellationToken.None).ConfigureAwait(true)
+                    : ProtectionServiceInstall.InstallAndStart();
                 if (!install.Success)
                 {
                     ShieldStatusText = install.Message;
@@ -1153,7 +1158,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             }
         }
 
-        ShieldStatusText = "The Axiom service did not come up. Check Windows Services for 'Axiom'.";
+        ShieldStatusText = OperatingSystem.IsMacOS()
+            ? "The Axiom daemon did not come up. Check 'sudo launchctl print system/com.axiom.service' and /Library/Logs/Axiom."
+            : "The Axiom service did not come up. Check Windows Services for 'Axiom'.";
     }
 
     private void ApplyStatus(ProtectionStatus status)
@@ -1206,7 +1213,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
                 : "Protection is off. Axiom only observes.";
 
         ShieldHintText = !status.ServiceElevated
-            ? "Enable installs the Axiom Windows service (one administrator approval). Until then Axiom can read rules but cannot enforce them."
+            ? (OperatingSystem.IsMacOS()
+                ? "Enable installs the Axiom daemon (one administrator password). Until then Axiom can read rules but cannot enforce them."
+                : "Enable installs the Axiom Windows service (one administrator approval). Until then Axiom can read rules but cannot enforce them.")
             : status.Enabled
                 ? "Ask policy: a new outbound application waits above until you choose Block or Allow. Every block is a Windows Firewall rule named Axiom::…."
                 : "The service runs elevated and can enforce. Turn protection on to start the ask policy.";

@@ -14,6 +14,22 @@ public static class ThemeSettingsStore
         "Axiom",
         "theme.txt");
 
+    /// <summary>True once the user has picked a palette (hosts may follow the OS until then).</summary>
+    public static bool HasSavedTheme
+    {
+        get
+        {
+            try
+            {
+                return File.Exists(SettingsPath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+    }
+
     public static UiTheme Load()
     {
         try

@@ -549,6 +549,15 @@ public sealed class AiAnalystClient : IDisposable
             Path.Combine(local, "Programs", "OpenCode", "opencode.exe"),
             Path.Combine(roaming, "npm", "opencode.exe"),
         ];
+        if (!OperatingSystem.IsWindows())
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            candidates =
+            [
+                Path.Combine(home, ".opencode", "bin", "opencode"),
+                .. AgentPlatform.MacExtraSearchDirectories(home).Select(directory => Path.Combine(directory, "opencode")),
+            ];
+        }
 
         foreach (var candidate in candidates)
         {
@@ -565,7 +574,7 @@ public sealed class AiAnalystClient : IDisposable
             {
                 try
                 {
-                    var candidate = Path.Combine(entry.Trim(), "opencode.exe");
+                    var candidate = Path.Combine(entry.Trim(), AgentPlatform.ExecutableName("opencode"));
                     if (File.Exists(candidate))
                     {
                         return candidate;

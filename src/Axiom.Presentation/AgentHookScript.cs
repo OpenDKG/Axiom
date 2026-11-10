@@ -10,7 +10,7 @@ public static class AgentHookScript
     /// <summary>Bump when hook behavior changes so Codex invalidates its trust hash.</summary>
     public const string Version = "2";
 
-    public static string Build(string framework) => $$"""
+    public static string Build(string framework) => AgentPlatform.AdaptHookScript($$"""
         # Managed by Axiom. Calls the local Blackbox guard for Claude Code and Codex lifecycle hooks.
         import contextlib
         import datetime
@@ -266,5 +266,5 @@ public static class AgentHookScript
 
         if __name__ == "__main__":
             main()
-        """;
+        """);
 }

@@ -37,7 +37,16 @@ public sealed class OptionalModuleInstaller
         "modules",
         "blackbox");
 
-    public string DkgCommand => Path.Combine(DkgRoot, "node_modules", ".bin", "dkg.cmd");
+    public string DkgCommand => Path.Combine(DkgRoot, "node_modules", ".bin", AgentPlatform.NpmShimName("dkg"));
+
+    /// <summary>
+    /// The guided installers are PowerShell scripts and the Blackbox installer is a Windows
+    /// installer, so they run only on Windows. Other platforms report this message instead.
+    /// </summary>
+    public static bool IsInstallSupported => OperatingSystem.IsWindows();
+
+    public const string UnsupportedInstallMessage =
+        "Guided module installation is not available on macOS yet. Install the module manually, then click Check again.";
 
     public bool IsDkgInstalled => File.Exists(DkgCommand);
 
@@ -210,7 +219,10 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        var startInfo = new ProcessStartInfo("cmd.exe", $"/c \"\"{command}\" start\"")
+        var (fileName, arguments) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", $"/c \"\"{command}\" start\"")
+            : (command, "start");
+        var startInfo = new ProcessStartInfo(fileName, arguments)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -258,9 +270,17 @@ public sealed class OptionalModuleInstaller
             return (null, false);
         }
 
-        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        var directories = path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries).AsEnumerable();
+        if (OperatingSystem.IsMacOS())
         {
-            foreach (var name in new[] { "dkg.cmd", "dkg.exe", "dkg.bat" })
+            directories = directories.Concat(AgentPlatform.MacExtraSearchDirectories(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)));
+        }
+
+        var names = OperatingSystem.IsWindows() ? new[] { "dkg.cmd", "dkg.exe", "dkg.bat" } : new[] { "dkg" };
+        foreach (var directory in directories)
+        {
+            foreach (var name in names)
             {
                 try
                 {
@@ -292,7 +312,7 @@ public sealed class OptionalModuleInstaller
         }
 
         var agent = Path.Combine(BlackboxRoot, "agent-blackbox");
-        var venv = Path.Combine(agent, "venv", "Scripts", "python.exe");
+        var venv = AgentPlatform.VenvPython(agent);
         if (!File.Exists(venv) || IsUnsafeInstallRoot(BlackboxRoot, agent, venv))
         {
             return false;
@@ -337,6 +357,12 @@ public sealed class OptionalModuleInstaller
 
     private static bool RunPowerShellScript(string script, Action<string>? log)
     {
+        if (!IsInstallSupported)
+        {
+            log?.Invoke(UnsupportedInstallMessage);
+            return false;
+        }
+
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
             "powershell.exe",
@@ -362,6 +388,11 @@ public sealed class OptionalModuleInstaller
 
     private static void StartPowerShell(string script)
     {
+        if (!IsInstallSupported)
+        {
+            return;
+        }
+
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
             "powershell.exe",

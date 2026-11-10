@@ -93,7 +93,9 @@ public sealed partial class FileScanRow : ObservableObject
 
     public bool CanBlockFromCommunity =>
         IsCommunityMatch &&
-        Path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+        (OperatingSystem.IsWindows()
+            ? Path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            : System.IO.Path.IsPathRooted(Path));
 }
 
 public sealed record CommunityFeedRow(string Sha256, string Name, string Verdict, string Source);
@@ -723,6 +725,12 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 return;
             }
 
+            if (!OptionalModuleInstaller.IsInstallSupported)
+            {
+                InstallStatusText = OptionalModuleInstaller.UnsupportedInstallMessage;
+                return;
+            }
+
             var confirmed = await _ui.ConfirmAsync(
                 "Install Blackbox",
                 "This downloads and runs Umanitek's official Windows installer with the Oxigraph " +
@@ -762,6 +770,12 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                     InstallStatusText = "DKG did not answer after 90 seconds. Check its local log or start it manually.";
                 }
 
+                return;
+            }
+
+            if (!OptionalModuleInstaller.IsInstallSupported)
+            {
+                InstallStatusText = OptionalModuleInstaller.UnsupportedInstallMessage;
                 return;
             }
 
