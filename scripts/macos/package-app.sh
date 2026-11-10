@@ -89,6 +89,9 @@ if [[ $SKIP_PUBLISH -eq 0 ]]; then
     -f net10.0 -c Release -r "$RID" --self-contained true -m:2 -nologo -v:q \
     -p:UseAppHost=true -o "$PUBLISH/service"
   "$DOTNET" build-server shutdown >/dev/null 2>&1 || true
+  # A RID-specific restore appends "net10.0/osx-*" sections to packages.lock.json; like the
+  # Windows release scripts, those are build artefacts and are not committed.
+  log "note: publish adds RID sections to packages.lock.json; discard them with: git checkout -- '*.lock.json'"
 fi
 
 [[ -x "$PUBLISH/app/Axiom" ]] || die "missing $PUBLISH/app/Axiom (publish first)"

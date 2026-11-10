@@ -45,3 +45,6 @@ desktop.ini
 
 # Internal planning documents (kept local, not published)
 *_SR.md
+
+# macOS app bundles from scripts/macos/package-app.sh
+/build/macos/
