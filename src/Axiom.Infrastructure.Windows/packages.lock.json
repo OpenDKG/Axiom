@@ -28,11 +28,18 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.8.0, )"
+          "Axiom.Contracts": "[0.10.6, )"
+        }
+      },
+      "axiom.service.hosting": {
+        "type": "Project",
+        "dependencies": {
+          "Axiom.Contracts": "[0.10.6, )",
+          "Axiom.Core": "[0.10.6, )"
         }
       }
     },
-    "net10.0-windows7.0/win-x64": {
+    "net10.0-windows7.0/osx-x64": {
       "System.Management": {
         "type": "Direct",
         "requested": "[10.0.14, )",

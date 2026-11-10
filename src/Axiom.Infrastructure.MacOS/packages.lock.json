@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[10.0.14, )",
+        "resolved": "10.0.14",
+        "contentHash": "YlTamXppEQls6DYWt7RdUuwWDb0lyw/vXCaGeQpLCpsLmfwGuCkOz/vIGgMTV7ECsJcavkCOkxZXv9s8rdAHkQ=="
+      },
+      "axiom.contracts": {
+        "type": "Project"
+      },
+      "axiom.core": {
+        "type": "Project",
+        "dependencies": {
+          "Axiom.Contracts": "[0.10.6, )"
+        }
+      },
+      "axiom.service.hosting": {
+        "type": "Project",
+        "dependencies": {
+          "Axiom.Contracts": "[0.10.6, )",
+          "Axiom.Core": "[0.10.6, )"
+        }
+      }
+    },
+    "net10.0/osx-x64": {}
+  }
+}

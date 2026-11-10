@@ -1,0 +1,156 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+using System.Net;
+using Axiom.Infrastructure.MacOS.Dns;
+using Axiom.Infrastructure.MacOS.Interop;
+
+namespace Axiom.Infrastructure.MacOS.Tests;
+
+public sealed class DnsTests
+{
+    private static readonly string[] ExpectedScutilServers = ["192.168.64.1", "2001:db8::53", "127.0.0.1", "8.8.8.8"];
+
+    private const string Services = """
+        An asterisk (*) denotes that a network service is disabled.
+        Ethernet
+        *Bluetooth PAN
+        Thunderbolt Bridge
+        Wi-Fi
+
+        """;
+
+    private const string Scutil = """
+        DNS configuration
+
+        resolver #1
+          search domain[0] : lan
+          nameserver[0] : 192.168.64.1
+          nameserver[1] : 2001:db8::53
+          if_index : 4 (en0)
+          flags    : Request A records, Request AAAA records
+          reach    : 0x00020002 (Reachable,Directly Reachable Address)
+
+        resolver #2
+          domain   : local
+          options  : mdns
+          timeout  : 5
+
+        resolver #3
+          nameserver[0] : 127.0.0.1
+
+        DNS configuration (for scoped queries)
+
+        resolver #1
+          nameserver[0] : 192.168.64.1
+          nameserver[1] : 8.8.8.8
+          if_index : 4 (en0)
+        """;
+
+    [Fact]
+    public void ParsesNetworkServices()
+    {
+        var services = NetworkSetupParser.ParseServices(Services);
+
+        Assert.Equal(["Ethernet", "Bluetooth PAN", "Thunderbolt Bridge", "Wi-Fi"], services.Select(service => service.Name));
+        Assert.False(services[1].Enabled);
+        Assert.True(services[0].Enabled);
+    }
+
+    [Fact]
+    public void ParsesDnsServers()
+    {
+        Assert.Equal(["1.1.1.1", "2606:4700:4700::1111"], NetworkSetupParser.ParseDnsServers("1.1.1.1\n2606:4700:4700::1111\n"));
+        Assert.Empty(NetworkSetupParser.ParseDnsServers("There aren't any DNS Servers set on Ethernet.\n")!);
+        Assert.Null(NetworkSetupParser.ParseDnsServers("Ethernet2 is not a recognized network service.\n** Error: The parameters were not valid."));
+    }
+
+    [Fact]
+    public void ParsesScutilDefaultResolvers()
+    {
+        var servers = NetworkSetupParser.ParseScutilNameservers(Scutil);
+
+        Assert.Equal(
+            ExpectedScutilServers,
+            servers.Select(server => server.ToString()));
+    }
+
+    [Fact]
+    public void RedirectSavesBackupAndRestoreRevertsIt()
+    {
+        using var temp = new TempDirectory();
+        var dns = new Dictionary<string, string[]>
+        {
+            ["Ethernet"] = [],
+            ["Wi-Fi"] = ["9.9.9.9"],
+            ["Bluetooth PAN"] = ["1.0.0.1"],
+        };
+        var runner = new FakeRunner()
+            .On("networksetup -listallnetworkservices", Services)
+            .On("networksetup -getdnsservers", args =>
+                dns.TryGetValue(args[1], out var servers)
+                    ? new ProcessResult(0, servers.Length == 0 ? $"There aren't any DNS Servers set on {args[1]}.\n" : string.Join('\n', servers) + "\n", string.Empty)
+                    : new ProcessResult(0, $"{args[1]} is not a recognized network service.\n** Error: The parameters were not valid.\n", string.Empty))
+            .On("networksetup -setdnsservers", args =>
+            {
+                dns[args[1]] = args[2] == "Empty" ? [] : args.Skip(2).ToArray();
+                return new ProcessResult(0, string.Empty, string.Empty);
+            })
+            .On("scutil --dns", Scutil);
+
+        var configurator = new MacDnsConfigurator(runner, Path.Combine(temp.Path, "backup.json"));
+        var result = configurator.Redirect();
+
+        Assert.True(result.Changed, result.Error);
+        Assert.Equal(["Ethernet", "Wi-Fi"], result.Services);
+        Assert.Equal(["127.0.0.1"], dns["Ethernet"]);
+        Assert.Equal(["127.0.0.1"], dns["Wi-Fi"]);
+        Assert.Equal(["1.0.0.1"], dns["Bluetooth PAN"]);
+        Assert.Contains("dscacheutil -flushcache", runner.Calls);
+
+        // Upstreams come from the backup once the system itself points at loopback.
+        runner.On("scutil --dns", "DNS configuration\nresolver #1\n  nameserver[0] : 127.0.0.1\n");
+        Assert.Equal(
+            [new IPEndPoint(IPAddress.Parse("192.168.64.1"), 53), new IPEndPoint(IPAddress.Parse("2001:db8::53"), 53), new IPEndPoint(IPAddress.Parse("8.8.8.8"), 53), new IPEndPoint(IPAddress.Parse("9.9.9.9"), 53)],
+            configurator.DiscoverUpstreams());
+
+        // A second redirect (daemon restart) keeps the original servers in the backup.
+        configurator.Redirect();
+        Assert.Equal(["9.9.9.9"], configurator.ReadBackup()!.Services.Single(service => service.Name == "Wi-Fi").Servers);
+
+        Assert.True(configurator.RestoreIfNeeded());
+        Assert.Empty(dns["Ethernet"]);
+        Assert.Equal(["9.9.9.9"], dns["Wi-Fi"]);
+        Assert.Null(configurator.ReadBackup());
+        Assert.False(configurator.RestoreIfNeeded());
+    }
+
+    [Fact]
+    public void RestoreWithoutBackupResetsLoopbackServicesToAutomatic()
+    {
+        using var temp = new TempDirectory();
+        var dns = new Dictionary<string, string[]> { ["Ethernet"] = ["127.0.0.1"], ["Wi-Fi"] = ["8.8.8.8"] };
+        var runner = new FakeRunner()
+            .On("networksetup -listallnetworkservices", "Ethernet\nWi-Fi\n")
+            .On("networksetup -getdnsservers", args => new ProcessResult(0, string.Join('\n', dns[args[1]]), string.Empty))
+            .On("networksetup -setdnsservers", args =>
+            {
+                dns[args[1]] = args[2] == "Empty" ? [] : args.Skip(2).ToArray();
+                return new ProcessResult(0, string.Empty, string.Empty);
+            });
+
+        Assert.True(new MacDnsConfigurator(runner, Path.Combine(temp.Path, "none.json")).RestoreIfNeeded());
+        Assert.Empty(dns["Ethernet"]);
+        Assert.Equal(["8.8.8.8"], dns["Wi-Fi"]);
+        Assert.Contains("networksetup -setdnsservers Ethernet Empty", runner.Calls);
+    }
+
+    [Fact]
+    public void PlatformDoesNotRedirectForNonStandardPort()
+    {
+        using var temp = new TempDirectory();
+        var runner = new FakeRunner();
+        var platform = new MacPrivacyDnsPlatform(new MacDnsConfigurator(runner, Path.Combine(temp.Path, "b.json")), null);
+
+        Assert.Contains("port 5353", platform.OnResolverStarted(5353), StringComparison.Ordinal);
+        Assert.Empty(runner.Calls);
+    }
+}

@@ -32,9 +32,10 @@ public sealed class PrivacyShieldBlockedHistoryStore
     {
         // History is deliberately kept in the service account's local profile: blocked domains
         // reveal browsing habits, so the file is not shared machine-wide like the settings.
+        // On a Unix daemon this resolves to the machine data directory; the file is created
+        // owner-only (0600) there so other local users cannot read it.
         _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Axiom",
+            Axiom.Contracts.AxiomPaths.ServicePrivateDataDirectory,
             "privacy-shield-blocked.jsonl");
         _count = CountLines();
     }
@@ -55,10 +56,15 @@ public sealed class PrivacyShieldBlockedHistoryStore
                 var directory = Path.GetDirectoryName(_path)
                     ?? throw new InvalidOperationException("Privacy Shield history path has no directory.");
                 Directory.CreateDirectory(directory);
+                var created = !File.Exists(_path);
                 File.AppendAllText(
                     _path,
                     JsonSerializer.Serialize(blocked, JsonOptions) + "\n",
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                if (created && !OperatingSystem.IsWindows())
+                {
+                    File.SetUnixFileMode(_path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                }
                 _count++;
             }
             catch (Exception exception) when (exception is

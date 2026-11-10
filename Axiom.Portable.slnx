@@ -2,14 +2,17 @@
   <Folder Name="/src/">
     <Project Path="src/Axiom.Contracts/Axiom.Contracts.csproj" />
     <Project Path="src/Axiom.Core/Axiom.Core.csproj" />
+    <Project Path="src/Axiom.Infrastructure.MacOS/Axiom.Infrastructure.MacOS.csproj" />
     <Project Path="src/Axiom.McpServer/Axiom.McpServer.csproj" />
     <Project Path="src/Axiom.Persistence/Axiom.Persistence.csproj" />
     <Project Path="src/Axiom.Presentation/Axiom.Presentation.csproj" />
+    <Project Path="src/Axiom.Service.Hosting/Axiom.Service.Hosting.csproj" />
     <Project Path="src/Axiom.UI.Avalonia/Axiom.UI.Avalonia.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Axiom.Contracts.Tests/Axiom.Contracts.Tests.csproj" />
     <Project Path="tests/Axiom.Core.Tests/Axiom.Core.Tests.csproj" />
+    <Project Path="tests/Axiom.Infrastructure.MacOS.Tests/Axiom.Infrastructure.MacOS.Tests.csproj" />
     <Project Path="tests/Axiom.McpServer.Tests/Axiom.McpServer.Tests.csproj" />
     <Project Path="tests/Axiom.Persistence.Tests/Axiom.Persistence.Tests.csproj" />
     <Project Path="tests/Axiom.Presentation.Tests/Axiom.Presentation.Tests.csproj" />

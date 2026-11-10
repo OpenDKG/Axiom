@@ -22,8 +22,10 @@ internal static class ShieldProcessFilter
     private static readonly string ProgramFilesX86 =
         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
-    private static readonly string ProgramData =
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+    // CommonApplicationData is /usr/share on Unix; only the Windows ProgramData root is trusted.
+    private static readonly string ProgramData = OperatingSystem.IsWindows()
+        ? Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)
+        : string.Empty;
 
     private static readonly ConcurrentDictionary<string, bool> Cache =
         new(StringComparer.OrdinalIgnoreCase);
@@ -59,6 +61,12 @@ internal static class ShieldProcessFilter
 
     private static bool IsMicrosoftSigned(string path)
     {
+        // Authenticode only exists on Windows; macOS signers are handled by the desktop host.
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
         try
         {
 #pragma warning disable SYSLIB0057 // CreateFromSignedFile is the API that reads Authenticode data from an executable.
