@@ -49,6 +49,10 @@ internal static class PrivacyShieldDnsHelper
                 interfaces = $entries
               } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $backup -Encoding UTF8
             }
+            # Keep a machine-wide copy the Axiom service (LocalSystem) can read for its failsafe.
+            $machine = Join-Path $env:ProgramData 'Axiom\privacy-shield-dns-backup.json'
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $machine) | Out-Null
+            Copy-Item -LiteralPath $backup -Destination $machine -Force
             Set-DnsClientServerAddress -InterfaceAlias $alias -ServerAddresses @($resolver)
             try {
               if ($resolver -notlike '*:*') {

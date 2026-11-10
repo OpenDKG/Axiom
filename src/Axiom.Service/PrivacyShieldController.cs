@@ -60,6 +60,9 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         _settings = store.Load();
     }
 
+    /// <summary>Whether the persisted configuration asks the resolver to run.</summary>
+    public bool IsEnabled => _settings.Enabled;
+
     public async Task<PrivacyShieldStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -136,6 +139,10 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
                 _settings = normalized;
                 _lastError = null;
+
+                // The adapter may still send DNS to 127.0.0.1. With the resolver stopped that would
+                // take name resolution down, so restore the saved DNS without an extra prompt.
+                _ = Task.Run(PrivacyDnsFailSafe.RestoreIfNeeded);
                 return CreateStatus();
             }
 
@@ -301,6 +308,9 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
         _server = null;
         _lastError = error;
+
+        // A failed start (port taken, socket error) must not leave the adapter without a resolver.
+        _ = Task.Run(PrivacyDnsFailSafe.RestoreIfNeeded);
     }
 
     private bool TryCreateServer(
