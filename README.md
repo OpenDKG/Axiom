@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.18 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.19 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -12,6 +12,8 @@
 > changes can break name resolution, and agent hooks can block tools or files. Do not rely on it as
 > your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
 > and keep a recovery path.
+
+![Axiom Overview in the dark theme: live sockets, system-wide throughput and local-only counters](docs/assets/screenshots/overview-dark.png)
 
 Axiom is a local, offline Windows network monitor, firewall policy manager and agent-protection
 console. It shows which applications use the network, which endpoints they talk to, and what
@@ -30,6 +32,17 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.19
+
+- **Shared URLs no longer carry secrets.** A URL indicator is reduced to scheme, host, non-default
+  port and path: userinfo, query strings and fragments are dropped, and loopback, private, `.local`
+  and single-label hosts are rejected.
+- **IP normalisation covers the special-purpose ranges.** `0.0.0.0/8`, CGNAT `100.64/10`,
+  documentation, benchmarking, AS112/AMT anycast, multicast and reserved IPv4, plus IPv6
+  translation, discard-only, `2001::/23`, documentation, 6to4, ULA, link-local and multicast.
+  IPv4-mapped IPv6 is checked as IPv4.
+- The README now shows the Overview page so the application is visible before the feature list.
 
 ## What's in 0.10.18
 
