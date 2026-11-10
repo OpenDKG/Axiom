@@ -1,14 +1,14 @@
-# Security model — Axiom (FND-005)
+﻿# Security model — Axiom (FND-005)
 
 ## 1. Current trust boundary
 
 | Process | Rights | What it does |
 |---|---|---|
 | `Axiom.Desktop.exe` | `asInvoker` | UI; reads IP Helper or calls the pipe |
-| `Axiom.Service.exe` | `asInvoker` (console mode) | polls IP Helper, writes SQLite, serves the pipe |
+| `Axiom.Service.exe` | `LocalSystem` (installed); `asInvoker` in console mode | polls IP Helper, writes SQLite, serves the pipe |
 | `Axiom.McpServer.exe` | `asInvoker`, same user | read-only MCP tools; calls the authenticated pipe only |
 
-In production the service would run under a service account (FND-009); the UI stays unprivileged.
+In production the service runs as `LocalSystem` from `%ProgramFiles%\Axiom\Service` with an administrator-only ACL; the UI stays unprivileged. The installer copies the image there and repairs an older install that still points at the user profile.
 There are no COM/WFP/ETW/netsh calls, no firewall writes and no outbound network communication.
 
 ETW (FND-004) is not implemented; when it arrives it requires `SeSystemProfilePrivilege` and belongs
@@ -19,6 +19,7 @@ in the service.
 - `\\.\pipe\Axiom.Service.v1`.
 - Explicit DACL: allow the service account + one SID; deny `Network`/`Anonymous`/`Guests`.
 - The client process SID is read from its token after connect; a mismatch closes the connection.
+- Inbound + Allow rule specs are rejected on the pipe; the UI cannot request that shape either.
 - Limits: request 256 KiB, response 4 MiB, 100 requests/s, 30 s idle, 4 instances.
 - Named commands only; no `exec`; firewall writes/config/diagnostics/`live.events` →
   `not_supported` (`history.query` and read-only `rules.query` are supported).
@@ -37,8 +38,9 @@ in the service.
 - SQLite WAL; `foreign_keys=ON`; `integrity_check` at startup.
 - A corrupt file is moved to `.corrupt-<timestamp>` (not deleted) and the database is recreated.
 - CSV export writes to a path the user explicitly selects; UTF-8 BOM; escaping.
-- The installer (FND-009) must set an explicit ACL on `%ProgramData%\Axiom\`; development
-  uses per-user LocalAppData.
+- The installed service sets an explicit ACL on `%ProgramData%\Axiom\` (SYSTEM and Administrators
+  only, no user write or create), rejects junctions, writes settings through a random temp file, and
+  refuses to use a settings file it cannot own. Development uses per-user LocalAppData.
 
 ## 4. Firewall write gate (FND-006)
 
@@ -60,7 +62,8 @@ in the service.
   direction, protocol, profiles, enabled state, addresses and ports against the persisted spec.
 - The UI disables block/remove unless the service reports `FirewallWrites=true`.
 - The agent lockdown composes 16 non-loopback CIDR blocks (IPv4 and IPv6) so 127.0.0.0/8 and ::1
-  stay reachable for the local Blackbox guard; it never blocks loopback.
+  stay reachable for the local Blackbox guard; it never blocks loopback. It is path-exact: a renamed
+  copy of an agent executable, or another tool such as curl, is not covered, and the UI says so.
 - Installer uninstall, rollback and external-rule conflicts remain VM checks (ADR 0007).
 
 ## 5. Threat model
@@ -69,7 +72,8 @@ in the service.
 |---|---|---|
 | Another local user calls the service | DACL + SID check | Foreign SID rejection tested |
 | Remote pipe access | Deny `Network`/`Anonymous`/`Guests` | Local pipe |
-| Reading someone else's history | Per-user LocalAppData; ProgramData ACL in FND-009 | Per-user path |
+| Reading someone else's history | Per-user LocalAppData; installed ProgramData ACL is SYSTEM/Administrators only | Per-user path |
+| Same-user process calls the pipe | The allowed SID is accepted; inbound + allow is rejected. Protection changes and firewall writes still need the signed-in user's own code path | Documented limitation |
 | Sensitive content in the database | Only metadata | No payload/DNS |
 | Oversized response / DoS | 4 MiB response cap, 256 KiB request, 100/s | Buffered reader + limits |
 | Corrupt database | `integrity_check` + `.corrupt-*` backup | Tested |
@@ -83,9 +87,11 @@ in the service.
 
 ## 6. Limitations and checks not run
 
-- The service is not installed (no admin/VM); the console host and pipe were tested.
-- A real second Windows account was not tested; ACL/SID rejection were.
-- No installation ACL or signing (FND-009).
+- The service is installed under `%ProgramFiles%\Axiom\Service` and runs as `LocalSystem`; the
+  ProgramData ACL and the service image ACL were verified on a local install.
+- A real second Windows account is still not exercised in CI; ACL/SID rejection are unit tested.
+- Binaries are not Authenticode-signed yet. The bootstrap script downloads the archive and its
+  checksums from the same release, so integrity is checked but authenticity is not.
 - No IPC command audit trail; required before firewall commands (FND-006). MCP calls are therefore
   not separately audited yet.
 - No real MCP client or prompt-injection exercise has been run; only raw JSON-RPC and unit tests.

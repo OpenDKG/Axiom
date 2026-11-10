@@ -351,7 +351,7 @@ Blackbox is Umanitek's runtime security product for AI agents. Follow Umanitek's
 prerequisites and review the installer before running it. The Windows installer is:
 
 ```powershell
-iwr -useb blackbox-w.umanitek.ai | iex
+iwr -useb https://blackbox-w.umanitek.ai | iex
 ```
 
 The installer sets up Hermes, the Blackbox plugin and a local DKG node; the dashboard listens on
