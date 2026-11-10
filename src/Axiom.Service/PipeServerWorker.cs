@@ -28,13 +28,23 @@ public sealed partial class PipeServerWorker(
     [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "Pipe {Pipe} allows SID {Sid}")]
     private static partial void LogPipe(ILogger logger, string pipe, string sid);
 
+    [LoggerMessage(EventId = 2003, Level = LogLevel.Information, Message = "IPC endpoint {Endpoint} accepts callers {Callers}")]
+    private static partial void LogEndpoint(ILogger logger, string endpoint, string callers);
+
     [LoggerMessage(EventId = 2002, Level = LogLevel.Information, Message = "{Message}")]
     private static partial void LogMessage(ILogger logger, string message);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var allowedCallers = transport.Prepare();
-        LogPipe(logger, transport.Endpoint, allowedCallers);
+        if (OperatingSystem.IsWindows())
+        {
+            LogPipe(logger, transport.Endpoint, allowedCallers);
+        }
+        else
+        {
+            LogEndpoint(logger, transport.Endpoint, allowedCallers);
+        }
 
         var handlers = new IpcRequestHandlers
         {

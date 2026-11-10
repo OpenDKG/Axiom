@@ -204,7 +204,13 @@ public sealed class MacConnectionSource : IConnectionSnapshotSource
             var key = string.Create(
                 CultureInfo.InvariantCulture,
                 $"{(socket.Tcp ? "tcp" : "udp")}|{local}|{remote}|{socket.ProcessId}");
-            live.Add(key);
+            if (!live.Add(key))
+            {
+                // libproc reports a socket once per file descriptor: a pid that holds the same
+                // socket in several descriptors (dup/fork-inherited) would otherwise list it twice.
+                continue;
+            }
+
             var first = _firstSeen.GetOrAdd(key, now);
 
             var listening = socket.Tcp && socket.TcpState == LibProcLayout.TcpStateListen;

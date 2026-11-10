@@ -21,7 +21,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         IUserInteraction? ui = null,
         IServiceRequestClient? serviceClient = null,
         IProcessActions? processActions = null)
-        : base("Connections", "Sockets read from this Windows host · read-only", "C")
+        : base("Connections", $"Sockets read from this {PlatformText.HostKind} · read-only", "C")
     {
         _monitor = monitor;
         _ui = ui ?? new NullUserInteraction();

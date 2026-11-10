@@ -12,6 +12,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        if (!OperatingSystem.IsWindows())
+        {
+            UseNativeCaption();
+        }
+
         UpdateCaptionGlyph();
         AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
     }
@@ -34,6 +39,25 @@ public partial class MainWindow : Window
         if (change.Property == WindowStateProperty)
         {
             UpdateCaptionGlyph();
+        }
+    }
+
+    /// <summary>
+    /// The drawn caption buttons use Segoe MDL2 Assets and Windows placement. Elsewhere (macOS)
+    /// the native window buttons are kept over the extended title bar, the title content makes
+    /// room for them, and the bell uses a vector icon.
+    /// </summary>
+    private void UseNativeCaption()
+    {
+        WindowDecorations = WindowDecorations.Full;
+        MinimizeButton.IsVisible = false;
+        MaximizeButton.IsVisible = false;
+        CloseButton.IsVisible = false;
+        BellGlyph.IsVisible = false;
+        BellIcon.IsVisible = true;
+        if (OperatingSystem.IsMacOS())
+        {
+            TitleContent.Margin = new Thickness(70, 0, 0, 0);
         }
     }
 

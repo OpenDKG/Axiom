@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
+             xmlns:presentation="using:Axiom.Presentation"
              x:Class="Axiom.UI.Avalonia.Views.FirewallView">
   <UserControl.Styles>
     <Style Selector="Border.pending-row.focused">
@@ -61,7 +62,7 @@
                 <controls:AxiomSelectableTextBlock Text="Why Axiom Shield is asking" FontSize="10" FontWeight="SemiBold"
                            Foreground="{DynamicResource Axiom.Accent}" />
                 <controls:AxiomSelectableTextBlock
-                           Text="Axiom Shield lists every executable that opened a new outbound connection and has no Block/Allow decision yet. It stays listed after the connection ends until you choose Block, Allow or Dismiss. Dismiss hides it until the application opens a new connection. This is not a malware verdict, a VirusTotal result or a community-feed match. Block creates an outbound Windows Firewall rule for this executable; Allow records an allow decision and removes any existing Axiom block."
+                           Text="{x:Static presentation:PlatformText.AskQueueExplanation}"
                            FontSize="9.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
               </StackPanel>
             </Border>
@@ -183,7 +184,7 @@
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Grid.Column="0" Spacing="4">
           <StackPanel Orientation="Horizontal" Spacing="10">
-            <controls:AxiomSelectableTextBlock Text="Windows Firewall · Axiom-owned rules" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="{x:Static presentation:PlatformText.FirewallRulesTitle}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
               <controls:AxiomSelectableTextBlock Text="{Binding NoticeBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="9" FontWeight="Bold" />
             </Border>

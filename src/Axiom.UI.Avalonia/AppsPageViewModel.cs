@@ -208,7 +208,7 @@ public sealed partial class AppsPageViewModel : PageViewModel, IDisposable
         var directionText = direction == FirewallDirection.Outbound ? "outbound" : "inbound";
         var confirmed = await _ui.ConfirmAsync(
             "Axiom firewall write",
-            $"Create a Windows Firewall block rule for {app.Name} ({directionText})?\n\n" +
+            $"Create a {PlatformText.Firewall} block rule for {app.Name} ({directionText})?\n\n" +
             "The rule is owned by Axiom and can be removed from the Firewall page. " +
             "Only continue on an isolated test VM.",
             "Create rule",

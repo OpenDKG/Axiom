@@ -29,8 +29,8 @@ public sealed record PrivacyShieldAdapterOption(
     bool HasFallback = false)
 {
     public string DisplayName => HasDefaultRoute
-        ? $"{Name} — default route · DNS {DnsText}"
-        : $"{Name} — DNS {DnsText}";
+        ? $"{Name} â€” default route Â· DNS {DnsText}"
+        : $"{Name} â€” DNS {DnsText}";
 
     public override string ToString() => DisplayName;
 }
@@ -192,7 +192,7 @@ public sealed class BlockedHistoryAppGroup(
 
     public DateTimeOffset LastUtc => lastUtc;
 
-    public string SummaryText => $"{TotalBlocks} blocks · {DomainCount} domains";
+    public string SummaryText => $"{TotalBlocks} blocks Â· {DomainCount} domains";
 
     public string Tooltip => string.IsNullOrWhiteSpace(appPath)
         ? appDisplay
@@ -221,7 +221,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         IUserInteraction ui,
         IDnsAdapterHelper dnsHelper,
         IUiTimerFactory timers)
-        : base("Privacy Shield", "Local DNS filtering · complete installation enables the resolver", "P")
+        : base("Privacy Shield", "Local DNS filtering Â· complete installation enables the resolver", "P")
     {
         ArgumentNullException.ThrowIfNull(ui);
         ArgumentNullException.ThrowIfNull(dnsHelper);
@@ -232,9 +232,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
         Profiles =
         [
-            new(PrivacyShieldProfile.Basic, "Basic · Windows telemetry"),
-            new(PrivacyShieldProfile.Balanced, "Balanced · telemetry, ads, tracking"),
-            new(PrivacyShieldProfile.Strict, "Strict · all categories"),
+            new(PrivacyShieldProfile.Basic, "Basic Â· Windows telemetry"),
+            new(PrivacyShieldProfile.Balanced, "Balanced Â· telemetry, ads, tracking"),
+            new(PrivacyShieldProfile.Strict, "Strict Â· all categories"),
         ];
         _selectedProfile = Profiles[1];
         ApplyProfileCategories(PrivacyShieldProfile.Balanced);
@@ -331,11 +331,11 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         $"{PrivacyShieldPolicy.StarterRulesAll.Count} starter rules (manually reviewed, not a third-party list)";
 
     public string ManualSetupText =>
-        "The Axiom service never changes adapter DNS silently. The optional UAC helper changes " +
-        "only the selected adapter after you confirm Windows elevation; it saves the previous DNS, " +
+        $"The Axiom service never changes adapter DNS silently. The optional {PlatformText.ElevationName} helper changes " +
+        $"only the selected adapter after you confirm {PlatformText.ElevationPrompt}; it saves the previous DNS, " +
         "keeps it behind the resolver as a fallback, and can restore it. If you do not use the helper, " +
         "set the adapter DNS to 127.0.0.1 (port 53) and keep the router's DNS as the second entry " +
-        "manually. Until Windows DNS points at this resolver, normal traffic bypasses it " +
+        $"manually. Until {PlatformText.OsName} DNS points at this resolver, normal traffic bypasses it " +
         "and the counters stay at zero. This is DNS filtering only: applications still connect " +
         "directly to destination IPs; traffic is not routed or proxied through Axiom.";
 
@@ -628,7 +628,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             "Change adapter DNS",
             $"Point adapter '{SelectedAdapter.Name}' at the Privacy Shield loopback resolver 127.0.0.1?\n\n" +
             "The adapter keeps its current DNS servers behind the resolver as a fallback, so a stopped " +
-            "resolver cannot take the network down. Windows will ask for elevation. The previous DNS " +
+            $"resolver cannot take the network down. {PlatformText.OsName} will ask for elevation. The previous DNS " +
             "settings are saved and can be restored.",
             "Change DNS",
             destructive: true,
@@ -639,7 +639,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             return;
         }
 
-        DnsHelperStatusText = "Waiting for the Windows elevation prompt...";
+        DnsHelperStatusText = $"Waiting for {(OperatingSystem.IsMacOS() ? "the macOS administrator prompt" : "the Windows elevation prompt")}...";
         try
         {
             var exitCode = await _dnsHelper
@@ -670,7 +670,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
         var confirmed = await _ui.ConfirmAsync(
             "Restore adapter DNS",
-            "Restore the adapter DNS settings saved by the Privacy Shield helper? Windows will ask for elevation.",
+            $"Restore the adapter DNS settings saved by the Privacy Shield helper? {PlatformText.OsName} will ask for elevation.",
             "Restore DNS",
             destructive: false,
             CancellationToken.None).ConfigureAwait(true);
@@ -680,7 +680,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             return;
         }
 
-        DnsHelperStatusText = "Waiting for the Windows elevation prompt...";
+        DnsHelperStatusText = $"Waiting for {(OperatingSystem.IsMacOS() ? "the macOS administrator prompt" : "the Windows elevation prompt")}...";
         try
         {
             var exitCode = await _dnsHelper
@@ -916,7 +916,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                     StringComparer.OrdinalIgnoreCase);
                 source.Entries = state?.Entries ?? 0;
                 source.UpdatedText = state?.UpdatedUtc is { } updated
-                    ? $"updated {updated.ToLocalTime():MM-dd HH:mm} · {state.Entries:N0} entries"
+                    ? $"updated {updated.ToLocalTime():MM-dd HH:mm} Â· {state.Entries:N0} entries"
                     : "not downloaded";
                 source.ErrorText = state?.Error ?? string.Empty;
             }
@@ -936,8 +936,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         StatusText = status.Running
             ? $"Listening on {status.BindAddress}:{status.Port}; upstream {status.Upstream}."
             : status.Detail;
-        DetailText = $"{status.RuleCount:N0} active rules · {status.Allowed:N0} allowed · " +
-                     $"{status.Blocked:N0} blocked · {status.Errors:N0} errors. " +
+        DetailText = $"{status.RuleCount:N0} active rules Â· {status.Allowed:N0} allowed Â· " +
+                     $"{status.Blocked:N0} blocked Â· {status.Errors:N0} errors. " +
                      "Counts are in memory and reset when the resolver restarts.";
         StatsText = status.Running
             ? $"{status.Queries:N0} queries observed."
@@ -1206,7 +1206,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 var dnsText = usesResolver
-                    ? $"{resolverAddress} · Privacy Shield" +
+                    ? $"{resolverAddress} Â· Privacy Shield" +
                       (otherDns.Length == 0 ? string.Empty : ", " + string.Join(", ", otherDns))
                     : otherDns.Length == 0
                         ? "automatic"

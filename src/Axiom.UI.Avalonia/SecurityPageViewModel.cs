@@ -50,6 +50,15 @@ public sealed record SecurityModule(
     public bool IsAgentModule => Name is "Blackbox" or "OriginTrail DKG";
 
     public bool IsSecurityModule => Name is "Reputation provider" or "Community feed" or "File scanning";
+
+    /// <summary>
+    /// The Segoe MDL2 glyph on Windows. Other platforms have no font with those private-use code
+    /// points (they render as boxes), so they show the module's initial instead.
+    /// </summary>
+    public string DisplayGlyph =>
+        OperatingSystem.IsWindows() || Glyph.Length == 0 || Glyph[0] < '\uE000' || Glyph[0] > '\uF8FF'
+            ? Glyph
+            : Name.Length > 0 ? Name[..1] : string.Empty;
 }
 
 public sealed partial class FileScanRow : ObservableObject
@@ -364,7 +373,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         : "NOT CONFIGURED";
 
     private string ReputationDetail => _reputationSettings.Enabled && !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)
-        ? "Hash-only lookups enabled; the API key is stored with Windows DPAPI."
+        ? $"Hash-only lookups enabled; the API key is stored with {PlatformText.SecretStore}."
         : "No external reputation lookup is enabled. Unknown is shown as unknown.";
 
     private bool IsCommunityConfigured =>

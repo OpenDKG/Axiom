@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:presentation="using:Axiom.Presentation"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.SettingsView">
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -19,7 +20,7 @@
                       Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
             <CheckBox Content="Show tray icon" IsChecked="{Binding TrayNotificationsEnabled}"
                       Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <CheckBox Content="Hide background console windows (Node, PowerShell, Python)" IsChecked="{Binding HideBackgroundWindows}"
+            <CheckBox Content="{x:Static presentation:PlatformText.HideConsoleWindowsLabel}" IsChecked="{Binding HideBackgroundWindows}"
                       Foreground="{DynamicResource Axiom.TextPrimary}" />
             <Button Content="Test alert (preview only; ignores off switch)" Command="{Binding TestNotificationCommand}"
                     HorizontalAlignment="Left" Padding="10,4" Margin="0,4,0,0" />
@@ -30,13 +31,13 @@
         <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
           <StackPanel Spacing="8">
             <controls:AxiomSelectableTextBlock Text="Startup" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <CheckBox Content="Start with Windows" IsChecked="{Binding StartWithWindows}"
+            <CheckBox Content="{x:Static presentation:PlatformText.StartWithOs}" IsChecked="{Binding StartWithWindows}"
                       IsEnabled="{Binding IsAutostartSupported}" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <CheckBox Content="Start minimized" IsChecked="{Binding StartMinimized}" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <controls:AxiomSelectableTextBlock Text="{Binding StartupStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             <Button Content="Repair startup entry" Command="{Binding RepairStartupCommand}"
                     IsEnabled="{Binding CanRepairStartup}" Padding="12,6" HorizontalAlignment="Left" />
-            <controls:AxiomSelectableTextBlock Text="Only the per-user Axiom startup value is written. No machine-wide entry is created."
+            <controls:AxiomSelectableTextBlock Text="{x:Static presentation:PlatformText.StartupScopeNote}"
                        FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </StackPanel>
         </Border>

@@ -178,7 +178,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             CapabilityStatusText = "Service required";
             CapabilityDetail = "Firewall policy is read through the local service. Start this host with --service.";
             OwnedRuleCountText = "—";
-            StatusText = "No Windows Firewall policy was read in in-process mode.";
+            StatusText = $"No {PlatformText.Firewall} policy was read in in-process mode.";
             IsEmpty = true;
             return;
         }
@@ -302,7 +302,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
     public string NoticeText => WritesEnabled
         ? "Axiom Shield is on. Rules are read and written through the elevated local service with the documented INetFwPolicy2 COM objects. Every change is confirmed and audited."
-        : "This session is read-only for Windows Firewall changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
+        : $"This session is read-only for {PlatformText.Firewall} changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
 
     public string NoticeBadgeText => WritesEnabled ? "SHIELD ON" : "READ-ONLY";
 
@@ -361,7 +361,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private string _shieldHintText =
-        "Axiom Shield applies Windows Firewall rules owned by Axiom. Nothing is blocked until you turn it on.";
+        $"Axiom Shield applies {PlatformText.Firewall} rules owned by Axiom. Nothing is blocked until you turn it on.";
 
     [ObservableProperty]
     private string _serviceAccountText = "unknown";
@@ -496,7 +496,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         var confirmed = await _ui.ConfirmAsync(
             "Axiom firewall write",
             $"Create or update the Axiom-owned {action.ToString().ToLowerInvariant()} rule for:\n{path}\n\n" +
-            "Only this rule is changed. Other Windows Firewall rules are not touched. Continue only on an isolated test VM.",
+            $"Only this rule is changed. Other {PlatformText.Firewall} rules are not touched. Continue only on an isolated test VM.",
             "Apply rule",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);
@@ -549,8 +549,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
         var confirmed = await _ui.ConfirmAsync(
             "Axiom firewall write",
-            $"Remove the owned Windows Firewall rule for {row.Application}?\n\n" +
-            "Only this Axiom rule is removed; other Windows Firewall rules are not touched.",
+            $"Remove the owned {PlatformText.Firewall} rule for {row.Application}?\n\n" +
+            $"Only this Axiom rule is removed; other {PlatformText.Firewall} rules are not touched.",
             "Remove rule",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);
@@ -607,7 +607,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         {
             var confirmed = await _ui.ConfirmAsync(
                 "Disable Axiom Shield",
-                "Turn protection off and remove every Axiom-owned Windows Firewall rule?\n\n" +
+                $"Turn protection off and remove every Axiom-owned {PlatformText.Firewall} rule?\n\n" +
                 "Other firewall rules are not touched. Rules are re-created from your decisions when you enable it again.",
                 "Disable protection",
                 destructive: true,
@@ -652,8 +652,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
                 OperatingSystem.IsMacOS()
                     ? "Axiom installs and starts its background daemon (axiomd) so it can enforce firewall rules through the Axiom network filter.\n\n" +
                       "macOS will ask for an administrator password once. The desktop app itself stays unprivileged."
-                    : "Axiom installs and starts its Windows service so it can create machine-wide firewall rules.\n\n" +
-                      "Windows will ask for administrator approval once. The desktop app itself stays unprivileged.",
+                    : $"Axiom installs and starts its {PlatformText.ServiceKind} so it can create machine-wide firewall rules.\n\n" +
+                      $"{PlatformText.OsName} will ask for administrator approval once. The desktop app itself stays unprivileged.",
                 "Continue",
                 destructive: false,
                 CancellationToken.None).ConfigureAwait(true);
@@ -759,7 +759,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     {
         var confirmed = await _ui.ConfirmAsync(
             "Block this application",
-            $"Create an Axiom outbound Windows Firewall block rule for:\n{appPath}\n\n" +
+            $"Create an Axiom outbound {PlatformText.Firewall} block rule for:\n{appPath}\n\n" +
             "Only the Axiom-owned rule is changed. You can unblock it from Remembered Shield decisions at any time.",
             "Block",
             destructive: true,
@@ -778,7 +778,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         var confirmed = await _ui.ConfirmAsync(
             "Unblock this application",
             $"Remove the Axiom outbound block rule for:\n{appPath}\n\n" +
-            "This restores network access and records an allow decision. Only the Axiom-owned rule is changed; other Windows Firewall rules are not touched.",
+            $"This restores network access and records an allow decision. Only the Axiom-owned rule is changed; other {PlatformText.Firewall} rules are not touched.",
             "Unblock",
             destructive: false,
             CancellationToken.None).ConfigureAwait(true);
@@ -997,7 +997,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         {
             var confirmed = await _ui.ConfirmAsync(
                 "Block this application",
-                $"Create a Windows Firewall block rule for:\n{row.AppPath}\n\n" +
+                $"Create a {PlatformText.Firewall} block rule for:\n{row.AppPath}\n\n" +
                 "Only the Axiom-owned rule is changed. You can remove it from the rules list at any time.",
                 "Block",
                 destructive: true,
@@ -1160,7 +1160,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
         ShieldStatusText = OperatingSystem.IsMacOS()
             ? "The Axiom daemon did not come up. Check 'sudo launchctl print system/com.axiom.service' and /Library/Logs/Axiom."
-            : "The Axiom service did not come up. Check Windows Services for 'Axiom'.";
+            : $"The Axiom service did not come up. {PlatformText.ServiceCheckHint}";
     }
 
     private void ApplyStatus(ProtectionStatus status)
@@ -1215,9 +1215,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         ShieldHintText = !status.ServiceElevated
             ? (OperatingSystem.IsMacOS()
                 ? "Enable installs the Axiom daemon (one administrator password). Until then Axiom can read rules but cannot enforce them."
-                : "Enable installs the Axiom Windows service (one administrator approval). Until then Axiom can read rules but cannot enforce them.")
+                : $"Enable installs the Axiom {PlatformText.ServiceKind} (one administrator approval). Until then Axiom can read rules but cannot enforce them.")
             : status.Enabled
-                ? "Ask policy: a new outbound application waits above until you choose Block or Allow. Every block is a Windows Firewall rule named Axiom::…."
+                ? $"Ask policy: a new outbound application waits above until you choose Block or Allow. Every block is a {PlatformText.Firewall} rule named Axiom::…."
                 : "The service runs elevated and can enforce. Turn protection on to start the ask policy.";
     }
 
@@ -1304,14 +1304,14 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
                 _ => "Unknown",
             };
             CapabilityDetail = snapshot.Capability.Reason
-                ?? "Windows Firewall COM policy is readable. No rule is changed by this page.";
+                ?? $"{(OperatingSystem.IsWindows() ? "Windows Firewall COM policy" : PlatformText.Firewall + " policy")} is readable. No rule is changed by this page.";
             OwnedRuleCountText = snapshot.Rules.Count.ToString(CultureInfo.InvariantCulture);
             IsEmpty = snapshot.Rules.Count == 0;
             WritesEnabled = snapshot.WritesEnabled;
             WritePathText = snapshot.WritesEnabled ? "enabled (test VM only)" : "disabled";
             HasError = snapshot.Capability.Status == FirewallCapabilityStatus.Unavailable;
             StatusText = snapshot.Rules.Count == 0
-                ? "0 owned rules. Axiom has not created any Windows Firewall rule on this host."
+                ? $"0 owned rules. Axiom has not created any {PlatformText.Firewall} rule on this host."
                 : $"{snapshot.Rules.Count} owned rules read at {DateTimeOffset.Now:HH:mm:ss}.";
 
             await RefreshShieldAsync().ConfigureAwait(true);

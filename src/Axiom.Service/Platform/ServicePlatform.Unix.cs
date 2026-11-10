@@ -23,6 +23,12 @@ internal static class ServicePlatform
     public static bool TryRunCommand(string[] args, out int exitCode)
     {
         exitCode = 0;
+        if (args.Length > 0 && args[0].StartsWith("--", StringComparison.Ordinal))
+        {
+            // Run from the desktop's administrator prompt: see ChildSignal.
+            Axiom.Infrastructure.MacOS.Interop.ChildSignal.ReexecIfChildSignalIgnored(args);
+        }
+
         if (args.Length > 0 &&
             string.Equals(args[0], "--install-service", StringComparison.OrdinalIgnoreCase))
         {
