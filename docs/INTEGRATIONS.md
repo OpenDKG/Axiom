@@ -40,8 +40,10 @@ after installation.
 The activity strip shows the last 30 loopback checks; it is a health indicator, not module event
 content. The Agents page also shows a **Threat sharing** card that reads the dashboard's `report`
 setting (`off · opt in` or `on · signed, redacted`) and can enable or disable signed, redacted
-community sharing after confirmation. Only privacy-safe indicators are shared; prompts, commands,
-file paths, credentials, model content and raw session ids are never sent.
+community sharing after confirmation. Only privacy-safe indicators are queued; prompts, commands,
+file paths, credentials, model content and raw session ids are never sent. A queued indicator is
+signed and sent only when the user presses **Share** on it or **Send now** for the queue — Axiom
+never sends on a timer.
 
 Agent workspace labels are deliberately not interchangeable:
 

@@ -106,7 +106,7 @@
             </StackPanel>
           </Grid>
           <controls:AxiomSelectableTextBlock
-                     Text="Axiom only proposes indicators it can honestly attribute: a malware-list domain that an agent actually fetched (directly or through a tool it ran, such as curl or git), or a high-confidence AI Analyst IOC. Blackbox signs and shares them, and only while sharing is on. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
+                     Text="Axiom only proposes indicators it can honestly attribute: a malware-list domain that an agent actually fetched (directly or through a tool it ran, such as curl or git), or a high-confidence AI Analyst IOC. Blackbox signs and shares a candidate only when you press Share or Send now. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
                      FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <Border Background="{DynamicResource Axiom.SurfaceAlt}"
                   BorderBrush="{DynamicResource Axiom.Border}"
@@ -125,14 +125,18 @@
           <ItemsControl ItemsSource="{Binding ThreatShareCandidates}" IsVisible="{Binding HasThreatShareCandidates}">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,2">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" Margin="0,2">
                   <StackPanel Grid.Column="0" Spacing="1">
                     <controls:AxiomSelectableTextBlock Text="{Binding Candidate.Value}" FontSize="11"
                                Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
                     <controls:AxiomSelectableTextBlock Text="{Binding Candidate.Detail}" FontSize="9"
                                Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
                   </StackPanel>
-                  <Button Grid.Column="1" Content="Dismiss" Padding="9,3" FontSize="10"
+                  <Button Grid.Column="1" Content="Share" Padding="9,3" FontSize="10"
+                          IsEnabled="{Binding $parent[UserControl].DataContext.CanSubmitThreatShare}"
+                          Command="{Binding $parent[UserControl].DataContext.ShareThreatShareItemCommand}"
+                          CommandParameter="{Binding}" />
+                  <Button Grid.Column="2" Content="Dismiss" Padding="9,3" FontSize="10"
                           Command="{Binding $parent[UserControl].DataContext.DismissThreatShareCommand}"
                           CommandParameter="{Binding}" />
                 </Grid>

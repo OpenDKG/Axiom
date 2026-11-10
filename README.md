@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.16 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.17 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -30,6 +30,13 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.17
+
+- **Threat sharing waits for you.** A queued indicator is no longer signed and sent on a one-minute
+  timer. Each row now has **Share**, and **Send now** sends the reviewed queue; nothing is sent
+  while sharing is off. The card and queue text say so instead of "waiting for review" over an
+  automatic send.
 
 ## What's in 0.10.16
 
