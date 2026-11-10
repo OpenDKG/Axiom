@@ -148,6 +148,29 @@ public sealed class DnsProxyTests
         Assert.Equal(1, server.Snapshot(settings).Allowed);
     }
 
+    [Fact]
+    public void Response_must_match_the_transaction_id_and_question()
+    {
+        var query = BuildQuery("example.com");
+        Assert.True(DnsProtocol.TryParseQuery(query, out var parsed));
+        Assert.NotNull(parsed);
+
+        var response = (byte[])query.Clone();
+        response[2] |= 0x80;
+        Assert.True(DnsProtocol.IsMatchingResponse(query, parsed!.QuestionEnd, response));
+
+        var wrongId = (byte[])response.Clone();
+        wrongId[0] ^= 0xFF;
+        Assert.False(DnsProtocol.IsMatchingResponse(query, parsed.QuestionEnd, wrongId));
+
+        var wrongQuestion = (byte[])response.Clone();
+        wrongQuestion[13] ^= 0x01;
+        Assert.False(DnsProtocol.IsMatchingResponse(query, parsed.QuestionEnd, wrongQuestion));
+
+        var truncated = response.AsSpan(0, parsed.QuestionEnd - 1);
+        Assert.False(DnsProtocol.IsMatchingResponse(query, parsed.QuestionEnd, truncated));
+    }
+
     private static byte[] BuildQuery(string domain)
     {
         var labels = domain.Split('.');

@@ -345,7 +345,10 @@ public sealed class DnsProxyServer : IAsyncDisposable
                 }
 
                 var response = await ReadExactAsync(stream, length, timeout.Token).ConfigureAwait(false);
-                if (response is not null)
+                if (response is not null &&
+                    DnsProtocol.TryParseQuery(query, out var parsedTcp) &&
+                    parsedTcp is not null &&
+                    DnsProtocol.IsMatchingResponse(query, parsedTcp.QuestionEnd, response))
                 {
                     return response;
                 }
@@ -463,7 +466,10 @@ public sealed class DnsProxyServer : IAsyncDisposable
                 var received = await socket
                     .ReceiveAsync(response.AsMemory(), SocketFlags.None, timeout.Token)
                     .ConfigureAwait(false);
-                if (received > 0)
+                if (received > 0 &&
+                    DnsProtocol.TryParseQuery(query, out var parsedUdp) &&
+                    parsedUdp is not null &&
+                    DnsProtocol.IsMatchingResponse(query, parsedUdp.QuestionEnd, response.AsSpan(0, received)))
                 {
                     return response[..received];
                 }

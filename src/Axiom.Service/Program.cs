@@ -13,13 +13,29 @@ using Microsoft.Extensions.Hosting;
 if (args.Length > 0 &&
     string.Equals(args[0], "--install-service", StringComparison.OrdinalIgnoreCase))
 {
-    return ServiceInstaller.Install(ReadOption(args, "--allowed-sid"));
+    try
+    {
+        return ServiceInstaller.Install(ReadOption(args, "--allowed-sid"));
+    }
+    catch (Exception exception)
+    {
+        WriteInstallFailure(exception);
+        return 8;
+    }
 }
 
 if (args.Length > 0 &&
     string.Equals(args[0], "--uninstall-service", StringComparison.OrdinalIgnoreCase))
 {
     return ServiceInstaller.Uninstall();
+}
+
+// The service owns machine-wide state. Harden ProgramData and make sure the registered image is
+// the protected copy before anything reads settings or migrates data.
+if (MachineStateSecurity.IsRunningAsSystem())
+{
+    MachineStateSecurity.HardenProgramData();
+    ServiceImageProtection.EnsureProtectedImage();
 }
 
 Axiom.Persistence.LegacyDataMigration.Migrate();
@@ -73,4 +89,16 @@ static string? ReadOption(string[] arguments, string name)
     }
 
     return null;
+}
+
+static void WriteInstallFailure(Exception exception)
+{
+    try
+    {
+        var path = Path.Combine(Path.GetTempPath(), "axiom-service-install-error.log");
+        File.WriteAllText(path, $"{DateTimeOffset.UtcNow:O}{Environment.NewLine}{exception}");
+    }
+    catch (Exception writeFailure) when (writeFailure is IOException or UnauthorizedAccessException)
+    {
+    }
 }

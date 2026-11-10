@@ -82,9 +82,22 @@ public sealed class ProtectionSettingsStore
                 settings with { SchemaVersion = CurrentSchemaVersion },
                 JsonOptions);
 
-            var temporary = _path + ".tmp";
-            File.WriteAllText(temporary, payload);
-            File.Move(temporary, _path, overwrite: true);
+            // A predictable temp name lets another user pre-create the file and keep ownership of
+            // the saved settings. Use a random name and move over the target atomically.
+            var temporary = _path + "." + Path.GetRandomFileName() + ".tmp";
+            try
+            {
+                File.WriteAllText(temporary, payload);
+                File.Move(temporary, _path, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(temporary))
+                {
+                    File.Delete(temporary);
+                }
+            }
+
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

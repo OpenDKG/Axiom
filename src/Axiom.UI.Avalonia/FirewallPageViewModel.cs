@@ -1197,7 +1197,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         AgentPathCount = status.AgentPaths.Count;
         AgentLockdownHintText = AgentPathCount == 0
             ? "No agent executable is connected right now."
-            : $"{AgentPathCount} agent executable(s) detected. Lockdown blocks internet access and keeps localhost reachable.";
+            : $"{AgentPathCount} agent executable(s) detected. Lockdown blocks internet access for these exact files and keeps localhost reachable; a renamed copy or another tool is not covered.";
 
         ShieldStatusText = !string.IsNullOrWhiteSpace(status.LastError)
             ? status.LastError!

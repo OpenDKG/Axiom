@@ -2,6 +2,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 
 namespace Axiom.Contracts.Community;
@@ -24,6 +25,8 @@ public sealed record CommunityFeedResult(
 public sealed class CommunityFeedClient : IDisposable
 {
     public const int MaxEntries = 1000;
+
+    private const int MaxResponseBytes = 2 * 1024 * 1024;
 
     private readonly HttpClient _http;
 
@@ -68,10 +71,25 @@ public sealed class CommunityFeedClient : IDisposable
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Trim());
         }
 
-        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
-        body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int read;
+        while ((read = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
+        {
+            if (buffer.Length + read > MaxResponseBytes)
+            {
+                throw new InvalidDataException(
+                    $"The community feed exceeded the {MaxResponseBytes / (1024 * 1024)} MB limit.");
+            }
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        body = Encoding.UTF8.GetString(buffer.ToArray());
         return Parse(body);
     }
 
