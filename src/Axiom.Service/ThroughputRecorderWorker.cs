@@ -17,7 +17,9 @@ public sealed partial class ThroughputRecorderWorker(
     ILogger<ThroughputRecorderWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(1);
-    private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan FlushInterval = TimeSpan.FromMinutes(5);
+
+    private readonly List<ThroughputBucket> _pendingBuckets = [];
 
     private readonly Dictionary<string, (long Sent, long Received)> _previous =
         new(StringComparer.Ordinal);
@@ -59,18 +61,31 @@ public sealed partial class ThroughputRecorderWorker(
 
                 if (now >= _bucketStart.AddMinutes(1))
                 {
-                    // Close the finished minute with its own timestamp before starting the next one.
-                    await FlushAsync(stoppingToken).ConfigureAwait(false);
+                    // Keep completed minutes in memory and write them in one batch later.
+                    if (_measuredSeconds > 0)
+                    {
+                        _pendingBuckets.Add(new ThroughputBucket(
+                            _bucketStart,
+                            _uploadBytes,
+                            _downloadBytes,
+                            _measuredSeconds));
+                    }
+
                     _bucketStart = FloorToMinute(now);
                     _uploadBytes = 0;
                     _downloadBytes = 0;
                     _measuredSeconds = 0;
+
+                    if (_pendingBuckets.Count >= 12)
+                    {
+                        await FlushAsync(stoppingToken).ConfigureAwait(false);
+                    }
+
                     continue;
                 }
 
                 if (now - _lastFlush >= FlushInterval)
                 {
-                    // Keep the current minute visible to a 1h chart without waiting for rollover.
                     await FlushAsync(stoppingToken).ConfigureAwait(false);
                 }
             }
@@ -128,21 +143,22 @@ public sealed partial class ThroughputRecorderWorker(
     private async Task FlushAsync(CancellationToken cancellationToken)
     {
         _lastFlush = DateTimeOffset.UtcNow;
-        if (_measuredSeconds <= 0)
+
+        var buckets = new List<ThroughputBucket>(_pendingBuckets);
+        if (_measuredSeconds > 0)
+        {
+            buckets.Add(new ThroughputBucket(_bucketStart, _uploadBytes, _downloadBytes, _measuredSeconds));
+        }
+
+        if (buckets.Count == 0)
         {
             return;
         }
 
         try
         {
-            await store
-                .RecordThroughputAsync(
-                    _bucketStart,
-                    _uploadBytes,
-                    _downloadBytes,
-                    _measuredSeconds,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            await store.RecordThroughputBatchAsync(buckets, cancellationToken).ConfigureAwait(false);
+            _pendingBuckets.Clear();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Runtime;
 using Axiom.Contracts.Privacy;
 using Axiom.Infrastructure.Windows.Dns;
@@ -18,6 +18,9 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     private readonly PrivacyShieldSourceUpdater _sourceUpdater;
 
     private readonly PrivacyShieldBlockedHistoryStore _blockedHistory = new();
+
+    /// <summary>Writes buffered blocked history before the service stops.</summary>
+    public void FlushBlockedHistory() => _blockedHistory.Flush();
 
     private readonly ThreatShareController? _threatShare;
 

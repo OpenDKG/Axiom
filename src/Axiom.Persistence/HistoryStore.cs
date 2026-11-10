@@ -149,34 +149,124 @@ public sealed class HistoryStore
         }
     }
 
-    public async Task<int> UpsertAsync(ConnectionSnapshot snapshot, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Opens a pooled connection with the pragmas that keep routine writes cheap. SQLite applies
+    /// synchronous/journal settings per connection, so a pooled connection that was never
+    /// configured would silently fall back to a full fsync on every commit.
+    /// </summary>
+    private async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
+    {
+        var connection = new SqliteConnection(_connectionString);
+        try
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await ExecuteAsync(connection, "PRAGMA synchronous=NORMAL;", cancellationToken).ConfigureAwait(false);
+            await ExecuteAsync(connection, "PRAGMA temp_store=MEMORY;", cancellationToken).ConfigureAwait(false);
+            await ExecuteAsync(connection, "PRAGMA cache_size=-8192;", cancellationToken).ConfigureAwait(false);
+            await ExecuteAsync(connection, "PRAGMA wal_autocheckpoint=2000;", cancellationToken).ConfigureAwait(false);
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+    private readonly Dictionary<string, string> _writtenFlows = new(StringComparer.Ordinal);
+
+    private DateTimeOffset _lastFullRefresh = DateTimeOffset.MinValue;
+
+    /// <summary>
+    /// Unchanged flows only need their last-seen time refreshed occasionally. Writing every flow
+    /// on every tick turned a quiet machine into a steady stream of SQLite page writes; the delta
+    /// leaves the disk alone when nothing changed.
+    /// </summary>
+    private static readonly TimeSpan FullRefreshInterval = TimeSpan.FromHours(6);
+
+    public async Task<int> UpsertAsync(ConnectionSnapshot snapshot, bool forceRefresh = false, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
         var now = ToStorage(snapshot.CapturedUtc);
-        var appIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var written = 0;
-
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
-
+        var refreshAll = forceRefresh || DateTimeOffset.UtcNow - _lastFullRefresh >= FullRefreshInterval;
+        var changed = new List<(LiveConnection Flow, string Key, string Fingerprint)>();
         foreach (var flow in snapshot.Connections)
         {
-            var key = AppKey(flow);
-            if (!appIds.TryGetValue(key, out var appId))
+            var key = FlowKey(flow);
+            var fingerprint = FlowFingerprint(flow);
+            if (refreshAll ||
+                !_writtenFlows.TryGetValue(key, out var previous) ||
+                !string.Equals(previous, fingerprint, StringComparison.Ordinal))
             {
-                appId = await UpsertAppAsync(connection, transaction, key, flow, now, cancellationToken);
-                appIds[key] = appId;
+                changed.Add((flow, key, fingerprint));
+            }
+        }
+
+        if (changed.Count == 0)
+        {
+            return 0;
+        }
+
+        var appIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (flow, _, _) in changed)
+        {
+            var key = AppKey(flow);
+            if (!appIds.ContainsKey(key))
+            {
+                appIds[key] = 0;
+            }
+        }
+
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        foreach (var (flow, _, _) in changed)
+        {
+            var key = AppKey(flow);
+            if (appIds[key] == 0)
+            {
+                appIds[key] = await UpsertAppAsync(connection, transaction, key, flow, now, cancellationToken);
             }
 
-            await UpsertFlowAsync(connection, transaction, appId, flow, now, cancellationToken);
-            written++;
+            await UpsertFlowAsync(connection, transaction, appIds[key], flow, now, cancellationToken);
         }
 
         await transaction.CommitAsync(cancellationToken);
-        return written;
+
+        if (refreshAll)
+        {
+            _writtenFlows.Clear();
+            _lastFullRefresh = DateTimeOffset.UtcNow;
+        }
+
+        foreach (var (_, key, fingerprint) in changed)
+        {
+            _writtenFlows[key] = fingerprint;
+        }
+
+        if (_writtenFlows.Count > 20_000)
+        {
+            _writtenFlows.Clear();
+        }
+
+        return changed.Count;
     }
+
+    private static string FlowKey(LiveConnection flow) =>
+        string.Join(
+            '\u001f',
+            AppKey(flow),
+            flow.Protocol.ToString(),
+            LocalHost(flow.LocalEndpoint),
+            flow.RemoteEndpoint,
+            flow.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    private static string FlowFingerprint(LiveConnection flow) =>
+        string.Join(
+            '\u001f',
+            flow.State,
+            flow.Direction.ToString(),
+            flow.Quality.ToString());
 
     public async Task<HistoryPage> QueryAsync(HistoryQuery query, CancellationToken cancellationToken = default)
     {
@@ -200,8 +290,7 @@ public sealed class HistoryStore
                    OR CAST(f.process_id AS TEXT) LIKE $search ESCAPE '\')
             """;
 
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         int total;
 
@@ -278,30 +367,49 @@ public sealed class HistoryStore
     /// Stores the absolute byte totals observed for one minute. The sampler owns the minute
     /// accumulator, so writing the same bucket again replaces its partial value.
     /// </summary>
-    public async Task RecordThroughputAsync(
+    public Task RecordThroughputAsync(
         DateTimeOffset bucketStartUtc,
         long uploadBytes,
         long downloadBytes,
         double measuredSeconds,
+        CancellationToken cancellationToken = default) =>
+        RecordThroughputBatchAsync(
+            [new ThroughputBucket(bucketStartUtc, uploadBytes, downloadBytes, measuredSeconds)],
+            cancellationToken);
+
+    /// <summary>Writes several minute buckets in one transaction, so batching keeps commits rare.</summary>
+    public async Task RecordThroughputBatchAsync(
+        IReadOnlyList<ThroughputBucket> buckets,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
+        if (buckets.Count == 0)
+        {
+            return;
+        }
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            INSERT INTO throughput_buckets(bucket_start_unix, upload_bytes, download_bytes, measured_seconds)
-            VALUES ($bucket, $upload, $download, $measured)
-            ON CONFLICT(bucket_start_unix) DO UPDATE SET
-                upload_bytes = excluded.upload_bytes,
-                download_bytes = excluded.download_bytes,
-                measured_seconds = excluded.measured_seconds;
-            """;
-        command.Parameters.AddWithValue("$bucket", bucketStartUtc.ToUnixTimeSeconds());
-        command.Parameters.AddWithValue("$upload", uploadBytes);
-        command.Parameters.AddWithValue("$download", downloadBytes);
-        command.Parameters.AddWithValue("$measured", measuredSeconds);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        foreach (var bucket in buckets)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                INSERT INTO throughput_buckets(bucket_start_unix, upload_bytes, download_bytes, measured_seconds)
+                VALUES ($bucket, $upload, $download, $measured)
+                ON CONFLICT(bucket_start_unix) DO UPDATE SET
+                    upload_bytes = excluded.upload_bytes,
+                    download_bytes = excluded.download_bytes,
+                    measured_seconds = excluded.measured_seconds;
+                """;
+            command.Parameters.AddWithValue("$bucket", bucket.StartUtc.ToUnixTimeSeconds());
+            command.Parameters.AddWithValue("$upload", bucket.UploadBytes);
+            command.Parameters.AddWithValue("$download", bucket.DownloadBytes);
+            command.Parameters.AddWithValue("$measured", bucket.MeasuredSeconds);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
     }
 
     /// <summary>
@@ -328,9 +436,8 @@ public sealed class HistoryStore
         var toUnix = Math.Max(fromUnix, query.ToUtc.ToUnixTimeSeconds());
 
         var measured = new Dictionary<long, (long Upload, long Download, double Seconds)>();
-        await using (var connection = new SqliteConnection(_connectionString))
+        await using (var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false))
         {
-            await connection.OpenAsync(cancellationToken);
             await using var command = connection.CreateCommand();
             command.CommandText = """
                 SELECT (bucket_start_unix / $bucket) * $bucket AS start_unix,
@@ -511,8 +618,7 @@ public sealed class HistoryStore
         var now = ToStorage(DateTimeOffset.UtcNow);
         var specJson = JsonSerializer.Serialize(rule.Spec, IpcJson.Options);
 
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
         await using (var upsert = connection.CreateCommand())
@@ -560,8 +666,7 @@ public sealed class HistoryStore
 
         var now = ToStorage(DateTimeOffset.UtcNow);
 
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
         await using (var update = connection.CreateCommand())
@@ -604,8 +709,7 @@ public sealed class HistoryStore
 
         var now = ToStorage(DateTimeOffset.UtcNow);
 
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
         await using (var delete = connection.CreateCommand())
@@ -622,8 +726,7 @@ public sealed class HistoryStore
 
     public async Task<IReadOnlyList<ManagedRule>> ListFirewallRulesAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = """
@@ -670,8 +773,7 @@ public sealed class HistoryStore
 
         var cutoff = ToStorage(nowUtc.Subtract(retention));
 
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         int deleted;
 
@@ -703,8 +805,7 @@ public sealed class HistoryStore
 
     private async Task MigrateAsync(CancellationToken cancellationToken)
     {
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await ExecuteAsync(connection, "PRAGMA journal_mode=WAL;", cancellationToken);
         await ExecuteAsync(connection, "PRAGMA foreign_keys=ON;", cancellationToken);
@@ -813,7 +914,7 @@ public sealed class HistoryStore
         command.Parameters.AddWithValue("$appId", appId);
         command.Parameters.AddWithValue("$pid", flow.ProcessId);
         command.Parameters.AddWithValue("$protocol", flow.Protocol.ToString());
-        command.Parameters.AddWithValue("$local", flow.LocalEndpoint);
+        command.Parameters.AddWithValue("$local", LocalHost(flow.LocalEndpoint));
         command.Parameters.AddWithValue("$remote", flow.RemoteEndpoint);
         command.Parameters.AddWithValue("$direction", flow.Direction.ToString());
         command.Parameters.AddWithValue("$state", flow.State);
@@ -822,6 +923,26 @@ public sealed class HistoryStore
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// History is grouped by remote endpoint, so the local port carries no information and would
+    /// create a new row for every short-lived connection. Keep the local address only.
+    /// </summary>
+    private static string LocalHost(string endpoint)
+    {
+        if (string.IsNullOrEmpty(endpoint))
+        {
+            return string.Empty;
+        }
+
+        if (endpoint[0] == '[')
+        {
+            var closing = endpoint.IndexOf(']');
+            return closing > 1 ? endpoint[1..closing] : endpoint;
+        }
+
+        var colon = endpoint.LastIndexOf(':');
+        return colon > 0 && endpoint.IndexOf(':') == colon ? endpoint[..colon] : endpoint;
+    }
     private static string AppKey(LiveConnection flow) =>
         flow.AppPath.Length > 0
             ? flow.AppPath
