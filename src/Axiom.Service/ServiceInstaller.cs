@@ -53,7 +53,7 @@ internal static class ServiceInstaller
             MachineStateSecurity.EnsureDirectory(MachineStateSecurity.ServiceDirectory, usersMayRead: false);
             if (!string.Equals(source, target, StringComparison.OrdinalIgnoreCase))
             {
-                File.Copy(source, target, overwrite: true);
+                CopyWithRetry(source, target);
             }
 
             MachineStateSecurity.EnsureFile(target, usersMayRead: false);
@@ -161,12 +161,16 @@ internal static class ServiceInstaller
         {
             using var controller = new ServiceController(ServiceInfo.ServiceName);
             controller.Refresh();
-            if (controller.Status is ServiceControllerStatus.Stopped or ServiceControllerStatus.StopPending)
+            if (controller.Status == ServiceControllerStatus.Stopped)
             {
                 return;
             }
 
-            controller.Stop();
+            if (controller.Status != ServiceControllerStatus.StopPending)
+            {
+                controller.Stop();
+            }
+
             controller.WaitForStatus(ServiceControllerStatus.Stopped, timeout);
         }
         catch (InvalidOperationException)
@@ -176,6 +180,23 @@ internal static class ServiceInstaller
         catch (System.ServiceProcess.TimeoutException)
         {
             Console.Error.WriteLine("The existing Axiom service did not stop in time.");
+        }
+    }
+
+    private static void CopyWithRetry(string source, string target)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Copy(source, target, overwrite: true);
+                return;
+            }
+            catch (IOException) when (attempt < 10)
+            {
+                // The stopped image can stay mapped for a moment; Windows releases it shortly.
+                Thread.Sleep(TimeSpan.FromSeconds(1));
+            }
         }
     }
 
