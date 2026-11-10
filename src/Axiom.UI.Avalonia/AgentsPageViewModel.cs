@@ -68,7 +68,6 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private readonly ThreatShareCli _cli = new();
     private ThreatShareQueueStatus? _threatShareStatus;
     private bool _threatShareSubmitting;
-    private DateTimeOffset _lastThreatShareSubmitUtc = DateTimeOffset.MinValue;
 
     private readonly List<BlackboxAuditEntry> _allActivity = [];
 
@@ -1102,22 +1101,34 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             : " Blackbox still needs the reporter terms accepted in its own settings.";
 
         ThreatShareQueueText =
-            $"{status.Pending} waiting for review, {status.Submitted} shared in total, " +
+            $"{status.Pending} waiting for your review, {status.Submitted} shared in total, " +
             $"{status.TodaySubmitted}/{status.DailyLimit} today. " +
             (ThreatSharingEnabled
-                ? "Sharing is on; queued indicators are signed and sent by Blackbox from this session."
-                : "Sharing is off; nothing is sent until you enable it.") +
+                ? "Sharing is on; nothing is sent until you press Share or Send now."
+                : "Sharing is off; nothing is signed or sent.") +
             consent;
-
-        if (ThreatSharingEnabled && status.Pending > 0 &&
-            DateTimeOffset.UtcNow - _lastThreatShareSubmitUtc >= TimeSpan.FromMinutes(1))
-        {
-            _ = SubmitThreatShareAsync();
-        }
     }
 
     [RelayCommand]
-    private async Task SubmitThreatShareAsync()
+    private Task SubmitThreatShareAsync()
+    {
+        if (_threatShareStatus is not { } status)
+        {
+            return Task.CompletedTask;
+        }
+
+        var pending = status.Items
+            .Where(item => item.State == ThreatShareState.Pending)
+            .Take(Math.Max(0, status.DailyLimit - status.TodaySubmitted))
+            .ToList();
+        return SubmitThreatShareItemsAsync(pending);
+    }
+
+    [RelayCommand]
+    private Task ShareThreatShareItemAsync(ThreatShareItem? item) =>
+        item is null ? Task.CompletedTask : SubmitThreatShareItemsAsync([item]);
+
+    private async Task SubmitThreatShareItemsAsync(List<ThreatShareItem> items)
     {
         if (_serviceClient is null || _threatShareSubmitting)
         {
@@ -1126,36 +1137,31 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         if (!ThreatSharingEnabled)
         {
-            ThreatShareActionText = "Turn threat sharing on before submitting indicators.";
+            ThreatShareActionText = "Turn threat sharing on before sharing indicators.";
             return;
         }
 
-        if (_threatShareStatus is not { } status)
+        if (_threatShareStatus is { } status && status.TodaySubmitted >= status.DailyLimit)
         {
+            ThreatShareActionText = "The daily sharing cap is reached; nothing was sent.";
+            return;
+        }
+
+        if (items.Count == 0)
+        {
+            ThreatShareActionText = "Nothing is waiting for review.";
             return;
         }
 
         _threatShareSubmitting = true;
-        _lastThreatShareSubmitUtc = DateTimeOffset.UtcNow;
         CanSubmitThreatShare = false;
         ThreatShareActionText = "Submitting through the Blackbox reporter...";
         try
         {
-            var pending = status.Items
-                .Where(item => item.State == ThreatShareState.Pending)
-                .Take(Math.Max(0, status.DailyLimit - status.TodaySubmitted))
-                .ToList();
-
-            if (pending.Count == 0)
-            {
-                ThreatShareActionText = "Nothing is waiting for review, or the daily cap is reached.";
-                return;
-            }
-
             var shared = 0;
             var rejected = 0;
             ThreatShareQueueStatus? latest = null;
-            foreach (var item in pending)
+            foreach (var item in items)
             {
                 var (submitted, outcome) = await _cli
                     .ReportAsync(item.Candidate, CancellationToken.None)

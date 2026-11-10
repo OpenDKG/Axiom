@@ -263,7 +263,7 @@ public sealed class ThreatShareController : IAsyncDisposable
                 DailyLimit = ThreatShareVocabulary.MaxDailySubmissions,
                 Detail = pending == 0
                     ? "No indicator is waiting for review."
-                    : $"{pending} indicator(s) wait for review; the desktop submits them only while sharing is on.",
+                    : $"{pending} indicator(s) wait for your review; the desktop sends one only when you press Share or Send now.",
                 Items = items,
             };
         }
