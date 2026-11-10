@@ -6,18 +6,12 @@ under **GPL-3.0-or-later** (see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE)).
 This file separates roles that are often confused. Git commit authorship is not treated as proof of
 copyright ownership, and nothing here transfers rights.
 
-## Original creator(s)
+## Original creator
 
-No individual creator is separately documented in this repository. The copyright notice therefore
-keeps the existing collective attribution:
+**a-51-50** - <https://github.com/a-51-50>
 
-```text
-The Axiom contributors
-```
-
-A named creator or copyright holder is added here only when the project owner confirms the exact
-identity and the wording to publish. Until then, no personal name, legal name or contribution share
-is claimed.
+Confirmed as the project's creator by the repository owner. The GitHub account is the public identity
+used here; no legal name, private e-mail address or other personal data is published.
 
 ## Copyright holders
 
@@ -25,16 +19,24 @@ is claimed.
 Copyright (C) 2026 The Axiom contributors
 ```
 
+The collective notice is kept until the owner confirms an individual copyright holder and the exact
+wording to publish. Naming a creator does not by itself assign copyright.
+
 ## Project maintainers
 
-Maintainers are the people with write access to the repository above. This file does not publish
-personal names, private e-mail addresses or other personal data.
+- **a-51-50** - repository administrator.
+- **dreddster** - repository collaborator with write access.
+- **brxtrac** - repository collaborator with write access.
 
 ## Contributors
 
-Contributors are recorded in the repository's Git history. Every contributor keeps attribution for
-their work. Being listed in history does not make a contributor an original creator or a copyright
-holder, and future contributors are not classified as founders.
+- **a-51-50**
+- **dreddster**
+- **brxtrac**
+
+The list follows the repository's Git history and collaborator record. Every contributor keeps
+attribution for their work. Being listed does not make a contributor an original creator or a
+copyright holder, and future contributors are added here without changing the creator entry.
 
 ## Project affiliation
 

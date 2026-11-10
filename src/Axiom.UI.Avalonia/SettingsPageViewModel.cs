@@ -83,7 +83,9 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public string AboutTagline => "Free & open-source network and AI agent security";
 
-    public string AboutCreatedBy => AxiomDocuments.ContributorsLabel;
+    public string AboutCreatedBy => AxiomDocuments.CreatorLabel;
+
+    public string AboutContributors => AxiomDocuments.ContributorsLine;
 
     public string AboutCopyright => AxiomDocuments.CopyrightLine;
 

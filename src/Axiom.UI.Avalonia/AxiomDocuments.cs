@@ -14,15 +14,18 @@ public static class AxiomDocuments
 
     public const string CopyrightNotice = "Copyright (C) 2026 The Axiom contributors";
 
-    public const string CopyrightLine = "© 2026 The Axiom contributors";
+    /// <summary>
+    /// Collectively held copyright, as recorded in NOTICE and the build properties. Naming the
+    /// creator does not assign copyright; that needs the owner's explicit wording.
+    /// </summary>
+    public const string CopyrightLine = "\u00A9 2026 The Axiom contributors";
 
     public const string LicenseName = "GNU General Public License v3.0 or later (GPL-3.0-or-later)";
 
-    /// <summary>
-    /// Named authors are not documented in the repository, so the project keeps the existing
-    /// collective attribution instead of inventing identities.
-    /// </summary>
-    public const string ContributorsLabel = "The Axiom contributors";
+    /// <summary>Confirmed by the repository owner; the public GitHub account is used, not a legal name.</summary>
+    public const string CreatorLabel = "a-51-50";
+
+    public const string ContributorsLine = "a-51-50, dreddster, brxtrac";
 
     private static readonly Lazy<string> LicenseDocument = new(() => Read("Axiom.Documents.LICENSE.txt"));
 

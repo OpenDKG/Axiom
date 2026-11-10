@@ -77,17 +77,19 @@
               <controls:AxiomSelectableTextBlock Text="AXIOM" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource Axiom.TextPrimary}" />
               <controls:AxiomSelectableTextBlock Text="{Binding AboutTagline}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
             </StackPanel>
-            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="7" Margin="0,4,0,0">
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7" Margin="0,4,0,0">
               <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="Version" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
               <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AppVersion}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
               <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Created by" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
               <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AboutCreatedBy}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="Copyright" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-              <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AboutCopyright}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="License" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-              <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding AboutLicense}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="Source code" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-              <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding AboutSource}" FontSize="11" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="Contributors" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+              <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AboutContributors}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="Copyright" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+              <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding AboutCopyright}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="License" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+              <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding AboutLicense}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="0" Text="Source code" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
+              <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="1" Text="{Binding AboutSource}" FontSize="11" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
             </Grid>
             <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
               <Button Content="View license" Command="{Binding ViewLicenseCommand}" Padding="12,6" Margin="0,0,8,8" />

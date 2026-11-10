@@ -27,7 +27,9 @@ public sealed class AboutAxiomTests
             var version = typeof(SettingsPageViewModel).Assembly.GetName().Version?.ToString(3);
             Assert.Equal($"v{version}", page.AppVersion);
             Assert.Contains("GPL-3.0-or-later", page.AboutLicense, StringComparison.Ordinal);
-            Assert.Equal("The Axiom contributors", page.AboutCreatedBy);
+            Assert.Equal("a-51-50", page.AboutCreatedBy);
+            Assert.Contains("dreddster", page.AboutContributors, StringComparison.Ordinal);
+            Assert.Contains("brxtrac", page.AboutContributors, StringComparison.Ordinal);
             Assert.Equal("https://github.com/a-51-50/Axiom", page.AboutSource);
             Assert.Contains("2026 The Axiom contributors", page.AboutCopyright, StringComparison.Ordinal);
         }
