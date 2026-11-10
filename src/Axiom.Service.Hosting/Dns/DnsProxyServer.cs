@@ -1,20 +1,17 @@
 ﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
 using Axiom.Contracts.Privacy;
-using Axiom.Contracts.Threat;
-using Axiom.Infrastructure.Windows.IpHelper;
 
-namespace Axiom.Infrastructure.Windows.Dns;
+namespace Axiom.Service.Hosting.Dns;
 
 /// <summary>
 /// Small loopback DNS filter used by the opt-in Privacy Shield module. It evaluates only the
-/// question name, forwards allowed queries to the configured upstream and never changes Windows
-/// adapter settings itself.
+/// question name, forwards allowed queries to the configured upstream and never changes the
+/// system DNS configuration itself (that is the job of <see cref="IPrivacyDnsPlatform"/>).
+/// Attribution of a blocked query to the querying app goes through <see cref="IDnsAppAttributor"/>.
 /// </summary>
 public sealed class DnsProxyServer : IAsyncDisposable
 {
@@ -51,8 +48,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private readonly ConcurrentQueue<PrivacyShieldBlockedEvent> _recentBlocked = new();
 
-    private static readonly ConcurrentDictionary<int, CachedAppIdentity> AppCache = new();
-    private static readonly TimeSpan AppCacheLifetime = TimeSpan.FromSeconds(30);
+    private readonly IDnsAppAttributor? _attributor;
 
     private long _queries;
 
@@ -66,11 +62,13 @@ public sealed class DnsProxyServer : IAsyncDisposable
         PrivacyShieldPolicy policy,
         IReadOnlyList<IPEndPoint> upstreams,
         int port,
-        Action<PrivacyShieldBlockedEvent>? onBlocked = null)
+        Action<PrivacyShieldBlockedEvent>? onBlocked = null,
+        IDnsAppAttributor? attributor = null)
     {
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _upstreams = upstreams ?? throw new ArgumentNullException(nameof(upstreams));
         _onBlocked = onBlocked;
+        _attributor = attributor;
         if (upstreams.Count == 0)
         {
             throw new ArgumentException("At least one upstream DNS endpoint is required.", nameof(upstreams));
@@ -532,231 +530,22 @@ public sealed class DnsProxyServer : IAsyncDisposable
         }
     }
 
-    private static (string Name, string Path, string AgentName, string AgentPath) ResolveApp(
-        IPEndPoint? source,
-        bool tcp)
+    private DnsAppIdentity ResolveApp(IPEndPoint? source, bool tcp)
     {
-        if (source is null || source.Port <= 0)
+        if (_attributor is null || source is null || source.Port <= 0)
         {
-            return (string.Empty, string.Empty, string.Empty, string.Empty);
-        }
-
-        var processId = FindOwningProcess(source, tcp);
-        if (processId <= 4)
-        {
-            return (string.Empty, string.Empty, string.Empty, string.Empty);
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        if (AppCache.TryGetValue(processId, out var cached) &&
-            now - cached.ResolvedUtc < AppCacheLifetime)
-        {
-            return (cached.Name, cached.Path, cached.AgentName, cached.AgentPath);
-        }
-
-        var name = string.Empty;
-        var path = string.Empty;
-        try
-        {
-            using var process = Process.GetProcessById(processId);
-            name = process.ProcessName + ".exe";
-            try
-            {
-                path = process.MainModule?.FileName ?? string.Empty;
-            }
-            catch (Exception exception) when (exception is
-                         System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
-            {
-                // Protected or exiting process; the name is still useful.
-            }
-        }
-        catch (Exception exception) when (exception is
-                     ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-        }
-
-        // Agents usually fetch through a tool process (curl, git, nslookup), so the querying process
-        // is not the agent itself. Walk the parent chain once per process (cached) and remember the
-        // nearest agent ancestor; that is what makes "fetched by tool" provable.
-        var (agentName, agentPath) = FindAgentAncestor(processId);
-
-        AppCache[processId] = new CachedAppIdentity(name, path, agentName, agentPath, now);
-        if (AppCache.Count > 256)
-        {
-            foreach (var pair in AppCache)
-            {
-                if (now - pair.Value.ResolvedUtc > AppCacheLifetime)
-                {
-                    AppCache.TryRemove(pair.Key, out _);
-                }
-            }
-        }
-
-        return (name, path, agentName, agentPath);
-    }
-
-    private static (string Name, string Path) FindAgentAncestor(int processId)
-    {
-        var current = processId;
-        for (var depth = 0; depth < 6 && current > 4; depth++)
-        {
-            var parent = ParentProcessId(current);
-            if (parent <= 4 || parent == current)
-            {
-                return (string.Empty, string.Empty);
-            }
-
-            try
-            {
-                using var process = Process.GetProcessById(parent);
-                var name = process.ProcessName + ".exe";
-                var path = string.Empty;
-                try
-                {
-                    path = process.MainModule?.FileName ?? string.Empty;
-                }
-                catch (Exception exception) when (exception is
-                             System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
-                {
-                }
-
-                if (AgentProcessMatcher.IsAgentProcess(name, path))
-                {
-                    return (name, path);
-                }
-            }
-            catch (Exception exception) when (exception is
-                         ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
-            {
-                // Exited or protected parent; keep walking with the pid we have.
-            }
-
-            current = parent;
-        }
-
-        return (string.Empty, string.Empty);
-    }
-
-    private static int ParentProcessId(int processId)
-    {
-        var snapshot = CreateToolhelp32Snapshot(Th32CsSnapProcess, 0);
-        if (snapshot == IntPtr.Zero || snapshot == InvalidHandleValue)
-        {
-            return 0;
+            return DnsAppIdentity.Unknown;
         }
 
         try
         {
-            var entry = new ProcessEntry32 { Size = (uint)Marshal.SizeOf<ProcessEntry32>() };
-            if (!Process32First(snapshot, ref entry))
-            {
-                return 0;
-            }
-
-            do
-            {
-                if (entry.ProcessId == (uint)processId)
-                {
-                    return (int)entry.ParentProcessId;
-                }
-
-                entry.Size = (uint)Marshal.SizeOf<ProcessEntry32>();
-            }
-            while (Process32Next(snapshot, ref entry));
+            return _attributor.Resolve(source, tcp) ?? DnsAppIdentity.Unknown;
         }
-        finally
+#pragma warning disable CA1031 // Attribution is best effort and must never fail a DNS response.
+        catch (Exception)
+#pragma warning restore CA1031
         {
-            CloseHandle(snapshot);
-        }
-
-        return 0;
-    }
-
-    private const uint Th32CsSnapProcess = 0x00000002;
-
-    private static readonly IntPtr InvalidHandleValue = new(-1);
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct ProcessEntry32
-    {
-        public uint Size;
-        public uint Usage;
-        public uint ProcessId;
-        public IntPtr DefaultHeapId;
-        public uint ModuleId;
-        public uint Threads;
-        public uint ParentProcessId;
-        public int PriorityClassBase;
-        public uint Flags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-        public string ExeFile;
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool Process32First(IntPtr snapshot, ref ProcessEntry32 entry);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool Process32Next(IntPtr snapshot, ref ProcessEntry32 entry);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseHandle(IntPtr handle);
-
-    private static int FindOwningProcess(IPEndPoint source, bool tcp)
-    {
-        try
-        {
-            if (tcp)
-            {
-                if (source.AddressFamily == AddressFamily.InterNetworkV6)
-                {
-                    return NativeMethods.QueryTcpV6()
-                        .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
-                                      row.State == 5 &&
-                                      row.OwningPid > 4)
-                        .Select(row => (int)row.OwningPid)
-                        .FirstOrDefault();
-                }
-
-                return NativeMethods.QueryTcpV4()
-                    .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
-                                  row.State == 5 &&
-                                  row.OwningPid > 4)
-                    .Select(row => (int)row.OwningPid)
-                    .FirstOrDefault();
-            }
-
-            if (source.AddressFamily == AddressFamily.InterNetworkV6)
-            {
-                return NativeMethods.QueryUdpV6()
-                    .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
-                                  row.OwningPid > 4)
-                    .Select(row => (int)row.OwningPid)
-                    .FirstOrDefault();
-            }
-
-            return NativeMethods.QueryUdpV4()
-                .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
-                              row.OwningPid > 4)
-                .Select(row => (int)row.OwningPid)
-                .FirstOrDefault();
-        }
-        catch (Exception exception) when (exception is
-                     System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            return 0;
+            return DnsAppIdentity.Unknown;
         }
     }
-
-    private sealed record CachedAppIdentity(
-        string Name,
-        string Path,
-        string AgentName,
-        string AgentPath,
-        DateTimeOffset ResolvedUtc);
 }

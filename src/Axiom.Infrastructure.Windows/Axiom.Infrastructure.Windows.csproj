@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
     <ProjectReference Include="..\Axiom.Core\Axiom.Core.csproj" />
+    <ProjectReference Include="..\Axiom.Service.Hosting\Axiom.Service.Hosting.csproj" />
   </ItemGroup>
 
   <ItemGroup>

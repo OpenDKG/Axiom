@@ -104,15 +104,23 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.7.6, )"
+          "Axiom.Contracts": "[0.10.6, )"
         }
       },
       "axiom.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.7.6, )",
-          "Axiom.Core": "[0.7.6, )",
+          "Axiom.Contracts": "[0.10.6, )",
+          "Axiom.Core": "[0.10.6, )",
+          "Axiom.Service.Hosting": "[0.10.6, )",
           "System.Management": "[10.0.14, )"
+        }
+      },
+      "axiom.service.hosting": {
+        "type": "Project",
+        "dependencies": {
+          "Axiom.Contracts": "[0.10.6, )",
+          "Axiom.Core": "[0.10.6, )"
         }
       },
       "System.Management": {

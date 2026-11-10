@@ -26,8 +26,7 @@ public sealed class ProtectionSettingsStore
     }
 
     public static string DefaultPath => System.IO.Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "Axiom",
+        Axiom.Contracts.AxiomPaths.MachineDataDirectory,
         "protection.json");
 
     public string FilePath => _path;

@@ -1,13 +1,15 @@
 ﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Runtime;
 using Axiom.Contracts.Privacy;
-using Axiom.Infrastructure.Windows.Dns;
+using Axiom.Service.Hosting.Dns;
 
 namespace Axiom.Service;
 
 /// <summary>
-/// Owns the opt-in loopback DNS resolver. It never changes adapter DNS settings; a user who wants
-/// system-wide filtering must point Windows at the displayed loopback resolver explicitly.
+/// Owns the opt-in loopback DNS resolver. On Windows it never changes adapter DNS settings; a user
+/// who wants system-wide filtering must point Windows at the displayed loopback resolver explicitly.
+/// On macOS the root daemon redirects the network services itself through
+/// <see cref="IPrivacyDnsPlatform"/> and restores them when the resolver stops.
 /// </summary>
 public sealed class PrivacyShieldController : IAsyncDisposable
 {
@@ -20,6 +22,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     private readonly PrivacyShieldBlockedHistoryStore _blockedHistory = new();
 
     private readonly ThreatShareController? _threatShare;
+
+    private readonly IPrivacyDnsPlatform _dns;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -51,8 +55,10 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         PrivacyShieldSettingsStore store,
         PrivacyShieldRuleStore? ruleStore = null,
         PrivacyShieldSourceUpdater? sourceUpdater = null,
-        ThreatShareController? threatShare = null)
+        ThreatShareController? threatShare = null,
+        IPrivacyDnsPlatform? dnsPlatform = null)
     {
+        _dns = dnsPlatform ?? ServicePlatform.CreateDefaultPrivacyDnsPlatform();
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _ruleStore = ruleStore ?? new PrivacyShieldRuleStore();
         _sourceUpdater = sourceUpdater ?? new PrivacyShieldSourceUpdater();
@@ -142,7 +148,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
                 // The adapter may still send DNS to 127.0.0.1. With the resolver stopped that would
                 // take name resolution down, so restore the saved DNS without an extra prompt.
-                _ = Task.Run(PrivacyDnsFailSafe.RestoreIfNeeded);
+                _ = Task.Run(_dns.RestoreIfNeeded);
                 return CreateStatus();
             }
 
@@ -192,7 +198,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
             _server = candidate;
             _settings = normalized;
-            _lastError = startWarning;
+            _lastError = CombineWarnings(startWarning, NotifyResolverStarted(candidate));
             return CreateStatus();
         }
         finally
@@ -216,7 +222,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         }
 
         _server = server;
-        _lastError = warning;
+        _lastError = CombineWarnings(warning, NotifyResolverStarted(server));
         return Task.FromResult(true);
     }
 
@@ -302,7 +308,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         if (TryCreateServer(_settings, out var server, out var error, out var warning))
         {
             _server = server;
-            _lastError = warning;
+            _lastError = CombineWarnings(warning, NotifyResolverStarted(server));
             return;
         }
 
@@ -310,7 +316,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         _lastError = error;
 
         // A failed start (port taken, socket error) must not leave the adapter without a resolver.
-        _ = Task.Run(PrivacyDnsFailSafe.RestoreIfNeeded);
+        _ = Task.Run(_dns.RestoreIfNeeded);
     }
 
     private bool TryCreateServer(
@@ -326,7 +332,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         IReadOnlyList<System.Net.IPEndPoint> upstreams;
         if (!string.IsNullOrWhiteSpace(settings.UpstreamDns))
         {
-            if (!SystemDnsResolver.TryParseUpstream(settings.UpstreamDns, out var endpoint) ||
+            if (!DnsUpstream.TryParse(settings.UpstreamDns, out var endpoint) ||
                 endpoint is null)
             {
                 error = "The configured upstream DNS address is invalid.";
@@ -337,7 +343,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         }
         else
         {
-            upstreams = SystemDnsResolver.ResolveSystemDns();
+            upstreams = _dns.DiscoverUpstreams();
         }
 
         if (upstreams.Count == 0)
@@ -350,8 +356,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 new System.Net.IPEndPoint(System.Net.IPAddress.Parse("1.1.1.1"), 53),
                 new System.Net.IPEndPoint(System.Net.IPAddress.Parse("9.9.9.9"), 53),
             ];
-            warning = "No non-loopback Windows DNS server was found; using fallback upstream DNS. " +
-                      "Set an explicit upstream address if this network requires a local resolver.";
+            warning = _dns.NoUpstreamWarning;
         }
 
         try
@@ -365,7 +370,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 {
                     _blockedHistory.Append(blocked);
                     _threatShare?.ObserveBlocked(blocked);
-                });
+                },
+                _dns.Attributor);
             return true;
         }
         catch (Exception exception) when (exception is
@@ -375,6 +381,31 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             return false;
         }
     }
+
+    /// <summary>Lets the platform redirect system DNS to the running resolver (macOS).</summary>
+    private string? NotifyResolverStarted(DnsProxyServer? server)
+    {
+        if (server is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return _dns.OnResolverStarted(server.Port);
+        }
+#pragma warning disable CA1031 // A failed redirect must not take the running resolver down.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            return $"System DNS could not be pointed at the resolver: {exception.Message}";
+        }
+    }
+
+    private static string? CombineWarnings(string? first, string? second) =>
+        string.IsNullOrWhiteSpace(first) ? second
+        : string.IsNullOrWhiteSpace(second) ? first
+        : first + " " + second;
 
     private async Task StopServerLockedAsync()
     {

@@ -4,7 +4,6 @@ using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Protection;
 using Axiom.Core.Firewall;
 using Axiom.Core.Protection;
-using Axiom.Infrastructure.Windows.Firewall;
 using Microsoft.Extensions.Logging;
 
 namespace Axiom.Service;
@@ -58,7 +57,7 @@ public sealed partial class ProtectionController(
         {
             Enabled = settings.Enabled,
             ServiceElevated = ProtectionWriteConsent.IsServiceHost,
-            WriteGateOpen = WindowsFirewallPolicyAdapter.IsWriteGateOpen,
+            WriteGateOpen = FirewallWriteGate.IsOpen,
             AccountName = CurrentAccount(),
             DefaultPolicy = settings.DefaultPolicy,
             Pending = queue.Pending,
@@ -80,7 +79,9 @@ public sealed partial class ProtectionController(
         if (!ProtectionWriteConsent.IsServiceHost)
         {
             return await GetStatusAsync(
-                "Axiom Shield needs the Axiom Windows service. Approve the administrator prompt to install it.",
+                OperatingSystem.IsWindows()
+                    ? "Axiom Shield needs the Axiom Windows service. Approve the administrator prompt to install it."
+                    : "Axiom Shield needs the axiomd system daemon. Install it with administrator rights.",
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -447,7 +448,9 @@ public sealed partial class ProtectionController(
     {
         try
         {
-            return WindowsIdentity.GetCurrent().Name;
+            return OperatingSystem.IsWindows()
+                ? WindowsIdentity.GetCurrent().Name
+                : Environment.UserName;
         }
 #pragma warning disable CA1031 // The account name is display-only.
         catch (Exception)
