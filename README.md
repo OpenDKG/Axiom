@@ -743,7 +743,12 @@ The desktop application, the Windows service and the core libraries are licensed
 **GNU GPL v3.0 or later**. See [`LICENSE`](LICENSE) for the full text and [`NOTICE`](NOTICE) for the
 copyright and grant. Third-party components and their licenses are listed in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md); names and logos are covered by
-[`TRADEMARKS.md`](TRADEMARKS.md).
+[`TRADEMARKS.md`](TRADEMARKS.md). The roles of creators, copyright holders, maintainers and
+contributors are described in [`AUTHORS.md`](AUTHORS.md).
+
+The installed application shows the same information under **Settings → About Axiom**, including the
+full GPL text, the notice, the third-party list and the source repository. Those documents are
+embedded in the application, so they remain readable offline.
 
 Contributions are accepted under the same license with a Developer Certificate of Origin
 (`git commit -s`); see [`CONTRIBUTING.md`](CONTRIBUTING.md). Security reports go through the private

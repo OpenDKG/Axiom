@@ -17,6 +17,12 @@ public interface IUserInteraction
 
     Task ShowMessageAsync(string title, string message, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Shows a long, read-only document such as a bundled license or notice inside the application,
+    /// so license text stays available offline without opening a browser.
+    /// </summary>
+    Task ShowDocumentAsync(string title, string document, CancellationToken cancellationToken);
+
     /// <summary>Native save dialog. Returns null when the user cancels.</summary>
     Task<string?> PickSaveFileAsync(
         string suggestedFileName,

@@ -110,7 +110,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             IsServiceMode,
             _theme,
             autostartService ?? new UnsupportedAutostartService(),
-            Firewall);
+            Firewall,
+            interaction);
         Overview.AgentActivity = Agents;
         AgentStats = new AgentStatsPageViewModel(Agents);
         Pages = [Overview, Agents, AgentStats, Security, PrivacyShield, Firewall, AiAnalyst, Connections, Apps, Events, Support, Settings];

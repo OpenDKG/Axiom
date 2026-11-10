@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Layout;
@@ -73,6 +74,82 @@ public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUser
         close.HorizontalAlignment = HorizontalAlignment.Right;
 
         dialog.Content = BuildContent(message, close);
+        await dialog.ShowDialog(owner).ConfigureAwait(true);
+    }
+
+    public async Task ShowDocumentAsync(
+        string title,
+        string document,
+        CancellationToken cancellationToken)
+    {
+        var owner = ownerProvider();
+        if (owner is null)
+        {
+            return;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 760,
+            Height = 620,
+            MinWidth = 460,
+            MinHeight = 320,
+            CanResize = true,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Background,
+            Foreground = PrimaryText,
+        };
+
+        var text = new SelectableTextBlock
+        {
+            Text = document,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12,
+            Foreground = PrimaryText,
+        };
+
+        var scroll = new ScrollViewer
+        {
+            Content = text,
+            Padding = new Thickness(0, 0, 12, 0),
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        };
+
+        var copy = CreateButton("Copy", destructive: false);
+        var close = CreateButton("Close", destructive: false);
+        copy.Click += async (_, _) =>
+        {
+            var clipboard = dialog.Clipboard;
+            if (clipboard is not null)
+            {
+                await clipboard.SetValueAsync(DataFormat.Text, document).ConfigureAwait(true);
+            }
+        };
+        close.Click += (_, _) => dialog.Close();
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 10,
+            Margin = new Thickness(0, 14, 0, 0),
+            Children = { copy, close },
+        };
+
+        var root = new Grid
+        {
+            RowDefinitions = new RowDefinitions("*,Auto"),
+            Margin = new Thickness(20),
+        };
+        Grid.SetRow(scroll, 0);
+        Grid.SetRow(buttons, 1);
+        root.Children.Add(scroll);
+        root.Children.Add(buttons);
+
+        dialog.Content = root;
         await dialog.ShowDialog(owner).ConfigureAwait(true);
     }
 

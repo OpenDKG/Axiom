@@ -107,6 +107,7 @@ $files = @(
     $communityDir,
     (Join-Path $root "LICENSE"),
     (Join-Path $root "NOTICE"),
+    (Join-Path $root "AUTHORS.md"),
     (Join-Path $root "THIRD_PARTY_NOTICES.md"),
     (Join-Path $root "scripts\install-portable.ps1"),
     (Join-Path $root "scripts\uninstall-portable.ps1"),
