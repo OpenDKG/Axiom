@@ -1,6 +1,6 @@
 # Axiom for macOS — architecture
 
-Status: in development on branch `buba/macos`
+Status: in development on branch `buba/macos` (as-built notes in §5, build/test in §6)
 Target: macOS 13 Ventura and later, Apple silicon (arm64) and Intel (x64)
 
 This document is the contract between the macOS components. Windows behaviour is unchanged.
@@ -109,3 +109,48 @@ Verified end to end on macOS 15.8.3 (x86_64 VM, ad hoc signed); see `macos/READM
 - Swift: `macos/AxiomFilter` built with Xcode Command Line Tools (`macos/build.sh`), on a Mac or the macOS CI runner.
 - `scripts/macos/package-app.sh` assembles `Axiom.app`, signs (Developer ID when `AXIOM_SIGN_IDENTITY` is set, ad hoc otherwise), and builds `Axiom.pkg`.
 - Release signing/notarization needs an Apple Developer Program team with the Network Extension capability. Development builds run ad hoc signed on a Mac with SIP disabled and `systemextensionsctl developer on`.
+
+## 5. As built
+
+Verified on macOS 15.8.3 (x86_64 QEMU VM, SIP off, ad hoc signed); acceptance results are in
+[`MACOS_TEST_REPORT.md`](MACOS_TEST_REPORT.md).
+
+### 5.1 Components
+
+| Piece | Project / path | Notes |
+|---|---|---|
+| Desktop app | `src/Axiom.Desktop.Avalonia.MacOS` → `Axiom.app/Contents/MacOS/Axiom` | Shared `Axiom.UI.Avalonia` pages, native window chrome, menu-bar (status item) menu, single instance (a second `open` activates the running window). Platform wording comes from `Axiom.Presentation.PlatformText`; Windows strings are unchanged. |
+| Daemon | `src/Axiom.Service` (`net10.0` target, assembly `axiomd`) → `Contents/Resources/service/axiomd` | launchd job `com.axiom.service` (`/Library/LaunchDaemons/com.axiom.service.plist`, `AXIOM_SERVICE=1`), log `/Library/Logs/Axiom/axiomd.log`. Installed from the app through the administrator password prompt (`LaunchdServiceInstaller`). |
+| Portable service core | `src/Axiom.Service.Hosting` | IPC dispatch, Privacy Shield `DnsProxyServer`, policy code shared by the Windows service and `axiomd`. |
+| macOS platform layer | `src/Axiom.Infrastructure.MacOS` | `Ipc/UnixSocketIpcTransport` + `PeerAuthorization`, `Dns/MacDnsConfigurator` + `MacPrivacyDnsPlatform`, `Filter/*` (rules file, event server, policy adapter), `Monitoring/*` (flow table, libproc fallback), `Launchd/*`, `Interop/*` (libproc, getpeereid, SIGCHLD re-exec, process runner). |
+| Filter | `macos/AxiomFilter` (Swift `NEFilterDataProvider` system extension) + `axiom-sysext` helper | See §3.4 and `macos/README.md`. |
+
+### 5.2 Deviations from the original contract
+
+- **`Axiom.Service.Hosting` extraction.** The portable dispatch code moved out of `Axiom.Service` into a shared project instead of being copied; `Axiom.Service` multi-targets `net10.0-windows;net10.0` and selects the platform in `Platform/ServicePlatform.{Windows,Unix}.cs`.
+- **Seams instead of forks.** `IIpcTransport` (named pipe with SID ACL on Windows, Unix socket on macOS), `IPrivacyDnsPlatform` (Windows: UAC helper changes adapter DNS; macOS: the daemon switches DNS itself) and `IDnsAppAttributor` (who sent a DNS query: Windows IP Helper table, macOS libproc lookup).
+- **Custom Unix socket transport.** §1 planned to reuse `NamedPipeServerStream`; the daemon uses its own listener at `/var/run/axiom/axiom.sock` instead, so the peer can be checked with `getpeereid` before any byte is read. Allowed peers: uid 0 and console users (uid ≥ 501). The line protocol is unchanged.
+- **DNS switching is owned by the daemon.** While the Privacy Shield resolver runs on port 53, `axiomd` saves every enabled network service's DNS servers to a backup file (machine data root, 0600) and points the service at 127.0.0.1 with `networksetup -setdnsservers`. On disable, resolver stop, service stop or uninstall it restores the saved servers (automatic DNS when the service had none). Fail-safe: the next daemon start restores any service still pointing only at loopback; unreadable services are retried and, if they were redirected by Axiom, restored from the backup, which is kept until the state is known. The desktop app shows this as "System DNS (switched by the Axiom daemon)" and never prompts. All changes are logged as `Privacy Shield DNS: …` in `axiomd.log`. Every enabled service is redirected, including ones without an active interface (e.g. "Built-in Serial Port (1)" in the VM); they are restored the same way.
+- **`AxiomPaths.ServicePrivateDataDirectory`.** Windows keeps `%LocalAppData%\Axiom` for the service account. On Unix the root daemon has no meaningful profile, so service-private stores (threat-share state, Privacy Shield blocked history) live in the machine data root with owner-only files.
+- **SIGCHLD re-exec for admin-prompt installs.** `osascript … with administrator privileges` starts the command with SIGCHLD ignored, so .NET never sees child processes exit (`launchctl` looked hung). Privileged CLI modes reset SIGCHLD to default and `execv` themselves once (`Interop/ChildSignal`).
+- **Filter is always fail-open.** `failOpen` in the rules file is parsed but ignored: without a valid table the filter allows everything.
+- **Blocked TCP shows a connect timeout.** A block is `.drop()`; clients see the SYN dropped (e.g. `curl` exit 7 / timeout), not a reset.
+- **Axiom's own daemon is never prompted.** Axiom Shield's "new outbound application" list skips executables inside the running `Axiom.app` bundle (the daemon forwards Privacy Shield queries upstream), as well as SIP-protected system paths.
+
+## 6. Build, install, test
+
+### 6.1 Development (Linux + macOS VM)
+
+1. **Publish on Linux:** `scripts/macos/package-app.sh osx-x64 --no-sign` (or `osx-arm64`) publishes the desktop app and `axiomd` self-contained and assembles an unsigned `build/macos/<rid>/Axiom.app`. Run `git checkout -- '*.lock.json'` afterwards (publishing adds RID sections to the lock files).
+2. **Sign on a Mac/VM:** copy the tree and run `scripts/macos/package-app.sh osx-x64 --skip-publish --build-filter`. This builds the Swift filter and `axiom-sysext` with the Command Line Tools (`macos/build.sh`), embeds them and signs inside-out (ad hoc unless `AXIOM_SIGN_IDENTITY` is set).
+3. **Dev loop:** `scripts/macos/deploy-to-vm.sh` does steps 1–2 against the VM over SSH, installs to `/Applications/Axiom.app`, and restarts `com.axiom.service` when it is installed.
+4. **Dev machine requirements:** SIP disabled and `systemextensionsctl developer on` (both need the GUI session and a password), so an ad hoc signed system extension can be activated. First activation still needs approval in System Settings > General > Login Items & Extensions > Network Extensions and the "Filter Network Content" prompt.
+5. **Tests on Linux:** `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true`, then `dotnet test` the `tests/Axiom.*.Tests` projects. `Axiom.Infrastructure.MacOS.Tests` covers the DNS configurator, rules/events, socket peer checks and libproc layouts with fakes (SO_PEERCRED on Linux).
+
+### 6.2 Release
+
+- An Apple Developer Program team with the **Network Extension** capability (content filter, system extension) and the app group `group.com.axiom.firewall` (prefixed with the team id).
+- **Developer ID signing:** `AXIOM_SIGN_IDENTITY="Developer ID Application: … (TEAMID)"` and `AXIOM_TEAM_ID` (derived from the identity if unset) for `package-app.sh` (signs with hardened runtime and a secure timestamp).
+- **Provisioning profiles:** Developer ID profiles for the app (`AXIOM_APP_PROFILE`, embedded as `Contents/embedded.provisionprofile`) and for the filter extension (`AXIOM_FILTER_PROFILE`, used by `macos/build.sh`), both carrying the Network Extension entitlement (`content-filter-provider-systemextension`).
+- **Notarization:** submit the signed app/pkg with `xcrun notarytool submit --wait` and staple (`xcrun stapler staple`). Notarized releases run with SIP on and without developer mode.
+- Apple-silicon builds (`osx-arm64`) must be validated on real hardware; the VM is Intel only.
