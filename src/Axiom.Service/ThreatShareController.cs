@@ -105,7 +105,8 @@ public sealed class ThreatShareController : IAsyncDisposable
         {
             var index = _items.FindIndex(item =>
                 string.Equals(item.Candidate.Id, id, StringComparison.Ordinal));
-            if (index >= 0 && _items[index].State == ThreatShareState.Pending)
+            if (index >= 0 &&
+                _items[index].State is ThreatShareState.Pending or ThreatShareState.Deferred)
             {
                 _items[index] = _items[index] with
                 {
@@ -139,12 +140,35 @@ public sealed class ThreatShareController : IAsyncDisposable
                 string.Equals(item.Candidate.Id, request.Id, StringComparison.Ordinal));
             if (index >= 0)
             {
-                _items[index] = _items[index] with
-                {
-                    State = request.Submitted ? ThreatShareState.Submitted : ThreatShareState.Rejected,
-                    Outcome = Trim(request.Outcome, 200),
-                    AttemptedUtc = DateTimeOffset.UtcNow,
-                };
+                var current = _items[index];
+                var now = DateTimeOffset.UtcNow;
+                var attempts = current.Attempts + 1;
+                _items[index] = request.Submitted
+                    ? current with
+                    {
+                        State = ThreatShareState.Submitted,
+                        Outcome = Trim(request.Outcome, 200),
+                        AttemptedUtc = now,
+                        Attempts = attempts,
+                        NextAttemptUtc = null,
+                    }
+                    : request.Deferred
+                        ? current with
+                        {
+                            State = ThreatShareState.Deferred,
+                            Outcome = Trim(request.Outcome, 200),
+                            AttemptedUtc = now,
+                            Attempts = attempts,
+                            NextAttemptUtc = now.AddMinutes(BackoffMinutes(attempts)),
+                        }
+                        : current with
+                        {
+                            State = ThreatShareState.Rejected,
+                            Outcome = Trim(request.Outcome, 200),
+                            AttemptedUtc = now,
+                            Attempts = attempts,
+                            NextAttemptUtc = null,
+                        };
                 _store.Save(_items);
             }
         }
@@ -244,11 +268,13 @@ public sealed class ThreatShareController : IAsyncDisposable
             var today = DateTimeOffset.UtcNow.UtcDateTime.Date;
             var items = _items
                 .OrderByDescending(item => item.State == ThreatShareState.Pending)
+                .ThenByDescending(item => item.State == ThreatShareState.Deferred)
                 .ThenByDescending(item => item.Candidate.ObservedUtc)
                 .Take(100)
                 .ToArray();
 
             var pending = _items.Count(item => item.State == ThreatShareState.Pending);
+            var deferred = _items.Count(item => item.State == ThreatShareState.Deferred);
             var submitted = _items.Count(item => item.State == ThreatShareState.Submitted);
             var todaySubmitted = _items.Count(item =>
                 item.State == ThreatShareState.Submitted &&
@@ -258,12 +284,14 @@ public sealed class ThreatShareController : IAsyncDisposable
             return new ThreatShareQueueStatus
             {
                 Pending = pending,
+                Deferred = deferred,
                 Submitted = submitted,
                 TodaySubmitted = todaySubmitted,
                 DailyLimit = ThreatShareVocabulary.MaxDailySubmissions,
-                Detail = pending == 0
+                Detail = pending == 0 && deferred == 0
                     ? "No indicator is waiting for review."
-                    : $"{pending} indicator(s) wait for your review; the desktop sends one only when you press Share or Send now.",
+                    : $"{pending} waiting for your review, {deferred} deferred after a transient failure; " +
+                      "the desktop sends one only when you press Share or Send now.",
                 Items = items,
             };
         }
@@ -272,6 +300,9 @@ public sealed class ThreatShareController : IAsyncDisposable
             _gate.Release();
         }
     }
+
+    private static double BackoffMinutes(int attempts) =>
+        Math.Min(5 * Math.Pow(2, Math.Max(0, attempts - 1)), 360);
 
     private static string Trim(string? value, int max)
     {

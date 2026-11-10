@@ -1081,7 +1081,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     {
         _threatShareStatus = status;
         var pending = status.Items
-            .Where(item => item.State == ThreatShareState.Pending)
+            .Where(item => item.State is ThreatShareState.Pending or ThreatShareState.Deferred)
             .Take(8)
             .ToList();
 
@@ -1092,7 +1092,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         HasThreatShareCandidates = pending.Count > 0;
-        CanSubmitThreatShare = status.Pending > 0 &&
+        CanSubmitThreatShare = status.Items.Any(IsReady) &&
                                ThreatSharingEnabled &&
                                status.TodaySubmitted < status.DailyLimit;
 
@@ -1100,9 +1100,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ? string.Empty
             : " Blackbox still needs the reporter terms accepted in its own settings.";
 
+        var deferred = status.Deferred > 0
+            ? $" {status.Deferred} deferred after a transient failure; retry when it is due."
+            : string.Empty;
+
         ThreatShareQueueText =
             $"{status.Pending} waiting for your review, {status.Submitted} shared in total, " +
-            $"{status.TodaySubmitted}/{status.DailyLimit} today. " +
+            $"{status.TodaySubmitted}/{status.DailyLimit} today.{deferred} " +
             (ThreatSharingEnabled
                 ? "Sharing is on; nothing is sent until you press Share or Send now."
                 : "Sharing is off; nothing is signed or sent.") +
@@ -1118,15 +1122,35 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         var pending = status.Items
-            .Where(item => item.State == ThreatShareState.Pending)
+            .Where(IsReady)
             .Take(Math.Max(0, status.DailyLimit - status.TodaySubmitted))
             .ToList();
         return SubmitThreatShareItemsAsync(pending);
     }
 
     [RelayCommand]
-    private Task ShareThreatShareItemAsync(ThreatShareItem? item) =>
-        item is null ? Task.CompletedTask : SubmitThreatShareItemsAsync([item]);
+    private Task ShareThreatShareItemAsync(ThreatShareItem? item)
+    {
+        if (item is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (!IsReady(item))
+        {
+            ThreatShareActionText =
+                $"This indicator is deferred after a transient failure. Retry after " +
+                $"{item.NextAttemptUtc?.ToLocalTime():HH:mm}.";
+            return Task.CompletedTask;
+        }
+
+        return SubmitThreatShareItemsAsync([item]);
+    }
+
+    private static bool IsReady(ThreatShareItem item) =>
+        item.State == ThreatShareState.Pending ||
+        (item.State == ThreatShareState.Deferred &&
+         (item.NextAttemptUtc is null || item.NextAttemptUtc <= DateTimeOffset.UtcNow));
 
     private async Task SubmitThreatShareItemsAsync(List<ThreatShareItem> items)
     {
@@ -1159,36 +1183,48 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         try
         {
             var shared = 0;
+            var deferred = 0;
             var rejected = 0;
+            var capReached = false;
             ThreatShareQueueStatus? latest = null;
             foreach (var item in items)
             {
-                var (submitted, outcome) = await _cli
+                var result = await _cli
                     .ReportAsync(item.Candidate, CancellationToken.None)
                     .ConfigureAwait(true);
+
+                // The cap is not an outcome for this indicator: leave it pending for tomorrow.
+                if (result.Status == ThreatShareReportStatus.CapReached)
+                {
+                    capReached = true;
+                    break;
+                }
+
                 latest = await _serviceClient
                     .SendAsync<ThreatShareQueueStatus>(
                         IpcCommandTypes.ThreatShareRecord,
                         new ThreatShareRecordRequest
                         {
                             Id = item.Candidate.Id,
-                            Submitted = submitted,
-                            Outcome = outcome,
+                            Submitted = result.Submitted,
+                            Deferred = result.Status == ThreatShareReportStatus.RetryableFailure,
+                            Outcome = result.Outcome,
                         },
                         CancellationToken.None)
                     .ConfigureAwait(true);
 
-                if (submitted)
+                switch (result.Status)
                 {
-                    shared++;
-                }
-                else
-                {
-                    rejected++;
-                    if (outcome.Contains("cap", StringComparison.OrdinalIgnoreCase))
-                    {
+                    case ThreatShareReportStatus.Shared:
+                    case ThreatShareReportStatus.AlreadyShared:
+                        shared++;
                         break;
-                    }
+                    case ThreatShareReportStatus.RetryableFailure:
+                        deferred++;
+                        break;
+                    default:
+                        rejected++;
+                        break;
                 }
             }
 
@@ -1197,7 +1233,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 ApplyThreatShareStatus(latest);
             }
 
-            ThreatShareActionText = $"Submitted {shared}, rejected {rejected}.";
+            ThreatShareActionText =
+                $"Submitted {shared}, deferred {deferred}, rejected {rejected}." +
+                (capReached
+                    ? " The daily cap is reached; the remaining indicators stay queued."
+                    : string.Empty);
         }
         catch (Exception exception) when (exception is
                      ServiceUnavailableException or TimeoutException or
