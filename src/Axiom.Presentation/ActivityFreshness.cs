@@ -31,7 +31,8 @@ public static class ActivityFreshness
         {
             return $"No new agent activity since {local:HH:mm} ({Format(age)} ago). " +
                    "The Blackbox dashboard may be stalled or the agent hooks are not loaded; " +
-                   "restart the agent or use Install/repair agent hooks on the Agents page.";
+                   "an agent keeps the hook it loaded at start, so restart it (especially after an " +
+                   "Axiom update) or use Install/repair agent hooks on the Agents page.";
         }
 
         return $"Newest agent event {local:HH:mm} ({Format(age)} ago).";
