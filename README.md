@@ -13,32 +13,39 @@
 > your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
 > and keep a recovery path.
 
-## Project Leadership & Core Team
+## Project Leadership & Founding Team
 
-**Axiom** is an independent, community-oriented open-source network and AI-agent security project.
+**Axiom** is an independent, open-source network and AI-agent security project developed by its
+founding team.
 
-**Founder, Creator & Lead Maintainer**
+**Founder & Original Creator**
 
-- [@a-51-50](https://github.com/a-51-50) - original project creator, architecture and lead maintainership.
+[@a-51-50](https://github.com/a-51-50)
 
-**Core Maintainers & Platform Leads**
+Original project creator, initiator and developer of the initial Windows implementation.
 
-- [@dreddster](https://github.com/dreddster) - Core Maintainer & Platform Lead.
-- [@brxtrac](https://github.com/brxtrac) - Core Maintainer & Platform Lead.
+**Co-Founders & Core Maintainers**
 
-The Core Team collaborates on Axiom's development across Windows, Linux and macOS, with platform
-responsibilities documented as they are formally assigned.
+[@dreddster](https://github.com/dreddster)
 
-The canonical upstream repository remains [a-51-50/Axiom](https://github.com/a-51-50/Axiom).
+[@brxtrac](https://github.com/brxtrac)
 
-Axiom is affiliated with [OpenDKG](https://github.com/OpenDKG), but the affiliation does not transfer
-repository ownership or copyright.
+Members of Axiom's founding development team, contributing to its long-term technical direction,
+cross-platform development and maintenance. The team is expanding Axiom across Windows, Linux and
+macOS; platform-specific responsibilities and actual implementations are documented separately as
+development progresses.
 
-For detailed attribution and maintainership, see [AUTHORS.md](AUTHORS.md) and
-[Repository Stewardship](docs/REPOSITORY_STEWARDSHIP.md).
+**Canonical upstream:** [a-51-50/Axiom](https://github.com/a-51-50/Axiom)
+
+**Affiliation:** [OpenDKG](https://github.com/OpenDKG)
+
+Project leadership titles do not automatically transfer repository or intellectual-property
+ownership.
+
+See [AUTHORS.md](AUTHORS.md) and [Repository Stewardship](docs/REPOSITORY_STEWARDSHIP.md) for
+additional information.
 
 > These public credits do not replace any applicable signed founder or contributor agreements.
-
 ![Axiom Dashboard in Axiom Glass Dark: live sockets, system-wide throughput and local-only counters](docs/assets/screenshots/axiom-glass-dark-full.png)
 
 Axiom is a local-first Windows network monitor, firewall policy manager and optional AI-agent
