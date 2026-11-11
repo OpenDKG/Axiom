@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.10.25
+
+- **Axiom uses the DKG node Blackbox already runs.** When no standalone node answers on 9200,
+  the DKG card follows `dkg_url` from Blackbox's graph status and labels it "reported by
+  Blackbox". A complete installation skips Axiom's own unused DKG node when Blackbox reports its
+  node reachable, avoiding a second node and port collision.
+
 ## What's in 0.10.24
 
 - **Module cards no longer claim Axiom cannot start a module.** When DKG or Blackbox is not

@@ -125,11 +125,22 @@ internal static class SetupInstaller
                         cancellationToken).ConfigureAwait(false);
                     Report($"Blackbox installer exit code: {(blackboxExit ? "0" : "non-zero")}.");
 
-                    Report("Starting the official DKG installer. Follow its prompts and terms.");
-                    var dkgExit = await Task.Run(
-                        () => moduleInstaller.InstallDkgAndWait(Report),
-                        cancellationToken).ConfigureAwait(false);
-                    Report($"DKG installer exit code: {(dkgExit ? "0" : "non-zero")}.");
+                    var blackboxProvidesDkg = blackboxExit &&
+                                              await TryWaitForBlackboxDkgAsync(cancellationToken).ConfigureAwait(false);
+                    if (blackboxProvidesDkg)
+                    {
+                        Report("Blackbox reports its own DKG node reachable; skipping Axiom's standalone DKG " +
+                               "to avoid a second unused node on this machine.");
+                        dkgInstalled = true;
+                    }
+                    else
+                    {
+                        Report("Starting the official DKG installer. Follow its prompts and terms.");
+                        var dkgExit = await Task.Run(
+                            () => moduleInstaller.InstallDkgAndWait(Report),
+                            cancellationToken).ConfigureAwait(false);
+                        Report($"DKG installer exit code: {(dkgExit ? "0" : "non-zero")}.");
+                    }
 
                     var hermesLocal = Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -176,10 +187,14 @@ internal static class SetupInstaller
 
                     blackboxInstalled = await WaitForEndpointAsync(
                         "http://127.0.0.1:9700/api/graph-status", cancellationToken).ConfigureAwait(false);
-                    dkgInstalled = await WaitForEndpointAsync(
-                        "http://127.0.0.1:9200/api/status", cancellationToken).ConfigureAwait(false);
+                    if (!dkgInstalled)
+                    {
+                        dkgInstalled = await WaitForEndpointAsync(
+                            "http://127.0.0.1:9200/api/status", cancellationToken).ConfigureAwait(false);
+                    }
+
                     Report($"Blackbox endpoint: {(blackboxInstalled ? "connected" : "not verified")}; " +
-                           $"DKG endpoint: {(dkgInstalled ? "connected" : "not verified")}.");
+                           $"DKG endpoint: {(dkgInstalled ? (blackboxProvidesDkg ? "provided by Blackbox" : "connected") : "not verified")}.");
 
                     Report("Installing agent hooks after the Blackbox runtime is prepared.");
                     var protection = new UserStateProtection();
@@ -400,6 +415,50 @@ internal static class SetupInstaller
                 }
             }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+            {
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when Blackbox reports that its own DKG node is reachable and gives its loopback URL.
+    /// In that case the complete installation skips Axiom's standalone node.
+    /// </summary>
+    private static async Task<bool> TryWaitForBlackboxDkgAsync(CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            try
+            {
+                using var response = await ProbeClient
+                    .GetAsync("http://127.0.0.1:9700/api/graph-status", cancellationToken)
+                    .ConfigureAwait(false);
+                if (response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content
+                        .ReadAsStringAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    using var document = JsonDocument.Parse(body);
+                    var root = document.RootElement;
+                    if (root.ValueKind == JsonValueKind.Object &&
+                        root.TryGetProperty("node_reachable", out var reachable) &&
+                        reachable.ValueKind == JsonValueKind.True &&
+                        root.TryGetProperty("dkg_url", out var dkgUrl) &&
+                        dkgUrl.ValueKind == JsonValueKind.String &&
+                        !string.IsNullOrWhiteSpace(dkgUrl.GetString()))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch (Exception exception) when (exception is HttpRequestException or JsonException)
+            {
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
             }
 
