@@ -1,7 +1,10 @@
 # Accessibility and keyboard
 
-Axiom is a desktop WPF application. The interface uses a high-contrast dark/light palette,
-visible keyboard focus and screen-reader names for the main controls.
+**Scope note:** this document originated as a WPF accessibility baseline. The **current Windows
+desktop is Avalonia**, with WPF retained as a source fallback. Shortcut and screen-reader claims
+below must be verified separately on the current Avalonia build before being presented as
+comprehensive accessibility certification. The target interface uses dark/light palettes,
+visible keyboard focus and appropriately named controls.
 
 ## Keyboard shortcuts
 
