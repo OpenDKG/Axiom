@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Ai;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.Privacy;
 using Axiom.Contracts.Threat;
 using Axiom.Presentation;
 
@@ -515,7 +516,8 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
 
         try
         {
-            foreach (var candidate in ThreatShareIocExtractor.Extract(finding, evidence))
+            var listDerived = await ListDerivedValuesAsync().ConfigureAwait(true);
+            foreach (var candidate in ThreatShareIocExtractor.Extract(finding, evidence, listDerived))
             {
                 await _serviceClient
                     .SendAsync<ThreatShareQueueStatus>(
@@ -530,6 +532,43 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
                      System.Text.Json.JsonException or System.IO.IOException)
         {
             // The preview list is optional; an offline service must not affect the analyst result.
+        }
+    }
+
+    /// <summary>
+    /// Values that local public-list blocks already contain. The analyst must not present the same
+    /// public-list match as an independent sighting; the service's blocked history is the local
+    /// provenance record and is read, never uploaded.
+    /// </summary>
+    private async Task<IReadOnlySet<string>> ListDerivedValuesAsync()
+    {
+        var empty = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (_serviceClient is null)
+        {
+            return empty;
+        }
+
+        try
+        {
+            var status = await _serviceClient
+                .SendAsync<PrivacyShieldStatus>(
+                    IpcCommandTypes.PrivacyStatus,
+                    null,
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+
+            return status.BlockedHistory
+                .Where(item => item.Category.HasFlag(PrivacyCategory.Malware))
+                .SelectMany(item => new[] { item.Domain, item.MatchedRule })
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.TrimEnd('.').ToLowerInvariant())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (exception is
+                     ServiceUnavailableException or TimeoutException or
+                     System.Text.Json.JsonException or System.IO.IOException)
+        {
+            return empty;
         }
     }
 

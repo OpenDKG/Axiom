@@ -17,7 +17,8 @@ public static class ThreatShareIocExtractor
 
     public static IReadOnlyList<ThreatShareEnqueueRequest> Extract(
         AiFinding finding,
-        AiEvidencePackage? evidence)
+        AiEvidencePackage? evidence,
+        IReadOnlySet<string>? listDerivedValues = null)
     {
         ArgumentNullException.ThrowIfNull(finding);
 
@@ -45,6 +46,7 @@ public static class ThreatShareIocExtractor
             }
 
             if (ThreatShareVocabulary.Normalize(indicator.Type, indicator.Value) is not { } normalized ||
+                WasListDerived(indicator.Type, normalized, listDerivedValues) ||
                 !WasObserved(indicator.Type, normalized, observed) ||
                 !seen.Add(indicator.Type.Trim() + ":" + normalized))
             {
@@ -155,4 +157,27 @@ public static class ThreatShareIocExtractor
             "hash" => observed.Hashes.Contains(value),
             _ => false,
         };
+
+    /// <summary>
+    /// Suppress a value that local public-list blocks already contain. The model observing the same
+    /// endpoint again must not turn a list match into a second, supposedly independent sighting.
+    /// </summary>
+    private static bool WasListDerived(
+        string type,
+        string value,
+        IReadOnlySet<string>? listDerivedValues)
+    {
+        if (listDerivedValues is null || listDerivedValues.Count == 0)
+        {
+            return false;
+        }
+
+        return type.Trim().ToLowerInvariant() switch
+        {
+            "domain" or "ip" or "hash" => listDerivedValues.Contains(value.TrimEnd('.')),
+            "url" => Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+                     listDerivedValues.Contains(uri.Host.TrimEnd('.')),
+            _ => false,
+        };
+    }
 }

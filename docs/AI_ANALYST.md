@@ -75,7 +75,8 @@ plain text for a human to review; they are never executed.
 The analyst returns a structured `indicators` array (`type`, `value`, `role`). Axiom proposes only
 `role: malicious` entries from a `SUSPICIOUS` or `SUPPORTED_ALERT` finding at high or critical
 severity, and only when the value matches a remote endpoint Axiom itself put in the evidence
-package. Summary, observations, evidence references and recommended actions are never scanned, so
+package. A value already present in Axiom's local malware-list block history is suppressed as
+list-derived. Summary, observations, evidence references and recommended actions are never scanned, so
 a domain named in prose or in a suggested block list cannot become a report. Queued values are shown
 on the Agents page and are signed and sent only after the user presses **Share** or **Send now**.
 

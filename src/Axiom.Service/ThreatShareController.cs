@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.Concurrent;
 using System.Text.Json;
-using Axiom.Contracts.Privacy;
 using Axiom.Contracts.Threat;
 
 namespace Axiom.Service;
 
 /// <summary>
 /// Holds the indicator candidates Axiom proposes to share and records what happened to each one.
-/// Only malware indicators an agent actually fetched (and high-confidence AI Analyst IOCs) enter
-/// the queue. The service never runs the reporter or writes to the graph: Blackbox and the user's
-/// DKG identity live in the user's own session, so the desktop submits and reports the outcome.
+/// Only high-confidence AI Analyst IOCs that match evidence Axiom observed enter the queue; public
+/// list matches stay local so they are not mistaken for independent sightings. The service never
+/// runs the reporter or writes to the graph: Blackbox and the user's DKG identity live in the
+/// user's own session, so the desktop submits and reports the outcome.
 /// </summary>
 public sealed class ThreatShareController : IAsyncDisposable
 {
@@ -32,57 +32,6 @@ public sealed class ThreatShareController : IAsyncDisposable
     }
 
     public string StorePath => _store.StorePath;
-
-    /// <summary>
-    /// Called from the DNS block path, so it only decides and enqueues; it never touches disk.
-    /// </summary>
-    public void ObserveBlocked(PrivacyShieldBlockedEvent blocked)
-    {
-        if (CreateFromBlocked(blocked) is { } request)
-        {
-            _incoming.Enqueue(request);
-        }
-    }
-
-    /// <summary>
-    /// A blocked malware domain is only shareable when an agent actually fetched it: directly, or
-    /// through a tool process it spawned. Only then is the Blackbox "fetched-by-tool" context true.
-    /// Ads, tracking and telemetry never qualify.
-    /// </summary>
-    public static ThreatShareEnqueueRequest? CreateFromBlocked(PrivacyShieldBlockedEvent blocked)
-    {
-        if (!blocked.Category.HasFlag(PrivacyCategory.Malware))
-        {
-            return null;
-        }
-
-        var fetchedDirectly = AgentProcessMatcher.IsAgentProcess(blocked.AppName, blocked.AppPath);
-        var fetchedByTool = AgentProcessMatcher.IsAgentProcess(blocked.AgentName, blocked.AgentPath);
-        if (!fetchedDirectly && !fetchedByTool)
-        {
-            return null;
-        }
-
-        if (ThreatShareVocabulary.Normalize("domain", blocked.Domain) is null)
-        {
-            return null;
-        }
-
-        var via = fetchedDirectly
-            ? blocked.AppDisplay
-            : $"{blocked.AppDisplay} via {blocked.AgentDisplay}";
-
-        return new ThreatShareEnqueueRequest
-        {
-            IndicatorType = "domain",
-            Value = blocked.Domain,
-            Reason = "malware-delivery",
-            Context = "fetched-by-tool",
-            Source = ThreatShareSource.PrivacyShield,
-            Detail = $"Blocked for {via} by the malware list.",
-            ObservedUtc = blocked.BlockedUtc,
-        };
-    }
 
     public void Enqueue(ThreatShareEnqueueRequest request) => _incoming.Enqueue(request);
 

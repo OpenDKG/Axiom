@@ -102,6 +102,27 @@ public sealed class PrivacyShieldPolicyTests
     }
 
     [Fact]
+    public void Block_decision_carries_the_matching_source_for_local_provenance()
+    {
+        var policy = PrivacyShieldPolicy.Create(
+            new PrivacyShieldSettings { Categories = PrivacyCategory.None },
+            [
+                new PrivacyShieldStoredRule(
+                    "evil.example",
+                    "urlhaus-domains",
+                    PrivacyCategory.Malware,
+                    DateTimeOffset.UtcNow),
+            ]);
+
+        var decision = policy.Evaluate("deep.evil.example");
+
+        Assert.True(decision.Blocked);
+        Assert.Equal("evil.example", decision.MatchedRule);
+        Assert.Equal("urlhaus-domains", decision.SourceId);
+        Assert.Equal(PrivacyCategory.Malware, decision.Category);
+    }
+
+    [Fact]
     public void Source_catalog_has_six_license_cleared_entries()
     {
         var sources = PrivacyShieldSourceCatalog.All;

@@ -87,9 +87,16 @@ public sealed class BlockedEventRow(PrivacyShieldBlockedEvent blocked, bool isAl
 
     public string StateText => isAllowed ? "allowed" : "blocked";
 
-    public string Tooltip => string.IsNullOrWhiteSpace(blocked.AppPath)
+    public string Tooltip => (string.IsNullOrWhiteSpace(blocked.AppPath)
         ? $"{blocked.Domain}\nBlocked app: {blocked.AppDisplay}\nCategory: {blocked.CategoryText}"
-        : $"{blocked.Domain}\nBlocked app: {blocked.AppDisplay}\nPath: {blocked.AppPath}\nCategory: {blocked.CategoryText}";
+        : $"{blocked.Domain}\nBlocked app: {blocked.AppDisplay}\nPath: {blocked.AppPath}\nCategory: {blocked.CategoryText}") +
+        (string.IsNullOrWhiteSpace(ProvenanceText) ? string.Empty : $"\n{ProvenanceText}");
+
+    /// <summary>Local list provenance; never sent to Blackbox as free text.</summary>
+    public string ProvenanceText => blocked.SourceId.Length == 0
+        ? string.Empty
+        : $"Source: {blocked.SourceName} ({blocked.SourceId}) {blocked.SourceVersion} · " +
+          $"{blocked.DetectionReason} · Axiom {blocked.AxiomVersion}".TrimEnd(' ', '·');
 }
 
 /// <summary>One (domain, app) pair in the live list, so a chatty app cannot flood the page.</summary>
