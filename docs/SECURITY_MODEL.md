@@ -1,6 +1,6 @@
 # Axiom security and privacy model
 
-**Current development scope:** Axiom 0.10.23 (Windows / Avalonia), with the WPF fallback retained in source. This document distinguishes shipped behaviour, optional integrations and unverified scenarios. Axiom is a development security tool, **not** a guarantee of malware prevention.
+**Applies to:** Axiom 0.10.23 for Windows. Axiom is a security tool under active development and cannot guarantee prevention of every threat.
 
 ## Trust boundaries and responsibilities
 
@@ -63,7 +63,7 @@ The normalized IOC sharing path excludes loopback, private/local/special-use des
 - An unavailable Blackbox guard causes supported hooks to fail open by design. Do not claim agents are protected in this state.
 - A failed reporter call can be retained as a deferred local candidate. Retry requires a later explicit sharing action; turning the internet back on does not license silent sending.
 
-## Threat model and guarantees
+## Protection and limitations
 
 | Threat / failure | Mitigation | Remaining limitation |
 |---|---|---|
@@ -76,10 +76,6 @@ The normalized IOC sharing path excludes loopback, private/local/special-use des
 | Misleading status LEDs | Distinct health/sync/hook/canary states | A hook file or localhost listener alone does not prove active protection |
 | Tampered binaries / supply chain | Pinned dependencies and installer hash verification | Portable public binaries are not yet Authenticode-signed; hashes alone are not publisher identity |
 | Unexpected changes to agent configuration | Marker-owned hooks, backups, user-state fingerprinting and restoration attempts | Some third-party agent hook APIs/versions remain unstable |
-
-## Verified tests versus assumptions
-
-The source includes tests for IPC restrictions, owned-rule paths, queue retries, privacy source handling and selected guard integrations. Versioned [release notes](RELEASES/0.10.23.md) list 564 passing tests at that release. That is **not** proof of every live Windows, corporate DNS, third-party agent or offline restart scenario. The older [test matrix](TEST_MATRIX.md) remains a historical snapshot. Before a production security claim, execute controlled offline, DNS-fallback, firewall, reboot and real agent-host denial tests.
 
 ## Supported packaging modes
 
