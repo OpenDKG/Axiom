@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.22 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.23 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -32,6 +32,13 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.23
+
+- **Hermes and Blackbox use one resolved profile path.** The reporter, consent check, mode store,
+  local state and uninstaller now resolve `HERMES_HOME`, then `%LOCALAPPDATA%\hermes`, then the
+  legacy `~\.hermes` in one place, with `BLACKBOX_HOME` as an override. The threat-sharing card
+  shows the profile path and whether its consent and reporter key exist.
 
 ## What's in 0.10.22
 

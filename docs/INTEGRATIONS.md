@@ -51,6 +51,11 @@ never sends on a timer. A timeout, missing CLI or offline node marks the item **
 retry time instead of rejecting it; a daily cap leaves it pending for the next day. Only an explicit
 schema or policy refusal is recorded as rejected.
 
+The card also shows which Hermes profile the reporter uses and whether its consent and
+`reporter_key.pem` are present. Axiom resolves the profile once: `HERMES_HOME` when set, then
+`%LOCALAPPDATA%\hermes`, then the legacy `~\.hermes`. `BLACKBOX_HOME` overrides the Blackbox folder
+inside it.
+
 Agent workspace labels are deliberately not interchangeable:
 
 - **HOOKED**: the Axiom hook is installed and Blackbox is reachable, but no recent runtime
@@ -386,8 +391,8 @@ Official documentation: <https://github.com/umanitek/agent-blackbox>
 ## Blackbox mode
 
 After Blackbox is installed, the Security page shows **Audit** and **Block** buttons next to it.
-They update only `~/.hermes/config.yaml` -> `plugins.entries.blackbox.mode`; no reinstall or admin is
-needed.
+They update only `plugins.entries.blackbox.mode` in the resolved Hermes profile's `config.yaml`
+(`HERMES_HOME`, then `%LOCALAPPDATA%\hermes`, then `~\.hermes`); no reinstall or admin is needed.
 
 - **Audit** logs and reports findings without stopping agent actions. Recommended for first use.
 - **Block** stops confirmed threats at or above the configured `block_severity` (default `critical`).
@@ -402,7 +407,8 @@ An **Uninstall** button appears when Axiom detects an installed/configured modul
 
 - **Blackbox**: stops processes whose command line points into
   `%LOCALAPPDATA%\Axiom\modules\blackbox`, removes that folder, the
-  `%USERPROFILE%\.local\bin\blackbox.cmd` shortcut, `.hermes\blackbox` and the
+  `%USERPROFILE%\.local\bin\blackbox.cmd` shortcut, the resolved Blackbox home (usually
+  `%LOCALAPPDATA%\hermes\blackbox`, or `~\.hermes\blackbox` on legacy profiles) and the
   `Agent Blackbox DKG node` scheduled task if present. Other Hermes profiles, logs and global
   Python/npm packages are kept.
 - **DKG**: stops local processes under the Axiom DKG folders and removes

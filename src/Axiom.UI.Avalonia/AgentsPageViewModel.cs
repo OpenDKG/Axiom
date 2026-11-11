@@ -257,6 +257,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private string _threatShareQueueText = "Loading the indicator preview...";
 
     [ObservableProperty]
+    private string _threatShareReporterText = string.Empty;
+
+    [ObservableProperty]
     private bool _hasThreatShareCandidates;
 
     [ObservableProperty]
@@ -1080,6 +1083,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private void ApplyThreatShareStatus(ThreatShareQueueStatus status)
     {
         _threatShareStatus = status;
+        ThreatShareReporterText = ThreatShareCli.DescribeReporterProfile();
         var pending = status.Items
             .Where(item => item.State is ThreatShareState.Pending or ThreatShareState.Deferred)
             .Take(8)

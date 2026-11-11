@@ -122,6 +122,8 @@
           </Border>
           <controls:AxiomSelectableTextBlock Text="{Binding ThreatShareQueueText}" FontSize="10"
                      Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding ThreatShareReporterText}" FontSize="9"
+                     Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <ItemsControl ItemsSource="{Binding ThreatShareCandidates}" IsVisible="{Binding HasThreatShareCandidates}">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
