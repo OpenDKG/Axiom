@@ -87,6 +87,14 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public string AboutContributors => AxiomDocuments.ContributorsLine;
 
+    /// <summary>Creator credited separately from the wider core team.</summary>
+    public ProjectRole AboutFounder => AxiomDocuments.Founder;
+
+    /// <summary>Core maintainers and platform leads shown in About.</summary>
+    public IReadOnlyList<ProjectRole> AboutCoreTeam => AxiomDocuments.CoreTeam;
+
+    public string AboutCoreTeamStatement => AxiomDocuments.CoreTeamStatement;
+
     public string AboutAffiliationLabel => AxiomDocuments.AffiliationLabel;
 
     public string AboutAffiliation => AxiomDocuments.AffiliationText;
@@ -116,6 +124,14 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     [RelayCommand]
     private Task OpenAffiliationAsync() => OpenExternalAsync(AxiomDocuments.AffiliationUrl, "OpenDKG", "website");
+
+    /// <summary>Opens a maintainer's GitHub profile through the existing external-link path.</summary>
+    [RelayCommand]
+    private Task OpenProfileAsync(string? url) =>
+        OpenExternalAsync(
+            string.IsNullOrWhiteSpace(url) ? AxiomDocuments.SourceUrl : url,
+            "GitHub profile",
+            "profile");
 
     private async Task OpenExternalAsync(string url, string title, string label)
     {
