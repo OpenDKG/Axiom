@@ -4,16 +4,22 @@ using System.Text;
 namespace Axiom.Infrastructure.MacOS.Filter;
 
 /// <summary>
-/// Atomic publication of rules.json: write a temp file in the same directory, flush it to disk,
-/// set mode 0644 and rename over the target. The filter therefore sees either the old or the new
-/// complete table, never a partial file.
+/// Atomic publication of daemon files: write a temp file in the same directory, flush it to
+/// disk, set the mode and rename over the target. A reader therefore sees either the old or the
+/// new complete file, never a partial one. rules.json is published 0644 (the AxiomFilter
+/// extension reads it); every other daemon file is 0600 (<see cref="PrivateMode"/>).
 /// </summary>
 public static class FilterRulesFile
 {
-    public const UnixFileMode PublishedMode =
-        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
+    /// <summary>0644: the rule table read by the filter extension.</summary>
+    public const UnixFileMode PublishedMode = MacDataDirectoryPermissions.SharedFileMode;
 
-    public static void WriteAtomic(string path, string content)
+    /// <summary>0600: daemon-private state (managed rules, DNS backup).</summary>
+    public const UnixFileMode PrivateMode = MacDataDirectoryPermissions.PrivateFileMode;
+
+    public static void WriteAtomic(string path, string content) => WriteAtomic(path, content, PublishedMode);
+
+    public static void WriteAtomic(string path, string content, UnixFileMode mode)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(content);
@@ -26,7 +32,18 @@ public static class FilterRulesFile
         try
         {
             var bytes = Encoding.UTF8.GetBytes(content);
-            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            var options = new FileStreamOptions
+            {
+                Mode = FileMode.CreateNew,
+                Access = FileAccess.Write,
+                Share = FileShare.None,
+            };
+            if (!OperatingSystem.IsWindows())
+            {
+                options.UnixCreateMode = mode;
+            }
+
+            using (var stream = new FileStream(temp, options))
             {
                 stream.Write(bytes);
                 stream.Flush(flushToDisk: true);
@@ -34,7 +51,8 @@ public static class FilterRulesFile
 
             if (!OperatingSystem.IsWindows())
             {
-                File.SetUnixFileMode(temp, PublishedMode);
+                // UnixCreateMode is subject to the umask; set the exact mode.
+                File.SetUnixFileMode(temp, mode);
             }
 
             // rename(2) on Unix: atomic replacement within one file system.
@@ -52,7 +70,7 @@ public static class FilterRulesFile
     public static void WriteAtomic(string path, FilterRuleTable table)
     {
         ArgumentNullException.ThrowIfNull(table);
-        WriteAtomic(path, table.ToJson() + "\n");
+        WriteAtomic(path, table.ToJson() + "\n", PublishedMode);
     }
 
     /// <summary>Reads the current table; null when missing or invalid.</summary>

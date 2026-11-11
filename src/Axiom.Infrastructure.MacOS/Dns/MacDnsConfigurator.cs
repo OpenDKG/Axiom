@@ -329,7 +329,7 @@ public sealed class MacDnsConfigurator
     }
 
     private void WriteBackup(MacDnsBackup backup) =>
-        FilterRulesFile.WriteAtomic(_backupPath, JsonSerializer.Serialize(backup, BackupJson) + "\n");
+        FilterRulesFile.WriteAtomic(_backupPath, JsonSerializer.Serialize(backup, BackupJson) + "\n", FilterRulesFile.PrivateMode);
 
     private void TryDeleteBackup()
     {

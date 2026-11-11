@@ -318,7 +318,7 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisposab
     }
 
     private void SaveState(ManagedRuleState state) =>
-        FilterRulesFile.WriteAtomic(_paths.ManagedRulesFile, JsonSerializer.Serialize(state, StateJson) + "\n");
+        FilterRulesFile.WriteAtomic(_paths.ManagedRulesFile, JsonSerializer.Serialize(state, StateJson) + "\n", FilterRulesFile.PrivateMode);
 
     private bool TryProbeWritable(out string problem)
     {

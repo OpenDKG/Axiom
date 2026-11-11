@@ -147,6 +147,37 @@ public sealed class HistoryStore
             RecoverCorruptDatabase();
             await MigrateAsync(cancellationToken);
         }
+
+        RestrictUnixPermissions();
+    }
+
+    /// <summary>
+    /// History is private to the service account: on Unix the database and its WAL/shared-memory
+    /// side files are 0600 (SQLite creates new side files with the database's mode, so setting
+    /// the database once covers later ones). No-op on Windows.
+    /// </summary>
+    private void RestrictUnixPermissions()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        foreach (var suffix in new[] { string.Empty, "-wal", "-shm", "-journal" })
+        {
+            var path = DatabasePath + suffix;
+            try
+            {
+                if (File.Exists(path))
+                {
+                    File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Best effort; the daemon's startup sweep repeats it.
+            }
+        }
     }
 
     public async Task<int> UpsertAsync(ConnectionSnapshot snapshot, CancellationToken cancellationToken = default)
