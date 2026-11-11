@@ -280,7 +280,7 @@ EOF
   PKG_SIGN=()
   [[ -n "${AXIOM_INSTALLER_IDENTITY:-}" ]] && PKG_SIGN=(--sign "$AXIOM_INSTALLER_IDENTITY" --timestamp)
   pkgbuild --root "$PKGROOT" --identifier "$APP_ID.pkg" --version "$VERSION" --install-location / \
-    --scripts "$SCRIPTS" "${PKG_SIGN[@]}" "$PKG" >/dev/null
+    --scripts "$SCRIPTS" ${PKG_SIGN[@]+"${PKG_SIGN[@]}"} "$PKG" >/dev/null
   log "installer: $PKG (unsigned unless AXIOM_INSTALLER_IDENTITY=\"Developer ID Installer: …\")"
 fi
 log "install (bundle only): sudo rm -rf /Applications/Axiom.app && sudo ditto '$APP' /Applications/Axiom.app"
