@@ -1,6 +1,7 @@
 # Privacy Shield (local DNS filtering)
 
-Privacy Shield is an optional, **default-disabled** local DNS policy module. It runs inside the
+Privacy Shield is an optional local DNS policy module: **partial installation leaves it disabled**,
+while an explicitly chosen complete installation can enable it with a Balanced profile. It runs inside the
 existing `Axiom.Service` process and listens only on loopback. It does not change Windows DNS
 settings, the hosts file, firewall rules, agent configuration or certificates.
 
@@ -35,13 +36,14 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
 - Application attribution is best-effort: Axiom maps the loopback UDP/TCP source port to the owning
   PID through the Windows owner tables. Protected or already-exited processes may show
   `unknown app`.
-- A catalog of **five HTTPS-only, license-labelled** sources (HaGeZi Multi PRO, OISD Big,
-  WindowsSpyBlocker, The Block List Project Ads and Tracking). A source update downloads with a
+- A catalog of **six HTTPS-only, license-labelled** sources (HaGeZi Multi PRO, OISD Big,
+  WindowsSpyBlocker, The Block List Project Ads and Tracking, and the dedicated malware-labelled
+  URLhaus domain feed compiled by malware-filter). A source update downloads with a
   20 MB/45 s bound, parses and normalizes domains, then atomically replaces the previous ruleset only
   if every selected source succeeds. The previous rules file is retained. The local cap is 500,000
   unique domains, and every selected source keeps a reserved share so a large list cannot starve a
   smaller telemetry list such as WindowsSpyBlocker.
-- Licenses: HaGeZi and OISD are GPL-3.0, WindowsSpyBlocker is MIT, and the two Block List Project
+- Licenses: HaGeZi and OISD are GPL-3.0, WindowsSpyBlocker and malware-filter are MIT, and the two Block List Project
   lists are Unlicense. Axiom downloads them from the upstream URL at runtime and does not bundle the
   list bytes; no separate approval is required beyond the license and attribution terms. Upstream
   terms must be rechecked before adding or redistributing a list. See
@@ -133,14 +135,22 @@ the field empty keeps the current Windows DNS servers. After enabling the resolv
 ## Safety and recovery
 
 - A **complete installation** enables Privacy Shield once, during setup, with the Balanced profile
-  and all five sources selected. A **partial installation** leaves it off. Updates and later starts
+  and the setup-selected initial sources. Six sources are available in the catalog; inspect the
+  enabled-source selections rather than assuming every source is active. A **partial installation** leaves it off. Updates and later starts
   never enable it by themselves, and no mode changes adapter DNS silently.
-- Stopping the resolver leaves the Windows adapter pointing at a non-responsive loopback address
-  if the user manually configured it. Restore the adapter DNS or set a real upstream before
-  stopping the resolver.
-- The service never modifies DNS adapter state, so a crash or uninstall cannot silently rewrite it.
-  Recovery is the same manual adapter setting.
-- No DNS payload is uploaded, sold or sent to AI/DKG/Blackbox services.
+- The elevated adapter helper preserves the previous adapter DNS servers and, when there is a real
+  fallback, places them behind the local resolver. If the resolver stops answering, Windows may use
+  that fallback. **DNS still resolves, but Axiom filtering is bypassed until the resolver returns.**
+- The service has a privileged failsafe that attempts to restore the saved adapter DNS on resolver
+  disable, service stop or failed resolver start, using a validated machine snapshot. It cannot
+  guarantee recovery on every damaged/missing snapshot or unusual corporate adapter.
+- If no fallback is available or DNS fails, use **Restore saved DNS (UAC)** or your original adapter
+  settings; see [Firewall and DNS recovery](FIREWALL_RECOVERY.md). Do not assume that disabling the
+  resolver leaves the adapter unchanged.
+- Raw local DNS browsing history is not uploaded, sold or sent as a dataset to AI/DKG/Blackbox.
+  **Allowed DNS questions are forwarded to the configured upstream resolver.** A narrow, normalized
+  malware IOC can enter a *local preview queue* when an agent-related blocked lookup qualifies;
+  the user must explicitly approve Blackbox submission. See [Threat intelligence](THREAT_INTELLIGENCE.md).
 - Query counters reset when the resolver restarts.
 
 ## Limitations
