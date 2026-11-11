@@ -13,6 +13,19 @@
 > your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
 > and keep a recovery path.
 
+## Project origin and stewardship
+
+**Original creator and project initiator:** [@a-51-50](https://github.com/a-51-50).
+The canonical Axiom source repository remains [a-51-50/Axiom](https://github.com/a-51-50/Axiom).
+Axiom is affiliated with OpenDKG, but affiliation does not transfer the repository or copyright.
+Linux and macOS development is planned with contributions from [@dreddster](https://github.com/dreddster)
+and [@brxtrac](https://github.com/brxtrac); individual changes are attributed through commits and
+pull requests, and specific platform responsibilities are not assigned by this notice.
+
+See [authors and attribution](AUTHORS.md), [repository stewardship](docs/REPOSITORY_STEWARDSHIP.md)
+and [contribution guidelines](CONTRIBUTING.md). These public credits do not replace any applicable
+signed founder or contributor agreements.
+
 ![Axiom Overview in the dark theme: live sockets, system-wide throughput and local-only counters](docs/assets/screenshots/overview-dark.png)
 
 Axiom is a local-first Windows network monitor, firewall policy manager and optional AI-agent
