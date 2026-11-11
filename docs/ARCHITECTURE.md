@@ -1,154 +1,95 @@
-# Architecture — Axiom (FND-005)
+# Axiom architecture — current Windows implementation
 
-Current state: read-only inventory in the service, a local Named Pipe, SQLite history, and a UI that
-runs either in-process or through the service. FND-004 (ETW bytes) is deferred because it requires
-elevation.
+**Applies to:** development version 0.10.23. **Primary desktop:** Avalonia; the WPF desktop remains in the repository as a legacy fallback. This document describes runtime boundaries rather than the early FND-005 design proposal.
 
-## 1. Context
+## System diagram
 
-```text
-┌────────────────────────────────────────────────────────┐
-│ Axiom.Desktop (WinExe, asInvoker)              │
-│ chooses the source: in-process or service              │
-└───────────────┬────────────────────────────────────────┘
-                │
-┌───────────────▼────────────────────────────────────────┐
-│ Axiom.UI (WPF library, Contracts only)         │
-│ Live/Apps/History/Overview · ConnectionMonitor         │
-└───────┬──────────────────────────────┬─────────────────┘
-        │ IConnectionSnapshotSource    │ ServicePipeClient
-┌───────▼──────────────────┐    ┌──────▼──────────────────────┐
-│ Infrastructure.Windows   │    │ \\.\pipe\Axiom.…    │
-│ IP Helper · process      │    └──────┬──────────────────────┘
-│ identity · PipeServer    │           │
-└──────────────────────────┘    ┌──────▼──────────────────────┐
-                                │ Axiom.Service       │
-                                │ MonitoringWorker → cache    │
-                                │ HistoryWriter → SQLite      │
-                                │ PipeServerWorker            │
-                                └──────┬──────────────────────┘
-                                       │
-                                ┌──────▼──────────────────────┐
-                                │ Persistence (HistoryStore)  │
-                                │ WAL · migrations · retention│
-                                └─────────────────────────────┘
-```
+~~~text
+ Axiom.Desktop.exe (Avalonia, unprivileged)
+   |  typed local IPC over an authenticated Windows Named Pipe
+   v
+ Axiom.Service.exe (Windows service for Axiom Shield; per-user service path for basic monitoring)
+   +-- IP Helper socket inventory, process attribution and measured counters
+   +-- bounded SQLite network/throughput history and Axiom-owned firewall audit
+   +-- Privacy Shield: local loopback DNS proxy, disk-backed compiled block lists
+   +-- threat-sharing preview queue (no service-side publication)
+   +-- firewall policy coordinator -> Windows Firewall (Axiom:: owned rules only)
 
-## 2. Projects and dependencies
+ Optional components outside the firewall/connection enforcement path:
+   Axiom UI -- local HTTP --> Blackbox dashboard/guard at 127.0.0.1:9700
+                                     |
+                           local audit / verified graph cache
+                                     |
+                                 DKG node and network peers
+   Axiom UI -- local HTTP --> standalone DKG status at 127.0.0.1:9200
+   User-approved report -- Blackbox CLI --> community graph
+   AI Analyst -- explicit provider or signed-in OpenCode CLI --> findings only
+   MCP server -- stdio + authenticated Named Pipe --> read-only Axiom service
+~~~
 
-| Project | Depends on | Responsibility |
-|---|---|---|
-| Contracts | — | DTOs, IPC, history contract, `IConnectionSnapshotSource` |
-| Core | Contracts | domain rules, firewall port |
-| Infrastructure.Windows | Contracts, Core | IP Helper, process identity, Named Pipe server |
-| Persistence | Contracts | SQLite schema, upsert, query, retention |
-| Service | Contracts, Core, Infrastructure, Persistence | host, monitoring, history writer, pipe |
-| UI | **Contracts only** | Views/ViewModels/theme, pipe client |
-| MCP server | Contracts | local stdio MCP adapter; read-only pipe client, no host APIs |
-| Setup | UI | single-file per-user installer with embedded desktop/service payload |
-| Desktop | UI, Infrastructure | composition root / the only desktop EXE |
+Blackbox's *configured* DKG node and Axiom's *standalone* DKG node must be treated as distinct until identity/configuration proves otherwise. A successful localhost probe does not establish remote connectivity or current graph synchronization.
 
-`UI` has no Windows reference; `System.IO.Pipes` is BCL. Windows API code lives in
-Infrastructure/Service/Desktop.
+## Current projects
 
-## 3. Service
+| Project | Responsibility |
+|---|---|
+| `Axiom.Contracts` | Shared types, IPC, local security contracts, module status |
+| `Axiom.Core` | Domain logic and firewall policy interfaces |
+| `Axiom.Infrastructure.Windows` | Windows IP Helper/process identity and Windows-specific plumbing |
+| `Axiom.Persistence` | SQLite history, storage and migrations |
+| `Axiom.Service` | Monitoring, Privilege boundary, Privacy Shield, firewall coordinator, local queue |
+| `Axiom.Presentation` | Portable view-model, settings and optional integration logic |
+| `Axiom.UI.Avalonia` | Current Avalonia pages, navigation, themes and native dialogs |
+| `Axiom.Desktop.Avalonia.Windows` | Primary Windows executable composition root |
+| `Axiom.UI`, `Axiom.Desktop` | Legacy WPF UI and fallback desktop retained in source |
+| `Axiom.McpServer` | Separate read-only stdio MCP adapter, not an authorization path for writes |
 
-- `MonitoringWorker`: IP Helper every 1 s → `ConnectionSnapshotCache` (volatile reference + revision).
-- `HistoryWriter`: writes the latest snapshot to SQLite every 2 s; retention at startup and hourly.
-- `PipeServerWorker`: pipe with an explicit DACL, SID check and limits.
-- `ServiceInfo`: start time is set explicitly (`MarkStarted`) so uptime does not depend on lazy type
-  initialization.
+Avalonia provides UI portability; Windows socket inventory, service integration, Windows Firewall and adapter-DNS operations are **not** automatically portable to Linux or macOS. See [cross-platform handoff](CROSS_PLATFORM_UI_HANDOFF.md).
 
-## 4. IPC
+## Runtime privilege model
 
-- NDJSON, one `IpcEnvelope` per line.
-- Request max **256 KiB**; response max **4 MiB** (a snapshot with thousands of sockets exceeds the
-  request limit).
-- Buffered `IpcLineReader` (16 KiB reads, growing output) — no byte-by-byte reading.
-- Commands: `serviceHealth`, `capabilities`, `snapshot`, `history.query`, `rules.query`.
-- `rule.*`, `config.*`, `diagnostics.*`, `live.events` → `not_supported` unless the firewall write
-  gate and an explicit command contract allow it.
-- DACL: allow the service account + one SID; deny `Network`/`Anonymous`/`Guests`; the client SID is
-  read from the process token after connect.
+- The Avalonia UI runs as the signed-in user; it must not silently elevate or make direct privileged firewall changes.
+- Axiom Shield requires user consent and the installed Windows service for Windows Firewall writes. The service runs as `LocalSystem` with restricted installation/data ACLs. It manages only rule names of the `Axiom::{id}::{OUT|IN}` form, with read-back verification and audit.
+- The basic portable app can monitor without registering a privileged Windows service. This mode does **not** imply that firewall writes are available.
+- An explicit UAC helper may update the selected Windows DNS adapter after approval; the local resolver itself does not silently change adapter DNS.
+- Optional DKG/Blackbox installers, agent-hook setup and third-party processes have distinct permissions and terms. They are not part of Windows Firewall's enforcement process.
 
-## 5. SQLite history (FND-005)
+## IPC and storage
 
-- Path: `AXIOM_DATA_DIR` → otherwise `%LOCALAPPDATA%` (interactive process) or
-  `%ProgramData%` (service).
-- WAL, `foreign_keys=ON`, `busy_timeout=5000`, `synchronous=NORMAL`.
-- Tables:
-  - `schema_migrations(version, applied_utc, checksum)` — version 1,
-  - `apps(id, app_key UNIQUE, display_name, executable_path, first_seen_utc, last_seen_utc)`,
-  - `flows(id, app_id, process_id, protocol, local_endpoint, remote_endpoint, direction, state,
-    quality, first_seen_utc, last_seen_utc, UNIQUE(app_id, protocol, local, remote, pid))`,
-  - `traffic_buckets` — prepared for FND-004, not filled yet,
-  - `settings`.
-- Upsert: `first_seen` is preserved; `last_seen`, `state`, `direction`, `quality` are updated.
-- Query: UTC range, search (name/path/remote/PID), `LIMIT/OFFSET`, `COUNT(*)` for the total.
-- Retention: 30 days; deletes old `flows` and `apps` without flows.
-- Corrupt database: `integrity_check`/SQLite 26 → `ClearAllPools`, file moved to `.corrupt-<ts>`,
-  recreate.
-- Indexes: `last_seen_utc`, `remote_endpoint`, `app_id`.
+The UI talks to the service over `\\.\pipe\Axiom.Service.v1`: NDJSON messages with bounded request/response sizes, explicit DACL and client-SID validation, typed commands and rate limits. External network clients cannot use the pipe as a remote management API. The MCP adapter also uses the pipe and exposes read-only tools; it does not read SQLite or invoke Windows Firewall COM directly.
 
-## 6. Firewall (FND-006)
+Axiom stores its own network observations and settings locally, including retained SQLite flow/throughput history, firewall rule/audit records, bounded blocked-DNS history, AI findings and the threat-sharing preview queue. Different stores have different retention limits. Blackbox/Hermes maintains **its own** local guard/audit/profile data and reporter key. Do not conflate Blackbox data with Axiom's SQLite history; see [security model](SECURITY_MODEL.md).
 
-- `IFirewallPolicyAdapter` (Core) is implemented by `WindowsFirewallPolicyAdapter`, which uses the
-  documented `INetFwPolicy2`/`INetFwRule` COM objects on a dedicated STA thread.
-- Read-only operations: capability probe, owned-rule listing and verification. They need no admin
-  on a normal host.
-- Write operations: apply and remove, limited to exact `Axiom::{id}::{OUT|IN}` names. They are
-  refused unless the persisted shield consent is granted **and** the process is the
-  non-interactive Windows service. The two environment variables remain a test-only override.
-- `FirewallRuleCoordinator` serialises changes and runs
-  validate → pending + audit → apply → read-back → applied/failed + audit.
-- SQLite schema v2 adds `firewall_rules` and `rule_audit`; the audit actor is the verified pipe
-  client SID.
-- The UI reads capability/rules through `rules.query`; block actions live on Applications, remove on
-  Firewall, and both require `WritesEnabled=true`. An optional advanced scope covers protocol,
-  remote ports, IPv4/IPv6 or CIDR addresses and network profiles.
-- Real enforcement is not verified on the development host. The VM checklist is in ADR 0007 and
-  `docs/FIREWALL_RECOVERY.md` documents targeted recovery.
+## Monitoring and firewall behaviour
 
-## 7. UI
+The service uses Windows IP Helper socket owner tables and counters. Ownership can be partial or unknown; it is not packet capture and does not prove full connection contents. Live activity and historical samples are presented with data-quality flags and gaps rather than invented per-process traffic.
 
-- Navigation follows the V2 set plus the Agents page: Overview, Connections, Applications, Events,
-  Agents, Firewall, Security, Privacy Shield, AI Analyst, Support, Settings. Agents sits immediately
-  above Firewall. The redundant Files page is intentionally absent; the local SHA-256 scan is on
-  Security.
-- `ConnectionMonitor`: 1 s polling, keyed diff, raises `Updated` on success and on error (offline
-  banner).
-- `Connections` includes an explicit `COUNTRY` placeholder. No GeoIP database is loaded, so every
-  row shows an unknown country instead of inferring a flag from an IP address.
-- `Applications` groups observed executables by resolved path with live sorting by socket count.
-- `Events` is a persisted network-flow timeline. Only `All` and `Network` are exposed because no
-  durable file, agent, system or blocked event source exists in this build.
-- `Connections` and `Events` support a **Group by application** view. Expanding a group shows the
-  loaded sockets or events for that executable without discarding the flat table view.
-- The former `Files` page was removed because it only redirected users to the working local
-  SHA-256 scan on `Security`; background folder watching and quarantine remain disabled. `Agents`
-  owns DKG, Blackbox, module activity and the recognized workspace list. `Security` owns
-  reputation, community feed and local file scan.
-- `HistoryViewModel`/`Alerts` were replaced by `EventsViewModel`; the database still stores flows.
-- The 5m throughput view is `LIVE COUNTERS`: it samples real system-wide IPv4/IPv6 interface byte
-  counters once per second. Longer ranges are labelled `DEMO SERIES` until byte history is stored;
-  per-process bytes still need ETW (FND-004). New-connection markers use observed first-seen time.
+Windows Firewall enforces Axiom-owned rules, including when the desktop closes. No DKG lookup or cloud API call occurs on the per-connection enforcement path. Turning Axiom Shield off removes Axiom-owned rules; service outages do not by themselves remove already-applied Windows rules. See [firewall recovery](FIREWALL_RECOVERY.md).
 
-## 8. MCP server (read-only foundation)
+## Privacy Shield DNS behaviour
 
-- `Axiom.McpServer` is a separate local process using the official `ModelContextProtocol` SDK
-  over **stdio**. stdout is JSON-RPC; logs go to stderr.
-- It calls the existing authenticated Named Pipe for status, snapshots, history and read-only rule
-  state. It does not open SQLite, Windows Firewall COM, the registry or arbitrary files.
-- The tool surface is read-only: no rule apply/remove, process kill, file read, shell or
-  configuration write. See `docs/MCP.md` for the tool list and unverified claims.
-- No client configuration is installed and no MCP process is started by the desktop application.
+Privacy Shield is a local DNS proxy, not an inline packet firewall or network gateway. Blocked names receive NXDOMAIN when queries reach its resolver; allowed queries are forwarded to the configured upstream DNS. The source catalog includes telemetry, ad, tracking and dedicated malware lists, with local rule compilation and rollback on failed updates. Applications using their own DoH, direct IPs, VPN resolvers or cached answers may bypass this layer.
 
-## 9. Deferred
+The explicit adapter helper stores previous DNS servers. It places a real fallback behind the loopback resolver where possible; the service has a restore failsafe for disable/stop/start failure. **If fallback DNS takes over, internet name resolution may recover while Privacy Shield filtering is bypassed.** Never describe resolver failure as guaranteed continuous protection.
 
-- **FND-004 (ETW)**: a kernel network session requires `SeSystemProfilePrivilege`; this session is
-  UAC-filtered (`logman` → Access denied). Implementation and verification move to an elevated
-  session/VM.
-- FND-006 firewall writes, FND-007 alerts, FND-009 installer/signing.
-- Service account and installation ACL; filling `traffic_buckets`.
+See [Privacy Shield](PRIVACY_SHIELD.md) for current configuration, recovery and limitations.
 
-Decisions: ADR 0001–0007.
+## Blackbox and DKG integration
+
+The Blackbox dashboard is accessed over local loopback. Agent hooks send lifecycle/tool events to the local guard; their true blocking status depends on the active mode, host integration and a functioning guard. If the guard fails, hooks are designed to fail open; `DEGRADED` is not `PROTECTED`.
+
+Axiom displays the Blackbox verified graph using the local dashboard API, and can ask the dashboard to synchronize. Optional auto-sync is **off by default**; when enabled it requests incremental updates about every 15 minutes. Existing local cached state can remain visible offline but must show its last-known status.
+
+Axiom can queue and offer approved, signed IOC reports through the Blackbox CLI. No service background timer silently publishes them. **Community reports, verified graph data and Windows Firewall rules are separate concepts.** Axiom does not currently issue paid VM publications or turn community reports directly into OS blocks.
+
+See [threat intelligence](THREAT_INTELLIGENCE.md) and [optional integrations](INTEGRATIONS.md).
+
+## Release modes, operational limitations and tests
+
+- **Portable/Standard:** local monitoring, firewall management subject to Shield setup, Privacy Shield and local features; optional modules are not required.
+- **Complete installation:** explicitly selected installation/configuration of Blackbox, DKG and selected agent hooks, possibly involving downloads, separate prompts and privileges.
+- **Microsoft Store MSIX:** core-only package with optional module installers and agent hooks excluded; see [Store](STORE.md).
+- **Development limitations:** ETW per-process byte-level telemetry is not complete; some per-agent runtime integrations depend on external host behaviour and tests; unsigned portable releases can trigger Windows SmartScreen.
+- **Runtime truth:** health status, hook installed status, graph synchronized status and proven block status must be distinct. No green badge should be inferred merely from a file, listener or report existing.
+
+Historical FND documents and Avalonia migration matrices are planning/baseline records and should not be treated as the current implementation contract. For tests, compare the versioned [test matrix](TEST_MATRIX.md) and [release notes](RELEASES/0.10.23.md).
