@@ -138,6 +138,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     public bool IsAvailable => !DistributionContext.IsStorePackage;
 
+    /// <summary>Truthful enforcement status shown above the host list.</summary>
+    public EnforcementSurfaceState Enforcement => EnforcementSurfaceState.Current;
+
     public IReadOnlyList<string> ActivityFilters { get; } =
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
 
