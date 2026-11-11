@@ -18,12 +18,21 @@ public enum ThreatShareReportStatus
 
     /// <summary>Timeout, missing CLI, node offline or an unknown failure that may succeed later.</summary>
     RetryableFailure = 4,
+
+    /// <summary>
+    /// The reporter ran but its result is unknown (for example a timeout after start). The value may
+    /// already be published, so this is never retried automatically.
+    /// </summary>
+    UnknownOutcome = 5,
 }
 
 public sealed record ThreatShareReportResult(ThreatShareReportStatus Status, string Outcome)
 {
     public bool Submitted =>
         Status is ThreatShareReportStatus.Shared or ThreatShareReportStatus.AlreadyShared;
+
+    /// <summary>True when the attempt may have reached the network without a confirmed result.</summary>
+    public bool Ambiguous => Status == ThreatShareReportStatus.UnknownOutcome;
 }
 
 /// <summary>
@@ -93,31 +102,13 @@ public sealed class ThreatShareCli
             var text = ((await stdoutTask.ConfigureAwait(false)) + "\n" +
                         (await stderrTask.ConfigureAwait(false))).Replace("\r", string.Empty);
 
-            if (text.Contains("Report shared with the community", StringComparison.Ordinal))
-            {
-                return new(ThreatShareReportStatus.Shared, "shared");
-            }
-
-            if (text.Contains("Already shared with the community", StringComparison.Ordinal))
-            {
-                return new(ThreatShareReportStatus.AlreadyShared, "already shared");
-            }
-
-            if (text.Contains("Daily report cap reached", StringComparison.Ordinal))
-            {
-                return new(ThreatShareReportStatus.CapReached, "daily report cap reached");
-            }
-
-            var line = text
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .FirstOrDefault(value => value.Length > 0) ?? $"exit code {process.ExitCode}";
-            return IsPolicyRefusal(text)
-                ? new(ThreatShareReportStatus.Rejected, line)
-                : new(ThreatShareReportStatus.RetryableFailure, line);
+            return Classify(text, process.ExitCode);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new(ThreatShareReportStatus.RetryableFailure, "the Blackbox CLI timed out");
+            return new(
+                ThreatShareReportStatus.UnknownOutcome,
+                "the Blackbox CLI timed out after it started; the report may already be published");
         }
         catch (Exception exception) when (exception is
                      System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
@@ -125,6 +116,53 @@ public sealed class ThreatShareCli
             return new(ThreatShareReportStatus.RetryableFailure, exception.Message);
         }
     }
+
+    /// <summary>
+    /// Maps one reporter run to a result. Unknown text after a completed run is treated as an
+    /// ambiguous outcome, not as a retryable failure: the reporter may already have published.
+    /// </summary>
+    public static ThreatShareReportResult Classify(string text, int exitCode)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        if (text.Contains("Report shared with the community", StringComparison.Ordinal))
+        {
+            return new(ThreatShareReportStatus.Shared, "shared");
+        }
+
+        if (text.Contains("Already shared with the community", StringComparison.Ordinal))
+        {
+            return new(ThreatShareReportStatus.AlreadyShared, "already shared");
+        }
+
+        if (text.Contains("Daily report cap reached", StringComparison.Ordinal))
+        {
+            return new(ThreatShareReportStatus.CapReached, "daily report cap reached");
+        }
+
+        var line = text
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(value => value.Length > 0) ?? $"exit code {exitCode}";
+
+        if (IsPolicyRefusal(text))
+        {
+            return new(ThreatShareReportStatus.Rejected, line);
+        }
+
+        if (IsOffline(text))
+        {
+            return new(ThreatShareReportStatus.RetryableFailure, line);
+        }
+
+        return new(ThreatShareReportStatus.UnknownOutcome, line);
+    }
+
+    private static bool IsOffline(string text) =>
+        text.Contains("not running", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("offline", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("ECONNREFUSED", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("connection refused", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("cannot connect", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsPolicyRefusal(string text) =>
         text.Contains("invalid", StringComparison.OrdinalIgnoreCase) ||

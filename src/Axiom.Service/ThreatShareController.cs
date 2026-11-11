@@ -92,6 +92,9 @@ public sealed class ThreatShareController : IAsyncDisposable
                 var current = _items[index];
                 var now = DateTimeOffset.UtcNow;
                 var attempts = current.Attempts + 1;
+                var submissionKey = string.IsNullOrWhiteSpace(current.SubmissionKey)
+                    ? Guid.NewGuid().ToString("N")
+                    : current.SubmissionKey;
                 _items[index] = request.Submitted
                     ? current with
                     {
@@ -100,24 +103,37 @@ public sealed class ThreatShareController : IAsyncDisposable
                         AttemptedUtc = now,
                         Attempts = attempts,
                         NextAttemptUtc = null,
+                        SubmissionKey = submissionKey,
                     }
-                    : request.Deferred
+                    : request.Ambiguous
                         ? current with
                         {
-                            State = ThreatShareState.Deferred,
-                            Outcome = Trim(request.Outcome, 200),
-                            AttemptedUtc = now,
-                            Attempts = attempts,
-                            NextAttemptUtc = now.AddMinutes(BackoffMinutes(attempts)),
-                        }
-                        : current with
-                        {
-                            State = ThreatShareState.Rejected,
+                            State = ThreatShareState.Unverified,
                             Outcome = Trim(request.Outcome, 200),
                             AttemptedUtc = now,
                             Attempts = attempts,
                             NextAttemptUtc = null,
-                        };
+                            SubmissionKey = submissionKey,
+                        }
+                        : request.Deferred
+                            ? current with
+                            {
+                                State = ThreatShareState.Deferred,
+                                Outcome = Trim(request.Outcome, 200),
+                                AttemptedUtc = now,
+                                Attempts = attempts,
+                                NextAttemptUtc = now.AddMinutes(BackoffMinutes(attempts)),
+                                SubmissionKey = submissionKey,
+                            }
+                            : current with
+                            {
+                                State = ThreatShareState.Rejected,
+                                Outcome = Trim(request.Outcome, 200),
+                                AttemptedUtc = now,
+                                Attempts = attempts,
+                                NextAttemptUtc = null,
+                                SubmissionKey = submissionKey,
+                            };
                 _store.Save(_items);
             }
         }
@@ -224,6 +240,7 @@ public sealed class ThreatShareController : IAsyncDisposable
 
             var pending = _items.Count(item => item.State == ThreatShareState.Pending);
             var deferred = _items.Count(item => item.State == ThreatShareState.Deferred);
+            var unverified = _items.Count(item => item.State == ThreatShareState.Unverified);
             var submitted = _items.Count(item => item.State == ThreatShareState.Submitted);
             var todaySubmitted = _items.Count(item =>
                 item.State == ThreatShareState.Submitted &&
@@ -234,10 +251,11 @@ public sealed class ThreatShareController : IAsyncDisposable
             {
                 Pending = pending,
                 Deferred = deferred,
+                Unverified = unverified,
                 Submitted = submitted,
                 TodaySubmitted = todaySubmitted,
                 DailyLimit = ThreatShareVocabulary.MaxDailySubmissions,
-                Detail = pending == 0 && deferred == 0
+                Detail = pending == 0 && deferred == 0 && unverified == 0
                     ? "No indicator is waiting for review."
                     : $"{pending} waiting for your review, {deferred} deferred after a transient failure; " +
                       "the desktop sends one only when you press Share or Send now.",
