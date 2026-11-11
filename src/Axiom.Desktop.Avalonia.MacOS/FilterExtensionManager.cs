@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Text.Json;
 using Axiom.Presentation;
 
@@ -146,54 +144,27 @@ public sealed class FilterExtensionManager(MacBundleLayout layout)
                 "Move Axiom.app to /Applications first: macOS only activates network filters from there.");
         }
 
-        var startInfo = new ProcessStartInfo(layout.SysextHelperPath)
+        var result = await Axiom.Contracts.ToolProcess.RunAsync(
+            layout.SysextHelperPath,
+            [command, .. arguments],
+            timeout,
+            cancellationToken).ConfigureAwait(false);
+        if (result.TimedOut)
         {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-        startInfo.ArgumentList.Add(command);
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
+            return new FilterExtensionStatus(command, 2, false, "timeout", null, false, false);
         }
 
-        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(timeout);
-        try
+        if (result.ExitCode == Axiom.Contracts.ToolProcessResult.NotStartedExitCode)
         {
-            using var process = Process.Start(startInfo);
-            if (process is null)
-            {
-                return FilterExtensionStatus.Unavailable(command, "axiom-sysext did not start.");
-            }
-
-            var output = process.StandardOutput.ReadToEndAsync(timeoutSource.Token);
-            var error = process.StandardError.ReadToEndAsync(timeoutSource.Token);
-            try
-            {
-                await process.WaitForExitAsync(timeoutSource.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                process.Kill();
-                return new FilterExtensionStatus(command, 2, false, "timeout", null, false, false);
-            }
-
-            var stdout = await output.ConfigureAwait(false);
-            var stderr = await error.ConfigureAwait(false);
-            var status = FilterExtensionStatus.Parse(command, process.ExitCode, stdout);
-            StartupLog.Write(
-                "sysext",
-                $"{command} exit={process.ExitCode} state={status.State} enabled={status.FilterEnabled}" +
-                (status.Ok ? string.Empty : " stderr=" + Tail(stderr)));
-            return status;
+            return FilterExtensionStatus.Unavailable(command, "axiom-sysext could not run: " + result.StandardError);
         }
-        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or IOException)
-        {
-            return FilterExtensionStatus.Unavailable(command, "axiom-sysext could not run: " + exception.Message);
-        }
+
+        var status = FilterExtensionStatus.Parse(command, result.ExitCode, result.StandardOutput);
+        StartupLog.Write(
+            "sysext",
+            $"{command} exit={result.ExitCode} state={status.State} enabled={status.FilterEnabled}" +
+            (status.Ok ? string.Empty : " stderr=" + Tail(result.StandardError)));
+        return status;
     }
 
     private static string Tail(string text)

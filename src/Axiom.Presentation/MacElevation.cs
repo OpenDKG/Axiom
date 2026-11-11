@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Text;
 
 namespace Axiom.Presentation;
@@ -85,7 +83,8 @@ public static class MacElevation
 
     /// <summary>
     /// Shows the administrator dialog and runs <paramref name="shellCommand"/> as root. Returns
-    /// exit code -1 off macOS or when osascript cannot start.
+    /// exit code -1 off macOS or when osascript cannot start. The user may take as long as they
+    /// like at the password dialog, so there is no timeout; cancellation still applies.
     /// </summary>
     public static async Task<MacElevationResult> RunAsync(
         string shellCommand,
@@ -97,36 +96,12 @@ public static class MacElevation
             return new MacElevationResult(-1, string.Empty, "Administrator prompts are only available on macOS.");
         }
 
-        var startInfo = new ProcessStartInfo(OsascriptPath)
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-        startInfo.ArgumentList.Add("-e");
-        startInfo.ArgumentList.Add(BuildAppleScript(shellCommand, prompt));
-
-        try
-        {
-            using var process = Process.Start(startInfo);
-            if (process is null)
-            {
-                return new MacElevationResult(-1, string.Empty, "osascript did not start.");
-            }
-
-            var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var error = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            return new MacElevationResult(
-                process.ExitCode,
-                await output.ConfigureAwait(false),
-                await error.ConfigureAwait(false));
-        }
-        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
-        {
-            return new MacElevationResult(-1, string.Empty, exception.Message);
-        }
+        var result = await Axiom.Contracts.ToolProcess.RunAsync(
+            OsascriptPath,
+            ["-e", BuildAppleScript(shellCommand, prompt)],
+            Timeout.InfiniteTimeSpan,
+            cancellationToken).ConfigureAwait(false);
+        return new MacElevationResult(result.ExitCode, result.StandardOutput, result.StandardError);
     }
 }
 

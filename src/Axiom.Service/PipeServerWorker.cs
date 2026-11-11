@@ -25,11 +25,10 @@ public sealed partial class PipeServerWorker(
     ThreatShareController threatShare,
     ILogger<PipeServerWorker> logger) : BackgroundService
 {
-    [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "Pipe {Pipe} allows SID {Sid}")]
-    private static partial void LogPipe(ILogger logger, string pipe, string sid);
-
-    [LoggerMessage(EventId = 2003, Level = LogLevel.Information, Message = "IPC endpoint {Endpoint} accepts callers {Callers}")]
-    private static partial void LogEndpoint(ILogger logger, string endpoint, string callers);
+    // Windows logs "Pipe \\.\pipe\axiom allows SID S-1-…" (unchanged wording); macOS logs the socket
+    // path and its uid policy through the same message.
+    [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "{Kind} {Endpoint} {Verb} {Callers}")]
+    private static partial void LogEndpoint(ILogger logger, string kind, string endpoint, string verb, string callers);
 
     [LoggerMessage(EventId = 2002, Level = LogLevel.Information, Message = "{Message}")]
     private static partial void LogMessage(ILogger logger, string message);
@@ -37,14 +36,12 @@ public sealed partial class PipeServerWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var allowedCallers = transport.Prepare();
-        if (OperatingSystem.IsWindows())
-        {
-            LogPipe(logger, transport.Endpoint, allowedCallers);
-        }
-        else
-        {
-            LogEndpoint(logger, transport.Endpoint, allowedCallers);
-        }
+        LogEndpoint(
+            logger,
+            OperatingSystem.IsWindows() ? "Pipe" : "IPC endpoint",
+            transport.Endpoint,
+            OperatingSystem.IsWindows() ? "allows SID" : "accepts callers",
+            allowedCallers);
 
         var handlers = new IpcRequestHandlers
         {

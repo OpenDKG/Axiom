@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using System.ComponentModel;
-using System.Diagnostics;
+using Axiom.Contracts;
 
 namespace Axiom.Infrastructure.MacOS.Interop;
 
@@ -16,59 +15,14 @@ public interface IProcessRunner
     ProcessResult Run(string fileName, IReadOnlyList<string> arguments, TimeSpan timeout);
 }
 
+/// <summary>Production runner over the shared <see cref="ToolProcess"/> implementation.</summary>
 public sealed class ProcessRunner : IProcessRunner
 {
     public static ProcessRunner Instance { get; } = new();
 
     public ProcessResult Run(string fileName, IReadOnlyList<string> arguments, TimeSpan timeout)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
-        ArgumentNullException.ThrowIfNull(arguments);
-
-        var startInfo = new ProcessStartInfo(fileName)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = false,
-        };
-
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        try
-        {
-            using var process = Process.Start(startInfo);
-            if (process is null)
-            {
-                return new ProcessResult(-1, string.Empty, $"{fileName} did not start.");
-            }
-
-            var stdout = process.StandardOutput.ReadToEndAsync();
-            var stderr = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(timeout))
-            {
-                try
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-                catch (InvalidOperationException)
-                {
-                    // Already exited.
-                }
-
-                return new ProcessResult(-2, string.Empty, $"{fileName} timed out after {timeout.TotalSeconds:0} s.");
-            }
-
-            process.WaitForExit();
-            return new ProcessResult(process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
-        }
-        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or IOException)
-        {
-            return new ProcessResult(-1, string.Empty, exception.Message);
-        }
+        var result = ToolProcess.Run(fileName, arguments, timeout);
+        return new ProcessResult(result.ExitCode, result.StandardOutput, result.StandardError);
     }
 }
