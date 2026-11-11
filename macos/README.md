@@ -151,6 +151,17 @@ caller's main run loop is not required — but the call blocks, so invoke it fro
 then `Marshal.PtrToStringUTF8` and `axiom_sysext_free`. The library is loaded relative to the
 executable (`@executable_path/libAxiomSysext.dylib`).
 
+**.NET side (done):** `src/Axiom.Desktop.Avalonia.MacOS/SysextLibrary.cs` (`DylibSysextLibrary`) binds these
+entry points, resolving the library from the executable directory only (`DllImportSearchPath.AssemblyDirectory`
++ a `NativeLibrary` resolver), and `FilterExtensionManager` prefers it over the helper: the call runs on a
+dedicated worker thread, the JSON `exitCode` field becomes the same `FilterExtensionStatus` the helper's exit
+code would, and `DllNotFoundException` / `EntryPointNotFoundException` / `BadImageFormatException` (or a missing
+dylib) fall back to `axiom-sysext`. `desktop.log` records `[sysext] <command> via dylib (…)` or `via helper (…)`.
+`scripts/macos/package-app.sh` ships and signs the dylib (identifier `com.axiom.firewall.sysextlib`) and signs
+`Contents/MacOS/Axiom` with `scripts/macos/Axiom.entitlements` (system-extension.install, networkextension, app
+group). Verified in the VM (ad hoc): activation from the main process shows the "“Axiom” Would Like to Filter
+Network Content" prompt and ends `state=activated`; Developer ID remains unverified (no team).
+
 ## `axiom-sysext`
 
 ```text

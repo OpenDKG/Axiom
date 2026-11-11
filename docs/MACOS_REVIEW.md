@@ -36,8 +36,13 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
 4. **Developer ID activation path unproven.** [FILTER HALF DONE 3bae86e: `build.sh` builds `libAxiomSysext.dylib`
    (`axiom_sysext_activate/deactivate/set_filter/status`, JSON out, `SysextCore.swift` shared with the helper) so the
    main `Axiom` process can submit the requests itself; README "Which activation path for Developer ID builds"
-   recommends it and lists the signing contract (`Axiom` signed with `axiom-sysext.entitlements`). .NET P/Invoke +
-   packaging of the dylib are open on the .NET side; Developer ID itself still unverified (no team).] `build.sh` signs `axiom-sysext` as a secondary executable with
+   recommends it and lists the signing contract (`Axiom` signed with `axiom-sysext.entitlements`).] [.NET HALF DONE
+   0ab52e6: `FilterExtensionManager` P/Invokes `libAxiomSysext.dylib` from `Contents/MacOS` (`DylibSysextLibrary`,
+   worker thread, `axiom_sysext_free`), falls back to the `axiom-sysext` child process when the dylib is missing or
+   throws `DllNotFound`/`EntryPointNotFound`/`BadImageFormat`, logs the path used; `package-app.sh` ships + signs the
+   dylib; `Axiom.entitlements` carries `system-extension.install`, `networkextension` and the app group. VM: `activate
+   via dylib … state=activated`, extension `[activated enabled]`, daemon `AxiomFilter connected`. Developer ID itself
+   still unverified (no team).] `build.sh` signs `axiom-sysext` as a secondary executable with
    restricted entitlements (`system-extension.install`, `networkextension`). With SIP on, those need a provisioning
    profile, and `Contents/embedded.provisionprofile` vouches only for the main executable. Ad hoc + SIP off never
    checks this. Fix: submit `OSSystemExtensionRequest` from the main `Axiom` process via a small Swift dylib
@@ -55,7 +60,12 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
    Fix: always rebuild, `AXIOM_VERSION=$VERSION`, `AXIOM_BUILD` from CI, compare cdhash or force on version change.
 6. **Rejected rules are invisible.** [FIXED 9366faa: `filter.rules {generation, applied, rejected:[{id,reason}], error,
    dropped}` after every reload (right after `filter.hello`), and with `error` when the file itself was rejected; §3.2.
-   UI display is the .NET side.] `RuleStore.swift:155` only os_logs a skipped rule; daemon and UI believe it is
+   UI display is the .NET side.] [UI HALF DONE a3bf1b5: `FlowEventParser` parses `filter.rules`, `FilterStatus`
+   keeps the latest report, `rules.query`/`capabilities` expose `capability.filterEnforcement {generation,
+   appliedRuleCount, rejectedRules:[{ruleId,reason}], fileError, droppedEvents}` and `rule.verify` sets
+   `filterRejectionReason` (no effective action); the Firewall page shows "N rule(s) not enforced by the filter" with
+   id + reason and a banner for a rejected file / dropped events. VM: `remoteAddresses:["1.2.3"]` (accepted by the
+   daemon, rejected by the filter) → `screenshots/macos/firewall-rejected-rules.png`.] `RuleStore.swift:155` only os_logs a skipped rule; daemon and UI believe it is
    enforced. Fix: `filter.rules {generation, applied, rejected:[{id,reason}]}` event; show on the Firewall page.
 
 ## Medium
