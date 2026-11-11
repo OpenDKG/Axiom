@@ -11,6 +11,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Axiom.Contracts.Monitoring;
 using Axiom.Infrastructure.Windows.IpHelper;
+using Axiom.Infrastructure.Windows.Network;
 using Axiom.Presentation;
 using Axiom.UI.Avalonia;
 
@@ -96,6 +97,7 @@ public partial class App : Application
             };
             var autostart = new WindowsAutostartService();
             var visualEffects = new WindowsVisualEffectsService();
+            var networkRecovery = new NetworkRecoveryService(new WindowsNetworkRecoveryPlatform());
             var protector = new DpapiApiKeyProtector();
             _shell = new ShellViewModel(
                 source,
@@ -112,7 +114,8 @@ public partial class App : Application
                 new AvaloniaShellActions(() => desktop.Shutdown()),
                 new AvaloniaBlackboxDialogs(() => window, interaction),
                 new Axiom.Persistence.AgentSessionReader(),
-                visualEffects);
+                visualEffects,
+                () => networkRecovery.Restore());
 
             window = new MainWindow { DataContext = _shell };
             _window = window;
