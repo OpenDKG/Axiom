@@ -192,6 +192,8 @@ public sealed class OptionalModuleProbe : IDisposable
             AddIfPresent(root, "version", "version", parts);
             AddIfPresent(root, "peerId", "peer", parts);
             AddIfPresent(root, "nodeRole", "role", parts);
+            AddIfPresent(root, "networkName", "network", parts);
+            AddIfPresent(root, "networkId", "network id", parts);
 
             return parts.Count == 0 ? null : $"Local DKG node: {string.Join(", ", parts)}.";
         }

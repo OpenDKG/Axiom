@@ -8,13 +8,30 @@ using Axiom.Contracts;
 namespace Axiom.Presentation;
 
 /// <summary>
+/// The DKG release Axiom installs. It must match the network the installer initialises: npm's
+/// <c>latest</c> tag is the mainnet build, while testnet uses a different version.
+/// </summary>
+public static class DkgRelease
+{
+    public const string PackageName = "@origintrail-official/dkg";
+
+    public const string PinnedVersion = "10.1.0";
+
+    public const string Network = "testnet";
+
+    public static string PackageSpec => $"{PackageName}@{PinnedVersion}";
+}
+
+/// <summary>
 /// Launches the optional third-party installers only after the UI has shown an explicit warning.
 /// The installers run in a visible PowerShell window so the user can read every step; Axiom does
 /// not hide or silently execute a remote script.
 /// </summary>
 public sealed class OptionalModuleInstaller
 {
-    private const string DkgPackage = "@origintrail-official/dkg@latest";
+    private const string DkgPackageJsonResource = "Axiom.Presentation.Resources.dkg.package.json";
+
+    private const string DkgPackageLockResource = "Axiom.Presentation.Resources.dkg.package-lock.json";
 
     // Pinned vendor installer digest. Update only after reviewing a new official release.
     private const string BlackboxInstallerSha256 = "261122F5E879596E88D63C30D5D36D12B4E155986F83AA3EB83ADEB406E41179";
@@ -60,6 +77,11 @@ public sealed class OptionalModuleInstaller
             return;
         }
 
+        if (!EnsureDkgManifests(null))
+        {
+            return;
+        }
+
         StartPowerShell(BuildDkgScript());
     }
 
@@ -77,6 +99,11 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        if (!EnsureDkgManifests(log))
+        {
+            return false;
+        }
+
         return RunPowerShellScript(BuildDkgScript(), log);
     }
 
@@ -87,24 +114,91 @@ public sealed class OptionalModuleInstaller
             $dkgRoot = '{{Escape(DkgRoot)}}'
             $dkgHome = '{{Escape(DkgHome)}}'
             $dkg = Join-Path $dkgRoot 'node_modules\.bin\dkg.cmd'
+            $dkgVersion = '{{DkgRelease.PinnedVersion}}'
             New-Item -ItemType Directory -Force -Path $dkgRoot, $dkgHome | Out-Null
-            if (-not (Test-Path $dkg)) {
-              Write-Host 'Installing @origintrail-official/dkg (local, --ignore-scripts)...' -ForegroundColor Cyan
-              npm install --prefix $dkgRoot --ignore-scripts --no-fund --no-audit '{{DkgPackage}}'
-              if ($LASTEXITCODE -ne 0) { throw "npm install failed with exit code $LASTEXITCODE" }
+            $packagePath = Join-Path $dkgRoot 'node_modules\@origintrail-official\dkg\package.json'
+            $installed = $null
+            if (Test-Path $packagePath) {
+              try { $installed = (Get-Content $packagePath -Raw | ConvertFrom-Json).version } catch { $installed = $null }
+            }
+            if ($installed -ne $dkgVersion -or -not (Test-Path $dkg)) {
+              if (Test-Path $dkg) {
+                $env:DKG_HOME = $dkgHome
+                Write-Host "Stopping Axiom's DKG $installed before upgrading to $dkgVersion..." -ForegroundColor Yellow
+                & $dkg stop 2>$null | Out-Null
+                Start-Sleep -Seconds 2
+              }
+              Write-Host "Installing pinned @origintrail-official/dkg $dkgVersion from the Axiom lockfile..." -ForegroundColor Cyan
+              npm ci --prefix $dkgRoot --ignore-scripts --no-fund --no-audit
+              if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
             }
             Write-Host 'Building the better-sqlite3 native module for this Node version...' -ForegroundColor Cyan
             npm rebuild better-sqlite3 --prefix $dkgRoot
             if ($LASTEXITCODE -ne 0) { throw "better-sqlite3 rebuild failed with exit code $LASTEXITCODE" }
             $env:DKG_HOME = $dkgHome
             Write-Host 'Starting the official DKG testnet setup. Answer the prompts in this window.' -ForegroundColor Cyan
-            & $dkg init --network testnet --role edge --store oxigraph
+            & $dkg init --network {{DkgRelease.Network}} --role edge --store oxigraph
             if ($LASTEXITCODE -eq 0) {
+              $configPath = Join-Path $dkgHome 'config.json'
+              if (Test-Path $configPath) {
+                try {
+                  $config = Get-Content $configPath -Raw | ConvertFrom-Json
+                  if ($null -eq $config.autoUpdate) {
+                    $config | Add-Member -NotePropertyName autoUpdate -NotePropertyValue ([pscustomobject]@{ enabled = $false; source = 'npm' })
+                  } else {
+                    $config.autoUpdate.enabled = $false
+                  }
+                  [System.IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+                  Write-Host 'DKG auto-update is disabled; Axiom pins the installed version.' -ForegroundColor Yellow
+                } catch {
+                  Write-Warning "Could not disable DKG auto-update: $_"
+                }
+              }
               Write-Host 'Starting the DKG node in the background...' -ForegroundColor Cyan
               Start-Process -FilePath $dkg -WorkingDirectory $dkgRoot -WindowStyle Hidden -ArgumentList @('start')
             }
             Write-Host 'DKG setup finished. Return to Axiom and click Check again.' -ForegroundColor Green
             """;
+    }
+
+    /// <summary>
+    /// Writes the exact npm manifest and lockfile the installer runs. <c>npm ci</c> refuses to run
+    /// without them, and the lockfile fixes transitive packages instead of npm's caret ranges.
+    /// </summary>
+    private bool EnsureDkgManifests(Action<string>? log)
+    {
+        try
+        {
+            Directory.CreateDirectory(DkgRoot);
+            WriteIfChanged(Path.Combine(DkgRoot, "package.json"), ReadEmbedded(DkgPackageJsonResource));
+            WriteIfChanged(Path.Combine(DkgRoot, "package-lock.json"), ReadEmbedded(DkgPackageLockResource));
+            return true;
+        }
+        catch (Exception exception) when (exception is
+                     IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            log?.Invoke("DKG install refused: could not write the pinned npm manifest: " + exception.Message);
+            return false;
+        }
+    }
+
+    private static string ReadEmbedded(string name)
+    {
+        using var stream = typeof(OptionalModuleInstaller).Assembly.GetManifestResourceStream(name)
+            ?? throw new InvalidOperationException($"Embedded resource {name} is missing.");
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+
+    private static void WriteIfChanged(string path, string content)
+    {
+        if (File.Exists(path) &&
+            string.Equals(File.ReadAllText(path), content, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        File.WriteAllText(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
     /// <summary>
