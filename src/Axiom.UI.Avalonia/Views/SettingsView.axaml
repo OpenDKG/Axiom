@@ -10,6 +10,8 @@
             <controls:AxiomSelectableTextBlock Text="Appearance" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <controls:AxiomSelectableTextBlock Text="{Binding CurrentThemeText, StringFormat=Current theme: {0}}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" />
             <WrapPanel Orientation="Horizontal">
+              <Button Content="Axiom Glass Dark" Command="{Binding UseGlassDarkThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes="primary" />
+              <Button Content="Axiom Glass Light" Command="{Binding UseGlassLightThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
               <Button Content="Dark" Command="{Binding UseDarkThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
               <Button Content="Light" Command="{Binding UseLightThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
               <Button Content="Dark Midnight" Command="{Binding UseDarkMidnightThemeCommand}" Padding="14,6" Margin="0,0,8,8" />

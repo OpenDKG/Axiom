@@ -123,7 +123,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     }
 
     public IReadOnlyList<string> Themes { get; } =
-        ["Dark", "Light", "Dark Midnight", "Light Warm"];
+        ["Axiom Glass Dark", "Axiom Glass Light", "Dark", "Light", "Dark Midnight", "Light Warm"];
 
     [ObservableProperty]
     private string _selectedTheme;
@@ -140,6 +140,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             "Light" => UiTheme.Light,
             "Dark Midnight" => UiTheme.DarkMidnight,
             "Light Warm" => UiTheme.LightWarm,
+            "Axiom Glass Light" => UiTheme.GlassLight,
+            "Axiom Glass Dark" => UiTheme.GlassDark,
             _ => UiTheme.Dark,
         });
     }
@@ -174,6 +176,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         UiTheme.Light => "Light",
         UiTheme.DarkMidnight => "Dark Midnight",
         UiTheme.LightWarm => "Light Warm",
+        UiTheme.GlassDark => "Axiom Glass Dark",
+        UiTheme.GlassLight => "Axiom Glass Light",
         _ => "Dark",
     };
 

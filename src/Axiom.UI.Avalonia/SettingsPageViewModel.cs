@@ -240,6 +240,12 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private void UseLightWarmTheme() => _theme.Apply(UiTheme.LightWarm);
 
+    [RelayCommand]
+    private void UseGlassDarkTheme() => _theme.Apply(UiTheme.GlassDark);
+
+    [RelayCommand]
+    private void UseGlassLightTheme() => _theme.Apply(UiTheme.GlassLight);
+
     private void OnThemeChanged(object? sender, EventArgs e) =>
         CurrentThemeText = ThemeLabel(_theme.Current);
 
@@ -248,6 +254,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         UiTheme.Light => "Light",
         UiTheme.DarkMidnight => "Dark Midnight",
         UiTheme.LightWarm => "Light Warm",
+        UiTheme.GlassDark => "Axiom Glass Dark",
+        UiTheme.GlassLight => "Axiom Glass Light",
         _ => "Dark",
     };
 

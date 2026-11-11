@@ -26,7 +26,7 @@ See [authors and attribution](AUTHORS.md), [repository stewardship](docs/REPOSIT
 and [contribution guidelines](CONTRIBUTING.md). These public credits do not replace any applicable
 signed founder or contributor agreements.
 
-![Axiom Overview in the dark theme: live sockets, system-wide throughput and local-only counters](docs/assets/screenshots/overview-dark.png)
+![Axiom Overview in Axiom Glass Dark: live sockets, system-wide throughput and local-only counters](docs/assets/screenshots/axiom-glass-dark-full.png)
 
 Axiom is a local-first Windows network monitor, firewall policy manager and optional AI-agent
 protection console. It shows which applications use the network, which endpoints they talk to, and what
@@ -57,7 +57,8 @@ agent-level guardrails and signed threat-intelligence context respectively.
 - [Install and first-run modes](docs/INSTALL.md) — core vs Complete setup and required privileges.
 - [Architecture](docs/ARCHITECTURE.md) — Avalonia UI, local service, Windows Firewall and optional components.
 - [Security model](docs/SECURITY_MODEL.md) — what stays on-device, what can leave and where protection can fail open.
-- [Threat intelligence lifecycle](docs/THREAT_INTELLIGENCE.md) — Axiom sightings, Blackbox reports, community sharing, verified graph and SWM/VM provenance.
+- [Threat intelligence lifecycle](docs/THREAT_INTELLIGENCE.md) - Axiom sightings, Blackbox reports, community sharing, verified graph and SWM/VM provenance.
+- [Appearance and Axiom Glass](docs/APPEARANCE.md) - themes, current glass styling and what is not yet implemented.
 - [Full historical changelog](docs/CHANGELOG.md) — release-by-release detail from earlier README versions.
 
 > **Do not equate a locally connected module with fresh DKG synchronization, or a signed community report with a verified threat.** Agent hooks can fail open when their local guard is unavailable. A DNS fallback can preserve connectivity while bypassing Privacy Shield filtering.

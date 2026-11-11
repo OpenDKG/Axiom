@@ -14,4 +14,10 @@ public static class AxiomThemeVariants
 
     public static ThemeVariant LightWarm { get; } =
         new("LightWarm", ThemeVariant.Light);
+
+    public static ThemeVariant GlassDark { get; } =
+        new("GlassDark", ThemeVariant.Dark);
+
+    public static ThemeVariant GlassLight { get; } =
+        new("GlassLight", ThemeVariant.Light);
 }
