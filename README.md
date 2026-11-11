@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.21 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.22 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -32,6 +32,13 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.22
+
+- **A module is connected only when it identifies itself.** DKG requires `/api/status` with
+  `version`, `peerId` (`12D3Koo…`), `nodeRole` and a known testnet/mainnet `networkId`; Blackbox
+  requires `/api/graph-status` with `mode`, `node_reachable`, `dkg_url` and `sync_progress`.
+  Anything else on 9200/9700 is reported as `UNKNOWN` instead of a green module.
 
 ## What's in 0.10.21
 
