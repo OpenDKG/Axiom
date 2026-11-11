@@ -41,7 +41,9 @@ enum ExitCode: Int32 {
 }
 
 enum SysextCommand {
-    case activate(force: Bool, wait: Bool)
+    /// `resetFilter`: remove and re-create the NEFilterManager configuration instead of
+    /// updating it in place (see `isAdHocSigned`).
+    case activate(force: Bool, wait: Bool, resetFilter: Bool)
     case deactivate
     case enable
     case disable
@@ -213,6 +215,23 @@ func cdhash(of url: URL) -> String? {
     return unique.map { String(format: "%02x", $0) }.joined()
 }
 
+/// True when this process is ad hoc signed (development builds). An NEFilterManager
+/// configuration is bound to the code signature of the app that saved it; for an ad hoc
+/// signature that is the exact cdhash, so after every rebuild nesessionmanager rejects the
+/// existing configuration ("does not satisfy the code signature requirements") and the filter
+/// never starts. Dev builds therefore re-create the configuration on every activate; Developer
+/// ID signatures satisfy a stable designated requirement and keep theirs.
+func isAdHocSigned() -> Bool {
+    var code: SecCode?
+    guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return false }
+    var staticCode: SecStaticCode?
+    guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return false }
+    var info: CFDictionary?
+    guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+          let dict = info as? [String: Any], let flags = dict[kSecCodeInfoFlags as String] as? UInt32 else { return false }
+    return flags & SecCodeSignatureFlags.adhoc.rawValue != 0
+}
+
 /// Version info of the extension embedded in this app.
 func embeddedExtensionInfo() -> [String: Any]? {
     guard let bundle = Bundle(url: embeddedExtensionURL()) else { return nil }
@@ -287,7 +306,7 @@ func updateFilter(enable: Bool, remove: Bool = false, _ completion: @escaping ([
 
 // MARK: - Commands
 
-private func activate(_ out: SysextResult, queue: DispatchQueue, wait: Bool, force: Bool) {
+private func activate(_ out: SysextResult, queue: DispatchQueue, wait: Bool, force: Bool, resetFilter: Bool) {
     guard let embedded = embeddedExtensionInfo() else {
         out.finish(.error, state: "error",
                    message: "extension not found at \(embeddedExtensionURL().path); run from Axiom.app/Contents/MacOS")
@@ -305,17 +324,30 @@ private func activate(_ out: SysextResult, queue: DispatchQueue, wait: Bool, for
                        message: "Approve Axiom in System Settings > General > Login Items & Extensions > Network Extensions, then run activate again")
         }
     }
+    let reset = resetFilter || isAdHocSigned()
+    out["filterReset"] = reset
     let enableFilter = {
-        out.progress("extension active; enabling content filter")
-        updateFilter(enable: true) { state, error in
-            queue.async {
-                out["filter"] = state
-                if let error {
-                    out.finish(.error, state: "error", message: "extension activated but filter not enabled", error: error)
-                    return
+        let save = {
+            out.progress("extension active; enabling content filter")
+            updateFilter(enable: true) { state, error in
+                queue.async {
+                    out["filter"] = state
+                    if let error {
+                        out.finish(.error, state: "error", message: "extension activated but filter not enabled", error: error)
+                        return
+                    }
+                    out.finish(.ok, state: "activated")
                 }
-                out.finish(.ok, state: "activated")
             }
+        }
+        if reset {
+            out.progress("re-creating the content filter configuration (ad hoc signature / --reset-filter)")
+            updateFilter(enable: false, remove: true) { _, error in
+                if let error { out.progress("removing the old configuration failed: \(describe(error))") }
+                save()
+            }
+        } else {
+            save()
         }
     }
     delegate.onFail = { [unowned delegate] error in
@@ -423,7 +455,8 @@ func runSysextCommand(_ command: SysextCommand, queue: DispatchQueue, timeout: T
         default: break
         }
         switch command {
-        case let .activate(force, wait): activate(out, queue: queue, wait: wait, force: force)
+        case let .activate(force, wait, resetFilter):
+            activate(out, queue: queue, wait: wait, force: force, resetFilter: resetFilter)
         case .deactivate: deactivate(out, queue: queue)
         case .enable: setFilter(out, queue: queue, enable: true)
         case .disable: setFilter(out, queue: queue, enable: false)

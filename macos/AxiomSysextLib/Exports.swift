@@ -14,6 +14,8 @@
 //
 // C signatures:
 //   char *axiom_sysext_activate(int force, int waitForApproval, int timeoutSeconds);
+//         force: always replace the installed extension; bit 2 (value 2) of force = reset the
+//         filter configuration (always done for ad hoc signed callers)
 //   char *axiom_sysext_deactivate(int timeoutSeconds);
 //   char *axiom_sysext_set_filter(int enable, int timeoutSeconds);
 //   char *axiom_sysext_status(int timeoutSeconds);
@@ -42,7 +44,7 @@ private func run(_ command: SysextCommand, timeoutSeconds: Int32) -> UnsafeMutab
 
 @_cdecl("axiom_sysext_activate")
 public func axiom_sysext_activate(_ force: Int32, _ waitForApproval: Int32, _ timeoutSeconds: Int32) -> UnsafeMutablePointer<CChar>? {
-    run(.activate(force: force != 0, wait: waitForApproval != 0), timeoutSeconds: timeoutSeconds)
+    run(.activate(force: force & 1 != 0, wait: waitForApproval != 0, resetFilter: force & 2 != 0), timeoutSeconds: timeoutSeconds)
 }
 
 @_cdecl("axiom_sysext_deactivate")

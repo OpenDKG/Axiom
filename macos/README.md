@@ -134,7 +134,7 @@ vouches for the **main executable** of the bundle. Two layouts satisfy this:
 #### `libAxiomSysext.dylib`
 
 ```c
-char *axiom_sysext_activate(int force, int waitForApproval, int timeoutSeconds);
+char *axiom_sysext_activate(int force, int waitForApproval, int timeoutSeconds);  // force bit 1: replace, bit 2: reset filter config
 char *axiom_sysext_deactivate(int timeoutSeconds);
 char *axiom_sysext_set_filter(int enable, int timeoutSeconds);   // enable / disable
 char *axiom_sysext_status(int timeoutSeconds);                   // 0 = default 15 s
@@ -159,7 +159,7 @@ axiom-sysext activate|deactivate|enable|disable|status [--timeout SECONDS] [--no
 
 | Command | Does |
 |---|---|
-| `activate` | Submits the activation request (install / upgrade; an installed copy with the same version, build **and** cdhash is kept unless `--force`), waits for user approval (up to `--timeout`, default 120 s; `--no-wait` returns exit 3 immediately when approval is needed), then saves and enables the `NEFilterManager` configuration (`filterSockets`, data provider `com.axiom.firewall.filter`, description "Axiom Firewall"). The first enable shows the "Filter Network Content" Allow prompt. |
+| `activate` | Submits the activation request (install / upgrade; an installed copy with the same version, build **and** cdhash is kept unless `--force`), re-creates the filter configuration when the helper is ad hoc signed or `--reset-filter` is given (see "Ad hoc builds and the filter configuration"), waits for user approval (up to `--timeout`, default 120 s; `--no-wait` returns exit 3 immediately when approval is needed), then saves and enables the `NEFilterManager` configuration (`filterSockets`, data provider `com.axiom.firewall.filter`, description "Axiom Firewall"). The first enable shows the "Filter Network Content" Allow prompt. |
 | `deactivate` | Removes the filter configuration, then submits the deactivation request (needs an admin password prompt: run it from the GUI session). |
 | `enable` / `disable` | Only toggles the filter configuration; the extension stays installed. |
 | `status` | No changes or prompts (15 s default timeout). |
@@ -204,6 +204,18 @@ prompts; the old process exits on `stopFilter`. Note that **disabling or replaci
 resets TCP connections that were established while it was active** (observed with and without
 flow reports, e.g. SSH sessions into the Mac drop): run upgrades from a local shell or detached
 (`nohup … &`).
+
+### Ad hoc builds and the filter configuration
+
+The `NEFilterManager` configuration is bound to the code signature of the process that saved
+it. For an ad hoc signature that is the exact cdhash, so after the helper is rebuilt
+`nesessionmanager` logs `Rejecting agent com.axiom.firewall because it does not satisfy the
+code signature requirements` / `Failed to launch com.axiom.firewall`, the filter session never
+starts and all traffic is allowed although `status` says `running`. `activate` therefore
+removes and re-creates the configuration whenever the helper is ad hoc signed (reported as
+`"filterReset": true`; `--reset-filter` forces it for signed builds), which re-shows the "Filter
+Network Content" prompt. Developer ID signatures satisfy a stable designated requirement and
+keep their configuration across upgrades.
 
 ## Behaviour notes (review #23)
 
