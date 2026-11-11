@@ -47,6 +47,20 @@ A context that truthfully describes a blocked/attempted lookup is also needed. U
 exist, Axiom keeps provenance local and does not invent unsupported values or send it to the
 community graph.
 
+## On-demand Check graph
+
+Privacy Shield's blocked-domain rows have a **Graph** action. It asks the local Blackbox dashboard
+(`/api/threat`) for the public, local and community tiers, one bounded request per tier with a
+five-second timeout. Results are cached for ten minutes (at most 256 identifiers), only when the
+user explicitly clicks; nothing runs on the per-connection or refresh path and Axiom never contacts
+a DKG or external endpoint for this lookup.
+
+The dialog shows the tier, category, sources and reporter count when the dashboard returns genuine
+per-indicator evidence. It says **Unknown, not clean** when no entry exists, the dashboard does not
+answer, or an entry has no source/reporter provenance. Axiom does not show VERIFIED or COMMUNITY
+badges from this result, and automatic annotation stays deferred until Umanitek provides a
+documented per-indicator or batch lookup with provenance.
+
 ## Local queue, retries and retention
 
 The service persists candidates in its local threat-share store (currently `threat-share.json`, with a maximum of 500 saved entries). Failed attempts caused by network/node outages, missing CLI or unexpected reporter responses can be marked **deferred** with exponential backoff, starting at five minutes and capped at six hours. A daily reporter cap leaves items pending. **Retries are user-initiated** through **Share** or **Send now** when eligible; the existence of a backoff timestamp does *not* imply an automatic timer will transmit reports.

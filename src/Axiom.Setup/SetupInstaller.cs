@@ -47,9 +47,7 @@ internal static class SetupInstaller
         try
         {
             if (Process.GetProcessesByName("Axiom.Desktop").Length > 0 ||
-                Process.GetProcessesByName("Axiom.Service").Length > 0 ||
-                Process.GetProcessesByName("Netpetra.Desktop").Length > 0 ||
-                Process.GetProcessesByName("Netpetra.Service").Length > 0)
+                Process.GetProcessesByName("Netpetra.Desktop").Length > 0)
             {
                 return new SetupInstallResult(false, "Axiom is running. Close it before installing.", log);
             }
@@ -75,6 +73,7 @@ internal static class SetupInstaller
                 }
 
                 Directory.CreateDirectory(options.InstallDir);
+                StopInstallDirServiceProcesses(options.InstallDir, Report);
                 Report($"Installing to {options.InstallDir}");
 
                 var desktopTarget = Path.Combine(options.InstallDir, "Axiom.Desktop.exe");
@@ -392,6 +391,46 @@ internal static class SetupInstaller
     }
 
     private static string? ExistingOrNull(string path) => File.Exists(path) ? path : null;
+
+    /// <summary>
+    /// A registered Windows service runs from Program Files and is replaced by the elevated service
+    /// installer later, so it must not block a Setup upgrade. Only an interactive service process
+    /// that lives in the selected install directory can lock the files being copied.
+    /// </summary>
+    private static void StopInstallDirServiceProcesses(string installDir, Action<string> report)
+    {
+        var root = Path.GetFullPath(installDir).TrimEnd(Path.DirectorySeparatorChar) +
+                   Path.DirectorySeparatorChar;
+        foreach (var name in new[] { "Axiom.Service", "Netpetra.Service" })
+        {
+            foreach (var process in Process.GetProcessesByName(name))
+            {
+                try
+                {
+                    var path = process.MainModule?.FileName;
+                    if (path is null ||
+                        !Path.GetFullPath(path).StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(3000);
+                    report($"Stopped {name} from the install directory before copying.");
+                }
+                catch (Exception exception) when (exception is
+                             System.ComponentModel.Win32Exception or InvalidOperationException or
+                             NotSupportedException or IOException or UnauthorizedAccessException)
+                {
+                    // The copy below reports a locked file; never kill an unreadable process.
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            }
+        }
+    }
 
     private static void CopyFile(string source, string destination, bool overwrite) =>
         File.Copy(source, destination, overwrite);

@@ -516,8 +516,19 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
 
         try
         {
-            var listDerived = await ListDerivedValuesAsync().ConfigureAwait(true);
-            foreach (var candidate in ThreatShareIocExtractor.Extract(finding, evidence, listDerived))
+            var (available, listDerived) = await ListDerivedValuesAsync().ConfigureAwait(true);
+            if (!available)
+            {
+                StatusText += " Threat-share candidates were not queued because local list " +
+                              "provenance is unavailable; independence cannot be established.";
+                return;
+            }
+
+            foreach (var candidate in ThreatShareIocExtractor.Extract(
+                         finding,
+                         evidence,
+                         listDerived,
+                         provenanceAvailable: true))
             {
                 await _serviceClient
                     .SendAsync<ThreatShareQueueStatus>(
@@ -536,16 +547,16 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
     }
 
     /// <summary>
-    /// Values that local public-list blocks already contain. The analyst must not present the same
-    /// public-list match as an independent sighting; the service's blocked history is the local
-    /// provenance record and is read, never uploaded.
+    /// Values that local public-list blocks already contain, plus whether the lookup itself worked.
+    /// The analyst must not present the same public-list match as an independent sighting; if the
+    /// service cannot answer, the caller fails closed and queues nothing.
     /// </summary>
-    private async Task<IReadOnlySet<string>> ListDerivedValuesAsync()
+    private async Task<(bool Available, IReadOnlySet<string> Values)> ListDerivedValuesAsync()
     {
         var empty = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (_serviceClient is null)
         {
-            return empty;
+            return (false, empty);
         }
 
         try
@@ -557,18 +568,19 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
                     CancellationToken.None)
                 .ConfigureAwait(true);
 
-            return status.BlockedHistory
+            var values = status.BlockedHistory
                 .Where(item => item.Category.HasFlag(PrivacyCategory.Malware))
                 .SelectMany(item => new[] { item.Domain, item.MatchedRule })
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(value => value.TrimEnd('.').ToLowerInvariant())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return (true, values);
         }
         catch (Exception exception) when (exception is
                      ServiceUnavailableException or TimeoutException or
                      System.Text.Json.JsonException or System.IO.IOException)
         {
-            return empty;
+            return (false, empty);
         }
     }
 

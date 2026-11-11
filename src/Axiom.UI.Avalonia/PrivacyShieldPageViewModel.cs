@@ -217,6 +217,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private readonly IUserInteraction _ui;
     private readonly IDnsAdapterHelper _dnsHelper;
     private readonly IUiTimer? _statsTimer;
+    private readonly BlackboxGraphLookup _graphLookup = new();
     private bool _updating;
     private bool _resolverActive;
     private bool _statsRefreshing;
@@ -445,6 +446,23 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     {
         _statsTimer?.StopTimer();
         _statsTimer?.Dispose();
+        _graphLookup.Dispose();
+    }
+
+    [RelayCommand]
+    private async Task CheckGraphAsync(BlockedEventRow? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        var result = await _graphLookup
+            .LookupDomainAsync(row.Domain, CancellationToken.None)
+            .ConfigureAwait(true);
+        await _ui
+            .ShowMessageAsync("Local threat graph lookup", result.Describe(), CancellationToken.None)
+            .ConfigureAwait(true);
     }
 
     [RelayCommand]
