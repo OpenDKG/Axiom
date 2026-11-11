@@ -37,6 +37,17 @@ visible PowerShell window only after a confirmation dialog:
   `/api/graph-status` returns `mode`, `node_reachable`, `dkg_url` and `sync_progress`; another
   listener on 9700 is reported as `UNKNOWN`.
 
+Axiom additionally checks **who owns the listening port**. On Windows the probe reads the owner
+from the IP Helper TCP tables and resolves its name, path and command line without elevation:
+
+- **Process observed**: the port belongs to the module runtime and its path or command line names
+  the module. The status detail shows the process and PID.
+- **Unverified**: the owner could not be read (protected process, non-Windows host). The documented
+  contract still decides the status, but the endpoint is never trusted for settings writes.
+- **Mismatch**: the port belongs to an unrelated process, so the module is reported as `UNKNOWN`
+  even when the JSON looks right. `OptionalModuleStatus.CanReceivePrivilegedSettings` is true only
+  for an observed process; no current code sends settings to these endpoints.
+
 If Blackbox or DKG is installed but not running, its action changes to **Start**; it starts the
 existing dashboard/node without reinstalling. The node/dashboard runs in the background, and child
 console windows created by third-party launchers are hidden. The button changes to **Starting...**

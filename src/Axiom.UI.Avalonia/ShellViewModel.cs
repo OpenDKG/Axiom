@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Agents;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.Modules;
 using Axiom.Contracts.Protection;
 using Axiom.Presentation;
 
@@ -48,7 +49,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         IBlackboxDialogService? blackboxDialogs = null,
         IAgentSessionSource? agentSessions = null,
         IVisualEffectsService? visualEffects = null,
-        Func<NetworkRecoveryResult>? restoreNetwork = null)
+        Func<NetworkRecoveryResult>? restoreNetwork = null,
+        ILoopbackListenerInspector? listenerInspector = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(timers);
@@ -94,7 +96,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             apiKeyProtector ?? new UnsupportedApiKeyProtector(),
             timers,
             shellActions ?? new UnsupportedShellActions(),
-            serviceClient);
+            serviceClient,
+            listenerInspector);
         Agents = new AgentsPageViewModel(
             Security,
             agentSessions,
