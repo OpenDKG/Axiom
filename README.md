@@ -26,7 +26,7 @@ See [authors and attribution](AUTHORS.md), [repository stewardship](docs/REPOSIT
 and [contribution guidelines](CONTRIBUTING.md). These public credits do not replace any applicable
 signed founder or contributor agreements.
 
-![Axiom Overview in the dark theme: live sockets, system-wide throughput and local-only counters](docs/assets/screenshots/overview-dark.png)
+![Axiom Overview in Axiom Glass Dark: live sockets, system-wide throughput and local-only counters](docs/assets/screenshots/axiom-glass-dark-full.png)
 
 Axiom is a local-first Windows network monitor, firewall policy manager and optional AI-agent
 protection console. It shows which applications use the network, which endpoints they talk to, and what
