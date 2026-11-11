@@ -11,7 +11,7 @@ namespace Axiom.UI.Avalonia;
 public sealed class AgentStatsPageViewModel : PageViewModel, IActivatablePage
 {
     public AgentStatsPageViewModel(AgentsPageViewModel agents)
-        : base("Agent Stats", "Recorded agent activity, sessions, hook evidence and findings", "S")
+        : base("Agent Activity", "Recorded agent activity, sessions, hook evidence and findings", "S")
     {
         Agents = agents ?? throw new ArgumentNullException(nameof(agents));
     }

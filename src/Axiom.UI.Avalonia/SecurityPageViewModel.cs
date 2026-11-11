@@ -260,7 +260,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         IUiTimerFactory timers,
         IShellActions shell,
         IServiceRequestClient? serviceClient = null)
-        : base("Security", "Optional intelligence and protection modules", "\uE8D7")
+        : base("Integrations", "Optional modules, API keys and integration health", "\uE8D7")
     {
         ArgumentNullException.ThrowIfNull(ui);
         ArgumentNullException.ThrowIfNull(dialogs);

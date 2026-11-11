@@ -102,7 +102,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         IBlackboxDialogService dialogs,
         IUiTimerFactory timers,
         IServiceRequestClient? serviceClient = null)
-        : base("Agents", "DKG, Blackbox and the workspaces they protect", "\uE99A")
+        : base("Agent Protection", "Hooks, DKG and Blackbox protection for local AI agents", "\uE99A")
     {
         Security = security ?? throw new ArgumentNullException(nameof(security));
         ArgumentNullException.ThrowIfNull(ui);

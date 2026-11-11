@@ -8,6 +8,8 @@ public enum UiTheme
     Light,
     DarkMidnight,
     LightWarm,
+    GlassDark,
+    GlassLight,
 }
 
 /// <summary>Host theme application and persistence.</summary>

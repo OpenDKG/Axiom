@@ -18,7 +18,28 @@ public sealed class TrafficChartControl : Control
     public static readonly StyledProperty<IList<double>?> DownloadSeriesProperty =
         AvaloniaProperty.Register<TrafficChartControl, IList<double>?>(nameof(DownloadSeries));
 
+    public static readonly StyledProperty<IBrush?> GridLineBrushProperty =
+        AvaloniaProperty.Register<TrafficChartControl, IBrush?>(nameof(GridLineBrush));
+
+    public static readonly StyledProperty<IBrush?> UploadBrushProperty =
+        AvaloniaProperty.Register<TrafficChartControl, IBrush?>(nameof(UploadBrush));
+
+    public static readonly StyledProperty<IBrush?> DownloadBrushProperty =
+        AvaloniaProperty.Register<TrafficChartControl, IBrush?>(nameof(DownloadBrush));
+
+    public static readonly StyledProperty<IBrush?> MutedBrushProperty =
+        AvaloniaProperty.Register<TrafficChartControl, IBrush?>(nameof(MutedBrush));
+
     private IBrush _muted = new SolidColorBrush(Color.Parse("#8A98A8"));
+
+    static TrafficChartControl()
+    {
+        AffectsRender<TrafficChartControl>(
+            GridLineBrushProperty,
+            UploadBrushProperty,
+            DownloadBrushProperty,
+            MutedBrushProperty);
+    }
 
     public IList<double>? UploadSeries
     {
@@ -30,6 +51,30 @@ public sealed class TrafficChartControl : Control
     {
         get => GetValue(DownloadSeriesProperty);
         set => SetValue(DownloadSeriesProperty, value);
+    }
+
+    public IBrush? GridLineBrush
+    {
+        get => GetValue(GridLineBrushProperty);
+        set => SetValue(GridLineBrushProperty, value);
+    }
+
+    public IBrush? UploadBrush
+    {
+        get => GetValue(UploadBrushProperty);
+        set => SetValue(UploadBrushProperty, value);
+    }
+
+    public IBrush? DownloadBrush
+    {
+        get => GetValue(DownloadBrushProperty);
+        set => SetValue(DownloadBrushProperty, value);
+    }
+
+    public IBrush? MutedBrush
+    {
+        get => GetValue(MutedBrushProperty);
+        set => SetValue(MutedBrushProperty, value);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -71,10 +116,10 @@ public sealed class TrafficChartControl : Control
         var plotWidth = Math.Max(1, width - paddingLeft - paddingRight);
         var plotHeight = Math.Max(1, height - paddingTop - paddingBottom);
 
-        var gridPen = new Pen(ResolveBrush("Axiom.GridLine", "#2E3A47"), 1);
-        var uploadPen = new Pen(ResolveBrush("Axiom.Upload", "#5EEAD4"), 1.6);
-        var downloadPen = new Pen(ResolveBrush("Axiom.Download", "#1F6FEB"), 1.6);
-        _muted = ResolveBrush("Axiom.TextMuted", "#8A98A8");
+        var gridPen = new Pen(GridLineBrush ?? ResolveBrush("Axiom.GridLine", "#2E3A47"), 1);
+        var uploadPen = new Pen(UploadBrush ?? ResolveBrush("Axiom.Upload", "#5EEAD4"), 1.6);
+        var downloadPen = new Pen(DownloadBrush ?? ResolveBrush("Axiom.Download", "#1F6FEB"), 1.6);
+        _muted = MutedBrush ?? ResolveBrush("Axiom.TextMuted", "#8A98A8");
 
         for (var line = 0; line <= 4; line++)
         {

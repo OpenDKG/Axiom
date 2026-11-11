@@ -233,7 +233,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         IUserInteraction ui,
         IDnsAdapterHelper dnsHelper,
         IUiTimerFactory timers)
-        : base("Privacy Shield", "Local DNS filtering · complete installation enables the resolver", "P")
+        : base("Privacy Shield", "DNS Protection — local DNS filtering; complete installation enables the resolver", "P")
     {
         ArgumentNullException.ThrowIfNull(ui);
         ArgumentNullException.ThrowIfNull(dnsHelper);
