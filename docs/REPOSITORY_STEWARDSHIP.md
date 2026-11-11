@@ -2,15 +2,36 @@
 
 **Status:** Documentation of the current development arrangement. Not a contract or copyright assignment.
 
-## Original project and canonical upstream
+## Project creator
 
-- **Original creator and project initiator:** [@a-51-50](https://github.com/a-51-50).
-- **Canonical upstream repository:** [a-51-50/Axiom](https://github.com/a-51-50/Axiom).
-- **Current repository owner:** the personal GitHub account `a-51-50`.
-- **Project affiliation:** OpenDKG, without a transfer of the canonical repository.
-- **Planned cross-platform collaborators:** [@dreddster](https://github.com/dreddster)
-  and [@brxtrac](https://github.com/brxtrac) for Linux and macOS work. Individual platform
-  assignments must be agreed separately and credits must track actual contributions.
+The original creator, [@a-51-50](https://github.com/a-51-50), is responsible for the canonical
+upstream's overall direction, the initial architecture and lead maintainership. This credit is
+permanent and is not changed by later contributions.
+
+## Core maintainers
+
+**Core Maintainer & Platform Lead:** [@dreddster](https://github.com/dreddster),
+[@brxtrac](https://github.com/brxtrac).
+
+Core maintainers contribute to architecture, platform development, maintenance, testing and review
+within their agreed areas, and should have appropriate collaboration and review opportunities for
+their assigned work. Core maintainership is a technical role; it does not transfer repository
+ownership, copyright, trademarks, signing authority or legal rights.
+
+## Platform responsibility
+
+Platform leads are the primary technical maintainers of their assigned platform implementations:
+platform-specific runtime integration, compatibility, testing, packaging and regression prevention.
+They coordinate shared Core and Avalonia changes rather than independently replacing shared
+implementations. Specific Linux and macOS assignments are recorded only when formally confirmed, so
+this document deliberately keeps the generic Platform Lead role.
+
+## Ownership boundaries
+
+The canonical repository remains [a-51-50/Axiom](https://github.com/a-51-50/Axiom). Project titles do
+not transfer GitHub ownership, copyright, trademarks, signing authority or legal rights, and the
+existing signed founder agreements and contributor obligations are unaffected. The planned OpenDKG
+fork relationship described below is unchanged.
 
 The complete Git history (commits, timestamps and Git author metadata) is the technical record
 of contributions. [AUTHORS.md](../AUTHORS.md) records project origin and credited roles.
@@ -28,6 +49,23 @@ Repository access, copyright and branding rights are separate. Contributor copyr
 with the applicable rightsholders unless valid agreements say otherwise; the
 [GPL-3.0-or-later license](../LICENSE), notices, and any applicable signed agreements
 continue to apply. This document does not amend an existing signed founders' agreement.
+
+### Proposed CODEOWNERS matrix (documented, not applied)
+
+The live [CODEOWNERS](../.github/CODEOWNERS) file keeps its single global entry until platform
+assignments and final directory names are confirmed. A future matrix, to be applied only after
+review, would look like:
+
+| Area | Proposed review request | Status |
+|---|---|---|
+| Linux infrastructure, desktop host, packaging and tests | `@dreddster` after confirmation | proposed |
+| macOS infrastructure, desktop host, Network Extension, packaging and tests | `@brxtrac` after confirmation | proposed |
+| Shared `Axiom.Core`, `Axiom.Contracts`, `Axiom.Presentation`, `Axiom.UI.Avalonia` | `@a-51-50` plus the relevant platform lead | proposed |
+| Repository administration, releases and CI security | `@a-51-50` | current |
+
+CODEOWNERS does not establish legal ownership. Listing several owners requests review from eligible
+owners; it is not a legal or merge-authority grant. Branch protection and rulesets are configured
+separately and must not prevent a platform maintainer from working on their platform.
 
 ## Optional future OpenDKG repository
 

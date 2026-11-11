@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -14,6 +14,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     private readonly IAutostartService _autostart;
     private readonly FirewallPageViewModel? _firewall;
     private readonly IUserInteraction _ui;
+    private readonly IVisualEffectsService _visualEffects;
+    private readonly Func<NetworkRecoveryResult>? _restoreNetwork;
     private readonly StartupSettingsStore _startupSettings = new();
     private bool _updatingStartup;
 
@@ -23,7 +25,9 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         IThemeService theme,
         IAutostartService autostart,
         FirewallPageViewModel? firewall = null,
-        IUserInteraction? userInteraction = null)
+        IUserInteraction? userInteraction = null,
+        IVisualEffectsService? visualEffects = null,
+        Func<NetworkRecoveryResult>? restoreNetwork = null)
         : base("Settings", "Appearance, build and license information", "G")
     {
         ArgumentNullException.ThrowIfNull(monitor);
@@ -33,6 +37,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         _autostart = autostart;
         _firewall = firewall;
         _ui = userInteraction ?? new NullUserInteraction();
+        _visualEffects = visualEffects ?? new FixedVisualEffectsService();
+        _restoreNetwork = restoreNetwork;
 
         CollectorText = monitor.SourceName;
         PollText = $"{monitor.PollInterval.TotalSeconds:0} s · read-only";
@@ -45,6 +51,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
         _theme.Changed += OnThemeChanged;
         CurrentThemeText = ThemeLabel(_theme.Current);
+        _visualEffects.Changed += OnVisualEffectsChanged;
+        CurrentVisualEffectsText = VisualEffectsText();
 
         var startup = _startupSettings.Load();
         _updatingStartup = true;
@@ -87,6 +95,14 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public string AboutContributors => AxiomDocuments.ContributorsLine;
 
+    /// <summary>Creator credited separately from the wider core team.</summary>
+    public ProjectRole AboutFounder => AxiomDocuments.Founder;
+
+    /// <summary>Core maintainers and platform leads shown in About.</summary>
+    public IReadOnlyList<ProjectRole> AboutCoreTeam => AxiomDocuments.CoreTeam;
+
+    public string AboutCoreTeamStatement => AxiomDocuments.CoreTeamStatement;
+
     public string AboutAffiliationLabel => AxiomDocuments.AffiliationLabel;
 
     public string AboutAffiliation => AxiomDocuments.AffiliationText;
@@ -94,6 +110,31 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     public string AboutCopyright => AxiomDocuments.CopyrightLine;
 
     public string AboutLicense => AxiomDocuments.LicenseName;
+
+    /// <summary>One compact legal line: license and collective copyright.</summary>
+    public string AboutLegalLine =>
+        $"{AxiomDocuments.ShortLicenseName} \u00B7 {AxiomDocuments.CopyrightLine}";
+
+    /// <summary>True when the host supplied a restore operation.</summary>
+    public bool HasNetworkRecovery => _restoreNetwork is not null;
+
+    [ObservableProperty]
+    private string _networkRecoveryStatusText = string.Empty;
+
+    /// <summary>Restores the saved DNS servers and removes the captured Axiom-owned rules.</summary>
+    [RelayCommand]
+    private void RestoreNetworkSettings()
+    {
+        if (_restoreNetwork is null)
+        {
+            return;
+        }
+
+        var result = _restoreNetwork();
+        NetworkRecoveryStatusText = result.Succeeded
+            ? $"Restored {result.AdaptersRestored} adapter(s); removed {result.RulesRemoved} Axiom rule(s)."
+            : "Restore incomplete: " + string.Join(" ", result.Problems);
+    }
 
     public string AboutSource => AxiomDocuments.SourceUrl;
 
@@ -117,6 +158,14 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private Task OpenAffiliationAsync() => OpenExternalAsync(AxiomDocuments.AffiliationUrl, "OpenDKG", "website");
 
+    /// <summary>Opens a maintainer's GitHub profile through the existing external-link path.</summary>
+    [RelayCommand]
+    private Task OpenProfileAsync(string? url) =>
+        OpenExternalAsync(
+            string.IsNullOrWhiteSpace(url) ? AxiomDocuments.SourceUrl : url,
+            "GitHub profile",
+            "profile");
+
     private async Task OpenExternalAsync(string url, string title, string label)
     {
         try
@@ -134,6 +183,10 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private string _currentThemeText = "Dark";
+
+    /// <summary>Selected effects level plus the backdrop the host actually reported.</summary>
+    [ObservableProperty]
+    private string _currentVisualEffectsText = "Visual effects: Auto";
 
     [ObservableProperty]
     private bool _trayNotificationsEnabled = true;
@@ -226,7 +279,30 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         UpdateStartupStatus();
     }
 
-    public void Dispose() => _theme.Changed -= OnThemeChanged;
+    public void Dispose()
+    {
+        _theme.Changed -= OnThemeChanged;
+        _visualEffects.Changed -= OnVisualEffectsChanged;
+    }
+
+    [RelayCommand]
+    private void UseAutoEffects() => _visualEffects.Apply(VisualEffects.Auto);
+
+    [RelayCommand]
+    private void UseFullEffects() => _visualEffects.Apply(VisualEffects.Full);
+
+    [RelayCommand]
+    private void UseReducedEffects() => _visualEffects.Apply(VisualEffects.Reduced);
+
+    [RelayCommand]
+    private void UseNoEffects() => _visualEffects.Apply(VisualEffects.Off);
+
+    private void OnVisualEffectsChanged(object? sender, EventArgs e) =>
+        CurrentVisualEffectsText = VisualEffectsText();
+
+    private string VisualEffectsText() =>
+        $"Visual effects: {VisualEffectsLabels.Label(_visualEffects.Current)}. " +
+        $"Backdrop: {_visualEffects.BackdropStatus}.";
 
     [RelayCommand]
     private void UseDarkTheme() => _theme.Apply(UiTheme.Dark);
@@ -240,6 +316,12 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private void UseLightWarmTheme() => _theme.Apply(UiTheme.LightWarm);
 
+    [RelayCommand]
+    private void UseGlassDarkTheme() => _theme.Apply(UiTheme.GlassDark);
+
+    [RelayCommand]
+    private void UseGlassLightTheme() => _theme.Apply(UiTheme.GlassLight);
+
     private void OnThemeChanged(object? sender, EventArgs e) =>
         CurrentThemeText = ThemeLabel(_theme.Current);
 
@@ -248,6 +330,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         UiTheme.Light => "Light",
         UiTheme.DarkMidnight => "Dark Midnight",
         UiTheme.LightWarm => "Light Warm",
+        UiTheme.GlassDark => "Axiom Glass Dark",
+        UiTheme.GlassLight => "Axiom Glass Light",
         _ => "Dark",
     };
 

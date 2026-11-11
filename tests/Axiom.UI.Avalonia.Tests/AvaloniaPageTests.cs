@@ -12,14 +12,14 @@ namespace Axiom.UI.Avalonia.Tests;
 public sealed class AvaloniaPageTests
 {
     [Fact]
-    public void Shell_exposes_all_eleven_parity_pages()
+    public void Shell_exposes_all_navigation_pages()
     {
         var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
 
         Assert.Equal(12, shell.Pages.Count);
-        Assert.Contains(shell.Pages, page => page.Title == "Security");
-        Assert.Contains(shell.Pages, page => page.Title == "Agents");
-        Assert.Contains(shell.Pages, page => page.Title == "Agent Stats");
+        Assert.Contains(shell.Pages, page => page.Title == "Integrations");
+        Assert.Contains(shell.Pages, page => page.Title == "Agent Protection");
+        Assert.Contains(shell.Pages, page => page.Title == "Agent Activity");
         Assert.False(shell.IsServiceMode);
 
         shell.Dispose();
@@ -32,20 +32,42 @@ public sealed class AvaloniaPageTests
 
         Assert.Equal(
             [
-                "Overview",
-                "Agents",
-                "Agent Stats",
-                "Security",
-                "Privacy Shield",
-                "Firewall",
-                "AI Analyst",
-                "Connections",
+                "Dashboard",
+                "Live Connections",
                 "Applications",
-                "Events",
-                "Support",
+                "Network Events",
+                "Network Control",
+                "Privacy Shield",
+                "Agent Protection",
+                "Agent Activity",
+                "AI Analyst",
+                "Integrations",
                 "Settings",
+                "Help & Support",
             ],
             shell.Pages.Select(page => page.Title));
+
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void Navigation_groups_start_on_the_expected_pages()
+    {
+        var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
+
+        var groups = shell.Pages
+            .Where(page => page.HasGroupLabel)
+            .Select(page => (page.Title, page.GroupLabel))
+            .ToArray();
+
+        Assert.Equal(
+            [
+                ("Dashboard", "MONITORING"),
+                ("Network Control", "PROTECTION"),
+                ("AI Analyst", "INTELLIGENCE"),
+                ("Settings", "GENERAL"),
+            ],
+            groups);
 
         shell.Dispose();
     }

@@ -95,6 +95,6 @@ Other offline limits:
 
 Local history (including network metadata, blocked DNS events, AI findings and agent-guard audit records) is **not** a public dataset. Only explicitly approved, normalized indicators may be passed to the external Blackbox reporter. Axiom must not submit private network addresses, loopback or local hostnames, raw DNS browsing history, prompts, command lines, credentials, tokens, file paths, model content or session identifiers as community intelligence.
 
-The URL sharing path discards userinfo, query strings and fragments; it also rejects private, loopback and local destinations. External optional integrations may still make network requests when enabled. The DKG node itself can communicate with peers; localhost-only Axiom status/API calls are **not** proof that the whole integration is offline or network-silent.
+The URL sharing path discards userinfo, query strings and fragments; it also rejects private, loopback and local destinations. A URL with any non-root path is rejected by default, because paths can contain account, document or session identifiers; only a domain or root URL is shareable, and no path opt-in ships yet. External optional integrations may still make network requests when enabled. The DKG node itself can communicate with peers; localhost-only Axiom status/API calls are **not** proof that the whole integration is offline or network-silent.
 
 See [Security model](SECURITY_MODEL.md), [Privacy Shield](PRIVACY_SHIELD.md) and [Integrations](INTEGRATIONS.md).

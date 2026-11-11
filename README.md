@@ -13,20 +13,33 @@
 > your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
 > and keep a recovery path.
 
-## Project origin and stewardship
+## Project Leadership & Core Team
 
-**Original creator and project initiator:** [@a-51-50](https://github.com/a-51-50).
-The canonical Axiom source repository remains [a-51-50/Axiom](https://github.com/a-51-50/Axiom).
-Axiom is affiliated with OpenDKG, but affiliation does not transfer the repository or copyright.
-Linux and macOS development is planned with contributions from [@dreddster](https://github.com/dreddster)
-and [@brxtrac](https://github.com/brxtrac); individual changes are attributed through commits and
-pull requests, and specific platform responsibilities are not assigned by this notice.
+**Axiom** is an independent, community-oriented open-source network and AI-agent security project.
 
-See [authors and attribution](AUTHORS.md), [repository stewardship](docs/REPOSITORY_STEWARDSHIP.md)
-and [contribution guidelines](CONTRIBUTING.md). These public credits do not replace any applicable
-signed founder or contributor agreements.
+**Founder, Creator & Lead Maintainer**
 
-![Axiom Overview in Axiom Glass Dark: live sockets, system-wide throughput and local-only counters](docs/assets/screenshots/axiom-glass-dark-full.png)
+- [@a-51-50](https://github.com/a-51-50) - original project creator, architecture and lead maintainership.
+
+**Core Maintainers & Platform Leads**
+
+- [@dreddster](https://github.com/dreddster) - Core Maintainer & Platform Lead.
+- [@brxtrac](https://github.com/brxtrac) - Core Maintainer & Platform Lead.
+
+The Core Team collaborates on Axiom's development across Windows, Linux and macOS, with platform
+responsibilities documented as they are formally assigned.
+
+The canonical upstream repository remains [a-51-50/Axiom](https://github.com/a-51-50/Axiom).
+
+Axiom is affiliated with [OpenDKG](https://github.com/OpenDKG), but the affiliation does not transfer
+repository ownership or copyright.
+
+For detailed attribution and maintainership, see [AUTHORS.md](AUTHORS.md) and
+[Repository Stewardship](docs/REPOSITORY_STEWARDSHIP.md).
+
+> These public credits do not replace any applicable signed founder or contributor agreements.
+
+![Axiom Dashboard in Axiom Glass Dark: live sockets, system-wide throughput and local-only counters](docs/assets/screenshots/axiom-glass-dark-full.png)
 
 Axiom is a local-first Windows network monitor, firewall policy manager and optional AI-agent
 protection console. It shows which applications use the network, which endpoints they talk to, and what
@@ -57,7 +70,8 @@ agent-level guardrails and signed threat-intelligence context respectively.
 - [Install and first-run modes](docs/INSTALL.md) — core vs Complete setup and required privileges.
 - [Architecture](docs/ARCHITECTURE.md) — Avalonia UI, local service, Windows Firewall and optional components.
 - [Security model](docs/SECURITY_MODEL.md) — what stays on-device, what can leave and where protection can fail open.
-- [Threat intelligence lifecycle](docs/THREAT_INTELLIGENCE.md) — Axiom sightings, Blackbox reports, community sharing, verified graph and SWM/VM provenance.
+- [Threat intelligence lifecycle](docs/THREAT_INTELLIGENCE.md) - Axiom sightings, Blackbox reports, community sharing, verified graph and SWM/VM provenance.
+- [Appearance and Axiom Glass](docs/APPEARANCE.md) - themes, current glass styling and what is not yet implemented.
 - [Full historical changelog](docs/CHANGELOG.md) — release-by-release detail from earlier README versions.
 
 > **Do not equate a locally connected module with fresh DKG synchronization, or a signed community report with a verified threat.** Agent hooks can fail open when their local guard is unavailable. A DNS fallback can preserve connectivity while bypassing Privacy Shield filtering.
