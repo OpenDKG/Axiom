@@ -40,14 +40,36 @@ pass except the 10 pre-existing Windows-path failures in `Axiom.Core.Tests`; `Ax
 | O | Privacy Shield via IPC, uninstall with the shield on | PASS | `privacy.configure {"enabled":true}` → `"state":"Active"`, `networksetup -getdnsservers Ethernet` = `127.0.0.1`, doctor: `dns: 'Ethernet' = 127.0.0.1 (Privacy Shield)`, `dns backup … present (2 service(s))`, `privacy-shield-dns-backup.json mode=600`. `sudo axiomd --uninstall-service` → `restore 'Ethernet' -> automatic: ok`, `Restored system DNS from the Privacy Shield backup.`, `Removed /Library/PrivilegedHelperTools/com.axiom.service.`, `Stopped and removed system/com.axiom.service.`; afterwards no DNS servers set, helper dir and plist gone, `launchctl print` → not found. Reinstall → shield still enabled, DNS back to `127.0.0.1`; `privacy.configure {"enabled":false}` → "There aren't any DNS Servers set on Ethernet." |
 | P | App still sees the daemon | PASS | Overview page after the reinstall: status bar `Service (Unix socket)`, `Service monitor` green, `IPC: local service · contract v1`, `Protection: ON`; `screenshots/macos/overview-hardened.png`. |
 
+## Medium/Low review items (.NET side) — VM evidence
+
+Same VM (macOS Sequoia 15.8.3 x86_64, user `dev` uid 501). Commits 99ce513 (#8/#9), 5d5189e (#7), 2ac3c5f (#10 + test gaps),
+0016a09 (#18), 8c7f12a (#19), ca8b752 (#20), a7b9934 (#22), 11871d6 (#15/#21/#25), da36443 + 4852dfa + 97c0a80 (#16),
+2e21bca (install retry, Overview wording). Gate: `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true`
+0 errors / 0 warnings; `Axiom.Infrastructure.MacOS.Tests` 146 passed (+4 files), `Axiom.Desktop.Avalonia.MacOS.Tests` 22,
+`Axiom.UI.Avalonia.Tests` 29, `Axiom.Presentation.Tests` 24, `Axiom.McpServer.Tests` 33, `Axiom.Persistence.Tests` 18;
+pre-existing Linux-only failures unchanged: `Axiom.Core.Tests` 10, `Axiom.Service.Tests` 7 (FirewallRuleCoordinator + a
+`FileShare.None` test that only holds on Windows), `Axiom.Infrastructure.Windows.Tests` 19.
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| Q | #9 plist + log rotation after `--install-service` | PASS | `/Library/LaunchDaemons/com.axiom.service.plist`: `KeepAlive` → `<dict><key>SuccessfulExit</key><false/></dict>`, `ThrottleInterval` → `10`. `/etc/newsyslog.d/com.axiom.service.conf`: `/Library/Logs/Axiom/axiomd.log root:wheel 644 5 5120 * J`. Installer prints `Log rotation: /etc/newsyslog.d/com.axiom.service.conf (5 MB, keep 5, compressed).` |
+| R | `axiomd --doctor` as root after the upgrade | PASS | All lines `PASS`, `Result: all checks passed.` |
+| S | #8 `axiomd --restore-dns` without the daemon | PASS (real incident) | A redeploy hit `launchctl bootstrap failed (5): Input/output error` (launchd still tearing the old job down) with the shield on: DNS stayed at `127.0.0.1` with no daemon. `sudo axiomd --restore-dns` → `restore 'Ethernet' -> automatic: ok`, `Restored system DNS from the Privacy Shield backup.`, exit 0; `networksetup -getdnsservers Ethernet` → "There aren't any DNS Servers set", `dig example.com` resolves. Follow-up fix 2e21bca: `--install-service` polls `launchctl print` until the job is gone (≤15 s) and retries `bootstrap` up to 8× every 2 s. |
+| T | #7 upstream rediscovery | PASS (poll proven; swap by unit test) | With the shield on, `axiomd.log`: `Privacy Shield DNS: upstream rediscovery active: every 10 s, every 2 s after 3 consecutive upstream failures`, then `upstreams unchanged (10.0.2.3:53) after 3 consecutive failures` (the fast path ran while the daemon came up). A live resolver change could not be simulated: `sudo networksetup -setdnsservers` is blocked by the host approval guard; the swap path (`Decide`, failure-streak cadence, loopback → backup servers, `UpdateUpstreams` without restarting the listener) is covered by `UpstreamRediscoveryTests` (7 tests). |
+| U | #20 per-uid cap | PASS | As `dev`: 4 idle Unix-socket connections held open, 5th `axipc serviceHealth` → `null` (closed without reply); `axiomd.log`: `Rejected IPC client uid:501: more than 4 concurrent connections`; after closing one idle socket the next request answers `"status": "running"`. |
+| V | #16 packaging | PASS | On the VM: `signed 229 files` under `Contents/MacOS` (codesign treats that directory as code), Mach-O only (18) under `Resources/service`, no `--timestamp` for ad hoc, `codesign --verify --deep --strict` ok; `build/macos/osx-x64/Axiom.pkg` (87 MB, `pkgutil --check-signature` → no signature, as documented without `AXIOM_INSTALLER_IDENTITY`). dSYM step is Developer-ID-only and could not run (ad hoc). |
+| W | #25 AppleScript quit | DOCUMENTED | `osascript -e 'quit app "Axiom"'` → `execution error: Axiom got an error: User canceled. (-128)` but the app does quit (`pgrep -x Axiom` empty 3 s later). Avalonia's `applicationShouldTerminate` answers `NSTerminateCancel` and shuts down itself; the reply code is an Avalonia-level behaviour, not fixable in the app without a native hook. Harmless (deploy scripts use `|| true`). |
+| X | #15 autostart plist | UNIT-TESTED | No LaunchAgent is enabled in the VM (Settings toggle not exercised); `MacHostTests` writes the plist and asserts `ProgramArguments` = `/usr/bin/open -b com.axiom.firewall --args --autostart`, the stale-path repair and the bare-executable fallback. |
+| Y | #25 state-aware UI | SEE BELOW | Menu-bar menu and Overview with the shield on: `screenshots/macos/menu-state-aware.png`, `screenshots/macos/overview-protection-active.png`. |
+
 ## Known limitations
 
 - Tested only in an Intel (x86_64) VM; Apple silicon (`osx-arm64`) is built but untested.
 - Ad hoc signed with SIP off and developer mode on; Developer ID signing, provisioning profiles and notarization need an Apple Developer team with the Network Extension capability.
-- The menu-bar menu keeps offering "Install Background Service…" and "Turn On Network Filter…" while both already run (harmless re-run; cosmetic).
+- `osascript -e 'quit app "Axiom"'` reports -128 (User canceled) although the app quits (Avalonia terminate reply).
 - ICMP is not filterable (the content filter sees TCP/UDP socket flows only).
 - Enabling, disabling or upgrading the filter drops TCP connections that were established while it was active (macOS behaviour).
 - Blocked TCP connections fail with a connect timeout, not a reset.
-- Privacy Shield redirects every enabled network service, including ones without an active interface; all are restored on disable.
+- Privacy Shield redirects enabled services whose interface is active plus services with no known device/status (conservative); all are restored on disable.
 - Agent protection config paths are assumed to be the same as the Windows equivalents under `~`; they were not individually verified on macOS.
 - The optional DKG and Blackbox installers are PowerShell-only and not available on macOS (the Agents page shows them as not running).

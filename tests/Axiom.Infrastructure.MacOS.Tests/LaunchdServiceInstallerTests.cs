@@ -45,7 +45,7 @@ public sealed class LaunchdServiceInstallerTests
     {
         using var temp = new TempDirectory();
         var layout = Layout(temp);
-        var runner = new FakeRunner();
+        var runner = new FakeRunner().On("launchctl print", "Could not find service", 113);
         var output = new StringWriter();
 
         Assert.Equal(5, new LaunchdServiceInstaller(runner, layout, () => false, () => null).RestoreDns(TextWriter.Null, TextWriter.Null));
@@ -62,7 +62,7 @@ public sealed class LaunchdServiceInstallerTests
         Directory.CreateDirectory(Path.GetDirectoryName(layout.DnsBackupPath)!);
         File.WriteAllText(layout.DnsBackupPath, """{"schemaVersion":1,"services":[{"name":"Ethernet","servers":["10.0.2.3"]}],"upstreams":["10.0.2.3"]}""");
         var dns = new Dictionary<string, string> { ["Ethernet"] = "127.0.0.1" };
-        var runner = new FakeRunner()
+        var runner = new FakeRunner().On("launchctl print", "Could not find service", 113)
             .On("networksetup -listallnetworkservices", "An asterisk (*) denotes that a network service is disabled.\nEthernet\n")
             .On("networksetup -getdnsservers", arguments => new ProcessResult(0, dns[arguments[1]] + "\n", string.Empty))
             .On("networksetup -setdnsservers", arguments =>
@@ -106,7 +106,7 @@ public sealed class LaunchdServiceInstallerTests
         File.SetUnixFileMode(exe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
         File.WriteAllText(Path.Combine(bundle, "Axiom.Core.dll"), "dll");
         File.WriteAllText(Path.Combine(bundle, "sub", "data.json"), "{}");
-        var runner = StatAsRoot(new FakeRunner());
+        var runner = StatAsRoot(new FakeRunner().On("launchctl print", "Could not find service", 113));
         var installer = new LaunchdServiceInstaller(runner, layout, () => true, () => 501);
 
         var output = new StringWriter();
@@ -171,7 +171,7 @@ public sealed class LaunchdServiceInstallerTests
         Directory.CreateDirectory(bundle);
         var exe = Path.Combine(bundle, "axiomd");
         File.WriteAllText(exe, "x");
-        var runner = new FakeRunner().On("stat", arguments =>
+        var runner = new FakeRunner().On("launchctl print", "Could not find service", 113).On("stat", arguments =>
             new ProcessResult(0, string.Join('\n', arguments.Skip(2).Select(path => $"501 20 {(Directory.Exists(path) ? "40755" : "100755")} {path}")), string.Empty));
         var error = new StringWriter();
 
@@ -190,7 +190,7 @@ public sealed class LaunchdServiceInstallerTests
     {
         using var temp = new TempDirectory();
         var layout = Layout(temp);
-        var runner = new FakeRunner();
+        var runner = new FakeRunner().On("launchctl print", "Could not find service", 113);
 
         Assert.Equal(5, new LaunchdServiceInstaller(runner, layout, () => false, () => null).Install("/x", TextWriter.Null, TextWriter.Null));
         Assert.Equal(2, new LaunchdServiceInstaller(runner, layout, () => true, () => null).Install(Path.Combine(temp.Path, "missing"), TextWriter.Null, TextWriter.Null));

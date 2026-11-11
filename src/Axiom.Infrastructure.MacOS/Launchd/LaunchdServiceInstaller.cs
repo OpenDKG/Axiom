@@ -209,6 +209,7 @@ public sealed class LaunchdServiceInstaller
 
             // Stop the running instance (upgrade); "not loaded" is expected on first install.
             _runner.Run(Launchctl, ["bootout", ServiceTarget], ToolTimeout);
+            WaitForJobRemoval();
 
             if (staged is not null)
             {
@@ -240,10 +241,12 @@ public sealed class LaunchdServiceInstaller
 
         _runner.Run(Launchctl, ["enable", ServiceTarget], ToolTimeout);
         var bootstrap = _runner.Run(Launchctl, ["bootstrap", "system", _options.PlistPath], ToolTimeout);
-        if (!bootstrap.Succeeded)
+        for (var attempt = 1; attempt < BootstrapAttempts && !bootstrap.Succeeded; attempt++)
         {
-            // launchd may still be tearing the old job down; retry once.
-            Thread.Sleep(TimeSpan.FromSeconds(1));
+            // "Bootstrap failed: 5: Input/output error" while launchd is still tearing the old job
+            // down (its shutdown restores DNS first). A failed bootstrap with the shield on would
+            // strand DNS at 127.0.0.1, so keep trying for a while.
+            Thread.Sleep(BootstrapRetryDelay);
             bootstrap = _runner.Run(Launchctl, ["bootstrap", "system", _options.PlistPath], ToolTimeout);
         }
 
@@ -470,6 +473,29 @@ public sealed class LaunchdServiceInstaller
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(path, mode);
+        }
+    }
+
+    private const int BootstrapAttempts = 8;
+
+    private static readonly TimeSpan BootstrapRetryDelay = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// After <c>bootout</c> returns, launchd may still hold the job while the old daemon exits
+    /// (DNS restore, socket cleanup). Poll <c>launchctl print</c> until it no longer finds the job,
+    /// at most ~15 s, so the subsequent <c>bootstrap</c> does not fail with EIO.
+    /// </summary>
+    private void WaitForJobRemoval()
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            var print = _runner.Run(Launchctl, ["print", ServiceTarget], ToolTimeout);
+            if (!print.Succeeded)
+            {
+                return;
+            }
+
+            Thread.Sleep(500);
         }
     }
 

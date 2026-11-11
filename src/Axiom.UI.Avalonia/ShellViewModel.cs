@@ -84,7 +84,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             interaction,
             dnsAdapterHelper ?? new UnsupportedDnsAdapterHelper(),
             timers);
-        Overview.ProtectionActive = () => PrivacyShield.IsResolverActive || Firewall.WritesEnabled;
+        // Review #25: the Overview line follows the same state as the "SHIELD ON" badge.
+        Overview.ProtectionActive = () => _protection is { Enabled: true } || PrivacyShield.IsResolverActive || Firewall.WritesEnabled;
         Security = new SecurityPageViewModel(
             interaction,
             securityDialogs ?? new UnsupportedSecurityDialogs(),
