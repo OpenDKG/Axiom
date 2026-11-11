@@ -14,7 +14,7 @@ public sealed class ThreatShareIocExtractorTests
         var finding = Finding(
             new AiIndicator { Type = "ip", Value = "8.8.8.8", Role = "malicious" },
             new AiIndicator { Type = "domain", Value = "c2.example.org", Role = "malicious" },
-            new AiIndicator { Type = "url", Value = "https://c2.example.org/drop", Role = "malicious" },
+            new AiIndicator { Type = "url", Value = "https://c2.example.org", Role = "malicious" },
             new AiIndicator { Type = "hash", Value = Sha256, Role = "malicious" });
 
         var candidates = ThreatShareIocExtractor.Extract(
@@ -23,7 +23,7 @@ public sealed class ThreatShareIocExtractorTests
 
         Assert.Contains(candidates, candidate => candidate.IndicatorType == "ip" && candidate.Value == "8.8.8.8");
         Assert.Contains(candidates, candidate => candidate.IndicatorType == "domain" && candidate.Value == "c2.example.org");
-        Assert.Contains(candidates, candidate => candidate.IndicatorType == "url" && candidate.Value == "https://c2.example.org/drop");
+        Assert.Contains(candidates, candidate => candidate.IndicatorType == "url" && candidate.Value == "https://c2.example.org");
         Assert.DoesNotContain(candidates, candidate => candidate.IndicatorType == "hash");
         Assert.All(candidates, candidate =>
         {
@@ -31,6 +31,20 @@ public sealed class ThreatShareIocExtractorTests
             Assert.Equal("in-tool-output", candidate.Context);
             Assert.Contains("Axiom observed", candidate.Detail, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public void Url_path_is_not_shared_by_default()
+    {
+        var finding = Finding(
+            new AiIndicator
+            {
+                Type = "url",
+                Value = "https://c2.example.org/private/account?token=abc",
+                Role = "malicious",
+            });
+
+        Assert.Empty(ThreatShareIocExtractor.Extract(finding, Evidence("c2.example.org:443")));
     }
 
     [Fact]
