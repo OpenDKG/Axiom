@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Agents;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Contracts.Protection;
 using Axiom.Presentation;
 
@@ -48,7 +49,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         IBlackboxDialogService? blackboxDialogs = null,
         IAgentSessionSource? agentSessions = null,
         IVisualEffectsService? visualEffects = null,
-        Func<NetworkRecoveryResult>? restoreNetwork = null)
+        Func<CancellationToken, Task<NetworkRecoveryRestoreResult>>? restoreNetwork = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(timers);

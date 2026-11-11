@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Net;
-using System.Net.NetworkInformation;
-using System.Net.Sockets;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
@@ -13,8 +10,8 @@ using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Infrastructure.Windows.IpHelper;
-using Axiom.Infrastructure.Windows.Network;
 using Axiom.Presentation;
 using Axiom.UI.Avalonia;
 
@@ -100,7 +97,15 @@ public partial class App : Application
             };
             var autostart = new WindowsAutostartService();
             var visualEffects = new WindowsVisualEffectsService();
-            var networkRecovery = new NetworkRecoveryService(new WindowsNetworkRecoveryPlatform());
+            NetworkRecoveryClient? networkRecovery = null;
+            if (serviceClient is not null)
+            {
+                // Recovery needs the service because firewall and DNS writes require elevation.
+                // It uses a longer request timeout than the read-only UI commands.
+                networkRecovery = new NetworkRecoveryClient(
+                    new ServicePipeClient(requestTimeout: NetworkRecoveryClient.DefaultRequestTimeout));
+            }
+
             var protector = new DpapiApiKeyProtector();
             _shell = new ShellViewModel(
                 source,
@@ -118,7 +123,7 @@ public partial class App : Application
                 new AvaloniaBlackboxDialogs(() => window, interaction),
                 new Axiom.Persistence.AgentSessionReader(),
                 visualEffects,
-                () => networkRecovery.Restore());
+                networkRecovery is null ? null : networkRecovery.RestoreAsync);
 
             window = new MainWindow { DataContext = _shell };
             _window = window;
@@ -142,15 +147,7 @@ public partial class App : Application
             };
 
             _shell.Start();
-            try
-            {
-                StartNetworkRecovery(networkRecovery);
-            }
-#pragma warning disable CA1031 // Recovery must never prevent the app from starting.
-            catch (Exception)
-#pragma warning restore CA1031
-            {
-            }
+            StartNetworkRecovery(networkRecovery);
 
             var autostartArgument = HasArgument(arguments, "--autostart");
             var startMinimized = HasArgument(arguments, "--start-minimized") ||
@@ -193,87 +190,54 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    private DispatcherTimer? _networkWatchdogTimer;
-    private int _networkProbeFailures;
-
     /// <summary>
-    /// Captures a baseline at launch, rolls back immediately when the active protection left the
-    /// loopback resolver unreachable, and watches for the same condition while the app runs.
+    /// Asks the service to save the machine baseline once. The service also captures at its own
+    /// start; this call is an idempotent fallback for a service that was already running. A failure
+    /// is logged and later reported truthfully as "no saved state"; it never changes the network.
     /// </summary>
-    private void StartNetworkRecovery(NetworkRecoveryService recovery)
+    private static void StartNetworkRecovery(NetworkRecoveryClient? recovery)
     {
-        var snapshot = NetworkRecoveryStore.Load();
-        if (snapshot.IsEmpty)
+        if (recovery is null)
         {
-            snapshot = recovery.Capture(NetworkUsesLoopbackDns());
+            return;
         }
 
-        if (snapshot.ProtectionWasActive && !LoopbackDnsResponds())
+        _ = Task.Run(async () =>
         {
-            SafeRestore(recovery, snapshot);
-        }
-
-        _networkWatchdogTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
-        _networkWatchdogTimer.Tick += (_, _) =>
-        {
-            if (!NetworkUsesLoopbackDns() || LoopbackDnsResponds())
+            try
             {
-                _networkProbeFailures = 0;
-                return;
+                var result = await recovery.CaptureAsync(CancellationToken.None).ConfigureAwait(false);
+                if (result.Status is not (NetworkRecoveryStatus.Succeeded or NetworkRecoveryStatus.AlreadyCaptured))
+                {
+                    WriteRecoveryLog(
+                        $"Recovery baseline not saved: {result.Status}. " +
+                        NetworkRecoveryText.Problems(result.Problems));
+                }
             }
-
-            _networkProbeFailures++;
-            if (_networkProbeFailures < 2)
+            catch (Exception exception) when (exception is
+                         InvalidOperationException or UnauthorizedAccessException or IOException)
             {
-                return;
+                WriteRecoveryLog($"Recovery baseline request failed: {exception.Message}");
             }
-
-            _networkProbeFailures = 0;
-            SafeRestore(recovery, NetworkRecoveryStore.Load());
-            _networkWatchdogTimer?.Stop();
-        };
-        _networkWatchdogTimer.Start();
+        });
     }
 
-    private static void SafeRestore(NetworkRecoveryService recovery, NetworkRecoverySnapshot snapshot)
+    private static void WriteRecoveryLog(string message)
     {
         try
         {
-            recovery.Restore(snapshot);
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Axiom",
+                "network-recovery.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.AppendAllText(path, $"{DateTimeOffset.UtcNow:O} {message}\n");
         }
-        catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // Recovery is best-effort; the user can still use the Settings action.
         }
     }
 
-    private static bool NetworkUsesLoopbackDns()
-    {
-        try
-        {
-            return NetworkInterface.GetAllNetworkInterfaces().Any(network =>
-                network.OperationalStatus == OperationalStatus.Up
-                && network.GetIPProperties().DnsAddresses.Any(IPAddress.IsLoopback));
-        }
-        catch (NetworkInformationException)
-        {
-            return false;
-        }
-    }
-
-    private static bool LoopbackDnsResponds()
-    {
-        try
-        {
-            using var client = new TcpClient();
-            var connect = client.ConnectAsync(IPAddress.Loopback, 53);
-            return connect.Wait(TimeSpan.FromMilliseconds(400)) && client.Connected;
-        }
-        catch (Exception exception) when (exception is SocketException or AggregateException)
-        {
-            return false;
-        }
-    }
     private static bool HasArgument(IEnumerable<string> arguments, string expected) =>
         arguments.Any(argument =>
             string.Equals(argument, expected, StringComparison.OrdinalIgnoreCase));
@@ -445,7 +409,6 @@ public partial class App : Application
             _tray = null;
         }
 
-        _networkWatchdogTimer?.Stop();
         _shell?.Dispose();
         _serviceHost?.Dispose();
         _moduleWindowHider?.Dispose();
