@@ -110,6 +110,22 @@ public sealed class ThreatShareIocExtractorTests
     }
 
     [Fact]
+    public void Unavailable_provenance_fails_closed()
+    {
+        var finding = Finding(
+            new AiIndicator { Type = "ip", Value = "8.8.8.8", Role = "malicious" },
+            new AiIndicator { Type = "domain", Value = "c2.example.org", Role = "malicious" });
+
+        var candidates = ThreatShareIocExtractor.Extract(
+            finding,
+            Evidence("8.8.8.8:443", "c2.example.org:443"),
+            listDerivedValues: null,
+            provenanceAvailable: false);
+
+        Assert.Empty(candidates);
+    }
+
+    [Fact]
     public void Without_the_evidence_package_nothing_is_proposed()
     {
         var finding = Finding(new AiIndicator { Type = "ip", Value = "8.8.8.8", Role = "malicious" });

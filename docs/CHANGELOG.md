@@ -2,6 +2,22 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.3.0
+
+- **AI Analyst provenance fails closed.** If the local list/provenance lookup fails, no AI
+  indicator is queued; independence cannot be established from an empty fallback set.
+- **User-triggered Check graph.** Blocked domains have a read-only **Graph** action that asks the
+  local Blackbox `/api/threat` endpoint for public, local and community tiers, with a 5-second
+  bound, a 10-minute/256-entry cache and no work on the per-connection path. Not found and
+  unreadable results are explicitly **Unknown, not clean**; no VERIFIED or COMMUNITY badges are
+  shown.
+- **Version numbering reset** to `0.3.0` (from `0.2.0`, after the earlier `0.10.x` sequence);
+  portable/Setup upgrade compatibility and the Store/MSIX caveat are documented in the release
+  notes.
+- **Setup can upgrade while the Windows service runs.** Only a running desktop blocks Setup; an
+  interactive service copy in the install directory is stopped before copying, and the registered
+  service is replaced by the elevated service installer.
+
 ## What's in 0.2.0
 
 - **Public-list matches stay local.** Privacy Shield no longer proposes blocked malware-list

@@ -31,8 +31,10 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
   allowed queries, and has a clear action. It is deliberately not shared machine-wide because it is
   the only DNS data kept. This is the one deliberate DNS history exception; it is local and
   user-clearable. Recent blocks are refreshed every 2 seconds and can be **Allowed** or **Blocked**
-  directly from the row. Allow adds the domain to the custom allowlist; Block removes it from the
-  allowlist and adds it to the custom blocklist.
+  directly from the row; a **Graph** action performs a user-triggered, read-only lookup against the
+  local Blackbox graph and reports Unknown when no entry/provenance is available. Allow adds the
+  domain to the custom allowlist; Block removes it from the allowlist and adds it to the custom
+  blocklist.
 - Application attribution is best-effort: Axiom maps the loopback UDP/TCP source port to the owning
   PID through the Windows owner tables. Protected or already-exited processes may show
   `unknown app`.
@@ -148,9 +150,10 @@ the field empty keeps the current Windows DNS servers. After enabling the resolv
   settings; see [Firewall and DNS recovery](FIREWALL_RECOVERY.md). Do not assume that disabling the
   resolver leaves the adapter unchanged.
 - Raw local DNS browsing history is not uploaded, sold or sent as a dataset to AI/DKG/Blackbox.
-  **Allowed DNS questions are forwarded to the configured upstream resolver.** A narrow, normalized
-  malware IOC can enter a *local preview queue* when an agent-related blocked lookup qualifies;
-  the user must explicitly approve Blackbox submission. See [Threat intelligence](THREAT_INTELLIGENCE.md).
+  **Allowed DNS questions are forwarded to the configured upstream resolver.** Public-list block
+  matches stay local with source/version provenance and are not proposed to the community; only an
+  evidence-bound AI Analyst indicator can enter the preview queue, and the user must explicitly
+  approve Blackbox submission. See [Threat intelligence](THREAT_INTELLIGENCE.md).
 - Query counters reset when the resolver restarts.
 
 ## Limitations

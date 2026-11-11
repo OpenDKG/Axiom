@@ -18,9 +18,17 @@ public static class ThreatShareIocExtractor
     public static IReadOnlyList<ThreatShareEnqueueRequest> Extract(
         AiFinding finding,
         AiEvidencePackage? evidence,
-        IReadOnlySet<string>? listDerivedValues = null)
+        IReadOnlySet<string>? listDerivedValues = null,
+        bool provenanceAvailable = true)
     {
         ArgumentNullException.ThrowIfNull(finding);
+
+        if (!provenanceAvailable)
+        {
+            // Without the local block history Axiom cannot rule out that this value came from a
+            // public list. Fail closed instead of presenting it as independent evidence.
+            return [];
+        }
 
         var status = (finding.Status ?? string.Empty).Trim().ToUpperInvariant();
         var severity = (finding.Severity ?? string.Empty).Trim().ToLowerInvariant();
