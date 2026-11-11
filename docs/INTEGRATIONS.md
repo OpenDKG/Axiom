@@ -248,8 +248,10 @@ and quoting survive the mode update. Axiom does not write Codex `config.toml`.
 
 ## Blackbox control center
 
-The Agents page reads the local dashboard at `http://127.0.0.1:9700`. It never opens a public
-listener and never sends data off the machine.
+The Agents page reads the local dashboard at `http://127.0.0.1:9700`. Axiom does not open a
+public API listener; **dashboard API calls remain on loopback**, while a user-requested graph
+sync or approved reporter submission may cause the separate Blackbox/DKG components to contact
+external peers. The local-only API boundary must not be confused with network-silent integration.
 
 - **Configure** opens a native settings dialog. It reads `GET /api/settings`, edits only requested
   fields, and posts a patch to `POST /api/settings` with the per-process `X-Blackbox-Token` from
