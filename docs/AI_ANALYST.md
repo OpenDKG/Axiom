@@ -96,16 +96,3 @@ proposed. The Blackbox report still uses the closest available context label (`i
 - File hashes and full Authenticode chain details are not part of the evidence package.
 - Provider APIs and model availability can change; verify the endpoint and model at configuration
   time.
-
-## Verification
-
-- `AiAnalystSettingsStore` DPAPI round trip and `AiFindingStore` history tests are in the UI test
-  suite.
-- `AiEvidenceBuilder`/client unit tests cover redaction, structured parsing, invalid provider
-  responses, HTTPS enforcement, status normalization, baseline aggregation and the optional verifier
-  request.
-- The OpenChamber/OpenCode path was exercised end to end in the installed app: `Analyze now` returned
-  a valid structured finding with model `opencode-go/deepseek-v4.1-flash`, signer/parent evidence and
-  baseline rows, without an API key or a separate local server.
-- Copy result/all and Cancel were verified in the installed Avalonia UI.
-- The existing MCP and firewall tests remain unchanged; the AI path has no write capability.
