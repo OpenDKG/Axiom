@@ -28,6 +28,7 @@
 #
 # Environment:
 #   AXIOM_SIGN_IDENTITY   codesign identity (Developer ID); unset = ad hoc ("-")
+#   AXIOM_INSTALLER_IDENTITY  "Developer ID Installer: …" for Axiom.pkg; unset = unsigned .pkg
 #   AXIOM_TEAM_ID         team id for the app group (default: "(TEAMID)" suffix of the identity)
 #   AXIOM_APP_PROFILE     provisioning profile embedded as Contents/embedded.provisionprofile
 #   AXIOM_BUILD           CFBundleVersion (default 1)
@@ -188,25 +189,54 @@ if [[ -n "$IDENTITY" ]]; then
   TEAM_ID=${AXIOM_TEAM_ID:-$(sed -n 's/.*(\([A-Z0-9]\{10\}\)).*/\1/p' <<<"$IDENTITY")}
   [[ -n "$TEAM_ID" ]] || die "set AXIOM_TEAM_ID (could not derive it from AXIOM_SIGN_IDENTITY)"
   APP_GROUP="$TEAM_ID.$APP_ID"
+  # A secure timestamp only exists for a real identity; ad hoc signatures have none.
   SIGN_ARGS=(--sign "$IDENTITY" --options runtime --timestamp)
 else
   APP_GROUP="group.$APP_ID"
   SIGN_ARGS=(--sign - --options runtime)
 fi
 
+# dSYMs (Developer ID only): the Swift filter extension and helper carry DWARF that dsymutil can
+# extract; the .NET parts have no dSYM (portable .pdb is the managed equivalent and is produced
+# by publish; it is stripped from the bundle above, keep build/macos/<rid>/publish for symbolication).
+if [[ -n "$IDENTITY" && $HAS_FILTER -eq 1 ]] && command -v dsymutil >/dev/null; then
+  DSYMS="$OUT/dSYMs"; rm -rf "$DSYMS"; mkdir -p "$DSYMS"
+  for bin in "$APP/Contents/Library/SystemExtensions/$EXT_ID.systemextension/Contents/MacOS/$EXT_ID" \
+             "$APP/Contents/MacOS/axiom-sysext"; do
+    [[ -f "$bin" ]] && dsymutil "$bin" -o "$DSYMS/$(basename "$bin").dSYM" 2>/dev/null \
+      && log "dSYM: $DSYMS/$(basename "$bin").dSYM" || log "no DWARF for $(basename "$bin") (n/a)"
+  done
+fi
+
 ENTITLEMENTS="$OUT/Axiom.entitlements"
 sed -e "s|@APP_GROUP@|$APP_GROUP|g" "$ROOT/scripts/macos/Axiom.entitlements" > "$ENTITLEMENTS"
 plutil -lint -s "$ENTITLEMENTS"
 
-sign_tree() { # sign_tree <dir> <skip-name...>: every regular file, deepest first
+is_macho() { # Mach-O or fat magic: feedface/feedfacf (thin), cefaedfe/cffaedfe (swapped), cafebabe (fat)
+  local magic
+  magic=$(od -An -N4 -tx1 "$1" 2>/dev/null | tr -d ' \n')
+  case "$magic" in
+    feedface|feedfacf|cefaedfe|cffaedfe|cafebabe) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+sign_tree() { # sign_tree <dir> <skip-name...>: every Mach-O file, deepest first (review #16)
   local dir=$1; shift
   local skip=("$@")
+  local signed=0 skipped=0
   while IFS= read -r -d '' file; do
     local name; name=$(basename "$file")
     local wanted=1
     for s in "${skip[@]}"; do [[ "$name" == "$s" ]] && wanted=0; done
-    if [[ $wanted -eq 1 ]]; then codesign --force "${SIGN_ARGS[@]}" "$file"; fi
-  done < <(find "$dir" -type f -print0)
+    if [[ $wanted -eq 1 ]]; then
+      # Managed .dll, .json, .plist etc. are sealed by the bundle signature; codesign on them
+      # only creates xattr-backed signatures that ditto/zip lose anyway.
+      if is_macho "$file"; then codesign --force "${SIGN_ARGS[@]}" "$file"; signed=$((signed + 1))
+      else skipped=$((skipped + 1)); fi
+    fi
+  done < <(find "$dir" -type f -print0 | sort -z -r)
+  log "  signed $signed Mach-O files, left $skipped non-Mach-O files to the bundle seal"
 }
 
 log "codesign axiomd and its runtime (Contents/Resources/service)"
@@ -227,4 +257,26 @@ log "codesign Axiom.app (${IDENTITY:-ad hoc}, app group $APP_GROUP)"
 codesign --force "${SIGN_ARGS[@]}" --entitlements "$ENTITLEMENTS" "$APP"
 codesign --verify --deep --strict "$APP"
 log "signed bundle: $APP"
-log "install: sudo rm -rf /Applications/Axiom.app && sudo ditto '$APP' /Applications/Axiom.app"
+
+# ---------------------------------------------------------------------------------------------
+# 5. Installer package: /Applications/Axiom.app + postinstall that installs the daemon
+# ---------------------------------------------------------------------------------------------
+if command -v pkgbuild >/dev/null; then
+  PKGROOT="$OUT/pkgroot"; SCRIPTS="$OUT/pkgscripts"
+  rm -rf "$PKGROOT" "$SCRIPTS"; mkdir -p "$PKGROOT/Applications" "$SCRIPTS"
+  ditto "$APP" "$PKGROOT/Applications/Axiom.app"
+  cat > "$SCRIPTS/postinstall" <<'EOF'
+#!/bin/sh
+# Installs the root daemon (launchd plist, root-owned helper copy, newsyslog rotation); idempotent.
+"$2/Axiom.app/Contents/Resources/service/axiomd" --install-service || exit 1
+exit 0
+EOF
+  chmod 755 "$SCRIPTS/postinstall"
+  PKG="$OUT/Axiom.pkg"
+  PKG_SIGN=()
+  [[ -n "${AXIOM_INSTALLER_IDENTITY:-}" ]] && PKG_SIGN=(--sign "$AXIOM_INSTALLER_IDENTITY" --timestamp)
+  pkgbuild --root "$PKGROOT" --identifier "$APP_ID.pkg" --version "$VERSION" --install-location / \
+    --scripts "$SCRIPTS" "${PKG_SIGN[@]}" "$PKG" >/dev/null
+  log "installer: $PKG (unsigned unless AXIOM_INSTALLER_IDENTITY=\"Developer ID Installer: …\")"
+fi
+log "install (bundle only): sudo rm -rf /Applications/Axiom.app && sudo ditto '$APP' /Applications/Axiom.app"
