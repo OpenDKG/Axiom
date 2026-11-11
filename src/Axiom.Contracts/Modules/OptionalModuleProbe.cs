@@ -74,7 +74,10 @@ public sealed class OptionalModuleProbe : IDisposable
             }
 
             var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            var detail = DescribeDkg(body) ?? "Local DKG node answered /api/status.";
+            if (!TryDescribeDkg(body, out var detail, out var problem))
+            {
+                return Unknown(problem, baseUri);
+            }
 
             return new OptionalModuleStatus
             {
@@ -107,21 +110,24 @@ public sealed class OptionalModuleProbe : IDisposable
                 .GetAsync(new Uri(baseUri, "/api/graph-status"), cancellationToken)
                 .ConfigureAwait(false);
 
-            if (response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode)
             {
-                return new OptionalModuleStatus
-                {
-                    Status = "CONNECTED",
-                    Detail = "Local Blackbox dashboard answered /api/graph-status.",
-                    IsConnected = true,
-                    Endpoint = baseUri.ToString(),
-                };
+                return Unknown(
+                    $"Something answered on the Blackbox port with HTTP {(int)response.StatusCode}; " +
+                    "it did not return Blackbox graph status, so it is not treated as the dashboard.",
+                    baseUri);
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (!TryDescribeBlackbox(body, out var detail, out var problem))
+            {
+                return Unknown(problem, baseUri);
             }
 
             return new OptionalModuleStatus
             {
                 Status = "CONNECTED",
-                Detail = $"Local Blackbox dashboard answered HTTP {(int)response.StatusCode}; graph status is not exposed.",
+                Detail = detail,
                 IsConnected = true,
                 Endpoint = baseUri.ToString(),
             };
@@ -152,11 +158,28 @@ public sealed class OptionalModuleProbe : IDisposable
         Endpoint = endpoint.ToString(),
     };
 
+    /// <summary>Something answered on the port but its response is not the module's documented shape.</summary>
+    private static OptionalModuleStatus Unknown(string detail, Uri endpoint) => new()
+    {
+        Status = "UNKNOWN",
+        Detail = detail,
+        IsConnected = false,
+        Endpoint = endpoint.ToString(),
+    };
+
     private static OptionalModuleStatus Unavailable(string detail) => new()
     {
         Status = "UNAVAILABLE",
         Detail = detail,
         IsConnected = false,
+    };
+
+    private static readonly HashSet<string> KnownNetworkIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "7449c543ff04a550b2dafa999fe8ee577a00b212023bb4d4244e8d58a4792c7b", // DKG V10 Base Testnet
+        "562ea760dbe27fb4233d58dfc958bbddf844b82596ec3d51dff98718e6bf61ca", // DKG V10 Base Mainnet
+        "e08a9fb72a648ec2eb2fd9c152ded90a8ad67bb56f27df4781d9bb7e261fb7a7", // DKG V10 Gnosis Mainnet
+        "83698bd2a305d6261169bfe96dd7c2f8aa9d24bee92150eee949a9a89bb68729", // DKG V10 NeuroWeb Mainnet
     };
 
     private static bool TryCreateLoopbackUri(string value, out Uri uri, out string error)
@@ -181,39 +204,88 @@ public sealed class OptionalModuleProbe : IDisposable
         return true;
     }
 
-    private static string? DescribeDkg(string json)
+    private static bool TryDescribeDkg(string json, out string detail, out string problem)
     {
+        detail = string.Empty;
+        problem = "Something answered on the DKG port but did not return /api/status; it is not treated as a DKG node.";
+
         try
         {
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
-            var parts = new List<string>();
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
 
-            AddIfPresent(root, "version", "version", parts);
-            AddIfPresent(root, "peerId", "peer", parts);
-            AddIfPresent(root, "nodeRole", "role", parts);
-            AddIfPresent(root, "networkName", "network", parts);
-            AddIfPresent(root, "networkId", "network id", parts);
+            var version = ReadString(root, "version");
+            var peerId = ReadString(root, "peerId");
+            var role = ReadString(root, "nodeRole");
+            var networkId = ReadString(root, "networkId");
+            if (version.Length == 0 ||
+                role.Length == 0 ||
+                networkId.Length == 0 ||
+                !peerId.StartsWith("12D3Koo", StringComparison.Ordinal))
+            {
+                problem = "The listener on the DKG port did not provide the documented /api/status " +
+                          "identity fields (version, peerId, nodeRole, networkId); it is not treated as a DKG node.";
+                return false;
+            }
 
-            return parts.Count == 0 ? null : $"Local DKG node: {string.Join(", ", parts)}.";
+            if (!KnownNetworkIds.Contains(networkId))
+            {
+                problem = $"A DKG-like node answered with unrecognized network id {networkId}; " +
+                          "Axiom accepts only the known testnet and mainnet ids.";
+                return false;
+            }
+
+            var networkName = ReadString(root, "networkName");
+            detail = $"Local DKG node: version {version}, peer {peerId}, role {role}" +
+                     (networkName.Length == 0 ? string.Empty : $", network {networkName}") +
+                     $", network id {networkId[..8]}….";
+            return true;
         }
         catch (JsonException)
         {
-            return "Local DKG node answered /api/status with unreadable JSON.";
+            return false;
         }
     }
 
-    private static void AddIfPresent(
-        JsonElement root,
-        string propertyName,
-        string label,
-        List<string> parts)
+    private static bool TryDescribeBlackbox(string json, out string detail, out string problem)
     {
-        if (root.ValueKind == JsonValueKind.Object &&
-            root.TryGetProperty(propertyName, out var value) &&
-            value.ValueKind is JsonValueKind.String or JsonValueKind.Number)
+        detail = string.Empty;
+        problem = "Something is listening on the Blackbox port but did not return Blackbox graph status; " +
+                  "it is not treated as the dashboard.";
+
+        try
         {
-            parts.Add($"{label} {value}");
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("mode", out var mode) ||
+                mode.ValueKind != JsonValueKind.String ||
+                !root.TryGetProperty("node_reachable", out var reachable) ||
+                reachable.ValueKind is not (JsonValueKind.True or JsonValueKind.False) ||
+                !root.TryGetProperty("dkg_url", out var dkgUrl) ||
+                dkgUrl.ValueKind != JsonValueKind.String ||
+                !root.TryGetProperty("sync_progress", out var syncProgress) ||
+                syncProgress.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            detail = $"Blackbox dashboard: {mode.GetString()} mode, " +
+                     $"DKG node {(reachable.GetBoolean() ? "reachable" : "offline")}.";
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
+
+    private static string ReadString(JsonElement root, string propertyName) =>
+        root.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? string.Empty
+            : string.Empty;
 }

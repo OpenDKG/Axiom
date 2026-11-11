@@ -16,7 +16,7 @@ public sealed class OptionalModuleProbeTests
     public async Task Dkg_status_is_connected_when_the_local_node_answers()
     {
         var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
-            {"version":"10.1.0","peerId":"12D3KooExample","nodeRole":"edge","networkName":"DKG V10 Base Testnet"}
+            {"version":"10.1.0","peerId":"12D3KooExample","nodeRole":"edge","networkName":"DKG V10 Base Testnet","networkId":"7449c543ff04a550b2dafa999fe8ee577a00b212023bb4d4244e8d58a4792c7b"}
             """));
         using var http = new HttpClient(handler);
         using var probe = new OptionalModuleProbe(http, DkgUrl, BlackboxUrl);
@@ -28,6 +28,23 @@ public sealed class OptionalModuleProbeTests
         Assert.Contains("10.1.0", result.Detail, StringComparison.Ordinal);
         Assert.Contains("edge", result.Detail, StringComparison.Ordinal);
         Assert.Contains("DKG V10 Base Testnet", result.Detail, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"status":"ok"}""")]
+    [InlineData("""{"version":"10.1.0","peerId":"12D3KooExample","nodeRole":"edge"}""")]
+    [InlineData("""{"version":"10.1.0","peerId":"nope","nodeRole":"edge","networkId":"7449c543ff04a550b2dafa999fe8ee577a00b212023bb4d4244e8d58a4792c7b"}""")]
+    [InlineData("""{"version":"10.1.0","peerId":"12D3KooExample","nodeRole":"edge","networkId":"0000000000000000000000000000000000000000000000000000000000000000"}""")]
+    public async Task Something_else_on_the_dkg_port_is_not_reported_as_connected(string body)
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, body));
+        using var http = new HttpClient(handler);
+        using var probe = new OptionalModuleProbe(http, DkgUrl, BlackboxUrl);
+
+        var result = await probe.ProbeDkgAsync(CancellationToken.None);
+
+        Assert.False(result.IsConnected);
+        Assert.Equal("UNKNOWN", result.Status);
     }
 
     [Fact]
@@ -61,7 +78,9 @@ public sealed class OptionalModuleProbeTests
     [Fact]
     public async Task Blackbox_is_connected_when_the_loopback_dashboard_answers()
     {
-        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, "{\"status\":\"ok\"}"));
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {"mode":"block","node_reachable":true,"dkg_url":"http://127.0.0.1:9320","sync_progress":{"blackbox":{"state":"ready"}}}
+            """));
         using var http = new HttpClient(handler);
         using var probe = new OptionalModuleProbe(http, DkgUrl, BlackboxUrl);
 
@@ -70,10 +89,25 @@ public sealed class OptionalModuleProbeTests
         Assert.True(result.IsConnected);
         Assert.Equal("CONNECTED", result.Status);
         Assert.Contains("Blackbox", result.Detail, StringComparison.Ordinal);
+        Assert.Contains("block", result.Detail, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task Blackbox_is_still_reported_running_when_graph_status_is_missing()
+    public async Task Another_listener_on_the_blackbox_port_is_not_reported_as_connected()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """{"status":"ok"}"""));
+        using var http = new HttpClient(handler);
+        using var probe = new OptionalModuleProbe(http, DkgUrl, BlackboxUrl);
+
+        var result = await probe.ProbeBlackboxAsync(CancellationToken.None);
+
+        Assert.False(result.IsConnected);
+        Assert.Equal("UNKNOWN", result.Status);
+        Assert.Contains("not treated as the dashboard", result.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Blackbox_http_error_is_not_reported_as_connected()
     {
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
         using var http = new HttpClient(handler);
@@ -81,7 +115,8 @@ public sealed class OptionalModuleProbeTests
 
         var result = await probe.ProbeBlackboxAsync(CancellationToken.None);
 
-        Assert.True(result.IsConnected);
+        Assert.False(result.IsConnected);
+        Assert.Equal("UNKNOWN", result.Status);
         Assert.Contains("404", result.Detail, StringComparison.Ordinal);
     }
 

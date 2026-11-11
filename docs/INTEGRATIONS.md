@@ -30,7 +30,9 @@ visible PowerShell window only after a confirmation dialog:
   and refuses to run on a mismatch, then runs it with `-StoreBackend oxigraph` (no Docker). Update
   the pin only after reviewing a new official vendor release. It then repairs the Python dependencies the dashboard
   needs (`aiohttp`, `cryptography`, `psutil`, FastAPI, uvicorn) and starts the dashboard at
-  `http://127.0.0.1:9700`.
+  `http://127.0.0.1:9700`. The status probe only treats the dashboard as connected when
+  `/api/graph-status` returns `mode`, `node_reachable`, `dkg_url` and `sync_progress`; another
+  listener on 9700 is reported as `UNKNOWN`.
 
 If Blackbox or DKG is installed but not running, its action changes to **Start**; it starts the
 existing dashboard/node without reinstalling. The node/dashboard runs in the background, and child
@@ -343,7 +345,9 @@ Invoke-RestMethod http://127.0.0.1:9200/api/status
 ```
 
 Then open Axiom -> **Security** -> **Check again**. A running node shows `CONNECTED` with its
-version, peer id and role. The default endpoint is `http://127.0.0.1:9200`; override it only with a
+version, peer id, role and network. The probe only accepts the documented `/api/status` identity
+fields and a known testnet/mainnet `networkId`; any other listener on 9200 is reported as
+`UNKNOWN`, not connected. The default endpoint is `http://127.0.0.1:9200`; override it only with a
 loopback URL:
 
 ```powershell
