@@ -58,7 +58,7 @@ public sealed class OptionalModuleProbeTests
 
         Assert.False(result.IsConnected);
         Assert.Equal("NOT RUNNING", result.Status);
-        Assert.Contains("does not start", result.Detail, StringComparison.Ordinal);
+        Assert.Contains("Start button", result.Detail, StringComparison.Ordinal);
     }
 
     [Fact]
