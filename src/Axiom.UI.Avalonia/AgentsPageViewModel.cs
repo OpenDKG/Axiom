@@ -138,6 +138,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     public bool IsAvailable => !DistributionContext.IsStorePackage;
 
+    /// <summary>Truthful enforcement status shown above the host list.</summary>
+    public EnforcementSurfaceState Enforcement => EnforcementSurfaceState.Current;
+
     public IReadOnlyList<string> ActivityFilters { get; } =
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
 
@@ -264,6 +267,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     [ObservableProperty]
     private bool _canSubmitThreatShare;
+
+    /// <summary>Per-row action availability; an unverified row must still be retryable on purpose.</summary>
+    [ObservableProperty]
+    private bool _canShareThreatShareItem;
 
     [ObservableProperty]
     private string _threatShareActionText = string.Empty;
@@ -1085,7 +1092,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _threatShareStatus = status;
         ThreatShareReporterText = ThreatShareCli.DescribeReporterProfile();
         var pending = status.Items
-            .Where(item => item.State is ThreatShareState.Pending or ThreatShareState.Deferred)
+            .Where(item => item.State is ThreatShareState.Pending or ThreatShareState.Deferred
+                or ThreatShareState.Unverified)
             .Take(8)
             .ToList();
 
@@ -1099,6 +1107,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         CanSubmitThreatShare = status.Items.Any(IsReady) &&
                                ThreatSharingEnabled &&
                                status.TodaySubmitted < status.DailyLimit;
+        CanShareThreatShareItem = pending.Count > 0 &&
+                                  ThreatSharingEnabled &&
+                                  status.TodaySubmitted < status.DailyLimit;
 
         var consent = ThreatShareCli.ConsentPresent()
             ? string.Empty
@@ -1108,9 +1119,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ? $" {status.Deferred} deferred after a transient failure; retry when it is due."
             : string.Empty;
 
+        var unverified = status.Unverified > 0
+            ? $" {status.Unverified} awaiting confirmation: the reporter outcome was unknown, so retry only after you check."
+            : string.Empty;
+
         ThreatShareQueueText =
             $"{status.Pending} waiting for your review, {status.Submitted} shared in total, " +
-            $"{status.TodaySubmitted}/{status.DailyLimit} today.{deferred} " +
+            $"{status.TodaySubmitted}/{status.DailyLimit} today.{deferred}{unverified} " +
             (ThreatSharingEnabled
                 ? "Sharing is on; nothing is sent until you press Share or Send now."
                 : "Sharing is off; nothing is signed or sent.") +
@@ -1138,6 +1153,12 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         if (item is null)
         {
             return Task.CompletedTask;
+        }
+
+        if (item.State == ThreatShareState.Unverified)
+        {
+            // The row says "Retry": the user has seen that the previous attempt may have published.
+            return SubmitThreatShareItemsAsync([item]);
         }
 
         if (!IsReady(item))
@@ -1188,6 +1209,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         {
             var shared = 0;
             var deferred = 0;
+            var unverified = 0;
             var rejected = 0;
             var capReached = false;
             ThreatShareQueueStatus? latest = null;
@@ -1212,6 +1234,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                             Id = item.Candidate.Id,
                             Submitted = result.Submitted,
                             Deferred = result.Status == ThreatShareReportStatus.RetryableFailure,
+                            Ambiguous = result.Ambiguous,
                             Outcome = result.Outcome,
                         },
                         CancellationToken.None)
@@ -1226,6 +1249,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                     case ThreatShareReportStatus.RetryableFailure:
                         deferred++;
                         break;
+                    case ThreatShareReportStatus.UnknownOutcome:
+                        unverified++;
+                        break;
                     default:
                         rejected++;
                         break;
@@ -1238,7 +1264,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             }
 
             ThreatShareActionText =
-                $"Submitted {shared}, deferred {deferred}, rejected {rejected}." +
+                $"Submitted {shared}, deferred {deferred}, awaiting confirmation {unverified}, rejected {rejected}." +
                 (capReached
                     ? " The daily cap is reached; the remaining indicators stay queued."
                     : string.Empty);

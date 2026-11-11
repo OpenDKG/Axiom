@@ -177,7 +177,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
 /// </summary>
 public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 {
-    private readonly OptionalModuleProbe _probe = new();
+    private readonly OptionalModuleProbe _probe;
 
     private readonly OptionalModuleInstaller _installer = new();
 
@@ -259,7 +259,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         IApiKeyProtector protector,
         IUiTimerFactory timers,
         IShellActions shell,
-        IServiceRequestClient? serviceClient = null)
+        IServiceRequestClient? serviceClient = null,
+        ILoopbackListenerInspector? listenerInspector = null)
         : base("Integrations", "Optional modules, API keys and integration health", "\uE8D7")
     {
         ArgumentNullException.ThrowIfNull(ui);
@@ -271,6 +272,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         _dialogs = dialogs;
         _shell = shell;
         _actions = new ConnectionActionService(serviceClient, _ui, new UnsupportedProcessActions());
+        _probe = new OptionalModuleProbe(listenerInspector: listenerInspector);
         _reputationStore = new ReputationSettingsStore(protector);
         _communityStore = new CommunityFeedSettingsStore(protector);
 

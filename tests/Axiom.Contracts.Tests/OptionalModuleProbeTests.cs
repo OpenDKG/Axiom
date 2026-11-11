@@ -158,6 +158,110 @@ public sealed class OptionalModuleProbeTests
         Assert.Contains("404", result.Detail, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Dkg_listener_owned_by_the_node_runtime_is_reported_as_observed()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {"version":"10.1.0","peerId":"12D3KooExample","nodeRole":"edge","networkName":"DKG V10 Base Testnet","networkId":"7449c543ff04a550b2dafa999fe8ee577a00b212023bb4d4244e8d58a4792c7b"}
+            """));
+        using var http = new HttpClient(handler);
+        var inspector = new FakeInspector(_ => new ModuleListenerOwner(
+            42,
+            "node.exe",
+            @"C:\Program Files\nodejs\node.exe",
+            @"node C:\Axiom\modules\dkg\node_modules\@origintrail-official\dkg\dist\cli.js daemon-worker"));
+        using var probe = new OptionalModuleProbe(http, DkgUrl, BlackboxUrl, inspector);
+
+        var result = await probe.ProbeDkgAsync(CancellationToken.None);
+
+        Assert.True(result.IsConnected);
+        Assert.Equal(ModuleEndpointIdentityLevel.ProcessObserved, result.Identity!.Level);
+        Assert.True(result.CanReceivePrivilegedSettings);
+        Assert.Contains("node", result.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Dkg_port_owned_by_an_unrelated_process_is_unknown()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {"version":"10.1.0","peerId":"12D3KooExample","nodeRole":"edge","networkName":"DKG V10 Base Testnet","networkId":"7449c543ff04a550b2dafa999fe8ee577a00b212023bb4d4244e8d58a4792c7b"}
+            """));
+        using var http = new HttpClient(handler);
+        var inspector = new FakeInspector(_ => new ModuleListenerOwner(
+            7,
+            "squatter.exe",
+            @"C:\Temp\squatter.exe",
+            @"""C:\Temp\squatter.exe"" --fake-dkg"));
+        using var probe = new OptionalModuleProbe(http, DkgUrl, BlackboxUrl, inspector);
+
+        var result = await probe.ProbeDkgAsync(CancellationToken.None);
+
+        Assert.False(result.IsConnected);
+        Assert.Equal("UNKNOWN", result.Status);
+        Assert.Equal(ModuleEndpointIdentityLevel.ProcessMismatch, result.Identity!.Level);
+        Assert.False(result.CanReceivePrivilegedSettings);
+        Assert.Contains("not treated", result.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Unreadable_listener_owner_keeps_the_schema_result_but_grants_no_settings()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {"version":"10.1.0","peerId":"12D3KooExample","nodeRole":"edge","networkName":"DKG V10 Base Testnet","networkId":"7449c543ff04a550b2dafa999fe8ee577a00b212023bb4d4244e8d58a4792c7b"}
+            """));
+        using var http = new HttpClient(handler);
+        var inspector = new FakeInspector(_ => null);
+        using var probe = new OptionalModuleProbe(http, DkgUrl, BlackboxUrl, inspector);
+
+        var result = await probe.ProbeDkgAsync(CancellationToken.None);
+
+        Assert.True(result.IsConnected);
+        Assert.Equal(ModuleEndpointIdentityLevel.Unverified, result.Identity!.Level);
+        Assert.False(result.CanReceivePrivilegedSettings);
+    }
+
+    [Fact]
+    public async Task Blackbox_listener_owned_by_the_blackbox_process_is_observed()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {"mode":"block","node_reachable":true,"dkg_url":"http://127.0.0.1:9320","sync_progress":{"blackbox":{"state":"ready"}}}
+            """));
+        using var http = new HttpClient(handler);
+        var inspector = new FakeInspector(_ => new ModuleListenerOwner(
+            11,
+            "python.exe",
+            @"C:\Axiom\modules\blackbox\venv\Scripts\python.exe",
+            @"python hermes.exe blackbox dashboard"));
+        using var probe = new OptionalModuleProbe(http, DkgUrl, BlackboxUrl, inspector);
+
+        var result = await probe.ProbeBlackboxAsync(CancellationToken.None);
+
+        Assert.True(result.IsConnected);
+        Assert.Equal(ModuleEndpointIdentityLevel.ProcessObserved, result.Identity!.Level);
+        Assert.True(result.CanReceivePrivilegedSettings);
+    }
+
+    [Fact]
+    public async Task Blackbox_port_owned_by_python_without_module_evidence_is_unverified()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {"mode":"block","node_reachable":true,"dkg_url":"http://127.0.0.1:9320","sync_progress":{"blackbox":{"state":"ready"}}}
+            """));
+        using var http = new HttpClient(handler);
+        var inspector = new FakeInspector(_ => new ModuleListenerOwner(
+            12,
+            "python",
+            @"C:\Python312\python.exe",
+            @"python -m http.server 9700"));
+        using var probe = new OptionalModuleProbe(http, DkgUrl, BlackboxUrl, inspector);
+
+        var result = await probe.ProbeBlackboxAsync(CancellationToken.None);
+
+        Assert.True(result.IsConnected);
+        Assert.Equal(ModuleEndpointIdentityLevel.Unverified, result.Identity!.Level);
+        Assert.False(result.CanReceivePrivilegedSettings);
+    }
+
     private static HttpResponseMessage Json(HttpStatusCode status, string json) => new(status)
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json"),
@@ -174,5 +278,10 @@ public sealed class OptionalModuleProbeTests
             Calls++;
             return Task.FromResult(respond(request));
         }
+    }
+
+    private sealed class FakeInspector(Func<Uri, ModuleListenerOwner?> resolve) : ILoopbackListenerInspector
+    {
+        public ModuleListenerOwner? FindOwner(Uri endpoint) => resolve(endpoint);
     }
 }

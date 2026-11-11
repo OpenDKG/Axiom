@@ -12,6 +12,7 @@ using Avalonia.Threading;
 using Axiom.Contracts.Monitoring;
 using Axiom.Contracts.NetworkRecovery;
 using Axiom.Infrastructure.Windows.IpHelper;
+using Axiom.Infrastructure.Windows.Modules;
 using Axiom.Presentation;
 using Axiom.UI.Avalonia;
 
@@ -96,6 +97,7 @@ public partial class App : Application
                 _ => ThemeVariant.Dark,
             };
             var autostart = new WindowsAutostartService();
+            var listenerInspector = new WindowsLoopbackListenerInspector();
             var visualEffects = new WindowsVisualEffectsService();
             NetworkRecoveryClient? networkRecovery = null;
             if (serviceClient is not null)
@@ -123,7 +125,8 @@ public partial class App : Application
                 new AvaloniaBlackboxDialogs(() => window, interaction),
                 new Axiom.Persistence.AgentSessionReader(),
                 visualEffects,
-                networkRecovery is null ? null : networkRecovery.RestoreAsync);
+                networkRecovery is null ? null : networkRecovery.RestoreAsync,
+                listenerInspector);
 
             window = new MainWindow { DataContext = _shell };
             _window = window;

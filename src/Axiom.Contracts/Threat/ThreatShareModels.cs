@@ -73,6 +73,12 @@ public enum ThreatShareState
 
     /// <summary>A transient reporter failure. The candidate stays in the queue with a retry time.</summary>
     Deferred = 4,
+
+    /// <summary>
+    /// The reporter ran but its outcome is unknown (for example a timeout after start). The value
+    /// may already be published, so it is never retried automatically.
+    /// </summary>
+    Unverified = 5,
 }
 
 public sealed record ThreatShareItem(
@@ -87,12 +93,22 @@ public sealed record ThreatShareItem(
     /// <summary>Earliest time a deferred retry should be attempted.</summary>
     public DateTimeOffset? NextAttemptUtc { get; init; }
 
+    /// <summary>
+    /// Stable key for this candidate's submission attempts. It is created on the first attempt and
+    /// reused on a manual retry so an ambiguous outcome stays traceable and explainable.
+    /// </summary>
+    public string SubmissionKey { get; init; } = string.Empty;
+
+    /// <summary>Button label: an ambiguous item needs a deliberate retry, not another "Share".</summary>
+    public string ActionLabel => State == ThreatShareState.Unverified ? "Retry" : "Share";
+
     public string StateLabel => State switch
     {
         ThreatShareState.Submitted => "shared",
         ThreatShareState.Rejected => "rejected",
         ThreatShareState.Dismissed => "dismissed",
         ThreatShareState.Deferred => "deferred",
+        ThreatShareState.Unverified => "awaiting confirmation",
         _ => "pending review",
     };
 
@@ -102,6 +118,9 @@ public sealed record ThreatShareItem(
             (NextAttemptUtc is { } next ? $"retry after {next.ToLocalTime():HH:mm}" : "retry later") +
             (string.IsNullOrWhiteSpace(Outcome) ? string.Empty : $" · {Outcome}"),
         ThreatShareState.Rejected => Outcome,
+        ThreatShareState.Unverified =>
+            "the previous attempt may have published; confirm before retrying" +
+            (string.IsNullOrWhiteSpace(Outcome) ? string.Empty : " - " + Outcome),
         _ => string.Empty,
     };
 
@@ -115,6 +134,9 @@ public sealed record ThreatShareQueueStatus
 
     /// <summary>Transiently failed candidates that stay queued for a later retry.</summary>
     public int Deferred { get; init; }
+
+    /// <summary>Ambiguous attempts that need explicit confirmation before any retry.</summary>
+    public int Unverified { get; init; }
 
     public required int Submitted { get; init; }
 
@@ -141,6 +163,9 @@ public sealed record ThreatShareRecordRequest
 
     /// <summary>True for a transient failure that should stay queued instead of being rejected.</summary>
     public bool Deferred { get; init; }
+
+    /// <summary>True when the reporter ran but the outcome is unknown; never auto-retried.</summary>
+    public bool Ambiguous { get; init; }
 
     public string Outcome { get; init; } = string.Empty;
 }
@@ -198,7 +223,7 @@ public static class ThreatShareVocabulary
         Contexts.Contains(context, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Builds the stable queue id and the value Blackbox hashes, or null when invalid.</summary>
-    public static string? Normalize(string indicatorType, string value)
+    public static string? Normalize(string indicatorType, string value, bool allowUrlPath = false)
     {
         var type = (indicatorType ?? string.Empty).Trim().ToLowerInvariant();
         var raw = (value ?? string.Empty).Trim();
@@ -229,6 +254,13 @@ public static class ThreatShareVocabulary
 
                 // Scheme, host, non-default port and path only: credentials, query strings and
                 // fragments can contain tokens or presigned secrets and never leave the machine.
+                // A path is not shared unless the caller explicitly opts in; paths can contain
+                // account, document or session identifiers.
+                if (!allowUrlPath && uri.AbsolutePath is not ("" or "/"))
+                {
+                    return null;
+                }
+
                 var hostForUrl = uri.IdnHost.TrimEnd('.').ToLowerInvariant();
                 if (hostForUrl.Contains(':', StringComparison.Ordinal) &&
                     !hostForUrl.StartsWith('['))
@@ -237,7 +269,8 @@ public static class ThreatShareVocabulary
                 }
 
                 var port = uri.IsDefaultPort ? string.Empty : ":" + uri.Port;
-                var normalizedUrl = $"{uri.Scheme}://{hostForUrl}{port}{uri.AbsolutePath}"
+                var path = allowUrlPath ? uri.AbsolutePath : string.Empty;
+                var normalizedUrl = $"{uri.Scheme}://{hostForUrl}{port}{path}"
                     .TrimEnd('/');
                 return normalizedUrl.Length is > 0 and <= 2_048 ? normalizedUrl : null;
             case "ip":

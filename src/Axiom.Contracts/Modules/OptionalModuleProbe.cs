@@ -14,6 +14,16 @@ public sealed record OptionalModuleStatus
     public required bool IsConnected { get; init; }
 
     public string? Endpoint { get; init; }
+
+    /// <summary>Owning-process evidence, when the host can inspect it.</summary>
+    public ModuleEndpointIdentity? Identity { get; init; }
+
+    /// <summary>
+    /// True only when the documented contract and the owning process were both observed. Any future
+    /// privileged settings write must require this flag; an open port or a schema match is not enough.
+    /// </summary>
+    public bool CanReceivePrivilegedSettings =>
+        IsConnected && Identity?.Level == ModuleEndpointIdentityLevel.ProcessObserved;
 }
 
 /// <summary>
@@ -36,13 +46,17 @@ public sealed class OptionalModuleProbe : IDisposable
 
     private readonly bool _ownsHttpClient;
 
+    private readonly ILoopbackListenerInspector? _listenerInspector;
+
     public OptionalModuleProbe(
         HttpClient? httpClient = null,
         string? dkgUrl = null,
-        string? blackboxUrl = null)
+        string? blackboxUrl = null,
+        ILoopbackListenerInspector? listenerInspector = null)
     {
         _http = httpClient ?? new HttpClient { Timeout = DefaultTimeout };
         _ownsHttpClient = httpClient is null;
+        _listenerInspector = listenerInspector;
         _dkgUrl = dkgUrl
                   ?? Environment.GetEnvironmentVariable("AXIOM_DKG_URL")
                   ?? Environment.GetEnvironmentVariable(LegacyIdentity.ProductName + "_DKG_URL")
@@ -106,12 +120,23 @@ public sealed class OptionalModuleProbe : IDisposable
                 return Unknown(problem, baseUri);
             }
 
+            var endpointIdentity = VerifyIdentity(baseUri, dkg: true);
+            if (endpointIdentity.Level == ModuleEndpointIdentityLevel.ProcessMismatch)
+            {
+                return Unknown(
+                    $"Port {baseUri.Port} answered the DKG contract but is owned by {endpointIdentity.Detail}; " +
+                    "it is not treated as the local node.",
+                    baseUri) with { Identity = endpointIdentity };
+            }
+
             return new OptionalModuleStatus
             {
                 Status = "CONNECTED",
-                Detail = $"{(fromBlackbox ? "DKG node reported by Blackbox" : "Local DKG node")}: {identity}.",
+                Detail = $"{(fromBlackbox ? "DKG node reported by Blackbox" : "Local DKG node")}: {identity}. " +
+                         IdentitySentence(endpointIdentity),
                 IsConnected = true,
                 Endpoint = baseUri.ToString(),
+                Identity = endpointIdentity,
             };
         }
         catch (HttpRequestException)
@@ -194,12 +219,22 @@ public sealed class OptionalModuleProbe : IDisposable
                 return Unknown(problem, baseUri);
             }
 
+            var endpointIdentity = VerifyIdentity(baseUri, dkg: false);
+            if (endpointIdentity.Level == ModuleEndpointIdentityLevel.ProcessMismatch)
+            {
+                return Unknown(
+                    $"Port {baseUri.Port} answered the Blackbox contract but is owned by {endpointIdentity.Detail}; " +
+                    "it is not treated as the dashboard.",
+                    baseUri) with { Identity = endpointIdentity };
+            }
+
             return new OptionalModuleStatus
             {
                 Status = "CONNECTED",
-                Detail = detail,
+                Detail = $"{detail} {IdentitySentence(endpointIdentity)}",
                 IsConnected = true,
                 Endpoint = baseUri.ToString(),
+                Identity = endpointIdentity,
             };
         }
         catch (HttpRequestException)
@@ -219,6 +254,96 @@ public sealed class OptionalModuleProbe : IDisposable
             _http.Dispose();
         }
     }
+
+    /// <summary>
+    /// Ties the listener to the module runtime where the host can see it. A mismatched owner turns a
+    /// schema-valid port into UNKNOWN; an unreadable owner keeps the schema result but never grants
+    /// the endpoint privileged settings.
+    /// </summary>
+    private ModuleEndpointIdentity VerifyIdentity(Uri endpoint, bool dkg)
+    {
+        if (_listenerInspector is null)
+        {
+            return new ModuleEndpointIdentity
+            {
+                Level = ModuleEndpointIdentityLevel.Unverified,
+                Detail = "owning process not inspected on this host",
+            };
+        }
+
+        ModuleListenerOwner? owner;
+        try
+        {
+            owner = _listenerInspector.FindOwner(endpoint);
+        }
+        catch (Exception exception) when (exception is
+                     InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            return new ModuleEndpointIdentity
+            {
+                Level = ModuleEndpointIdentityLevel.Unverified,
+                Detail = "owning process could not be read",
+            };
+        }
+
+        if (owner is null || string.IsNullOrWhiteSpace(owner.ProcessName))
+        {
+            return new ModuleEndpointIdentity
+            {
+                Level = ModuleEndpointIdentityLevel.Unverified,
+                Detail = "listening process not resolved",
+            };
+        }
+
+        var runtime = dkg ? IsDkgRuntime(owner.ProcessName) : IsBlackboxRuntime(owner.ProcessName);
+        if (!runtime)
+        {
+            return new ModuleEndpointIdentity
+            {
+                Level = ModuleEndpointIdentityLevel.ProcessMismatch,
+                Detail = $"process {owner.ProcessName} (PID {owner.ProcessId})",
+                ProcessId = owner.ProcessId,
+                ProcessName = owner.ProcessName,
+            };
+        }
+
+        var evidence = $"{owner.ExecutablePath} {owner.CommandLine}";
+        var token = dkg ? "dkg" : "blackbox";
+        var named = evidence.Contains(token, StringComparison.OrdinalIgnoreCase);
+
+        return new ModuleEndpointIdentity
+        {
+            Level = named ? ModuleEndpointIdentityLevel.ProcessObserved : ModuleEndpointIdentityLevel.Unverified,
+            Detail = named
+                ? $"process {owner.ProcessName} (PID {owner.ProcessId}) names {token}"
+                : $"process {owner.ProcessName} (PID {owner.ProcessId}) without {token} evidence",
+            ProcessId = owner.ProcessId,
+            ProcessName = owner.ProcessName,
+        };
+    }
+
+    private static bool IsDkgRuntime(string processName) =>
+        RuntimeName(processName).Equals("node", StringComparison.OrdinalIgnoreCase)
+        || RuntimeName(processName).Equals("dkg", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsBlackboxRuntime(string processName) =>
+        RuntimeName(processName).Equals("node", StringComparison.OrdinalIgnoreCase)
+        || RuntimeName(processName).Equals("blackbox", StringComparison.OrdinalIgnoreCase)
+        || RuntimeName(processName).Equals("hermes", StringComparison.OrdinalIgnoreCase)
+        || RuntimeName(processName).StartsWith("python", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Windows reports "node.exe"; the runtime match must not depend on the suffix.</summary>
+    private static string RuntimeName(string processName) =>
+        processName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? processName[..^4]
+            : processName;
+
+    private static string IdentitySentence(ModuleEndpointIdentity identity) => identity.Level switch
+    {
+        ModuleEndpointIdentityLevel.ProcessObserved => $"Owning {identity.Detail}.",
+        ModuleEndpointIdentityLevel.Unverified => $"Owning process unverified ({identity.Detail}).",
+        _ => $"Owning process mismatch ({identity.Detail}).",
+    };
 
     private static OptionalModuleStatus NotRunning(string detail, Uri endpoint) => new()
     {

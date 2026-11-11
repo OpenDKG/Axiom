@@ -95,28 +95,28 @@
             </Grid>
             <controls:AxiomSelectableTextBlock Text="{Binding AboutTagline}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
 
-            <controls:AxiomSelectableTextBlock Text="Project Leadership" FontSize="12" FontWeight="SemiBold"
+            <controls:AxiomSelectableTextBlock Text="Project Leadership" FontSize="13" FontWeight="SemiBold"
                                                Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+            <Grid ColumnDefinitions="116,*" ColumnSpacing="10">
               <Button Grid.Column="0" Content="{Binding AboutFounder.GitHubHandle}" Command="{Binding OpenProfileCommand}"
                       CommandParameter="{Binding AboutFounder.ProfileUrl}"
                       Background="Transparent" BorderThickness="0" Padding="0" VerticalAlignment="Center"
-                      Foreground="{DynamicResource Axiom.Accent}" FontSize="11.5" />
+                      HorizontalAlignment="Left" Foreground="{DynamicResource Axiom.Accent}" FontSize="11.5" />
               <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding AboutFounder.Role}" FontSize="10.5"
                                                  Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap"
                                                  VerticalAlignment="Center" />
             </Grid>
-            <controls:AxiomSelectableTextBlock Text="Core Development Team" FontSize="10" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,4,0,0" />
+            <controls:AxiomSelectableTextBlock Text="Co-Founders &amp; Core Maintainers" FontSize="10.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,8,0,2" />
             <ItemsControl ItemsSource="{Binding AboutCoreTeam}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                  <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,0,0,3">
+                  <Grid ColumnDefinitions="116,*" ColumnSpacing="10" Margin="0,0,0,4">
                     <Button Grid.Column="0" Content="{Binding GitHubHandle}"
                             Command="{Binding $parent[UserControl].DataContext.OpenProfileCommand}"
                             CommandParameter="{Binding ProfileUrl}"
                             Background="Transparent" BorderThickness="0" Padding="0" VerticalAlignment="Center"
-                            Foreground="{DynamicResource Axiom.Accent}" FontSize="11.5" />
+                            HorizontalAlignment="Left" Foreground="{DynamicResource Axiom.Accent}" FontSize="11.5" />
                     <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Role}" FontSize="10.5"
                                                        Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap"
                                                        VerticalAlignment="Center" />
@@ -125,15 +125,15 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
             <controls:AxiomSelectableTextBlock Text="{Binding AboutCoreTeamStatement}" FontSize="10"
-                                               Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+                                               Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" Margin="0,4,0,0" />
 
             <Border Height="1" Background="{DynamicResource Axiom.Border}" Margin="0,6,0,2" />
             <WrapPanel Orientation="Horizontal">
               <Button Content="View license" Command="{Binding ViewLicenseCommand}" Padding="12,6" Margin="0,0,8,8" />
-              <Button Content="Third-party notices" Command="{Binding ViewThirdPartyNoticesCommand}" Padding="12,6" Margin="0,0,8,8" />
-              <Button Content="Authors &amp; attribution" Command="{Binding ViewContributorsCommand}" Padding="12,6" Margin="0,0,8,8" />
+              <Button Content="Notices" Command="{Binding ViewThirdPartyNoticesCommand}" Padding="12,6" Margin="0,0,8,8" />
+              <Button Content="Authors" Command="{Binding ViewContributorsCommand}" Padding="12,6" Margin="0,0,8,8" />
               <Button Content="Source code" Command="{Binding OpenSourceCommand}" Padding="12,6" Margin="0,0,8,8" />
-              <Button Content="OpenDKG website" Command="{Binding OpenAffiliationCommand}" Padding="12,6" Margin="0,0,8,8" />
+              <Button Content="OpenDKG" Command="{Binding OpenAffiliationCommand}" Padding="12,6" Margin="0,0,8,8" />
             </WrapPanel>
             <controls:AxiomSelectableTextBlock Text="{Binding AboutLegalLine}" FontSize="10"
                                                Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />

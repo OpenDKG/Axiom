@@ -1,4 +1,4 @@
-# ADR 0009: Service-owned network recovery
+# ADR 0011: Service-owned network recovery
 
 Status: Proposed
 

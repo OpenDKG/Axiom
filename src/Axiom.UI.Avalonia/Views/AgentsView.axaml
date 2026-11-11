@@ -42,6 +42,28 @@
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24,18,24,24" Spacing="14">
 
+      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Warning}"
+              BorderThickness="1" CornerRadius="8" Padding="14">
+        <StackPanel Spacing="5">
+          <Grid ColumnDefinitions="*,Auto">
+            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="ENFORCEMENT" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Axiom.TextMuted}" />
+            <Border Grid.Column="1" Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="6" Padding="8,3">
+              <controls:AxiomSelectableTextBlock Text="{Binding Enforcement.VerificationLabel}" FontSize="9"
+                                                 FontWeight="SemiBold" Foreground="{DynamicResource Axiom.Warning}" />
+            </Border>
+          </Grid>
+          <controls:AxiomSelectableTextBlock Text="{Binding Enforcement.Summary}" FontSize="11" FontWeight="SemiBold"
+                                             Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding Enforcement.DetectorDetail}" FontSize="10"
+                                             Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding Enforcement.BrokerDetail}" FontSize="10"
+                                             Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding Enforcement.PolicyDetail}" FontSize="10"
+                                             Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
       <Grid ColumnDefinitions="*,14,*">
         <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
                 CornerRadius="8" Padding="14">
@@ -136,8 +158,8 @@
                     <controls:AxiomSelectableTextBlock Text="{Binding StateDetail}" IsVisible="{Binding HasStateDetail}"
                                FontSize="9" Foreground="{DynamicResource Axiom.Warning}" TextWrapping="Wrap" />
                   </StackPanel>
-                  <Button Grid.Column="1" Content="Share" Padding="9,3" FontSize="10"
-                          IsEnabled="{Binding $parent[UserControl].DataContext.CanSubmitThreatShare}"
+                  <Button Grid.Column="1" Content="{Binding ActionLabel}" Padding="9,3" FontSize="10"
+                          IsEnabled="{Binding $parent[UserControl].DataContext.CanShareThreatShareItem}"
                           Command="{Binding $parent[UserControl].DataContext.ShareThreatShareItemCommand}"
                           CommandParameter="{Binding}" />
                   <Button Grid.Column="2" Content="Dismiss" Padding="9,3" FontSize="10"
