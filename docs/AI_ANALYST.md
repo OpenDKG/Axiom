@@ -54,15 +54,13 @@ or modify agent configuration.
   snapshot directly; the existing MCP server remains available to external MCP clients.
 - Model-controlled firewall writes, shell execution, active scanning, reputation invention or
   guaranteed model confidence.
-- OriginTrail publication, Blackbox integration or local research memory.
+- Direct OriginTrail VM/Knowledge Asset publication, independent Blackbox curation or an autonomous research-memory service. **User-approved Blackbox IOC reporting is implemented** as documented below.
 - Storage of raw prompts or raw provider responses.
 - Full cost accounting beyond token and hourly request bounds.
 
 ## Privacy
 
-Cloud use requires the user to enable the analyst, enter an endpoint/model and press Analyze. Before
-sending evidence, the page states exactly which categories are included. No request is made while
-the analyst is disabled or unconfigured. Provider failures are reported locally and do not affect
+Cloud use requires an explicitly configured provider and the analyst to be enabled. Manual **Analyze** sends a bounded evidence request; optional automatic analysis may also send requests when the user enables it and its interval/hourly limits permit. Before enabling external analysis, the page should state exactly which evidence categories may be sent. No request is made while the analyst is disabled or unconfigured. Provider failures are reported locally and do not affect
 monitoring, history or firewall behavior.
 
 ## Prompt-injection and action boundary
@@ -91,23 +89,10 @@ proposed. The Blackbox report still uses the closest available context label (`i
   `LOW_OBSERVED_RISK`, `SUSPICIOUS` and `SUPPORTED_ALERT` are not equivalent to a confirmed incident.
 - ETW telemetry is not integrated yet, so SNI, TLS certificate subjects, DNS query names, exact
   per-connection byte counts and TIME_WAIT ownership remain missing evidence.
-- There is no reputation or threat-intelligence feed; no score is invented.
+- AI Analyst does not automatically consume VirusTotal, community or DKG reputation lookups as investigation evidence; those are separate optional modules. It does not invent a reputation score.
 - Command lines are sanitised and truncated, and protected processes may not expose them.
 - Axiom reports only its own firewall rules; effective Windows default policy and third-party rules
   remain outside `ruleStatus`.
 - File hashes and full Authenticode chain details are not part of the evidence package.
 - Provider APIs and model availability can change; verify the endpoint and model at configuration
   time.
-
-## Verification
-
-- `AiAnalystSettingsStore` DPAPI round trip and `AiFindingStore` history tests are in the UI test
-  suite.
-- `AiEvidenceBuilder`/client unit tests cover redaction, structured parsing, invalid provider
-  responses, HTTPS enforcement, status normalization, baseline aggregation and the optional verifier
-  request.
-- The OpenChamber/OpenCode path was exercised end to end in the installed app: `Analyze now` returned
-  a valid structured finding with model `opencode-go/deepseek-v4.1-flash`, signer/parent evidence and
-  baseline rows, without an API key or a separate local server.
-- Copy result/all and Cancel were verified in the installed Avalonia UI.
-- The existing MCP and firewall tests remain unchanged; the AI path has no write capability.

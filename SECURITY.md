@@ -4,8 +4,8 @@
 
 | Version | Status |
 |---|---|
-| 0.1.x (pre-release, FND-005) | Best-effort fixes; no production support claim |
-| Older builds | Not supported |
+| Current 0.10.x pre-release (see latest release tag) | Best-effort security fixes; not production-certified |
+| Earlier development milestones | Not maintained; upgrade for current fixes |
 
 The project is pre-1.0. Interfaces, storage schema and IPC protocol may change between milestones.
 
@@ -37,8 +37,9 @@ by the maintainers.
 
 - Attacks that require a local administrator (documented boundary).
 - Vulnerabilities in Windows, Microsoft Defender or third-party firewalls.
-- Optional modules that are not part of the Standard build (Blackbox, DKG, wallet extension,
-  community feeds) until they are implemented and enabled.
+- Vulnerabilities in upstream third-party products themselves are reported to their own maintainers.
+  **Axiom's adapters, installers, credential handling and integration boundaries remain in scope** when those optional components are enabled.
+- Proposed/unimplemented features, including direct paid VM publishing or a future wallet extension.
 - Social engineering and physical access.
 
 ## Security expectations for contributions

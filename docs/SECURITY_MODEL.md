@@ -1,161 +1,88 @@
-﻿# Security model — Axiom (FND-005)
+# Axiom security and privacy model
 
-## 1. Current trust boundary
+**Applies to:** Axiom 0.10.23 for Windows. Axiom is a security tool under active development and cannot guarantee prevention of every threat.
 
-| Process | Rights | What it does |
+## Trust boundaries and responsibilities
+
+| Component | Runs where | Main authority | Important boundary |
+|---|---|---|---|
+| Avalonia desktop | Signed-in Windows user | UI, local display, explicit user actions | No silent elevation; no generic remote control |
+| Axiom service | Local Windows host (installed Shield service: LocalSystem; portable monitoring: per-user service/process) | Observations, bounded stores and privileged Axiom rule coordinator | Service validates typed IPC; Windows Firewall does actual enforcement |
+| Windows Firewall | Windows OS | Applies persistent rules | Axiom manages only its own named rules |
+| Privacy Shield | Local Axiom service | Loopback DNS resolution and blocklists | DNS filtering only; it is not an inline network firewall |
+| Blackbox guard/dashboard | Optional local third-party module | Agent hook decisions, audit, graph cache, reporter integration | Mode and functioning hook/guard determine protection |
+| DKG node | Optional separate process | Network sync and external knowledge | May contact peers; local status does not prove sync |
+| AI provider / community feed / VirusTotal | Opt-in third-party endpoints | External inference or reputation evidence | May transmit bounded data upon user's explicit configuration/action |
+| Read-only MCP adapter | Local stdio process | Read-only queries through Axiom pipe | No arbitrary file, shell, process kill, OS-rule write or generic execution tool |
+
+## Local IPC and privileged firewall writes
+
+The Named Pipe `\\.\pipe\Axiom.Service.v1` uses an explicit DACL, caller SID verification, bounded NDJSON requests/responses and rate limits. The service rejects unsupported or unauthorized commands; its IPC is not a remote HTTP management API.
+
+Axiom Shield requires explicit consent and an installed privileged Windows service. Only that service can add/remove Axiom-owned Windows Firewall rules (form `Axiom::{id}::{OUT|IN}`), followed by read-back and audit; it must not edit unrelated user or third-party firewall rules. An installed rule remains Windows-managed if the UI closes or the service stops. Turning Shield off deliberately removes Axiom-owned rules. The documented legacy environment overrides exist for isolated testing, **not** for normal users. See [firewall recovery](FIREWALL_RECOVERY.md).
+
+## What is stored locally
+
+| Data | Where / retention | External transmission |
 |---|---|---|
-| `Axiom.Desktop.exe` | `asInvoker` | UI; reads IP Helper or calls the pipe |
-| `Axiom.Service.exe` | `LocalSystem` (installed); `asInvoker` in console mode | polls IP Helper, writes SQLite, serves the pipe |
-| `Axiom.McpServer.exe` | `asInvoker`, same user | read-only MCP tools; calls the authenticated pipe only |
+| Network flow metadata and measured traffic history | Axiom SQLite, with versioned retention (network flow history commonly 30 days) | Not automatically shared |
+| Axiom-owned firewall decisions and rule audit | Local service database/configuration | Not automatically shared |
+| Privacy Shield settings and compiled DNS rules | Local installed-service data (ProgramData); portable mode may use LocalAppData | List **downloads** contact selected upstream sources |
+| Blocked DNS request history | Bounded local blocked-event store (only blocked requests, with optional best-effort app identity); allowed requests are not retained as blocked history | Not published as raw browsing history |
+| AI Analyst findings/settings | Bounded local findings; configured API keys DPAPI-protected for current user | Opt-in analysis may send sanitized evidence to the selected provider |
+| Threat-sharing candidates/outcomes | Local `threat-share.json` preview queue, capped at 500 saved items | Only approved normalized candidates can be submitted through Blackbox |
+| Agent hook evidence and Blackbox audit/profile | Separate local Blackbox/Hermes stores, managed partly by upstream components | Third-party Blackbox reporting/network sync follows its own consent and configuration |
+| Reporter identity, signing key and sharing consent | Resolved local Hermes/Blackbox profile | Reporter uses signing identity for approved reports; do not publish private key |
+| Optional VirusTotal/community feed keys | Windows DPAPI for current user where implemented | Requests go to selected endpoint only when configured and invoked |
 
-In production the service runs as `LocalSystem` from `%ProgramFiles%\Axiom\Service` with an administrator-only ACL; the UI stays unprivileged. The installer copies the image there and repairs an older install that still points at the user profile.
-There are no COM/WFP/ETW/netsh calls, no firewall writes and no outbound network communication.
+Local data is **not automatically public**. "No telemetry" means Axiom does not implement its own analytics/data-sale pipeline; it does **not** mean that enabled DKG, Blackbox, AI or reputation integrations are network-silent.
 
-ETW (FND-004) is not implemented; when it arrives it requires `SeSystemProfilePrivilege` and belongs
-in the service.
+Axiom's own database is not generally encrypted at rest. File ACLs, restricted service directories and DPAPI for selected credentials do **not** mean every local history file is encrypted. The local Blackbox dashboard can expose more raw audit detail than the redacted Axiom UI view; protect its endpoint and profile accordingly.
 
-## 2. Named Pipe protection
+## What can leave the machine?
 
-- `\\.\pipe\Axiom.Service.v1`.
-- Explicit DACL: allow the service account + one SID; deny `Network`/`Anonymous`/`Guests`.
-- The client process SID is read from its token after connect; a mismatch closes the connection.
-- Inbound + Allow rule specs are rejected on the pipe; the UI cannot request that shape either.
-- Limits: request 256 KiB, response 4 MiB, 100 requests/s, 30 s idle, 4 instances.
-- Named commands only; no `exec`; firewall writes/config/diagnostics/`live.events` →
-  `not_supported` (`history.query` and read-only `rules.query` are supported).
-- Errors return a code and message, without a stack trace.
-- The MCP adapter uses the same DACL/SID-checked pipe. It has no direct database, firewall COM,
-  registry or filesystem API, and exposes no write tool.
+| Capability | Default / trigger | Typical outbound data | Notes |
+|---|---|---|---|
+| Core monitoring, local firewall | Local, no account needed | None required | Continues without DKG, Blackbox or internet |
+| DNS resolution with Privacy Shield | User enables/configures resolver and points adapter at it | Allowed DNS questions to selected upstream resolver | Local blocked names receive NXDOMAIN; bypass/fallback can alter filtering |
+| Blocklist update | User updates selected sources | HTTPS source requests | Existing local rules retained on failed source update |
+| AI Analyst | Explicitly configured and invoked; automatic analysis optional and off by default | Sanitized evidence about selected process/connections | Remote provider sees the evidence; local OpenCode route may use its own provider |
+| VirusTotal hash lookup | Opt-in API key and user checks hash | File SHA-256, not the file bytes | Provider can correlate lookups |
+| Community feed | Configured HTTPS URL / Refresh feed | Network fetch and optional bearer token | Starter feed is bundled and offline |
+| DKG/Blackbox installation and sync | User elects to install/start/enable integration | Network package downloads, DKG peer traffic and sync metadata | Localhost API reads are local, but the underlying node is networked |
+| Community IOC report | Sharing consent and explicit **Share** / **Send now** | Signed, normalized threat indicator and reporter identity | No automatic timer publication; queueing alone is not transmission |
+| VM publication | Not implemented directly in Axiom | None by Axiom | Any TRAC/gas-funded publishing belongs to an external, explicitly approved integration |
 
-## 3. Data at rest (FND-005)
+The normalized IOC sharing path excludes loopback, private/local/special-use destinations and drops URL userinfo, query and fragment. It is **not** authorized to publish raw prompts, network browsing histories, private IPs, command lines, files, credentials or session IDs. See [threat intelligence](THREAT_INTELLIGENCE.md).
 
-- Database: `%LOCALAPPDATA%\Axiom\axiom.db` (per-user/console mode) or
-  `%ProgramData%\Axiom\` (installed service). `AXIOM_DATA_DIR` overrides the path.
-- Only **connection metadata** is stored: process name/path, PID, protocol, local/remote endpoint,
-  state, direction, quality, first/last seen.
-- No payload, TLS content, DNS queries, tokens or credentials are stored.
-- Retention: 30 days; old flows and apps without flows are deleted.
-- SQLite WAL; `foreign_keys=ON`; `integrity_check` at startup.
-- A corrupt file is moved to `.corrupt-<timestamp>` (not deleted) and the database is recreated.
-- CSV export writes to a path the user explicitly selects; UTF-8 BOM; escaping.
-- The installed service sets an explicit ACL on `%ProgramData%\Axiom\` (SYSTEM and Administrators
-  only, no user write or create), rejects junctions, writes settings through a random temp file, and
-  refuses to use a settings file it cannot own. Development uses per-user LocalAppData.
+## Offline operation and safety trade-offs
 
-## 4. Firewall write gate (FND-006)
+- Existing Axiom-owned Windows Firewall rules remain active under Windows, even when Axiom's UI is closed or its optional network services are down.
+- Locally compiled DNS policy continues working **while the Axiom resolver is running and receiving queries**. If it stops, a saved-adapter restore or fallback DNS may restore name resolution **without filtering**. This is a deliberate connectivity failsafe.
+- Cached DKG/Blackbox verified-graph data is last-known evidence. No remote refresh occurs without connectivity. `CONNECTED` (local module), `SYNCED` (graph state), `VERIFIED` (specific data) and `PROTECTED` (guard/enforcement) must not be used interchangeably.
+- An unavailable Blackbox guard causes supported hooks to fail open by design. Do not claim agents are protected in this state.
+- A failed reporter call can be retained as a deferred local candidate. Retry requires a later explicit sharing action; turning the internet back on does not license silent sending.
 
-- `WindowsFirewallPolicyAdapter` uses the documented COM policy/rule objects on a dedicated STA
-  thread. Read-only listing and verification are always enabled; writes are gated.
-- Writes require **both** persisted user consent (`%ProgramData%\Axiom\protection.json`,
-  `Enabled=true`) and a non-interactive service host. The interactive app never writes, even with
-  consent; the legacy two-variable environment gate remains only as a test override
-  (`AXIOM_ENABLE_FIREWALL_WRITES=1`, `AXIOM_FIREWALL_WRITE_CONFIRM=yes`).
-- Consent is granted through Axiom Shield, which installs and starts the Windows service from one
-  UAC prompt. Removing the service is never automatic.
-- Only exact `Axiom::{id}::{OUT|IN}` names are created or removed; no wildcard, prefix or group
-  deletion exists.
-- The coordinator writes pending/applied/failed state and an audit row (actor SID, time, action,
-  result, spec, error) in the same SQLite transaction as the rule state.
-- Failed or throwing removals are also audited as `rule.remove` / `failed`; the stored rule is
-  marked `Failed` instead of remaining `Applied`.
-- Reapplying a rule clears a removed port scope, and read-back/verification compares action,
-  direction, protocol, profiles, enabled state, addresses and ports against the persisted spec.
-- The UI disables block/remove unless the service reports `FirewallWrites=true`.
-- The agent lockdown composes 16 non-loopback CIDR blocks (IPv4 and IPv6) so 127.0.0.0/8 and ::1
-  stay reachable for the local Blackbox guard; it never blocks loopback. It is path-exact: a renamed
-  copy of an agent executable, or another tool such as curl, is not covered, and the UI says so.
-- Installer uninstall, rollback and external-rule conflicts remain VM checks (ADR 0007).
+## Protection and limitations
 
-## 5. Threat model
-
-| Threat | FND-005 | Control |
+| Threat / failure | Mitigation | Remaining limitation |
 |---|---|---|
-| Another local user calls the service | DACL + SID check | Foreign SID rejection tested |
-| Remote pipe access | Deny `Network`/`Anonymous`/`Guests` | Local pipe |
-| Reading someone else's history | Per-user LocalAppData; installed ProgramData ACL is SYSTEM/Administrators only | Per-user path |
-| Same-user process calls the pipe | The allowed SID is accepted; inbound + allow is rejected. Protection changes and firewall writes still need the signed-in user's own code path | Documented limitation |
-| Sensitive content in the database | Only metadata | No payload/DNS |
-| Oversized response / DoS | 4 MiB response cap, 256 KiB request, 100/s | Buffered reader + limits |
-| Corrupt database | `integrity_check` + `.corrupt-*` backup | Tested |
-| Unbounded database growth | 30-day retention, hourly check | Tested |
-| SQL injection through search | Parameterized queries + `LIKE ... ESCAPE` | Tested |
-| Fake PID/path | `partial`, `unknown path` | FND-010 |
-| Firewall change | Consented shield, non-interactive service only, exact Axiom rule names | FND-006 |
-| Service crash | UI `Service unavailable`, reconnect | E2E tested |
-| Malicious prompt induces MCP tool abuse | Read-only tools only; no path input, shell, exec, rule or config command | PR A; no model-driven adversarial test yet |
-| MCP process reads data directly | Pipe-only adapter; no SQLite/COM/registry access | Code review; service SID check remains |
+| Other-user or remote pipe invocation | DACL, SID check, bounded commands | Same-user compromise remains an important boundary |
+| Unexpected firewall changes | Explicit Shield consent, Axiom-only identities, read-back and audit | Administrator/Windows policy can override; GUI status must be verified |
+| DNS outage after resolver stop | Adapter snapshot, safe fallback and service restore failsafe | DNS may bypass Privacy Shield while online connectivity survives |
+| Untrusted AI analysis or malicious text | Structured bounded evidence, model output treated as untrusted, no executable AI action field | Model findings can be wrong; do not auto-block |
+| Threat-graph poisoning / false positives | User-reviewed IOC reporting and independent upstream curation | Signed and consensus-endorsed claims are not automatically factual |
+| Leaking sensitive agent/user data | Local-first collection, sanitized indicator pipeline, explicit submission | Optional cloud/Blackbox/DKG components have their own processing/privacy terms |
+| Misleading status LEDs | Distinct health/sync/hook/canary states | A hook file or localhost listener alone does not prove active protection |
+| Tampered binaries / supply chain | Pinned dependencies and installer hash verification | Portable public binaries are not yet Authenticode-signed; hashes alone are not publisher identity |
+| Unexpected changes to agent configuration | Marker-owned hooks, backups, user-state fingerprinting and restoration attempts | Some third-party agent hook APIs/versions remain unstable |
 
-## 6. Limitations and checks not run
+## Supported packaging modes
 
-- The service is installed under `%ProgramFiles%\Axiom\Service` and runs as `LocalSystem`; the
-  ProgramData ACL and the service image ACL were verified on a local install.
-- A real second Windows account is still not exercised in CI; ACL/SID rejection are unit tested.
-- Binaries are not Authenticode-signed yet. The bootstrap script downloads the archive and its
-  checksums from the same release, so integrity is checked but authenticity is not.
-- No IPC command audit trail; required before firewall commands (FND-006). MCP calls are therefore
-  not separately audited yet.
-- No real MCP client or prompt-injection exercise has been run; only raw JSON-RPC and unit tests.
-- ETW/bytes are not implemented; FND-004 requires elevation.
-- The database is not encrypted; data is per-user metadata. This is a decision for FND-009.
+- Portable/desktop setup: may run local monitoring without a registered service; Shield setup and optional integrations involve further steps and permissions.
+- Complete installation: explicitly selected Blackbox/DKG/hook installers; installation and cloud/peer communication may require network access and additional consent.
+- Microsoft Store MSIX: core-only; Blackbox/DKG installers and agent hooks excluded. See [Store](STORE.md).
 
-## 7. Microsoft Store (MSIX) mode
+## Vulnerability reporting
 
-The Store package is core-only. At process start the Desktop host asks Windows for package identity
-and sets `DistributionContext.IsStorePackage`. In that mode:
-
-- DKG/Blackbox module entries and the Agents page are hidden;
-- optional installer/uninstaller methods return without launching PowerShell;
-- agent hook installation and hook probes are disabled;
-- HKCU `Run` autostart is disabled; Store packages use package activation instead;
-- no optional module file or agent configuration is created or removed.
-
-The package is a full-trust MSIX with `runFullTrust`, `internetClient` and
-`privateNetworkClientServer`. It is unsigned locally and signed by Microsoft during Store
-submission. See [STORE.md](STORE.md).
-
-## 8. Privacy Shield (FND-020, initial local resolver)
-
-- Off after a **partial installation**; a **complete installation** enables it during setup with
-  the Balanced profile and five sources. The service itself never changes adapter DNS, the hosts
-  file, firewall state or agent configuration. A separate explicit UAC helper can change one
-  selected adapter after the user approves Windows elevation.
-- The resolver binds UDP and TCP loopback only (`127.0.0.1`, and `::1` when available). It is not a
-  LAN resolver. TCP is used for TCP queries and oversized/truncated UDP fallback.
-- Blocked queries are answered locally with NXDOMAIN. Allowed queries are forwarded to the current
-  Windows DNS servers or an explicitly configured non-loopback upstream.
-- Only catalogued HTTPS blocklist sources are downloadable. Updates are bounded to 20 MB/45 s,
-  validated, normalized and atomically swapped; the previous ruleset is retained for rollback.
-- The policy engine evaluates only the DNS question name. It does not inspect payloads, TLS, HTTP
-  or application identity and does not claim per-process DNS attribution.
-- Counters and top blocked domains are in memory. A bounded, local blocked-query history (last 1,000)
-  stores only blocked domain, category and timestamp in
-  `%LOCALAPPDATA%\Axiom\privacy-shield-blocked.jsonl`; allowed queries are never stored, and the
-  user can clear it. No other DNS history is written to SQLite or any other store.
-- If no non-loopback system DNS is available, the service uses a conservative public fallback
-  (`1.1.1.1`/`9.9.9.9`) and reports it, so a manually configured loopback adapter does not lose all
-  resolution. Managed networks should set an explicit upstream.
-- DoH/DoT/DoQ, hardcoded IPs, VPN tunnels and pre-activation cache bypass the resolver. A blocked
-  query is not evidence that a connection was prevented.
-- See [PRIVACY_SHIELD.md](PRIVACY_SHIELD.md) for the user-facing safety and recovery contract.
-
-## 9. AI Security Analyst (FND-019 initial manual mode)
-
-- Disabled by default. The AI page is a manual action; it does not auto-analyze network events in
-  this build.
-- The API key is DPAPI-protected for the current user. Findings contain structured summaries and
-  evidence references, not prompts, provider responses or keys.
-- Evidence is bounded to process metadata, endpoints, direction, state and quality. Local paths are
-  reduced to file names by default. Packet contents, credentials, cookies, agent histories and
-  arbitrary files are never collected.
-- Cloud endpoints require HTTPS; HTTP is accepted only for a loopback local endpoint.
-- Provider output is treated as untrusted. It is parsed into a fixed structured contract, list
-  lengths are bounded, `SAFE`/`CLEAN` are normalized to `UNKNOWN`, and no firewall, shell, file or
-  agent-config action field exists.
-- A model warning is not a confirmed incident, and `SUPPORTED_ALERT` is not an enforcement result.
-- The existing MCP server remains read-only and separate; this initial UI path does not add a second
-  MCP server or any MCP write tool.
-
-## 10. Reporting vulnerabilities
-
-Until a public channel exists, report directly to the project owner. Do not publish real SIDs,
-paths or database content in a reproduction.
+Use [SECURITY.md](../SECURITY.md) and the repository's private GitHub security advisory workflow. Never publish real keys, user paths, database exports or private network details in a public bug report.

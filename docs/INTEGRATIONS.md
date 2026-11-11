@@ -1,11 +1,14 @@
 # Optional integrations
 
 Axiom's standard build is the local network monitor and firewall policy manager. Blackbox and
-OriginTrail DKG are **optional third-party integrations**. Axiom reads their loopback status; the
-Install buttons launch the official installers only after an explicit confirmation.
+OriginTrail DKG are **optional third-party integrations**. Axiom checks their local loopback status,
+can explicitly install/start the modules and provides a Blackbox settings/sync/report interface.
+These operations require the user's choice or a separately enabled auto-sync preference; none of
+them is on the per-connection firewall enforcement path.
 
-Both probes accept only loopback URLs. A non-loopback endpoint is rejected, and no request leaves
-the machine.
+Both **status probes** accept only loopback URLs; a non-loopback module endpoint is rejected.
+This does not mean the third-party node, its package installer, sync or approved report submission
+is offline-only: those components may communicate with peers or external endpoints.
 
 The Microsoft Store MSIX build is **core-only**. It does not include these integrations, the
 Blackbox/DKG installers or any agent-hook adapter. See [STORE.md](STORE.md).
@@ -245,8 +248,10 @@ and quoting survive the mode update. Axiom does not write Codex `config.toml`.
 
 ## Blackbox control center
 
-The Agents page reads the local dashboard at `http://127.0.0.1:9700`. It never opens a public
-listener and never sends data off the machine.
+The Agents page reads the local dashboard at `http://127.0.0.1:9700`. Axiom does not open a
+public API listener; **dashboard API calls remain on loopback**, while a user-requested graph
+sync or approved reporter submission may cause the separate Blackbox/DKG components to contact
+external peers. The local-only API boundary must not be confused with network-silent integration.
 
 - **Configure** opens a native settings dialog. It reads `GET /api/settings`, edits only requested
   fields, and posts a patch to `POST /api/settings` with the per-process `X-Blackbox-Token` from
@@ -281,6 +286,9 @@ listener and never sends data off the machine.
   back to the local `authoritative-sync.json`, `sync_progress.json` and `ruleset.json` files for the
   last known counts and graph sample instead of falsely reporting the node offline. Null values are
   shown as `—`, never as zero, and an offline node is never presented as an empty or clean graph.
+  **Auto-sync is opt-in and off by default**; when enabled, Axiom asks the local dashboard for
+  incremental catch-up approximately every 15 minutes. A graph drawn from the local fallback files
+  is last-known state, not proof of a new remote verification.
 - **Test Protection** creates a temporary harmless canary, adds it to protected paths, requires
   Block mode, calls the local guard, restores the original paths and removes the canary. Its result
   is explicitly labelled guard-level; it does not claim that an agent hook was executed.
@@ -288,6 +296,10 @@ listener and never sends data off the machine.
   activation; a hook file alone is not presented as `PROTECTED`. Connected/configured states
   (`HOOK INSTALLED`, `HOOK LOADED`) are green, while `AUDIT ONLY` is amber and `DEGRADED`/`OFFLINE`
   are red.
+
+For the complete IOC lifecycle, SWM/VM distinctions, local retry semantics, upstream curation,
+provenance and paid VM publishing boundaries, see [Threat intelligence](THREAT_INTELLIGENCE.md).
+Axiom currently does not directly pay TRAC/gas or publish VM assets.
 
 ## Reputation provider (VirusTotal, opt-in)
 
@@ -423,10 +435,14 @@ Firewall rules, other applications or unrelated user data.
 
 | Status | Meaning |
 |---|---|
-| `CONNECTED` | The loopback endpoint answered. Axiom only read its status. |
-| `NOT RUNNING` | Nothing answered on the configured loopback endpoint. Start the module separately. |
-| `UNAVAILABLE` | The endpoint is invalid or not loopback; no request was sent. |
+| `CONNECTED` | An expected local module identity/status payload was returned; does **not** prove fresh graph sync or active agent blocking. |
+| `NOT RUNNING` | The configured local endpoint did not answer. Use the explicit Start action if installed. |
+| `UNKNOWN` | A listener answered but did not identify as the expected module. |
+| `UNAVAILABLE` | An invalid/non-loopback module endpoint was rejected; no probe was sent. |
 | `CHECKING` | The initial probe is still running. |
+
+Graph sync has separate `synced`, `syncing`, `node offline` and `unknown` states; a hook has
+separate installed, loaded, audited and confirmed-blocked states.
 
 ## Security boundaries
 
@@ -434,8 +450,14 @@ Firewall rules, other applications or unrelated user data.
   silently.
 - Uninstall stops only processes whose command line points into the Axiom module folder; it does
   not stop unrelated agents or global services.
-- Axiom does not configure or control a module after installation; it only reads status.
-- No remote endpoint, cloud lookup, token display or credential storage.
+- Axiom can explicitly configure Blackbox settings/mode, trigger a local-dashboard sync,
+  start an installed module and run user-approved reporter submissions. It does **not** silently
+  write third-party agent configurations outside its documented marker-owned adapters.
+- Local status probes are loopback-only, but selected feeds, AI providers, VirusTotal and the
+  underlying DKG/Blackbox components can access external endpoints when enabled.
+- Axiom stores selected opt-in provider/feed credentials using DPAPI, while Blackbox has its own
+  local profile, signing identity and consent files. A local status probe alone does not require a
+  DKG wallet.
 - No DKG wallet or token is required for the status probe.
 - Neither module is on the per-connection firewall enforcement path.
 - A `CONNECTED` status is not a malware verdict and does not replace Windows Firewall.
