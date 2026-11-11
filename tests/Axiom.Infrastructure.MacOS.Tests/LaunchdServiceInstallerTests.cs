@@ -136,6 +136,7 @@ public sealed class LaunchdServiceInstallerTests
         Assert.Equal(
             [
                 "launchctl bootout system/com.axiom.service",
+                "launchctl print system/com.axiom.service",
                 "launchctl enable system/com.axiom.service",
                 "launchctl bootstrap system " + layout.PlistPath,
             ],
