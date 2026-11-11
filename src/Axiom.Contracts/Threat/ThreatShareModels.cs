@@ -198,7 +198,7 @@ public static class ThreatShareVocabulary
         Contexts.Contains(context, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Builds the stable queue id and the value Blackbox hashes, or null when invalid.</summary>
-    public static string? Normalize(string indicatorType, string value)
+    public static string? Normalize(string indicatorType, string value, bool allowUrlPath = false)
     {
         var type = (indicatorType ?? string.Empty).Trim().ToLowerInvariant();
         var raw = (value ?? string.Empty).Trim();
@@ -229,6 +229,13 @@ public static class ThreatShareVocabulary
 
                 // Scheme, host, non-default port and path only: credentials, query strings and
                 // fragments can contain tokens or presigned secrets and never leave the machine.
+                // A path is not shared unless the caller explicitly opts in; paths can contain
+                // account, document or session identifiers.
+                if (!allowUrlPath && uri.AbsolutePath is not ("" or "/"))
+                {
+                    return null;
+                }
+
                 var hostForUrl = uri.IdnHost.TrimEnd('.').ToLowerInvariant();
                 if (hostForUrl.Contains(':', StringComparison.Ordinal) &&
                     !hostForUrl.StartsWith('['))
@@ -237,7 +244,8 @@ public static class ThreatShareVocabulary
                 }
 
                 var port = uri.IsDefaultPort ? string.Empty : ":" + uri.Port;
-                var normalizedUrl = $"{uri.Scheme}://{hostForUrl}{port}{uri.AbsolutePath}"
+                var path = allowUrlPath ? uri.AbsolutePath : string.Empty;
+                var normalizedUrl = $"{uri.Scheme}://{hostForUrl}{port}{path}"
                     .TrimEnd('/');
                 return normalizedUrl.Length is > 0 and <= 2_048 ? normalizedUrl : null;
             case "ip":

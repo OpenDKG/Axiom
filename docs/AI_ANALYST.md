@@ -81,10 +81,12 @@ a domain named in prose or in a suggested block list cannot become a report. Que
 on the Agents page and are signed and sent only after the user presses **Share** or **Send now**.
 
 While the evidence package carries no file hash computed by Axiom, hash indicators are never
-proposed. If the local list/provenance lookup is unavailable, Axiom fails closed and queues no AI
-indicator: an empty fallback set must not turn a list-derived value into an independent report.
-The Blackbox report still uses the closest available context label (`in-tool-output`) and
-`malware-delivery`; a dedicated observed-endpoint context should be requested from Umanitek.
+proposed. A URL indicator with a non-root path is rejected by default; only a domain or root URL is
+shareable, and no path opt-in ships yet. If the local list/provenance lookup is unavailable, Axiom
+fails closed and queues no AI indicator: an empty fallback set must not turn a list-derived value
+into an independent report. The Blackbox report still uses the closest available context label
+(`in-tool-output`) and `malware-delivery`; a dedicated observed-endpoint context should be requested
+from Umanitek.
 
 ## Limitations
 
