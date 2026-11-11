@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -47,7 +47,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         IShellActions? shellActions = null,
         IBlackboxDialogService? blackboxDialogs = null,
         IAgentSessionSource? agentSessions = null,
-        IVisualEffectsService? visualEffects = null)
+        IVisualEffectsService? visualEffects = null,
+        Func<NetworkRecoveryResult>? restoreNetwork = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(timers);
@@ -115,7 +116,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             autostartService ?? new UnsupportedAutostartService(),
             Firewall,
             interaction,
-            _visualEffects);
+            _visualEffects,
+            restoreNetwork);
         Overview.AgentActivity = Agents;
         AgentStats = new AgentStatsPageViewModel(Agents);
         Pages =

@@ -17,4 +17,7 @@
     <PackageReference Include="System.Management" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Axiom.Presentation\Axiom.Presentation.csproj" />
+  </ItemGroup>
 </Project>

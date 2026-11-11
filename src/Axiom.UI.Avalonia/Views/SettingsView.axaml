@@ -27,6 +27,11 @@
             </WrapPanel>
             <controls:AxiomSelectableTextBlock Text="{Binding CurrentVisualEffectsText}" FontSize="10"
                                                Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <Button Content="Restore network settings" Command="{Binding RestoreNetworkSettingsCommand}"
+                    IsVisible="{Binding HasNetworkRecovery}" Padding="12,6" HorizontalAlignment="Left" Margin="0,2,0,0"
+                    ToolTip.Tip="Restores the DNS servers saved before the last protection change and removes only Axiom-owned firewall rules." />
+            <controls:AxiomSelectableTextBlock Text="{Binding NetworkRecoveryStatusText}" IsVisible="{Binding HasNetworkRecovery}"
+                                               FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             <CheckBox Content="Show notifications" IsChecked="{Binding NotificationsEnabled}"
                       Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
             <CheckBox Content="Show tray icon" IsChecked="{Binding TrayNotificationsEnabled}"

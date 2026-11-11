@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -15,6 +15,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     private readonly FirewallPageViewModel? _firewall;
     private readonly IUserInteraction _ui;
     private readonly IVisualEffectsService _visualEffects;
+    private readonly Func<NetworkRecoveryResult>? _restoreNetwork;
     private readonly StartupSettingsStore _startupSettings = new();
     private bool _updatingStartup;
 
@@ -25,7 +26,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         IAutostartService autostart,
         FirewallPageViewModel? firewall = null,
         IUserInteraction? userInteraction = null,
-        IVisualEffectsService? visualEffects = null)
+        IVisualEffectsService? visualEffects = null,
+        Func<NetworkRecoveryResult>? restoreNetwork = null)
         : base("Settings", "Appearance, build and license information", "G")
     {
         ArgumentNullException.ThrowIfNull(monitor);
@@ -36,6 +38,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         _firewall = firewall;
         _ui = userInteraction ?? new NullUserInteraction();
         _visualEffects = visualEffects ?? new FixedVisualEffectsService();
+        _restoreNetwork = restoreNetwork;
 
         CollectorText = monitor.SourceName;
         PollText = $"{monitor.PollInterval.TotalSeconds:0} s · read-only";
@@ -111,6 +114,27 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     /// <summary>One compact legal line: license and collective copyright.</summary>
     public string AboutLegalLine =>
         $"{AxiomDocuments.ShortLicenseName} \u00B7 {AxiomDocuments.CopyrightLine}";
+
+    /// <summary>True when the host supplied a restore operation.</summary>
+    public bool HasNetworkRecovery => _restoreNetwork is not null;
+
+    [ObservableProperty]
+    private string _networkRecoveryStatusText = string.Empty;
+
+    /// <summary>Restores the saved DNS servers and removes the captured Axiom-owned rules.</summary>
+    [RelayCommand]
+    private void RestoreNetworkSettings()
+    {
+        if (_restoreNetwork is null)
+        {
+            return;
+        }
+
+        var result = _restoreNetwork();
+        NetworkRecoveryStatusText = result.Succeeded
+            ? $"Restored {result.AdaptersRestored} adapter(s); removed {result.RulesRemoved} Axiom rule(s)."
+            : "Restore incomplete: " + string.Join(" ", result.Problems);
+    }
 
     public string AboutSource => AxiomDocuments.SourceUrl;
 
