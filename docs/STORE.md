@@ -8,7 +8,7 @@ separate installer. The portable GitHub release remains a separate, unsigned cha
 
 Included:
 
-- the Avalonia Windows desktop application (the WPF fallback remains in source);
+- the WPF desktop application;
 - local IP Helper monitoring with the bundled per-user service process;
 - history, applications, events, firewall inventory, overview and settings;
 - reputation-provider configuration, the community feed and local SHA-256 file scanning;
@@ -28,7 +28,8 @@ The app detects MSIX package identity at startup and hides or blocks the exclude
 the package is sideloaded. The package does not contain `Axiom-Setup.exe`; the optional module
 installation flow and agent-hook flow are disabled at runtime and are not exposed in the Store UI.
 
-The Store package is core-only and starts without elevation. Do not infer active firewall enforcement from monitoring alone: any supported firewall-write path still requires Axiom Shield's explicit consent and privileged Windows service. Store packaging does not silently request elevation or apply rules.
+Firewall writes remain off unless both documented test-VM environment variables are set. The Store
+package does not request elevation and does not require firewall changes to start.
 
 ## Build
 
@@ -117,12 +118,11 @@ Import-Certificate `
   -FilePath .\artifacts\store\test.cer `
   -CertStoreLocation Cert:\CurrentUser\TrustedPeople
 
-$package = Get-ChildItem .\artifacts\store\Axiom-*-x64.msix | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\signtool.exe" sign `
   /fd SHA256 /f .\artifacts\store\test.pfx /p "test-only" `
-  $package.FullName
+  .\artifacts\store\Axiom-0.4.21-x64.msix
 
-Add-AppxPackage $package.FullName
+Add-AppxPackage .\artifacts\store\Axiom-0.4.21-x64.msix
 ```
 
 Sideloading must be enabled on the test VM. Never use this test certificate for a public release.
