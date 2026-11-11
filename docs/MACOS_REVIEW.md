@@ -47,13 +47,13 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
 
 ## Medium
 
-7. Upstream resolvers discovered once (`PrivacyShieldController.cs:346`); Wi-Fi/VPN switch while the shield is on
+7. [FIXED 5d5189e: `UpstreamRediscovery` polls `DiscoverUpstreams()` every 10 s (2 s after 3 consecutive upstream failures, `DnsProxyServer.UpstreamFailureStreak`) and `DnsProxyServer.UpdateUpstreams` swaps the list without touching the listener; a loopback-only discovery (our own 127.0.0.1) uses the backup's saved servers; macOS only, Windows unchanged.] Upstream resolvers discovered once (`PrivacyShieldController.cs:346`); Wi-Fi/VPN switch while the shield is on
    leaves dead upstreams -> machine-wide DNS outage. Re-discover on `State:/Network/Global/DNS` change or on failure.
-8. Deleting/moving the bundle with the shield on strands DNS at 127.0.0.1 (KeepAlive loops on a missing program,
+8. [FIXED 99ce513: `axiomd --restore-dns` restores from the backup without the daemon; the daemon runs from the root-owned helper dir (#1) so moving the bundle does not remove the program; with `{SuccessfulExit:false}` + `ThrottleInterval` a missing program cannot hot-loop.] Deleting/moving the bundle with the shield on strands DNS at 127.0.0.1 (KeepAlive loops on a missing program,
    no restore). Follows from #1; add `axiomd --restore-dns`.
-9. `KeepAlive=true` restarts a clean exit forever; single unbounded log file. Use `KeepAlive {SuccessfulExit:false}`
+9. [FIXED 99ce513: `KeepAlive {SuccessfulExit:false}`, `ThrottleInterval 10`, `/etc/newsyslog.d/com.axiom.service.conf` (5 MB, keep 5, compressed) written by `--install-service`, removed by `--uninstall-service`; tests.] `KeepAlive=true` restarts a clean exit forever; single unbounded log file. Use `KeepAlive {SuccessfulExit:false}`
    and a `newsyslog.d` entry.
-10. libproc fallback scans every pid every second, twice (`MacConnectionSource`, `MacDnsProcessLookup`). Share one
+10. [FIXED 2ac3c5f: `LibProcSocketScanner.Shared` — one pass per 2 s shared by `MacConnectionSource` and `MacDnsProcessLookup`, a DNS miss refreshes at most every 500 ms; test asserts 5 passes for ten 1 s polls and no second pass for a burst of misses.] libproc fallback scans every pid every second, twice (`MacConnectionSource`, `MacDnsProcessLookup`). Share one
     scanner, poll 2-5 s, or use `net.inet.tcp.pcblist_n`.
 11. Rule file read via path twice (stat then read, follows symlinks). Enforce root-only invariant:
     `open(O_NOFOLLOW)`, `fstat`, `st_uid==0 && !(mode & 022)`, read from the fd.
@@ -65,32 +65,32 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
 14. `EventSink.send` does one `queue.async` per event before the bounded queue applies: a flow flood grows the
     dispatch backlog. `statisticsReportFrequency = .medium` emits ~1 event/s per live flow. Atomic in-flight counter,
     `.low` or batched stats.
-15. Autostart LaunchAgent pins the current path (translocated for quarantined apps). Use
+15. [FIXED 11871d6: ProgramArguments `/usr/bin/open -b com.axiom.firewall --args --autostart` when running from a bundle; the executable path only as fallback; an old pinned plist reads as stale and `Repair` upgrades it; tests.] Autostart LaunchAgent pins the current path (translocated for quarantined apps). Use
     `open -b com.axiom.firewall --args --autostart` or `SMAppService.loginItem`.
-16. `package-app.sh` codesigns every regular file with `--timestamp` (hundreds of timestamp calls, signs .json/.pdb).
+16. [FIXED da36443: signs Mach-O files only (magic bytes, deepest first), `--timestamp` only with a Developer ID identity, `dsymutil` for the Swift extension/helper when `AXIOM_SIGN_IDENTITY` is set (no dSYM for .NET; portable pdb stays in `publish/`), and `Axiom.pkg` via `pkgbuild` with a postinstall that runs `axiomd --install-service` (`AXIOM_INSTALLER_IDENTITY` to sign it).] `package-app.sh` codesigns every regular file with `--timestamp` (hundreds of timestamp calls, signs .json/.pdb).
     Sign Mach-O only; produce dSYMs. Docs claim a `.pkg` is produced; it is not.
 17. macOS 13/14 code paths (`NWHostEndpoint`, `NENetworkRule(remoteNetwork:)`, deprecated in 15) compiled but
     never run; add `#available(macOS 15)` branch with `nw_endpoint` initialisers before Tahoe removes them.
-18. Dead .NET `FilterRuleMatcher` (204 lines, tests only). Delete, or make it a cross-language contract test sharing
+18. [FIXED 0016a09: `macos/Tests/fixtures/rules-cases.json` (17 address-entry cases, 8 rule sets / 22 verdict cases from the Swift unit cases) is read by `FilterRulesTests`; `FilterRuleMatcher` moved to the test project as the reference implementation. Swift side wires the same file (#other agent).] Dead .NET `FilterRuleMatcher` (204 lines, tests only). Delete, or make it a cross-language contract test sharing
     fixtures with the Swift tests.
 
 ## Low
 
-19. Legacy `SecKeychainFind/AddGenericPassword`; ad hoc re-signs change the item ACL -> Keychain prompts on every
+19. [FIXED 8c7f12a: `SecItemCopyMatching/SecItemAdd/SecItemUpdate`, `kSecClassGenericPassword`, service `com.axiom.firewall`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`; minimal CFDictionary/CFData/CFString interop; AES-GCM design and tests unchanged.] Legacy `SecKeychainFind/AddGenericPassword`; ad hoc re-signs change the item ACL -> Keychain prompts on every
     rebuild. Migrate to `SecItemAdd/CopyMatching`.
-20. IPC DoS: 16 slots x 30 s idle, any user. Per-uid cap.
-21. Single-instance race between `TryAcquire` and `Listen`; second launch may exit without showing the window.
-22. Three near-identical "run tool with timeout" helpers; `PipeServerWorker` branches only for a log string.
+20. [FIXED ca8b752: max 4 concurrent connections per non-root uid (root unlimited), counted after authorization, released on close; test opens 4 idle sockets and shows the 5th refused.] IPC DoS: 16 slots x 30 s idle, any user. Per-uid cap.
+21. [FIXED 11871d6: lock + Listen run before any other startup work; the second instance retries `SignalExisting` once after 300 ms.] Single-instance race between `TryAcquire` and `Listen`; second launch may exit without showing the window.
+22. [FIXED a7b9934: `Axiom.Contracts.ToolProcess` (argument list, both streams, timeout kills the tree) backs `ProcessRunner`, `MacElevation.RunAsync` and `FilterExtensionManager`; `PipeServerWorker` has one `LoggerMessage` with the OS wording as parameters.] Three near-identical "run tool with timeout" helpers; `PipeServerWorker` branches only for a log string.
 23. Unconnected UDP sockets get one verdict; document. `exit(0)` after `stopFilter` logs as unexpected exit; document.
 24. `deploy-to-vm.sh` hardcodes `/home/buba`; mark dev-only.
-25. Cosmetic: menu offers Install/Turn On while running; Overview says "read-only inventory" with the shield on;
+25. [FIXED 11871d6: menu items read "Service: running" / "Filter: on" (disabled) once running; Overview line becomes "Protection active: firewall writes enabled…" when the resolver runs or writes are enabled; `MacDnsConfigurator.ListActiveServices` skips services whose device reports `status: inactive` (restore still covers every service). AppleScript quit: see MACOS_TEST_REPORT.md.] Cosmetic: menu offers Install/Turn On while running; Overview says "read-only inventory" with the shield on;
     Privacy Shield redirects inactive network services; AppleScript quit reports -128.
 
 ## Test gaps
 
 - Swift: `EventSink` (drop-oldest, framing), `RuleStore` watch/poll races, IPv6/UDP/QUIC traffic, translocation,
   upgrade-replace, crash relaunch. No CI.
-- .NET: `MacConnectionSource` aggregation/dedupe, `MacProcessIdentityResolver` cache/promotion, `LibProcLayout`
+- .NET: [DONE 2ac3c5f: `MacConnectionSourceAndIdentityTests`] ~~`MacConnectionSource` aggregation/dedupe, `MacProcessIdentityResolver` cache/promotion~~, `LibProcLayout`
   against a real arm64 dump, `ChildSignal`, getpeereid path, `MacProtectionSetup` flows (VM-only).
 - Apple silicon: never executed. Developer ID / notarization: never executed.
 

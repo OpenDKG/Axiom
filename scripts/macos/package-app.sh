@@ -221,8 +221,12 @@ is_macho() { # Mach-O or fat magic: feedface/feedfacf (thin), cefaedfe/cffaedfe 
   esac
 }
 
-sign_tree() { # sign_tree <dir> <skip-name...>: every Mach-O file, deepest first (review #16)
-  local dir=$1; shift
+sign_tree() { # sign_tree <dir> <macho|all> <skip-name...>: deepest first (review #16)
+  # "macho": only Mach-O files; everything else (managed .dll, .json, .plist) is sealed by the
+  # bundle signature as a resource. "all": every regular file — codesign treats Contents/MacOS as
+  # code, not resources, so a non-Mach-O file there must carry its own signature or
+  # `--verify --deep --strict` fails with "code object is not signed at all".
+  local dir=$1 mode=$2; shift 2
   local skip=("$@")
   local signed=0 skipped=0
   while IFS= read -r -d '' file; do
@@ -230,23 +234,23 @@ sign_tree() { # sign_tree <dir> <skip-name...>: every Mach-O file, deepest first
     local wanted=1
     for s in "${skip[@]}"; do [[ "$name" == "$s" ]] && wanted=0; done
     if [[ $wanted -eq 1 ]]; then
-      # Managed .dll, .json, .plist etc. are sealed by the bundle signature; codesign on them
-      # only creates xattr-backed signatures that ditto/zip lose anyway.
-      if is_macho "$file"; then codesign --force "${SIGN_ARGS[@]}" "$file"; signed=$((signed + 1))
+      if [[ $mode == all ]] || is_macho "$file"; then
+        codesign --force "${SIGN_ARGS[@]}" "$file" 2>&1 | grep -v 'replacing existing signature' || true
+        signed=$((signed + 1))
       else skipped=$((skipped + 1)); fi
     fi
   done < <(find "$dir" -type f -print0 | sort -z -r)
-  log "  signed $signed Mach-O files, left $skipped non-Mach-O files to the bundle seal"
+  log "  signed $signed files, left $skipped non-Mach-O files to the bundle seal"
 }
 
 log "codesign axiomd and its runtime (Contents/Resources/service)"
-sign_tree "$APP/Contents/Resources/service" axiomd
+sign_tree "$APP/Contents/Resources/service" macho axiomd
 codesign --force "${SIGN_ARGS[@]}" --identifier com.axiom.service \
   --entitlements "$ROOT/scripts/macos/axiomd.entitlements" "$APP/Contents/Resources/service/axiomd"
 
 log "codesign the .NET runtime and libraries (Contents/MacOS)"
 # axiom-sysext keeps the signature and entitlements from macos/build.sh; Axiom is signed with the bundle.
-sign_tree "$APP/Contents/MacOS" Axiom axiom-sysext
+sign_tree "$APP/Contents/MacOS" all Axiom axiom-sysext
 
 if [[ $HAS_FILTER -eq 1 ]]; then
   codesign --verify --strict "$APP/Contents/Library/SystemExtensions/$EXT_ID.systemextension"
