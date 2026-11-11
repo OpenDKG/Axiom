@@ -2,6 +2,17 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.11.0
+
+- **Public release line resumes after 0.10.25.** This release rolls up the 0.2.0 provenance work
+  (list-only matches stay local, local source/version/Axiom provenance, fail-closed AI provenance)
+  and the 0.3.0 work (user-triggered Check graph, installer upgrade while the service runs).
+- **Release ordering is guarded.** `scripts/build-release.ps1` now refuses a version that is not
+  greater than the highest existing `v*` tag, because GitHub sorts releases by semantic version.
+  The short 0.2.0/0.3.0 reset stays as historical snapshots.
+- Version `0.11.0` is greater than the previous public tag `0.10.25`, so the new release appears
+  above it; future 0.11.x releases continue normally.
+
 ## What's in 0.3.0
 
 - **AI Analyst provenance fails closed.** If the local list/provenance lookup fails, no AI

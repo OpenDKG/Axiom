@@ -59,6 +59,23 @@ if (-not $OutputDir) {
     $OutputDir = Join-Path $root "artifacts\release"
 }
 
+$highestTag = $null
+$existingTags = & git -C $root tag --list "v*" 2>$null
+foreach ($tag in $existingTags) {
+    $candidate = $tag.TrimStart("v")
+    $parsed = $null
+    if ([version]::TryParse($candidate, [ref]$parsed) -and
+        (-not $highestTag -or $parsed -gt $highestTag)) {
+        $highestTag = $parsed
+    }
+}
+
+$currentVersion = $null
+if ([version]::TryParse($Version, [ref]$currentVersion) -and
+    $highestTag -and $currentVersion -le $highestTag) {
+    throw "Version $Version is not greater than existing release tag v$highestTag. GitHub sorts releases by semantic version, so a reset would hide the new release below older ones. Bump above v$highestTag."
+}
+
 $dotnet = Resolve-Dotnet
 $project = Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj"
 $serviceProject = Join-Path $root "src\Axiom.Service\Axiom.Service.csproj"
