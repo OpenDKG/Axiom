@@ -187,6 +187,74 @@ public sealed class UnixSocketIpcTests
         }
     }
 
+    [Fact]
+    public void UidCapIsFourForUsersAndUnlimitedForRoot()
+    {
+        Assert.True(UnixSocketIpcTransport.IsWithinUidCap(501, 3));
+        Assert.False(UnixSocketIpcTransport.IsWithinUidCap(501, UnixSocketIpcTransport.MaxConnectionsPerUid));
+        Assert.False(UnixSocketIpcTransport.IsWithinUidCap(null, UnixSocketIpcTransport.MaxConnectionsPerUid));
+        Assert.True(UnixSocketIpcTransport.IsWithinUidCap(0, 1000));
+    }
+
+    [Fact]
+    public async Task FifthIdleConnectionOfTheSameUidIsRefusedAndTheSlotComesBackOnClose()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var paths = MacServicePaths.ForRoot(temp.Path);
+        var logs = new List<string>();
+        // The test runs as one non-root uid; pretend it is uid 501 so root's exemption does not apply.
+        var transport = new UnixSocketIpcTransport(paths, _ => new PeerDecision(true, "uid:501", "test"));
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var server = transport.RunAsync(Dispatcher(_ => { }), line => { lock (logs) { logs.Add(line); } }, cts.Token);
+        var idle = new List<Socket>();
+        try
+        {
+            await WaitForSocketAsync(paths.IpcSocketPath, cts.Token);
+            for (var index = 0; index < UnixSocketIpcTransport.MaxConnectionsPerUid; index++)
+            {
+                var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+                await socket.ConnectAsync(new UnixDomainSocketEndPoint(paths.IpcSocketPath), cts.Token);
+                idle.Add(socket);
+            }
+
+            // Fifth: accepted by the kernel, then closed by the daemon without a reply.
+            Assert.Null(await RequestAsync(paths.IpcSocketPath, IpcCommandTypes.ServiceHealth, cts.Token));
+            lock (logs)
+            {
+                Assert.Contains(logs, line => line.Contains("more than 4 concurrent connections", StringComparison.Ordinal));
+            }
+
+            // Closing one idle connection frees its slot.
+            idle[0].Dispose();
+            idle.RemoveAt(0);
+            IpcResponse? response = null;
+            for (var attempt = 0; attempt < 50 && response is null; attempt++)
+            {
+                await Task.Delay(20, cts.Token);
+                response = await RequestAsync(paths.IpcSocketPath, IpcCommandTypes.ServiceHealth, cts.Token);
+            }
+
+            Assert.NotNull(response);
+            Assert.True(response.Ok);
+        }
+        finally
+        {
+            foreach (var socket in idle)
+            {
+                socket.Dispose();
+            }
+
+            await cts.CancelAsync();
+            await server;
+        }
+    }
+
     private static IpcRequestDispatcher Dispatcher(Action<string> log) => new(
         new IpcRequestHandlers
         {

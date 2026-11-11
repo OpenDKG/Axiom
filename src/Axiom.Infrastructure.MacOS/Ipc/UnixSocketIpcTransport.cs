@@ -10,12 +10,19 @@ namespace Axiom.Infrastructure.MacOS.Ipc;
 /// The daemon IPC endpoint: a Unix domain socket (default <c>/var/run/axiom/axiom.sock</c>, mode
 /// 0666 in a 0755 root directory). It speaks exactly the Windows pipe protocol (newline-delimited
 /// JSON envelopes), so .NET <c>NamedPipeClientStream</c> clients connect to the absolute path
-/// unchanged. Every accepted peer is authorized by uid before a byte is read.
+/// unchanged. Every accepted peer is authorized by uid before a byte is read. Review #20: besides
+/// the global slot limit, every non-root uid may hold at most <see cref="MaxConnectionsPerUid"/>
+/// concurrent connections, so one user idling on sockets cannot lock the others (or the desktop
+/// app of the installing user) out; root is uncapped.
 /// </summary>
 [UnsupportedOSPlatform("windows")]
 public sealed class UnixSocketIpcTransport : IIpcTransport
 {
-    private const int MaxConcurrentClients = 16;
+    public const int MaxConcurrentClients = 16;
+
+    public const int MaxConnectionsPerUid = 4;
+
+    private readonly Dictionary<uint, int> _perUid = [];
 
     private readonly MacServicePaths _paths;
 
@@ -47,6 +54,13 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
     }
 
     public string Endpoint => _paths.IpcSocketPath;
+
+    /// <summary>
+    /// Pure cap decision: root (uid 0) is unlimited; an unknown uid (no peer credentials) and
+    /// every other uid get <see cref="MaxConnectionsPerUid"/>.
+    /// </summary>
+    public static bool IsWithinUidCap(uint? uid, int activeForUid) =>
+        uid == 0 || activeForUid < MaxConnectionsPerUid;
 
     public string Prepare() => PeerAuthorization.Description;
 
@@ -104,6 +118,42 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
         }
     }
 
+    private bool TryCountConnection(uint? uid)
+    {
+        // Peers without credentials share one bucket (uint.MaxValue) so they cannot bypass the cap.
+        var key = uid ?? uint.MaxValue;
+        lock (_perUid)
+        {
+            var active = _perUid.GetValueOrDefault(key);
+            if (!IsWithinUidCap(uid, active))
+            {
+                return false;
+            }
+
+            _perUid[key] = active + 1;
+            return true;
+        }
+    }
+
+    private void ReleaseConnection(uint? uid)
+    {
+        var key = uid ?? uint.MaxValue;
+        lock (_perUid)
+        {
+            if (_perUid.TryGetValue(key, out var active))
+            {
+                if (active <= 1)
+                {
+                    _perUid.Remove(key);
+                }
+                else
+                {
+                    _perUid[key] = active - 1;
+                }
+            }
+        }
+    }
+
     private async Task ServeAsync(
         Socket client,
         IpcRequestDispatcher dispatcher,
@@ -111,9 +161,11 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
         SemaphoreSlim slots,
         CancellationToken cancellationToken)
     {
+        uint? uid = null;
+        var counted = false;
         try
         {
-            uint? uid = UnixPeerCredentials.TryGetPeerUid(client, out var peerUid) ? peerUid : null;
+            uid = UnixPeerCredentials.TryGetPeerUid(client, out var peerUid) ? peerUid : null;
             var decision = _authorize(uid);
             if (!decision.Allowed)
             {
@@ -121,6 +173,15 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
                 client.Dispose();
                 return;
             }
+
+            if (!TryCountConnection(uid))
+            {
+                log($"Rejected IPC client {decision.Actor}: more than {MaxConnectionsPerUid} concurrent connections");
+                client.Dispose();
+                return;
+            }
+
+            counted = true;
 
             var stream = new NetworkStream(client, ownsSocket: true);
             await using (stream.ConfigureAwait(false))
@@ -137,6 +198,11 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
         finally
         {
             client.Dispose();
+            if (counted)
+            {
+                ReleaseConnection(uid);
+            }
+
             try
             {
                 slots.Release();
