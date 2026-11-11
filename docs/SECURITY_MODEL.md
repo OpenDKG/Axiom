@@ -86,3 +86,15 @@ The normalized IOC sharing path excludes loopback, private/local/special-use des
 ## Vulnerability reporting
 
 Use [SECURITY.md](../SECURITY.md) and the repository's private GitHub security advisory workflow. Never publish real keys, user paths, database exports or private network details in a public bug report.
+
+## Enforcement status in the Agents page
+
+The Agents page opens with an enforcement card that separates detector health from enforcement
+strength:
+
+- **COOPERATIVE - NOT VERIFIED** is the only state this build may show. A Blackbox guard verdict,
+  an installed hook file or a passing unit test does not prove that a host refused an operation.
+- The card states that the managed runner and file broker are not implemented (ADR 0010) and that
+  the offline policy engine exists in the library but is not wired to hooks.
+- `VERIFIED BLOCKING` can only appear after a live host canary proves the deny and the absent side
+  effect, or after an OS boundary is demonstrated.
