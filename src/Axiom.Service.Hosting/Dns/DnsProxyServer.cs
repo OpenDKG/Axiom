@@ -29,7 +29,8 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private readonly PrivacyShieldPolicy _policy;
 
-    private readonly IReadOnlyList<IPEndPoint> _upstreams;
+    // Swapped as a whole by UpdateUpstreams; forwarders read it once per query.
+    private volatile IReadOnlyList<IPEndPoint> _upstreams;
 
     private readonly Action<PrivacyShieldBlockedEvent>? _onBlocked;
 
@@ -57,6 +58,8 @@ public sealed class DnsProxyServer : IAsyncDisposable
     private long _blocked;
 
     private long _errors;
+
+    private long _upstreamFailureStreak;
 
     public DnsProxyServer(
         PrivacyShieldPolicy policy,
@@ -124,6 +127,43 @@ public sealed class DnsProxyServer : IAsyncDisposable
     }
 
     public string Upstream => string.Join(", ", _upstreams.Select(endpoint => endpoint.ToString()));
+
+    /// <summary>The upstreams in use right now (snapshot).</summary>
+    public IReadOnlyList<IPEndPoint> Upstreams => _upstreams;
+
+    /// <summary>
+    /// Consecutive allowed queries that no upstream answered; reset by the next answered query.
+    /// A growing streak means the upstreams are gone (network change), not that a domain is bad.
+    /// </summary>
+    public long UpstreamFailureStreak => Interlocked.Read(ref _upstreamFailureStreak);
+
+    /// <summary>
+    /// Replaces the upstream list without touching the listeners (used when the system resolvers
+    /// change while Privacy Shield is on). Queries in flight finish against the old list.
+    /// </summary>
+    public void UpdateUpstreams(IReadOnlyList<IPEndPoint> upstreams)
+    {
+        ArgumentNullException.ThrowIfNull(upstreams);
+        if (upstreams.Count == 0)
+        {
+            throw new ArgumentException("At least one upstream DNS endpoint is required.", nameof(upstreams));
+        }
+
+        _upstreams = upstreams.ToArray();
+        Interlocked.Exchange(ref _upstreamFailureStreak, 0);
+    }
+
+    private void NoteForwardResult(bool answered)
+    {
+        if (answered)
+        {
+            Interlocked.Exchange(ref _upstreamFailureStreak, 0);
+        }
+        else
+        {
+            Interlocked.Increment(ref _upstreamFailureStreak);
+        }
+    }
 
     public PrivacyShieldStatus Snapshot(PrivacyShieldSettings settings)
     {
@@ -319,6 +359,13 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private async Task<byte[]?> ForwardTcpAsync(byte[] query, CancellationToken cancellationToken)
     {
+        var response = await ForwardTcpCoreAsync(query, cancellationToken).ConfigureAwait(false);
+        NoteForwardResult(response is not null);
+        return response;
+    }
+
+    private async Task<byte[]?> ForwardTcpCoreAsync(byte[] query, CancellationToken cancellationToken)
+    {
         foreach (var upstream in _upstreams)
         {
             try
@@ -443,6 +490,13 @@ public sealed class DnsProxyServer : IAsyncDisposable
     }
 
     private async Task<byte[]?> ForwardAsync(byte[] query, CancellationToken cancellationToken)
+    {
+        var response = await ForwardCoreAsync(query, cancellationToken).ConfigureAwait(false);
+        NoteForwardResult(response is not null);
+        return response;
+    }
+
+    private async Task<byte[]?> ForwardCoreAsync(byte[] query, CancellationToken cancellationToken)
     {
         foreach (var upstream in _upstreams)
         {

@@ -49,6 +49,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private DnsProxyServer? _server;
 
+    private CancellationTokenSource? _upstreamWatch;
+
     private string? _lastError;
 
     public PrivacyShieldController(
@@ -390,6 +392,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             return null;
         }
 
+        StartUpstreamWatch(server);
         try
         {
             return _dns.OnResolverStarted(server.Port);
@@ -409,6 +412,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private async Task StopServerLockedAsync()
     {
+        StopUpstreamWatch();
         if (_server is null)
         {
             return;
@@ -416,6 +420,41 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
         await _server.DisposeAsync().ConfigureAwait(false);
         _server = null;
+    }
+
+    /// <summary>
+    /// Review #7: with the system redirected to this resolver, the upstreams discovered at start
+    /// die on a Wi-Fi/VPN change. Only platforms that redirect (macOS) and only when no explicit
+    /// upstream is configured; Windows behaviour is unchanged.
+    /// </summary>
+    private void StartUpstreamWatch(DnsProxyServer server)
+    {
+        StopUpstreamWatch();
+        if (!_dns.RediscoversUpstreams)
+        {
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        _upstreamWatch = cancellation;
+        _ = UpstreamRediscovery.WatchAsync(
+            server,
+            _dns,
+            message => Console.Error.WriteLine("Privacy Shield DNS: " + message),
+            cancellation.Token);
+    }
+
+    private void StopUpstreamWatch()
+    {
+        var watch = _upstreamWatch;
+        _upstreamWatch = null;
+        if (watch is null)
+        {
+            return;
+        }
+
+        watch.Cancel();
+        watch.Dispose();
     }
 
     private Task<IReadOnlyList<PrivacyShieldStoredRule>> EnsureRulesLoadedAsync()

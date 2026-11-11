@@ -39,6 +39,8 @@ public sealed class MacPrivacyDnsPlatform : IPrivacyDnsPlatform
 
     public IReadOnlyList<IPEndPoint> DiscoverUpstreams() => _configurator.DiscoverUpstreams();
 
+    public bool RediscoversUpstreams => true;
+
     public string? OnResolverStarted(int port)
     {
         if (port != 53)

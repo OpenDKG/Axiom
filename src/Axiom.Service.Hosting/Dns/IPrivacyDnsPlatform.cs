@@ -15,6 +15,14 @@ public interface IPrivacyDnsPlatform
     /// <summary>Non-loopback system resolvers to forward allowed queries to.</summary>
     IReadOnlyList<IPEndPoint> DiscoverUpstreams();
 
+    /// <summary>
+    /// Whether the running resolver should re-run <see cref="DiscoverUpstreams"/> periodically and
+    /// on upstream failure and swap the proxy's upstreams live (macOS: the daemon owns the redirect,
+    /// so a Wi-Fi/VPN change would otherwise leave dead upstreams behind 127.0.0.1). Windows keeps
+    /// discovering once at start, as before.
+    /// </summary>
+    bool RediscoversUpstreams => false;
+
     /// <summary>Optional attribution of blocked queries to the querying app.</summary>
     IDnsAppAttributor? Attributor { get; }
 
