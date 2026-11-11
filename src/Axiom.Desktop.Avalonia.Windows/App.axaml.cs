@@ -142,7 +142,15 @@ public partial class App : Application
             };
 
             _shell.Start();
-            StartNetworkRecovery(networkRecovery);
+            try
+            {
+                StartNetworkRecovery(networkRecovery);
+            }
+#pragma warning disable CA1031 // Recovery must never prevent the app from starting.
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+            }
 
             var autostartArgument = HasArgument(arguments, "--autostart");
             var startMinimized = HasArgument(arguments, "--start-minimized") ||
