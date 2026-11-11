@@ -108,6 +108,63 @@ public sealed class ThreatShareTests
     }
 
     [Fact]
+    public async Task Ambiguous_outcome_is_unverified_and_reuses_the_submission_key()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "axiom-threat-share", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "queue.json");
+
+        try
+        {
+            await using var controller = new ThreatShareController(new ThreatShareStore(path));
+            controller.Enqueue(Candidate());
+            await controller.FlushAsync(CancellationToken.None);
+
+            var first = await controller.RecordAsync(
+                new ThreatShareRecordRequest
+                {
+                    Id = "ioc:domain:evil.example",
+                    Submitted = false,
+                    Ambiguous = true,
+                    Outcome = "the Blackbox CLI timed out after it started",
+                },
+                CancellationToken.None);
+
+            var item = Assert.Single(first.Items);
+            Assert.Equal(ThreatShareState.Unverified, item.State);
+            Assert.Null(item.NextAttemptUtc);
+            Assert.Equal(1, item.Attempts);
+            Assert.False(string.IsNullOrWhiteSpace(item.SubmissionKey));
+            Assert.Equal(1, first.Unverified);
+            Assert.Equal(0, first.Deferred);
+            Assert.Contains("may have published", item.StateDetail, StringComparison.Ordinal);
+
+            // A restarted service keeps the same attempt key, so a retry is traceable.
+            var reloaded = Assert.Single(new ThreatShareStore(path).Load());
+            Assert.Equal(item.SubmissionKey, reloaded.SubmissionKey);
+            Assert.Equal(ThreatShareState.Unverified, reloaded.State);
+
+            var retry = await controller.RecordAsync(
+                new ThreatShareRecordRequest
+                {
+                    Id = "ioc:domain:evil.example",
+                    Submitted = true,
+                    Outcome = "already shared",
+                },
+                CancellationToken.None);
+
+            var retried = Assert.Single(retry.Items);
+            Assert.Equal(ThreatShareState.Submitted, retried.State);
+            Assert.Equal(item.SubmissionKey, retried.SubmissionKey);
+            Assert.Equal(2, retried.Attempts);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Policy_refusal_is_rejected_and_dismissal_clears_a_deferred_item()
     {
         var directory = Path.Combine(Path.GetTempPath(), "axiom-threat-share", Guid.NewGuid().ToString("N"));

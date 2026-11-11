@@ -73,6 +73,12 @@ public enum ThreatShareState
 
     /// <summary>A transient reporter failure. The candidate stays in the queue with a retry time.</summary>
     Deferred = 4,
+
+    /// <summary>
+    /// The reporter ran but its outcome is unknown (for example a timeout after start). The value
+    /// may already be published, so it is never retried automatically.
+    /// </summary>
+    Unverified = 5,
 }
 
 public sealed record ThreatShareItem(
@@ -87,12 +93,22 @@ public sealed record ThreatShareItem(
     /// <summary>Earliest time a deferred retry should be attempted.</summary>
     public DateTimeOffset? NextAttemptUtc { get; init; }
 
+    /// <summary>
+    /// Stable key for this candidate's submission attempts. It is created on the first attempt and
+    /// reused on a manual retry so an ambiguous outcome stays traceable and explainable.
+    /// </summary>
+    public string SubmissionKey { get; init; } = string.Empty;
+
+    /// <summary>Button label: an ambiguous item needs a deliberate retry, not another "Share".</summary>
+    public string ActionLabel => State == ThreatShareState.Unverified ? "Retry" : "Share";
+
     public string StateLabel => State switch
     {
         ThreatShareState.Submitted => "shared",
         ThreatShareState.Rejected => "rejected",
         ThreatShareState.Dismissed => "dismissed",
         ThreatShareState.Deferred => "deferred",
+        ThreatShareState.Unverified => "awaiting confirmation",
         _ => "pending review",
     };
 
@@ -102,6 +118,9 @@ public sealed record ThreatShareItem(
             (NextAttemptUtc is { } next ? $"retry after {next.ToLocalTime():HH:mm}" : "retry later") +
             (string.IsNullOrWhiteSpace(Outcome) ? string.Empty : $" · {Outcome}"),
         ThreatShareState.Rejected => Outcome,
+        ThreatShareState.Unverified =>
+            "the previous attempt may have published; confirm before retrying" +
+            (string.IsNullOrWhiteSpace(Outcome) ? string.Empty : " - " + Outcome),
         _ => string.Empty,
     };
 
@@ -115,6 +134,9 @@ public sealed record ThreatShareQueueStatus
 
     /// <summary>Transiently failed candidates that stay queued for a later retry.</summary>
     public int Deferred { get; init; }
+
+    /// <summary>Ambiguous attempts that need explicit confirmation before any retry.</summary>
+    public int Unverified { get; init; }
 
     public required int Submitted { get; init; }
 
@@ -141,6 +163,9 @@ public sealed record ThreatShareRecordRequest
 
     /// <summary>True for a transient failure that should stay queued instead of being rejected.</summary>
     public bool Deferred { get; init; }
+
+    /// <summary>True when the reporter ran but the outcome is unknown; never auto-retried.</summary>
+    public bool Ambiguous { get; init; }
 
     public string Outcome { get; init; } = string.Empty;
 }

@@ -67,6 +67,15 @@ The service persists candidates in its local threat-share store (currently `thre
 
 Axiom keeps local state according to its local retention and queue limits. This is **not** a permanent archive or proof that an upstream sighting remains available after its network TTL expires.
 
+### Ambiguous outcomes
+
+Some reporter runs cannot be classified: the CLI starts, then times out or exits with output Axiom does not recognise. This is recorded as **awaiting confirmation** (`Unverified`), not as a retryable failure, because the report may already have been signed and published. Such an item:
+
+- is never retried by **Send now** or any automatic timer;
+- keeps a persisted attempt key created on its first submission and reused on every retry, so attempts stay traceable;
+- is shown with a **Retry** row action instead of **Share**, and the user decides after checking the graph;
+- becomes **shared** only when the reporter confirms, including its `Already shared` answer.
+
 ## Shared Memory (SWM) versus Verifiable Memory (VM)
 
 - **SWM / community sharing:** useful for exchanging time-sensitive threat observations. TTL or expiry behaviour is governed by the OriginTrail/Blackbox implementation. Do **not** assume these reports remain publicly retrievable forever.
