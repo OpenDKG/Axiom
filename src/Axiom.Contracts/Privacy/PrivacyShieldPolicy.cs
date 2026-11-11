@@ -10,7 +10,8 @@ public sealed record DnsPolicyDecision(
     bool Blocked,
     PrivacyCategory Category,
     string? MatchedRule,
-    string Reason);
+    string Reason,
+    string SourceId = "");
 
 /// <summary>
 /// Deterministic, pure local DNS policy. It does not perform I/O and never trusts list content as
@@ -55,7 +56,7 @@ public sealed class PrivacyShieldPolicy
         new("heap.io", PrivacyCategory.Analytics),
     ];
 
-    private readonly Dictionary<string, PrivacyCategory> _blocked =
+    private readonly Dictionary<string, (PrivacyCategory Category, string SourceId)> _blocked =
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly HashSet<string> _allowed =
@@ -87,7 +88,7 @@ public sealed class PrivacyShieldPolicy
                 continue;
             }
 
-            if (policy._blocked.TryAdd(rule.Domain, rule.Category))
+            if (policy._blocked.TryAdd(rule.Domain, (rule.Category, "starter")))
             {
                 used.Add(rule);
             }
@@ -103,7 +104,7 @@ public sealed class PrivacyShieldPolicy
             var normalized = NormalizeDomain(domain);
             if (normalized is not null)
             {
-                policy._blocked.TryAdd(normalized, PrivacyCategory.Custom);
+                policy._blocked.TryAdd(normalized, (PrivacyCategory.Custom, "custom"));
             }
         }
 
@@ -119,7 +120,7 @@ public sealed class PrivacyShieldPolicy
                 var normalized = NormalizeDomain(rule.Domain);
                 if (normalized is not null)
                 {
-                    policy._blocked.TryAdd(normalized, rule.Category);
+                    policy._blocked.TryAdd(normalized, (rule.Category, rule.SourceId));
                 }
             }
         }
@@ -152,9 +153,14 @@ public sealed class PrivacyShieldPolicy
 
         foreach (var candidate in Suffixes(normalized))
         {
-            if (_blocked.TryGetValue(candidate, out var category))
+            if (_blocked.TryGetValue(candidate, out var entry))
             {
-                return new DnsPolicyDecision(true, category, candidate, "Matched a local block rule.");
+                return new DnsPolicyDecision(
+                    true,
+                    entry.Category,
+                    candidate,
+                    "Matched a local block rule.",
+                    entry.SourceId);
             }
         }
 

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.Reflection;
 using Axiom.Contracts.Privacy;
 using Axiom.Contracts.Threat;
 using Xunit;
@@ -8,76 +9,15 @@ namespace Axiom.Service.Tests;
 public sealed class ThreatShareTests
 {
     [Fact]
-    public void Only_malware_blocks_requested_by_an_agent_become_candidates()
+    public void Privacy_shield_list_detections_have_no_share_entry_point()
     {
-        var ads = new PrivacyShieldBlockedEvent("ads.example.com", PrivacyCategory.Ads, DateTimeOffset.UtcNow);
-        Assert.Null(ThreatShareController.CreateFromBlocked(ads));
-
-        var malwareFromBrowser = new PrivacyShieldBlockedEvent(
-            "evil.example.com",
-            PrivacyCategory.Malware,
-            DateTimeOffset.UtcNow)
-        {
-            AppName = "chrome.exe",
-            AppPath = @"C:\Program Files\Google\Chrome\chrome.exe",
-        };
-        Assert.Null(ThreatShareController.CreateFromBlocked(malwareFromBrowser));
-
-        var malwareFromAgent = new PrivacyShieldBlockedEvent(
-            "Evil.Example.COM.",
-            PrivacyCategory.Malware,
-            DateTimeOffset.UtcNow)
-        {
-            AppName = "node.exe",
-            AppPath = @"C:\Users\me\.opencode\bin\node.exe",
-        };
-
-        var candidate = ThreatShareController.CreateFromBlocked(malwareFromAgent);
-
-        Assert.NotNull(candidate);
-        Assert.Equal("domain", candidate!.IndicatorType);
-        Assert.Equal("evil.example.com", ThreatShareVocabulary.Normalize("domain", candidate.Value));
-        Assert.Equal("malware-delivery", candidate.Reason);
-        Assert.Equal("fetched-by-tool", candidate.Context);
-        Assert.Equal(ThreatShareSource.PrivacyShield, candidate.Source);
-    }
-
-    [Fact]
-    public void An_agent_tool_child_qualifies_through_its_agent_ancestor()
-    {
-        // A real agent shells out to curl/git/nslookup, so the DNS query belongs to the tool child
-        // while the agent is an ancestor. That is still a truthful "fetched by tool" sighting.
-        var viaTool = new PrivacyShieldBlockedEvent(
-            "malware.example",
-            PrivacyCategory.Malware,
-            DateTimeOffset.UtcNow)
-        {
-            AppName = "nslookup.exe",
-            AppPath = @"C:\Windows\System32\nslookup.exe",
-            AgentName = "opencode.exe",
-            AgentPath = @"C:\Users\me\AppData\Local\Programs\@openchamberelectron\resources\opencode-cli\opencode.exe",
-        };
-
-        var candidate = ThreatShareController.CreateFromBlocked(viaTool);
-
-        Assert.NotNull(candidate);
-        Assert.Contains("via opencode.exe", candidate!.Detail, StringComparison.Ordinal);
-        Assert.Equal("fetched-by-tool", candidate.Context);
-    }
-
-    [Fact]
-    public void A_tool_child_without_an_agent_ancestor_stays_local()
-    {
-        var unrelated = new PrivacyShieldBlockedEvent(
-            "malware.example",
-            PrivacyCategory.Malware,
-            DateTimeOffset.UtcNow)
-        {
-            AppName = "nslookup.exe",
-            AppPath = @"C:\Windows\System32\nslookup.exe",
-        };
-
-        Assert.Null(ThreatShareController.CreateFromBlocked(unrelated));
+        // Public list matches stay local; there must be no service API that can turn a blocked
+        // DNS lookup into a community report and look like independent corroboration.
+        Assert.DoesNotContain(
+            typeof(ThreatShareController).GetMethods(
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly),
+            method => method.GetParameters().Any(parameter =>
+                parameter.ParameterType == typeof(PrivacyShieldBlockedEvent)));
     }
 
     [Fact]

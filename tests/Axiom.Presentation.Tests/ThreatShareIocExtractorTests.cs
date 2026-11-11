@@ -92,6 +92,24 @@ public sealed class ThreatShareIocExtractorTests
     }
 
     [Fact]
+    public void A_value_already_blocked_from_a_public_list_is_not_shared_by_the_analyst()
+    {
+        var finding = Finding(
+            new AiIndicator { Type = "domain", Value = "evil.example", Role = "malicious" },
+            new AiIndicator { Type = "url", Value = "https://evil.example/drop", Role = "malicious" },
+            new AiIndicator { Type = "ip", Value = "8.8.8.8", Role = "malicious" });
+        var listDerived = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "evil.example" };
+
+        var candidates = ThreatShareIocExtractor.Extract(
+            finding,
+            Evidence("evil.example:443", "8.8.8.8:443"),
+            listDerived);
+
+        var candidate = Assert.Single(candidates);
+        Assert.Equal("8.8.8.8", candidate.Value);
+    }
+
+    [Fact]
     public void Without_the_evidence_package_nothing_is_proposed()
     {
         var finding = Finding(new AiIndicator { Type = "ip", Value = "8.8.8.8", Role = "malicious" });

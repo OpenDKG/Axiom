@@ -24,13 +24,28 @@ The **standalone Axiom DKG node** and the **DKG node configured by Blackbox** ar
 
 ## Which observations are eligible to be proposed?
 
-- Privacy Shield proposes a malware-labelled **domain** only when the blocked lookup is attributable to a recognized agent process or a tool launched by it. General browsing, advertising, analytics, telemetry and tracking detections are not community-report candidates.
-- The optional AI Analyst may propose structured malicious-role indicators only if they match remote endpoints already included in its evidence package and meet its severity/status restrictions. Text in observations, advice and free-form analysis is never scraped for arbitrary domains.
+- Privacy Shield list matches stay **local**. A blocked malware domain is recorded with its matched rule, source id/version, Axiom version, reason and timestamp for local provenance, but it is not proposed to the community: the same public URLhaus list on every install would look like independent corroboration. Advertising, analytics, telemetry and tracking detections are never candidates.
+- The optional AI Analyst may propose structured malicious-role indicators only if they match remote endpoints already included in its evidence package and meet its severity/status restrictions. A value already present in Axiom's local malware-list block history is suppressed as list-derived. Text in observations, advice and free-form analysis is never scraped for arbitrary domains.
 - A blocked DNS lookup proves an attempted lookup, **not** that malicious content was downloaded or that a completed connection occurred. A blocked lookup alone does not establish that a file was downloaded.
 - Proposed items are **not automatically sent**. The user reviews and explicitly triggers submission. Turning on threat-sharing capability alone does not publish the queue.
 - The reporter may reject an item under upstream policy, cooldown or consent rules. Axiom cannot guarantee acceptance or later verification.
 
 See [AI Analyst](AI_ANALYST.md) and [Optional integrations](INTEGRATIONS.md).
+
+### Proposed upstream provenance fields
+
+Blackbox's current IOC report accepts type, value, context and severity; it has no field for the
+list that produced a match. Axiom's request to Umanitek is to add optional machine-readable
+provenance to the report schema:
+
+- detection method (`dns-blocklist-match`, `ai-analyst`);
+- source list id and pinned version/hash;
+- whether the lookup was blocked or actually fetched;
+- Axiom version.
+
+A context that truthfully describes a blocked/attempted lookup is also needed. Until those fields
+exist, Axiom keeps provenance local and does not invent unsupported values or send it to the
+community graph.
 
 ## Local queue, retries and retention
 

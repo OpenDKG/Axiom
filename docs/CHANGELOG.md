@@ -2,6 +2,18 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.2.0
+
+- **Public-list matches stay local.** Privacy Shield no longer proposes blocked malware-list
+  domains to Blackbox/DKG. Every install matches the same URLhaus list, so those reports looked
+  like independent corroboration when they were one list echoed back.
+- **Local provenance is recorded.** Blocked events store the matched rule, source id/name/version,
+  Axiom version, detection reason, timestamp and the blocked/not-fetched distinction. This stays
+  local and is shown in the blocked-history tooltip.
+- **AI Analyst suppresses list-derived values.** A structured indicator whose domain already
+  appears in the local malware-list block history is not proposed, even if the model labels it
+  malicious. Evidence-bound indicators that are genuinely independent remain eligible.
+
 ## What's in 0.10.25
 
 - **Axiom uses the DKG node Blackbox already runs.** When no standalone node answers on 9200,
