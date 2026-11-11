@@ -16,7 +16,8 @@ public sealed record LaunchdInstallerOptions(
     string HelperDirectory,
     string MachineDataDirectory,
     string DnsBackupPath,
-    string ProtectionSettingsPath)
+    string ProtectionSettingsPath,
+    string NewsyslogConfPath)
 {
     public static LaunchdInstallerOptions Default { get; } = new(
         MacServicePaths.LaunchDaemonPlistPath,
@@ -24,7 +25,8 @@ public sealed record LaunchdInstallerOptions(
         PrivilegedHelperLayout.HelperDirectory,
         MacServicePaths.Default.MachineDataDirectory,
         MacServicePaths.Default.DnsBackupFile,
-        ProtectionSettingsStore.DefaultPath);
+        ProtectionSettingsStore.DefaultPath,
+        LaunchdServiceInstaller.NewsyslogConfPath);
 
     public string HelperRoot => Path.GetDirectoryName(HelperDirectory) ?? "/";
 
@@ -47,6 +49,17 @@ public sealed record LaunchdInstallerOptions(
 public sealed class LaunchdServiceInstaller
 {
     public const string ServiceEnvironmentVariable = "AXIOM_SERVICE";
+
+    /// <summary>newsyslog(8) rotation entry for the daemon log, written by install, removed by uninstall.</summary>
+    public const string NewsyslogConfPath = "/etc/newsyslog.d/com.axiom.service.conf";
+
+    /// <summary>Seconds launchd waits before respawning the daemon after an unsuccessful exit.</summary>
+    public const int ThrottleIntervalSeconds = 10;
+
+    /// <summary>Rotate at this size (newsyslog counts KiB).</summary>
+    public const int LogRotateSizeKiB = 5 * 1024;
+
+    public const int LogRotateKeep = 5;
 
     private const string Launchctl = "/bin/launchctl";
 
@@ -109,7 +122,12 @@ public sealed class LaunchdServiceInstaller
                 <key>RunAtLoad</key>
                 <true/>
                 <key>KeepAlive</key>
-                <true/>
+                <dict>
+                    <key>SuccessfulExit</key>
+                    <false/>
+                </dict>
+                <key>ThrottleInterval</key>
+                <integer>{ThrottleIntervalSeconds}</integer>
                 <key>ProcessType</key>
                 <string>Interactive</string>
                 <key>EnvironmentVariables</key>
@@ -129,6 +147,24 @@ public sealed class LaunchdServiceInstaller
             </plist>
             """).Append('\n');
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// The <c>/etc/newsyslog.d</c> entry: rotate <paramref name="logFilePath"/> at
+    /// <see cref="LogRotateSizeKiB"/> KiB, keep <see cref="LogRotateKeep"/> archives, bzip2 them
+    /// (flag <c>J</c>). launchd reopens the file per write, so no signal is needed.
+    /// </summary>
+    public static string BuildNewsyslogConf(string logFilePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(logFilePath);
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"""
+            # Axiom daemon log rotation (written by axiomd --install-service, removed by --uninstall-service).
+            # logfilename{"\t"}[owner:group]{"\t"}mode{"\t"}count{"\t"}size{"\t"}when{"\t"}flags
+            {logFilePath}{"\t"}root:wheel{"\t"}644{"\t"}{LogRotateKeep}{"\t"}{LogRotateSizeKiB}{"\t"}*{"\t"}J
+
+            """);
     }
 
     /// <param name="executablePath">The running axiomd; its directory is the publish tree to copy.</param>
@@ -168,7 +204,8 @@ public sealed class LaunchdServiceInstaller
             }
 
             Directory.CreateDirectory(_options.LogDirectory);
-            var plist = BuildPlist(_options.DaemonPath, Path.Combine(_options.LogDirectory, Path.GetFileName(MacServicePaths.LogFilePath)));
+            var logFile = Path.Combine(_options.LogDirectory, Path.GetFileName(MacServicePaths.LogFilePath));
+            var plist = BuildPlist(_options.DaemonPath, logFile);
 
             // Stop the running instance (upgrade); "not loaded" is expected on first install.
             _runner.Run(Launchctl, ["bootout", ServiceTarget], ToolTimeout);
@@ -189,6 +226,7 @@ public sealed class LaunchdServiceInstaller
             MacDataDirectoryPermissions.Enforce(_options.MachineDataDirectory);
             RecordOwner(ownerUid, output);
             FilterRulesFile.WriteAtomic(_options.PlistPath, plist, PrivilegedHelperLayout.FileMode);
+            WriteNewsyslogConf(logFile, output);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -250,10 +288,21 @@ public sealed class LaunchdServiceInstaller
         // here so an uninstall never leaves the system pointing at a resolver that is gone.
         if (File.Exists(_options.DnsBackupPath))
         {
-            var restored = new MacDnsConfigurator(_runner, _options.DnsBackupPath).RestoreIfNeeded();
-            output.WriteLine(restored
-                ? "Restored system DNS from the Privacy Shield backup."
-                : "Privacy Shield DNS backup checked; system DNS was already restored.");
+            RestoreDns(_runner, _options.DnsBackupPath, output);
+        }
+
+        try
+        {
+            if (File.Exists(_options.NewsyslogConfPath))
+            {
+                File.Delete(_options.NewsyslogConfPath);
+                output.WriteLine($"Removed {_options.NewsyslogConfPath}.");
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            error.WriteLine($"Could not remove {_options.NewsyslogConfPath}: {exception.Message}");
+            code = 1;
         }
 
         try
@@ -274,6 +323,54 @@ public sealed class LaunchdServiceInstaller
             ? $"Stopped and removed {ServiceTarget}."
             : $"Removed {_options.PlistPath} ({ServiceTarget} was not running).");
         return code;
+    }
+
+    /// <summary>
+    /// <c>axiomd --restore-dns</c>: puts the saved DNS servers back without the daemon. For the
+    /// case the bundle or helper is gone while Privacy Shield still pointed the system at
+    /// 127.0.0.1 (launchd cannot start a missing program, so the daemon's own fail-safe never runs).
+    /// </summary>
+    public int RestoreDns(TextWriter output, TextWriter error)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(error);
+
+        if (!_isPrivileged())
+        {
+            error.WriteLine("Restoring system DNS requires root (run with sudo).");
+            return 5;
+        }
+
+        if (!File.Exists(_options.DnsBackupPath))
+        {
+            output.WriteLine($"No Privacy Shield DNS backup at {_options.DnsBackupPath}; nothing to restore.");
+            return 0;
+        }
+
+        RestoreDns(_runner, _options.DnsBackupPath, output);
+        return 0;
+    }
+
+    private static bool RestoreDns(IProcessRunner runner, string backupPath, TextWriter output)
+    {
+        var restored = new MacDnsConfigurator(runner, backupPath).RestoreIfNeeded();
+        output.WriteLine(restored
+            ? "Restored system DNS from the Privacy Shield backup."
+            : "Privacy Shield DNS backup checked; system DNS was already restored.");
+        return restored;
+    }
+
+    private void WriteNewsyslogConf(string logFile, TextWriter output)
+    {
+        var directory = Path.GetDirectoryName(_options.NewsyslogConfPath);
+        if (directory is null)
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(directory);
+        FilterRulesFile.WriteAtomic(_options.NewsyslogConfPath, BuildNewsyslogConf(logFile), PrivilegedHelperLayout.FileMode);
+        output.WriteLine($"Log rotation: {_options.NewsyslogConfPath} ({LogRotateSizeKiB / 1024} MB, keep {LogRotateKeep}, compressed).");
     }
 
     /// <summary>Copies the publish tree next to the helper directory with final modes and root ownership.</summary>

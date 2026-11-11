@@ -46,6 +46,13 @@ internal static class ServicePlatform
         }
 
         if (args.Length > 0 &&
+            string.Equals(args[0], "--restore-dns", StringComparison.OrdinalIgnoreCase))
+        {
+            exitCode = new LaunchdServiceInstaller().RestoreDns(Console.Out, Console.Error);
+            return true;
+        }
+
+        if (args.Length > 0 &&
             string.Equals(args[0], "--doctor", StringComparison.OrdinalIgnoreCase))
         {
             exitCode = MacDoctor.Run(args, Console.Out);

@@ -23,9 +23,61 @@ public sealed class LaunchdServiceInstallerTests
         Assert.Equal("/Library/Logs/Axiom/axiomd.log", values["StandardErrorPath"]);
         Assert.Contains("<string>/Library/PrivilegedHelperTools/com.axiom.service/axiomd</string>", text, StringComparison.Ordinal);
         Assert.Contains("<key>RunAtLoad</key>\n    <true/>", text, StringComparison.Ordinal);
-        Assert.Contains("<key>KeepAlive</key>\n    <true/>", text, StringComparison.Ordinal);
+        Assert.Contains("<key>KeepAlive</key>\n    <dict>\n        <key>SuccessfulExit</key>\n        <false/>\n    </dict>", text, StringComparison.Ordinal);
+        Assert.Contains("<key>ThrottleInterval</key>\n    <integer>10</integer>", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("<key>KeepAlive</key>\n    <true/>", text, StringComparison.Ordinal);
         Assert.Contains("<key>AXIOM_SERVICE</key>\n        <string>1</string>", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Axiom.app", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NewsyslogEntryRotatesAtFiveMegabytesKeepsFiveCompressed()
+    {
+        var text = LaunchdServiceInstaller.BuildNewsyslogConf("/Library/Logs/Axiom/axiomd.log");
+
+        var entry = text.Split('\n').Single(line => line.StartsWith("/Library", StringComparison.Ordinal));
+        Assert.Equal(["/Library/Logs/Axiom/axiomd.log", "root:wheel", "644", "5", "5120", "*", "J"], entry.Split('\t'));
+        Assert.Equal("/etc/newsyslog.d/com.axiom.service.conf", LaunchdServiceInstaller.NewsyslogConfPath);
+    }
+
+    [Fact]
+    public void RestoreDnsRequiresRootAndIsANoOpWithoutABackup()
+    {
+        using var temp = new TempDirectory();
+        var layout = Layout(temp);
+        var runner = new FakeRunner();
+        var output = new StringWriter();
+
+        Assert.Equal(5, new LaunchdServiceInstaller(runner, layout, () => false, () => null).RestoreDns(TextWriter.Null, TextWriter.Null));
+        Assert.Equal(0, new LaunchdServiceInstaller(runner, layout, () => true, () => null).RestoreDns(output, TextWriter.Null));
+        Assert.Contains("nothing to restore", output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(runner.Calls);
+    }
+
+    [Fact]
+    public void RestoreDnsPutsSavedServersBackFromTheBackupWithoutTheDaemon()
+    {
+        using var temp = new TempDirectory();
+        var layout = Layout(temp);
+        Directory.CreateDirectory(Path.GetDirectoryName(layout.DnsBackupPath)!);
+        File.WriteAllText(layout.DnsBackupPath, """{"schemaVersion":1,"services":[{"name":"Ethernet","servers":["10.0.2.3"]}],"upstreams":["10.0.2.3"]}""");
+        var dns = new Dictionary<string, string> { ["Ethernet"] = "127.0.0.1" };
+        var runner = new FakeRunner()
+            .On("networksetup -listallnetworkservices", "An asterisk (*) denotes that a network service is disabled.\nEthernet\n")
+            .On("networksetup -getdnsservers", arguments => new ProcessResult(0, dns[arguments[1]] + "\n", string.Empty))
+            .On("networksetup -setdnsservers", arguments =>
+            {
+                dns[arguments[1]] = string.Join(' ', arguments.Skip(2));
+                return new ProcessResult(0, string.Empty, string.Empty);
+            });
+        var output = new StringWriter();
+
+        var code = new LaunchdServiceInstaller(runner, layout, () => true, () => null).RestoreDns(output, TextWriter.Null);
+
+        Assert.Equal(0, code);
+        Assert.Equal("10.0.2.3", dns["Ethernet"]);
+        Assert.Contains("Restored system DNS", output.ToString(), StringComparison.Ordinal);
+        Assert.False(File.Exists(layout.DnsBackupPath));
     }
 
     [Fact]
@@ -77,6 +129,8 @@ public sealed class LaunchdServiceInstallerTests
         Assert.Equal(MacDataDirectoryPermissions.PrivateDirectoryMode, File.GetUnixFileMode(layout.MachineDataDirectory));
         Assert.Equal(MacDataDirectoryPermissions.PrivateFileMode, File.GetUnixFileMode(layout.ProtectionSettingsPath));
         Assert.Contains("uid 501", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("axiomd.log\troot:wheel\t644\t5\t5120\t*\tJ", File.ReadAllText(layout.NewsyslogConfPath), StringComparison.Ordinal);
+        Assert.Equal(PrivilegedHelperLayout.FileMode, File.GetUnixFileMode(layout.NewsyslogConfPath));
 
         Assert.Contains(runner.Calls, call => call.StartsWith("chown -R 0:0 ", StringComparison.Ordinal));
         Assert.Equal(
@@ -98,6 +152,7 @@ public sealed class LaunchdServiceInstallerTests
         Assert.Equal(0, installer.Uninstall(uninstallOutput, TextWriter.Null));
         Assert.False(File.Exists(layout.PlistPath));
         Assert.False(Directory.Exists(layout.HelperDirectory));
+        Assert.False(File.Exists(layout.NewsyslogConfPath));
         Assert.Contains("networksetup -listallnetworkservices", runner.Calls);
         Assert.Contains("Privacy Shield", uninstallOutput.ToString(), StringComparison.Ordinal);
     }
@@ -168,7 +223,8 @@ public sealed class LaunchdServiceInstallerTests
             Path.Combine(helperRoot, "com.axiom.service"),
             Path.Combine(temp.Path, "data"),
             Path.Combine(temp.Path, "data", "privacy-shield-dns-backup.json"),
-            Path.Combine(temp.Path, "data", "protection.json"));
+            Path.Combine(temp.Path, "data", "protection.json"),
+            Path.Combine(temp.Path, "newsyslog.d", "com.axiom.service.conf"));
     }
 
     /// <summary>Answers stat with uid 0 and the real on-disk mode (the test cannot chown).</summary>
