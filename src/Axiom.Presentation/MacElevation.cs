@@ -150,6 +150,11 @@ public sealed class MacBundleLayout
     /// <summary>The system extension helper, <c>Contents/MacOS/axiom-sysext</c>.</summary>
     public string SysextHelperPath => Path.Combine(MacOSDirectory, "axiom-sysext");
 
+    /// <summary>The same operations as a dylib for P/Invoke, <c>Contents/MacOS/libAxiomSysext.dylib</c>.</summary>
+    public string SysextLibraryPath => Path.Combine(MacOSDirectory, SysextLibraryFileName);
+
+    public const string SysextLibraryFileName = "libAxiomSysext.dylib";
+
     public bool IsInApplicationsFolder =>
         BundlePath is not null &&
         string.Equals(Path.GetDirectoryName(BundlePath), "/Applications", StringComparison.Ordinal);

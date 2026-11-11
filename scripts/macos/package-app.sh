@@ -6,6 +6,7 @@
 #   Axiom.app/Contents/Info.plist
 #   Axiom.app/Contents/MacOS/Axiom (+ the self-contained .NET/Avalonia publish output)
 #   Axiom.app/Contents/MacOS/axiom-sysext                               (when macos/build has it)
+#   Axiom.app/Contents/MacOS/libAxiomSysext.dylib                       (when macos/build has it)
 #   Axiom.app/Contents/Resources/service/axiomd (+ its publish output)
 #   Axiom.app/Contents/Resources/Axiom.icns                              (when sips/iconutil exist)
 #   Axiom.app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension
@@ -163,12 +164,20 @@ if [[ $ON_MAC -eq 1 && $BUILD_FILTER -eq 1 ]]; then
 fi
 
 HAS_FILTER=0
+HAS_SYSEXT_LIB=0
 if [[ -d "$FILTER_BUILD/$EXT_ID.systemextension" && -f "$FILTER_BUILD/axiom-sysext" ]]; then
   log "adding the filter extension and axiom-sysext from macos/build"
   mkdir -p "$APP/Contents/Library/SystemExtensions"
   cp -R "$FILTER_BUILD/$EXT_ID.systemextension" "$APP/Contents/Library/SystemExtensions/"
   cp "$FILTER_BUILD/axiom-sysext" "$APP/Contents/MacOS/axiom-sysext"
   HAS_FILTER=1
+  # In-process activation path (review #4): the main executable P/Invokes this dylib; the helper
+  # stays as the fallback and the diagnostics CLI. Only shipped when build.sh produced it.
+  if [[ -f "$FILTER_BUILD/libAxiomSysext.dylib" ]]; then
+    cp "$FILTER_BUILD/libAxiomSysext.dylib" "$APP/Contents/MacOS/libAxiomSysext.dylib"
+    HAS_SYSEXT_LIB=1
+    log "adding libAxiomSysext.dylib (in-process activation)"
+  fi
 else
   log "no prebuilt filter in macos/build (run macos/build.sh on a Mac): bundle has no network filter"
 fi
@@ -204,7 +213,7 @@ fi
 if [[ -n "$IDENTITY" && $HAS_FILTER -eq 1 ]] && command -v dsymutil >/dev/null; then
   DSYMS="$OUT/dSYMs"; rm -rf "$DSYMS"; mkdir -p "$DSYMS"
   for bin in "$APP/Contents/Library/SystemExtensions/$EXT_ID.systemextension/Contents/MacOS/$EXT_ID" \
-             "$APP/Contents/MacOS/axiom-sysext"; do
+             "$APP/Contents/MacOS/axiom-sysext" "$APP/Contents/MacOS/libAxiomSysext.dylib"; do
     [[ -f "$bin" ]] && dsymutil "$bin" -o "$DSYMS/$(basename "$bin").dSYM" 2>/dev/null \
       && log "dSYM: $DSYMS/$(basename "$bin").dSYM" || log "no DWARF for $(basename "$bin") (n/a)"
   done
@@ -252,11 +261,20 @@ codesign --force "${SIGN_ARGS[@]}" --identifier com.axiom.service \
 
 log "codesign the .NET runtime and libraries (Contents/MacOS)"
 # axiom-sysext keeps the signature and entitlements from macos/build.sh; Axiom is signed with the bundle.
-sign_tree "$APP/Contents/MacOS" all Axiom axiom-sysext
+# libAxiomSysext.dylib is a Mach-O in Contents/MacOS and is (re)signed here with the same identity
+# as the runtime libraries, keeping build.sh's identifier (a library carries no entitlements).
+sign_tree "$APP/Contents/MacOS" all Axiom axiom-sysext libAxiomSysext.dylib
+if [[ $HAS_SYSEXT_LIB -eq 1 ]]; then
+  codesign --force "${SIGN_ARGS[@]}" --identifier com.axiom.firewall.sysextlib "$APP/Contents/MacOS/libAxiomSysext.dylib" \
+    2>&1 | grep -v 'replacing existing signature' || true
+fi
 
 if [[ $HAS_FILTER -eq 1 ]]; then
   codesign --verify --strict "$APP/Contents/Library/SystemExtensions/$EXT_ID.systemextension"
   codesign --verify --strict "$APP/Contents/MacOS/axiom-sysext"
+fi
+if [[ $HAS_SYSEXT_LIB -eq 1 ]]; then
+  codesign --verify --strict "$APP/Contents/MacOS/libAxiomSysext.dylib"
 fi
 
 log "codesign Axiom.app (${IDENTITY:-ad hoc}, app group $APP_GROUP)"
