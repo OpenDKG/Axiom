@@ -38,14 +38,19 @@ public sealed record MacProcessIdentity
 /// name / version (enclosing <c>.app</c> Info.plist) and code signature (<c>codesign</c>, run in the
 /// background once per path and cached). Pid entries are cached briefly because pids are reused.
 /// </summary>
-[SupportedOSPlatform("macos")]
 public sealed class MacProcessIdentityResolver : IProcessIdentitySource
 {
-    private static readonly TimeSpan PidCacheLifetime = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan PidCacheLifetime = TimeSpan.FromSeconds(30);
 
     private static readonly TimeSpan ToolTimeout = TimeSpan.FromSeconds(5);
 
     private readonly IProcessRunner _runner;
+
+    private readonly Func<int, string> _pidPath;
+
+    private readonly Func<int, LibProcBsdInfo?> _bsdInfo;
+
+    private readonly TimeProvider _time;
 
     private readonly ConcurrentDictionary<int, (MacProcessIdentity Identity, DateTimeOffset Resolved)> _pids = new();
 
@@ -53,19 +58,34 @@ public sealed class MacProcessIdentityResolver : IProcessIdentitySource
 
     private readonly ConcurrentDictionary<string, Lazy<Task<CodeSignatureInfo>>> _signatures = new(StringComparer.Ordinal);
 
+    [SupportedOSPlatform("macos")]
     public MacProcessIdentityResolver()
         : this(ProcessRunner.Instance)
     {
     }
 
+    [SupportedOSPlatform("macos")]
     public MacProcessIdentityResolver(IProcessRunner runner)
+        : this(runner, LibProc.PidPath, LibProc.BsdInfo, TimeProvider.System)
+    {
+    }
+
+    /// <summary>Testable wiring: libproc lookups and the clock are injected.</summary>
+    public MacProcessIdentityResolver(
+        IProcessRunner runner,
+        Func<int, string> pidPath,
+        Func<int, LibProcBsdInfo?> bsdInfo,
+        TimeProvider time)
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
+        _pidPath = pidPath ?? throw new ArgumentNullException(nameof(pidPath));
+        _bsdInfo = bsdInfo ?? throw new ArgumentNullException(nameof(bsdInfo));
+        _time = time ?? throw new ArgumentNullException(nameof(time));
     }
 
     public MacProcessIdentity Resolve(int processId, string? knownPath)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _time.GetUtcNow();
         if (_pids.TryGetValue(processId, out var cached) &&
             now - cached.Resolved < PidCacheLifetime &&
             (string.IsNullOrEmpty(knownPath) || string.Equals(cached.Identity.Path, knownPath, StringComparison.Ordinal)))
@@ -74,8 +94,8 @@ public sealed class MacProcessIdentityResolver : IProcessIdentitySource
             return WithSignature(cached.Identity);
         }
 
-        var path = string.IsNullOrEmpty(knownPath) && processId > 0 ? LibProc.PidPath(processId) : knownPath ?? string.Empty;
-        var bsd = processId > 0 ? LibProc.BsdInfo(processId) : null;
+        var path = string.IsNullOrEmpty(knownPath) && processId > 0 ? _pidPath(processId) : knownPath ?? string.Empty;
+        var bsd = processId > 0 ? _bsdInfo(processId) : null;
         var bundlePath = MacBundleInfo.FindEnclosingBundle(path);
         var bundle = bundlePath is null ? null : _bundles.GetOrAdd(bundlePath, ReadBundle);
 
@@ -185,24 +205,24 @@ public sealed class MacProcessIdentityResolver : IProcessIdentitySource
         }
     }
 
-    private static string ProcessName(int processId)
+    private string ProcessName(int processId)
     {
-        var path = LibProc.PidPath(processId);
+        var path = _pidPath(processId);
         if (path.Length > 0)
         {
             return Path.GetFileName(path);
         }
 
-        return LibProc.BsdInfo(processId)?.Command ?? string.Empty;
+        return _bsdInfo(processId)?.Command ?? string.Empty;
     }
 
-    private static string ParentChain(int? parent)
+    private string ParentChain(int? parent)
     {
         var names = new List<string>();
         var current = parent;
         for (var depth = 0; depth < 6 && current is > 1; depth++)
         {
-            var info = LibProc.BsdInfo(current.Value);
+            var info = _bsdInfo(current.Value);
             if (info is null)
             {
                 break;

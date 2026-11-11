@@ -70,10 +70,13 @@ public sealed class MacConnectionSource : IConnectionSnapshotSource
         _time = time ?? throw new ArgumentNullException(nameof(time));
     }
 
-    /// <summary>Production wiring: libproc fallback and full identity on macOS, flows only elsewhere.</summary>
+    /// <summary>
+    /// Production wiring: libproc fallback (through the shared, cached scanner, so the DNS
+    /// attributor and this poll share one pass) and full identity on macOS, flows only elsewhere.
+    /// </summary>
     public static MacConnectionSource Create(FlowTable flows, FilterStatus status) =>
         OperatingSystem.IsMacOS()
-            ? new MacConnectionSource(flows, status, new MacProcessIdentityResolver(), EnumerateLibProcSockets, TimeProvider.System)
+            ? new MacConnectionSource(flows, status, new MacProcessIdentityResolver(), LibProcSocketScanner.Shared.Current, TimeProvider.System)
             : new MacConnectionSource(flows, status, PathOnlyIdentitySource.Instance, null, TimeProvider.System);
 
     public string Name => $"{FlowSourceName} (fallback: {LibProcSourceName})";
@@ -263,22 +266,6 @@ public sealed class MacConnectionSource : IConnectionSnapshotSource
             SourceName = LibProcSourceName,
             Limitations = LibProcLimitations,
         };
-    }
-
-    private static List<LibProcSocket> EnumerateLibProcSockets()
-    {
-        if (!OperatingSystem.IsMacOS())
-        {
-            return [];
-        }
-
-        var result = new List<LibProcSocket>();
-        foreach (var pid in LibProc.ListPids())
-        {
-            result.AddRange(LibProc.Sockets(pid));
-        }
-
-        return result;
     }
 
     private static string DisplayName(MacProcessIdentity identity, int processId) =>

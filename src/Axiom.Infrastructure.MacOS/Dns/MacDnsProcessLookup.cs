@@ -7,22 +7,27 @@ using Axiom.Service.Hosting.Dns;
 namespace Axiom.Infrastructure.MacOS.Dns;
 
 /// <summary>
-/// DNS query attribution on macOS: the owner of the querying loopback socket is found by scanning
-/// the libproc socket table (cached for one second, since a burst of queries shares one scan).
-/// Most apps resolve through mDNSResponder, so their queries are attributed to mDNSResponder;
-/// tools that query the resolver directly (dig, curl --dns-servers, agents with their own stub)
-/// are attributed to themselves.
+/// DNS query attribution on macOS: the owner of the querying loopback socket is found in the
+/// shared libproc socket table (<see cref="LibProcSocketScanner"/>, one pass per 2 s shared with
+/// the connection fallback; a miss asks for a refresh at most every 500 ms). Most apps resolve
+/// through mDNSResponder, so their queries are attributed to mDNSResponder; tools that query the
+/// resolver directly (dig, curl --dns-servers, agents with their own stub) are attributed to
+/// themselves.
 /// </summary>
 [SupportedOSPlatform("macos")]
 public sealed class MacDnsProcessLookup : IDnsProcessLookup
 {
-    private static readonly TimeSpan ScanLifetime = TimeSpan.FromSeconds(1);
+    private readonly LibProcSocketScanner _scanner;
 
-    private readonly object _gate = new();
+    public MacDnsProcessLookup()
+        : this(LibProcSocketScanner.Shared)
+    {
+    }
 
-    private IReadOnlyList<LibProcSocket> _sockets = [];
-
-    private DateTimeOffset _scannedUtc = DateTimeOffset.MinValue;
+    public MacDnsProcessLookup(LibProcSocketScanner scanner)
+    {
+        _scanner = scanner ?? throw new ArgumentNullException(nameof(scanner));
+    }
 
     public int SystemProcessIdLimit => 0;
 
@@ -30,7 +35,7 @@ public sealed class MacDnsProcessLookup : IDnsProcessLookup
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        var match = Find(Scan(false), source, tcp) ?? Find(Scan(true), source, tcp);
+        var match = Find(_scanner.Current(), source, tcp) ?? Find(_scanner.Refresh(), source, tcp);
         return match?.ProcessId ?? 0;
     }
 
@@ -55,25 +60,4 @@ public sealed class MacDnsProcessLookup : IDnsProcessLookup
              socket.LocalAddress.Equals(IPAddress.Any) ||
              socket.LocalAddress.Equals(IPAddress.IPv6Any) ||
              (source.Address.IsIPv4MappedToIPv6 && socket.LocalAddress.Equals(source.Address.MapToIPv4()))));
-
-    private IReadOnlyList<LibProcSocket> Scan(bool force)
-    {
-        lock (_gate)
-        {
-            var now = DateTimeOffset.UtcNow;
-            if (force || now - _scannedUtc > ScanLifetime)
-            {
-                var sockets = new List<LibProcSocket>();
-                foreach (var pid in LibProc.ListPids())
-                {
-                    sockets.AddRange(LibProc.Sockets(pid));
-                }
-
-                _sockets = sockets;
-                _scannedUtc = now;
-            }
-
-            return _sockets;
-        }
-    }
 }
