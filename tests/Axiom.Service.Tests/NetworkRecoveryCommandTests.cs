@@ -61,6 +61,24 @@ public sealed class NetworkRecoveryCommandTests : IDisposable
             NetworkRecoverySnapshotStore.Read(_path).Status);
     }
 
+    [Fact]
+    public void Apply_without_administrator_rights_is_refused_before_any_change()
+    {
+        if (ServiceInstaller.IsAdministrator())
+        {
+            // An elevated test host would pass the authorization check; do not attempt a restore.
+            return;
+        }
+
+        Assert.True(NetworkRecoverySnapshotStore.TryWrite(_path, Snapshot(), out var error), error);
+        var before = File.ReadAllText(_path);
+
+        var exit = NetworkRecoveryCommand.Run(["--recover-network", "--apply"], _path);
+
+        Assert.Equal(NetworkRecoveryCommand.ExitCodes.NotAdministrator, exit);
+        Assert.Equal(before, File.ReadAllText(_path));
+    }
+
     private static NetworkRecoverySnapshot Snapshot() => new()
     {
         CapturedUtc = DateTimeOffset.UtcNow,
