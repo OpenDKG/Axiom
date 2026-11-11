@@ -16,7 +16,7 @@ public sealed class NetworkRecoveryServiceTests
             Adapters = [Adapter("a1", "Ethernet"), Adapter("a2", "Wi-Fi")],
             Rules = ["Axiom::r1::OUT", "Axiom::r2::IN"],
         };
-        var service = new NetworkRecoveryService(platform, () => Now);
+        var service = new NetworkRecoveryService(platform, () => Now, _ => { });
         var snapshot = service.Capture(protectionActive: true);
 
         platform.Applied.Clear();

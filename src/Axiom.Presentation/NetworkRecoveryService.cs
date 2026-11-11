@@ -33,12 +33,17 @@ public sealed class NetworkRecoveryService
 {
     private readonly INetworkRecoveryPlatform _platform;
     private readonly Func<DateTimeOffset> _clock;
+    private readonly Action<NetworkRecoverySnapshot> _persist;
 
-    public NetworkRecoveryService(INetworkRecoveryPlatform platform, Func<DateTimeOffset>? clock = null)
+    public NetworkRecoveryService(
+        INetworkRecoveryPlatform platform,
+        Func<DateTimeOffset>? clock = null,
+        Action<NetworkRecoverySnapshot>? persist = null)
     {
         ArgumentNullException.ThrowIfNull(platform);
         _platform = platform;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
+        _persist = persist ?? NetworkRecoveryStore.Save;
     }
 
     /// <summary>Captures and persists the state before a firewall or DNS change.</summary>
@@ -52,7 +57,7 @@ public sealed class NetworkRecoveryService
 
         if (!snapshot.IsEmpty)
         {
-            NetworkRecoveryStore.Save(snapshot);
+            _persist(snapshot);
         }
 
         return snapshot;
