@@ -4,12 +4,16 @@
 // Unix stream socket /var/run/axiom/filter.sock, where the daemon listens.
 // The filter is the client:
 //   * reconnects every 2 s while the daemon is down;
-//   * never blocks a verdict: callers only enqueue onto a private serial queue;
-//   * keeps a bounded in-memory queue and drops the oldest lines when full;
+//   * never blocks a verdict: callers only enqueue onto a private serial queue,
+//     and even that hop is bounded (review #14): at most `maxInflight` events may
+//     be waiting for the sink queue; beyond that `send` drops the event and counts it;
+//   * keeps a bounded in-memory backlog (`EventQueue`) and drops the oldest lines when full;
 //   * sends `filter.hello` first on every new connection (and again after each
-//     rules reload so the daemon learns the applied generation).
+//     rules reload, followed by `filter.rules`); both carry the total `dropped` count.
 //
 // All socket IO is non-blocking and driven by dispatch sources on `queue`.
+// EventQueue and the encoder have no NetworkExtension dependency so this file is
+// compiled into the unit test runner (`build.sh test`).
 
 import Darwin
 import Foundation
@@ -22,6 +26,10 @@ enum FilterEvent {
     case stats(id: UUID, ts: Date, bytesIn: UInt64, bytesOut: UInt64)
     case close(id: UUID, ts: Date, bytesIn: UInt64, bytesOut: UInt64)
     case hello(ts: Date, version: String, generation: Int64)
+    /// Outcome of a rules reload: `applied` rules enforced, `rejected` skipped.
+    /// `error` is set (and the counts describe the table still in force) when the file
+    /// as a whole was rejected.
+    case rules(ts: Date, generation: Int64, applied: Int, rejected: [RejectedRule], error: String?)
 }
 
 /// Everything flow.open carries. Built on the verdict path from cheap values.
@@ -39,22 +47,108 @@ struct FlowRecord {
     let remoteHost: String?
     let verdict: RuleAction
     let ruleId: String?
+    /// Responsible process (review #12) when it differs from `pid`/`path`; nil otherwise.
+    var responsiblePid: Int32? = nil
+    var responsiblePath: String? = nil
+}
+
+/// Bounded FIFO of encoded lines with drop-oldest semantics that never breaks a line
+/// that is partially on the wire. Not thread-safe: owned by the sink queue (or a test).
+final class EventQueue {
+    let maxLines: Int
+    let maxBytes: Int
+
+    /// `lines[head...]` are unsent; `headOffset` bytes of `lines[head]` were already written.
+    private(set) var lines: [Data] = []
+    private(set) var head = 0
+    private(set) var headOffset = 0
+    private(set) var pendingBytes = 0
+    /// Lines dropped because the queue was full.
+    private(set) var dropped: UInt64 = 0
+
+    init(maxLines: Int = 20_000, maxBytes: Int = 8 * 1024 * 1024) {
+        self.maxLines = maxLines
+        self.maxBytes = maxBytes
+    }
+
+    var pendingCount: Int { lines.count - head }
+    var isEmpty: Bool { head >= lines.count }
+    /// The line at the head and how much of it was already written.
+    var current: (line: Data, offset: Int)? { isEmpty ? nil : (lines[head], headOffset) }
+
+    func enqueue(_ line: Data, atFront: Bool = false) {
+        if atFront {
+            // Only used right after connecting, when nothing has been partially written.
+            if head > 0 { head -= 1; lines[head] = line } else { lines.insert(line, at: 0) }
+        } else {
+            lines.append(line)
+        }
+        pendingBytes += line.count
+        // The head line is protected while it is partially written, or when it is the hello
+        // that was just inserted for a new connection (it must precede everything else).
+        let protectHead = atFront || headOffset != 0
+        while pendingCount > maxLines || pendingBytes > maxBytes {
+            if !protectHead {
+                // Drop the oldest line: O(1), just advance the head.
+                pendingBytes -= lines[head].count
+                lines[head] = Data()
+                head += 1
+            } else {
+                // Drop the second-oldest instead by moving the protected line one slot forward
+                // (a partially written line must be finished to keep framing).
+                guard head + 1 < lines.count else { break }
+                pendingBytes -= lines[head + 1].count
+                lines[head + 1] = lines[head]
+                lines[head] = Data()
+                head += 1
+            }
+            dropped += 1
+        }
+        compact()
+    }
+
+    /// Records that `n` more bytes of the head line were written.
+    func advance(by n: Int) {
+        guard let cur = current else { return }
+        headOffset = cur.offset + n
+        if headOffset >= cur.line.count {
+            pendingBytes -= cur.line.count
+            lines[head] = Data() // release memory before compaction
+            head += 1
+            headOffset = 0
+        }
+    }
+
+    /// A line cut by a lost connection is re-sent whole on the next one.
+    func restartHeadLine() { headOffset = 0 }
+
+    /// Reclaims the consumed prefix of `lines` occasionally (amortised O(1)).
+    func compact() {
+        if head == lines.count { lines.removeAll(keepingCapacity: true); head = 0; return }
+        if head > 1024, head * 2 > lines.count {
+            lines.removeFirst(head)
+            head = 0
+        }
+    }
 }
 
 final class EventSink: @unchecked Sendable {
     static let defaultSocketPath = "/var/run/axiom/filter.sock"
 
-    /// Queue bounds: whichever is hit first triggers drop-oldest.
-    private let maxLines = 20_000
-    private let maxBytes = 8 * 1024 * 1024
     private let reconnectInterval: DispatchTimeInterval = .seconds(2)
 
     private let socketPath: String
+    private let trustedPeerUid: uid_t
     private let queue = DispatchQueue(label: "com.axiom.firewall.filter.events", qos: .utility)
     private let log = Logger(subsystem: FilterLog.subsystem, category: "events")
 
     /// Supplies the current hello event (version + applied generation).
     private let helloProvider: () -> FilterEvent
+
+    /// Review #14: events waiting for the sink queue (incremented before `queue.async`).
+    private let inflight = OSAllocatedUnfairLock<Int>(initialState: 0)
+    private let maxInflight: Int
+    private let droppedInflight = OSAllocatedUnfairLock<UInt64>(initialState: 0)
 
     // State below is only touched on `queue`.
     private var fd: Int32 = -1
@@ -64,13 +158,8 @@ final class EventSink: @unchecked Sendable {
     private var writeSourceActive = false
     private var reconnectTimer: DispatchSourceTimer?
     private var running = false
-
-    /// Pending lines: `lines[head...]` are unsent; `headOffset` bytes of `lines[head]` were already written.
-    private var lines: [Data] = []
-    private var head = 0
-    private var headOffset = 0
-    private var pendingBytes = 0
-    private var dropped: UInt64 = 0
+    private let backlog: EventQueue
+    private var loggedDrops: UInt64 = 0
 
     private let timestampFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
@@ -78,8 +167,12 @@ final class EventSink: @unchecked Sendable {
         return f
     }()
 
-    init(socketPath: String = EventSink.defaultSocketPath, helloProvider: @escaping () -> FilterEvent) {
+    init(socketPath: String = EventSink.defaultSocketPath, trustedPeerUid: uid_t = 0, maxInflight: Int = 4096,
+         maxLines: Int = 20_000, maxBytes: Int = 8 * 1024 * 1024, helloProvider: @escaping () -> FilterEvent) {
         self.socketPath = socketPath
+        self.trustedPeerUid = trustedPeerUid
+        self.maxInflight = maxInflight
+        self.backlog = EventQueue(maxLines: maxLines, maxBytes: maxBytes)
         self.helloProvider = helloProvider
     }
 
@@ -114,14 +207,42 @@ final class EventSink: @unchecked Sendable {
         }
     }
 
-    /// Enqueues an event. Safe from the verdict path: one async hop, no IO.
-    func send(_ event: FilterEvent) {
+    /// Enqueues an event. Safe from the verdict path: one bounded async hop, no IO.
+    /// Returns false when the event was dropped because too many are already in flight.
+    @discardableResult
+    func send(_ event: FilterEvent) -> Bool {
+        let admitted = inflight.withLock { count -> Bool in
+            guard count < maxInflight else { return false }
+            count += 1
+            return true
+        }
+        guard admitted else {
+            droppedInflight.withLock { $0 += 1 }
+            return false
+        }
         queue.async {
+            self.inflight.withLock { $0 -= 1 }
             guard let line = self.encode(event) else { return }
-            self.enqueue(line, atFront: false)
+            self.backlog.enqueue(line)
+            self.noteDrops()
             if self.connected { self.flush() }
         }
+        return true
     }
+
+    /// Total events dropped so far (backlog overflow + in-flight limit). Any thread.
+    var droppedTotal: UInt64 {
+        droppedInflight.withLock { $0 } + queue.sync { backlog.dropped }
+    }
+
+    // MARK: - Test hooks (no-ops in production use)
+
+    /// Parks the sink queue until `gate` is signalled, so tests can fill the in-flight window.
+    func testHoldQueue(until gate: DispatchSemaphore) { queue.async { gate.wait() } }
+    /// Waits until everything queued so far has been processed.
+    func testDrain() { queue.sync {} }
+    /// Encodes one event the way it would go on the wire (one JSON line with '\n').
+    func testEncode(_ event: FilterEvent) -> Data? { queue.sync { encode(event) } }
 
     // MARK: - Encoding
 
@@ -145,6 +266,8 @@ final class EventSink: @unchecked Sendable {
                 "remoteHost": r.remoteHost ?? null,
                 "verdict": r.verdict.rawValue,
                 "ruleId": r.ruleId ?? null,
+                "responsiblePid": r.responsiblePid.map { Int($0) } ?? null,
+                "responsiblePath": r.responsiblePath ?? null,
             ]
         case let .stats(id, ts, bytesIn, bytesOut):
             object = ["type": "flow.stats", "id": id.uuidString.lowercased(), "ts": timestampFormatter.string(from: ts),
@@ -154,7 +277,12 @@ final class EventSink: @unchecked Sendable {
                       "bytesIn": bytesIn, "bytesOut": bytesOut]
         case let .hello(ts, version, generation):
             object = ["type": "filter.hello", "ts": timestampFormatter.string(from: ts), "version": version,
-                      "generation": generation]
+                      "generation": generation, "dropped": totalDroppedOnQueue()]
+        case let .rules(ts, generation, applied, rejected, error):
+            object = ["type": "filter.rules", "ts": timestampFormatter.string(from: ts), "generation": generation,
+                      "applied": applied,
+                      "rejected": rejected.map { ["id": $0.id, "reason": $0.reason] },
+                      "error": error ?? null, "dropped": totalDroppedOnQueue()]
         }
         guard var data = try? JSONSerialization.data(withJSONObject: object, options: [.withoutEscapingSlashes]) else {
             return nil
@@ -163,46 +291,14 @@ final class EventSink: @unchecked Sendable {
         return data
     }
 
-    // MARK: - Bounded queue
+    /// `droppedTotal` for use on the sink queue (no queue.sync).
+    private func totalDroppedOnQueue() -> UInt64 { droppedInflight.withLock { $0 } + backlog.dropped }
 
-    private var pendingCount: Int { lines.count - head }
-
-    private func enqueue(_ line: Data, atFront: Bool) {
-        if atFront {
-            // Only used right after connecting, when nothing has been partially written.
-            if head > 0 { head -= 1; lines[head] = line } else { lines.insert(line, at: 0) }
-        } else {
-            lines.append(line)
-        }
-        pendingBytes += line.count
-        while pendingCount > maxLines || pendingBytes > maxBytes {
-            if headOffset == 0 {
-                // Drop the oldest line: O(1), just advance the head.
-                pendingBytes -= lines[head].count
-                lines[head] = Data()
-                head += 1
-            } else {
-                // The oldest line is partially on the wire and must be finished to keep framing:
-                // drop the second-oldest instead by moving the partial line one slot forward.
-                guard head + 1 < lines.count else { break }
-                pendingBytes -= lines[head + 1].count
-                lines[head + 1] = lines[head]
-                lines[head] = Data()
-                head += 1
-            }
-            dropped += 1
-            if dropped == 1 || dropped % 1000 == 0 {
-                log.error("event queue full: dropped \(self.dropped) oldest events so far")
-            }
-        }
-        compact()
-    }
-
-    /// Reclaims the consumed prefix of `lines` occasionally (amortised O(1)).
-    private func compact() {
-        if head > 1024, head * 2 > lines.count {
-            lines.removeFirst(head)
-            head = 0
+    private func noteDrops() {
+        let total = totalDroppedOnQueue()
+        if total > loggedDrops, (loggedDrops == 0 || total / 1000 > loggedDrops / 1000) {
+            log.error("event queue full: dropped \(total) events so far (backlog \(self.backlog.dropped), in-flight limit \(self.droppedInflight.withLock { $0 }))")
+            loggedDrops = total
         }
     }
 
@@ -278,15 +374,15 @@ final class EventSink: @unchecked Sendable {
     private func didConnect() {
         // Only a root-owned listener may receive per-process flow data.
         var uid: uid_t = 0, gid: gid_t = 0
-        if getpeereid(fd, &uid, &gid) != 0 || uid != 0 {
-            log.error("refusing filter socket peer with uid \(uid) (expected root)")
+        if getpeereid(fd, &uid, &gid) != 0 || uid != trustedPeerUid {
+            log.error("refusing filter socket peer with uid \(uid) (expected \(self.trustedPeerUid))")
             disconnect(reason: "untrusted peer")
             return
         }
         connected = true
-        headOffset = 0 // a line cut by a previous connection is re-sent whole
-        if let hello = encode(helloProvider()) { enqueue(hello, atFront: true) }
-        log.notice("connected to daemon at \(self.socketPath, privacy: .public), \(self.pendingCount) events pending")
+        backlog.restartHeadLine() // a line cut by a previous connection is re-sent whole
+        if let hello = encode(helloProvider()) { backlog.enqueue(hello, atFront: true) }
+        log.notice("connected to daemon at \(self.socketPath, privacy: .public), \(self.backlog.pendingCount) events pending")
         flush()
     }
 
@@ -303,7 +399,7 @@ final class EventSink: @unchecked Sendable {
         readSource = nil
         writeSourceActive = false
         fd = -1
-        headOffset = 0
+        backlog.restartHeadLine()
     }
 
     private func drainReadable() {
@@ -331,19 +427,13 @@ final class EventSink: @unchecked Sendable {
     /// Writes as much backlog as the socket accepts without blocking.
     private func flush() {
         guard connected else { return }
-        while head < lines.count {
-            let line = lines[head]
+        while let cur = backlog.current {
+            let (line, offset) = cur
             let n = line.withUnsafeBytes { raw -> Int in
-                write(fd, raw.baseAddress!.advanced(by: headOffset), line.count - headOffset)
+                write(fd, raw.baseAddress!.advanced(by: offset), line.count - offset)
             }
             if n > 0 {
-                headOffset += n
-                if headOffset == line.count {
-                    pendingBytes -= line.count
-                    lines[head] = Data() // release memory before compaction
-                    head += 1
-                    headOffset = 0
-                }
+                backlog.advance(by: n)
                 continue
             }
             if n < 0, errno == EINTR { continue }
@@ -355,7 +445,6 @@ final class EventSink: @unchecked Sendable {
             return
         }
         suspendWriteSource()
-        compact()
-        if head == lines.count { lines.removeAll(keepingCapacity: true); head = 0 }
+        backlog.compact()
     }
 }

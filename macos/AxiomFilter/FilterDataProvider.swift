@@ -13,15 +13,12 @@
 //
 // Lifecycle: on stopFilter the process exits shortly after completing (the
 // LuLu pattern) so that an upgraded extension can register its Mach service.
+// macOS logs that exit as unexpected; it is intended (see macos/README.md).
 
 import Foundation
+import Network
 import NetworkExtension
 import os
-
-/// Logging subsystem shared by all extension components.
-enum FilterLog {
-    static let subsystem = "com.axiom.firewall.filter"
-}
 
 final class FilterDataProvider: NEFilterDataProvider {
     private let log = Logger(subsystem: FilterLog.subsystem, category: "filter")
@@ -29,6 +26,12 @@ final class FilterDataProvider: NEFilterDataProvider {
     private lazy var events = EventSink { [rules] in
         .hello(ts: Date(), version: FilterDataProvider.version, generation: rules.snapshot().generation)
     }
+
+    /// Review #14: `.medium` statistics reports arrive about once per second per live flow;
+    /// forward at most one `flow.stats` per flow per `statsInterval` (the close report
+    /// always carries the final counters).
+    private static let statsInterval: TimeInterval = 2
+    private let lastStats = OSAllocatedUnfairLock<[UUID: Date]>(initialState: [:])
 
     /// CFBundleShortVersionString of the extension bundle.
     static let version: String =
@@ -40,11 +43,18 @@ final class FilterDataProvider: NEFilterDataProvider {
         log.notice("startFilter: version \(FilterDataProvider.version, privacy: .public)")
 
         // Rules first (synchronous initial load), so the first verdicts already use them.
-        rules.onReload = { [weak self] _ in
+        rules.onReload = { [weak self] table in
             guard let self else { return }
-            // Tell the daemon which generation is now enforced.
-            self.events.send(.hello(ts: Date(), version: FilterDataProvider.version,
-                                    generation: self.rules.snapshot().generation))
+            // Tell the daemon which generation is now enforced, then what was rejected.
+            self.events.send(.hello(ts: Date(), version: FilterDataProvider.version, generation: table.generation))
+            self.events.send(.rules(ts: Date(), generation: table.generation, applied: table.ruleCount,
+                                    rejected: table.rejected, error: nil))
+        }
+        rules.onRejectedFile = { [weak self] reason in
+            guard let self else { return }
+            let table = self.rules.snapshot()
+            self.events.send(.rules(ts: Date(), generation: table.generation, applied: table.ruleCount,
+                                    rejected: table.rejected, error: reason))
         }
         rules.start()
         events.start()
@@ -80,19 +90,31 @@ final class FilterDataProvider: NEFilterDataProvider {
     /// the daemon's DNS proxy on 127.0.0.1:53) to the client app. Inbound loopback is
     /// left out because it is the same connection seen from the server side.
     private static func makeSettings() -> NEFilterSettings {
-        func rule(_ network: String?, _ prefix: Int, _ direction: NETrafficDirection) -> NEFilterRule {
-            // NWHostEndpoint-based initialiser: deprecated in macOS 15 but required for macOS 13/14.
-            let endpoint = network.map { NWHostEndpoint(hostname: $0, port: "0") }
-            let networkRule = NENetworkRule(remoteNetwork: endpoint, remotePrefix: prefix, localNetwork: nil,
-                                            localPrefix: 0, protocol: .any, direction: direction)
-            return NEFilterRule(networkRule: networkRule, action: .filterData)
-        }
         let filterRules = [
-            rule("127.0.0.0", 8, .outbound),
-            rule("::1", 128, .outbound),
-            rule(nil, 0, .any),
-        ]
+            networkRule("127.0.0.0", 8, .outbound),
+            networkRule("::1", 128, .outbound),
+            networkRule(nil, 0, .any),
+        ].map { NEFilterRule(networkRule: $0, action: .filterData) }
         return NEFilterSettings(rules: filterRules, defaultAction: .allow)
+    }
+
+    /// Review #17: nw_endpoint-based initialiser on macOS 15+, NWHostEndpoint on 13/14.
+    private static func networkRule(_ network: String?, _ prefix: Int, _ direction: NETrafficDirection) -> NENetworkRule {
+        if #available(macOS 15.0, *) {
+            let endpoint: Network.NWEndpoint? = network.map { .hostPort(host: Network.NWEndpoint.Host($0), port: 0) }
+            return NENetworkRule(remoteNetworkEndpoint: endpoint, remotePrefix: prefix, localNetworkEndpoint: nil,
+                                 localPrefix: 0, protocol: .any, direction: direction)
+        }
+        return legacyNetworkRule(network, prefix, direction)
+    }
+
+    // Marked deprecated itself so the deprecated initialiser inside does not warn under
+    // -warnings-as-errors; only reached on macOS 13/14.
+    @available(macOS, deprecated: 15.0)
+    private static func legacyNetworkRule(_ network: String?, _ prefix: Int, _ direction: NETrafficDirection) -> NENetworkRule {
+        let endpoint = network.map { NWHostEndpoint(hostname: $0, port: "0") }
+        return NENetworkRule(remoteNetwork: endpoint, remotePrefix: prefix, localNetwork: nil,
+                             localPrefix: 0, protocol: .any, direction: direction)
     }
 
     // MARK: - Verdicts
@@ -130,7 +152,9 @@ final class FilterDataProvider: NEFilterDataProvider {
             remotePort: info.remotePort,
             remoteHost: info.remoteHost,
             verdict: decision.action,
-            ruleId: decision.ruleId
+            ruleId: decision.ruleId,
+            responsiblePid: info.responsiblePid,
+            responsiblePath: info.responsiblePath
         )))
         if decision.action == .block {
             // macOS sends no flowClosed report for dropped flows (verified on 15.8), so close
@@ -146,11 +170,22 @@ final class FilterDataProvider: NEFilterDataProvider {
         guard let flow = report.flow else { return }
         let bytesIn = UInt64(report.bytesInboundCount)
         let bytesOut = UInt64(report.bytesOutboundCount)
+        let now = Date()
         switch report.event {
         case .statistics:
-            events.send(.stats(id: flow.identifier, ts: Date(), bytesIn: bytesIn, bytesOut: bytesOut))
+            let forward = lastStats.withLock { map -> Bool in
+                if let last = map[flow.identifier], now.timeIntervalSince(last) < Self.statsInterval { return false }
+                map[flow.identifier] = now
+                if map.count > 8192 { // safety net: forget flows whose close we never saw
+                    let cutoff = now.addingTimeInterval(-60)
+                    map = map.filter { $0.value > cutoff }
+                }
+                return true
+            }
+            if forward { events.send(.stats(id: flow.identifier, ts: now, bytesIn: bytesIn, bytesOut: bytesOut)) }
         case .flowClosed:
-            events.send(.close(id: flow.identifier, ts: Date(), bytesIn: bytesIn, bytesOut: bytesOut))
+            lastStats.withLock { _ = $0.removeValue(forKey: flow.identifier) }
+            events.send(.close(id: flow.identifier, ts: now, bytesIn: bytesIn, bytesOut: bytesOut))
         default:
             break // newFlow / dataDecision: flow.open is emitted from handleNewFlow
         }

@@ -4,22 +4,38 @@
 //
 // macOS facts this relies on:
 //   * NEFilterFlow.sourceAppIdentifier is iOS-only; on macOS the source process
-//     comes from sourceAppAuditToken (an audit_token_t; pid is val.5). The path
-//     is resolved with proc_pidpath_audittoken, which is immune to pid reuse,
-//     falling back to proc_pidpath.
+//     comes from sourceAppAuditToken (an audit_token_t; pid is val.5, pidversion
+//     val.7). The path is resolved with proc_pidpath_audittoken, which is immune
+//     to pid reuse, falling back to proc_pidpath.
+//   * The *responsible* process (review #12) comes from the private but long-stable
+//     `responsibility_get_pid_responsible_for_pid` (libquarantine, used by LuLu):
+//     for `sh -c curl`, a WebKit networking process or an app's XPC helper it names
+//     the app that the user launched. Resolved with dlsym and skipped when absent.
+//   * Paths are canonicalised once per process (realpath, so /var and /private/var
+//     agree) and cached per (pid, pidversion) so the verdict path does no extra
+//     syscalls for a process it has already seen.
 //   * remoteFlowEndpoint/localFlowEndpoint (nw_endpoint_t) exist from macOS 15;
 //     earlier systems use the deprecated NWHostEndpoint properties.
 //   * remoteHostname carries the name the app connected by (also on DNS flows
 //     to port 53) when macOS knows it.
+//
+// Known limitation: App Translocation. A quarantined app launched from e.g. ~/Downloads
+// runs from /private/var/folders/.../AppTranslocation/<uuid>/d/Foo.app; realpath does
+// not undo that, so a rule for /Users/x/Downloads/Foo.app does not match until the app
+// is moved to /Applications (or the daemon writes the translocated path it observed).
 
 import Darwin
 import Foundation
 import Network
 import NetworkExtension
+import os
 
 struct FlowDescription {
     let pid: Int32
     let path: String?
+    /// Responsible process, only when it differs from `pid`.
+    let responsiblePid: Int32?
+    let responsiblePath: String?
     let direction: FlowDirection
     let proto: FlowProtocol
     let localAddress: String?
@@ -31,13 +47,21 @@ struct FlowDescription {
 
     var key: FlowKey {
         FlowKey(appPath: path, direction: direction, proto: proto, remoteAddress: remoteIP,
-                remotePort: remotePort.flatMap { UInt16(exactly: $0) })
+                remotePort: remotePort.flatMap { UInt16(exactly: $0) }, responsiblePath: responsiblePath)
     }
+}
+
+/// Resolved identity of one process, cached per (pid, pidversion).
+struct ProcessIdentity {
+    let pid: Int32
+    let path: String?
+    let responsiblePid: Int32?
+    let responsiblePath: String?
 }
 
 enum FlowInspector {
     static func describe(_ flow: NEFilterSocketFlow) -> FlowDescription {
-        let (pid, path) = process(flow.sourceAppAuditToken)
+        let who = process(flow.sourceAppAuditToken)
         let (remoteText, remotePort) = remoteEndpoint(flow)
         let (localText, localPort) = localEndpoint(flow)
 
@@ -49,8 +73,10 @@ enum FlowInspector {
         if host?.isEmpty == true { host = nil }
 
         return FlowDescription(
-            pid: pid,
-            path: path,
+            pid: who.pid,
+            path: who.path,
+            responsiblePid: who.responsiblePid,
+            responsiblePath: who.responsiblePath,
             direction: flow.direction == .inbound ? .inbound : .outbound,
             proto: FlowProtocol(socketProtocol: flow.socketProtocol),
             localAddress: localIP?.description ?? localText,
@@ -64,16 +90,56 @@ enum FlowInspector {
 
     // MARK: Process identity
 
-    /// pid and executable path of the app responsible for the flow.
-    static func process(_ tokenData: Data?) -> (Int32, String?) {
-        guard let tokenData, tokenData.count == MemoryLayout<audit_token_t>.size else { return (-1, nil) }
+    private typealias ResponsibleFn = @convention(c) (pid_t) -> pid_t
+    /// `responsibility_get_pid_responsible_for_pid`, or nil when this macOS does not export it.
+    private static let responsibleFn: ResponsibleFn? = {
+        guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2) /* RTLD_DEFAULT */,
+                              "responsibility_get_pid_responsible_for_pid") else { return nil }
+        return unsafeBitCast(sym, to: ResponsibleFn.self)
+    }()
+
+    private struct CacheKey: Hashable { let pid: Int32; let version: UInt32 }
+    private static let cache = OSAllocatedUnfairLock<[CacheKey: ProcessIdentity]>(initialState: [:])
+    /// Flushed wholesale when exceeded; pids recycle, so a bounded cache is enough.
+    private static let cacheLimit = 4096
+
+    /// pid, executable path and responsible process of the app behind an audit token.
+    static func process(_ tokenData: Data?) -> ProcessIdentity {
+        guard let tokenData, tokenData.count == MemoryLayout<audit_token_t>.size else {
+            return ProcessIdentity(pid: -1, path: nil, responsiblePid: nil, responsiblePath: nil)
+        }
         var token = tokenData.withUnsafeBytes { $0.loadUnaligned(as: audit_token_t.self) }
         let pid = Int32(bitPattern: token.val.5)
+        let key = CacheKey(pid: pid, version: token.val.7)
+        if let hit = cache.withLock({ $0[key] }) { return hit }
 
         var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4) // PROC_PIDPATHINFO_MAXSIZE
         var length = proc_pidpath_audittoken(&token, &buffer, UInt32(buffer.count))
         if length <= 0 { length = proc_pidpath(pid, &buffer, UInt32(buffer.count)) }
-        return (pid, length > 0 ? String(cString: buffer) : nil)
+        let path = length > 0 ? PathMatch.resolve(String(cString: buffer)) : nil
+
+        var responsiblePid: Int32? = nil
+        var responsiblePath: String? = nil
+        if let fn = responsibleFn, pid > 0 {
+            let r = fn(pid)
+            if r > 0, r != pid {
+                var rbuf = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+                let rlen = proc_pidpath(r, &rbuf, UInt32(rbuf.count))
+                let rpath = rlen > 0 ? PathMatch.resolve(String(cString: rbuf)) : nil
+                if rpath != nil, rpath != path {
+                    responsiblePid = r
+                    responsiblePath = rpath
+                }
+            }
+        }
+        let identity = ProcessIdentity(pid: pid, path: path, responsiblePid: responsiblePid, responsiblePath: responsiblePath)
+        if path != nil {
+            cache.withLock { map in
+                if map.count >= cacheLimit { map.removeAll(keepingCapacity: true) }
+                map[key] = identity
+            }
+        }
+        return identity
     }
 
     // MARK: Endpoints
@@ -83,7 +149,7 @@ enum FlowInspector {
             if let ep = flow.remoteFlowEndpoint { return parts(ep) }
             return (nil, nil)
         }
-        return legacyParts(flow.remoteEndpoint)
+        return legacyRemote(flow)
     }
 
     private static func localEndpoint(_ flow: NEFilterSocketFlow) -> (String?, Int?) {
@@ -91,7 +157,7 @@ enum FlowInspector {
             if let ep = flow.localFlowEndpoint { return parts(ep) }
             return (nil, nil)
         }
-        return legacyParts(flow.localEndpoint)
+        return legacyLocal(flow)
     }
 
     /// Address (or host name) and port of a Network.framework endpoint
@@ -108,7 +174,16 @@ enum FlowInspector {
         }
     }
 
-    /// Pre-macOS 15 endpoints (NWHostEndpoint with string hostname/port).
+    // Pre-macOS 15 endpoints (NWHostEndpoint with string hostname/port). These helpers are
+    // themselves marked deprecated so the use of the deprecated properties inside them does
+    // not warn (build.sh compiles with -warnings-as-errors); they only run on macOS 13/14.
+    @available(macOS, deprecated: 15.0)
+    private static func legacyRemote(_ flow: NEFilterSocketFlow) -> (String?, Int?) { legacyParts(flow.remoteEndpoint) }
+
+    @available(macOS, deprecated: 15.0)
+    private static func legacyLocal(_ flow: NEFilterSocketFlow) -> (String?, Int?) { legacyParts(flow.localEndpoint) }
+
+    @available(macOS, deprecated: 15.0)
     private static func legacyParts(_ endpoint: NSObject?) -> (String?, Int?) {
         guard let host = endpoint as? NWHostEndpoint else { return (nil, nil) }
         return (host.hostname.isEmpty ? nil : host.hostname, Int(host.port))
