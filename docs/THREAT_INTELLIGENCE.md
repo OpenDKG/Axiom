@@ -20,7 +20,7 @@ Axiom is a **local-first firewall, network monitor and DNS policy tool**. Its fi
 | Synchronize | Local Blackbox dashboard and its configured DKG node | Fetch and compile verified graph knowledge; expose local dashboard status and graph view | Yes for updates; cached data can be read locally |
 | Enforce | Windows Firewall / Axiom Privacy Shield / optional Blackbox guard | Apply local rules; Blackbox guard enforces its configured agent policy when reachable | Local enforcement does not require an online DKG lookup |
 
-The **standalone Axiom DKG node** and the **DKG node configured by Blackbox** are not necessarily the same process or data store. Axiom displays their health separately. "Connected" to localhost proves only that an expected local endpoint responded with the documented status shape, **not** that it is synchronized with the network.
+The **standalone Axiom DKG node** and the **DKG node configured by Blackbox** are not necessarily the same process or data store. Axiom displays their health separately. "Connected" to localhost proves only that an expected local endpoint responded with the documented status shape, **not** that it is synchronized with the network. When no standalone node answers and Blackbox reports its own DKG node reachable, the DKG card shows that node and labels it "DKG node reported by Blackbox"; a complete installation then skips Axiom's second, unused node.
 
 ## Which observations are eligible to be proposed?
 

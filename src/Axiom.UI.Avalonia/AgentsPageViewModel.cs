@@ -1750,8 +1750,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         var dkgModule = Security.Modules.FirstOrDefault(module => module.Name == "OriginTrail DKG");
         AxiomDkgHealthText = dkgModule is null
-            ? "Axiom DKG: unknown"
-            : $"Axiom DKG: {dkgModule.Status} · {dkgModule.Detail}";
+            ? "DKG: unknown"
+            : $"DKG: {dkgModule.Status} · {dkgModule.Detail}";
 
         var ruleset = graph["ruleset"] as JsonObject;
         var verified = ReadInt(ruleset, "injection") + ReadInt(ruleset, "escalation") +

@@ -48,6 +48,44 @@ public sealed class OptionalModuleProbeTests
     }
 
     [Fact]
+    public async Task Dkg_uses_the_node_blackbox_reports_when_no_standalone_node_answers()
+    {
+        var handler = new StubHandler(request =>
+        {
+            var uri = request.RequestUri!;
+            if (uri.Port == 9200)
+            {
+                throw new HttpRequestException("refused");
+            }
+
+            if (uri.AbsolutePath == "/api/graph-status")
+            {
+                return Json(HttpStatusCode.OK, """
+                    {"mode":"block","node_reachable":true,"dkg_url":"http://127.0.0.1:9320","sync_progress":{}}
+                    """);
+            }
+
+            if (uri.Port == 9320 && uri.AbsolutePath == "/api/status")
+            {
+                return Json(HttpStatusCode.OK, """
+                    {"version":"10.1.0","peerId":"12D3KooExample","nodeRole":"edge","networkName":"DKG V10 Base Testnet","networkId":"7449c543ff04a550b2dafa999fe8ee577a00b212023bb4d4244e8d58a4792c7b"}
+                    """);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+        using var http = new HttpClient(handler);
+        using var probe = new OptionalModuleProbe(http, DkgUrl, BlackboxUrl);
+
+        var result = await probe.ProbeDkgAsync(CancellationToken.None);
+
+        Assert.True(result.IsConnected);
+        Assert.Equal("CONNECTED", result.Status);
+        Assert.Contains("reported by Blackbox", result.Detail, StringComparison.Ordinal);
+        Assert.Contains("9320", result.Endpoint, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Dkg_status_is_not_running_when_the_connection_is_refused()
     {
         var handler = new StubHandler(_ => throw new HttpRequestException("refused"));

@@ -60,6 +60,33 @@ public sealed class OptionalModuleProbe : IDisposable
             return Unavailable(error);
         }
 
+        var primary = await ProbeDkgAtAsync(baseUri, fromBlackbox: false, cancellationToken)
+            .ConfigureAwait(false);
+        if (primary.IsConnected || primary.Status != "NOT RUNNING")
+        {
+            return primary;
+        }
+
+        // Blackbox runs its own DKG node. When Axiom has no standalone node, point the DKG card
+        // at the node Blackbox reports instead of showing a false "not installed".
+        if (await TryResolveBlackboxDkgAsync(cancellationToken).ConfigureAwait(false) is { } fallback)
+        {
+            var result = await ProbeDkgAtAsync(fallback, fromBlackbox: true, cancellationToken)
+                .ConfigureAwait(false);
+            if (result.IsConnected)
+            {
+                return result;
+            }
+        }
+
+        return primary;
+    }
+
+    private async Task<OptionalModuleStatus> ProbeDkgAtAsync(
+        Uri baseUri,
+        bool fromBlackbox,
+        CancellationToken cancellationToken)
+    {
         try
         {
             using var response = await _http
@@ -74,7 +101,7 @@ public sealed class OptionalModuleProbe : IDisposable
             }
 
             var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            if (!TryDescribeDkg(body, out var detail, out var problem))
+            if (!TryDescribeDkg(body, out var identity, out var problem))
             {
                 return Unknown(problem, baseUri);
             }
@@ -82,7 +109,7 @@ public sealed class OptionalModuleProbe : IDisposable
             return new OptionalModuleStatus
             {
                 Status = "CONNECTED",
-                Detail = detail,
+                Detail = $"{(fromBlackbox ? "DKG node reported by Blackbox" : "Local DKG node")}: {identity}.",
                 IsConnected = true,
                 Endpoint = baseUri.ToString(),
             };
@@ -94,6 +121,49 @@ public sealed class OptionalModuleProbe : IDisposable
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             return NotRunning("The DKG status check timed out. Start it with the Start button in Axiom or `dkg start`; setup is in docs/INTEGRATIONS.md.", baseUri);
+        }
+    }
+
+    private async Task<Uri?> TryResolveBlackboxDkgAsync(CancellationToken cancellationToken)
+    {
+        if (!TryCreateLoopbackUri(_blackboxUrl, out var blackboxUri, out _))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var response = await _http
+                .GetAsync(new Uri(blackboxUri, "/api/graph-status"), cancellationToken)
+                .ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            using var document = JsonDocument.Parse(body);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("node_reachable", out var reachable) ||
+                reachable.ValueKind != JsonValueKind.True ||
+                !root.TryGetProperty("dkg_url", out var dkgUrl) ||
+                dkgUrl.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            return TryCreateLoopbackUri(dkgUrl.GetString() ?? string.Empty, out var uri, out _)
+                ? uri
+                : null;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException)
+        {
+            return null;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
         }
     }
 
@@ -240,9 +310,9 @@ public sealed class OptionalModuleProbe : IDisposable
             }
 
             var networkName = ReadString(root, "networkName");
-            detail = $"Local DKG node: version {version}, peer {peerId}, role {role}" +
+            detail = $"version {version}, peer {peerId}, role {role}" +
                      (networkName.Length == 0 ? string.Empty : $", network {networkName}") +
-                     $", network id {networkId[..8]}….";
+                     $", network id {networkId[..8]}...";
             return true;
         }
         catch (JsonException)
