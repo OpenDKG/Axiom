@@ -13,18 +13,31 @@
 > your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
 > and keep a recovery path.
 
-## Project origin and stewardship
+## Project Leadership & Core Team
 
-**Original creator and project initiator:** [@a-51-50](https://github.com/a-51-50).
-The canonical Axiom source repository remains [a-51-50/Axiom](https://github.com/a-51-50/Axiom).
-Axiom is affiliated with OpenDKG, but affiliation does not transfer the repository or copyright.
-Linux and macOS development is planned with contributions from [@dreddster](https://github.com/dreddster)
-and [@brxtrac](https://github.com/brxtrac); individual changes are attributed through commits and
-pull requests, and specific platform responsibilities are not assigned by this notice.
+**Axiom** is an independent, community-oriented open-source network and AI-agent security project.
 
-See [authors and attribution](AUTHORS.md), [repository stewardship](docs/REPOSITORY_STEWARDSHIP.md)
-and [contribution guidelines](CONTRIBUTING.md). These public credits do not replace any applicable
-signed founder or contributor agreements.
+**Founder, Creator & Lead Maintainer**
+
+- [@a-51-50](https://github.com/a-51-50) - original project creator, architecture and lead maintainership.
+
+**Core Maintainers & Platform Leads**
+
+- [@dreddster](https://github.com/dreddster) - Core Maintainer & Platform Lead.
+- [@brxtrac](https://github.com/brxtrac) - Core Maintainer & Platform Lead.
+
+The Core Team collaborates on Axiom's development across Windows, Linux and macOS, with platform
+responsibilities documented as they are formally assigned.
+
+The canonical upstream repository remains [a-51-50/Axiom](https://github.com/a-51-50/Axiom).
+
+Axiom is affiliated with [OpenDKG](https://github.com/OpenDKG), but the affiliation does not transfer
+repository ownership or copyright.
+
+For detailed attribution and maintainership, see [AUTHORS.md](AUTHORS.md) and
+[Repository Stewardship](docs/REPOSITORY_STEWARDSHIP.md).
+
+> These public credits do not replace any applicable signed founder or contributor agreements.
 
 ![Axiom Overview in Axiom Glass Dark: live sockets, system-wide throughput and local-only counters](docs/assets/screenshots/axiom-glass-dark-full.png)
 

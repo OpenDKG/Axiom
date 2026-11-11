@@ -14,6 +14,26 @@ copyright ownership, and nothing here transfers rights.
 Confirmed as the project's creator by the repository owner. The GitHub account is the public identity
 used here; no legal name, private e-mail address or other personal data is published.
 
+## Core project team
+
+- **a-51-50** - Founder, Creator & Lead Maintainer
+- **dreddster** - Core Maintainer & Platform Lead
+- **brxtrac** - Core Maintainer & Platform Lead
+
+Core maintainership is a technical role: architecture, platform development, maintenance, testing and
+review within agreed areas. It does not establish copyright ownership, repository ownership or
+authority to transfer the project, and it does not change who created the original implementation.
+
+Platform assignments are recorded only when they are formally confirmed. Until then, both platform
+leads share the generic Platform Lead role.
+
+## Additional contributors
+
+Future community contributors are acknowledged through their actual contributions, commits and pull
+requests. No additional contributor is listed at this time; the core team is not repeated here merely
+to describe its primary roles. Listing a contributor does not imply shared ownership of the whole
+project, an original-creator role or a copyright claim.
+
 ## Copyright holders
 
 ```text
@@ -21,32 +41,17 @@ Copyright (C) 2026 The Axiom contributors
 ```
 
 The collective notice is kept until the owner confirms an individual copyright holder and the exact
-wording to publish. Naming a creator does not by itself assign copyright.
-
-## Project maintainers
-
-- **a-51-50** - repository administrator.
-- **dreddster** - repository collaborator with write access.
-- **brxtrac** - repository collaborator with write access.
-
-## Contributors
-
-- **dreddster**
-- **brxtrac**
-
-The original creator is listed above and is not repeated here. Contributors are credited for their
-work. Listing a contributor does not imply shared ownership of the whole project, an original-creator
-role or a copyright claim. Future contributors are added here without changing the creator entry.
+wording to publish. Naming a creator or a maintainer does not by itself assign copyright.
 
 ## Planned cross-platform work
 
-**dreddster** and **brxtrac** are expected to contribute to Linux and macOS development.
-This is a statement of planned collaboration, not an assertion that either has completed a
-specific port, nor an assignment of one platform to either contributor. Actual contributions
-will be credited by their commits and pull requests.
+**dreddster** and **brxtrac** work on Linux and macOS development as core maintainers. This is a
+statement of collaboration, not an assertion that either port is included in a Windows release, nor
+an assignment of one platform to either maintainer. Actual contributions will be credited by their
+commits and pull requests.
 
-The original creator entry remains separate from later contributions. Author credit,
-copyright ownership and administrator access are distinct matters.
+The original creator entry remains separate from later contributions. Author credit, copyright
+ownership and administrator access are distinct matters.
 
 ## Project affiliation
 
