@@ -33,16 +33,29 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
    write time (mode set on the temp file before the atomic rename; SQLite db/-wal/-shm after open); docs fixed.] `axiom.db`, `-wal`, `-shm`, managed-rules.json are
    `root:admin 0644`; `FilterRulesFile.PublishedMode` 0644 is also used for the DNS backup although the docs say
    0600. Fix: data root 0700 (`filter/` 0755 for the extension), `UnixCreateMode` on every store write, fix docs.
-4. **Developer ID activation path unproven.** `build.sh` signs `axiom-sysext` as a secondary executable with
+4. **Developer ID activation path unproven.** [FILTER HALF DONE 3bae86e: `build.sh` builds `libAxiomSysext.dylib`
+   (`axiom_sysext_activate/deactivate/set_filter/status`, JSON out, `SysextCore.swift` shared with the helper) so the
+   main `Axiom` process can submit the requests itself; README "Which activation path for Developer ID builds"
+   recommends it and lists the signing contract (`Axiom` signed with `axiom-sysext.entitlements`). .NET P/Invoke +
+   packaging of the dylib are open on the .NET side; Developer ID itself still unverified (no team).] `build.sh` signs `axiom-sysext` as a secondary executable with
    restricted entitlements (`system-extension.install`, `networkextension`). With SIP on, those need a provisioning
    profile, and `Contents/embedded.provisionprofile` vouches only for the main executable. Ad hoc + SIP off never
    checks this. Fix: submit `OSSystemExtensionRequest` from the main `Axiom` process via a small Swift dylib
    (P/Invoke), or ship the helper as its own `.app` with its own profile.
-5. **Upgrade path keyed on version strings that never change.** `package-app.sh` skips `build.sh` when
+5. **Upgrade path keyed on version strings that never change.** [FIXED 3bae86e (filter side): `build.sh` fails without
+   `AXIOM_VERSION` when `AXIOM_SIGN_IDENTITY` is set, dev builds default to `0.0.<commits>` / `<commits>.<timestamp>`;
+   `activate` replaces on version/build or cdhash difference (`SecCodeCopySigningInformation`), `--force` always;
+   README "Versioning" is the contract for `package-app.sh` (must export both and always rebuild). Verified: three
+   consecutive dev builds each replaced the previous one, `systemextensionsctl list` shows the new build; a repeated
+   `activate` with the same cdhash keeps it (`replaced:false`). 33ac363/ba8f715: ad hoc helpers also re-create the
+   NEFilterManager configuration after an upgrade — without that nesessionmanager rejects the session and the filter
+   silently allows everything. `package-app.sh` passing the version is the other agent's item.] `package-app.sh` skips `build.sh` when
    `macos/build/axiom-sysext` exists and does not pass `AXIOM_VERSION`; `AXIOM_BUILD` defaults to 1; the helper keeps
    the installed extension when version+build match. A release upgrade would keep old filter code.
    Fix: always rebuild, `AXIOM_VERSION=$VERSION`, `AXIOM_BUILD` from CI, compare cdhash or force on version change.
-6. **Rejected rules are invisible.** `RuleStore.swift:155` only os_logs a skipped rule; daemon and UI believe it is
+6. **Rejected rules are invisible.** [FIXED 9366faa: `filter.rules {generation, applied, rejected:[{id,reason}], error,
+   dropped}` after every reload (right after `filter.hello`), and with `error` when the file itself was rejected; §3.2.
+   UI display is the .NET side.] `RuleStore.swift:155` only os_logs a skipped rule; daemon and UI believe it is
    enforced. Fix: `filter.rules {generation, applied, rejected:[{id,reason}]}` event; show on the Firewall page.
 
 ## Medium
@@ -55,21 +68,32 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
    and a `newsyslog.d` entry.
 10. [FIXED 2ac3c5f: `LibProcSocketScanner.Shared` — one pass per 2 s shared by `MacConnectionSource` and `MacDnsProcessLookup`, a DNS miss refreshes at most every 500 ms; test asserts 5 passes for ten 1 s polls and no second pass for a burst of misses.] libproc fallback scans every pid every second, twice (`MacConnectionSource`, `MacDnsProcessLookup`). Share one
     scanner, poll 2-5 s, or use `net.inet.tcp.pcblist_n`.
-11. Rule file read via path twice (stat then read, follows symlinks). Enforce root-only invariant:
+11. [FIXED 9366faa: `RuleStore.loadFile` = `open(O_RDONLY|O_NOFOLLOW|O_CLOEXEC)`, `fstat`, regular file, uid 0,
+    `!(mode & 022)`, size cap, read from the fd; rejection keeps the last table, is logged once per reason and reported
+    in `filter.rules.error`. Unit + e2e tested (chown 501 / chmod 666 / symlink).] Rule file read via path twice (stat then read, follows symlinks). Enforce root-only invariant:
     `open(O_NOFOLLOW)`, `fstat`, `st_uid==0 && !(mode & 022)`, read from the fd.
-12. Attribution is the socket owner, not the app: WebKit networking, `nsurlsessiond`, translocated apps will not
+12. [FIXED 9366faa: rule paths realpath'd on load, flow paths realpath'd once per (pid, pidversion) and cached,
+    comparison case-insensitive; responsible pid via `responsibility_get_pid_responsible_for_pid` (dlsym) emitted as
+    `responsiblePid`/`responsiblePath`, rules match owner **or** responsible path. App Translocation documented as a
+    limitation. The daemon writing realpath is optional now.] Attribution is the socket owner, not the app: WebKit networking, `nsurlsessiond`, translocated apps will not
     match `/Applications/Foo.app` prefix rules; `hasPrefix` is case-sensitive on case-insensitive APFS; `/var` vs
     `/private/var`. Daemon writes `realpath()`, filter compares case-insensitively, consider the responsible pid.
-13. Loopback flows evaluated by ordinary rules: "block app X" also kills its DNS through the Privacy Shield proxy.
+13. [FIXED 9366faa: loopback destinations are exempt unless `remoteAddresses` names a loopback address; flows still
+    reported. Unit + e2e tested.] Loopback flows evaluated by ordinary rules: "block app X" also kills its DNS through the Privacy Shield proxy.
     Skip loopback unless the rule names it (Windows Firewall ignores loopback).
-14. `EventSink.send` does one `queue.async` per event before the bounded queue applies: a flow flood grows the
+14. [FIXED 9366faa: in-flight counter (4096) checked before `queue.async`, drops counted and reported as `dropped` in
+    `filter.hello`/`filter.rules`; backlog is a testable `EventQueue`; `.medium` kept but `flow.stats` coalesced to one
+    per flow per 2 s.] `EventSink.send` does one `queue.async` per event before the bounded queue applies: a flow flood grows the
     dispatch backlog. `statisticsReportFrequency = .medium` emits ~1 event/s per live flow. Atomic in-flight counter,
     `.low` or batched stats.
 15. [FIXED 11871d6: ProgramArguments `/usr/bin/open -b com.axiom.firewall --args --autostart` when running from a bundle; the executable path only as fallback; an old pinned plist reads as stale and `Repair` upgrades it; tests.] Autostart LaunchAgent pins the current path (translocated for quarantined apps). Use
+15. [Swift part done 9366faa: a rejected rule is logged once per (id, reason), not per reload.] Autostart LaunchAgent pins the current path (translocated for quarantined apps). Use
     `open -b com.axiom.firewall --args --autostart` or `SMAppService.loginItem`.
 16. [FIXED da36443: signs Mach-O files only (magic bytes, deepest first), `--timestamp` only with a Developer ID identity, `dsymutil` for the Swift extension/helper when `AXIOM_SIGN_IDENTITY` is set (no dSYM for .NET; portable pdb stays in `publish/`), and `Axiom.pkg` via `pkgbuild` with a postinstall that runs `axiomd --install-service` (`AXIOM_INSTALLER_IDENTITY` to sign it).] `package-app.sh` codesigns every regular file with `--timestamp` (hundreds of timestamp calls, signs .json/.pdb).
     Sign Mach-O only; produce dSYMs. Docs claim a `.pkg` is produced; it is not.
-17. macOS 13/14 code paths (`NWHostEndpoint`, `NENetworkRule(remoteNetwork:)`, deprecated in 15) compiled but
+17. [FIXED 9366faa: `NENetworkRule(remoteNetworkEndpoint:…)` under `#available(macOS 15)`, legacy path in
+    `@available(macOS, deprecated: 15.0)` helpers; `build.sh` compiles with `-warnings-as-errors` (clean on the 15.8
+    SDK).] macOS 13/14 code paths (`NWHostEndpoint`, `NENetworkRule(remoteNetwork:)`, deprecated in 15) compiled but
     never run; add `#available(macOS 15)` branch with `nw_endpoint` initialisers before Tahoe removes them.
 18. [FIXED 0016a09: `macos/Tests/fixtures/rules-cases.json` (17 address-entry cases, 8 rule sets / 22 verdict cases from the Swift unit cases) is read by `FilterRulesTests`; `FilterRuleMatcher` moved to the test project as the reference implementation. Swift side wires the same file (#other agent).] Dead .NET `FilterRuleMatcher` (204 lines, tests only). Delete, or make it a cross-language contract test sharing
     fixtures with the Swift tests.
@@ -82,6 +106,10 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
 21. [FIXED 11871d6: lock + Listen run before any other startup work; the second instance retries `SignalExisting` once after 300 ms.] Single-instance race between `TryAcquire` and `Listen`; second launch may exit without showing the window.
 22. [FIXED a7b9934: `Axiom.Contracts.ToolProcess` (argument list, both streams, timeout kills the tree) backs `ProcessRunner`, `MacElevation.RunAsync` and `FilterExtensionManager`; `PipeServerWorker` has one `LoggerMessage` with the OS wording as parameters.] Three near-identical "run tool with timeout" helpers; `PipeServerWorker` branches only for a log string.
 23. Unconnected UDP sockets get one verdict; document. `exit(0)` after `stopFilter` logs as unexpected exit; document.
+20. IPC DoS: 16 slots x 30 s idle, any user. Per-uid cap.
+21. Single-instance race between `TryAcquire` and `Listen`; second launch may exit without showing the window.
+22. Three near-identical "run tool with timeout" helpers; `PipeServerWorker` branches only for a log string.
+23. [DONE 045c118: both documented in `macos/README.md` "Behaviour notes" and ARCHITECTURE §3.4.] Unconnected UDP sockets get one verdict; document. `exit(0)` after `stopFilter` logs as unexpected exit; document.
 24. `deploy-to-vm.sh` hardcodes `/home/buba`; mark dev-only.
 25. [FIXED 11871d6: menu items read "Service: running" / "Filter: on" (disabled) once running; Overview line becomes "Protection active: firewall writes enabled…" when the resolver runs or writes are enabled; `MacDnsConfigurator.ListActiveServices` skips services whose device reports `status: inactive` (restore still covers every service). AppleScript quit: see MACOS_TEST_REPORT.md.] Cosmetic: menu offers Install/Turn On while running; Overview says "read-only inventory" with the shield on;
     Privacy Shield redirects inactive network services; AppleScript quit reports -128.
@@ -91,6 +119,12 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
 - Swift: `EventSink` (drop-oldest, framing), `RuleStore` watch/poll races, IPv6/UDP/QUIC traffic, translocation,
   upgrade-replace, crash relaunch. No CI.
 - .NET: [DONE 2ac3c5f: `MacConnectionSourceAndIdentityTests`] ~~`MacConnectionSource` aggregation/dedupe, `MacProcessIdentityResolver` cache/promotion~~, `LibProcLayout`
+- Swift: [PARTLY DONE 9366faa: 147 checks — `EventQueue` drop-oldest/partial-line framing, sink in-flight limit +
+  `dropped`, wire framing over a real Unix socket (hello first, untrusted peer refused), `RuleStore` identity
+  rejection + reload/keep-last-table, loopback, case/realpath/responsible matching, `filter.rules` JSON; shared
+  fixtures `Tests/fixtures/rules-cases.json` (9 groups, 36 cases). Upgrade-replace verified manually in the VM.]
+  Still open: IPv6/UDP/QUIC traffic, translocation, crash relaunch. No CI.
+- .NET: `MacConnectionSource` aggregation/dedupe, `MacProcessIdentityResolver` cache/promotion, `LibProcLayout`
   against a real arm64 dump, `ChildSignal`, getpeereid path, `MacProtectionSetup` flows (VM-only).
 - Apple silicon: never executed. Developer ID / notarization: never executed.
 

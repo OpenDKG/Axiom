@@ -1,5 +1,5 @@
 {
-  "$comment": "Cross-language rule contract (docs/MACOS_ARCHITECTURE.md \u00a73.1). Read by tests/Axiom.Infrastructure.MacOS.Tests/FilterRulesTests.cs (.NET reference matcher) and macos/Tests/main.swift (AxiomFilter RuleTable). Add cases here, never in one side only.",
+  "$comment": "Cross-language rule contract (docs/MACOS_ARCHITECTURE.md §3.1). addressEntries/ruleSets are read by tests/Axiom.Infrastructure.MacOS.Tests/FilterRulesTests.cs; groups are read by macos/Tests/main.swift. Add cases to both views.",
   "schemaVersion": 1,
   "addressEntries": [
     {
@@ -521,6 +521,716 @@
           },
           "action": "allow",
           "ruleId": null
+        }
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "name": "exact path + ip",
+      "rules": [
+        {
+          "id": "b1",
+          "appPath": "/usr/bin/curl",
+          "direction": "outbound",
+          "action": "block",
+          "protocol": "any",
+          "remoteAddresses": [
+            "93.184.215.14"
+          ],
+          "remotePorts": null,
+          "enabled": true
+        }
+      ],
+      "cases": [
+        {
+          "name": "blocks",
+          "flow": {
+            "appPath": "/usr/bin/curl",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "b1"
+          }
+        },
+        {
+          "name": "other app",
+          "flow": {
+            "appPath": "/usr/bin/nc",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        },
+        {
+          "name": "inbound not covered",
+          "flow": {
+            "appPath": "/usr/bin/curl",
+            "direction": "inbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        },
+        {
+          "name": "other ip",
+          "flow": {
+            "appPath": "/usr/bin/curl",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "1.1.1.1",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        },
+        {
+          "name": "unknown path",
+          "flow": {
+            "appPath": null,
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        },
+        {
+          "name": "mapped v6 normalised",
+          "flow": {
+            "appPath": "/usr/bin/curl",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "::ffff:93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "b1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "bundle prefix",
+      "rules": [
+        {
+          "id": "bundle",
+          "appPath": "/Applications/Foo.app/",
+          "direction": "outbound",
+          "action": "block",
+          "remoteAddresses": []
+        }
+      ],
+      "cases": [
+        {
+          "name": "inside bundle",
+          "flow": {
+            "appPath": "/Applications/Foo.app/Contents/MacOS/Foo",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "bundle"
+          }
+        },
+        {
+          "name": "exact",
+          "flow": {
+            "appPath": "/Applications/Foo.app",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "bundle"
+          }
+        },
+        {
+          "name": "needs separator",
+          "flow": {
+            "appPath": "/Applications/Foo.application/x",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        },
+        {
+          "name": "case-insensitive",
+          "flow": {
+            "appPath": "/applications/foo.app/contents/macos/foo",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "bundle"
+          }
+        },
+        {
+          "name": "responsible path",
+          "flow": {
+            "appPath": "/usr/bin/curl",
+            "responsiblePath": "/Applications/Foo.app/Contents/MacOS/Foo",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "bundle"
+          }
+        },
+        {
+          "name": "unrelated responsible path",
+          "flow": {
+            "appPath": "/usr/bin/curl",
+            "responsiblePath": "/Applications/Bar.app/Contents/MacOS/Bar",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "cidr + port range",
+      "rules": [
+        {
+          "id": "cidr",
+          "appPath": "*",
+          "direction": "outbound",
+          "action": "block",
+          "protocol": "tcp",
+          "remoteAddresses": [
+            "10.0.0.0/8",
+            "2001:db8::/32"
+          ],
+          "remotePorts": "80,1000-2000"
+        }
+      ],
+      "cases": [
+        {
+          "name": "in range",
+          "flow": {
+            "appPath": "/x",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "10.1.1.1",
+            "remotePort": 1500
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "cidr"
+          }
+        },
+        {
+          "name": "port outside",
+          "flow": {
+            "appPath": "/x",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "10.1.1.1",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        },
+        {
+          "name": "protocol mismatch",
+          "flow": {
+            "appPath": "/x",
+            "direction": "outbound",
+            "protocol": "udp",
+            "remoteAddress": "10.1.1.1",
+            "remotePort": 80
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        },
+        {
+          "name": "v6 cidr",
+          "flow": {
+            "appPath": "/x",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "2001:db8::5",
+            "remotePort": 80
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "cidr"
+          }
+        },
+        {
+          "name": "no remote ip",
+          "flow": {
+            "appPath": "/x",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": null,
+            "remotePort": 80
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "block wins over allow",
+      "rules": [
+        {
+          "id": "allow",
+          "appPath": "/usr/bin/curl",
+          "direction": "outbound",
+          "action": "allow"
+        },
+        {
+          "id": "block",
+          "appPath": "/usr/bin/curl",
+          "direction": "outbound",
+          "action": "block"
+        }
+      ],
+      "cases": [
+        {
+          "name": "block wins",
+          "flow": {
+            "appPath": "/usr/bin/curl",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "block"
+          }
+        }
+      ]
+    },
+    {
+      "name": "disabled rule ignored",
+      "rules": [
+        {
+          "id": "allow",
+          "appPath": "/usr/bin/curl",
+          "direction": "outbound",
+          "action": "allow"
+        },
+        {
+          "id": "off",
+          "appPath": "/usr/bin/curl",
+          "direction": "outbound",
+          "action": "block",
+          "enabled": false
+        }
+      ],
+      "cases": [
+        {
+          "name": "allow reported",
+          "flow": {
+            "appPath": "/usr/bin/curl",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": "allow"
+          }
+        }
+      ]
+    },
+    {
+      "name": "inbound rule",
+      "rules": [
+        {
+          "id": "in",
+          "appPath": "",
+          "direction": "inbound",
+          "action": "block",
+          "remotePorts": "22"
+        }
+      ],
+      "cases": [
+        {
+          "name": "inbound blocked",
+          "flow": {
+            "appPath": "/usr/sbin/sshd",
+            "direction": "inbound",
+            "protocol": "tcp",
+            "remoteAddress": "10.0.2.2",
+            "remotePort": 22
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "in"
+          }
+        },
+        {
+          "name": "outbound ignored",
+          "flow": {
+            "appPath": "/usr/sbin/sshd",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "10.0.2.2",
+            "remotePort": 22
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid rules skipped, never widened",
+      "rules": [
+        {
+          "id": "bad1",
+          "action": "block",
+          "remoteAddresses": [
+            "not-an-ip"
+          ]
+        },
+        {
+          "id": "bad2",
+          "action": "explode"
+        },
+        {
+          "id": "bad3",
+          "action": "block",
+          "remotePorts": "99999"
+        },
+        {
+          "action": "block",
+          "appPath": "relative/path"
+        },
+        {
+          "id": "ok",
+          "action": "block",
+          "remoteAddresses": [
+            "*"
+          ],
+          "appPath": "/bin/x"
+        }
+      ],
+      "expectRejected": [
+        "bad1",
+        "bad2",
+        "bad3",
+        "#3"
+      ],
+      "cases": [
+        {
+          "name": "ok rule applies",
+          "flow": {
+            "appPath": "/bin/x",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "8.8.8.8",
+            "remotePort": 53
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "ok"
+          }
+        },
+        {
+          "name": "bad rules do not widen",
+          "flow": {
+            "appPath": "/bin/y",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "8.8.8.8",
+            "remotePort": 53
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "loopback exemption",
+      "rules": [
+        {
+          "id": "block-curl",
+          "appPath": "/usr/bin/curl",
+          "direction": "outbound",
+          "action": "block"
+        },
+        {
+          "id": "block-all",
+          "appPath": "/bin/y",
+          "direction": "outbound",
+          "action": "block",
+          "remoteAddresses": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        },
+        {
+          "id": "block-lo",
+          "appPath": "/bin/z",
+          "direction": "outbound",
+          "action": "block",
+          "remoteAddresses": [
+            "127.0.0.1"
+          ],
+          "remotePorts": "53"
+        },
+        {
+          "id": "block-lo8",
+          "appPath": "/bin/w",
+          "direction": "outbound",
+          "action": "block",
+          "remoteAddresses": [
+            "127.0.0.0/8",
+            "::1"
+          ]
+        }
+      ],
+      "cases": [
+        {
+          "name": "app block skips loopback v4",
+          "flow": {
+            "appPath": "/usr/bin/curl",
+            "direction": "outbound",
+            "protocol": "udp",
+            "remoteAddress": "127.0.0.1",
+            "remotePort": 53
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        },
+        {
+          "name": "app block skips loopback v6",
+          "flow": {
+            "appPath": "/usr/bin/curl",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "::1",
+            "remotePort": 8080
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        },
+        {
+          "name": "app block still blocks remote",
+          "flow": {
+            "appPath": "/usr/bin/curl",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "10.0.0.1",
+            "remotePort": 80
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "block-curl"
+          }
+        },
+        {
+          "name": "catch-all cidr skips loopback",
+          "flow": {
+            "appPath": "/bin/y",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "127.0.0.1",
+            "remotePort": 80
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        },
+        {
+          "name": "catch-all cidr blocks remote",
+          "flow": {
+            "appPath": "/bin/y",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "1.1.1.1",
+            "remotePort": 80
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "block-all"
+          }
+        },
+        {
+          "name": "explicit loopback matches",
+          "flow": {
+            "appPath": "/bin/z",
+            "direction": "outbound",
+            "protocol": "udp",
+            "remoteAddress": "127.0.0.1",
+            "remotePort": 53
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "block-lo"
+          }
+        },
+        {
+          "name": "explicit loopback is exact",
+          "flow": {
+            "appPath": "/bin/z",
+            "direction": "outbound",
+            "protocol": "udp",
+            "remoteAddress": "127.0.0.2",
+            "remotePort": 53
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
+        },
+        {
+          "name": "loopback cidr",
+          "flow": {
+            "appPath": "/bin/w",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "127.0.0.2",
+            "remotePort": 53
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "block-lo8"
+          }
+        },
+        {
+          "name": "::1 named",
+          "flow": {
+            "appPath": "/bin/w",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "::1",
+            "remotePort": 53
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "block-lo8"
+          }
+        },
+        {
+          "name": "mapped loopback",
+          "flow": {
+            "appPath": "/bin/w",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "::ffff:127.0.0.1",
+            "remotePort": 53
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "block-lo8"
+          }
+        }
+      ]
+    },
+    {
+      "name": "case-insensitive paths",
+      "rules": [
+        {
+          "id": "case",
+          "appPath": "/USERS/dev/Foo.app",
+          "direction": "outbound",
+          "action": "block"
+        }
+      ],
+      "cases": [
+        {
+          "name": "prefix",
+          "flow": {
+            "appPath": "/Users/dev/Foo.app/Contents/MacOS/Foo",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "case"
+          }
+        },
+        {
+          "name": "exact",
+          "flow": {
+            "appPath": "/users/DEV/foo.APP",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "block",
+            "ruleId": "case"
+          }
+        },
+        {
+          "name": "separator kept",
+          "flow": {
+            "appPath": "/Users/dev/Foo.application/x",
+            "direction": "outbound",
+            "protocol": "tcp",
+            "remoteAddress": "93.184.215.14",
+            "remotePort": 443
+          },
+          "expect": {
+            "action": "allow",
+            "ruleId": null
+          }
         }
       ]
     }

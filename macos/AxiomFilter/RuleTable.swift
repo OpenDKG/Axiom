@@ -15,6 +15,11 @@
 import Darwin
 import Foundation
 
+/// Logging subsystem shared by all extension components.
+enum FilterLog {
+    static let subsystem = "com.axiom.firewall.filter"
+}
+
 // MARK: - Flow-side value types
 
 /// Initial direction of a flow, as seen from this Mac.
@@ -41,9 +46,32 @@ enum FlowProtocol: String {
     }
 }
 
+/// Case-insensitive path comparison (APFS/HFS+ system volumes are case-insensitive).
+///
+/// Paths are compared on their Unicode-lowercased form, which is what `strncasecmp`
+/// semantics mean for ASCII and is good enough for bundle paths. Callers resolve
+/// symlinks (`realpath`) before folding so that `/var/...` and `/private/var/...` agree.
+enum PathMatch {
+    static func fold(_ path: String) -> String { path.lowercased() }
+
+    /// Resolves symlinks when the path exists; otherwise returns it unchanged
+    /// (a rule may name an app that is not installed yet).
+    static func resolve(_ path: String) -> String {
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        guard realpath(path, &buffer) != nil else { return path }
+        return String(cString: buffer)
+    }
+
+    /// Exact executable match, or any executable inside a directory/bundle (prefix + "/").
+    /// Both arguments must already be folded.
+    static func matches(rule folded: String, candidate: String) -> Bool {
+        candidate == folded || candidate.hasPrefix(folded + "/")
+    }
+}
+
 /// The attributes of a flow that rules can match on.
 struct FlowKey {
-    /// Executable path of the source process (nil when it could not be resolved).
+    /// Executable path of the socket-owning process (nil when it could not be resolved).
     var appPath: String?
     var direction: FlowDirection
     var proto: FlowProtocol
@@ -51,6 +79,27 @@ struct FlowKey {
     var remoteAddress: IPAddress?
     /// Remote port (nil when unknown / not applicable).
     var remotePort: UInt16?
+    /// Executable path of the responsible process (the app that launched a helper such as
+    /// `sh -c curl` or a WebKit networking process), when it differs from `appPath`.
+    var responsiblePath: String?
+
+    /// Folded candidate paths for app matching: the socket owner and the responsible app.
+    /// Computed once per flow so the per-rule comparison does no case conversion.
+    let foldedPaths: [String]
+
+    init(appPath: String?, direction: FlowDirection, proto: FlowProtocol, remoteAddress: IPAddress?,
+         remotePort: UInt16?, responsiblePath: String? = nil) {
+        self.appPath = appPath
+        self.direction = direction
+        self.proto = proto
+        self.remoteAddress = remoteAddress
+        self.remotePort = remotePort
+        self.responsiblePath = responsiblePath
+        var folded: [String] = []
+        if let appPath { folded.append(PathMatch.fold(appPath)) }
+        if let responsiblePath, responsiblePath != appPath { folded.append(PathMatch.fold(responsiblePath)) }
+        self.foldedPaths = folded
+    }
 }
 
 // MARK: - IP addresses and address matchers
@@ -90,6 +139,12 @@ struct IPAddress: Equatable, CustomStringConvertible {
     }
 
     var isIPv4: Bool { bytes.count == 4 }
+
+    /// 127.0.0.0/8 or ::1 (IPv4-mapped loopback was already normalised to IPv4).
+    var isLoopback: Bool {
+        if bytes.count == 4 { return bytes[0] == 127 }
+        return bytes.count == 16 && bytes[0..<15].allSatisfy({ $0 == 0 }) && bytes[15] == 1
+    }
 
     /// Canonical textual form (inet_ntop).
     var description: String {
@@ -134,6 +189,18 @@ enum AddressMatcher: Equatable {
         }
         guard let address = IPAddress(s) else { return nil }
         self = .cidr(network: address.bytes, prefix: address.bytes.count * 8)
+    }
+
+    /// True when the entry explicitly names loopback (its first address is a loopback
+    /// address). `0.0.0.0/0` or `::/0` do not count: they cover loopback only implicitly.
+    var namesLoopback: Bool {
+        switch self {
+        case let .cidr(network, prefix):
+            let first = IPAddress(bytes: network)
+            return first.isLoopback && prefix >= (first.isIPv4 ? 8 : 128)
+        case let .range(first, _):
+            return IPAddress(bytes: first).isLoopback
+        }
     }
 
     func contains(_ address: IPAddress) -> Bool {
@@ -209,8 +276,12 @@ enum RuleAction: String {
 struct CompiledRule {
     let id: String
     let action: RuleAction
-    /// nil = any app. Otherwise matched exactly or as a directory/bundle prefix.
+    /// nil = any app. Otherwise the resolved (realpath) rule path, matched exactly or as a
+    /// directory/bundle prefix, case-insensitively, against the socket owner *and* the
+    /// responsible process of a flow (either match counts).
     let appPath: String?
+    /// `appPath` case-folded for comparison.
+    let foldedAppPath: String?
     /// Directions this rule applies to.
     let inbound: Bool
     let outbound: Bool
@@ -220,6 +291,24 @@ struct CompiledRule {
     let addresses: [AddressMatcher]?
     /// nil = any remote port.
     let ports: PortSet?
+    /// True when `remoteAddresses` explicitly names a loopback address. Only such rules
+    /// apply to loopback flows (a "block app X" rule must not cut X off from local
+    /// services such as the Privacy Shield resolver on 127.0.0.1:53).
+    let coversLoopback: Bool
+
+    init(id: String, action: RuleAction, appPath: String?, inbound: Bool, outbound: Bool, proto: FlowProtocol?,
+         addresses: [AddressMatcher]?, ports: PortSet?) {
+        self.id = id
+        self.action = action
+        self.appPath = appPath
+        self.foldedAppPath = appPath.map(PathMatch.fold)
+        self.inbound = inbound
+        self.outbound = outbound
+        self.proto = proto
+        self.addresses = addresses
+        self.ports = ports
+        self.coversLoopback = addresses?.contains(where: \.namesLoopback) ?? false
+    }
 
     func matches(_ flow: FlowKey) -> Bool {
         switch flow.direction {
@@ -228,11 +317,12 @@ struct CompiledRule {
         default: break
         }
         if let proto, proto != flow.proto { return false }
-        if let appPath {
-            guard let path = flow.appPath else { return false }
-            // Exact executable match, or any executable inside a directory/bundle.
-            if path != appPath, !path.hasPrefix(appPath + "/") { return false }
+        if let foldedAppPath {
+            guard flow.foldedPaths.contains(where: { PathMatch.matches(rule: foldedAppPath, candidate: $0) }) else {
+                return false
+            }
         }
+        if let remote = flow.remoteAddress, remote.isLoopback, !coversLoopback { return false }
         if let addresses {
             guard let remote = flow.remoteAddress, addresses.contains(where: { $0.contains(remote) }) else { return false }
         }
@@ -267,6 +357,14 @@ enum RuleLoadError: Error, CustomStringConvertible {
     }
 }
 
+/// A rule that was present in the file but is not enforced, with the reason.
+/// Reported to the daemon in the `filter.rules` event (§3.2) so the UI can show it.
+struct RejectedRule: Equatable {
+    /// The rule's `id`, or `#<index>` when it had none.
+    let id: String
+    let reason: String
+}
+
 /// Immutable snapshot of the active rules. Shared by reference between the
 /// verdict path and the loader; never mutated after construction.
 final class RuleTable: @unchecked Sendable {
@@ -277,21 +375,25 @@ final class RuleTable: @unchecked Sendable {
     let failOpen: Bool
     let blockRules: [CompiledRule]
     let allowRules: [CompiledRule]
-    /// Human-readable problems with individual rules that were skipped.
-    let warnings: [String]
+    /// Rules that were skipped (invalid), with the reason. Disabled rules are not listed.
+    let rejected: [RejectedRule]
 
-    init(generation: Int64, failOpen: Bool, blockRules: [CompiledRule], allowRules: [CompiledRule], warnings: [String]) {
+    init(generation: Int64, failOpen: Bool, blockRules: [CompiledRule], allowRules: [CompiledRule],
+         rejected: [RejectedRule]) {
         self.generation = generation
         self.failOpen = failOpen
         self.blockRules = blockRules
         self.allowRules = allowRules
-        self.warnings = warnings
+        self.rejected = rejected
     }
 
     /// Table used before any rules file has loaded: allow everything (fail-open).
-    static let empty = RuleTable(generation: -1, failOpen: true, blockRules: [], allowRules: [], warnings: [])
+    static let empty = RuleTable(generation: -1, failOpen: true, blockRules: [], allowRules: [], rejected: [])
 
     var ruleCount: Int { blockRules.count + allowRules.count }
+
+    /// Human-readable problems with individual rules that were skipped (log lines).
+    var warnings: [String] { rejected.map { "rule \($0.id): \($0.reason) (skipped)" } }
 
     /// Block wins; then allow; then default allow.
     func evaluate(_ flow: FlowKey) -> RuleDecision {
@@ -307,8 +409,9 @@ final class RuleTable: @unchecked Sendable {
     // MARK: Parsing
 
     /// Parses a rules.json document. Throws only for document-level problems;
-    /// individual invalid rules are skipped and listed in `warnings`.
-    static func parse(_ data: Data) throws -> RuleTable {
+    /// individual invalid rules are skipped and listed in `rejected`.
+    /// `resolvePath` canonicalises rule `appPath`s (realpath by default; tests inject their own).
+    static func parse(_ data: Data, resolvePath: (String) -> String = PathMatch.resolve) throws -> RuleTable {
         let object: Any
         do {
             object = try JSONSerialization.jsonObject(with: data, options: [])
@@ -330,29 +433,31 @@ final class RuleTable: @unchecked Sendable {
 
         var blocks: [CompiledRule] = []
         var allows: [CompiledRule] = []
-        var warnings: [String] = []
+        var rejected: [RejectedRule] = []
         for (index, raw) in rawRules.enumerated() {
             guard let dict = raw as? [String: Any] else {
-                warnings.append("rules[\(index)]: not an object")
+                rejected.append(RejectedRule(id: "#\(index)", reason: "not an object"))
                 continue
             }
-            switch compile(dict) {
+            switch compile(dict, resolvePath: resolvePath) {
             case .success(nil):
                 continue // disabled
             case let .success(rule?):
                 if rule.action == .block { blocks.append(rule) } else { allows.append(rule) }
             case let .failure(problem):
-                let id = (dict["id"] as? String) ?? "#\(index)"
-                warnings.append("rule \(id): \(problem.message) (skipped)")
+                let id = (dict["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "#\(index)"
+                rejected.append(RejectedRule(id: id, reason: problem.message))
             }
         }
-        return RuleTable(generation: generation, failOpen: failOpen, blockRules: blocks, allowRules: allows, warnings: warnings)
+        return RuleTable(generation: generation, failOpen: failOpen, blockRules: blocks, allowRules: allows,
+                         rejected: rejected)
     }
 
     struct RuleProblem: Error { let message: String }
 
     /// Compiles one rule object. Returns `.success(nil)` for a disabled rule.
-    static func compile(_ dict: [String: Any]) -> Result<CompiledRule?, RuleProblem> {
+    static func compile(_ dict: [String: Any],
+                        resolvePath: (String) -> String = PathMatch.resolve) -> Result<CompiledRule?, RuleProblem> {
         if let enabled = dict["enabled"] as? Bool, !enabled { return .success(nil) }
 
         let id = (dict["id"] as? String) ?? ""
@@ -380,12 +485,18 @@ final class RuleTable: @unchecked Sendable {
         case let other: return .failure(RuleProblem(message: "unknown protocol \(other ?? "")"))
         }
 
-        // appPath: "" or "*" = any app; trailing slashes are ignored.
+        // appPath: "" or "*" = any app; trailing slashes are ignored; symlinks resolved when
+        // the path exists (so "/var/..." and "/private/var/..." compare equal).
         var appPath: String? = nil
         if let p = dict["appPath"] as? String {
             var trimmed = p.trimmingCharacters(in: .whitespaces)
             while trimmed.count > 1, trimmed.hasSuffix("/") { trimmed.removeLast() }
-            if !trimmed.isEmpty, trimmed != "*" { appPath = trimmed }
+            if !trimmed.isEmpty, trimmed != "*" {
+                guard trimmed.hasPrefix("/") else {
+                    return .failure(RuleProblem(message: "appPath is not absolute: \(trimmed)"))
+                }
+                appPath = resolvePath(trimmed)
+            }
         }
 
         // remoteAddresses: empty/absent or containing "*" = any.

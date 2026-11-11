@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 """End-to-end rule tests for an installed, enabled AxiomFilter.
 
-Run as root on a test Mac while Tests/filter-listener.py records events:
+Run as root on a test Mac while Tests/filter-listener.py records events. When the Axiom
+daemon is installed it owns /var/run/axiom/filter.sock, so stop it first and restart it
+afterwards:
 
+    sudo launchctl bootout system/com.axiom.service
     sudo python3 filter-listener.py --out /tmp/flows.jsonl --seconds 300 &
     sudo python3 e2e-rules.py --events /tmp/flows.jsonl
+    sudo launchctl bootstrap system /Library/LaunchDaemons/com.axiom.service.plist
+
+Covers: exact/bundle/CIDR/port/direction rules, block-over-allow, invalid documents,
+inbound, loopback exemption (review #13), rejected-rule reporting via filter.rules (#6),
+rule-file identity (#11: non-root owner / world-writable rejected, last table kept),
+case-insensitive path matching and responsible-process attribution (#12).
 
 Writes /Library/Application Support/Axiom/filter/rules.json atomically
 (temp + rename, like the daemon), waits for the filter.hello carrying the
@@ -36,12 +45,12 @@ def report(name, ok, detail=""):
     print(f"[{'PASS' if ok else 'FAIL'}] {name}{': ' + detail if detail else ''}", flush=True)
 
 
-def write_raw(text):
+def write_raw(text, mode=0o644):
     os.makedirs(RULES_DIR, exist_ok=True)
     tmp = RULES + ".tmp"
     with open(tmp, "w") as f:
         f.write(text)
-    os.chmod(tmp, 0o644)
+    os.chmod(tmp, mode)
     os.rename(tmp, RULES)
 
 
@@ -106,6 +115,28 @@ def flows(path_sub, since):
             if e.get("type") == "flow.open" and e["_t"] >= since and path_sub in (e.get("path") or ""):
                 out.append(e)
     return out
+
+
+def events(kind, since):
+    out = []
+    with open(args.events) as f:
+        for line in f:
+            e = json.loads(line)
+            if e.get("type") == kind and e["_t"] >= since:
+                out.append(e)
+    return out
+
+
+def rules_event(since, timeout=5.0, with_error=None, **match):
+    """First filter.rules event after `since` whose fields equal `match` (and whose `error`
+    contains `with_error`, when given), or None."""
+    end = time.time() + timeout
+    while time.time() < end:
+        for e in events("filter.rules", since):
+            if all(e.get(k) == v for k, v in match.items()) and (with_error is None or with_error in (e.get("error") or "")):
+                return e
+        time.sleep(0.05)
+    return None
 
 
 ips = sorted({a[4][0] for a in socket.getaddrinfo(HOST, 443, socket.AF_INET, socket.SOCK_STREAM)})
@@ -238,6 +269,125 @@ ev = [e for e in flows("", t) if e["direction"] == "inbound" and e.get("localPor
 report("inbound flow.open verdict=block", any(e["verdict"] == "block" for e in ev),
        json.dumps(ev[-1]) if ev else "none")
 srv.close()
+
+# 7. loopback exemption (review #13): "block curl" must not cut curl off from local services
+lo = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+lo.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+lo.bind(("127.0.0.1", 18098))
+lo.listen(8)
+lo.settimeout(0.2)
+
+
+def lo_server_round():
+    """Serve one HTTP request on the loopback listener while curl runs; returns curl's result."""
+    p = subprocess.Popen(["/usr/bin/curl", "-sS", "-m", "4", "-o", "/dev/null", "-w", "%{http_code}",
+                          "http://127.0.0.1:18098/"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    end = time.time() + 4
+    while time.time() < end and p.poll() is None:
+        try:
+            c, _ = lo.accept()
+        except socket.timeout:
+            continue
+        c.settimeout(2)
+        try:
+            c.recv(4096)
+            c.sendall(b"HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\nok")
+        except OSError:
+            pass
+        c.close()
+    out, _ = p.communicate(timeout=6)
+    return out.strip() == "200", f"rc={p.returncode} {out.strip()[:80]}"
+
+
+t = time.time()
+apply([{"id": "block-curl-all", "appPath": "/usr/bin/curl", "direction": "outbound", "action": "block"}], "block curl (no addresses)")
+ok, d = curl(f"https://{HOST}")
+report("loopback exemption: curl to example.com blocked", not ok, d)
+report("loopback exemption: curl to 127.0.0.1 still allowed", *lo_server_round())
+ev = [e for e in flows("/usr/bin/curl", t) if e.get("remoteAddress") == "127.0.0.1"]
+report("loopback flow.open still emitted (verdict allow, no rule)", any(e["verdict"] == "allow" and e["ruleId"] is None for e in ev),
+       json.dumps(ev[-1]) if ev else "no event")
+t = time.time()
+apply([{"id": "block-curl-lo", "appPath": "/usr/bin/curl", "direction": "outbound", "action": "block",
+        "remoteAddresses": ["127.0.0.1"], "remotePorts": "18098"}], "block curl -> 127.0.0.1:18098 explicitly")
+ok, d = lo_server_round()
+report("rule naming loopback blocks curl to 127.0.0.1", not ok, d)
+ev = [e for e in flows("/usr/bin/curl", t) if e.get("remoteAddress") == "127.0.0.1"]
+report("loopback block attributed to the rule", any(e["ruleId"] == "block-curl-lo" for e in ev), ev[-1]["ruleId"] if ev else "no event")
+lo.close()
+
+# 8. rejected rules are reported in filter.rules (review #6)
+t = time.time()
+gen = apply([{"id": "block-curl", "appPath": "/usr/bin/curl", "direction": "outbound", "action": "block", "remoteAddresses": ips},
+             {"id": "bad-action", "appPath": "/usr/bin/curl", "direction": "outbound", "action": "explode"},
+             {"id": "bad-ports", "appPath": "*", "action": "block", "remotePorts": "99999"}], "one good + two bad rules")
+re_ = rules_event(t, generation=gen)
+report("filter.rules event for the generation", re_ is not None, json.dumps(re_) if re_ else "none")
+if re_:
+    rejected = {r["id"]: r["reason"] for r in re_.get("rejected", [])}
+    report("filter.rules lists both rejected rules with reasons", set(rejected) == {"bad-action", "bad-ports"} and all(rejected.values()),
+           json.dumps(rejected))
+    report("filter.rules applied=1, error null, dropped counter present",
+           re_.get("applied") == 1 and re_.get("error") is None and isinstance(re_.get("dropped"), int), json.dumps(re_))
+    hello = [e for e in events("filter.hello", t) if e.get("generation") == gen]
+    report("filter.rules follows the hello of the same generation", bool(hello) and re_["_t"] >= hello[0]["_t"], f"{len(hello)} hello(s)")
+ok, d = curl(f"https://{HOST}")
+report("good rule in the same file enforced", not ok, d)
+
+# 9. rule file identity (review #11): wrong owner / world-writable -> rejected, last table kept
+import pwd
+try:
+    other_uid = next(p.pw_uid for p in pwd.getpwall() if 500 < p.pw_uid < 1000 and p.pw_name not in ("nobody",))
+except StopIteration:
+    other_uid = 501
+t = time.time()
+os.chown(RULES, other_uid, 0)
+re_ = rules_event(t, timeout=3, with_error="owned by uid")
+report("file chowned to a non-root user is rejected (filter.rules error)", re_ is not None,
+       json.dumps(re_) if re_ else "no filter.rules event with that error")
+ok, d = curl(f"https://{HOST}")
+report("previous table (block curl) still enforced after chown", not ok, d)
+os.chown(RULES, 0, 0)
+t = time.time()
+write_raw(json.dumps({"schemaVersion": 1, "generation": generation + 50, "failOpen": True, "rules": []}), mode=0o666)
+# (the chown back to root re-accepts the previous content first; wait for the 0666 rejection itself)
+re_ = rules_event(t, timeout=3, with_error="world-writable")
+report("world-writable (0666) root-owned file is rejected", re_ is not None,
+       json.dumps(re_) if re_ else "no filter.rules event with that error")
+ok, d = curl(f"https://{HOST}")
+report("previous table still enforced after a 0666 replacement", not ok, d)
+os.chmod(RULES, 0o644)
+t0 = time.time()
+latency = hello_after(generation + 50, t0, timeout=3)
+report("chmod back to 0644 -> file accepted (new generation applied)", latency is not None, f"{latency}")
+generation += 50
+report("curl allowed after the empty table was accepted", *curl(f"https://{HOST}"))
+
+# 10. case-insensitive path matching (review #12)
+apply([{"id": "block-curl-upper", "appPath": "/USR/BIN/CURL", "direction": "outbound", "action": "block", "remoteAddresses": ips}],
+      "upper-case appPath")
+ok, d = curl(f"https://{HOST}")
+report("rule with /USR/BIN/CURL blocks /usr/bin/curl", not ok, d)
+apply([{"id": "block-bin-upper", "appPath": "/usr/BIN", "direction": "outbound", "action": "block", "remoteAddresses": ips}],
+      "upper-case directory prefix")
+ok, d = curl(f"https://{HOST}")
+report("rule with /usr/BIN prefix blocks /usr/bin/curl", not ok, d)
+
+# 11. responsible process attribution (review #12): curl started through `sh -c`
+t = time.time()
+apply([], "empty (responsible pid baseline)")
+rc, out = run(["/bin/sh", "-c", f"/usr/bin/curl -sS -m 6 -o /dev/null -w '%{{http_code}}' https://{HOST}"])
+ev = [e for e in flows("/usr/bin/curl", t) if e.get("remoteAddress") in ips]
+resp = next((e for e in ev if e.get("responsiblePid")), None)
+report("flow.open from `sh -c curl` carries responsiblePid/responsiblePath",
+       resp is not None and resp["responsiblePid"] != resp["pid"] and bool(resp.get("responsiblePath")),
+       json.dumps({k: resp.get(k) for k in ("pid", "path", "responsiblePid", "responsiblePath")}) if resp else (json.dumps(ev[-1]) if ev else "no event"))
+if resp and resp.get("responsiblePath"):
+    apply([{"id": "block-responsible", "appPath": resp["responsiblePath"], "direction": "outbound", "action": "block",
+            "remoteAddresses": ips}], f"block responsible app {resp['responsiblePath']}")
+    rc, out = run(["/bin/sh", "-c", f"/usr/bin/curl -sS -m 6 -o /dev/null -w '%{{http_code}}' https://{HOST}"])
+    report("rule on the responsible app's path blocks curl started through sh -c", not (rc == 0 and out.startswith(("2", "3"))),
+           f"rc={rc} {out}")
 
 # cleanup
 apply([], "empty (cleanup)")

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Template: build.sh substitutes @VERSION@, @BUILD@ and @APP_GROUP@. -->
+<!-- Template: build.sh substitutes @VERSION@, @BUILD@, @GIT@ and @APP_GROUP@. -->
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
@@ -17,6 +17,8 @@
 	<string>@VERSION@</string>
 	<key>CFBundleVersion</key>
 	<string>@BUILD@</string>
+	<key>AxiomSourceRevision</key>
+	<string>@GIT@</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleDevelopmentRegion</key>
