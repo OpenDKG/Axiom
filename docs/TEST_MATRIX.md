@@ -1,4 +1,10 @@
-# Test matrix — Axiom (FND-005)
+# Test matrix — historical FND-005 snapshot
+
+> **Historical results, not a current test run.** This document records the executed checks from
+> 2026-11-06, before multiple 0.10.x releases. Keep the original counts and limitations as evidence;
+> do not cite 375 tests as the latest coverage. The [0.10.23 release notes](RELEASES/0.10.23.md)
+> report **564 passing tests** from that release, but that does not substitute for a new full live
+> security, offline, DNS and agent-host acceptance run.
 
 Date: 2026-11-06. Host: Windows 10 IoT Enterprise LTSC 2021, 10.0.19044, x64.
 SDK: 10.0.403. Configuration: `Release`.
