@@ -6,7 +6,7 @@
         x:Class="Axiom.UI.Avalonia.MainWindow"
         Title="Axiom — Free Open-Source Network &amp; AI Agent Security"
         Width="1460" Height="900" MinWidth="900" MinHeight="600"
-        Background="{DynamicResource Axiom.Window}" Foreground="{DynamicResource Axiom.TextPrimary}"
+        Background="Transparent" Foreground="{DynamicResource Axiom.TextPrimary}"
         FontFamily="Segoe UI Variable Text, Segoe UI, Inter, Noto Sans"
         UseLayoutRounding="True"
         WindowDecorations="BorderOnly"
@@ -78,7 +78,12 @@
     </DataTemplate>
   </Window.DataTemplates>
 
-  <Grid ColumnDefinitions="252,*" RowDefinitions="44,*">
+  <Grid x:Name="RootLayout" ColumnDefinitions="252,*" RowDefinitions="44,*"
+        Classes.glass="{Binding IsGlassTheme}"
+        Classes.glasslight="{Binding IsGlassLight}">
+    <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Window}" />
+    <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.AmbientGlow}" />
+    <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.AmbientWash}" />
     <Border Grid.Row="0" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}"
             BorderThickness="0,0,0,1" chrome:WindowDecorationProperties.ElementRole="TitleBar">
       <Grid ColumnDefinitions="*,Auto" Margin="18,0,4,0">
@@ -189,14 +194,19 @@
                  Background="Transparent" BorderThickness="0" Margin="10,0">
           <ListBox.ItemTemplate>
             <DataTemplate>
-              <Grid ColumnDefinitions="3,*">
-                <Border Grid.Column="0" Width="3" Height="18" CornerRadius="1.5"
-                        Background="{DynamicResource Axiom.Accent}" Margin="0,0,11,0"
-                        VerticalAlignment="Center"
-                        IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
-                <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="13"
-                           Foreground="{DynamicResource Axiom.TextPrimary}" Padding="0,7" />
-              </Grid>
+              <StackPanel>
+                <TextBlock Text="{Binding GroupLabel}" IsVisible="{Binding HasGroupLabel}"
+                           FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Axiom.TextMuted}"
+                           Margin="6,12,0,4" />
+                <Grid ColumnDefinitions="3,*">
+                  <Border Grid.Column="0" Width="3" Height="18" CornerRadius="1.5"
+                          Background="{DynamicResource Axiom.Accent}" Margin="0,0,11,0"
+                          VerticalAlignment="Center"
+                          IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
+                  <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="13"
+                             Foreground="{DynamicResource Axiom.TextPrimary}" Padding="0,7" />
+                </Grid>
+              </StackPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>

@@ -31,7 +31,7 @@ public sealed partial class EventsPageViewModel : PageViewModel, IDisposable
         IServiceRequestClient? client,
         IUiTimerFactory timers,
         IUserInteraction ui)
-        : base("Events", "Unified timeline · network events from the local service", "E")
+        : base("Network Events", "Unified timeline — network events from the local service", "E")
     {
         ArgumentNullException.ThrowIfNull(timers);
         ArgumentNullException.ThrowIfNull(ui);

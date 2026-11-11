@@ -68,10 +68,16 @@
   </Style>
   <Style Selector="Border.card">
     <Setter Property="Background" Value="{DynamicResource Axiom.Surface}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.GlassBorder}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="12" />
     <Setter Property="Padding" Value="16" />
+  </Style>
+  <Style Selector="Grid.glass Border.card">
+    <Setter Property="BoxShadow" Value="0 16 38 0 #73000000, inset 0 1 0 0 #26FFFFFF" />
+  </Style>
+  <Style Selector="Grid.glasslight Border.card">
+    <Setter Property="BoxShadow" Value="0 16 34 0 #26000000, inset 0 1 0 0 #99FFFFFF" />
   </Style>
   <Style Selector="TextBlock.page-title">
     <Setter Property="FontSize" Value="22" />

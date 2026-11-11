@@ -90,9 +90,12 @@ public partial class App : Application
                 UiTheme.Light => ThemeVariant.Light,
                 UiTheme.DarkMidnight => AxiomThemeVariants.DarkMidnight,
                 UiTheme.LightWarm => AxiomThemeVariants.LightWarm,
+                UiTheme.GlassDark => AxiomThemeVariants.GlassDark,
+                UiTheme.GlassLight => AxiomThemeVariants.GlassLight,
                 _ => ThemeVariant.Dark,
             };
             var autostart = new WindowsAutostartService();
+            var visualEffects = new WindowsVisualEffectsService();
             var protector = new DpapiApiKeyProtector();
             _shell = new ShellViewModel(
                 source,
@@ -108,7 +111,8 @@ public partial class App : Application
                 new AvaloniaSecurityDialogs(() => window),
                 new AvaloniaShellActions(() => desktop.Shutdown()),
                 new AvaloniaBlackboxDialogs(() => window, interaction),
-                new Axiom.Persistence.AgentSessionReader());
+                new Axiom.Persistence.AgentSessionReader(),
+                visualEffects);
 
             window = new MainWindow { DataContext = _shell };
             _window = window;

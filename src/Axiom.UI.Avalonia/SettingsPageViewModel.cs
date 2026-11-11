@@ -14,6 +14,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     private readonly IAutostartService _autostart;
     private readonly FirewallPageViewModel? _firewall;
     private readonly IUserInteraction _ui;
+    private readonly IVisualEffectsService _visualEffects;
     private readonly StartupSettingsStore _startupSettings = new();
     private bool _updatingStartup;
 
@@ -23,7 +24,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         IThemeService theme,
         IAutostartService autostart,
         FirewallPageViewModel? firewall = null,
-        IUserInteraction? userInteraction = null)
+        IUserInteraction? userInteraction = null,
+        IVisualEffectsService? visualEffects = null)
         : base("Settings", "Appearance, build and license information", "G")
     {
         ArgumentNullException.ThrowIfNull(monitor);
@@ -33,6 +35,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         _autostart = autostart;
         _firewall = firewall;
         _ui = userInteraction ?? new NullUserInteraction();
+        _visualEffects = visualEffects ?? new FixedVisualEffectsService();
 
         CollectorText = monitor.SourceName;
         PollText = $"{monitor.PollInterval.TotalSeconds:0} s · read-only";
@@ -45,6 +48,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
         _theme.Changed += OnThemeChanged;
         CurrentThemeText = ThemeLabel(_theme.Current);
+        _visualEffects.Changed += OnVisualEffectsChanged;
+        CurrentVisualEffectsText = VisualEffectsText();
 
         var startup = _startupSettings.Load();
         _updatingStartup = true;
@@ -134,6 +139,10 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private string _currentThemeText = "Dark";
+
+    /// <summary>Selected effects level plus the backdrop the host actually reported.</summary>
+    [ObservableProperty]
+    private string _currentVisualEffectsText = "Visual effects: Auto";
 
     [ObservableProperty]
     private bool _trayNotificationsEnabled = true;
@@ -226,7 +235,30 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         UpdateStartupStatus();
     }
 
-    public void Dispose() => _theme.Changed -= OnThemeChanged;
+    public void Dispose()
+    {
+        _theme.Changed -= OnThemeChanged;
+        _visualEffects.Changed -= OnVisualEffectsChanged;
+    }
+
+    [RelayCommand]
+    private void UseAutoEffects() => _visualEffects.Apply(VisualEffects.Auto);
+
+    [RelayCommand]
+    private void UseFullEffects() => _visualEffects.Apply(VisualEffects.Full);
+
+    [RelayCommand]
+    private void UseReducedEffects() => _visualEffects.Apply(VisualEffects.Reduced);
+
+    [RelayCommand]
+    private void UseNoEffects() => _visualEffects.Apply(VisualEffects.Off);
+
+    private void OnVisualEffectsChanged(object? sender, EventArgs e) =>
+        CurrentVisualEffectsText = VisualEffectsText();
+
+    private string VisualEffectsText() =>
+        $"Visual effects: {VisualEffectsLabels.Label(_visualEffects.Current)}. " +
+        $"Backdrop: {_visualEffects.BackdropStatus}.";
 
     [RelayCommand]
     private void UseDarkTheme() => _theme.Apply(UiTheme.Dark);

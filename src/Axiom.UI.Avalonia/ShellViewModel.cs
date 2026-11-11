@@ -22,6 +22,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly IServiceRequestClient? _serviceClient;
     private readonly IUserInteraction _ui;
     private readonly IThemeService _theme;
+    private readonly IVisualEffectsService _visualEffects;
     private readonly CancellationTokenSource _cancellation = new();
     private DateTimeOffset _lastProbeUtc = DateTimeOffset.MinValue;
     private DateTimeOffset _lastProtectionProbeUtc = DateTimeOffset.MinValue;
@@ -45,7 +46,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         ISecurityDialogService? securityDialogs = null,
         IShellActions? shellActions = null,
         IBlackboxDialogService? blackboxDialogs = null,
-        IAgentSessionSource? agentSessions = null)
+        IAgentSessionSource? agentSessions = null,
+        IVisualEffectsService? visualEffects = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(timers);
@@ -57,6 +59,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         var interaction = userInteraction ?? new NullUserInteraction();
         _ui = interaction;
         _theme = themeService ?? new FixedThemeService();
+        _visualEffects = visualEffects ?? new FixedVisualEffectsService();
         var processes = processActions ?? new UnsupportedProcessActions();
         Overview = new OverviewPageViewModel(
             _monitor,
@@ -111,10 +114,32 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             _theme,
             autostartService ?? new UnsupportedAutostartService(),
             Firewall,
-            interaction);
+            interaction,
+            _visualEffects);
         Overview.AgentActivity = Agents;
         AgentStats = new AgentStatsPageViewModel(Agents);
-        Pages = [Overview, Agents, AgentStats, Security, PrivacyShield, Firewall, AiAnalyst, Connections, Apps, Events, Support, Settings];
+        Pages =
+        [
+            Overview,
+            Connections,
+            Apps,
+            Events,
+            Firewall,
+            PrivacyShield,
+            Agents,
+            AgentStats,
+            AiAnalyst,
+            Security,
+            Settings,
+            Support,
+        ];
+
+        // Navigation groups follow the UI terminology audit; only the first page of a group
+        // carries the header so the nav list keeps one selection model.
+        Overview.GroupLabel = "MONITORING";
+        Firewall.GroupLabel = "PROTECTION";
+        AiAnalyst.GroupLabel = "INTELLIGENCE";
+        Settings.GroupLabel = "GENERAL";
         _selectedPage = Overview;
         _selectedTheme = ThemeLabel(_theme.Current);
         _theme.Changed += OnThemeChanged;
@@ -124,6 +149,15 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<string> Themes { get; } =
         ["Axiom Glass Dark", "Axiom Glass Light", "Dark", "Light", "Dark Midnight", "Light Warm"];
+
+    /// <summary>Visual-effects preference plus the backdrop the host confirmed.</summary>
+    public IVisualEffectsService VisualEffects => _visualEffects;
+
+    /// <summary>True only for the two Axiom Glass palettes; the window requests blur for these.</summary>
+    public bool IsGlassTheme => _theme.Current is UiTheme.GlassDark or UiTheme.GlassLight;
+
+    /// <summary>True for the light glass palette, which uses a softer shadow.</summary>
+    public bool IsGlassLight => _theme.Current == UiTheme.GlassLight;
 
     [ObservableProperty]
     private string _selectedTheme;
@@ -169,6 +203,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _updatingTheme = true;
         SelectedTheme = ThemeLabel(_theme.Current);
         _updatingTheme = false;
+        OnPropertyChanged(nameof(IsGlassTheme));
+        OnPropertyChanged(nameof(IsGlassLight));
     }
 
     private static string ThemeLabel(UiTheme theme) => theme switch

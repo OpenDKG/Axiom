@@ -163,7 +163,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     private readonly FirewallDefaultsStore _defaultsStore = FirewallDefaultsStore.Shared;
 
     public FirewallPageViewModel(IServiceRequestClient? serviceClient, IUserInteraction ui, ConnectionMonitor? monitor = null)
-        : base("Firewall", "Owned rules, defaults and rule editor", "F")
+        : base("Network Control", "Axiom-owned firewall rules, defaults and rule editor", "F")
     {
         ArgumentNullException.ThrowIfNull(ui);
         _client = serviceClient;
