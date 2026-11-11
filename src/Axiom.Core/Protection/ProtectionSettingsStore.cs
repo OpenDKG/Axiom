@@ -83,6 +83,12 @@ public sealed class ProtectionSettingsStore
 
             var temporary = _path + ".tmp";
             File.WriteAllText(temporary, payload);
+            if (!OperatingSystem.IsWindows())
+            {
+                // Machine-wide state written by the root daemon: not readable by other local users.
+                File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+
             File.Move(temporary, _path, overwrite: true);
             return true;
         }
@@ -107,6 +113,15 @@ public sealed record ProtectionSettings
     public DateTimeOffset? EnabledUtc { get; init; }
 
     public string? AllowedSid { get; init; }
+
+    /// <summary>
+    /// macOS: uid of the account that installed the daemon; it may send IPC write commands.
+    /// Recorded by <c>axiomd --install-service</c>. Ignored on Windows (which uses <see cref="AllowedSid"/>).
+    /// </summary>
+    public uint? AllowedUid { get; init; }
+
+    /// <summary>macOS: members of the <c>admin</c> group may also send IPC write commands. Ignored on Windows.</summary>
+    public bool AllowAdminGroupWrites { get; init; } = true;
 
     public IReadOnlyList<ProtectionDecision>? Decisions { get; init; } = [];
 

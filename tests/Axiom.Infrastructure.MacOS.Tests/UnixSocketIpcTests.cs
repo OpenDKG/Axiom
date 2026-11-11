@@ -148,6 +148,64 @@ public sealed class UnixSocketIpcTests
         }
     }
 
+    [Fact]
+    public async Task ReadOnlyPeerGetsUnauthorizedForWriteCommandsButMayRead()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var paths = MacServicePaths.ForRoot(temp.Path);
+        var logs = new List<string>();
+        var policy = new PeerPolicy(OwnerUid: 1, AdminGroupMayWrite: false, _ => false);
+        var transport = new UnixSocketIpcTransport(paths, uid => PeerAuthorization.Decide(uid, policy) with { Allowed = true });
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var server = transport.RunAsync(Dispatcher(line => { lock (logs) { logs.Add(line); } }), _ => { }, cts.Token);
+        try
+        {
+            await WaitForSocketAsync(paths.IpcSocketPath, cts.Token);
+
+            var health = await RequestAsync(paths.IpcSocketPath, IpcCommandTypes.ServiceHealth, cts.Token);
+            var denied = await RequestAsync(paths.IpcSocketPath, IpcCommandTypes.PrivacyConfigure, cts.Token);
+
+            Assert.True(health!.Ok);
+            Assert.False(denied!.Ok);
+            Assert.Equal(IpcErrorCodes.Unauthorized, denied.Error!.Code);
+            Assert.Contains("only allowed for root", denied.Error.Message, StringComparison.Ordinal);
+            lock (logs)
+            {
+                Assert.Contains(logs, line => line.Contains("Denied 'privacy.configure' for uid:", StringComparison.Ordinal));
+            }
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            await server;
+        }
+    }
+
+    private static IpcRequestDispatcher Dispatcher(Action<string> log) => new(
+        new IpcRequestHandlers
+        {
+            SnapshotProvider = () => (ConnectionSnapshot?)null,
+            HealthProvider = () => new ServiceHealth
+            {
+                Status = "Running",
+                UptimeSeconds = 1,
+                SourceName = "test",
+                PollIntervalSeconds = 2,
+                ConnectionCount = 0,
+                ProcessCount = 0,
+            },
+            // Must never run for a read-only caller: the dispatcher denies the command first.
+            PrivacyConfigure = (_, _) => throw new InvalidOperationException("write handler reached"),
+        },
+        writeGateOpen: () => true,
+        log: log);
+
     private static async Task<IpcResponse?> RequestAsync(string path, string command, CancellationToken cancellationToken)
     {
         using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);

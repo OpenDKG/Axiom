@@ -21,9 +21,23 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
 
     private readonly Func<uint?, PeerDecision> _authorize;
 
+    /// <summary>Connection check only (every console user may write); kept for tests and tools.</summary>
     public UnixSocketIpcTransport(MacServicePaths paths)
-        : this(paths, PeerAuthorization.Decide)
+        : this(paths, uid => PeerAuthorization.Decide(uid))
     {
+    }
+
+    /// <summary>
+    /// Production policy: the owner uid and admin-group switch are re-read from
+    /// <paramref name="settings"/> for every connection so an install or a settings change
+    /// applies without a daemon restart.
+    /// </summary>
+    public UnixSocketIpcTransport(MacServicePaths paths, Axiom.Core.Protection.ProtectionSettingsStore settings)
+        : this(paths, uid => PeerAuthorization.Decide(
+            uid,
+            PeerPolicy.FromSettings(settings.Load(), member => UnixGroups.IsMember(member, PeerPolicy.AdminGroup))))
+    {
+        ArgumentNullException.ThrowIfNull(settings);
     }
 
     public UnixSocketIpcTransport(MacServicePaths paths, Func<uint?, PeerDecision> authorize)
@@ -111,7 +125,8 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
             var stream = new NetworkStream(client, ownsSocket: true);
             await using (stream.ConfigureAwait(false))
             {
-                await dispatcher.HandleConnectionAsync(stream, decision.Actor, cancellationToken).ConfigureAwait(false);
+                var caller = new IpcCaller(decision.Actor, decision.CanWrite, decision.WriteDenialReason);
+                await dispatcher.HandleConnectionAsync(stream, caller, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (Exception exception) when (exception is

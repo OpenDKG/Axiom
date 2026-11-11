@@ -112,10 +112,22 @@ public sealed class IpcRequestDispatcher
     /// Serves one authenticated connection until the client closes it, idles out, exceeds the
     /// message bound or the rate limit, or <paramref name="cancellationToken"/> fires.
     /// </summary>
-    public async Task HandleConnectionAsync(Stream stream, string actor, CancellationToken cancellationToken)
+    public Task HandleConnectionAsync(Stream stream, string actor, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actor);
+        return HandleConnectionAsync(stream, IpcCaller.FullAccess(actor), cancellationToken);
+    }
+
+    /// <summary>
+    /// Same loop for a caller whose write permission was decided by the transport: commands in
+    /// <see cref="IpcCommandAccess.WriteCommands"/> are refused with <see cref="IpcErrorCodes.Unauthorized"/>
+    /// when <see cref="IpcCaller.CanWrite"/> is false.
+    /// </summary>
+    public async Task HandleConnectionAsync(Stream stream, IpcCaller caller, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        ArgumentException.ThrowIfNullOrWhiteSpace(actor);
+        ArgumentNullException.ThrowIfNull(caller);
+        ArgumentException.ThrowIfNullOrWhiteSpace(caller.Actor);
 
         using var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         idle.CancelAfter(IdleTimeout);
@@ -158,7 +170,7 @@ public sealed class IpcRequestDispatcher
                 return;
             }
 
-            if (!await ProcessAsync(stream, line, actor, cancellationToken).ConfigureAwait(false))
+            if (!await ProcessAsync(stream, line, caller, cancellationToken).ConfigureAwait(false))
             {
                 return;
             }
@@ -185,9 +197,10 @@ public sealed class IpcRequestDispatcher
     private async Task<bool> ProcessAsync(
         Stream stream,
         string line,
-        string actorSid,
+        IpcCaller caller,
         CancellationToken cancellationToken)
     {
+        var actorSid = caller.Actor;
         IpcEnvelope? envelope;
 
         try
@@ -223,6 +236,18 @@ public sealed class IpcRequestDispatcher
                 envelope.Id,
                 IpcErrorCodes.InvalidRequest,
                 $"Unsupported protocol version {envelope.Version}.",
+                cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        if (!caller.CanWrite && IpcCommandAccess.IsWrite(envelope.Type))
+        {
+            _log?.Invoke($"Denied '{envelope.Type}' for {actorSid}: write commands are not allowed for this caller.");
+            await WriteErrorAsync(
+                stream,
+                envelope.Id,
+                IpcErrorCodes.Unauthorized,
+                caller.WriteDenialReason ?? $"Command '{envelope.Type}' is not allowed for {actorSid}.",
                 cancellationToken).ConfigureAwait(false);
             return true;
         }
