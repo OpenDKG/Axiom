@@ -222,38 +222,20 @@ optional **verified knowledge layer** that can supply signed rules and threat co
 independent: Axiom works with neither installed, a DKG outage does not disable the firewall, and an
 offline Blackbox does not stop local monitoring.
 
-### Agent security research memory
+### Threat sharing and community intelligence
 
-- A separate, permissively licensed package for collaborative research on public suspicious
-  packages and domains; it can exist without the desktop application.
-- Two or more agents use Working Memory and Shared Memory to record evidence and contradictions,
-  with source, date, confidence and a `unverified`/`reviewed` status.
-- It shares no secrets, wallet keys, private connection history or user paths, and it does not
-  publish to a chain without an explicit later decision.
+Axiom can offer suspicious public indicators for optional sharing through Blackbox. Candidates are stored locally and **are not sent until you choose Share or Send now**. Community reports do not automatically create firewall rules. Axiom can display the synchronized verified threat graph when Blackbox is available.
 
-### Optional publishing, wallet protection and community reports
+Shared Memory is intended for time-limited reports; Verifiable Memory is designed for independently verifiable, longer-lived publications. Axiom does not publish directly to paid VM or require users to pay TRAC/gas fees. Learn how reports, identity and offline caching work in [Threat intelligence](docs/THREAT_INTELLIGENCE.md).
 
-- TRAC / Verifiable Memory publishing is optional, starts on a test network, and requires an
-  explicit budget and approval. The Standard firewall never depends on it.
-- Wallet protection is a separate browser-extension research path. It never captures seed phrases
-  or private keys and never signs or approves transactions.
-- Community reports are opt-in and redacted. A community report never triggers automatic OS
-  blocking, and a false report cannot silently block a benign site.
-- The Security page has a **Setup** action for an HTTPS JSON feed. The format is
-  `{"entries":[{"sha256":"...","name":"...","verdict":"...","source":"...","updatedUtc":"..."}]}`.
-  Only entries with a valid SHA-256 are accepted; the feed is evidence, not a verdict.
-- First-run setup can enable the bundled `axiom://starter` feed: one clearly labelled EICAR
-  test entry, read from disk with no network call. Replace it with an HTTPS feed when available.
+The optional community feed can display reputation evidence from a chosen HTTPS source. The bundled starter feed includes a test indicator only; it is not live threat intelligence.
 
-### Rules for every optional module
+### Privacy and safety of optional features
 
-- Off by default: no process, account, wallet, key or network call while disabled.
-- Never in the enforcement hot path; local Windows rules always apply first.
-- Every finding has a source, time, confidence, expiry and a correction path; `unknown` is not
-  `safe`.
-- External terms (VirusTotal, Blackbox feeds, DKG, GeoIP) are reviewed before distribution.
-- Integration modules keep their own permissive license and notices; no GPL-only code is copied
-  into them.
+- Optional network integrations require configuration and, where applicable, explicit consent.
+- Local Windows Firewall and DNS protection use their own stored policies rather than querying a remote service for each connection.
+- A reputation result has a source and age; unknown does not mean safe.
+- Review the privacy terms of each third-party provider before enabling it.
 
 ## How it works
 
@@ -290,40 +272,9 @@ Windows Service
 
 ## Platform and requirements
 
-- Windows 10 x64 (19041+) is the current development/test host. Windows 11 x64 uses the same
-  .NET/Avalonia code path, but Windows 11 VM validation is still in the test matrix.
-- .NET 10 SDK for building; the published self-contained build needs no .NET runtime.
-- No administrator rights are required for the UI or for read-only console development.
-- Firewall rule writes and ETW kernel tracing require an elevated service or an isolated test VM.
-
-## Building and running
-
-The service is built as a Windows GUI-subsystem executable, so launching it never creates a console
-window. The desktop and `run-service.ps1` also start it in the background. Use the script's redirected
-log when you need diagnostics.
-
-```powershell
-dotnet restore Axiom.sln --locked-mode
-dotnet build Axiom.sln -c Release --no-restore
-dotnet test Axiom.sln -c Release --no-build
-.\scripts\publish-standalone.ps1
-```
-
-```powershell
-# service mode (local history is available)
-.\scripts\run-service.ps1
-
-# in-process read-only mode
-.\artifacts\publish\win-x64\Axiom.Desktop.exe
-```
-
-The standalone build produces one self-contained `Axiom.Desktop.exe` in
-`artifacts\publish\win-x64`.
-
-The legacy WPF fallback keeps software rendering enabled by default because some GPU drivers leave
-the client area blank after a driver reset. Set `AXIOM_HARDWARE_RENDER=1` before starting the legacy
-app to opt in to hardware acceleration on a machine where it is known to work. The Avalonia host
-uses its normal platform renderer.
+- Windows 11 x64, or Windows 10 x64 with best-effort support.
+- The published Windows installer is self-contained; installing the core app does not require a separate .NET runtime.
+- Core monitoring runs locally. Turning on Axiom Shield or changing an adapter's DNS settings can require Windows administrator approval.
 
 ### Installation (core per-user setup; optional modules require additional consent)
 
@@ -344,80 +295,19 @@ Harness files unchanged. Axiom also provisions Axiom-managed hooks for detected 
 build at startup, preserving user-authored hooks. Codex still requires its own one-time `/hooks`
 trust review.
 
-You can also install from a shell:
-
-```powershell
-irm https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-github.ps1 | iex
-```
-
-The bootstrap downloads the latest release, verifies `SHA256SUMS.txt`, installs under
-`%LOCALAPPDATA%\Programs\Axiom` and starts the app. The first run shows the optional module
-wizard.
-
-For the private repository, authenticate with `gh auth login` first and pass the token to the
-bootstrap:
-
-```powershell
-$env:AXIOM_GITHUB_TOKEN = gh auth token
-$headers = @{ Authorization = "Bearer $env:AXIOM_GITHUB_TOKEN" }
-irm -Headers $headers https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-github.ps1 | iex
-```
-
-The installer uses the token for release metadata and asset downloads; a public repository needs
-only the plain `irm` command. A token is read from `AXIOM_GITHUB_TOKEN`, `GH_TOKEN` or
-`GITHUB_TOKEN` and is never written to disk by the installer.
-
-You can also run `.\scripts\install-portable.ps1` from a checkout. Remove with
-`.\scripts\uninstall-portable.ps1`; local data stays unless `-RemoveData` is used. Details:
-[`docs/INSTALL.md`](docs/INSTALL.md).
-
-### Microsoft Store (core-only MSIX)
-
-A core-only MSIX package can be built for Microsoft Store submission:
-
-```powershell
-.\scripts\build-msix.ps1
-```
-
-The Store signs the package, so no local code-signing certificate is needed for publication. The
-package excludes the optional DKG/Blackbox installers, agent hooks and HKCU autostart. Partner
-Center identity values, local test signing, submission steps and certification risks are documented
-in [`docs/STORE.md`](docs/STORE.md).
-
-## Repository layout
-
-```text
-src/
-  Axiom.Contracts/              # DTOs, IPC and history contracts
-  Axiom.Core/                   # domain rules and firewall port
-  Axiom.Infrastructure.Windows/ # IP Helper, process identity, Named Pipe server
-  Axiom.Persistence/            # SQLite schema, queries, retention
-  Axiom.Service/                # Worker host, monitoring, history writer, pipe
-  Axiom.Presentation/           # portable view models, state and feature services
-  Axiom.UI.Avalonia/            # Avalonia views, controls, themes and host services
-  Axiom.Desktop.Avalonia.Windows/ # primary Windows composition root / Axiom.Desktop.exe
-  Axiom.UI/                     # WPF fallback library: views, view models, theme
-  Axiom.Desktop/                # WPF fallback composition root
-tests/                                  # unit and Windows integration tests
-docs/                                   # architecture, security, test matrix, licensing, ADRs
-scripts/                                # local run, service mode, standalone publish
-```
+For installation and recovery details, see [Installing Axiom](docs/INSTALL.md). A core-only Microsoft Store package, where offered, excludes Blackbox/DKG installation and third-party agent hooks.
 
 ## Documentation
 
-- [Threat-intelligence lifecycle](docs/THREAT_INTELLIGENCE.md)
-- [Historical changelog](docs/CHANGELOG.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Security model](docs/SECURITY_MODEL.md)
-- [Test matrix](docs/TEST_MATRIX.md)
-- [Accessibility and keyboard](docs/ACCESSIBILITY.md)
-- [Performance budget](docs/PERFORMANCE_BUDGET.md)
+- [Install and first run](docs/INSTALL.md)
+- [Privacy Shield and DNS filtering](docs/PRIVACY_SHIELD.md)
+- [Blackbox, DKG and optional integrations](docs/INTEGRATIONS.md)
+- [Threat sharing, SWM and VM](docs/THREAT_INTELLIGENCE.md)
+- [Security and privacy](docs/SECURITY_MODEL.md)
 - [Firewall recovery](docs/FIREWALL_RECOVERY.md)
-- [MCP server foundation](docs/MCP.md)
-- [Optional integrations](docs/INTEGRATIONS.md)
+- [AI Analyst](docs/AI_ANALYST.md)
+- [Historical changelog](docs/CHANGELOG.md)
 - [Licensing](docs/LICENSING.md)
-- [Roadmap](docs/ROADMAP.md)
-- [Architecture decision records](docs/ADR/)
 
 ## License and copyright
 
