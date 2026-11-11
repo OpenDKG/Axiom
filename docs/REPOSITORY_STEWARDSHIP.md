@@ -8,23 +8,22 @@ The original creator, [@a-51-50](https://github.com/a-51-50), is responsible for
 upstream's overall direction, the initial architecture and lead maintainership. This credit is
 permanent and is not changed by later contributions.
 
-## Core maintainers
+## Founding leadership
 
-**Core Maintainer & Platform Lead:** [@dreddster](https://github.com/dreddster),
-[@brxtrac](https://github.com/brxtrac).
+- [@a-51-50](https://github.com/a-51-50) - **Founder & Original Creator**.
+- [@dreddster](https://github.com/dreddster) - **Co-Founder & Core Maintainer**.
+- [@brxtrac](https://github.com/brxtrac) - **Co-Founder & Core Maintainer**.
 
-Core maintainers contribute to architecture, platform development, maintenance, testing and review
-within their agreed areas, and should have appropriate collaboration and review opportunities for
-their assigned work. Core maintainership is a technical role; it does not transfer repository
-ownership, copyright, trademarks, signing authority or legal rights.
+## Responsibility model
 
-## Platform responsibility
+The Founder & Original Creator is recognized for initiating the project and developing the original
+application. Co-Founders & Core Maintainers participate in ongoing development, architectural
+collaboration, maintenance, reviews and cross-platform expansion. Platform-specific
+responsibilities are recorded once explicitly agreed; this document does not invent a Linux or
+macOS lead assignment.
 
-Platform leads are the primary technical maintainers of their assigned platform implementations:
-platform-specific runtime integration, compatibility, testing, packaging and regression prevention.
-They coordinate shared Core and Avalonia changes rather than independently replacing shared
-implementations. Specific Linux and macOS assignments are recorded only when formally confirmed, so
-this document deliberately keeps the generic Platform Lead role.
+Founding titles are technical project roles. They do not assign copyright, trademarks, repository
+administration, revenue rights or legal ownership.
 
 ## Ownership boundaries
 

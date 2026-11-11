@@ -7,32 +7,37 @@ currently private during active development, and is licensed under **GPL-3.0-or-
 This file separates roles that are often confused. Git commit authorship is not treated as proof of
 copyright ownership, and nothing here transfers rights.
 
-## Original creator
+## Founder & Original Creator
 
 **a-51-50** - <https://github.com/a-51-50>
 
-Confirmed as the project's creator by the repository owner. The GitHub account is the public identity
-used here; no legal name, private e-mail address or other personal data is published.
+Creator and original developer of Axiom, including its initial Windows implementation. Confirmed as
+the project's founder and initiator by the repository owner. The GitHub account is the public
+identity used here; no legal name, private e-mail address or other personal data is published.
 
-## Core project team
+## Co-Founders & Core Maintainers
 
-- **a-51-50** - Founder, Creator & Lead Maintainer
-- **dreddster** - Core Maintainer & Platform Lead
-- **brxtrac** - Core Maintainer & Platform Lead
+**dreddster** - <https://github.com/dreddster>
 
-Core maintainership is a technical role: architecture, platform development, maintenance, testing and
-review within agreed areas. It does not establish copyright ownership, repository ownership or
-authority to transfer the project, and it does not change who created the original implementation.
+Recognized co-founder and core maintainer, contributing to Axiom's technical development and
+cross-platform expansion.
 
-Platform assignments are recorded only when they are formally confirmed. Until then, both platform
-leads share the generic Platform Lead role.
+**brxtrac** - <https://github.com/brxtrac>
+
+Recognized co-founder and core maintainer, contributing to Axiom's technical development and
+cross-platform expansion.
+
+Co-founder and core-maintainer titles are technical project roles. They do not assign copyright,
+trademarks, repository administration, revenue rights or legal ownership, and they do not change who
+created the original implementation. Platform-specific responsibilities are recorded only when they
+are formally agreed.
 
 ## Additional contributors
 
-Future community contributors are acknowledged through their actual contributions, commits and pull
-requests. No additional contributor is listed at this time; the core team is not repeated here merely
-to describe its primary roles. Listing a contributor does not imply shared ownership of the whole
-project, an original-creator role or a copyright claim.
+Community contributors and other individuals are credited according to their actual work and Git
+history. No additional contributor is listed at this time; the founding team is not repeated here
+merely to describe its primary roles. Listing a contributor does not imply shared ownership of the
+whole project, an original-creator role or a copyright claim.
 
 ## Copyright holders
 
@@ -41,17 +46,14 @@ Copyright (C) 2026 The Axiom contributors
 ```
 
 The collective notice is kept until the owner confirms an individual copyright holder and the exact
-wording to publish. Naming a creator or a maintainer does not by itself assign copyright.
+wording to publish. Naming a founder, co-founder or maintainer does not by itself assign copyright.
 
 ## Planned cross-platform work
 
-**dreddster** and **brxtrac** work on Linux and macOS development as core maintainers. This is a
-statement of collaboration, not an assertion that either port is included in a Windows release, nor
-an assignment of one platform to either maintainer. Actual contributions will be credited by their
-commits and pull requests.
-
-The original creator entry remains separate from later contributions. Author credit, copyright
-ownership and administrator access are distinct matters.
+The founding team is expanding Axiom across Windows, Linux and macOS. This is a statement of
+collaboration, not an assertion that either port is included in a Windows release, nor an assignment
+of one platform to a specific maintainer. Actual contributions are credited by their commits and
+pull requests.
 
 ## Project affiliation
 

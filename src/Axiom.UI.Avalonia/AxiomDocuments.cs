@@ -15,11 +15,11 @@ public static class AxiomDocuments
 {
     public const string SourceUrl = "https://github.com/a-51-50/Axiom";
 
-    public const string LeadMaintainerRole = "Founder, Creator & Lead Maintainer";
+    public const string LeadMaintainerRole = "Founder & Original Creator";
 
-    public const string CoreMaintainerRole = "Core Maintainer & Platform Lead";
+    public const string CoreMaintainerRole = "Co-Founder & Core Maintainer";
 
-    public const string CoreTeamStatement = "Developed collaboratively by the Axiom Core Team.";
+    public const string CoreTeamStatement = "Developed by the Axiom Founding Team.";
 
     public const string CopyrightNotice = "Copyright (C) 2026 The Axiom contributors";
 
