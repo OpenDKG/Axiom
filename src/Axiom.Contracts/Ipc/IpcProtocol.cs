@@ -7,6 +7,12 @@ namespace Axiom.Contracts.Ipc;
 /// <summary>Protocol versioning and hard limits shared by client and service.</summary>
 public static class IpcProtocol
 {
+    /// <summary>
+    /// Wire-envelope version. Additive commands do not change the envelope, so a build advertises
+    /// them through <see cref="ServiceCapabilities.Commands"/> instead of raising this number: an
+    /// older service would otherwise reject every request from a newer desktop. A missing command
+    /// in the capability list is the compatible "this service build is too old" signal.
+    /// </summary>
     public const int CurrentVersion = 1;
 
     public const int MinimumSupportedVersion = 1;
@@ -54,6 +60,8 @@ public static class IpcCommandTypes
     public const string ThreatShareEnqueue = "threatshare.enqueue";
     public const string ThreatShareDismiss = "threatshare.dismiss";
     public const string ThreatShareRecord = "threatshare.record";
+    public const string NetworkRecoveryCapture = "networkRecovery.capture";
+    public const string NetworkRecoveryRestore = "networkRecovery.restore";
 
     public static IReadOnlyList<string> All { get; } =
     [
@@ -84,6 +92,8 @@ public static class IpcCommandTypes
         ThreatShareEnqueue,
         ThreatShareDismiss,
         ThreatShareRecord,
+        NetworkRecoveryCapture,
+        NetworkRecoveryRestore,
     ];
 }
 

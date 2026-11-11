@@ -6,6 +6,7 @@ using System.Text.Json;
 using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Infrastructure.Windows.Ipc;
 using Xunit;
 
@@ -256,13 +257,108 @@ public sealed class PipeServerTests : IAsyncLifetime
         Assert.Equal(IpcErrorCodes.NotSupported, response.Error!.Code);
     }
 
-    private static async Task<IpcResponse> SendAsync(string pipeName, string command)
+    [Fact]
+    public async Task Recovery_commands_are_not_supported_without_a_handler()
+    {
+        _host = await ServerHost.StartAsync();
+
+        var capture = await SendAsync(_host.PipeName, IpcCommandTypes.NetworkRecoveryCapture);
+        var restore = await SendAsync(_host.PipeName, IpcCommandTypes.NetworkRecoveryRestore);
+
+        Assert.False(capture.Ok);
+        Assert.Equal(IpcErrorCodes.NotSupported, capture.Error!.Code);
+        Assert.False(restore.Ok);
+        Assert.Equal(IpcErrorCodes.NotSupported, restore.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Recovery_commands_reject_client_supplied_state()
+    {
+        _host = await ServerHost.StartAsync(
+            networkRecoveryCapture: (_, _) => Task.FromResult(Captured()),
+            networkRecoveryRestore: (_, _) => Task.FromResult(Restored()));
+
+        var capture = await SendAsync(
+            _host.PipeName,
+            IpcCommandTypes.NetworkRecoveryCapture,
+            new { adapters = "8.8.8.8" });
+        var restore = await SendAsync(
+            _host.PipeName,
+            IpcCommandTypes.NetworkRecoveryRestore,
+            new { servers = "8.8.8.8" });
+
+        Assert.False(capture.Ok);
+        Assert.Equal(IpcErrorCodes.InvalidRequest, capture.Error!.Code);
+        Assert.False(restore.Ok);
+        Assert.Equal(IpcErrorCodes.InvalidRequest, restore.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Recovery_commands_return_typed_results_and_are_advertised()
+    {
+        var captureCalled = false;
+        var restoreCalled = false;
+        _host = await ServerHost.StartAsync(
+            networkRecoveryCapture: (actor, _) =>
+            {
+                captureCalled = actor.Length > 0;
+                return Task.FromResult(Captured());
+            },
+            networkRecoveryRestore: (actor, _) =>
+            {
+                restoreCalled = actor.Length > 0;
+                return Task.FromResult(Restored());
+            });
+
+        var capabilities = await SendAsync(_host.PipeName, IpcCommandTypes.Capabilities);
+        var captured = await SendAsync(_host.PipeName, IpcCommandTypes.NetworkRecoveryCapture);
+        var restored = await SendAsync(_host.PipeName, IpcCommandTypes.NetworkRecoveryRestore);
+
+        var advertised = capabilities.Result!.Value.Deserialize<ServiceCapabilities>(IpcJson.Options)!;
+        Assert.Contains(IpcCommandTypes.NetworkRecoveryCapture, advertised.Commands);
+        Assert.Contains(IpcCommandTypes.NetworkRecoveryRestore, advertised.Commands);
+
+        Assert.True(captured.Ok);
+        Assert.Equal(
+            NetworkRecoveryStatus.Succeeded,
+            captured.Result!.Value.Deserialize<NetworkRecoveryCaptureResult>(IpcJson.Options)!.Status);
+        Assert.True(restored.Ok);
+        Assert.True(restored.Result!.Value.Deserialize<NetworkRecoveryRestoreResult>(IpcJson.Options)!.Verified);
+        Assert.True(captureCalled);
+        Assert.True(restoreCalled);
+    }
+
+    private static NetworkRecoveryCaptureResult Captured() => new()
+    {
+        Status = NetworkRecoveryStatus.Succeeded,
+        CapturedUtc = DateTimeOffset.UtcNow,
+        AdapterCount = 1,
+        RuleCount = 1,
+        Persisted = true,
+    };
+
+    private static NetworkRecoveryRestoreResult Restored() => new()
+    {
+        Status = NetworkRecoveryStatus.Succeeded,
+        AdaptersRestored = 1,
+        AdaptersVerified = 1,
+        RulesRemoved = 1,
+        RulesVerifiedAbsent = 1,
+        Verified = true,
+        CompletedUtc = DateTimeOffset.UtcNow,
+    };
+
+    private static async Task<IpcResponse> SendAsync(string pipeName, string command, object? payload = null)
     {
         using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await pipe.ConnectAsync(3000, timeout.Token);
 
-        var envelope = new IpcEnvelope { Type = command };
+        var envelope = new IpcEnvelope
+        {
+            Type = command,
+            Payload = payload is null ? null : JsonSerializer.SerializeToElement(payload, IpcJson.Options),
+        };
         await IpcLineProtocol.WriteLineAsync(
             pipe,
             JsonSerializer.Serialize(envelope, IpcJson.Options),
@@ -293,7 +389,9 @@ public sealed class PipeServerTests : IAsyncLifetime
         public static async Task<ServerHost> StartAsync(
             string? allowedSid = null,
             ConnectionSnapshot? snapshot = null,
-            FirewallRulesSnapshot? firewall = null)
+            FirewallRulesSnapshot? firewall = null,
+            Func<string, CancellationToken, Task<NetworkRecoveryCaptureResult>>? networkRecoveryCapture = null,
+            Func<string, CancellationToken, Task<NetworkRecoveryRestoreResult>>? networkRecoveryRestore = null)
         {
             var pipeName = $"Axiom.Test.{Guid.NewGuid():N}";
             var sid = allowedSid ?? WindowsIdentity.GetCurrent().User!.Value;
@@ -338,7 +436,9 @@ public sealed class PipeServerTests : IAsyncLifetime
                 () => snapshot,
                 () => health,
                 historyQuery: null,
-                rulesQuery: firewall is null ? null : _ => Task.FromResult(firewall));
+                rulesQuery: firewall is null ? null : _ => Task.FromResult(firewall),
+                networkRecoveryCapture: networkRecoveryCapture,
+                networkRecoveryRestore: networkRecoveryRestore);
 
             var host = new ServerHost(pipeName, server);
             await host.WaitUntilReadyAsync();

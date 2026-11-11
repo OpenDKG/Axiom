@@ -143,6 +143,27 @@ public sealed class WindowsFirewallPolicyAdapterTests
     }
 
     [Fact]
+    public async Task Recovery_removal_is_refused_outside_the_service_or_an_administrator()
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        var isAdministrator = new System.Security.Principal.WindowsPrincipal(identity)
+            .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        if (isAdministrator || !Environment.UserInteractive)
+        {
+            // The caller is already authorized; there is no refusal to assert here.
+            return;
+        }
+
+        using var adapter = new WindowsFirewallPolicyAdapter();
+
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            adapter.RemoveCapturedOwnedRuleAsync(
+                Guid.NewGuid(),
+                FirewallDirection.Outbound,
+                CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Writes_are_refused_without_the_explicit_gate()
     {
         var previousEnable = Environment.GetEnvironmentVariable(WindowsFirewallPolicyAdapter.WriteEnableVariable);

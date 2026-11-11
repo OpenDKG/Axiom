@@ -1,17 +1,20 @@
 # Firewall recovery
 
-Axiom owns only rules whose name starts with `Axiom::`. Recovery never resets the Windows
-Firewall and never deletes another product's rules.
+Axiom owns only rules whose name follows `Axiom::{managed-rule-id}::{OUT|IN}` and whose OS metadata
+still proves ownership. Recovery never resets the Windows Firewall and never deletes another
+product's rules. Service-backed capture, DNS recovery, the snapshot format and the emergency
+command are documented in [NETWORK_RECOVERY.md](NETWORK_RECOVERY.md).
 
 ## Identify owned rules
 
 ```powershell
 Get-NetFirewallRule -Name 'Axiom::*' |
-  Select-Object Name, DisplayName, Direction, Action, Enabled, Profile
+  Select-Object Name, DisplayName, Direction, Action, Enabled, Profile, Group
 ```
 
 A rule name has the form `Axiom::{rule-id}::{OUT|IN}`. The same id and direction identify the
-rule in the local database (`firewall_rules`).
+rule in the local database (`firewall_rules`). The group or description is the second ownership
+signal recovery checks; do not edit it on an Axiom rule you want recovery to manage.
 
 ## Remove one owned rule
 
@@ -34,7 +37,8 @@ Run this only after reviewing the list. It still targets only names with the Axi
 
 Applied Windows Firewall rules remain in force when the service or UI stops. Axiom does not
 remove rules on exit. The UI shows `Service unavailable`; use the commands above if the service
-cannot be started.
+cannot be started. For the saved DNS/Axiom-rule baseline, use the elevated
+`--recover-network --apply` command described in [NETWORK_RECOVERY.md](NETWORK_RECOVERY.md).
 
 ## Firewall page configuration
 
