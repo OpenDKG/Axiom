@@ -1,10 +1,6 @@
 # Axiom — optional support and donations
 
-**Historical implementation note:** this text originated in the early Support-page PR stack
-(#100 → #99 → #97 → #96). The Support destination now exists in the Axiom development app;
-configuration and donation targets are packaging concerns. Treat the following as design and
-configuration guidance, not proof that any funding account, crypto address or external donation
-link is active.
+This Draft branch stacks on #100 → #99 → #97 → #96. It adds a **Support** navigation destination. Do not merge into `main` until the parent PR chain is validated on Windows.
 
 ## Donation channels
 
@@ -60,5 +56,4 @@ Reference: https://docs.github.com/en/repositories/managing-your-repositorys-set
 6. Test crypto copy-only action and clipboard contention; test every theme, keyboard navigation, narrow window and screen reader labels.
 7. Confirm app startup, IP Helper/SQLite/service, firewall policies and all agent sessions/config/junctions are untouched.
 
-**Historical test note:** original PR-stage tests were not run for this page. Consult the relevant
-versioned release evidence and verify real configured links before shipping.
+**Status:** Code authored, not compiled or smoke-tested in a Windows environment here.
