@@ -31,6 +31,9 @@ public static class AxiomDocuments
 
     public const string LicenseName = "GNU General Public License v3.0 or later (GPL-3.0-or-later)";
 
+    /// <summary>Compact license identifier for the About footer.</summary>
+    public const string ShortLicenseName = "GPL-3.0-or-later";
+
     /// <summary>Confirmed by the repository owner; the public GitHub account is used, not a legal name.</summary>
     public const string CreatorLabel = "a-51-50";
 

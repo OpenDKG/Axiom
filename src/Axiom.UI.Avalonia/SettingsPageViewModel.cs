@@ -108,6 +108,10 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public string AboutLicense => AxiomDocuments.LicenseName;
 
+    /// <summary>One compact legal line: license and collective copyright.</summary>
+    public string AboutLegalLine =>
+        $"{AxiomDocuments.ShortLicenseName} \u00B7 {AxiomDocuments.CopyrightLine}";
+
     public string AboutSource => AxiomDocuments.SourceUrl;
 
 
