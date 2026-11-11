@@ -154,10 +154,12 @@ EOF
 # ---------------------------------------------------------------------------------------------
 # 3. Filter system extension + helper (Swift; built on macOS only)
 # ---------------------------------------------------------------------------------------------
-if [[ $ON_MAC -eq 1 && $BUILD_FILTER -eq 1 && ! -f "$FILTER_BUILD/axiom-sysext" ]]; then
+# Always rebuild when asked (a stale macos/build would silently ship old filter code); the version
+# contract is macos/README.md "Versioning": the extension carries the product version and build.
+if [[ $ON_MAC -eq 1 && $BUILD_FILTER -eq 1 ]]; then
   arch=x86_64; [[ "$RID" == osx-arm64 ]] && arch=arm64
-  log "building the filter extension (macos/build.sh, ARCH=$arch)"
-  ARCH=$arch "$ROOT/macos/build.sh"
+  log "building the filter extension (macos/build.sh, ARCH=$arch, version $VERSION build $BUILD)"
+  AXIOM_VERSION="$VERSION" AXIOM_BUILD="$BUILD" ARCH=$arch "$ROOT/macos/build.sh"
 fi
 
 HAS_FILTER=0
