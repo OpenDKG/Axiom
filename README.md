@@ -325,7 +325,7 @@ the client area blank after a driver reset. Set `AXIOM_HARDWARE_RENDER=1` before
 app to opt in to hardware acceleration on a machine where it is known to work. The Avalonia host
 uses its normal platform renderer.
 
-### Installation (no administrator)
+### Installation (core per-user setup; optional modules require additional consent)
 
 The release ZIP contains **`Axiom-Setup.exe`**. Double-click it, choose the agent-hook scope
 (Complete or Partial) and click **Install Axiom**. The setup is a single self-contained
