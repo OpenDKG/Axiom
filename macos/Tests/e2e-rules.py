@@ -127,12 +127,13 @@ def events(kind, since):
     return out
 
 
-def rules_event(since, timeout=5.0, **match):
-    """First filter.rules event after `since` whose fields equal `match`, or None."""
+def rules_event(since, timeout=5.0, with_error=None, **match):
+    """First filter.rules event after `since` whose fields equal `match` (and whose `error`
+    contains `with_error`, when given), or None."""
     end = time.time() + timeout
     while time.time() < end:
         for e in events("filter.rules", since):
-            if all(e.get(k) == v for k, v in match.items()):
+            if all(e.get(k) == v for k, v in match.items()) and (with_error is None or with_error in (e.get("error") or "")):
                 return e
         time.sleep(0.05)
     return None
@@ -341,17 +342,18 @@ except StopIteration:
     other_uid = 501
 t = time.time()
 os.chown(RULES, other_uid, 0)
-re_ = rules_event(t, timeout=3)
-report("file chowned to a non-root user is rejected (filter.rules error)", re_ is not None and "owned by uid" in (re_.get("error") or ""),
-       json.dumps(re_) if re_ else "no filter.rules event")
+re_ = rules_event(t, timeout=3, with_error="owned by uid")
+report("file chowned to a non-root user is rejected (filter.rules error)", re_ is not None,
+       json.dumps(re_) if re_ else "no filter.rules event with that error")
 ok, d = curl(f"https://{HOST}")
 report("previous table (block curl) still enforced after chown", not ok, d)
 os.chown(RULES, 0, 0)
 t = time.time()
 write_raw(json.dumps({"schemaVersion": 1, "generation": generation + 50, "failOpen": True, "rules": []}), mode=0o666)
-re_ = rules_event(t, timeout=3)
-report("world-writable (0666) root-owned file is rejected", re_ is not None and "world-writable" in (re_.get("error") or ""),
-       json.dumps(re_) if re_ else "no filter.rules event")
+# (the chown back to root re-accepts the previous content first; wait for the 0666 rejection itself)
+re_ = rules_event(t, timeout=3, with_error="world-writable")
+report("world-writable (0666) root-owned file is rejected", re_ is not None,
+       json.dumps(re_) if re_ else "no filter.rules event with that error")
 ok, d = curl(f"https://{HOST}")
 report("previous table still enforced after a 0666 replacement", not ok, d)
 os.chmod(RULES, 0o644)

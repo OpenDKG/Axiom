@@ -219,8 +219,9 @@ func cdhash(of url: URL) -> String? {
 /// configuration is bound to the code signature of the app that saved it; for an ad hoc
 /// signature that is the exact cdhash, so after every rebuild nesessionmanager rejects the
 /// existing configuration ("does not satisfy the code signature requirements") and the filter
-/// never starts. Dev builds therefore re-create the configuration on every activate; Developer
-/// ID signatures satisfy a stable designated requirement and keep theirs.
+/// never starts. Dev builds therefore re-create the configuration whenever `activate` replaced
+/// the extension (the helper is re-signed alongside); Developer ID signatures satisfy a stable
+/// designated requirement and keep theirs. `--reset-filter` forces the re-creation.
 func isAdHocSigned() -> Bool {
     var code: SecCode?
     guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return false }
@@ -324,9 +325,13 @@ private func activate(_ out: SysextResult, queue: DispatchQueue, wait: Bool, for
                        message: "Approve Axiom in System Settings > General > Login Items & Extensions > Network Extensions, then run activate again")
         }
     }
-    let reset = resetFilter || isAdHocSigned()
-    out["filterReset"] = reset
-    let enableFilter = {
+    let adHoc = isAdHocSigned()
+    out["adHocSigned"] = adHoc
+    // `replaced`: an installed extension was replaced (every dev build has a new build number,
+    // and package-app.sh re-signs the helper alongside, so this is when the ad hoc config breaks).
+    let enableFilter = { (replaced: Bool) in
+        let reset = resetFilter || (adHoc && replaced)
+        out["filterReset"] = reset
         let save = {
             out.progress("extension active; enabling content filter")
             updateFilter(enable: true) { state, error in
@@ -356,7 +361,7 @@ private func activate(_ out: SysextResult, queue: DispatchQueue, wait: Bool, for
            ns.code == OSSystemExtensionError.Code.requestCanceled.rawValue {
             out["replaced"] = false
             out["installedCdhash"] = delegate.installedCdhash ?? NSNull()
-            enableFilter() // identical extension already active: nothing to install
+            enableFilter(false) // identical extension already active: nothing to install
             return
         }
         out.finish(.error, state: "error", error: error)
@@ -368,7 +373,7 @@ private func activate(_ out: SysextResult, queue: DispatchQueue, wait: Bool, for
             out.finish(.rebootRequired, state: "reboot_required", message: "Restart the Mac to finish activation")
             return
         }
-        enableFilter()
+        enableFilter(delegate.sawExisting)
     }
     submit(OSSystemExtensionRequest.activationRequest(forExtensionWithIdentifier: extensionIdentifier, queue: queue),
            delegate)

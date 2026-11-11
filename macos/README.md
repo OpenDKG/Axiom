@@ -159,7 +159,7 @@ axiom-sysext activate|deactivate|enable|disable|status [--timeout SECONDS] [--no
 
 | Command | Does |
 |---|---|
-| `activate` | Submits the activation request (install / upgrade; an installed copy with the same version, build **and** cdhash is kept unless `--force`), re-creates the filter configuration when the helper is ad hoc signed or `--reset-filter` is given (see "Ad hoc builds and the filter configuration"), waits for user approval (up to `--timeout`, default 120 s; `--no-wait` returns exit 3 immediately when approval is needed), then saves and enables the `NEFilterManager` configuration (`filterSockets`, data provider `com.axiom.firewall.filter`, description "Axiom Firewall"). The first enable shows the "Filter Network Content" Allow prompt. |
+| `activate` | Submits the activation request (install / upgrade; an installed copy with the same version, build **and** cdhash is kept unless `--force`), re-creates the filter configuration when an ad hoc signed helper replaced the extension or `--reset-filter` is given (see "Ad hoc builds and the filter configuration"), waits for user approval (up to `--timeout`, default 120 s; `--no-wait` returns exit 3 immediately when approval is needed), then saves and enables the `NEFilterManager` configuration (`filterSockets`, data provider `com.axiom.firewall.filter`, description "Axiom Firewall"). The first enable shows the "Filter Network Content" Allow prompt. |
 | `deactivate` | Removes the filter configuration, then submits the deactivation request (needs an admin password prompt: run it from the GUI session). |
 | `enable` / `disable` | Only toggles the filter configuration; the extension stays installed. |
 | `status` | No changes or prompts (15 s default timeout). |
@@ -212,9 +212,11 @@ it. For an ad hoc signature that is the exact cdhash, so after the helper is reb
 `nesessionmanager` logs `Rejecting agent com.axiom.firewall because it does not satisfy the
 code signature requirements` / `Failed to launch com.axiom.firewall`, the filter session never
 starts and all traffic is allowed although `status` says `running`. `activate` therefore
-removes and re-creates the configuration whenever the helper is ad hoc signed (reported as
-`"filterReset": true`; `--reset-filter` forces it for signed builds), which re-shows the "Filter
-Network Content" prompt. Developer ID signatures satisfy a stable designated requirement and
+removes and re-creates the configuration when the helper is ad hoc signed **and** it replaced
+the installed extension (reported as `"adHocSigned"`/`"filterReset": true`), which re-shows the
+"Filter Network Content" prompt once per upgrade; a repeated `activate` that keeps the
+extension does not prompt. If only the helper was rebuilt (extension unchanged) run
+`activate --reset-filter`. Developer ID signatures satisfy a stable designated requirement and
 keep their configuration across upgrades.
 
 ## Behaviour notes (review #23)
