@@ -199,8 +199,44 @@
       </Grid>
     </Border>
 
-    <controls:AxiomSelectableTextBlock Grid.Row="2" Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11"
-               TextWrapping="Wrap" Margin="2,10,0,0" />
+    <StackPanel Grid.Row="2" Spacing="8" Margin="0,10,0,0">
+      <controls:AxiomSelectableTextBlock Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11"
+                 TextWrapping="Wrap" Margin="2,0,0,0" />
+
+      <!-- macOS only: the whole rules file was rejected by the filter, or the filter dropped events. -->
+      <Border IsVisible="{Binding HasFilterBanner}" Background="{DynamicResource Axiom.DangerBackground}"
+              BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="6" Padding="10">
+        <StackPanel Spacing="2">
+          <controls:AxiomSelectableTextBlock Text="Network filter problem" FontSize="11" FontWeight="SemiBold"
+                     Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <controls:AxiomSelectableTextBlock Text="{Binding FilterBannerText}" FontSize="10.5"
+                     Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <!-- macOS only: rules published to the filter that it refused to enforce (filter.rules event). -->
+      <Border IsVisible="{Binding HasRejectedRules}" Background="{DynamicResource Axiom.SurfaceAlt}"
+              BorderBrush="{DynamicResource Axiom.Accent}" BorderThickness="1" CornerRadius="6" Padding="10">
+        <StackPanel Spacing="4">
+          <controls:AxiomSelectableTextBlock Text="{Binding RejectedRulesHeadline}" FontSize="11" FontWeight="SemiBold"
+                     Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <controls:AxiomSelectableTextBlock Text="{Binding FilterEnforcedText}" FontSize="10"
+                     Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <ItemsControl ItemsSource="{Binding RejectedRules}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid ColumnDefinitions="Auto,*" Margin="0,2,0,0">
+                  <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding RuleId}" FontSize="10" FontFamily="Menlo,Consolas,monospace"
+                             Foreground="{DynamicResource Axiom.TextSecondary}" Margin="0,0,10,0" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Reason}" FontSize="10"
+                             Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </StackPanel>
 
     <Grid Grid.Row="3" ColumnDefinitions="1.35*,7,1*" Margin="0,10,0,0">
       <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"

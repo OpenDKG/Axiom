@@ -169,7 +169,13 @@ public sealed class FilterEventServer
         Interlocked.Increment(ref _acceptedEvents);
         if (flowEvent.Type == FlowEventType.Hello)
         {
-            _status.Hello(flowEvent.Version, flowEvent.Generation, now);
+            _status.Hello(flowEvent.Version, flowEvent.Generation, flowEvent.Dropped, now);
+            return;
+        }
+
+        if (flowEvent.Type == FlowEventType.Rules)
+        {
+            _status.RulesReported(flowEvent, now);
             return;
         }
 

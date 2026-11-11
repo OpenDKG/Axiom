@@ -289,6 +289,31 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [ObservableProperty]
     private string _statusText = string.Empty;
 
+    /// <summary>
+    /// What the OS filter reported about the published rules (macOS). Drives the "N rule(s) not
+    /// enforced by the filter" block and the rejected-file / dropped-events banner.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RejectedRules))]
+    [NotifyPropertyChangedFor(nameof(HasRejectedRules))]
+    [NotifyPropertyChangedFor(nameof(RejectedRulesHeadline))]
+    [NotifyPropertyChangedFor(nameof(HasFilterBanner))]
+    [NotifyPropertyChangedFor(nameof(FilterBannerText))]
+    [NotifyPropertyChangedFor(nameof(FilterEnforcedText))]
+    private FilterEnforcementSummary _enforcement = FilterEnforcementSummary.None;
+
+    public IReadOnlyList<RejectedRuleRow> RejectedRules => Enforcement.RejectedRules;
+
+    public bool HasRejectedRules => Enforcement.HasRejectedRules;
+
+    public string RejectedRulesHeadline => Enforcement.RejectedHeadline;
+
+    public bool HasFilterBanner => Enforcement.HasBanner;
+
+    public string FilterBannerText => Enforcement.BannerText;
+
+    public string FilterEnforcedText => Enforcement.EnforcedText;
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RemoveRuleCommand))]
     [NotifyCanExecuteChangedFor(nameof(ApplyNewRuleCommand))]
@@ -1329,6 +1354,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             WritesEnabled = snapshot.WritesEnabled;
             WritePathText = snapshot.WritesEnabled ? "enabled (test VM only)" : "disabled";
             HasError = snapshot.Capability.Status == FirewallCapabilityStatus.Unavailable;
+            Enforcement = FilterEnforcementSummary.From(snapshot.Capability.FilterEnforcement);
             StatusText = snapshot.Rules.Count == 0
                 ? $"0 owned rules. Axiom has not created any {PlatformText.Firewall} rule on this host."
                 : $"{snapshot.Rules.Count} owned rules read at {DateTimeOffset.Now:HH:mm:ss}.";
@@ -1338,6 +1364,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         catch (ServiceUnavailableException exception)
         {
             Rules.Clear();
+            Enforcement = FilterEnforcementSummary.None;
             CapabilityStatusText = "Service offline";
             CapabilityDetail = exception.Message;
             OwnedRuleCountText = "—";

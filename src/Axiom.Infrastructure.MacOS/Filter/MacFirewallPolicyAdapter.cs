@@ -92,8 +92,25 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisposab
             ManagedRulesReadable = true,
             ManagedRuleCount = state.Rules.Count,
             ProbedUtc = now,
+            FilterEnforcement = ToEnforcementReport(_status.Rules),
         });
     }
+
+    /// <summary>Maps the last <c>filter.rules</c> event to the IPC contract (null until one arrived).</summary>
+    public static FilterEnforcementReport? ToEnforcementReport(FilterRulesReport? rules) =>
+        rules is null
+            ? null
+            : new FilterEnforcementReport
+            {
+                Generation = rules.Generation,
+                AppliedRuleCount = rules.Applied,
+                RejectedRules = rules.Rejected
+                    .Select(rejected => new FilterRuleRejection { RuleId = rejected.Id, Reason = rejected.Reason })
+                    .ToArray(),
+                FileError = rules.Error,
+                DroppedEvents = rules.Dropped,
+                ReportedUtc = rules.ReceivedUtc,
+            };
 
     public Task<IReadOnlyList<ManagedRule>> ListOwnedRulesAsync(CancellationToken ct)
     {
@@ -255,18 +272,40 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisposab
             notes.Add("The rule in rules.json differs from the stored spec.");
         }
 
+        // The filter's own verdict on this rule (review #6): a rejected rule is published but not
+        // enforced, so it has no effective action even though it is present in the table.
+        string? rejection = null;
+        if (status.Rules is { } report)
+        {
+            if (report.Error is { Length: > 0 } fileError)
+            {
+                notes.Add(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"AxiomFilter rejected the rules file ({fileError}); generation {report.Generation} stays in force."));
+            }
+
+            rejection = report.Rejected
+                .FirstOrDefault(rejected => string.Equals(rejected.Id, expected.Id, StringComparison.OrdinalIgnoreCase))
+                ?.Reason;
+            if (rejection is not null)
+            {
+                notes.Add($"AxiomFilter rejected this rule and does not enforce it: {rejection}");
+            }
+        }
+
         return new EffectiveRuleReport
         {
             ManagedRuleId = spec.ManagedRuleId,
             PresentInOs = written is not null,
             MatchesSpec = expected.SameAs(written),
-            EffectiveAction = written is { Enabled: true }
+            EffectiveAction = written is { Enabled: true } && rejection is null
                 ? string.Equals(written.Action, FilterRuleTable.ActionBlock, StringComparison.Ordinal)
                     ? FirewallAction.Block
                     : FirewallAction.Allow
                 : null,
             ObservedUtc = now,
             Notes = notes,
+            FilterRejectionReason = rejection,
         };
     }
 

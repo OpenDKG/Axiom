@@ -19,4 +19,10 @@ public sealed record EffectiveRuleReport
 
     /// <summary>Human-readable limitations or conflicts observed during verification.</summary>
     public IReadOnlyList<string> Notes { get; init; } = [];
+
+    /// <summary>
+    /// Set when the OS filter reported this rule as rejected (macOS <c>filter.rules</c>): the rule
+    /// is published but not enforced. Null on Windows and when the filter accepted the rule.
+    /// </summary>
+    public string? FilterRejectionReason { get; init; }
 }

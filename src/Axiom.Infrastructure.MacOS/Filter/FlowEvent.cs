@@ -10,7 +10,13 @@ public enum FlowEventType
     Stats = 1,
     Close = 2,
     Hello = 3,
+
+    /// <summary><c>filter.rules</c>: outcome of the last rules reload (review #6).</summary>
+    Rules = 4,
 }
+
+/// <summary>One rule the filter skipped, with the filter's reason (docs/MACOS_ARCHITECTURE.md section 3.2).</summary>
+public sealed record FilterRejectedRule(string Id, string Reason);
 
 /// <summary>One parsed line of the filter -> daemon stream (docs/MACOS_ARCHITECTURE.md section 3.2).</summary>
 public sealed record FlowEvent
@@ -50,6 +56,18 @@ public sealed record FlowEvent
     public string? Version { get; init; }
 
     public long? Generation { get; init; }
+
+    /// <summary><c>filter.rules</c>: enabled rules the filter enforces from the table in force.</summary>
+    public int? Applied { get; init; }
+
+    /// <summary><c>filter.rules</c>: rules skipped by the filter (capped at <see cref="FlowEventParser.MaxRejectedRules"/>).</summary>
+    public IReadOnlyList<FilterRejectedRule> Rejected { get; init; } = [];
+
+    /// <summary><c>filter.rules</c>: why the whole rules file was rejected; null when it loaded.</summary>
+    public string? Error { get; init; }
+
+    /// <summary><c>filter.hello</c> / <c>filter.rules</c>: events the filter dropped so far (monotonic per process).</summary>
+    public long? Dropped { get; init; }
 }
 
 /// <summary>
@@ -60,6 +78,9 @@ public sealed record FlowEvent
 public static class FlowEventParser
 {
     public const int MaxStringLength = 1024;
+
+    /// <summary>Upper bound on the rejected-rule entries kept from one <c>filter.rules</c> event.</summary>
+    public const int MaxRejectedRules = 256;
 
     private static readonly JsonDocumentOptions DocumentOptions = new()
     {
@@ -90,6 +111,7 @@ public static class FlowEventParser
                 "flow.stats" => FlowEventType.Stats,
                 "flow.close" => FlowEventType.Close,
                 "filter.hello" => FlowEventType.Hello,
+                "filter.rules" => FlowEventType.Rules,
                 _ => null,
             };
 
@@ -99,7 +121,7 @@ public static class FlowEventParser
             }
 
             var id = GetString(root, "id");
-            if (eventType != FlowEventType.Hello && id.Length == 0)
+            if (eventType is not (FlowEventType.Hello or FlowEventType.Rules) && id.Length == 0)
             {
                 return null;
             }
@@ -124,12 +146,50 @@ public static class FlowEventParser
                 BytesOut = NonNegative(GetLong(root, "bytesOut")),
                 Version = GetString(root, "version") is { Length: > 0 } version ? version : null,
                 Generation = GetLong(root, "generation"),
+                Applied = eventType == FlowEventType.Rules
+                    ? (int?)Math.Clamp(NonNegative(GetLong(root, "applied")) ?? 0, 0, int.MaxValue)
+                    : null,
+                Rejected = eventType == FlowEventType.Rules ? GetRejected(root) : [],
+                Error = GetString(root, "error") is { Length: > 0 } error ? error : null,
+                Dropped = NonNegative(GetLong(root, "dropped")),
             };
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    private static List<FilterRejectedRule> GetRejected(JsonElement root)
+    {
+        if (!root.TryGetProperty("rejected", out var list) || list.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var rejected = new List<FilterRejectedRule>();
+        foreach (var entry in list.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var id = GetString(entry, "id");
+            var reason = GetString(entry, "reason");
+            if (id.Length == 0 && reason.Length == 0)
+            {
+                continue;
+            }
+
+            rejected.Add(new FilterRejectedRule(id.Length == 0 ? "?" : id, reason.Length == 0 ? "rejected by the filter" : reason));
+            if (rejected.Count >= MaxRejectedRules)
+            {
+                break;
+            }
+        }
+
+        return rejected;
     }
 
     private static string GetString(JsonElement root, string name)

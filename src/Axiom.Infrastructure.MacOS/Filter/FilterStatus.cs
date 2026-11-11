@@ -2,9 +2,32 @@
 namespace Axiom.Infrastructure.MacOS.Filter;
 
 /// <summary>
+/// The latest <c>filter.rules</c> event (docs/MACOS_ARCHITECTURE.md section 3.2): the table the
+/// extension enforces, the rules it skipped, and whether the rules file itself was rejected.
+/// </summary>
+public sealed record FilterRulesReport
+{
+    /// <summary>Generation of the table in force (-1 before the filter loaded any table).</summary>
+    public long Generation { get; init; } = -1;
+
+    /// <summary>Enabled rules the filter enforces.</summary>
+    public int Applied { get; init; }
+
+    public IReadOnlyList<FilterRejectedRule> Rejected { get; init; } = [];
+
+    /// <summary>Why the rules file was rejected as a whole; null when the last reload loaded it.</summary>
+    public string? Error { get; init; }
+
+    /// <summary>Events the filter dropped so far (monotonic per extension process).</summary>
+    public long Dropped { get; init; }
+
+    public DateTimeOffset ReceivedUtc { get; init; }
+}
+
+/// <summary>
 /// Liveness of the AxiomFilter system extension as seen on the flow-event socket: connection
-/// count, the last <c>filter.hello</c> (version and the rules generation it loaded) and the last
-/// event of any kind. Thread-safe.
+/// count, the last <c>filter.hello</c> (version and the rules generation it loaded), the last
+/// <c>filter.rules</c> report and the last event of any kind. Thread-safe.
 /// </summary>
 public sealed class FilterStatus
 {
@@ -22,6 +45,10 @@ public sealed class FilterStatus
     private string? _version;
 
     private long? _generation;
+
+    private long _dropped;
+
+    private FilterRulesReport? _rules;
 
     public bool IsConnected
     {
@@ -67,7 +94,7 @@ public sealed class FilterStatus
         }
     }
 
-    /// <summary>Rules generation reported by the extension in its last hello.</summary>
+    /// <summary>Rules generation reported by the extension in its last hello or rules report.</summary>
     public long? LoadedGeneration
     {
         get
@@ -75,6 +102,30 @@ public sealed class FilterStatus
             lock (_gate)
             {
                 return _generation;
+            }
+        }
+    }
+
+    /// <summary>Highest <c>dropped</c> counter seen from the extension (hello or rules event).</summary>
+    public long DroppedEvents
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _dropped;
+            }
+        }
+    }
+
+    /// <summary>The latest <c>filter.rules</c> report, or null until the extension sent one.</summary>
+    public FilterRulesReport? Rules
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _rules;
             }
         }
     }
@@ -95,7 +146,10 @@ public sealed class FilterStatus
         }
     }
 
-    public void Hello(string? version, long? generation, DateTimeOffset now)
+    public void Hello(string? version, long? generation, DateTimeOffset now) =>
+        Hello(version, generation, null, now);
+
+    public void Hello(string? version, long? generation, long? dropped, DateTimeOffset now)
     {
         lock (_gate)
         {
@@ -103,6 +157,45 @@ public sealed class FilterStatus
             _lastEventUtc = now;
             _version = version;
             _generation = generation;
+            if (dropped is { } count)
+            {
+                _dropped = Math.Max(_dropped, count);
+            }
+        }
+    }
+
+    /// <summary>Records a <c>filter.rules</c> event; the latest report replaces the previous one.</summary>
+    public void RulesReported(FlowEvent rulesEvent, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(rulesEvent);
+        if (rulesEvent.Type != FlowEventType.Rules)
+        {
+            throw new ArgumentException("Expected a filter.rules event.", nameof(rulesEvent));
+        }
+
+        lock (_gate)
+        {
+            _lastEventUtc = now;
+            if (rulesEvent.Dropped is { } count)
+            {
+                _dropped = Math.Max(_dropped, count);
+            }
+
+            // A rejected file keeps the previous table: its generation is the one still enforced.
+            if (rulesEvent.Generation is { } generation)
+            {
+                _generation = generation;
+            }
+
+            _rules = new FilterRulesReport
+            {
+                Generation = rulesEvent.Generation ?? -1,
+                Applied = rulesEvent.Applied ?? 0,
+                Rejected = rulesEvent.Rejected,
+                Error = rulesEvent.Error,
+                Dropped = _dropped,
+                ReceivedUtc = now,
+            };
         }
     }
 
