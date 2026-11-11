@@ -1,6 +1,6 @@
 # Threat intelligence: Axiom, Blackbox and OriginTrail DKG
 
-**Scope:** Axiom 0.10.23 development build. This describes observed Axiom behaviour and integration boundaries, not a promise about third-party availability, consensus or permanent data retention.
+**Applies to:** Axiom 0.10.23 for Windows. Blackbox and OriginTrail are optional third-party integrations; their availability and retention policies may differ.
 
 ## The short version
 
@@ -26,7 +26,7 @@ The **standalone Axiom DKG node** and the **DKG node configured by Blackbox** ar
 
 - Privacy Shield proposes a malware-labelled **domain** only when the blocked lookup is attributable to a recognized agent process or a tool launched by it. General browsing, advertising, analytics, telemetry and tracking detections are not community-report candidates.
 - The optional AI Analyst may propose structured malicious-role indicators only if they match remote endpoints already included in its evidence package and meet its severity/status restrictions. Text in observations, advice and free-form analysis is never scraped for arbitrary domains.
-- A blocked DNS lookup proves an attempted lookup, **not** that malicious content was downloaded or that a completed connection occurred. The existing Blackbox reporter vocabulary may use a less specific context label; do not claim a verified download.
+- A blocked DNS lookup proves an attempted lookup, **not** that malicious content was downloaded or that a completed connection occurred. A blocked lookup alone does not establish that a file was downloaded.
 - Proposed items are **not automatically sent**. The user reviews and explicitly triggers submission. Turning on threat-sharing capability alone does not publish the queue.
 - The reporter may reject an item under upstream policy, cooldown or consent rules. Axiom cannot guarantee acceptance or later verification.
 
@@ -45,20 +45,20 @@ Axiom keeps local state according to its local retention and queue limits. This 
 - A hash, publisher signature or consensus state does not itself prove a domain is malicious. Trust decisions still need a documented evidence policy, independent corroboration, expiry/revocation handling and a way to dispute mistakes.
 - A publication timestamp proves when a record was published, not when an indicator was **first discovered anywhere**. "First seen by Axiom on this host", "first reported to Blackbox" and "first published in VM" are different timestamps and must be labelled separately.
 
-**Axiom does not independently publish threat Knowledge Assets to VM, pay TRAC/gas, or guarantee that an upstream verified item contains the full history of the original reporter.** Any proposal to preserve original authorship or to sponsor VM fees requires agreement with the upstream curator/publisher; it must not become an implicit cost for Axiom's free users or maintainers. Never publish private local activity in order to obtain a permanent record.
+**Axiom does not independently publish threat Knowledge Assets to VM, pay TRAC/gas, or guarantee that an upstream verified item contains the full history of the original reporter.** Publishing selected records to VM is a separate decision made by the relevant external publisher. Axiom does not charge users TRAC or gas fees for its threat-sharing feature. Private network activity must never be published.
 
 ## Verified graph sync and offline behaviour
 
 Axiom reads the **local** Blackbox dashboard, including its verified-sync and public-graph endpoints. **Sync now** requests an upstream sync through Blackbox; Axiom itself does not implement a parallel DKG replication loop. An optional **Auto-sync** preference, **off by default**, requests incremental catch-up at roughly 15-minute intervals when enabled. It does not mean the node is always online or the graph is fresh.
 
-When a dashboard read is slow, Axiom may display locally persisted authoritative sync/progress/ruleset information as **last-known state**. A stale cache is not a fresh verification, and a missing or offline node must not be shown as an empty or clean graph. Local firewall rules, stored DNS policies and previously loaded lists continue to function independently of a new graph sync.
+When a dashboard read is slow, Axiom may display locally persisted authoritative sync/progress/ruleset information as **last-known state**. A stale cache is not a fresh verification, and an offline node does not mean that the graph contains no threats. Local firewall rules, stored DNS policies and previously loaded lists continue to function independently of a new graph sync.
 
-**Important distinction:** Axiom currently displays the synchronized verified graph through the Blackbox integration; it does **not** yet use general verified/community reputation lookups as per-connection enforcement decisions. The read-only annotations proposal is tracked in [issue #231](https://github.com/a-51-50/Axiom/issues/231) and must remain off the connection hot path.
+**Important distinction:** Axiom currently displays the synchronized verified graph through the Blackbox integration; it does **not** yet use general verified/community reputation lookups as per-connection enforcement decisions. Reputation annotations do not currently change firewall rules or block connections automatically.
 
 Other offline limits:
 
 - If the local DNS resolver fails, saved adapter DNS may be restored or a previously configured fallback resolver may answer. **Connectivity can continue while Axiom DNS filtering is bypassed**. This is an availability trade-off, not an assurance of uninterrupted filtering.
-- Agent hooks depend on a functioning local Blackbox guard. In Axiom's documented **fail-open** mode, guard failures do not block tools; show **DEGRADED**, not **PROTECTED**.
+- Agent hooks depend on a functioning local Blackbox guard. In Axiom's documented **fail-open** mode, guard failures do not block tools; Axiom displays a degraded protection state.
 - Offline submission has no network destination. A queued report remains local until a permitted, user-triggered retry succeeds.
 - The locally installed DKG process may be running without internet, but it cannot obtain new remote peer updates while disconnected.
 
@@ -69,16 +69,3 @@ Local history (including network metadata, blocked DNS events, AI findings and a
 The URL sharing path discards userinfo, query strings and fragments; it also rejects private, loopback and local destinations. External optional integrations may still make network requests when enabled. The DKG node itself can communicate with peers; localhost-only Axiom status/API calls are **not** proof that the whole integration is offline or network-silent.
 
 See [Security model](SECURITY_MODEL.md), [Privacy Shield](PRIVACY_SHIELD.md) and [Integrations](INTEGRATIONS.md).
-
-## Verification checklist for maintainers
-
-1. With the internet disconnected, confirm local Windows Firewall rules and loaded DNS list behaviour; restart the machine and repeat.
-2. Stop Blackbox and check that agent-hook states degrade honestly, while core monitoring remains usable.
-3. Stop the configured DKG node and confirm cached graph content is labelled last-known or unknown, never newly verified.
-4. Confirm that enabling sharing alone sends **nothing**, and that **Share** / **Send now** are required.
-5. Simulate an offline reporter and verify deferred queue persistence after service restart, due-time handling and no automatic retry.
-6. Inspect a proposed indicator to ensure normalized public IOC values contain no private endpoints or sensitive evidence.
-7. Verify that the dashboard's configured DKG node is not confused with Axiom's standalone node.
-8. Before claiming any VM provenance continuity, verify the original reporter identity, report timestamp and promotion trail on the **actual published asset**.
-
-These are release acceptance checks, **not a claim that every scenario has been executed**.
