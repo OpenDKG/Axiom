@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Diagnostics;
 using System.Globalization;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using Axiom.Presentation;
 
 namespace Axiom.Infrastructure.Windows.Network;
@@ -15,34 +18,42 @@ public sealed class WindowsNetworkRecoveryPlatform : INetworkRecoveryPlatform
 
     public IReadOnlyList<NetworkAdapterDns> CaptureAdapters()
     {
-        var output = Run(
-            "Get-DnsClientServerAddress -AddressFamily IPv4 | " +
-            "ForEach-Object { \"$($_.InterfaceGuid)|$($_.InterfaceAlias)|$($_.ServerAddresses -join ';')\" }");
-
         var adapters = new List<NetworkAdapterDns>();
-        foreach (var line in Lines(output))
+        foreach (var network in NetworkInterface.GetAllNetworkInterfaces())
         {
-            var parts = line.Split('|');
-            if (parts.Length != 3 || string.IsNullOrWhiteSpace(parts[0]))
+            if (network.OperationalStatus != OperationalStatus.Up)
             {
                 continue;
             }
 
-            adapters.Add(new NetworkAdapterDns(
-                parts[0],
-                parts[1],
-                UsesDhcp: false,
-                parts[2].Split(';', StringSplitOptions.RemoveEmptyEntries)));
+            var servers = network.GetIPProperties().DnsAddresses
+                .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
+                .Select(address => address.ToString())
+                .ToArray();
+            if (servers.Length == 0)
+            {
+                continue;
+            }
+
+            adapters.Add(new NetworkAdapterDns(network.Id, network.Name, UsesDhcp: false, servers));
         }
 
         return adapters;
     }
-
     public IReadOnlyList<string> CaptureAxiomRules()
     {
-        var output = Run(
-            "Get-NetFirewallRule -DisplayName 'Axiom::*' -ErrorAction SilentlyContinue | " +
-            "Select-Object -ExpandProperty DisplayName");
+        string output;
+        try
+        {
+            output = Run(
+                "Get-NetFirewallRule -DisplayName 'Axiom::*' -ErrorAction SilentlyContinue | " +
+                "Select-Object -ExpandProperty DisplayName");
+        }
+        catch (InvalidOperationException)
+        {
+            // Rule capture is best-effort; adapters must still produce a usable snapshot.
+            return [];
+        }
 
         return Lines(output)
             .Where(line => line.StartsWith(AxiomRulePrefix, StringComparison.Ordinal))
