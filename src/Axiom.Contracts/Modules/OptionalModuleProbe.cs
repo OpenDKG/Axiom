@@ -89,11 +89,11 @@ public sealed class OptionalModuleProbe : IDisposable
         }
         catch (HttpRequestException)
         {
-            return NotRunning("No local DKG node answered. Start it with `dkg start`; setup is in docs/INTEGRATIONS.md. Axiom does not start it.", baseUri);
+            return NotRunning("No local DKG node answered. Start it with the Start button in Axiom or `dkg start`; setup is in docs/INTEGRATIONS.md.", baseUri);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return NotRunning("The DKG status check timed out. Start it with `dkg start`; setup is in docs/INTEGRATIONS.md.", baseUri);
+            return NotRunning("The DKG status check timed out. Start it with the Start button in Axiom or `dkg start`; setup is in docs/INTEGRATIONS.md.", baseUri);
         }
     }
 
@@ -134,7 +134,7 @@ public sealed class OptionalModuleProbe : IDisposable
         }
         catch (HttpRequestException)
         {
-            return NotRunning("No local Blackbox dashboard answered. Start Blackbox separately; setup is in docs/INTEGRATIONS.md. Axiom does not start it.", baseUri);
+            return NotRunning("No local Blackbox dashboard answered. Start it with the Start button in Axiom or its own launcher; setup is in docs/INTEGRATIONS.md.", baseUri);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

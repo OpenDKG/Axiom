@@ -2,6 +2,12 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.10.24
+
+- **Module cards no longer claim Axiom cannot start a module.** When DKG or Blackbox is not
+  running, the status now says to press **Start** in Axiom or use `dkg start`, matching the Start
+  button that has existed for both modules.
+
 ## What's in 0.10.23
 
 - **Hermes and Blackbox use one resolved profile path.** The reporter, consent check, mode store,
