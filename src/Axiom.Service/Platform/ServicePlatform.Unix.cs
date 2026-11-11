@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Core.Firewall;
+using Axiom.Core.Protection;
 using Axiom.Contracts.Monitoring;
 using Axiom.Infrastructure.MacOS;
+using Axiom.Infrastructure.MacOS.Diagnostics;
 using Axiom.Infrastructure.MacOS.Dns;
 using Axiom.Infrastructure.MacOS.Filter;
 using Axiom.Infrastructure.MacOS.Ipc;
@@ -43,6 +45,13 @@ internal static class ServicePlatform
             return true;
         }
 
+        if (args.Length > 0 &&
+            string.Equals(args[0], "--doctor", StringComparison.OrdinalIgnoreCase))
+        {
+            exitCode = MacDoctor.Run(args, Console.Out);
+            return true;
+        }
+
         return false;
     }
 
@@ -54,6 +63,7 @@ internal static class ServicePlatform
     public static void ConfigureServices(HostApplicationBuilder builder)
     {
         var paths = MacServicePaths.Default;
+        EnforceDataDirectoryPermissions(paths);
         builder.Services.AddSingleton(paths);
         builder.Services.AddSingleton<FilterStatus>();
         builder.Services.AddSingleton<FlowTable>();
@@ -65,6 +75,33 @@ internal static class ServicePlatform
         builder.Services.AddSingleton<MacFirewallPolicyAdapter>();
         builder.Services.AddSingleton<IFirewallPolicyAdapter>(provider => provider.GetRequiredService<MacFirewallPolicyAdapter>());
         builder.Services.AddSingleton<IPrivacyDnsPlatform>(_ => CreateDefaultPrivacyDnsPlatform());
-        builder.Services.AddSingleton<IIpcTransport>(provider => new UnixSocketIpcTransport(provider.GetRequiredService<MacServicePaths>()));
+        builder.Services.AddSingleton<IIpcTransport>(provider => new UnixSocketIpcTransport(
+            provider.GetRequiredService<MacServicePaths>(),
+            provider.GetRequiredService<ProtectionSettingsStore>()));
+    }
+
+    /// <summary>
+    /// The machine data directory is 0700 root with 0600 files (filter/ 0755, rules.json 0644 for
+    /// the extension). Applied on every daemon start so an older layout is tightened in place.
+    /// </summary>
+    private static void EnforceDataDirectoryPermissions(MacServicePaths paths)
+    {
+        if (!Environment.IsPrivilegedProcess)
+        {
+            return;
+        }
+
+        try
+        {
+            var changed = MacDataDirectoryPermissions.Enforce(paths.MachineDataDirectory);
+            if (changed.Count > 0)
+            {
+                Console.Error.WriteLine($"Data directory permissions: tightened {changed.Count} entries under {paths.MachineDataDirectory}.");
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Data directory permissions: {exception.Message}");
+        }
     }
 }
