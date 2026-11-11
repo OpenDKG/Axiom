@@ -18,6 +18,10 @@ The snapshot is written once. A second capture keeps the existing valid baseline
 overwriting it with state that may already have been changed. A corrupt or unreadable file is
 **not** replaced automatically: capture reports it and leaves it for the operator.
 
+Capture also refuses a missing baseline when Privacy Shield is enabled and the adapters already
+point only at the loopback resolver. Recording that state would make the outage look like the
+baseline; stop Privacy Shield before resetting the baseline.
+
 The previous per-user file `%LOCALAPPDATA%\Axiom\network-recovery.txt` is legacy. It is not read
 by the service and is not deleted automatically.
 

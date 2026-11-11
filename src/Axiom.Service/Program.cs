@@ -69,7 +69,8 @@ builder.Services.AddSingleton(provider => new NetworkRecoveryController(
     () => provider.GetRequiredService<ProtectionSettingsStore>().Load().Enabled,
     NetworkRecoverySnapshotStore.DefaultPath,
     provider.GetRequiredService<HistoryStore>(),
-    provider.GetRequiredService<ILogger<NetworkRecoveryController>>()));
+    provider.GetRequiredService<ILogger<NetworkRecoveryController>>(),
+    isLoopbackResolverExpected: () => provider.GetRequiredService<PrivacyShieldController>().IsEnabled));
 builder.Services.AddHostedService<NetworkRecoveryWorker>();
 builder.Services.AddSingleton<FirewallRuleCoordinator>();
 builder.Services.AddSingleton(new ProtectionSettingsStore());

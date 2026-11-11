@@ -19,6 +19,7 @@ public sealed partial class NetworkRecoveryController : IDisposable
     private readonly IOwnedRuleRecoveryAdapter _firewall;
     private readonly Func<bool> _isWriteAuthorized;
     private readonly Func<bool> _isProtectionActive;
+    private readonly Func<bool>? _isLoopbackResolverExpected;
     private readonly Func<DateTimeOffset> _clock;
     private readonly string _snapshotPath;
     private readonly HistoryStore? _history;
@@ -33,7 +34,8 @@ public sealed partial class NetworkRecoveryController : IDisposable
         string snapshotPath,
         HistoryStore? history = null,
         ILogger<NetworkRecoveryController>? logger = null,
-        Func<DateTimeOffset>? clock = null)
+        Func<DateTimeOffset>? clock = null,
+        Func<bool>? isLoopbackResolverExpected = null)
     {
         ArgumentNullException.ThrowIfNull(dns);
         ArgumentNullException.ThrowIfNull(firewall);
@@ -49,6 +51,7 @@ public sealed partial class NetworkRecoveryController : IDisposable
         _history = history;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<NetworkRecoveryController>.Instance;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
+        _isLoopbackResolverExpected = isLoopbackResolverExpected;
     }
 
     public string SnapshotPath => _snapshotPath;
@@ -125,6 +128,18 @@ public sealed partial class NetworkRecoveryController : IDisposable
             {
                 LogFailure(_logger, exception.Code, exception);
                 return CaptureFailure(NetworkRecoveryStatus.Failed, exception.Code, exception.Message);
+            }
+
+            // A missing baseline captured while the local resolver is expected would record the
+            // loopback address as the "good" state and restore the outage later.
+            if (_isLoopbackResolverExpected?.Invoke() == true &&
+                adapters.Any(adapter =>
+                    IsLoopbackOnly(adapter.Ipv4Servers) || IsLoopbackOnly(adapter.Ipv6Servers)))
+            {
+                return CaptureFailure(
+                    NetworkRecoveryStatus.Failed,
+                    "snapshot.loopback_state",
+                    "Adapter DNS already points at the Axiom loopback resolver. Stop Privacy Shield before resetting the recovery baseline.");
             }
 
             IReadOnlyList<ManagedRule> ownedRules;
@@ -481,6 +496,11 @@ public sealed partial class NetworkRecoveryController : IDisposable
         left.OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .SequenceEqual(right.OrderBy(value => value, StringComparer.OrdinalIgnoreCase),
                 StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsLoopbackOnly(IReadOnlyList<string> servers) =>
+        servers.Count > 0 &&
+        servers.All(server =>
+            System.Net.IPAddress.TryParse(server, out var address) && System.Net.IPAddress.IsLoopback(address));
 
     private static NetworkRecoveryCaptureResult CaptureResult(
         NetworkRecoveryStatus status,

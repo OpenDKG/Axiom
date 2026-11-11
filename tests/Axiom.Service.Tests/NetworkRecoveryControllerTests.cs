@@ -107,6 +107,29 @@ public sealed class NetworkRecoveryControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task Capture_refuses_a_baseline_that_only_points_at_the_loopback_resolver()
+    {
+        _dns.Adapters.Add(Adapter("Ethernet", staticV4: ["127.0.0.1"]));
+
+        var result = await Create(loopbackExpected: true).CaptureAsync(Actor, CancellationToken.None);
+
+        Assert.Equal(NetworkRecoveryStatus.Failed, result.Status);
+        Assert.Contains(result.Problems, problem => problem.Code == "snapshot.loopback_state");
+        Assert.False(File.Exists(_path));
+    }
+
+    [Fact]
+    public async Task Capture_still_saves_a_non_loopback_baseline_when_the_resolver_is_expected()
+    {
+        _dns.Adapters.Add(Adapter("Ethernet", staticV4: ["192.168.0.1"]));
+
+        var result = await Create(loopbackExpected: true).CaptureAsync(Actor, CancellationToken.None);
+
+        Assert.Equal(NetworkRecoveryStatus.Succeeded, result.Status);
+        Assert.True(File.Exists(_path));
+    }
+
+    [Fact]
     public async Task Capture_does_not_persist_when_firewall_capture_fails()
     {
         _firewall.FailList = true;
@@ -389,14 +412,15 @@ public sealed class NetworkRecoveryControllerTests : IDisposable
         Assert.Empty(_firewall.Removed);
     }
 
-    private NetworkRecoveryController Create(string? path = null) => new(
+    private NetworkRecoveryController Create(string? path = null, bool loopbackExpected = false) => new(
         _dns,
         _firewall,
         () => _writeAuthorized,
         () => _protectionActive,
         path ?? _path,
         logger: NullLogger<NetworkRecoveryController>.Instance,
-        clock: () => Now);
+        clock: () => Now,
+        isLoopbackResolverExpected: loopbackExpected ? () => true : null);
 
     private static NetworkAdapterDnsState Adapter(string alias, params string[] staticV4) => new()
     {
