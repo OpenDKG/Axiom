@@ -24,4 +24,9 @@
     <ProjectReference Include="..\..\src\Axiom.Infrastructure.MacOS\Axiom.Infrastructure.MacOS.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Shared with the Swift tests (macos/Tests/main.swift): the rule-semantics contract. -->
+    <None Include="..\..\macos\Tests\fixtures\rules-cases.json" Link="fixtures\rules-cases.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -73,56 +73,63 @@ public sealed class FilterRulesTests
         Assert.Null(FilterRuleTable.TryParse("not json"));
     }
 
+    /// <summary>Review #18: the shared fixture is the contract between the .NET reference matcher and the Swift filter.</summary>
+    private static JsonDocument LoadContract() =>
+        JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "fixtures", "rules-cases.json")));
+
     [Fact]
-    public void MatcherBlockWinsAndUnmatchedIsAllowed()
+    public void ContractFixtureRuleSetsMatchTheReferenceMatcher()
     {
-        var table = new FilterRuleTable
+        using var contract = LoadContract();
+        var checks = 0;
+        foreach (var set in contract.RootElement.GetProperty("ruleSets").EnumerateArray())
         {
-            Generation = 1,
-            Rules =
-            [
-                new FilterRule { Id = "allow", AppPath = "/Applications/Foo.app", Direction = "outbound", Action = "allow" },
-                new FilterRule
+            var setName = set.GetProperty("name").GetString();
+            var table = FilterRuleTable.TryParse(set.GetProperty("table").GetRawText());
+            Assert.True(table is not null, $"rule set '{setName}' must parse");
+
+            foreach (var item in set.GetProperty("cases").EnumerateArray())
+            {
+                var caseName = $"{setName} / {item.GetProperty("name").GetString()}";
+                var flow = item.GetProperty("flow");
+                var remote = flow.GetProperty("remoteAddress").ValueKind == JsonValueKind.Null
+                    ? null
+                    : IPAddress.Parse(flow.GetProperty("remoteAddress").GetString()!);
+                var facts = new FilterFlowFacts(
+                    flow.GetProperty("appPath").ValueKind == JsonValueKind.Null ? string.Empty : flow.GetProperty("appPath").GetString()!,
+                    flow.GetProperty("direction").GetString()!,
+                    flow.GetProperty("protocol").GetString()!,
+                    remote,
+                    flow.GetProperty("remotePort").GetInt32());
+
+                var verdict = FilterRuleMatcher.Evaluate(table!, facts);
+                Assert.True(item.GetProperty("action").GetString() == verdict.Action, $"{caseName}: expected {item.GetProperty("action").GetString()}, got {verdict.Action}");
+                if (item.TryGetProperty("ruleId", out var ruleId))
                 {
-                    Id = "block",
-                    AppPath = "/Applications/Foo.app",
-                    Direction = "outbound",
-                    Action = "block",
-                    Protocol = "tcp",
-                    RemoteAddresses = ["93.184.0.0/16"],
-                    RemotePorts = "443,8000-8080",
-                },
-                new FilterRule { Id = "off", AppPath = "*", Direction = "outbound", Action = "block", Enabled = false },
-            ],
-        };
+                    var expected = ruleId.ValueKind == JsonValueKind.Null ? null : ruleId.GetString();
+                    Assert.True(expected == verdict.Rule?.Id, $"{caseName}: expected rule {expected ?? "none"}, got {verdict.Rule?.Id ?? "none"}");
+                }
 
-        FilterFlowFacts Flow(string path, string protocol, string address, int port) =>
-            new(path, "outbound", protocol, IPAddress.Parse(address), port);
+                checks++;
+            }
+        }
 
-        var helper = "/Applications/Foo.app/Contents/MacOS/Foo Helper";
-        Assert.Equal("block", FilterRuleMatcher.Evaluate(table, Flow(helper, "tcp", "93.184.216.34", 443)).Action);
-        Assert.Equal("block", FilterRuleMatcher.Evaluate(table, Flow(helper, "tcp", "::ffff:93.184.216.34", 8080)).Action);
-        Assert.Equal("allow", FilterRuleMatcher.Evaluate(table, Flow(helper, "udp", "93.184.216.34", 443)).Action);
-        Assert.Equal("allow", FilterRuleMatcher.Evaluate(table, Flow(helper, "tcp", "93.185.1.1", 443)).Action);
-        Assert.Equal("allow", FilterRuleMatcher.Evaluate(table, Flow(helper, "tcp", "93.184.216.34", 22)).Action);
-        Assert.Equal("allow", FilterRuleMatcher.Evaluate(table, Flow("/Applications/Foo.application/x", "tcp", "93.184.216.34", 443)).Action);
-        var unmatched = FilterRuleMatcher.Evaluate(table, Flow("/usr/bin/curl", "tcp", "1.1.1.1", 443));
-        Assert.Equal("allow", unmatched.Action);
-        Assert.Null(unmatched.Rule);
+        Assert.True(checks >= 20, "the fixture lost cases");
     }
 
-    [Theory]
-    [InlineData("10.0.0.0/8", "10.200.1.1", true)]
-    [InlineData("10.0.0.0/8", "11.0.0.1", false)]
-    [InlineData("192.168.1.0/25", "192.168.1.127", true)]
-    [InlineData("192.168.1.0/25", "192.168.1.128", false)]
-    [InlineData("2001:db8::/32", "2001:db8:1::1", true)]
-    [InlineData("2001:db8::/32", "10.0.0.1", false)]
-    [InlineData("1.2.3.4", "1.2.3.4", true)]
-    [InlineData("1.2.3.4/33", "1.2.3.4", false)]
-    [InlineData("*", "8.8.8.8", true)]
-    public void AddressEntriesMatch(string entry, string address, bool expected) =>
-        Assert.Equal(expected, FilterRuleMatcher.AddressMatches([entry], IPAddress.Parse(address)));
+    [Fact]
+    public void ContractFixtureAddressEntriesMatchTheReferenceMatcher()
+    {
+        using var contract = LoadContract();
+        foreach (var item in contract.RootElement.GetProperty("addressEntries").EnumerateArray())
+        {
+            var entry = item.GetProperty("entry").GetString()!;
+            var address = IPAddress.Parse(item.GetProperty("address").GetString()!);
+            var expected = item.GetProperty("expected").GetBoolean();
+
+            Assert.True(expected == FilterRuleMatcher.AddressMatches([entry], address), $"{item.GetProperty("name").GetString()}: '{entry}' vs {address}");
+        }
+    }
 
     [Fact]
     public void AtomicWriteReplacesFileWithoutLeftovers()

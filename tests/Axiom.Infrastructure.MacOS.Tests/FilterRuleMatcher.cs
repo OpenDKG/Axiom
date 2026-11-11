@@ -3,7 +3,9 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 
-namespace Axiom.Infrastructure.MacOS.Filter;
+using Axiom.Infrastructure.MacOS.Filter;
+
+namespace Axiom.Infrastructure.MacOS.Tests;
 
 /// <summary>Flow facts a rule is evaluated against.</summary>
 public sealed record FilterFlowFacts(
@@ -17,12 +19,13 @@ public sealed record FilterFlowFacts(
 public sealed record FilterVerdict(string Action, FilterRule? Rule);
 
 /// <summary>
-/// Reference implementation of the rule semantics in docs/MACOS_ARCHITECTURE.md section 3.1. The
-/// AxiomFilter extension implements the same rules in Swift; the daemon uses this to verify a
-/// written table and to explain verdicts. Windows Firewall semantics: an enabled matching block
-/// rule wins over any allow rule; without a match traffic is allowed.
+/// Test-only reference implementation of the rule semantics in docs/MACOS_ARCHITECTURE.md
+/// section 3.1 (review #18: nothing in src uses it; the AxiomFilter extension implements the same
+/// rules in Swift). Both sides are checked against macos/Tests/fixtures/rules-cases.json so the
+/// contract cannot drift silently. Windows Firewall semantics: an enabled matching block rule wins
+/// over any allow rule; without a match traffic is allowed.
 /// </summary>
-public static class FilterRuleMatcher
+internal static class FilterRuleMatcher
 {
     public static FilterVerdict Evaluate(FilterRuleTable table, FilterFlowFacts flow)
     {
@@ -74,14 +77,14 @@ public static class FilterRuleMatcher
             return false;
         }
 
-        var normalized = rulePath.Trim();
-        if (string.Equals(normalized, flowPath, StringComparison.Ordinal))
+        // "/Applications/Foo.app/" (directory form) still matches the bundle path itself.
+        var normalized = rulePath.Trim().TrimEnd('/');
+        if (normalized.Length == 0 || string.Equals(normalized, flowPath, StringComparison.Ordinal))
         {
             return true;
         }
 
-        var prefix = normalized.TrimEnd('/') + "/";
-        return flowPath.StartsWith(prefix, StringComparison.Ordinal);
+        return flowPath.StartsWith(normalized + "/", StringComparison.Ordinal);
     }
 
     /// <summary><c>icmp</c> rules are carried in the table but are not filtered yet.</summary>
@@ -164,13 +167,30 @@ public static class FilterRuleMatcher
         var slash = entry.IndexOf('/', StringComparison.Ordinal);
         if (slash < 0)
         {
+            var dash = entry.IndexOf('-', StringComparison.Ordinal);
+            if (dash > 0)
+            {
+                return RangeContains(entry[..dash], entry[(dash + 1)..], remote);
+            }
+
             return IPAddress.TryParse(entry, out var single) &&
                    (single.IsIPv4MappedToIPv6 ? single.MapToIPv4() : single).Equals(remote);
         }
 
         if (!IPAddress.TryParse(entry[..slash], out var network) ||
-            !int.TryParse(entry[(slash + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out var prefixLength) ||
-            network.AddressFamily != remote.AddressFamily)
+            !int.TryParse(entry[(slash + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out var prefixLength))
+        {
+            return false;
+        }
+
+        if (network.IsIPv4MappedToIPv6)
+        {
+            // "::ffff:10.0.0.0/104" is the v4 network 10.0.0.0/8.
+            network = network.MapToIPv4();
+            prefixLength -= 96;
+        }
+
+        if (network.AddressFamily != remote.AddressFamily)
         {
             return false;
         }
@@ -200,5 +220,28 @@ public static class FilterRuleMatcher
 
         var mask = (byte)(0xFF << (8 - remainingBits));
         return (networkBytes[fullBytes] & mask) == (remoteBytes[fullBytes] & mask);
+    }
+
+    /// <summary>Inclusive "low-high" range of the same family; a reversed range matches nothing.</summary>
+    private static bool RangeContains(string lowText, string highText, IPAddress remote)
+    {
+        if (!IPAddress.TryParse(lowText.Trim(), out var low) || !IPAddress.TryParse(highText.Trim(), out var high))
+        {
+            return false;
+        }
+
+        low = low.IsIPv4MappedToIPv6 ? low.MapToIPv4() : low;
+        high = high.IsIPv4MappedToIPv6 ? high.MapToIPv4() : high;
+        if (low.AddressFamily != remote.AddressFamily || high.AddressFamily != remote.AddressFamily)
+        {
+            return false;
+        }
+
+        var lowBytes = low.GetAddressBytes();
+        var highBytes = high.GetAddressBytes();
+        var remoteBytes = remote.GetAddressBytes();
+        return lowBytes.AsSpan().SequenceCompareTo(highBytes) <= 0 &&
+               lowBytes.AsSpan().SequenceCompareTo(remoteBytes) <= 0 &&
+               remoteBytes.AsSpan().SequenceCompareTo(highBytes) <= 0;
     }
 }
