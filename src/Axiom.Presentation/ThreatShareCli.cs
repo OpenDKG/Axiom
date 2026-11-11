@@ -76,9 +76,7 @@ public sealed class ThreatShareCli
                 start.ArgumentList.Add(argument);
             }
 
-            start.Environment["HERMES_HOME"] = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "hermes");
+            start.Environment[BlackboxPaths.HermesHomeVariable] = BlackboxPaths.ResolveHermesHome();
 
             using var process = Process.Start(start);
             if (process is null)
@@ -137,12 +135,18 @@ public sealed class ThreatShareCli
         text.Contains("severity too low", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>True when the user's Blackbox profile already holds the reporter-terms consent.</summary>
-    public static bool ConsentPresent() =>
-        File.Exists(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "hermes",
-            "blackbox",
-            "sharing_consent.json"));
+    public static bool ConsentPresent() => File.Exists(BlackboxPaths.ConsentPath());
+
+    /// <summary>Shows which profile the reporter will use and whether its key and consent exist.</summary>
+    public static string DescribeReporterProfile()
+    {
+        var hermes = BlackboxPaths.ResolveHermesHome();
+        var blackbox = BlackboxPaths.ResolveBlackboxHome();
+        var consent = File.Exists(Path.Combine(blackbox, "sharing_consent.json"));
+        var key = File.Exists(Path.Combine(blackbox, "reporter_key.pem"));
+        return $"Reporter profile: {hermes}. Consent {(consent ? "present" : "missing")}, " +
+               $"reporter key {(key ? "present" : "missing")}.";
+    }
 
     private static string? DefaultHermesPath()
     {
