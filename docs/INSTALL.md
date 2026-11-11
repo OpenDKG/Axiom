@@ -14,7 +14,9 @@ The **core portable installer** can install the desktop application for the curr
 without administrator rights, Windows service registration, a driver or firewall changes.
 **Complete installation is different:** it can download and install DKG, Blackbox and agent hooks
 with separate prerequisites, terms, prompts and network access. Later enabling **Axiom Shield**
-requires an explicit administrator approval to install the privileged Windows service. The recommended GitHub release asset is `Axiom-Setup.exe`: a single self-contained setup
+requires an explicit administrator approval to install the privileged Windows service.
+
+The recommended GitHub release asset is `Axiom-Setup.exe`: a single self-contained setup
 executable with the desktop and service payload embedded. Double-click it, keep or change the two
 options, and click **Install Axiom**. It installs for the current user, creates a Start Menu
 shortcut, and starts the application. No .NET runtime, administrator rights, service registration or
