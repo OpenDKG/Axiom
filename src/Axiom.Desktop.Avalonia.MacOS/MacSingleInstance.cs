@@ -78,6 +78,27 @@ internal sealed class MacSingleInstance : IDisposable
         }
     }
 
+    /// <summary>
+    /// Delay before the one retry of <see cref="SignalExistingAsync"/>: the first instance holds
+    /// the lock a moment before its show socket is bound (review #21).
+    /// </summary>
+    public static readonly TimeSpan SignalRetryDelay = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>
+    /// <see cref="SignalExisting"/> with one retry after <paramref name="retryDelay"/> for the
+    /// window between the other instance's TryAcquire and Listen.
+    /// </summary>
+    public async Task<bool> SignalExistingAsync(TimeSpan retryDelay, CancellationToken cancellationToken = default)
+    {
+        if (SignalExisting())
+        {
+            return true;
+        }
+
+        await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
+        return SignalExisting();
+    }
+
     /// <summary>Asks the running instance to show its window. Returns true on delivery.</summary>
     public bool SignalExisting()
     {

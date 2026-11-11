@@ -84,6 +84,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             interaction,
             dnsAdapterHelper ?? new UnsupportedDnsAdapterHelper(),
             timers);
+        Overview.ProtectionActive = () => PrivacyShield.IsResolverActive || Firewall.WritesEnabled;
         Security = new SecurityPageViewModel(
             interaction,
             securityDialogs ?? new UnsupportedSecurityDialogs(),

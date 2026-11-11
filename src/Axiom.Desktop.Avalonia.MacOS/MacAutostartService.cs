@@ -7,19 +7,32 @@ namespace Axiom.Desktop.Avalonia.MacOS;
 
 /// <summary>
 /// Per-user login item as a LaunchAgent: <c>~/Library/LaunchAgents/com.axiom.firewall.agent.plist</c>
-/// runs <c>Axiom --autostart</c> at login in the GUI (Aqua) session. Only that one file is written
-/// or removed; no machine-wide launchd job is touched (the daemon has its own plist).
+/// starts Axiom at login in the GUI (Aqua) session. Only that one file is written or removed; no
+/// machine-wide launchd job is touched (the daemon has its own plist).
+/// <para>
+/// Review #15: a quarantined app runs from an app-translocation path that changes on every launch,
+/// so pinning <c>Environment.ProcessPath</c> breaks the login item. When the app runs from a bundle
+/// (LaunchServices registered it at launch) the agent runs
+/// <c>/usr/bin/open -b com.axiom.firewall --args --autostart</c> instead, which resolves the bundle
+/// wherever it lives; the executable path is only pinned when there is no bundle to register.
+/// </para>
 /// </summary>
 public sealed class MacAutostartService : IAutostartService
 {
     public const string Label = "com.axiom.firewall.agent";
 
+    public const string BundleId = "com.axiom.firewall";
+
+    public const string OpenPath = "/usr/bin/open";
+
     private readonly string _executablePath;
     private readonly string _plistPath;
+    private readonly bool _bundleRegistered;
 
-    public MacAutostartService(string? executablePath = null, string? launchAgentsDirectory = null)
+    public MacAutostartService(string? executablePath = null, string? launchAgentsDirectory = null, bool? bundleRegistered = null)
     {
         _executablePath = executablePath ?? Environment.ProcessPath ?? string.Empty;
+        _bundleRegistered = bundleRegistered ?? MacBundleLayout.Current.IsInsideAppBundle;
         _plistPath = Path.Combine(
             launchAgentsDirectory ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -30,7 +43,7 @@ public sealed class MacAutostartService : IAutostartService
 
     public string PlistPath => _plistPath;
 
-    public bool IsSupported => _executablePath.Length > 0;
+    public bool IsSupported => _executablePath.Length > 0 || _bundleRegistered;
 
     public bool IsEnabled => Read() is AutostartState.Enabled or AutostartState.Stale;
 
@@ -48,10 +61,24 @@ public sealed class MacAutostartService : IAutostartService
 
     public bool Repair() => Enable();
 
+    /// <summary>The ProgramArguments this host would write now.</summary>
+    public IReadOnlyList<string> ProgramArguments => _bundleRegistered
+        ? [OpenPath, "-b", BundleId, "--args", "--autostart"]
+        : [_executablePath, "--autostart"];
+
+    /// <summary>Launches the registered bundle by id; the login item survives moves and translocation.</summary>
+    public static string BuildPlist() => BuildPlist([OpenPath, "-b", BundleId, "--args", "--autostart"]);
+
+    /// <summary>Pins an executable path (only when no bundle is registered).</summary>
     public static string BuildPlist(string executablePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
-        var path = SecurityElement.Escape(executablePath);
+        return BuildPlist([executablePath, "--autostart"]);
+    }
+
+    private static string BuildPlist(IReadOnlyList<string> programArguments)
+    {
+        var arguments = string.Join('\n', programArguments.Select(argument => $"        <string>{SecurityElement.Escape(argument)}</string>"));
         return $"""
             <?xml version="1.0" encoding="UTF-8"?>
             <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -61,8 +88,7 @@ public sealed class MacAutostartService : IAutostartService
                 <string>{Label}</string>
                 <key>ProgramArguments</key>
                 <array>
-                    <string>{path}</string>
-                    <string>--autostart</string>
+            {arguments}
                 </array>
                 <key>RunAtLoad</key>
                 <true/>
@@ -77,7 +103,10 @@ public sealed class MacAutostartService : IAutostartService
     }
 
     /// <summary>First ProgramArguments entry of an existing plist, or null.</summary>
-    internal static string? ReadProgram(string plistXml)
+    internal static string? ReadProgram(string plistXml) => ReadProgramArguments(plistXml) is { Count: > 0 } arguments ? arguments[0] : null;
+
+    /// <summary>ProgramArguments of an existing plist, or null when unreadable.</summary>
+    internal static IReadOnlyList<string>? ReadProgramArguments(string plistXml)
     {
         try
         {
@@ -95,10 +124,12 @@ public sealed class MacAutostartService : IAutostartService
             foreach (XmlNode key in keys)
             {
                 if (key.InnerText == "ProgramArguments" &&
-                    key.NextSibling is XmlElement { Name: "array" } array &&
-                    array.SelectSingleNode("string") is { } first)
+                    key.NextSibling is XmlElement { Name: "array" } array)
                 {
-                    return first.InnerText;
+                    return array.ChildNodes.OfType<XmlElement>()
+                        .Where(element => element.Name == "string")
+                        .Select(element => element.InnerText)
+                        .ToArray();
                 }
             }
 
@@ -124,8 +155,8 @@ public sealed class MacAutostartService : IAutostartService
                 return AutostartState.Disabled;
             }
 
-            var program = ReadProgram(File.ReadAllText(_plistPath));
-            return string.Equals(program, _executablePath, StringComparison.Ordinal)
+            var arguments = ReadProgramArguments(File.ReadAllText(_plistPath));
+            return arguments is not null && arguments.SequenceEqual(ProgramArguments, StringComparer.Ordinal)
                 ? AutostartState.Enabled
                 : AutostartState.Stale;
         }
@@ -146,7 +177,7 @@ public sealed class MacAutostartService : IAutostartService
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_plistPath)!);
             var temporary = _plistPath + ".tmp";
-            File.WriteAllText(temporary, BuildPlist(_executablePath));
+            File.WriteAllText(temporary, BuildPlist(ProgramArguments));
             File.Move(temporary, _plistPath, overwrite: true);
             return Read() == AutostartState.Enabled;
         }

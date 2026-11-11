@@ -38,6 +38,8 @@ public sealed class MacDnsConfigurator
 
     private const string DsCacheUtil = "/usr/bin/dscacheutil";
 
+    private const string Ifconfig = "/sbin/ifconfig";
+
     private static readonly TimeSpan ToolTimeout = TimeSpan.FromSeconds(15);
 
     private static readonly JsonSerializerOptions BackupJson = new(JsonSerializerDefaults.Web) { WriteIndented = true };
@@ -156,16 +158,52 @@ public sealed class MacDnsConfigurator
         return addresses.Take(4).Select(address => new IPEndPoint(address, 53)).ToArray();
     }
 
-    /// <summary>Saves the current DNS of every enabled service, then points them at 127.0.0.1.</summary>
+    /// <summary>
+    /// Enabled services whose interface has an active link (review #25). A service with no known
+    /// device or no <c>status:</c> line stays in the list: redirecting an idle service is harmless,
+    /// missing a live one is not. Restore still covers every service in the backup.
+    /// </summary>
+    public IReadOnlyList<NetworkServiceEntry> ListActiveServices()
+    {
+        var enabled = ListServices().Where(service => service.Enabled).ToList();
+        var order = _runner.Run(NetworkSetup, ["-listnetworkserviceorder"], ToolTimeout);
+        var devices = order.Succeeded
+            ? NetworkSetupParser.ParseServiceOrder(order.StandardOutput).ToDictionary(entry => entry.Name, entry => entry.Device, StringComparer.Ordinal)
+            : new Dictionary<string, string>(StringComparer.Ordinal);
+
+        var active = new List<NetworkServiceEntry>();
+        foreach (var service in enabled)
+        {
+            if (!devices.TryGetValue(service.Name, out var device))
+            {
+                active.Add(service);
+                continue;
+            }
+
+            var ifconfig = _runner.Run(Ifconfig, [device], ToolTimeout);
+            var state = ifconfig.Succeeded ? NetworkSetupParser.ParseInterfaceActive(ifconfig.StandardOutput) : null;
+            if (state == false)
+            {
+                Log($"redirect: skipping '{service.Name}' ({device}): interface inactive");
+                continue;
+            }
+
+            active.Add(service);
+        }
+
+        return active;
+    }
+
+    /// <summary>Saves the current DNS of every active service, then points them at 127.0.0.1.</summary>
     public RedirectResult Redirect()
     {
         lock (_gate)
         {
-            var services = ListServices().Where(service => service.Enabled).ToList();
+            var services = ListActiveServices();
             Log($"redirect: services={string.Join(", ", services.Select(service => service.Name))}");
             if (services.Count == 0)
             {
-                return new RedirectResult(false, [], "No enabled network service was found.");
+                return new RedirectResult(false, [], "No enabled network service with an active interface was found.");
             }
 
             var previous = ReadBackup();

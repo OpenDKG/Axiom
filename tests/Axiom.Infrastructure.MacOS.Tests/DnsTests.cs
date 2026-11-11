@@ -74,6 +74,66 @@ public sealed class DnsTests
     }
 
     [Fact]
+    public void ParsesServiceOrderAndInterfaceStatus()
+    {
+        const string order = """
+            An asterisk (*) denotes that a network service is disabled.
+            (1) Ethernet
+            (Hardware Port: Ethernet, Device: en0)
+
+            (2) Thunderbolt Bridge
+            (Hardware Port: Thunderbolt Bridge, Device: bridge0)
+
+            (*) Bluetooth PAN
+            (Hardware Port: Bluetooth PAN, Device: en5)
+
+            """;
+
+        Assert.Equal(
+            [("Ethernet", "en0"), ("Thunderbolt Bridge", "bridge0"), ("Bluetooth PAN", "en5")],
+            NetworkSetupParser.ParseServiceOrder(order).Select(entry => (entry.Name, entry.Device)));
+        Assert.True(NetworkSetupParser.ParseInterfaceActive("en0: flags=8863<UP,BROADCAST> mtu 1500\n\tinet 10.0.2.15\n\tstatus: active\n"));
+        Assert.False(NetworkSetupParser.ParseInterfaceActive("bridge0: flags=8863<UP> mtu 1500\n\tstatus: inactive\n"));
+        Assert.Null(NetworkSetupParser.ParseInterfaceActive("lo0: flags=8049<UP,LOOPBACK> mtu 16384\n"));
+    }
+
+    [Fact]
+    public void RedirectSkipsServicesWithAnInactiveInterfaceButRestoreCoversAll()
+    {
+        using var temp = new TempDirectory();
+        var dns = new Dictionary<string, string> { ["Ethernet"] = "10.0.2.3", ["Thunderbolt Bridge"] = "", ["Wi-Fi"] = "" };
+        var runner = new FakeRunner()
+            .On("networksetup -listallnetworkservices", "An asterisk (*) denotes that a network service is disabled.\nEthernet\nThunderbolt Bridge\nWi-Fi\n")
+            .On("networksetup -listnetworkserviceorder", "(1) Ethernet\n(Hardware Port: Ethernet, Device: en0)\n\n(2) Thunderbolt Bridge\n(Hardware Port: Thunderbolt Bridge, Device: bridge0)\n")
+            .On("ifconfig en0", "en0: flags=8863<UP> mtu 1500\n\tstatus: active\n")
+            .On("ifconfig bridge0", "bridge0: flags=8863<UP> mtu 1500\n\tstatus: inactive\n")
+            .On("scutil --dns", "resolver #1\n  nameserver[0] : 10.0.2.3\n")
+            .On("networksetup -getdnsservers", arguments => new ProcessResult(0, dns[arguments[1]].Length == 0 ? $"There aren't any DNS Servers set on {arguments[1]}.\n" : dns[arguments[1]] + "\n", string.Empty))
+            .On("networksetup -setdnsservers", arguments =>
+            {
+                dns[arguments[1]] = arguments[2] == "Empty" ? string.Empty : string.Join(' ', arguments.Skip(2));
+                return new ProcessResult(0, string.Empty, string.Empty);
+            });
+        var configurator = new MacDnsConfigurator(runner, Path.Combine(temp.Path, "backup.json"));
+
+        var result = configurator.Redirect();
+
+        // Ethernet (active) and Wi-Fi (no device known: conservative) are redirected; the inactive bridge is not.
+        Assert.Equal(["Ethernet", "Wi-Fi"], result.Services);
+        Assert.Equal("127.0.0.1", dns["Ethernet"]);
+        Assert.Equal("127.0.0.1", dns["Wi-Fi"]);
+        Assert.Equal("", dns["Thunderbolt Bridge"]);
+        Assert.Equal(["Ethernet", "Wi-Fi"], configurator.ReadBackup()!.Services.Select(service => service.Name));
+
+        // Restore walks every enabled service, including one redirected by hand meanwhile.
+        dns["Thunderbolt Bridge"] = "127.0.0.1";
+        Assert.True(configurator.RestoreIfNeeded());
+        Assert.Equal("10.0.2.3", dns["Ethernet"]);
+        Assert.Equal("", dns["Wi-Fi"]);
+        Assert.Equal("", dns["Thunderbolt Bridge"]);
+    }
+
+    [Fact]
     public void RedirectSavesBackupAndRestoreRevertsIt()
     {
         using var temp = new TempDirectory();

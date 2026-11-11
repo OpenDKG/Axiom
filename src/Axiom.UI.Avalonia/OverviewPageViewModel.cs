@@ -46,6 +46,16 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     /// <summary>Agent/audit surface shown on Overview, as in the WPF application.</summary>
     public AgentsPageViewModel? AgentActivity { get; set; }
 
+    /// <summary>
+    /// Whether protection is active (Privacy Shield resolver running or firewall writes enabled);
+    /// null keeps the plain read-only wording. Set by the shell; polled on every refresh.
+    /// </summary>
+    public Func<bool>? ProtectionActive { get; set; }
+
+    public const string ReadOnlyStatus = "Read-only inventory. No driver, no firewall write, no telemetry.";
+
+    public const string ProtectionActiveStatus = "Protection active: firewall writes enabled; Privacy Shield and rules apply. No telemetry.";
+
     public void Activate() => AgentActivity?.Activate();
 
     public void Deactivate() => AgentActivity?.Deactivate();
@@ -294,7 +304,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         BucketLabel = _traffic.BucketLabel;
         RangeNote = _traffic.RangeNote;
         StatusText = _monitor.LastError is null
-            ? "Read-only inventory. No driver, no firewall write, no telemetry."
+            ? ProtectionActive?.Invoke() == true ? ProtectionActiveStatus : ReadOnlyStatus
             : $"Monitor unavailable: {_monitor.LastError}";
 
         UpdateLiveCounters();

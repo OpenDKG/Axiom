@@ -212,6 +212,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private readonly IUiTimer? _statsTimer;
     private bool _updating;
     private bool _resolverActive;
+
+    /// <summary>True while the service reports the resolver as running (Overview wording).</summary>
+    public bool IsResolverActive => _resolverActive;
     private bool _statsRefreshing;
     private readonly HashSet<string> _expandedHistoryApps = new(StringComparer.OrdinalIgnoreCase);
     private string? _blockedHistorySignature;

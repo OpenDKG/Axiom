@@ -127,7 +127,7 @@ public sealed class MacAutostartServiceTests : IDisposable
     public void Enable_writes_a_launch_agent_with_autostart_and_disable_removes_it()
     {
         const string executable = "/Applications/Axiom.app/Contents/MacOS/Axiom";
-        var service = new MacAutostartService(executable, _directory);
+        var service = new MacAutostartService(executable, _directory, bundleRegistered: false);
 
         Assert.False(service.IsEnabled);
         Assert.True(service.SetEnabled(true));
@@ -149,13 +149,39 @@ public sealed class MacAutostartServiceTests : IDisposable
     [Fact]
     public void A_moved_app_is_reported_stale_and_repair_rewrites_the_path()
     {
-        new MacAutostartService("/Users/me/Downloads/Axiom.app/Contents/MacOS/Axiom", _directory).SetEnabled(true);
-        var service = new MacAutostartService("/Applications/Axiom.app/Contents/MacOS/Axiom", _directory);
+        new MacAutostartService("/Users/me/Downloads/Axiom.app/Contents/MacOS/Axiom", _directory, bundleRegistered: false).SetEnabled(true);
+        var service = new MacAutostartService("/Applications/Axiom.app/Contents/MacOS/Axiom", _directory, bundleRegistered: false);
 
         Assert.True(service.IsEnabled);
         Assert.True(service.CanRepair);
         Assert.True(service.Repair());
         Assert.False(service.CanRepair);
+    }
+
+    [Fact]
+    public void A_registered_bundle_is_launched_by_id_so_translocation_cannot_break_the_login_item()
+    {
+        // Quarantined apps run from /private/var/folders/.../AppTranslocation/<uuid>/d/Axiom.app.
+        const string translocated = "/private/var/folders/x1/AppTranslocation/0B1C/d/Axiom.app/Contents/MacOS/Axiom";
+        var service = new MacAutostartService(translocated, _directory, bundleRegistered: true);
+
+        Assert.True(service.SetEnabled(true));
+        var plist = File.ReadAllText(service.PlistPath);
+        Assert.Equal(
+            ["/usr/bin/open", "-b", "com.axiom.firewall", "--args", "--autostart"],
+            MacAutostartService.ReadProgramArguments(plist));
+        Assert.DoesNotContain("AppTranslocation", plist, StringComparison.Ordinal);
+        Assert.Equal("Autostart: active (login item)", service.StatusText);
+
+        // A plist written by an older build (pinned path) is stale and repair upgrades it.
+        File.WriteAllText(service.PlistPath, MacAutostartService.BuildPlist("/Applications/Axiom.app/Contents/MacOS/Axiom"));
+        Assert.True(service.CanRepair);
+        Assert.True(service.Repair());
+        Assert.Equal("/usr/bin/open", MacAutostartService.ReadProgram(File.ReadAllText(service.PlistPath)));
+
+        // Without a registered bundle (bare executable) the path fallback stays.
+        var bare = new MacAutostartService("/opt/axiom/Axiom", _directory, bundleRegistered: false);
+        Assert.Equal(["/opt/axiom/Axiom", "--autostart"], bare.ProgramArguments);
     }
 
     [Fact]

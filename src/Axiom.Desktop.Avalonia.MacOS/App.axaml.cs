@@ -22,6 +22,8 @@ public partial class App : Application
     private MacProtectionSetup? _protection;
     private NativeMenuItem? _daemonStatusItem;
     private NativeMenuItem? _filterStatusItem;
+    private readonly List<NativeMenuItem> _installItems = [];
+    private readonly List<NativeMenuItem> _activateItems = [];
     private readonly CancellationTokenSource _cancellation = new();
     private volatile bool _allowExit;
 
@@ -52,10 +54,12 @@ public partial class App : Application
             "startup",
             $"Axiom {typeof(App).Assembly.GetName().Version} pid={Environment.ProcessId} base={AppContext.BaseDirectory}");
 
+        // Lock and show-socket first, before anything heavy, so a second launch finds the socket
+        // as early as possible; the second launch retries once after 300 ms for the remaining gap.
         _singleInstance = new MacSingleInstance();
         if (!_singleInstance.TryAcquire())
         {
-            var delivered = _singleInstance.SignalExisting();
+            var delivered = _singleInstance.SignalExistingAsync(MacSingleInstance.SignalRetryDelay).GetAwaiter().GetResult();
             StartupLog.Write("startup", $"Another Axiom instance is running; show signal delivered={delivered}.");
             _singleInstance = null;
             desktop.Shutdown();
@@ -274,6 +278,31 @@ public partial class App : Application
         {
             _filterStatusItem.Header = _protection.FilterSummary;
         }
+
+        // Review #25: once the service runs / the filter is on, the action items read as state.
+        var daemonRunning = _protection.Daemon == DaemonState.Running;
+        var filterRunning = _protection.Filter is { IsRunning: true };
+        foreach (var item in _installItems)
+        {
+            item.Header = MenuHeaders.Install(daemonRunning);
+            item.IsEnabled = !daemonRunning;
+        }
+
+        foreach (var item in _activateItems)
+        {
+            item.Header = MenuHeaders.Activate(filterRunning);
+            item.IsEnabled = !filterRunning;
+        }
+    }
+
+    /// <summary>Menu wording for the two setup actions (pure; unit-tested).</summary>
+    public static class MenuHeaders
+    {
+        public static string Install(bool daemonRunning) =>
+            daemonRunning ? "Service: running" : "Install Background Service…";
+
+        public static string Activate(bool filterRunning) =>
+            filterRunning ? "Filter: on" : "Turn On Network Filter…";
     }
 
     /// <summary>The application menu next to the Apple menu. Avalonia appends Hide/Quit itself.</summary>
@@ -286,12 +315,14 @@ public partial class App : Application
             about.Click += (_, _) => ShowAbout();
             menu.Add(about);
             menu.Add(new NativeMenuItemSeparator());
-            var install = new NativeMenuItem("Install Background Service…");
+            var install = new NativeMenuItem(MenuHeaders.Install(false));
             install.Click += (_, _) => InstallDaemon();
             menu.Add(install);
-            var filter = new NativeMenuItem("Turn On Network Filter…");
+            _installItems.Add(install);
+            var filter = new NativeMenuItem(MenuHeaders.Activate(false));
             filter.Click += (_, _) => ActivateFilter();
             menu.Add(filter);
+            _activateItems.Add(filter);
             NativeMenu.SetMenu(this, menu);
             _ = desktop;
         }
@@ -322,10 +353,12 @@ public partial class App : Application
 
             _daemonStatusItem = new NativeMenuItem("Background service: checking…") { IsEnabled = false };
             _filterStatusItem = new NativeMenuItem("Network filter: checking…") { IsEnabled = false };
-            var installItem = new NativeMenuItem("Install Background Service…");
+            var installItem = new NativeMenuItem(MenuHeaders.Install(false));
             installItem.Click += (_, _) => InstallDaemon();
-            var filterItem = new NativeMenuItem("Turn On Network Filter…");
+            _installItems.Add(installItem);
+            var filterItem = new NativeMenuItem(MenuHeaders.Activate(false));
             filterItem.Click += (_, _) => ActivateFilter();
+            _activateItems.Add(filterItem);
 
             var notificationsItem = new NativeMenuItem("Show problem notifications")
             {
