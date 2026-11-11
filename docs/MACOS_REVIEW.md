@@ -5,7 +5,10 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
 
 ## Critical
 
-1. **Root daemon runs a user-owned binary.** [verified] `LaunchdServiceInstaller.cs:72` points `ProgramArguments`
+1. **Root daemon runs a user-owned binary.** [verified] [FIXED 1388da4: `--install-service` copies the publish dir to
+   `/Library/PrivilegedHelperTools/com.axiom.service` (root:wheel, 0755/0644), verifies owner/mode with `stat` and
+   refuses to bootstrap otherwise; plist points there; `--uninstall-service` removes it and restores DNS; see
+   MACOS_ARCHITECTURE.md §5.3 and MACOS_TEST_REPORT.md "Hardening".] `LaunchdServiceInstaller.cs:72` points `ProgramArguments`
    at `Environment.ProcessPath` = `/Applications/Axiom.app/Contents/Resources/service/axiomd`; in the VM that file
    is `dev:staff 0755`. launchd checks the plist owner, not the program. Any process of the installing user can
    replace `axiomd` or a neighbouring `.dll`/`.dylib` and get root at the next restart. Windows is safe because
@@ -16,13 +19,18 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
 
 ## High
 
-2. **Any local uid >= 501 can drive machine-wide state.** `PeerAuthorization.cs`, socket mode 0666. A standard
+2. **Any local uid >= 501 can drive machine-wide state.** [FIXED afb60ba: write commands only for root, the
+   installing uid (`ProtectionSettings.AllowedUid`, recorded by `--install-service`) and `admin` group members
+   (`AllowAdminGroupWrites`, default true); every IPC command is classified in `IpcCommandAccess` (test-enforced,
+   unknown = write); other users get `unauthorized` and the denial is logged; see §5.4.] `PeerAuthorization.cs`, socket mode 0666. A standard
    account can `privacy_configure` with an attacker upstream (DNS hijack for all users), apply/remove rules for every
    user, toggle protection, and read all users' history. Windows restricts to one persisted SID.
    Fix now: write commands only for the installing uid (persist like `AllowedSid`) or `admin` group members;
    read commands for uid >= 501. Later: authorize by code-signing identity (audit token -> `SecCodeCopyGuestWithAttributes`
    -> TeamID/bundle requirement) or launchd socket activation + XPC.
-3. **Machine data directory is world-readable.** [verified] `axiom.db`, `-wal`, `-shm`, managed-rules.json are
+3. **Machine data directory is world-readable.** [verified] [FIXED 0f31d68: data root 0700, `filter/` 0755,
+   `rules.json` 0644, every other daemon file 0600 — enforced at daemon start (`MacDataDirectoryPermissions`) and at
+   write time (mode set on the temp file before the atomic rename; SQLite db/-wal/-shm after open); docs fixed.] `axiom.db`, `-wal`, `-shm`, managed-rules.json are
    `root:admin 0644`; `FilterRulesFile.PublishedMode` 0644 is also used for the DNS backup although the docs say
    0600. Fix: data root 0700 (`filter/` 0755 for the extension), `UnixCreateMode` on every store write, fix docs.
 4. **Developer ID activation path unproven.** `build.sh` signs `axiom-sysext` as a secondary executable with
@@ -109,3 +117,6 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
    seams, PlatformText/AgentPlatform); (b) Infrastructure.MacOS + tests; (c) Service dual-TFM; (d) Desktop host;
    (e) UI fixes; (f) Swift extension + packaging.
 6. `axiomd --doctor`: prints socket modes, owners, DNS backup state, launchd status. Would have caught #1, #3, #8.
+   [DONE ba292ef: `axiomd --doctor [--json]` — launchd state/program, plist target+owner, helper dir audit, socket
+   modes, data root and per-file modes, DNS per service + backup, Privacy Shield state, filter extension; exit 0 only
+   when every check passes; root-only checks are SKIP for a normal user.]
