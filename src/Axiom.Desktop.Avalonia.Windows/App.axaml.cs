@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
@@ -139,6 +142,7 @@ public partial class App : Application
             };
 
             _shell.Start();
+            StartNetworkRecovery(networkRecovery);
 
             var autostartArgument = HasArgument(arguments, "--autostart");
             var startMinimized = HasArgument(arguments, "--start-minimized") ||
@@ -181,6 +185,87 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    private DispatcherTimer? _networkWatchdogTimer;
+    private int _networkProbeFailures;
+
+    /// <summary>
+    /// Captures a baseline at launch, rolls back immediately when the active protection left the
+    /// loopback resolver unreachable, and watches for the same condition while the app runs.
+    /// </summary>
+    private void StartNetworkRecovery(NetworkRecoveryService recovery)
+    {
+        var snapshot = NetworkRecoveryStore.Load();
+        if (snapshot.IsEmpty)
+        {
+            snapshot = recovery.Capture(NetworkUsesLoopbackDns());
+        }
+
+        if (snapshot.ProtectionWasActive && !LoopbackDnsResponds())
+        {
+            SafeRestore(recovery, snapshot);
+        }
+
+        _networkWatchdogTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        _networkWatchdogTimer.Tick += (_, _) =>
+        {
+            if (!NetworkUsesLoopbackDns() || LoopbackDnsResponds())
+            {
+                _networkProbeFailures = 0;
+                return;
+            }
+
+            _networkProbeFailures++;
+            if (_networkProbeFailures < 2)
+            {
+                return;
+            }
+
+            _networkProbeFailures = 0;
+            SafeRestore(recovery, NetworkRecoveryStore.Load());
+            _networkWatchdogTimer?.Stop();
+        };
+        _networkWatchdogTimer.Start();
+    }
+
+    private static void SafeRestore(NetworkRecoveryService recovery, NetworkRecoverySnapshot snapshot)
+    {
+        try
+        {
+            recovery.Restore(snapshot);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException)
+        {
+            // Recovery is best-effort; the user can still use the Settings action.
+        }
+    }
+
+    private static bool NetworkUsesLoopbackDns()
+    {
+        try
+        {
+            return NetworkInterface.GetAllNetworkInterfaces().Any(network =>
+                network.OperationalStatus == OperationalStatus.Up
+                && network.GetIPProperties().DnsAddresses.Any(IPAddress.IsLoopback));
+        }
+        catch (NetworkInformationException)
+        {
+            return false;
+        }
+    }
+
+    private static bool LoopbackDnsResponds()
+    {
+        try
+        {
+            using var client = new TcpClient();
+            var connect = client.ConnectAsync(IPAddress.Loopback, 53);
+            return connect.Wait(TimeSpan.FromMilliseconds(400)) && client.Connected;
+        }
+        catch (Exception exception) when (exception is SocketException or AggregateException)
+        {
+            return false;
+        }
+    }
     private static bool HasArgument(IEnumerable<string> arguments, string expected) =>
         arguments.Any(argument =>
             string.Equals(argument, expected, StringComparison.OrdinalIgnoreCase));
@@ -352,6 +437,7 @@ public partial class App : Application
             _tray = null;
         }
 
+        _networkWatchdogTimer?.Stop();
         _shell?.Dispose();
         _serviceHost?.Dispose();
         _moduleWindowHider?.Dispose();
