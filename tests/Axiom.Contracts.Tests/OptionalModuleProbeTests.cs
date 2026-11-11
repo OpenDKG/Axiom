@@ -16,7 +16,7 @@ public sealed class OptionalModuleProbeTests
     public async Task Dkg_status_is_connected_when_the_local_node_answers()
     {
         var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """
-            {"version":"10.0.23","peerId":"12D3KooExample","nodeRole":"edge"}
+            {"version":"10.1.0","peerId":"12D3KooExample","nodeRole":"edge","networkName":"DKG V10 Base Testnet"}
             """));
         using var http = new HttpClient(handler);
         using var probe = new OptionalModuleProbe(http, DkgUrl, BlackboxUrl);
@@ -25,8 +25,9 @@ public sealed class OptionalModuleProbeTests
 
         Assert.True(result.IsConnected);
         Assert.Equal("CONNECTED", result.Status);
-        Assert.Contains("10.0.23", result.Detail, StringComparison.Ordinal);
+        Assert.Contains("10.1.0", result.Detail, StringComparison.Ordinal);
         Assert.Contains("edge", result.Detail, StringComparison.Ordinal);
+        Assert.Contains("DKG V10 Base Testnet", result.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

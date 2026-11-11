@@ -18,10 +18,12 @@ Privacy Shield is a separate optional local DNS resolver; it is documented in
 The Security page has an **Install** button next to each module that is not connected. It opens a
 visible PowerShell window only after a confirmation dialog:
 
-- **DKG**: installs `@origintrail-official/dkg` into
-  `%LOCALAPPDATA%\Axiom\modules\dkg` with `--ignore-scripts`, sets a per-user `DKG_HOME`, runs
-  the official interactive testnet setup (`--network testnet --role edge --store oxigraph`) and
-  starts the node.
+- **DKG**: installs the pinned `@origintrail-official/dkg@10.1.0` (the testnet tag, not npm's
+  mainnet `latest`) into `%LOCALAPPDATA%\Axiom\modules\dkg` with `npm ci` from the embedded
+  `package-lock.json`, sets a per-user `DKG_HOME`, runs the official interactive testnet setup
+  (`--network testnet --role edge --store oxigraph`), disables the package's five-minute
+  auto-updater, and starts the node. An existing Axiom-managed install with another version is
+  stopped and upgraded.
 - **Blackbox**: downloads the official Umanitek Windows installer to
   `%LOCALAPPDATA%\Axiom\modules\blackbox`, verifies its SHA-256 against the pinned digest in
   `OptionalModuleInstaller` (`261122F5E879596E88D63C30D5D36D12B4E155986F83AA3EB83ADEB406E41179`)
@@ -326,10 +328,13 @@ URL; nothing is published and no local path or connection data is sent.
 Requirements: Node.js and npm, per the official DKG V10 documentation.
 
 ```powershell
-npm install -g @origintrail-official/dkg
-dkg init
+npm install -g @origintrail-official/dkg@10.1.0
+dkg init --network testnet --role edge --store oxigraph
 dkg start
 ```
+
+Axiom's own installer pins the same testnet release in a lockfile and turns off the node's
+auto-updater; a global install follows npm's tags and is the user's own choice.
 
 Verify the node directly:
 

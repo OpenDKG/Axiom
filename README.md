@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.10.20 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.10.21 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -32,6 +32,17 @@ Axiom brings together four surfaces:
 
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
+
+## What's in 0.10.21
+
+- **DKG installs a pinned testnet build.** Axiom now installs
+  `@origintrail-official/dkg@10.1.0` from an embedded lockfile with `npm ci`, instead of npm's
+  `latest` tag, which is the mainnet build. An existing Axiom-managed install with another version
+  is stopped and upgraded.
+- **The node no longer updates itself every five minutes.** The installer sets
+  `autoUpdate.enabled=false` in `DKG_HOME\config.json`, so the version Axiom installed is the
+  version that runs.
+- The DKG status line also shows the node's network name when `/api/status` returns it.
 
 ## What's in 0.10.20
 
