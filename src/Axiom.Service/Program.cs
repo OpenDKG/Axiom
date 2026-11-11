@@ -1,12 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Firewall;
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Core.Firewall;
 using Axiom.Core.Protection;
 using Axiom.Infrastructure.Windows.Firewall;
+using Axiom.Infrastructure.Windows.Network;
 using Axiom.Persistence;
 using Axiom.Service;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+// Explicit administrator recovery when the service or desktop cannot run. Dry run unless --apply.
+if (args.Length > 0 &&
+    string.Equals(args[0], "--recover-network", StringComparison.OrdinalIgnoreCase))
+{
+    return NetworkRecoveryCommand.Run(args);
+}
 
 // Elevated helper mode: register or remove the Windows service, then exit. This runs once, from a
 // UAC prompt started by the desktop app, and is the only path that needs administrator rights.
@@ -50,6 +60,17 @@ builder.Services.AddSingleton<ConnectionSnapshotCache>();
 builder.Services.AddSingleton(new HistoryStore(DatabasePaths.ResolveForCurrentProcess()));
 builder.Services.AddSingleton<WindowsFirewallPolicyAdapter>();
 builder.Services.AddSingleton<IFirewallPolicyAdapter>(provider => provider.GetRequiredService<WindowsFirewallPolicyAdapter>());
+builder.Services.AddSingleton<IOwnedRuleRecoveryAdapter>(provider => provider.GetRequiredService<WindowsFirewallPolicyAdapter>());
+builder.Services.AddSingleton<INetworkRecoveryDnsAdapter, WindowsDnsRecoveryAdapter>();
+builder.Services.AddSingleton(provider => new NetworkRecoveryController(
+    provider.GetRequiredService<INetworkRecoveryDnsAdapter>(),
+    provider.GetRequiredService<IOwnedRuleRecoveryAdapter>(),
+    () => ProtectionWriteConsent.IsServiceHost,
+    () => provider.GetRequiredService<ProtectionSettingsStore>().Load().Enabled,
+    NetworkRecoverySnapshotStore.DefaultPath,
+    provider.GetRequiredService<HistoryStore>(),
+    provider.GetRequiredService<ILogger<NetworkRecoveryController>>()));
+builder.Services.AddHostedService<NetworkRecoveryWorker>();
 builder.Services.AddSingleton<FirewallRuleCoordinator>();
 builder.Services.AddSingleton(new ProtectionSettingsStore());
 builder.Services.AddSingleton<ProtectionController>();

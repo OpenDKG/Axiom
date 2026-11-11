@@ -63,6 +63,9 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     /// <summary>Whether the persisted configuration asks the resolver to run.</summary>
     public bool IsEnabled => _settings.Enabled;
 
+    /// <summary>Whether the loopback resolver is listening right now.</summary>
+    public bool IsResolverRunning => Volatile.Read(ref _server) is not null;
+
     public async Task<PrivacyShieldStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

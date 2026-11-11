@@ -18,7 +18,7 @@ namespace Axiom.Infrastructure.Windows.Firewall;
 /// is possible. The product does not call them on a production workstation.
 /// </para>
 /// </summary>
-public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisposable
+public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRuleRecoveryAdapter, IDisposable
 {
     public const string WriteEnableVariable = "AXIOM_ENABLE_FIREWALL_WRITES";
 
@@ -73,6 +73,66 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
         }
 
         return _com.InvokeAsync(() => VerifyRule(spec), ct);
+    }
+
+    /// <summary>
+    /// Recovery-only inspection. No write gate is checked here: the service and the explicit
+    /// administrator recovery command authorize the call, and this method only reports whether the
+    /// exact identity still carries Axiom ownership metadata.
+    /// </summary>
+    public Task<OwnedRulePresence> InspectOwnedRuleAsync(
+        Guid managedRuleId,
+        FirewallDirection direction,
+        CancellationToken ct)
+    {
+        if (managedRuleId == Guid.Empty)
+        {
+            throw new ArgumentException("Managed rule id must not be empty.", nameof(managedRuleId));
+        }
+
+        return _com.InvokeAsync(() => InspectCapturedRule(managedRuleId, direction), ct);
+    }
+
+    /// <summary>
+    /// Recovery-only removal of one captured rule in one direction. It removes the exact
+    /// <c>Axiom::{id}::{OUT|IN}</c> name (or its legacy equivalent) and refuses when the ownership
+    /// metadata no longer matches. It never removes a rule by prefix or display name.
+    /// </summary>
+    public Task<RuleApplyResult> RemoveCapturedOwnedRuleAsync(
+        Guid managedRuleId,
+        FirewallDirection direction,
+        CancellationToken ct)
+    {
+        if (managedRuleId == Guid.Empty)
+        {
+            throw new ArgumentException("Managed rule id must not be empty.", nameof(managedRuleId));
+        }
+
+        EnsureRecoveryWriteAllowed();
+        return _com.InvokeAsync(() => RemoveCapturedRule(managedRuleId, direction), ct);
+    }
+
+    /// <summary>
+    /// The recovery removal is not behind the interactive write gate because it must work while
+    /// the shield is off, but it is still refused outside the non-interactive service or an
+    /// explicitly elevated administrator process.
+    /// </summary>
+    private static void EnsureRecoveryWriteAllowed()
+    {
+        if (ProtectionWriteConsent.IsServiceHost)
+        {
+            return;
+        }
+
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        if (new System.Security.Principal.WindowsPrincipal(identity)
+            .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator))
+        {
+            return;
+        }
+
+        throw new NotSupportedException(
+            "Network recovery writes require the elevated Axiom service or an administrator command.");
     }
 
     public void Dispose() => _com.Dispose();
@@ -210,6 +270,8 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
                 Description = (string?)rule.Description,
                 CreatedBy = "windows-firewall",
             },
+            OwnershipGroup = (string?)rule.Grouping,
+            OwnershipDescription = (string?)rule.Description,
         };
     }
 
@@ -313,6 +375,98 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisp
             {
                 return Failed(managedRuleId, "rule.remove_failed", $"Rule '{name}' is still present after removal.");
             }
+        }
+
+        return new RuleApplyResult
+        {
+            Success = true,
+            ManagedRuleId = managedRuleId,
+            State = RuleState.Desired,
+            VerifiedUtc = DateTimeOffset.UtcNow,
+        };
+    }
+
+    private static OwnedRulePresence InspectCapturedRule(Guid managedRuleId, FirewallDirection direction)
+    {
+        var policy = CreatePolicy();
+        return InspectCapturedRule(policy, managedRuleId, direction);
+    }
+
+    private static OwnedRulePresence InspectCapturedRule(
+        dynamic policy,
+        Guid managedRuleId,
+        FirewallDirection direction)
+    {
+        var name = OwnedRuleName.Create(managedRuleId, direction);
+        var legacyName = OwnedRuleName.ToLegacyName(name);
+        var current = FindRule(policy, name) ?? FindRule(policy, legacyName);
+        if (current is null)
+        {
+            return OwnedRulePresence.Absent;
+        }
+
+        dynamic rule = current;
+        return OwnedRuleOwnership.HasOwnershipMetadata(
+            (string?)rule.Grouping,
+            (string?)rule.Description)
+            ? OwnedRulePresence.Owned
+            : OwnedRulePresence.ForeignOrChanged;
+    }
+
+    private static RuleApplyResult RemoveCapturedRule(Guid managedRuleId, FirewallDirection direction)
+    {
+        var policy = CreatePolicy();
+        var name = OwnedRuleName.Create(managedRuleId, direction);
+        var legacyName = OwnedRuleName.ToLegacyName(name);
+        var found = false;
+
+        foreach (var candidate in new[] { name, legacyName })
+        {
+            var current = FindRule(policy, candidate);
+            if (current is null)
+            {
+                continue;
+            }
+
+            found = true;
+            dynamic rule = current;
+            if (!OwnedRuleOwnership.HasOwnershipMetadata(
+                    (string?)rule.Grouping,
+                    (string?)rule.Description))
+            {
+                return Failed(
+                    managedRuleId,
+                    "rule.not_owned",
+                    "The rule identity exists but no longer carries Axiom ownership metadata.");
+            }
+
+            try
+            {
+                policy.Rules.Remove(candidate);
+            }
+            catch (COMException)
+            {
+                // A concurrent removal may have won; the read-back below decides.
+            }
+        }
+
+        if (!found)
+        {
+            return new RuleApplyResult
+            {
+                Success = true,
+                ManagedRuleId = managedRuleId,
+                State = RuleState.Desired,
+                VerifiedUtc = DateTimeOffset.UtcNow,
+            };
+        }
+
+        if (FindRule(policy, name) is not null || FindRule(policy, legacyName) is not null)
+        {
+            return Failed(
+                managedRuleId,
+                "rule.remove_failed",
+                $"Rule '{name}' is still present after recovery removal.");
         }
 
         return new RuleApplyResult

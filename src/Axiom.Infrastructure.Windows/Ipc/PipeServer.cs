@@ -6,6 +6,7 @@ using Axiom.Contracts.Firewall;
 using Axiom.Contracts.History;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Contracts.Privacy;
 using Axiom.Contracts.Protection;
 using Axiom.Contracts.Threat;
@@ -75,6 +76,10 @@ public sealed class PipeServer
 
     private readonly Func<ThreatShareRecordRequest, CancellationToken, Task<ThreatShareQueueStatus>>? _threatShareRecord;
 
+    private readonly Func<string, CancellationToken, Task<NetworkRecoveryCaptureResult>>? _networkRecoveryCapture;
+
+    private readonly Func<string, CancellationToken, Task<NetworkRecoveryRestoreResult>>? _networkRecoveryRestore;
+
     private readonly Action<string>? _log;
 
     public PipeServer(
@@ -102,6 +107,8 @@ public sealed class PipeServer
         Func<ThreatShareEnqueueRequest, CancellationToken, Task<ThreatShareQueueStatus>>? threatShareEnqueue = null,
         Func<ThreatShareDismissRequest, CancellationToken, Task<ThreatShareQueueStatus>>? threatShareDismiss = null,
         Func<ThreatShareRecordRequest, CancellationToken, Task<ThreatShareQueueStatus>>? threatShareRecord = null,
+        Func<string, CancellationToken, Task<NetworkRecoveryCaptureResult>>? networkRecoveryCapture = null,
+        Func<string, CancellationToken, Task<NetworkRecoveryRestoreResult>>? networkRecoveryRestore = null,
         Action<string>? log = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
@@ -131,6 +138,8 @@ public sealed class PipeServer
         _threatShareEnqueue = threatShareEnqueue;
         _threatShareDismiss = threatShareDismiss;
         _threatShareRecord = threatShareRecord;
+        _networkRecoveryCapture = networkRecoveryCapture;
+        _networkRecoveryRestore = networkRecoveryRestore;
         _log = log;
     }
 
@@ -757,6 +766,66 @@ public sealed class PipeServer
                     await WriteResultAsync(stream, envelope.Id, recorded, cancellationToken).ConfigureAwait(false);
                     break;
 
+                case IpcCommandTypes.NetworkRecoveryCapture:
+                    if (_networkRecoveryCapture is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Network recovery is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    // The request never carries adapter ids, DNS servers or rule names. The service
+                    // captures machine state itself and the snapshot store validates it.
+                    if (envelope.Payload is not null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Network recovery capture does not accept client-supplied state.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var captured = await _networkRecoveryCapture(actorSid, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, captured, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.NetworkRecoveryRestore:
+                    if (_networkRecoveryRestore is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Network recovery is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    // Restore is limited to the validated machine snapshot; arbitrary DNS servers
+                    // or rule names are never accepted over the pipe.
+                    if (envelope.Payload is not null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Network recovery restore does not accept client-supplied state.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var restored = await _networkRecoveryRestore(actorSid, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, restored, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.PrivacyStatus:
                     if (_privacyStatus is null)
                     {
@@ -963,6 +1032,16 @@ public sealed class PipeServer
         if (_threatShareRecord is not null)
         {
             commands.Add(IpcCommandTypes.ThreatShareRecord);
+        }
+
+        if (_networkRecoveryCapture is not null)
+        {
+            commands.Add(IpcCommandTypes.NetworkRecoveryCapture);
+        }
+
+        if (_networkRecoveryRestore is not null)
+        {
+            commands.Add(IpcCommandTypes.NetworkRecoveryRestore);
         }
 
         if (WindowsFirewallPolicyAdapter.IsWriteGateOpen)
