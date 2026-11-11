@@ -89,7 +89,7 @@ proposed. The Blackbox report still uses the closest available context label (`i
   `LOW_OBSERVED_RISK`, `SUSPICIOUS` and `SUPPORTED_ALERT` are not equivalent to a confirmed incident.
 - ETW telemetry is not integrated yet, so SNI, TLS certificate subjects, DNS query names, exact
   per-connection byte counts and TIME_WAIT ownership remain missing evidence.
-- There is no reputation or threat-intelligence feed; no score is invented.
+- AI Analyst does not automatically consume VirusTotal, community or DKG reputation lookups as investigation evidence; those are separate optional modules. It does not invent a reputation score.
 - Command lines are sanitised and truncated, and protected processes may not expose them.
 - Axiom reports only its own firewall rules; effective Windows default policy and third-party rules
   remain outside `ruleStatus`.
