@@ -125,6 +125,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             restoreNetwork);
         AgentStats = new AgentStatsPageViewModel(Agents);
         AgentDashboard = new AgentDashboardPageViewModel(Agents);
+        AgentHealth = new AgentHealthPageViewModel(Security);
         Pages =
         [
             AgentDashboard,
@@ -134,6 +135,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             Events,
             Agents,
             AgentStats,
+            AgentHealth,
             Firewall,
             PrivacyShield,
             AiAnalyst,
@@ -246,6 +248,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public AgentsPageViewModel Agents { get; }
 
     public AgentStatsPageViewModel AgentStats { get; }
+
+    public AgentHealthPageViewModel AgentHealth { get; }
 
     public AiAnalystPageViewModel AiAnalyst { get; }
 

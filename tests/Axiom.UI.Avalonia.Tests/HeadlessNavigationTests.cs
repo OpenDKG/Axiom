@@ -18,7 +18,7 @@ public sealed class HeadlessNavigationTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(13, shell.Pages.Count);
+        Assert.Equal(14, shell.Pages.Count);
         Assert.IsType<AgentDashboardPageViewModel>(shell.Pages[0]);
         foreach (var page in shell.Pages)
         {

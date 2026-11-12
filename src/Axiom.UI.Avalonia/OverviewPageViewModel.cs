@@ -31,7 +31,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         IUserInteraction? ui = null,
         IServiceRequestClient? serviceClient = null,
         IProcessActions? processActions = null)
-        : base("Network", "Live sockets, throughput and recent network activity", "O")
+        : base("Network Dashboard", "Live sockets, throughput and recent network activity", "O")
     {
         _monitor = monitor;
         _traffic = traffic;
