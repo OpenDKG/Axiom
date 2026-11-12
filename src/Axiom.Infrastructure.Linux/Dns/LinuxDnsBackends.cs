@@ -131,7 +131,9 @@ public sealed class ResolvedDnsBackend : ILinuxDnsBackend
         var ok = _runner.Run(Resolvectl, ["dns", link, .. servers], ToolTimeout).Succeeded;
         if (ok)
         {
-            ok = _runner.Run(Resolvectl, ["domain", link, .. domains], ToolTimeout).Succeeded;
+            // `resolvectl domain <link>` with no further argument only prints the current domains;
+            // a single empty argument clears them (otherwise a restore leaves "~." behind).
+            ok = _runner.Run(Resolvectl, domains.Count == 0 ? ["domain", link, string.Empty] : ["domain", link, .. domains], ToolTimeout).Succeeded;
         }
 
         return ok;

@@ -35,6 +35,9 @@ public sealed class DnsBackendTests
         Assert.True(backend.SetDns("eno2", ["127.0.0.1"], ["~."]));
         Assert.Contains("resolvectl dns eno2 127.0.0.1", runner.Calls);
         Assert.Contains("resolvectl domain eno2 ~.", runner.Calls);
+        // Restoring servers with no domains must clear "~." (a bare `resolvectl domain eno2` only prints).
+        Assert.True(backend.SetDns("eno2", ["192.168.70.1"], []));
+        Assert.Contains(runner.Calls, call => call.StartsWith("resolvectl domain eno2", StringComparison.Ordinal) && !call.Contains("~.", StringComparison.Ordinal));
         Assert.True(backend.SetDns("eno2", [], []));
         Assert.Contains("resolvectl revert eno2", runner.Calls);
     }
