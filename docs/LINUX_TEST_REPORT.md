@@ -185,7 +185,57 @@ Same host (Ubuntu 24.04.5, kernel 7.0.0-42-generic, cgroup2fs, `bpftool` 7.x at 
 | 5 | Part A e2e (`scripts/linux/bpf/e2e.sh`: load/pin/attach, curl inode entry, bare curl rc=7, event, delete → 200, detach/unpin clean) | **not run** | Needs the compiled object (row 1). Script written and syntax-checked; nothing BPF-related was created on the box. |
 | 6 | Part B daemon path (`--daemon`: install in place, `rule.apply` block curl → bare curl rc=7, `snapshot` `bpf-` flow, journal `BPF layer attached`) | **not run** | Same blocker. The daemon on the box is unchanged (P4 image, active, no rules, shield off). Expected behaviour of the new image without the objects: journal `BPF layer inactive: BPF object not shipped: /usr/libexec/axiom/bpf/axiom_connect.bpf.o (…)`, nft-only. |
 
-## Box state after P4 (owner's instruction: daemon stays installed)
+## Security parity with the macOS review + BPF proof (2026-11-12, branch `buba/linux` after merging `buba/macos` 2436b3d and `buba/linux-enforce` ecc1330)
+
+Same box (Ubuntu 24.04.5, kernel 7.0.0-42-generic, systemd 255, nft 1.0.9, clang 18.1, libbpf-dev 1.3, bpftool 7.7.0,
+`/sys/kernel/btf/vmlinux` present). Baseline before the run: `axiomd.service` active from the P4 image, no rules,
+shield off (`writeGateOpen:false`), Privacy Shield disabled, `resolvectl status eno2` → `DNS Servers: 192.168.70.1`,
+no `axiom_*` BPF program, `/sys/fs/bpf` empty of ours. Daemon rebuilt from this branch
+(`dotnet publish src/Axiom.Service -f net10.0 -r linux-x64 -c Release --self-contained -o build/linux/axiomd`, the
+csproj ships `bpf/*` because `Bpf/native/out` exists) and installed in place with `sudo -n build/linux/axiomd/axiomd --install-service`.
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| S1 | Second uid, public reads | PASS | throwaway account `sudo -n useradd -M -s /usr/sbin/nologin axtest` (uid 1001, not in `sudo`/`wheel`/`axiom`); `sudo -n -u axtest python3 -I axipc.py serviceHealth` → `ok` keys `status, uptimeSeconds, sourceName, pollIntervalSeconds, lastCaptureUtc, connectionCount, processCount, limitations`; `capabilities` → `ok` keys `protocolVersion, commands, monitoring, firewallWrites, milestone` |
+| S2 | Second uid, private reads + writes | PASS | `snapshot`, `history.query`, `diagnostics.export` → `error unauthorized – This command discloses machine-wide activity and is only allowed for root, the user who installed …`; `privacy.configure`, `rule.apply` → `error unauthorized – This command changes machine-wide settings …`. Journal: `Denied 'snapshot' for uid:1001: private read commands are not allowed for this caller.` (one line per command). `sudo -n userdel axtest` afterwards (no host-guard block) |
+| S3 | Installing uid (1000) | PASS | `serviceHealth`, `capabilities`, `snapshot`, `rules.query`, `history.query` all `ok`; `protection.enable {"defaultPolicy":"ask"}` → `writeGateOpen:true` |
+| S4 | `LinuxSocketIpcTests` with `AXIOM_TEST_SECOND_USER=axtest` | PASS | `Passed! – Failed: 0, Passed: 2` (installing uid full access; second uid public-only + `unauthorized` over the real `SO_PEERCRED` socket) |
+| S5 | `rule.apply` Block `/usr/bin/curl` (`createdBy` is required in the payload) | PASS | `{"success":true,"state":"applied","osRuleName":"Axiom::0f8fad5b-…::OUT"}`; journal `BPF verdicts generation 16: 1 exe, 1 cgroup entries; 0 rule(s) left to nftables.` |
+| S6 | Bare `curl -m 8 https://example.com` immediately after | PASS | `curl: (7) Failed to connect to example.com port 443 after 0 ms` **rc=7 in 8 ms** (the BPF layer closes the exec race); `curl --limit-rate 400k` → rc=7, 8 ms |
+| S7 | `rule.verify` | PASS | `presentInOs:true, matchesSpec:true, effectiveAction:"block", enforcementVerified:true`, notes `table inet axiom generation 16, 3 nft rule(s), 0 packet(s) matched.` (0 packets because BPF refused the connect before any packet) |
+| S8 | `rules.query` enforcement report | PASS | `filterEnforcement {state:"verified", connected:true, publishedGeneration:16, ackedGeneration:16, lastSeenUtc, lastAckUtc, appliedRuleCount:1, rejectedRules:[]}`; `limitations: ["Attribution is a 1 s loop: … The BPF layer closes this window for unscoped outbound block rules."]` |
+| S9 | `sudo -n nft delete table inet axiom` | PASS | 4 s later `rules.query` → `{state:"degraded", connected:false, publishedGeneration:16, ackedGeneration:null}`; bare curl still rc=7 (BPF maps); journal `table inet axiom disappeared (generation 16 was published); enforcement degraded; republishing.` → `Republished table inet axiom generation 17; enforcement verified.`; report back to `verified … 17/17`, rule still `applied` |
+| S10 | Hostname rule (`remoteAddresses:["example.com"]`) | PASS | `{"success":false,"state":"failed","errorCode":"rule.invalid","errorMessage":"rule.addresses.invalid: 'example.com' is not an IP address or CIDR range."}` |
+| S11 | `rule.remove` | PASS | `state:"desired"`; bare curl → `200 rc=0`; journal `BPF verdicts generation 18: 0 exe, 0 cgroup entries`; report `verified 18/18, appliedRuleCount:0` |
+| S12 | Journal BPF lines | PASS | `BPF layer attached: connect4/connect6/sendmsg4/sendmsg6 at /sys/fs/cgroup (multi), pinned at /sys/fs/bpf/axiom.`; `sudo -n bpftool cgroup tree /sys/fs/cgroup` → 4 `axiom_*` programs `multi` at `/sys/fs/cgroup`. First install attempt logged `BPF layer inactive: bpftool prog loadall failed: libbpf: failed to mkdir /sys/fs/bpf/axiom/axiom_connect4: -EROFS` → unit fixed (`ProtectKernelTunables=no` + hand-written `ReadOnlyPaths`), reinstalled, attached |
+| S13 | `--doctor` | PASS | all 12 checks PASS incl. `log directory: /var/log/axiom root 0700, no file logs (journal only).`, `ipc owner: uid 1000 may write; admin groups allowed.`, `enforcement: … table inet axiom generation 14 is in force.`, `bpf layer: bpftool v7.7.0; 4 programs pinned at /sys/fs/bpf/axiom (connect4/connect6/sendmsg4/sendmsg6 at the cgroup root).`; `stat /var/log/axiom` → `root:root 700` |
+| S14 | Privacy Shield on/off | PASS | on → `state:"Active", upstream:"192.168.70.1:53"`, `resolvectl` → `DNS Servers: 127.0.0.1`, curl 200; off → `state:"Disabled"`, `DNS Servers: 192.168.70.1` (baseline), `/etc/resolv.conf` stub unchanged |
+| S15 | `protection.disable` | PASS | `enabled:false, writeGateOpen:false`; end state: 0 `socket cgroupv2` rules in `table inet axiom`, `axiom.slice` holds no app cgroup, the daemon's 4 BPF programs stay attached (daemon stays installed per owner's instruction) |
+| S16 | `scripts/linux/bpf/e2e.sh` part A (bpftool only) | PASS | first run (before the daemon had BPF): verifier rejected `axiom_connect4` (`invalid bpf_context access off=8`) → per-family fix → PASS. Re-run with the live daemon attached: `our prog ids: 1771 1772 1773 1774` → exe verdict for `/usr/bin/curl` (dev 8:2 ino 51643045) → bare curl `000 rc=7` → 8 block events from `axiom-bpf-events` (`{"verdict":"block","source":"exe","hook":"connect","family":2/10,"proto":6/17,"dport":443,…}`) → delete entry → `200 rc=0` → `/sys/fs/bpf/axiom-e2e removed`, none of our ids loaded/attached, only the daemon's own 4 remain. `## RESULT: PASS` |
+
+Not exercised: a second *admin* uid (no spare `sudo`-group account; the pure table is covered by `LinuxPeerAuthorizationTests`), Pending-state UI banner on a real desktop (text covered by `FilterEnforcementSummaryTests`), BPF on another kernel.
+
+## Gates after the security parity + BPF merge
+
+`dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` → `0 Warning(s) 0 Error(s)`. `Axiom.Portable.slnx` build → `0 Warning(s) 0 Error(s)`; test: Contracts 142/142, Core 117/128
+(the same 11 pre-existing Windows-path failures as every earlier gate and as pristine `buba/macos` on this host),
+Desktop.Avalonia.MacOS 35/35, Infrastructure.Linux 32/32 (+5: socket IPC classes, log permissions, doctor),
+Infrastructure.Unix 32/32 (+10: Linux peer-authorization table), Infrastructure.MacOS 199/199, McpServer 33/33,
+Persistence 21/21, Presentation 93/93, UI.Avalonia 42/42. Separately: Infrastructure.Linux.Nft 82/82 (+15:
+lifecycle readback/pending/degraded/unavailable, BPF layer), Desktop.Avalonia.Linux 49/49, Service.Tests 66/78
+(the same 12 pre-existing failures as `buba/macos` 2436b3d on this host, e.g. `FirewallRuleCoordinatorTests.Apply_failure_stores_failed_state_and_error`).
+`git checkout -- '*.lock.json'` afterwards; `dotnet build-server shutdown`.
+
+## Box state after the security parity + BPF run (owner's instruction: daemon stays installed)
+
+`axiomd.service` active + enabled from the image built here (with `bpf/*` shipped), `table inet axiom` holds only the
+loopback accept rules (0 `cgroupv2` rules), no app cgroup under `axiom.slice`, protection off (`writeGateOpen:false`),
+Privacy Shield disabled, `resolvectl status eno2` → `DNS Servers: 192.168.70.1`, `/etc/resolv.conf` stub unchanged.
+The daemon's own four `axiom_*` programs stay attached at `/sys/fs/cgroup` and pinned at `/sys/fs/bpf/axiom` (they are
+part of the running daemon; `--uninstall-service` detaches and removes them). `/sys/fs/bpf/axiom-e2e` gone; `axtest`
+user removed; `build/linux/axiomd` kept.
+
+## Box state after P4 (superseded by the section above)
 
 `axiomd.service` active + enabled from the newest image, `table inet axiom` holds only the loopback accept rules
 (0 `cgroupv2` rules), no `/sys/fs/cgroup/axiom.slice`, protection off (`firewallWrites: false`), Privacy Shield

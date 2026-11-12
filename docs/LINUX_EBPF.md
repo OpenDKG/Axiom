@@ -171,8 +171,12 @@ Unit (`SystemdUnit`): `CapabilityBoundingSet` += `CAP_BPF CAP_PERFMON` (`bpf()` 
 `bpf_get_current_task_btf`/`bpf_probe_read_kernel` used by the CO-RE exe lookup are gated on
 `perfmon_capable()`; attaching at the cgroup root needs `CAP_SYS_ADMIN`, already granted for
 `cgroup.procs`), `ReadWritePaths` += `/sys/fs/bpf` (pins under `ProtectSystem=strict`).
-`ProtectKernelTunables`, `NoNewPrivileges`, `RestrictAddressFamilies` are unchanged — `bpf()` is a
-syscall, not a socket family.
+`ProtectKernelTunables` had to become `no`: with `yes`, systemd 255 mounts `/sys/fs/bpf` read-only and
+neither `ReadWritePaths` nor `BindPaths` can override it (`bpftool prog loadall failed: libbpf: failed
+to mkdir /sys/fs/bpf/axiom/axiom_connect4: -EROFS`, found live). The unit lists the same paths
+read-only by hand (`ReadOnlyPaths=-/proc/sys -/proc/sysrq-trigger … -/sys/kernel -/sys/devices …`)
+and adds `ProtectKernelLogs=yes`; `NoNewPrivileges`, `RestrictAddressFamilies` are unchanged —
+`bpf()` is a syscall, not a socket family.
 
 ## 7. Proof plan (`scripts/linux/bpf/e2e.sh`)
 
@@ -215,3 +219,25 @@ process killed except the helper the script started; every object the script cre
 - btrfs exe-key caveat (§2).
 - `bpftool` must exist on the target (Ubuntu: `linux-tools-$(uname -r)`); packaging must list it as a
   recommends and the probe reports its absence.
+
+## 9. As built and proven (2026-11-12, kernel 7.0.0-42, clang 18, libbpf 1.3, bpftool 7.7)
+
+- `make -C src/Axiom.Infrastructure.Linux/Bpf/native` compiles the object and the events helper with
+  the installed toolchain (only `vmlinux.h` redefinition warnings from the generated header).
+- First load failed in the verifier: `invalid bpf_context access off=8 size=4` in `axiom_connect4` —
+  a `connect4` program may not touch `user_ip6` even on a dead branch behind `user_family`. The loopback
+  check and the event copy now take the family as a compile-time constant (`is6`), so each of the four
+  programs reads only its own fields. No other verifier complaint; the CO-RE exe lookup
+  (`bpf_get_current_task_btf` → `mm->exe_file->f_inode`) is accepted under `cgroup/connect4,6` and
+  `sendmsg4,6`.
+- `bpftool prog loadall` pin names match `BpfLayout` as written (section = program name); no change.
+- `scripts/linux/bpf/e2e.sh` part A **PASS** (bpftool only, with a live daemon also attached): control
+  curl 200 → load/pin/attach 4 programs (ids listed) → exe verdict for `/usr/bin/curl` (dev 8:2 ino
+  51643045) → bare `curl -m 8 https://example.com` **rc=7 after 0 ms** → 8 block events from
+  `axiom-bpf-events` (v4+v6, udp+tcp, `source:"exe"`, `hook:"connect"`) → delete entry → 200 →
+  detach/unload → none of our ids loaded or attached, `/sys/fs/bpf/axiom-e2e` gone.
+- Live daemon (`LINUX_TEST_REPORT.md`, "Security parity + BPF" rows): `BPF layer attached …`,
+  `BPF verdicts generation 16: 1 exe, 1 cgroup entries; 0 rule(s) left to nftables.`, bare curl rc=7 in
+  8 ms, `--limit-rate 400k` rc=7, still rc=7 while `table inet axiom` was deleted, `--doctor` `PASS bpf
+  layer: bpftool v7.7.0; 4 programs pinned at /sys/fs/bpf/axiom`.
+- Residual: §8 unchanged (scoped/inbound rules nft-only, allowed flows not evented, BTF-less kernels).

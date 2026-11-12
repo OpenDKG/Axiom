@@ -26,7 +26,7 @@ scutil or codesign.
 | Machine state (database, rules, shield, privacy, `network-recovery.txt`, `protection.json`) | `/var/lib/axiom` (`StateDirectory=axiom`) | `0700 root`, files `0600` | `AXIOM_DATA_ROOT` (Unix only; Windows ignores) |
 | Runtime: IPC socket | `/run/axiom/axiom.sock` (`RuntimeDirectory=axiom`) | dir `0755 root`, socket `0666` — access is decided per peer uid, not by the socket mode | `AXIOM_RUNTIME_DIR`, `AXIOM_IPC_SOCKET` |
 | Filter socket (nftables engine, later) | `$RuntimeDirectory/filter.sock` | — | `AXIOM_FILTER_SOCKET` |
-| Logs | journald (stderr); `/var/log/axiom` reserved via `LogsDirectory=axiom` | `0755 root` | — |
+| Logs | journald (stderr; readable by root and the `adm`/`systemd-journal` groups per systemd policy); `/var/log/axiom` via `LogsDirectory=axiom` `LogsDirectoryMode=0700` — nothing is written there today, but anything that appears is tightened to `0700` dir / `0600` files by the installer, at every daemon start and checked by `--doctor` (review Medium #5) | `0700 root`, files `0600` | — |
 | Protected image | `/usr/libexec/axiom` (`axiomd` + publish tree) | dirs `0755`, files `0644`, executables `0755`, all `root:root` | — |
 | Unit | `/etc/systemd/system/axiomd.service` | `0644 root` | — |
 | `/etc/axiom` | optional, not used in this phase | — | — |
@@ -92,13 +92,29 @@ Unchanged protocol: newline-delimited JSON envelopes (`version`, `id`, `type`, `
 project. The listener resolves the peer with `SO_PEERCRED` and asks `PeerAuthorization.Decide`
 with `UnixAccountRange.Linux`:
 
-| Peer | Read | Write |
-|---|---|---|
-| root (uid 0) | yes | yes |
-| installing user (`protection.json` `AllowedUid`) | yes | yes |
-| member of `axiom`, `sudo` or `wheel` (`AllowAdminGroupWrites`, default on) | yes | yes |
-| other uid ≥ 1000 | yes | no (`write denied: not the installing user or an administrator`) |
-| system accounts (uid < 1000) and `nobody` (65534) | no | no |
+Every IPC command belongs to one of three classes (`IpcCommandAccess`, shared with macOS): **public
+reads** (`serviceHealth`, `capabilities` — redacted: no machine-wide counters beyond the health
+summary), **private reads** (`snapshot`, `liveEvents`, `history.query`, `throughput.history`,
+`diagnostics.export`, `privacy.status`, `rules.query`, `rule.verify`, `protection.status`, …:
+anything that discloses machine-wide activity) and **writes** (`rule.apply/remove`,
+`privacy.configure`, `protection.*`, `networkRecovery.restore`, …). The decision is the pure
+`PeerAuthorization.Decide(uid, policy, UnixAccountRange.Linux)` — the same function and the same
+policy flag as macOS (review 2026-11-12 P0 #1):
+
+| Peer (SO_PEERCRED uid) | Public read | Private read | Write | Reason string |
+|---|---|---|---|---|
+| root (uid 0) | yes | yes | yes | `root` |
+| installing user (`protection.json` `AllowedUid`) | yes | yes | yes | `installing user` |
+| member of `axiom`, `sudo` or `wheel` **and** `AllowAdminGroupWrites` (default on, same flag as macOS) | yes | yes | yes | `admin group member (AllowAdminGroupWrites)` |
+| other uid ≥ 1000 | yes | **no** (`unauthorized`) | **no** (`unauthorized`) | `console user` — "private read/write commands are not allowed for this caller" |
+| system accounts (uid < 1000), `nobody` (65534) | no (connection closed) | no | no | `system account` / `nobody` |
+| peer uid unreadable | no | no | no | `unknown peer` |
+
+Every denial is one journal line: `Denied '<command>' for uid:<n>: private read commands are not
+allowed for this caller.` The transport also caps connections per uid (4). Tests:
+`tests/Axiom.Infrastructure.Unix.Tests/LinuxPeerAuthorizationTests.cs` (pure table) and
+`tests/Axiom.Infrastructure.Linux.Tests/LinuxSocketIpcTests.cs` (real socket; the second-uid case
+runs when `AXIOM_TEST_SECOND_USER` names an account reachable through `sudo -n -u`).
 
 `scripts/linux/axipc.py <command> [json]` is a dependency-free client (`AXIOM_IPC_SOCKET` or
 `/run/axiom/axiom.sock`).
@@ -161,13 +177,16 @@ a consistent, honest state. The nftables engine replaces this class without touc
 
 `axiomd --doctor [--json]` (`LinuxDoctor`): unit present + `ExecStart` matches the image, service
 active/enabled, image audit (root-owned, read-only), socket owner/mode, data directory 0700 (root
-only), DNS backend and per-link servers, Privacy Shield redirect/backup consistency, IPC owner
-(root only), enforcement availability (`nft --version`). Exit 1 when any check is WARN/FAIL.
+only), **log directory** (`/var/log/axiom` root 0700 and every file 0600 when it exists; "journal
+only" otherwise), DNS backend and per-link servers, Privacy Shield redirect/backup consistency, IPC
+owner (root only), enforcement (`nft --version`; as root also that `table inet axiom` is in force)
+and the **bpf layer** (bpftool + the four pins at `/sys/fs/bpf/axiom`, §12). Exit 1 when any check
+is WARN/FAIL.
 
 ## 9. Not in this phase
 
-eBPF attribution (the exec-time race stays, §10), polkit action for the desktop app,
-`.deb`/`.rpm` packaging, desktop app/autostart/tray, SELinux/AppArmor profiles, `/etc/axiom` config.
+polkit action for the desktop app, `.deb`/`.rpm` packaging, SELinux/AppArmor profiles, `/etc/axiom`
+config. (The eBPF layer and the desktop host landed later: §11, §12.)
 
 ## 10. As built in P3: the nftables engine inside axiomd
 
@@ -193,6 +212,28 @@ Windows TFM `Compile Remove` list) runs `NftEnforcementSupervisor.RunAsync`:
 5. *teardown* on stop — herded pids go back to their origin cgroups, app cgroups and the table
    are deleted; `--uninstall-service` repeats the table + `axiom.slice` removal belt-and-braces.
 
+**Rule lifecycle (review 2026-11-12 P0 #2/#3, High #4).** `rule.apply` stores the rule
+**Pending**, publishes the whole table as one `nft -f` batch and then reads it back with
+`nft -j list table inet axiom`. The rule becomes **Applied** only when the batch succeeded **and**
+the readback carries the published generation comment (`axiom generation N`) **and** the rule's own
+comment (`axiom:<id>:n`) **and** the app cgroup `axiom.slice/a-<hash>` exists **and** no live pid of
+that app failed to be herded; otherwise it stays Pending with the reason (`nft.readback_mismatch`,
+`nft.cgroup_missing`, `nft.attribution_failed`) or is **Failed** when the compiler refused it
+(`rule.invalid` / `nft.rule_rejected`, e.g. a hostname in `remoteAddresses`). `rule.verify` takes
+`presentInOs`, `effectiveAction` and `enforcementVerified` from the readback alone, never from the
+store. `rules.query → capabilities.filterEnforcement` is the honest boundary report:
+`{state, connected, publishedGeneration, ackedGeneration, lastSeenUtc, lastAckUtc, generation,
+appliedRuleCount, rejectedRules, fileError}` with `state` **verified** (readback matches the
+published generation), **pending** (published, readback not yet seen), **degraded** (the table
+vanished — `nft flush ruleset` by another admin — or `nft` cannot be read; `connected:false`,
+`ackedGeneration:null`) or **unavailable** (`nft` missing / torn down). `firewallServiceRunning`
+is live. The watcher degrades the report *immediately* when the table disappears, logs
+`table inet axiom disappeared (generation N was published); enforcement degraded; republishing.`,
+republishes and returns to verified (`Republished table inet axiom generation N+1; enforcement
+verified.`). `capabilities.firewall.limitations` always lists the ~1 s exec race of the attribution
+loop and, when the BPF layer is inactive, that nftables is the only boundary. Tests:
+`tests/Axiom.Infrastructure.Linux.Nft.Tests/NftLifecycleTests.cs`.
+
 **Event flow.** Block verdict → trace record → `FlowObservation{verdict:"block", ruleId}` →
 `LinuxConnectionSource.BlockedFlows` lists it next to the `/proc` sockets (`state: Blocked`,
 `ruleStatus: blockedByOwnedRule`, `quality: observed`, pid 0 when the rejected SYN's socket is
@@ -214,8 +255,12 @@ helper (P2b) or a proc-connector exec watcher.
 (`/proc/<pid>/{exe,fd}` of other users), `CAP_DAC_OVERRIDE` (resolv.conf / resolved runtime
 files), `CAP_CHOWN CAP_FOWNER` (0700/0600 enforcement), `CAP_KILL`, `CAP_NET_BIND_SERVICE`
 (Privacy Shield resolver on 127.0.0.1:53 — missing in P1, found by the e2e run). `ProtectSystem=strict`
-with `ReadWritePaths=/var/lib/axiom /run/axiom /sys/fs/cgroup /etc/resolv.conf /run/systemd/resolve
-/run/NetworkManager`, `ProtectControlGroups=no` (the daemon writes cgroups), `NoNewPrivileges=yes`.
+with `ReadWritePaths=/var/lib/axiom /run/axiom /sys/fs/cgroup /sys/fs/bpf /etc/resolv.conf
+/run/systemd/resolve /run/NetworkManager`, `ProtectControlGroups=no` (the daemon writes cgroups),
+`NoNewPrivileges=yes`, `CAP_BPF CAP_PERFMON` for the BPF layer. `ProtectKernelTunables=no` with the
+equivalent `ReadOnlyPaths=-/proc/sys … -/sys/kernel …` spelled out by hand: `ProtectKernelTunables=yes`
+mounts `/sys/fs/bpf` read-only and neither `ReadWritePaths` nor `BindPaths` can undo it (systemd 255:
+`failed to mkdir /sys/fs/bpf/axiom/axiom_connect4: -EROFS`), which kept the BPF layer from pinning.
 Child processes get `NOTIFY_SOCKET` stripped: `resolvectl` otherwise reports `EXIT_STATUS=` to
 systemd, which logs "reception only permitted for main PID" every probe.
 
@@ -253,3 +298,23 @@ copy of the daemon publish tree at `<bundle>/axiomd/` (the installer is looked u
 Not in P4: Windows firewall profiles are hidden off Windows (shared `FirewallPageViewModel`),
 there is no `.desktop` launcher/icon installation (packaging), no Wayland-native backend, and the
 polkit policy file is shipped but not installed by anything yet.
+
+## 12. As built in P2b: the connect-time BPF layer (`src/Axiom.Infrastructure.Linux/Bpf`)
+
+Design and map/event contract: `docs/LINUX_EBPF.md`. Status on the evidence box (2026-11-12): **active and
+proven** — journal `BPF layer attached: connect4/connect6/sendmsg4/sendmsg6 at /sys/fs/cgroup (multi), pinned
+at /sys/fs/bpf/axiom.`; a bare `curl -m 8 https://example.com` run *immediately* after `rule.apply` fails with
+`curl: (7) … after 0 ms` (rc 7, ~8 ms) — the ~1 s exec race of the attribution loop is closed for unscoped
+outbound block rules, and the rule keeps blocking while `table inet axiom` is deleted and republished
+(the verdict comes from the maps, not from nft). `capabilities.firewall.limitations` then names only the
+attribution loop ("The BPF layer closes this window for unscoped outbound block rules."); when the layer is
+inactive the second limitation names the reason (`BPF layer inactive (<status>): … nftables (socket cgroupv2)
+is the only boundary.`), `--doctor` `bpf layer` WARNs and nothing else changes — nftables stays the primary
+boundary. Scoped (address/port) and inbound rules are nft-only, so the ~1 s window remains for them.
+
+Verifier facts that cost a round: a `cgroup/connect4` program may read only `user_ip4`, a `connect6` one only
+`user_ip6` (`invalid bpf_context access off=8`), so the loopback check and the event copy are specialised per
+family at compile time. `bpftool prog loadall` pins by section name (`axiom_connect4` …) and the maps under
+`<pin>/maps/`; `bpftool cgroup tree` shows them `multi` at `/sys/fs/cgroup` next to systemd's own
+`sd_fw_egress`/`sd_devices` programs. The e2e script (`scripts/linux/bpf/e2e.sh`) counts only its own
+program ids, because a running `axiomd` keeps its four programs attached at the root as well.

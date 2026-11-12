@@ -1,6 +1,7 @@
 # Axiom for Linux — port report for the maintainer
 
-Date: 2026-11-12. Branch `buba/linux` on top of `buba/macos` (`7a48bdf`, upstream e45f880 / v0.13.0 + perf audit).
+Date: 2026-11-12. Branch `buba/linux` on top of `buba/macos` (`2436b3d`: upstream **v0.13.2** + the PR #274 review
+remediations; earlier base `7a48bdf` = v0.13.0 + perf audit).
 Not pushed; local only. Scope: the **root daemon** (`axiomd`) with nftables enforcement, systemd lifecycle,
 Privacy Shield DNS on systemd-resolved/NetworkManager/resolv.conf hosts, network recovery, `/proc` monitoring and
 `--doctor` — proven end to end as root on an Ubuntu 24.04 box (kernel 7.0, systemd 255, nft 1.0.9). No desktop
@@ -41,8 +42,24 @@ Detailed docs in the branch: `docs/LINUX_ARCHITECTURE.md` (contract + as built, 
   socket and DNS identical to the baseline.
 - Tests: Infrastructure.Unix 22, Infrastructure.Linux 27, Infrastructure.Linux.Nft 67 (fake `nft` runner + fake
   cgroup/proc fs + fake `bpftool`; the same test exe is the root e2e harness).
-- **P2b (branch `buba/linux-enforce`)**: the connect-time BPF layer that closes the exec-time race — see §4
-  for its (unproven) status and `docs/LINUX_EBPF.md` for the design as built. Full solution build with `EnableWindowsTargeting`:
+- **Security parity with the macOS PR-review (2026-11-12)**, same Definition of Done: (1) three-class IPC
+  authorization by `SO_PEERCRED` uid — root and the installing uid get everything, admin groups only under the
+  shared `AllowAdminGroupWrites` flag, every other uid gets the redacted public reads (`serviceHealth`,
+  `capabilities`) and `unauthorized` for `snapshot`/`history.query`/`diagnostics.export`/`privacy.configure`/
+  `rule.apply` (proven over the real socket with a throwaway second uid); (2) a rule is **Applied only after**
+  the `nft -f` batch succeeded *and* `nft -j list table inet axiom` reads back the generation and rule comments
+  *and* the app cgroup exists — `rule.verify` and `filterEnforcement {state verified/pending/degraded/unavailable,
+  connected, publishedGeneration, ackedGeneration, lastSeenUtc, lastAckUtc}` come from the live readback, the
+  watcher degrades immediately when the table vanishes and republishes; (3) `LogsDirectoryMode=0700`, files
+  `0600` under `/var/log/axiom`, journal documented, doctor check; (4) Linux wording for Pending/Degraded in
+  the UI (`nftables`, `table inet axiom`). `LINUX_ARCHITECTURE.md` §4, §10, §12; tests in
+  `LinuxPeerAuthorizationTests`, `LinuxSocketIpcTests`, `NftLifecycleTests`, `LogPermissionsAndDoctorTests`.
+- **P2b BPF layer — merged and proven live** (`docs/LINUX_EBPF.md` §9): compiled with clang 18 / libbpf 1.3,
+  loaded and attached by the daemon (`BPF layer attached …`), bare `curl` right after `rule.apply` fails at
+  connect (`rc=7`, 0 ms), the rule keeps blocking while `table inet axiom` is deleted; the ~1 s exec race is
+  closed for unscoped outbound block rules. Needed two fixes on this kernel: per-family context access in the
+  C programs (verifier) and `ProtectKernelTunables=no` + hand-written `ReadOnlyPaths` in the unit (bpffs
+  read-only otherwise). Full solution build with `EnableWindowsTargeting`:
   0 warnings, 0 errors; every other suite unchanged (Core 117/128 is the pre-existing Windows-path baseline).
 
 ## 2. What changed in shared code since `7a48bdf`
@@ -116,7 +133,8 @@ Nothing in the Windows projects (`Axiom.Infrastructure.Windows`, `Axiom.UI`, `Ax
 
 ## 4. Not done / unverified
 
-- eBPF helper (P2b) — **implemented, not proven live** (`docs/LINUX_EBPF.md`): `cgroup/connect4,6` +
+- eBPF helper (P2b) — **proven live on this box only** (kernel 7.0, Ubuntu 24.04); other kernels/distros and
+  BTF-less kernels untested. Original description of the layer: `cgroup/connect4,6` +
   `sendmsg4,6` programs (C, CO-RE, `src/Axiom.Infrastructure.Linux/Bpf/native/`), verdict maps keyed by exe
   inode and cgroup id, ring-buffer events via the `axiom-bpf-events` helper, `BpfEngine` (bpftool-driven
   load/pin/attach/map sync, `IEnforcementLayer` of the supervisor, `VerdictLayer` of the adapter), probe that

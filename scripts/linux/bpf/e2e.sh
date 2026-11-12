@@ -57,7 +57,12 @@ for hook in connect4 connect6 sendmsg4 sendmsg6; do
 done
 ls "$PIN" "$PIN/maps" | sed 's/^/  pin: /'
 bpftool cgroup tree "$CGROUP_ROOT" 2>/dev/null | grep -E "^$CGROUP_ROOT\$|axiom_" | sed 's/^/  tree: /'
-[ "$(bpftool cgroup tree "$CGROUP_ROOT" 2>/dev/null | grep -c 'axiom_')" = 4 ] && pass "four axiom_* programs attached at $CGROUP_ROOT" || fail "expected four attachments"
+# Count only this run's programs: a running axiomd keeps its own four axiom_* programs attached at the root.
+BASELINE_ATTACHED=${BASELINE_ATTACHED:-0}
+OURS=$(for hook in connect4 connect6 sendmsg4 sendmsg6; do bpftool prog show pinned "$PIN/axiom_$hook" -j 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["id"])'; done | tr '\n' ' ')
+echo "  our prog ids: $OURS"
+attached_ours() { local n=0 id; for id in $OURS; do bpftool cgroup tree "$CGROUP_ROOT" 2>/dev/null | grep -qE "^\s*$id\s" && n=$((n+1)); done; echo $n; }
+[ "$(attached_ours)" = 4 ] && pass "four axiom_* programs attached at $CGROUP_ROOT (ids $OURS)" || fail "expected four attachments"
 
 echo "## A3 verdict entry for $TARGET only"
 read -r MAJ MIN INO < <(stat -L -c '%Hd %Ld %i' "$TARGET")
@@ -93,8 +98,10 @@ for hook in connect4 connect6 sendmsg4 sendmsg6; do
 done
 rm -rf "$PIN"
 [ ! -e "$PIN" ] && pass "$PIN removed" || fail "$PIN remains"
-[ "$(bpftool prog list 2>/dev/null | grep -c 'axiom_')" = 0 ] && pass "bpftool prog list: no axiom_* program" || fail "axiom_* program still loaded"
-[ "$(bpftool cgroup tree "$CGROUP_ROOT" 2>/dev/null | grep -c 'axiom_')" = 0 ] && pass "bpftool cgroup tree: no axiom_* attachment" || fail "axiom_* still attached"
+LEFT=0; for id in $OURS; do bpftool prog show id "$id" >/dev/null 2>&1 && LEFT=$((LEFT+1)); done
+[ "$LEFT" = 0 ] && pass "bpftool prog list: none of our programs (ids $OURS) is loaded" || fail "$LEFT of our programs still loaded"
+[ "$(attached_ours)" = 0 ] && pass "bpftool cgroup tree: none of our programs attached" || fail "our programs still attached"
+[ "$(bpftool prog list 2>/dev/null | grep -c 'axiom_')" = "$(systemctl is-active axiomd >/dev/null 2>&1 && echo 4 || echo 0)" ] && pass "only the daemon's own axiom_* programs (if axiomd runs) remain" || echo "  note: $(bpftool prog list 2>/dev/null | grep -c 'axiom_') axiom_* programs loaded in total"
 
 if [ $DAEMON = 1 ]; then
   echo "## B1 install/upgrade axiomd in place (daemon stays installed afterwards)"
