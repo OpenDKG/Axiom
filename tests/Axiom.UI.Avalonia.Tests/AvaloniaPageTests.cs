@@ -16,7 +16,8 @@ public sealed class AvaloniaPageTests
     {
         var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
 
-        Assert.Equal(12, shell.Pages.Count);
+        Assert.Equal(13, shell.Pages.Count);
+        Assert.Contains(shell.Pages, page => page.Title == "Agent Dashboard");
         Assert.Contains(shell.Pages, page => page.Title == "Integrations");
         Assert.Contains(shell.Pages, page => page.Title == "Agent Protection");
         Assert.Contains(shell.Pages, page => page.Title == "Agent Activity");
@@ -32,7 +33,8 @@ public sealed class AvaloniaPageTests
 
         Assert.Equal(
             [
-                "Dashboard",
+                "Agent Dashboard",
+                "Network",
                 "Live Connections",
                 "Applications",
                 "Network Events",
@@ -62,7 +64,8 @@ public sealed class AvaloniaPageTests
 
         Assert.Equal(
             [
-                ("Dashboard", "MONITORING"),
+                ("Agent Dashboard", "OVERVIEW"),
+                ("Live Connections", "MONITORING"),
                 ("Agent Protection", "PROTECTION"),
                 ("AI Analyst", "INTELLIGENCE"),
                 ("Settings", "GENERAL"),

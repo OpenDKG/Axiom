@@ -41,6 +41,9 @@
     </Style>
   </Window.Styles>
   <Window.DataTemplates>
+    <DataTemplate DataType="local:AgentDashboardPageViewModel">
+      <views:AgentDashboardView />
+    </DataTemplate>
     <DataTemplate DataType="local:OverviewPageViewModel">
       <views:OverviewView />
     </DataTemplate>
