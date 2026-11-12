@@ -12,6 +12,18 @@ internal static class Program
         DistributionContext.ConfigureForProcess(false);
         try
         {
+            // Single instance before any Avalonia initialisation: calling Shutdown() from inside
+            // OnFrameworkInitializationCompleted throws "Dispatcher shut down" on the X11 backend,
+            // and a second launch should be cheap anyway.
+            var instance = new LinuxSingleInstance();
+            if (!instance.TryAcquire())
+            {
+                var delivered = instance.SignalExistingAsync(LinuxSingleInstance.SignalRetryDelay).GetAwaiter().GetResult();
+                StartupLog.Write("startup", $"Another Axiom instance is running; show signal delivered={delivered}.");
+                return 0;
+            }
+
+            App.SingleInstance = instance;
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
         catch (Exception exception)
