@@ -52,6 +52,14 @@ public sealed class FilterEventServer
         _time = time ?? throw new ArgumentNullException(nameof(time));
     }
 
+    /// <summary>
+    /// Runs after every accepted filter connection. The daemon uses it to republish the rule table
+    /// so the extension reloads and sends a fresh <c>filter.rules</c> acknowledgement on the new
+    /// connection (the extension only reports rules after a reload, the hello on connect is not an
+    /// acknowledgement). Failures are logged, never fatal.
+    /// </summary>
+    public Func<CancellationToken, Task>? ClientConnectedAsync { get; set; }
+
     public long RejectedLines => Interlocked.Read(ref _rejectedLines);
 
     public long AcceptedEvents => Interlocked.Read(ref _acceptedEvents);
@@ -198,6 +206,18 @@ public sealed class FilterEventServer
             log("AxiomFilter connected to the flow-event socket.");
             try
             {
+                if (ClientConnectedAsync is { } onConnected)
+                {
+                    try
+                    {
+                        await onConnected(cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                    {
+                        log($"Could not republish the rule table for the new filter connection: {exception.Message}");
+                    }
+                }
+
                 var stream = new NetworkStream(client, ownsSocket: false);
                 await using (stream.ConfigureAwait(false))
                 {

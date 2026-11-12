@@ -35,6 +35,14 @@ internal sealed partial class FilterEventWorker(
             LogPublishFailed(logger, exception.Message);
         }
 
+        // Every (re)connect of the extension gets a fresh generation, so its acknowledgement is
+        // for this connection: a hello that merely repeats an old generation never counts.
+        server.ClientConnectedAsync = async cancellationToken =>
+        {
+            var republished = await firewall.PublishAsync(cancellationToken).ConfigureAwait(false);
+            LogPublished(logger, republished);
+        };
+
         await server.RunAsync(message => LogMessage(logger, message), stoppingToken).ConfigureAwait(false);
     }
 }

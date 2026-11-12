@@ -300,7 +300,13 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [NotifyPropertyChangedFor(nameof(HasFilterBanner))]
     [NotifyPropertyChangedFor(nameof(FilterBannerText))]
     [NotifyPropertyChangedFor(nameof(FilterEnforcedText))]
+    [NotifyPropertyChangedFor(nameof(FilterConnectionText))]
+    [NotifyPropertyChangedFor(nameof(HasFilterConnectionText))]
     private FilterEnforcementSummary _enforcement = FilterEnforcementSummary.None;
+
+    public string FilterConnectionText => Enforcement.ConnectionText;
+
+    public bool HasFilterConnectionText => Enforcement.HasConnectionText;
 
     public IReadOnlyList<RejectedRuleRow> RejectedRules => Enforcement.RejectedRules;
 
@@ -544,9 +550,11 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
                 .SendAsync<RuleApplyResult>(IpcCommandTypes.RuleApply, spec, CancellationToken.None)
                 .ConfigureAwait(true);
 
-            NewRuleStatusText = result.Success
+            NewRuleStatusText = result.Success && result.State != RuleState.Pending
                 ? $"Rule applied and verified at {result.VerifiedUtc?.ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "unknown"}."
-                : $"Rule apply failed: {result.ErrorCode} - {result.ErrorMessage}";
+                : result.Success
+                    ? RuleApplyResultText.Describe(result, "Rule")
+                    : $"Rule apply failed: {result.ErrorCode} - {result.ErrorMessage}";
 
             if (result.Success)
             {

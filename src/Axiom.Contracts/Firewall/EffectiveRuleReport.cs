@@ -25,4 +25,12 @@ public sealed record EffectiveRuleReport
     /// is published but not enforced. Null on Windows and when the filter accepted the rule.
     /// </summary>
     public string? FilterRejectionReason { get; init; }
+
+    /// <summary>
+    /// Whether <see cref="EffectiveAction"/> rests on a verified enforcement boundary: true when the
+    /// OS filter is connected and has acknowledged the published generation containing this rule,
+    /// false when the rule is only published (filter absent, disconnected, behind, or rejecting).
+    /// Null on Windows, where the firewall applies rules synchronously and presence is enforcement.
+    /// </summary>
+    public bool? EnforcementVerified { get; init; }
 }
