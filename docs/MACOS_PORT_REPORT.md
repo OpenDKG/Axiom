@@ -1,6 +1,6 @@
 # Axiom for macOS — port report for the maintainer
 
-Date: 2026-11-12. Branch `buba/macos-desktop` (60 commits on top of `main` c21380d / v0.13.0, merged 2026-11-12). Not pushed; local only.
+Date: 2026-11-12. Branch `buba/macos-desktop` (60 commits on top of `main` e45f880 / v0.13.0, merged 2026-11-12). Not pushed; local only.
 Scope: 248 files, +23.9k / −1.7k lines. Shared (Windows-relevant) code: 99 files, +2.6k / −2.2k, mostly
 extraction into portable projects. The WPF projects (`Axiom.UI`, `Axiom.Desktop`) are untouched except 26 lines.
 
@@ -86,7 +86,7 @@ upstream's logic and the macOS seam is re-applied on top:
 - `PipeServer`: ours (transport only); the old constructor gained the two recovery delegates so upstream's
   `PipeServerTests` compile unchanged.
 
-Merge of upstream v0.13.0 (`c21380d`, 4 commits: 0.12.0, Antigravity UI/UX overhaul + full context menus +
+Merge of upstream v0.13.0 (`e45f880`, 4 commits: 0.12.0, Antigravity UI/UX overhaul + full context menus +
 v0.12.0 network recovery fixes, 0.13.0) — conflicts in 6 views, resolved with upstream's XAML and only the
 off-Windows bits re-applied:
 
