@@ -265,6 +265,50 @@ N rule(s) (generation G, verified)" only when verified; apply status text says "
 filter" for a `Pending` result, never "applied". The shared `FirewallRuleCoordinator` stores a `Pending` adapter result
 as `Pending` (audit `pending`), not `Applied`.
 
+#### 5.7.1 Latest-report state model and per-rule proof (GitHub review #2 5874573617, MAC-1 / MAC-2)
+
+An earlier clean ack is not a standing licence. `FilterStatus` now keeps, explicitly:
+
+| Field | Meaning |
+|---|---|
+| `Rules` (`FilterRulesReport`) | the **latest** `filter.rules` report, whatever its outcome: `Generation`, `ConnectionEpoch` (connection it arrived on), `Error` (file-level rejection, `IsError`), `Rejected` (rule ids + reasons), `AppliedRuleIds` (optional `ruleIds` echo, null = unknown), `ReceivedUtc` |
+| `_published` → `Snapshot(N).ExpectedRuleIds` | the ids the daemon wrote into rules.json for generation N (expected-rules snapshot; null when N was not published by this daemon process) |
+
+`Evaluate(N)` is `Verified` only when connected **and** the latest report has `ConnectionEpoch == current`, no error and
+`Generation == N`. Consequences: a later error report for the same generation revokes `Verified` (it was kept before,
+MAC-1); an N-1 ack never verifies N; any reconnect bumps the epoch so the previous instance's report stops counting
+until the new instance reports (the daemon republishes on connect); a new clean report for N restores `Verified`.
+
+Per-rule proof `RuleVerified(id, enabled)`: generation `Verified` ∧ `id` in `ExpectedRuleIds` ∧ not in `Rejected` ∧ (when
+the filter echoes `ruleIds`) listed — or, for a disabled rule, not listed. `ProjectState`, the apply outcome and
+`rule.verify` use it (`rule.verify` additionally needs the on-disk rule to match the spec); a verified generation whose
+acknowledged table lacks the rule is `Failed` (`filter.rule_not_effective`), never `Applied`. `RuleVerifiedAbsent(id)`:
+generation `Verified` ∧ `ExpectedRuleIds` known ∧ `id` not in it ∧ not echoed.
+
+Filter contract (§3.2), additive: `filter.rules` may carry `"ruleIds": ["<id>", …]` — ids of the enabled, compiled rules
+in force; omitted above 200 ids so a line stays within the daemon's 16 KiB limit. Missing = unknown; the daemon then
+relies on its published snapshot plus `rejected`.
+
+Recovery-only removal (`IOwnedRuleRecoveryAdapter.RemoveCapturedOwnedRuleAsync`, used by Settings → Restore network
+settings / `networkRecovery.restore` and `axiomd --recover-network --apply`) follows the normal removal discipline:
+publish without the rule (unrelated rules republished unchanged) → bounded ack wait (`DefaultAckTimeout`, cancellable)
+→ pure `RecoveryOutcome`:
+
+| Situation | Result |
+|---|---|
+| clean current ack of the new generation, rule absent from the published table and not echoed | `Success`, `Desired`, `VerifiedUtc` = ack time |
+| extension never reported to this process (offline recovery with the service stopped, extension off) | `Success=false`, `Pending`, `filter.disconnected`, message: enable the extension, start the service, run Restore again |
+| extension seen but disconnected | `Pending`, `filter.disconnected` (last seen …) |
+| connected, no clean ack of the generation yet | `Pending`, `filter.ack_pending` (last acknowledged G) |
+| file rejected after the publish | `Failed`, `filter.file_rejected` |
+| acknowledged table still lists the rule | `Failed`, `filter.rule_still_enforced` |
+
+No `VerifiedUtc` is ever derived from the clock or the file write. Retry is idempotent: when the rule is already gone from
+`managed-rules.json` nothing is rewritten and the outcome is re-derived from the current ack. `InspectOwnedRuleAsync`
+answers `Absent` only for a proven removal, so `NetworkRecoveryController` keeps the rule as a problem (status `Failed` /
+`PartialFailure`, `verified: false`, "Recovery did not complete") and the next Restore retries. The controller and the
+Windows adapter are unchanged.
+
 ### 5.5 `axiomd --doctor`, `--recover-network`
 
 `sudo axiomd --recover-network [--apply]` is upstream's offline recovery (v0.11.0, `NetworkRecoveryCommand`): it prints the

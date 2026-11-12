@@ -97,3 +97,100 @@ host's sudo guard on my side (row AL) — would appreciate a maintainer run of
   that group and needs a Windows run.
 - Still unverified: the second-standard-user IPC run and the forced newsyslog rotation on the VM (host sudo guard);
   Apple silicon; Developer ID signing.
+
+## Review #2 (5874573617)
+
+Prepared, not posted. Branch `buba/macos` on top of the reviewed head `fa12fe1`: `d0f8c92` (red tests), `ae418b9`
+(MAC-1), `c1a4842` (MAC-2), `5e7b673` (MAC-1 follow-up found in the VM), plus the docs commit. Design:
+`docs/MACOS_ARCHITECTURE.md` §5.7.1; tick list: `docs/MACOS_REVIEW.md` "GitHub review #2"; VM evidence:
+`docs/MACOS_TEST_REPORT.md` rows AM–AR.
+
+### MAC-1 — `src/Axiom.Infrastructure.MacOS/Filter/FilterStatus.cs` (`RulesReported` :323, `EvaluateLocked` :460), `MacFirewallPolicyAdapter.cs` (`Verify` :603)
+
+Fixed in `ae418b9` and `5e7b673`; reproduced first by `d0f8c92` (9 of 11 red on `fa12fe1`).
+
+- `FilterStatus` now keeps the **latest** `filter.rules` report as one record (generation, connection epoch, error,
+  rejected ids, optional `ruleIds`, receivedUtc) instead of a sticky `_ackedGeneration/_ackEpoch`, plus the
+  expected-rules snapshot the daemon published for each generation. `Evaluate(N)` is `Verified` only when the latest
+  report arrived on the current connection, carries no file error and names exactly `N`. A later error report for
+  the same generation revokes it, a reconnect invalidates the previous connection's report, `N-1` never verifies `N`,
+  and only a new clean ack restores it.
+- Per-rule proof: `FilterEnforcementSnapshot.RuleVerified` (:84) = generation verified ∧ rule id in the table
+  published for it ∧ not rejected ∧, when the filter echoes `ruleIds`, listed (a disabled rule must *not* be listed).
+  `ProjectState`, the apply outcome (`filter.rule_not_effective` → Failed, never Applied) and `rule.verify` (which also
+  requires the on-disk rule to match the spec) use it.
+- A connected filter whose latest report rejects the file makes `capability.status` `degraded`, with a reason that
+  names the rejection (`5e7b673`; before that, the VM showed `available` and a note reading "acknowledged N, not N").
+- Shared contract: AxiomFilter's `filter.rules` line gains an **optional, additive** `ruleIds` array (enabled compiled
+  rules in force; omitted above 200 ids to keep a line under the daemon's 16 KiB limit). A missing field means
+  "unknown" and the daemon falls back to its published snapshot + `rejected`, so an older extension keeps working.
+- Tests (`tests/Axiom.Infrastructure.MacOS.Tests/FilterVerificationRegressionTests.cs`):
+  `SameGenerationErrorReportAfterAck_RevokesVerified`, `CleanCurrentAckAfterError_RestoresVerified`,
+  `PreviousGenerationAck_DoesNotVerifyThePublishedOne`, `PreviousConnectionAck_DoesNotSurviveReconnect`,
+  `ExpectedRuleMissingOrMismatchedInTheAcknowledgedTable_IsNotVerified`,
+  `RejectedRulesFileAfterAVerifiedApply_DegradesRuleAndOverallStatus`, `AcknowledgedTableThatDoesNotListTheRule_IsNotVerified`,
+  `DisabledRule_IsVerifiedWhenTheFilterDoesNotEnforceIt`, `Parser_ReadsRuleIds_AndTreatsAMissingListAsUnknown`; Swift
+  encoder check in `macos/Tests/main.swift`.
+- VM (rows AM, AQ, AR): `chmod 664` on `rules.json` without changing its generation → `capability.status degraded`,
+  `filterEnforcement.state pending` although `ackedGeneration == publishedGeneration`, rule `pending`,
+  `rule.verify enforcementVerified false`; `chmod 644` → new clean report → `verified`, rule `applied`. Disable/enable
+  sampled every ~350 ms: right after reconnect `pending, pub 1794372834, ack 1794372833` — the old ack did not count —
+  then `verified` 0.4 s later.
+
+### MAC-2 — `src/Axiom.Infrastructure.MacOS/Filter/MacFirewallPolicyAdapter.cs` (`RemoveCapturedOwnedRuleAsync` :436)
+
+Fixed in `c1a4842`.
+
+- Recovery removal now uses the same discipline as `RemoveOwnedRuleAsync`: publish the table without the captured
+  rule (unrelated rules republished unchanged, no OS/user rules touched), wait a bounded, cancellable time for the
+  extension's ack of that generation, then decide with the pure `RecoveryOutcome` (:502):
+  - verified: clean current ack, rule absent from the published table and not echoed by the filter → `Success`,
+    `Desired`, `VerifiedUtc` = **ack time** (never the clock);
+  - pending: extension offline (`filter.disconnected`) or no clean ack yet (`filter.ack_pending`) → `Success=false`,
+    `Pending`, actionable message (enable the extension, start the service, run Restore again);
+  - failed: file rejected (`filter.file_rejected`) or the acknowledged table still lists the rule
+    (`filter.rule_still_enforced`).
+- `InspectOwnedRuleAsync` says `Absent` only when the removal is proven, so the shared `NetworkRecoveryController`
+  lists the problem and never reports the network as restored. Retry is idempotent: a rule already gone from
+  `managed-rules.json` is not rewritten; the outcome is re-derived from the current ack.
+- Windows: the Windows adapter and `NetworkRecoveryController` are unchanged.
+- Tests: `FilterVerificationRegressionTests` `RecoveryRemoval_ExtensionDisconnected_IsNotReportedVerified`,
+  `_StaleGenerationReport_StaysPending`, `_RejectedRulesFile_IsNotReportedComplete`,
+  `_RetryAfterReconnect_IsIdempotentAndVerifiedByTheAck`, `_NeverStampsVerifiedUtcFromTheClockAlone`,
+  `_FilterStillListsTheRule_IsFailedNotVerified`; `tests/Axiom.Service.Tests/NetworkRecoveryControllerTests.cs`
+  `Unverified_rule_removal_is_never_reported_as_restored_and_retry_completes`.
+- VM (rows AN–AP): extension disabled → `networkRecovery.restore` → `partialFailure, verified false,
+  rulesVerifiedAbsent 0`, problem `filter.disconnected` ("…removed from rules.json but the removal is not verified …
+  may still be enforced …"); a second retry gives the same answer and writes no new generation; after
+  `axiom-sysext enable` the third retry → `succeeded, verified true, rulesVerifiedAbsent 1`, curl HTTP 200.
+
+### PR comment (summary for review #2)
+
+Definition of done, honestly:
+
+- [x] Same-generation rejected report cannot leave enforcement `Verified` — `ae418b9`/`5e7b673`, unit tests + VM AM/AQ.
+- [x] Per-rule verification proves current effective state — `RuleVerified` (published table ∧ not rejected ∧ echoed
+  `ruleIds` when present). Limit: an extension that does not send `ruleIds` (older build) is proven against the
+  published snapshot + `rejected` list only.
+- [x] Recovery removal never claims verified without filter acknowledgement — `c1a4842`, unit tests + VM AO/AP.
+- [x] Disconnect, reconnect, stale generation, malformed/rejected file, timeouts (zero-timeout deterministic tests),
+  rejection and retry are covered by tests (`FilterVerificationRegressionTests` 15, controller test).
+- [x] IPC/privacy controls remain intact — no change to `PeerAuthorization`, `IpcCommandAccess` or log modes in this
+  round; their tests still pass.
+- [x] macOS build/test evidence and the limits are documented (`docs/MACOS_TEST_REPORT.md` AM–AR).
+- [x] PR stays Draft; nothing merged.
+- [ ] **Not done (needs the owner's Mac and an Apple Developer account):** SIP-enabled run, Developer ID signing and the
+  Network Extension entitlement on a real team, notarization, Apple-silicon evidence, reboot/upgrade/uninstall on a
+  clean install. All evidence above is from an Intel macOS 15.8.3 VM with SIP disabled and ad hoc signing — a
+  development smoke test, not release validation.
+
+Shared-contract change: `filter.rules` (AxiomFilter → daemon NDJSON) gains the optional `ruleIds` array; additive,
+absent = unknown. No change to `Axiom.Contracts` DTOs or `RuleState` in this round.
+
+Behaviour change: offline `sudo axiomd --recover-network --apply` on macOS (service stopped) has no filter connection,
+so it can no longer report an Axiom rule removal as done. It removes the rule from the table, reports the item as
+unverified (`filter.disconnected`) and tells the user to enable the extension, start the Axiom service and run
+Restore network settings again; the DNS/adapter part of the recovery is unaffected.
+
+Gate: see "Gate (review #2)" below.
+

@@ -199,6 +199,13 @@ Useful commands: `axiomd --install-service | --uninstall-service | --doctor [--j
   daemon should go through the same Pending → ack → Verified path. `RuleState` was not extended; `Pending` already exists.
 - `MacLogPermissions` is only the policy (0700 dir, 0600 files); on Linux the equivalent is the journald/systemd
   `LogsDirectoryMode=0700` or the same helper against `/var/log/axiom`.
+- Review #2 (MAC-1/MAC-2): "verified" means the **latest** report on the **current** connection is error-free for
+  exactly the published generation, and each rule is proven against the table published for that generation (and
+  the filter's `ruleIds` echo when present). A Linux adapter with a separate enforcement daemon must model the same
+  latest-report record; an nft adapter proving by readback must re-read after every change rather than trusting an
+  earlier success. Recovery-only removal must also wait for proof (ack or readback) and never stamp `VerifiedUtc` from
+  the clock. The `filter.rules` NDJSON contract (moved to `Axiom.Infrastructure.Unix` on the Linux branch) gains the
+  optional `ruleIds` field.
 
 ## 4. Not done / unverified
 

@@ -184,3 +184,14 @@ Follow-up `7986b8f`: the Firewall page re-queries the enforcement section every 
 connected / pending / verified text follows the live state (found during the VM run, row AJ).
 
 VM evidence for all five: `docs/MACOS_TEST_REPORT.md` rows AF–AL.
+
+# GitHub review #2 (5874573617, PR #274 @ `fa12fe1`, REQUEST_CHANGES)
+
+Red tests first: `d0f8c92` (`FilterVerificationRegressionTests`, 9 of 11 red on `fa12fe1`). Design: `docs/MACOS_ARCHITECTURE.md`
+§5.7.1. Evidence: `docs/MACOS_TEST_REPORT.md` rows AM–AR.
+
+| # | Severity | File | Finding | Fix | Commit |
+|---|---|---|---|---|---|
+| MAC-1 | Blocking | `src/Axiom.Infrastructure.MacOS/Filter/FilterStatus.cs` (`RulesReported`, `EvaluateLocked`), `MacFirewallPolicyAdapter.cs` (`Verify`) | an error `filter.rules` report for an already-acknowledged generation kept `_ackedGeneration/_ackEpoch`, so `Evaluate(N)` stayed `Verified`; verification proved the generation, not the rule | ☑ latest report modelled explicitly (`FilterRulesReport`: generation, connection epoch, error, rejected, optional `ruleIds`, receivedUtc) + expected-rules snapshot per published generation; `Verified` only for the latest, current-connection, error-free report of exactly the published generation (rejection revokes, reconnect invalidates, a new clean ack restores); per-rule `RuleVerified` (published ∧ not rejected ∧ echoed when the filter echoes ids; disabled = not echoed) drives `ProjectState`, apply outcome (`filter.rule_not_effective`) and `rule.verify`; capability `degraded` while the latest report rejects the file; Swift `filter.rules` gains optional `ruleIds` (additive). Tests: `FilterVerificationRegressionTests` (same-generation error, clean ack after error, N-1, reconnect, missing/mismatched rule, rejected file degrades rule + overall, `ruleIds` parse, table without the rule, disabled rule), Swift encoder check. | `ae418b9`, `5e7b673` |
+| MAC-2 | Blocking | `MacFirewallPolicyAdapter.cs` (`RemoveCapturedOwnedRuleAsync`) | recovery-only removal published and returned `Desired` + `VerifiedUtc = now` without an ack | ☑ publish → bounded ack wait → pure `RecoveryOutcome` (verified / `filter.disconnected` / `filter.ack_pending` → Pending, `filter.file_rejected` / `filter.rule_still_enforced` → Failed), `VerifiedUtc` only = ack time of a proven absence; idempotent retry (no rewrite when already gone); `InspectOwnedRuleAsync` says `Absent` only when proven, so `NetworkRecoveryController` lists the problem and never reports `verified`/restored; unrelated rules republished unchanged; Windows adapter + controller unchanged. Tests: `FilterVerificationRegressionTests` (disconnected, stale generation, rejected file, retry after reconnect with an unrelated rule, never clock-stamped, filter still lists the rule), `NetworkRecoveryControllerTests.Unverified_rule_removal_is_never_reported_as_restored_and_retry_completes`. | `c1a4842` |
+
