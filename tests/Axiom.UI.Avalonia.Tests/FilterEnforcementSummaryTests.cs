@@ -26,6 +26,10 @@ public sealed class FilterEnforcementSummaryTests
     {
         var summary = FilterEnforcementSummary.From(new FilterEnforcementReport
         {
+            State = FilterEnforcementState.Verified,
+            Connected = true,
+            PublishedGeneration = 42,
+            AckedGeneration = 42,
             Generation = 42,
             AppliedRuleCount = 7,
             RejectedRules =
@@ -38,7 +42,8 @@ public sealed class FilterEnforcementSummaryTests
         Assert.True(summary.HasRejectedRules);
         Assert.False(summary.HasBanner);
         Assert.Equal("2 rule(s) not enforced by the filter", summary.RejectedHeadline);
-        Assert.Equal("Filter enforces 7 rule(s) (generation 42).", summary.EnforcedText);
+        Assert.Equal("Filter enforces 7 rule(s) (generation 42, verified).", summary.EnforcedText);
+        Assert.True(summary.IsVerified);
         Assert.Collection(
             summary.RejectedRules,
             first =>
@@ -59,6 +64,10 @@ public sealed class FilterEnforcementSummaryTests
     {
         var fileRejected = FilterEnforcementSummary.From(new FilterEnforcementReport
         {
+            State = FilterEnforcementState.Pending,
+            Connected = true,
+            PublishedGeneration = 42,
+            AckedGeneration = 41,
             Generation = 41,
             AppliedRuleCount = 3,
             FileError = "unreadable: group/world-writable (mode 666)",
@@ -68,14 +77,68 @@ public sealed class FilterEnforcementSummaryTests
         Assert.Contains("rejected the whole rules file (unreadable: group/world-writable (mode 666))", fileRejected.BannerText, StringComparison.Ordinal);
         Assert.Contains("generation 41", fileRejected.BannerText, StringComparison.Ordinal);
 
-        var dropped = FilterEnforcementSummary.From(new FilterEnforcementReport { AppliedRuleCount = 1, DroppedEvents = 17 });
+        var dropped = FilterEnforcementSummary.From(new FilterEnforcementReport { State = FilterEnforcementState.Verified, Connected = true, AppliedRuleCount = 1, DroppedEvents = 17 });
         Assert.True(dropped.HasBanner);
         Assert.Contains("dropped 17 flow event(s)", dropped.BannerText, StringComparison.Ordinal);
 
-        var clean = FilterEnforcementSummary.From(new FilterEnforcementReport { Generation = 5, AppliedRuleCount = 2 });
+        var clean = FilterEnforcementSummary.From(new FilterEnforcementReport
+        {
+            State = FilterEnforcementState.Verified,
+            Connected = true,
+            PublishedGeneration = 5,
+            AckedGeneration = 5,
+            LastAckUtc = new DateTimeOffset(2026, 11, 12, 9, 30, 0, TimeSpan.Zero),
+            Generation = 5,
+            AppliedRuleCount = 2,
+        });
         Assert.False(clean.HasBanner);
         Assert.False(clean.HasRejectedRules);
-        Assert.Equal("Filter enforces 2 rule(s) (generation 5).", clean.EnforcedText);
+        Assert.Equal("Filter enforces 2 rule(s) (generation 5, verified).", clean.EnforcedText);
+        Assert.StartsWith("Filter: connected · generation 5 verified at ", clean.ConnectionText, StringComparison.Ordinal);
+    }
+
+    /// <summary>Review 2026-11-12: the page must never read "enforces" for a table the filter has not acknowledged.</summary>
+    [Fact]
+    public void Unverified_enforcement_is_a_banner_never_an_enforces_line()
+    {
+        var absent = FilterEnforcementSummary.From(new FilterEnforcementReport { State = FilterEnforcementState.Unavailable, PublishedGeneration = 3 });
+        Assert.True(absent.HasBanner);
+        Assert.False(absent.IsVerified);
+        Assert.Contains("NOT enforced", absent.BannerText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Filter enforces", absent.EnforcedText, StringComparison.Ordinal);
+        Assert.Equal("Filter enforcement unavailable: generation 3 published, none acknowledged.", absent.EnforcedText);
+        Assert.Equal("Filter: disconnected (last seen never)", absent.ConnectionText);
+
+        var lastSeen = new DateTimeOffset(2026, 11, 12, 9, 30, 0, TimeSpan.Zero);
+        var degraded = FilterEnforcementSummary.From(new FilterEnforcementReport
+        {
+            State = FilterEnforcementState.Degraded,
+            Connected = false,
+            PublishedGeneration = 4,
+            AckedGeneration = 4,
+            LastSeenUtc = lastSeen,
+            Generation = 4,
+            AppliedRuleCount = 2,
+        });
+        Assert.True(degraded.HasBanner);
+        Assert.Contains("disconnected (last seen " + lastSeen.ToLocalTime().ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture) + ")", degraded.BannerText, StringComparison.Ordinal);
+        Assert.Contains("protection is degraded", degraded.BannerText, StringComparison.Ordinal);
+        Assert.StartsWith("Filter: disconnected (last seen ", degraded.ConnectionText, StringComparison.Ordinal);
+        Assert.Equal("Filter enforcement degraded: generation 4 published, generation 4 last acknowledged.", degraded.EnforcedText);
+
+        var pending = FilterEnforcementSummary.From(new FilterEnforcementReport
+        {
+            State = FilterEnforcementState.Pending,
+            Connected = true,
+            PublishedGeneration = 6,
+            AckedGeneration = 5,
+            Generation = 5,
+            AppliedRuleCount = 2,
+        });
+        Assert.True(pending.HasBanner);
+        Assert.Contains("has not acknowledged rules generation 6", pending.BannerText, StringComparison.Ordinal);
+        Assert.Equal("Filter: connected · generation 6 pending acknowledgement", pending.ConnectionText);
+        Assert.Equal("Filter enforcement pending: generation 6 published, generation 5 last acknowledged.", pending.EnforcedText);
     }
 
     [Fact]
@@ -83,6 +146,10 @@ public sealed class FilterEnforcementSummaryTests
     {
         var report = new FilterEnforcementReport
         {
+            State = FilterEnforcementState.Verified,
+            Connected = true,
+            PublishedGeneration = 9,
+            AckedGeneration = 9,
             Generation = 9,
             AppliedRuleCount = 1,
             RejectedRules = [new FilterRuleRejection { RuleId = "#0", Reason = "no valid remoteAddresses in [1.2.3]" }],
@@ -103,10 +170,39 @@ public sealed class FilterEnforcementSummaryTests
         page.Dispose();
     }
 
+    /// <summary>Review 2026-11-12 #4: the live filter state must be re-queried while the page is visible, throttled.</summary>
+    [Fact]
+    public async Task Firewall_page_requeries_enforcement_when_stale()
+    {
+        var client = new EnforcementClient(new FilterEnforcementReport { State = FilterEnforcementState.Verified, Connected = true });
+        var page = new FirewallPageViewModel(client, new NullUserInteraction());
+        await Task.Delay(300);
+        var initial = client.RulesQueries;
+        Assert.True(initial >= 1);
+
+        var now = DateTimeOffset.UtcNow;
+        page.RefreshEnforcementIfStale(now);
+        await Task.Delay(100);
+        Assert.Equal(initial, client.RulesQueries); // fresh: no extra query
+
+        page.RefreshEnforcementIfStale(now + FirewallPageViewModel.EnforcementRefreshInterval + TimeSpan.FromSeconds(1));
+        await Task.Delay(300);
+        Assert.Equal(initial + 1, client.RulesQueries);
+
+        page.Dispose();
+    }
+
     private sealed class EnforcementClient(FilterEnforcementReport report) : IServiceRequestClient
     {
+        public int RulesQueries { get; private set; }
+
         public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
         {
+            if (command == IpcCommandTypes.RulesQuery)
+            {
+                RulesQueries++;
+            }
+
             object result = command switch
             {
                 IpcCommandTypes.RulesQuery => new FirewallRulesSnapshot

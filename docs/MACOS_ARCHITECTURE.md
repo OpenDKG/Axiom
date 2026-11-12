@@ -98,7 +98,7 @@ Newline-delimited JSON, one object per line:
 - `responsiblePid` / `responsiblePath` (review #12): the responsible process when it differs from `pid`/`path` (e.g. the Terminal that ran `sh -c curl`, the app behind a WebKit networking process); `null` otherwise. Rules were matched against both paths. Readers must tolerate the keys being absent (older filters).
 - `filter.hello` is sent first on every connection and again after every successful reload; `filter.rules` (review #6) follows it after every reload: `generation` and `applied` (number of enabled rules enforced) describe the table now in force, `rejected` lists the skipped rules with reasons. When the **file** was rejected (identity check, invalid JSON, unsupported schema) `filter.rules` is sent without a hello, `error` carries the reason and `generation`/`applied`/`rejected` describe the table that is still in force. Readers must ignore unknown event types.
 - `dropped` (review #14): total number of events the filter had to drop so far (backlog overflow or too many events in flight); monotonic per extension process. A daemon that sees it grow knows its flow table is incomplete.
-- **Consumer side** (daemon, .NET): `FlowEventParser` parses `filter.rules` (rejected list capped at 256 entries, wrong field types ignored) and the `dropped` counter of both events; `FilterStatus` keeps the latest report (`FilterRulesReport`) and the highest `dropped` seen, and takes the generation of a file-rejection event as the one still enforced. `MacFirewallPolicyAdapter` exposes it on the IPC contract: `capabilities` / `rules.query` → `capability.filterEnforcement {generation, appliedRuleCount, rejectedRules:[{ruleId, reason}], fileError, droppedEvents, reportedUtc}` (null on Windows and until the first report); `rule.verify` → `filterRejectionReason` (the rule then has no `effectiveAction`) plus a note. The Firewall page renders `rejectedRules` as "N rule(s) not enforced by the filter" with id + reason, and `fileError` / `droppedEvents > 0` as a banner (`FilterEnforcementSummary`). The daemon's own validation is not a superset of the filter's (e.g. `IPAddress.TryParse` accepts `1.2.3`), which is why the report matters.
+- **Consumer side** (daemon, .NET): `FlowEventParser` parses `filter.rules` (rejected list capped at 256 entries, wrong field types ignored) and the `dropped` counter of both events; `FilterStatus` keeps the latest report (`FilterRulesReport`) and the highest `dropped` seen, and takes the generation of a file-rejection event as the one still enforced. A `filter.rules` event **without** `error` is the extension's acknowledgement of its `generation` (§5.7); a hello is not. `MacFirewallPolicyAdapter` exposes it on the IPC contract: `capabilities` / `rules.query` → `capability.filterEnforcement {state, connected, publishedGeneration, ackedGeneration, lastSeenUtc, lastAckUtc, generation, appliedRuleCount, rejectedRules:[{ruleId, reason}], fileError, droppedEvents, reportedUtc}` (null on Windows; on macOS always present, `state: unavailable` before the first connection); `rule.verify` → `enforcementVerified` (bool, null on Windows) and `filterRejectionReason` (the rule then has no `effectiveAction`) plus a note. The Firewall page renders `rejectedRules` as "N rule(s) not enforced by the filter" with id + reason, and `fileError` / `droppedEvents > 0` as a banner (`FilterEnforcementSummary`). The daemon's own validation is not a superset of the filter's (e.g. `IPAddress.TryParse` accepts `1.2.3`), which is why the report matters.
 
 ### 3.3 Filter lifecycle
 
@@ -180,20 +180,31 @@ effect on the running daemon; writing into the helper directory needs root.
 
 ### 5.4 Authorization and file modes
 
-| Caller (peer uid from `getpeereid`) | Connect / read-only commands | Write commands |
-|---|---|---|
-| root (0) | yes | yes |
-| installing user (`protection.json` `AllowedUid`) | yes | yes |
-| member of group `admin` (getgrouplist; `AllowAdminGroupWrites`, default true) | yes | yes |
-| any other local account (uid ≥ 501) | yes | **denied**: `unauthorized` error, logged with the actor |
-| system accounts (1–500), `nobody`, unknown peer | connection closed | — |
+Four layers, each decided once per connection from the `getpeereid` uid and then enforced per command in the shared
+`IpcRequestDispatcher` before any handler runs (review 2026-11-12 P0 #1; `PeerAuthorization.Decide(uid, policy)` is a
+pure function so the Linux port can reuse it unchanged):
 
-`IpcCommandAccess` classifies every command (test-enforced: each `IpcCommandTypes` constant is in exactly one list; an
-unlisted command counts as a write). Read-only: `capabilities`, `serviceHealth`, `snapshot`, `live.events`,
-`rule.verify`, `rules.query`, `history.query`, `traffic.history`, `privacy.status`, `config.get`, `diagnostics.export`,
-`protection.status`, `threatshare.status`. Everything else (`rule.apply/remove`, `privacy.configure`,
-`privacy.sources.update`, `privacy.history.clear`, `config.set`, `protection.*` changes, `threatshare.*` changes) is a write.
-Windows is unchanged: the named pipe admits one SID with full access.
+| Caller (peer uid from `getpeereid`) | Connect | Public read (`serviceHealth` redacted, `capabilities`) | Private read (everything else that reads) | Write |
+|---|---|---|---|---|
+| root (0) — documented privileged policy | yes | yes | yes | yes |
+| installing user (`protection.json` `AllowedUid`) | yes | yes | yes | yes |
+| member of group `admin` (getgrouplist) with `AllowAdminGroupWrites` (default true) | yes | yes | yes | yes |
+| member of group `admin` with `AllowAdminGroupWrites` off | yes | yes | **denied** `unauthorized` | **denied** `unauthorized` |
+| any other local account (uid ≥ 501) | yes | yes | **denied** `unauthorized`, logged with the actor | **denied** `unauthorized` |
+| system accounts (1–500), `nobody`, unknown or failed peer credentials | connection closed | — | — | — |
+
+`IpcCommandAccess` puts every command in exactly one class (test-enforced by reflection over `IpcCommandTypes`; an
+unlisted command counts as a write). **PublicRead**: `serviceHealth` (for a public caller: status, version, uptime,
+contract version only — no counts, capture time, limitations or last error), `capabilities`. **PrivateRead**: `snapshot`,
+`live.events`, `rule.verify`, `rules.query`, `history.query`, `traffic.history`, `privacy.status`, `config.get`,
+`diagnostics.export`, `protection.status`, `threatshare.status`. **Write**: `rule.apply/remove`, `privacy.configure`,
+`privacy.sources.update`, `privacy.history.clear`, `config.set`, `protection.*` changes, `threatshare.*` changes,
+`networkRecovery.*`. Windows is unchanged: the named pipe admits one SID with full access (`IpcCaller.FullAccess`).
+
+Why the socket stays 0666: macOS has no `axiom` group, the installing user is a plain uid and admins are a group the
+daemon cannot own, so a 0660 socket would lock out the very users who may use it. The socket mode therefore only admits
+the *connection*; identity comes from `getpeereid` on every accepted socket and every command is checked against the
+class above. A peer whose credentials cannot be read is closed, never defaulted.
 
 Machine data directory `/Library/Application Support/Axiom` (`MacDataDirectoryPermissions`, applied at every daemon start
 and at write time): the root is `root 0700`; `filter/` is 0755 and `filter/rules.json` 0644 (read by the extension);
@@ -203,7 +214,56 @@ every other file the daemon writes — `axiom.db` with `-wal`/`-shm`, `filter/ma
 service image under Program Files) is excluded from the `net10.0` target; `ServicePlatform.HardenMachineState()` calls
 `MacDataDirectoryPermissions.Enforce` on macOS at the same point of `Program.cs`, and `MachineStateSecurity.Unix.cs`
 keeps only the symlink check (`IsReparsePointInPath`) the shared `NetworkRecoveryController` needs.
-Sockets: `/var/run/axiom/axiom.sock` 0666 (peer-checked), `filter.sock` 0600.
+Sockets: `/var/run/axiom/axiom.sock` 0666 (peer-checked, see the table above), `filter.sock` 0600.
+
+Daemon log `/Library/Logs/Axiom` (`MacLogPermissions`, review Medium #5): directory `root 0700`, `axiomd.log` and every
+rotated archive `axiomd.log.N.bz2` 0600, newsyslog entry mode `600`. The installer pre-creates the log 0600 before launchd
+opens `StandardOutPath` (launchd would create it with the default umask, 0644) and fixes an older layout on upgrade; the
+daemon re-applies the modes at every start next to the data-directory hardening. The log carries process names, paths
+and rule ids of every user's connections, never API keys or IPC payloads.
+
+### 5.7 Rule lifecycle and enforcement state (review 2026-11-12 P0 #2, P0 #3, High #4)
+
+Publishing `rules.json` is not enforcement (upstream `docs/ENFORCEMENT.md`: observation is not enforcement; never
+render a verified claim without a real boundary). The daemon only knows a table is enforced when the extension, over a
+live connection, acknowledged exactly that generation.
+
+`FilterStatus` keeps four signals apart:
+
+| Field | Source | Meaning |
+|---|---|---|
+| `LastSeenUtc` | any byte from the extension (hello, rules, flow events) | diagnostic only; shown as "last seen hh:mm" |
+| `IsConnected` | accepted connections on `filter.sock` (count > 0) | the extension holds a live connection *now* |
+| `AckedGeneration` / `LastAckUtc` | last `filter.rules` without `error`, tagged with the connection it arrived on | the generation the extension enforces |
+| `Evaluate(published)` | derived | `Unavailable` (never seen) · `Degraded` (seen, not connected) · `Pending` (connected, no matching ack on this connection) · `Verified` |
+
+Transitions: disconnect → `Degraded` immediately (no grace window; the former `HasRecentHello` 10-minute window is gone).
+Reconnect → `Pending` even when the hello names the current generation; the daemon republishes the table on every
+accepted connection (`FilterEventServer.ClientConnectedAsync` → `PublishAsync`, new generation), the extension reloads
+and sends `filter.hello` + `filter.rules`, and only that fresh ack makes the generation `Verified`. The Swift contract
+(§3.2) did not change. Daemon restart starts at `Unavailable` and goes through the same path.
+
+Rule states on macOS (`RuleState` unchanged; Windows still returns `Applied` when the OS rule exists):
+
+| Event | `rule.apply` result | Stored / `rules.query` state |
+|---|---|---|
+| rules.json written, filter connected, ack for generation N arrives within `DefaultAckTimeout` (2 s) and the rule is not in `rejected` | `Applied`, `verifiedUtc` = ack time | `Applied` |
+| written, filter never connected / disconnected / ack is for another generation / no ack within 2 s | `Pending`, `errorCode` null, message `awaiting AxiomFilter acknowledgement of generation N (…)` | `Pending` → flips to `Applied` by itself when the ack arrives (`ListOwnedRulesAsync` projects through the live snapshot) |
+| ack for N lists this rule in `rejected` | `Failed`, `filter.rule_rejected`, the filter's reason | `Failed` |
+| `filter.rules` with `error` after the publish (file rejected, old generation stays) | `Failed`, `filter.file_rejected` | `Failed` |
+| rule removed | `Desired`; `verifiedUtc` only after the ack | gone |
+| disconnect after a verified apply | — | `Pending` again; `capability.status = degraded`, `firewallServiceRunning = false` |
+
+`rule.verify`: `presentInOs` = in rules.json, `matchesSpec` as before, `effectiveAction` **only** when the published
+generation is `Verified` and the rule was not rejected, otherwise null with a note (`never connected` / `disconnected
+(last seen …)` / `acknowledged generation G, not N` / `rejected …`); `enforcementVerified` says which. `capabilities`:
+`firewallServiceRunning` = connected now; `status` = `available` while connected (even if the ack is pending — the
+reason names the pending generation), `degraded` while disconnected; `filterEnforcement` carries the five fields above
+plus the last report. The Firewall page shows `Filter: connected · generation N verified at hh:mm` / `… pending
+acknowledgement` / `Filter: disconnected (last seen hh:mm)`, a banner for every unverified state, and "Filter enforces
+N rule(s) (generation G, verified)" only when verified; apply status text says "published; waiting for the network
+filter" for a `Pending` result, never "applied". The shared `FirewallRuleCoordinator` stores a `Pending` adapter result
+as `Pending` (audit `pending`), not `Applied`.
 
 ### 5.5 `axiomd --doctor`, `--recover-network`
 

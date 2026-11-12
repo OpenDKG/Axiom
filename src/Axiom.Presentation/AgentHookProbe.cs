@@ -38,6 +38,7 @@ public sealed class AgentHookProbe
             {
                 "codex" => await TestCodexAsync(token).ConfigureAwait(false),
                 "claude" => await TestClaudeAsync(token).ConfigureAwait(false),
+                "antigravity" => await TestAntigravityAsync(token).ConfigureAwait(false),
                 "cursor" => await TestCursorAsync(token).ConfigureAwait(false),
                 "copilot" => await TestCopilotAsync(token).ConfigureAwait(false),
                 "gemini" => await TestGeminiAsync(token).ConfigureAwait(false),
@@ -399,6 +400,65 @@ public sealed class AgentHookProbe
         return new AgentHookTestResult(
             "HOOK RAN",
             "Gemini hook executed and reached the local guard without a block. The real Gemini CLI process was not exercised.");
+    }
+
+    private async Task<AgentHookTestResult> TestAntigravityAsync(CancellationToken cancellationToken)
+    {
+        var root = Path.Combine(_localAppData, "Axiom", "modules", "blackbox", "agent-blackbox");
+        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var hook = Path.Combine(root, "axiom-antigravity-hook.py");
+        if (!File.Exists(python) || !IsManagedScript(hook))
+        {
+            return new AgentHookTestResult("FAIL", "Antigravity hook or Blackbox Python runtime is missing.");
+        }
+
+        var startInfo = new ProcessStartInfo(python)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = root,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        startInfo.ArgumentList.Add(hook);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Could not start the Antigravity hook.");
+        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
+        {
+            toolCall = new
+            {
+                name = "read_file",
+                args = new { Path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
+            },
+            conversationId = "axiom-hook-test",
+            stepIdx = 1,
+        })).ConfigureAwait(false);
+        process.StandardInput.Close();
+
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var output = await outputTask.ConfigureAwait(false);
+        _ = await errorTask.ConfigureAwait(false);
+
+        if (process.ExitCode != 0)
+        {
+            return new AgentHookTestResult("FAIL", $"Antigravity hook exited with {process.ExitCode}.");
+        }
+
+        if (IsDeniedGeminiOutput(output))
+        {
+            return new AgentHookTestResult(
+                "BLOCKED",
+                "Antigravity hook executed and returned decision: deny for the benign test call. " +
+                "The real Antigravity process was not exercised.");
+        }
+
+        return new AgentHookTestResult(
+            "HOOK RAN",
+            "Antigravity hook executed and reached the local guard without a block. The real Antigravity process was not exercised.");
     }
 
     private static bool IsDeniedGeminiOutput(string output)

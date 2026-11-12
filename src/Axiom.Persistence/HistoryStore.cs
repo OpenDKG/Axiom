@@ -203,14 +203,13 @@ public sealed class HistoryStore
             throw;
         }
     }
-    private readonly Dictionary<string, string> _writtenFlows = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string Fingerprint, string CapturedUtc)> _writtenFlows = new(StringComparer.Ordinal);
 
     private DateTimeOffset _lastFullRefresh = DateTimeOffset.MinValue;
 
     /// <summary>
-    /// Unchanged flows only need their last-seen time refreshed occasionally. Writing every flow
-    /// on every tick turned a quiet machine into a steady stream of SQLite page writes; the delta
-    /// leaves the disk alone when nothing changed.
+    /// Refreshes last-seen timestamps on each distinct snapshot capture while suppressing duplicate
+    /// writes for identical snapshot timestamps.
     /// </summary>
     private static readonly TimeSpan FullRefreshInterval = TimeSpan.FromHours(6);
 
@@ -227,7 +226,8 @@ public sealed class HistoryStore
             var fingerprint = FlowFingerprint(flow);
             if (refreshAll ||
                 !_writtenFlows.TryGetValue(key, out var previous) ||
-                !string.Equals(previous, fingerprint, StringComparison.Ordinal))
+                !string.Equals(previous.Fingerprint, fingerprint, StringComparison.Ordinal) ||
+                !string.Equals(previous.CapturedUtc, now, StringComparison.Ordinal))
             {
                 changed.Add((flow, key, fingerprint));
             }
@@ -272,7 +272,7 @@ public sealed class HistoryStore
 
         foreach (var (_, key, fingerprint) in changed)
         {
-            _writtenFlows[key] = fingerprint;
+            _writtenFlows[key] = (fingerprint, now);
         }
 
         if (_writtenFlows.Count > 20_000)

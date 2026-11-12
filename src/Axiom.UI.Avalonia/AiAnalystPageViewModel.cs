@@ -212,8 +212,15 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
     [NotifyPropertyChangedFor(nameof(CanCopyResult))]
     private AiFinding? _selectedFinding;
 
+    private bool _suppressApiKeyInputChanged;
+
     partial void OnApiKeyInputChanged(string value)
     {
+        if (_suppressApiKeyInputChanged)
+        {
+            return;
+        }
+
         _apiKey = value;
         _apiKeyDirty = true;
         UpdateCredentialsText();
@@ -291,7 +298,15 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
         }
 
         _apiKeyDirty = false;
-        ApiKeyInput = string.Empty;
+        _suppressApiKeyInputChanged = true;
+        try
+        {
+            ApiKeyInput = string.Empty;
+        }
+        finally
+        {
+            _suppressApiKeyInputChanged = false;
+        }
         SettingsStatus = $"Settings saved locally. The API key is protected with {PlatformText.SecretStore}.";
         UpdateCredentialsText();
         UpdateStatus();

@@ -10,7 +10,9 @@ namespace Axiom.Infrastructure.Unix.Ipc;
 /// The daemon IPC endpoint: a Unix domain socket (default <c>/var/run/axiom/axiom.sock</c>, mode
 /// 0666 in a 0755 root directory). It speaks exactly the Windows pipe protocol (newline-delimited
 /// JSON envelopes), so .NET <c>NamedPipeClientStream</c> clients connect to the absolute path
-/// unchanged. Every accepted peer is authorized by uid before a byte is read. Review #20: besides
+/// unchanged. Every accepted peer is identified by uid (getpeereid) before a byte is read and the
+/// resulting <see cref="PeerDecision"/> is enforced per command by the dispatcher: the socket mode
+/// admits connections, it never grants data (see <see cref="PeerAuthorization"/>). Review #20: besides
 /// the global slot limit, every non-root uid may hold at most <see cref="MaxConnectionsPerUid"/>
 /// concurrent connections, so one user idling on sockets cannot lock the others (or the desktop
 /// app of the installing user) out; root is uncapped.
@@ -28,7 +30,7 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
 
     private readonly Func<uint?, PeerDecision> _authorize;
 
-    /// <summary>Connection check only (every console user may write); kept for tests and tools.</summary>
+    /// <summary>No install record: only root reads private data or writes; kept for tests and tools.</summary>
     public UnixSocketIpcTransport(UnixServicePaths paths)
         : this(paths, uid => PeerAuthorization.Decide(uid))
     {
@@ -187,8 +189,12 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
             var stream = new NetworkStream(client, ownsSocket: true);
             await using (stream.ConfigureAwait(false))
             {
-                var caller = new IpcCaller(decision.Actor, decision.CanWrite, decision.WriteDenialReason);
-                await dispatcher.HandleConnectionAsync(stream, caller, cancellationToken).ConfigureAwait(false);
+                if (!decision.CanReadPrivate)
+                {
+                    log($"IPC client {decision.Actor} connected with public health access only ({decision.Reason}).");
+                }
+
+                await dispatcher.HandleConnectionAsync(stream, decision.ToCaller(), cancellationToken).ConfigureAwait(false);
             }
         }
         catch (Exception exception) when (exception is

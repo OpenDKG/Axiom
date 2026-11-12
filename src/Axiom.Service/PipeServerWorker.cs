@@ -54,7 +54,9 @@ public sealed partial class PipeServerWorker(
             RulesQuery = async cancellationToken =>
             {
                 var capability = await firewall.GetCapabilitiesAsync(cancellationToken).ConfigureAwait(false);
-                IReadOnlyList<ManagedRule> rules = capability.Status == FirewallCapabilityStatus.Available
+                // Degraded (macOS: filter disconnected) still lists the published rules so the UI can
+                // show them as pending; Windows reports Available or Unavailable only.
+                IReadOnlyList<ManagedRule> rules = capability.Status is FirewallCapabilityStatus.Available or FirewallCapabilityStatus.Degraded
                     ? await firewall.ListOwnedRulesAsync(cancellationToken).ConfigureAwait(false)
                     : [];
 

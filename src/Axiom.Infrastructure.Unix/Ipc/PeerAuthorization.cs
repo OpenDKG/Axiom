@@ -1,14 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Globalization;
 using Axiom.Core.Protection;
+using Axiom.Service.Hosting.Ipc;
 
 namespace Axiom.Infrastructure.Unix.Ipc;
 
 /// <summary>
-/// Outcome of the caller check on the daemon socket. <see cref="Allowed"/> gates the connection
-/// (read-only commands); <see cref="CanWrite"/> gates commands that change machine state.
+/// Outcome of the caller check on the daemon socket, one flag per layer: <see cref="Allowed"/>
+/// gates the connection (public health commands), <see cref="CanReadPrivate"/> gates commands that
+/// disclose machine-wide activity, <see cref="CanWrite"/> gates commands that change machine state.
+/// Per-command capability is decided by <see cref="IpcCommandAccess"/> on top of these flags.
 /// </summary>
-public sealed record PeerDecision(bool Allowed, string Actor, string Reason, bool CanWrite = true, string? WriteDenialReason = null);
+public sealed record PeerDecision(
+    bool Allowed,
+    string Actor,
+    string Reason,
+    bool CanWrite = true,
+    string? WriteDenialReason = null,
+    bool CanReadPrivate = true,
+    string? ReadDenialReason = null)
+{
+    /// <summary>The dispatcher-side identity for this peer.</summary>
+    public IpcCaller ToCaller() => new(Actor, CanWrite, WriteDenialReason, CanReadPrivate, ReadDenialReason);
+}
 
 /// <summary>
 /// The local account conventions of one Unix flavour: where regular (console) users start, which
@@ -34,13 +48,14 @@ public sealed record UnixAccountRange(uint FirstUserUid, uint NobodyUid, IReadOn
     public bool IsRegularUser(uint uid) => uid >= FirstUserUid && uid != NobodyUid && uid != PeerAuthorization.UnknownUid;
 
     public string Describe() =>
-        $"root and console users (uid 0 or uid >= {FirstUserUid.ToString(CultureInfo.InvariantCulture)}, checked with {CredentialSource}); " +
-        $"writes: root, the installing user and {AdminGroupsText}";
+        $"connect: root and console users (uid 0 or uid >= {FirstUserUid.ToString(CultureInfo.InvariantCulture)}, checked with {CredentialSource}); " +
+        $"private reads and writes: root, the installing user and (policy) {AdminGroupsText}; other users: public health only";
 }
 
 /// <summary>
-/// Who may change machine-wide state over the socket: the uid recorded at install time
-/// (<see cref="ProtectionSettings.AllowedUid"/>) and, when enabled, members of the admin
+/// Who may read private data and change machine-wide state over the socket: the uid recorded at
+/// install time (<see cref="ProtectionSettings.AllowedUid"/>) and, when the explicit
+/// <see cref="ProtectionSettings.AllowAdminGroupWrites"/> policy is on, members of the admin
 /// group(s). <paramref name="IsAdminMember"/> answers group membership for a uid (getgrouplist).
 /// </summary>
 public sealed record PeerPolicy(uint? OwnerUid, bool AdminGroupMayWrite, Func<uint, bool> IsAdminMember)
@@ -48,7 +63,7 @@ public sealed record PeerPolicy(uint? OwnerUid, bool AdminGroupMayWrite, Func<ui
     /// <summary>The macOS administrator group.</summary>
     public const string AdminGroup = "admin";
 
-    /// <summary>Read-only for everyone but root: no owner, no admin group.</summary>
+    /// <summary>No owner, no admin group: only root reads private data or writes.</summary>
     public static PeerPolicy RootOnlyWrites { get; } = new(null, false, _ => false);
 
     public static PeerPolicy FromSettings(ProtectionSettings settings, Func<uint, bool> isAdminMember)
@@ -60,7 +75,7 @@ public sealed record PeerPolicy(uint? OwnerUid, bool AdminGroupMayWrite, Func<ui
 
     /// <summary>
     /// Production policy for <paramref name="range"/>: membership in any of its admin groups
-    /// (<see cref="Interop.UnixGroups"/>) grants writes when the setting allows it.
+    /// (<see cref="Interop.UnixGroups"/>) grants private reads and writes when the setting allows it.
     /// </summary>
     public static PeerPolicy FromSettings(ProtectionSettings settings, UnixAccountRange range)
     {
@@ -71,13 +86,29 @@ public sealed record PeerPolicy(uint? OwnerUid, bool AdminGroupMayWrite, Func<ui
 
 /// <summary>
 /// Who may talk to the daemon over the Unix socket (<c>/var/run/axiom/axiom.sock</c> on macOS,
-/// <c>/run/axiom/axiom.sock</c> on Linux). The socket is world connectable (0666) like a Windows
-/// pipe with an explicit DACL; the decision is made on the peer uid: root and regular console users
-/// (uid at or above the platform's first user uid) may connect and read; system/daemon accounts,
-/// <c>nobody</c> and an unknown peer are rejected. Write commands (rules, protection, Privacy
-/// Shield configuration, threat sharing) are limited to root, the installing user and optionally
-/// the platform's admin group(s), mirroring the single persisted SID on Windows. The actor
-/// recorded in the audit trail is <c>uid:N</c>.
+/// <c>/run/axiom/axiom.sock</c> on Linux), and what they may ask. The socket is world connectable
+/// (0666): neither platform has a group that contains "the user who installed Axiom" and the
+/// installing user is not necessarily an administrator, so a 0660 socket with a root-owned group
+/// would lock the desktop app out; instead every accepted connection is identified by its peer uid
+/// (<c>getpeereid</c> / <c>SO_PEERCRED</c>, kernel-set) before a byte is read and the decision
+/// below is enforced per command by the shared dispatcher. Layers (docs/MACOS_ARCHITECTURE.md §5.4,
+/// docs/LINUX_ARCHITECTURE.md authorization table):
+/// <list type="bullet">
+/// <item>Connection: root and regular console users (uid at or above the platform's first user
+/// uid) may connect; system/daemon accounts, <c>nobody</c> and a peer whose credentials cannot be
+/// read are closed without a reply.</item>
+/// <item>Private read (snapshot, live events, history, DNS status, diagnostics, settings) and write
+/// (rules, Axiom Shield, Privacy Shield, threat sharing, recovery): root (documented privileged
+/// policy: root owns the daemon, its data directory and the rules), the installing user, and
+/// members of the platform's admin group(s) only under the explicit <c>AllowAdminGroupWrites</c>
+/// policy (default on; the same switch covers private reads on both platforms).</item>
+/// <item>Any other local account gets the public health commands (<c>serviceHealth</c> redacted,
+/// <c>capabilities</c>) and <c>unauthorized</c> for everything else, so a second standard user
+/// cannot read the first user's traffic history or change the machine.</item>
+/// </list>
+/// The policy is pure (<see cref="Decide(uint?, PeerPolicy?, UnixAccountRange)"/>, <see cref="Permits(uint?, PeerPolicy?, IpcCommandClass, UnixAccountRange)"/>)
+/// so it is shared between macOS and Linux and unit-testable without a socket. The actor recorded
+/// in the audit trail is <c>uid:N</c>.
 /// </summary>
 public static class PeerAuthorization
 {
@@ -93,23 +124,27 @@ public static class PeerAuthorization
 
     public static string ActorFor(uint uid) => "uid:" + uid.ToString(CultureInfo.InvariantCulture);
 
-    /// <summary>Connection-level decision only; every connected peer may write (legacy/test use).</summary>
+    /// <summary>Decision without an install record: only root is privileged (safe default for tools and tests), macOS conventions.</summary>
     public static PeerDecision Decide(uint? uid) => Decide(uid, null, UnixAccountRange.MacOS);
 
     /// <summary>
-    /// Connection-level decision plus the write permission under <paramref name="policy"/>
-    /// (null = every connected peer may write), macOS account conventions.
+    /// Connection-level decision plus the private-read and write permissions under
+    /// <paramref name="policy"/> (null = <see cref="PeerPolicy.RootOnlyWrites"/>), macOS account conventions.
     /// </summary>
     public static PeerDecision Decide(uint? uid, PeerPolicy? policy) => Decide(uid, policy, UnixAccountRange.MacOS);
 
-    /// <summary>Connection-level decision plus the write permission for one account range.</summary>
+    /// <summary>
+    /// Connection-level decision plus the private-read and write permissions under
+    /// <paramref name="policy"/> (null = <see cref="PeerPolicy.RootOnlyWrites"/>) for one account range.
+    /// </summary>
     public static PeerDecision Decide(uint? uid, PeerPolicy? policy, UnixAccountRange range)
     {
         ArgumentNullException.ThrowIfNull(range);
+        policy ??= PeerPolicy.RootOnlyWrites;
 
         if (uid is not { } value || value == UnknownUid)
         {
-            return new PeerDecision(false, "uid:unknown", "The peer credentials could not be read.", false, "unknown peer");
+            return new PeerDecision(false, "uid:unknown", "The peer credentials could not be read.", false, "unknown peer", false, "unknown peer");
         }
 
         if (value == RootUid)
@@ -119,22 +154,13 @@ public static class PeerAuthorization
 
         if (value == range.NobodyUid)
         {
-            return new PeerDecision(false, ActorFor(value), "The nobody account may not use the daemon.", false, "nobody");
+            return new PeerDecision(false, ActorFor(value), "The nobody account may not use the daemon.", false, "nobody", false, "nobody");
         }
 
         if (value < range.FirstUserUid)
         {
-            return new PeerDecision(
-                false,
-                ActorFor(value),
-                $"System accounts below uid {range.FirstUserUid.ToString(CultureInfo.InvariantCulture)} may not use the daemon.",
-                false,
-                "system account");
-        }
-
-        if (policy is null)
-        {
-            return new PeerDecision(true, ActorFor(value), "console user");
+            var reason = $"System accounts below uid {range.FirstUserUid.ToString(CultureInfo.InvariantCulture)} may not use the daemon.";
+            return new PeerDecision(false, ActorFor(value), reason, false, "system account", false, "system account");
         }
 
         if (policy.OwnerUid == value)
@@ -144,15 +170,28 @@ public static class PeerAuthorization
 
         if (policy.AdminGroupMayWrite && policy.IsAdminMember(value))
         {
-            return new PeerDecision(true, ActorFor(value), "admin group member");
+            return new PeerDecision(true, ActorFor(value), "admin group member (AllowAdminGroupWrites)");
         }
 
         return new PeerDecision(
             true,
             ActorFor(value),
-            "console user (read-only)",
+            "console user (public health only)",
             false,
-            WriteDenialMessage(value, policy, range));
+            WriteDenialMessage(value, policy, range),
+            false,
+            ReadDenialMessage(value, policy, range));
+    }
+
+    /// <summary>Pure per-command answer for a (uid, policy, command class) triple, macOS conventions.</summary>
+    public static bool Permits(uint? uid, PeerPolicy? policy, IpcCommandClass commandClass) =>
+        Permits(uid, policy, commandClass, UnixAccountRange.MacOS);
+
+    /// <summary>Pure per-command answer for a (uid, policy, command class) triple.</summary>
+    public static bool Permits(uint? uid, PeerPolicy? policy, IpcCommandClass commandClass, UnixAccountRange range)
+    {
+        var decision = Decide(uid, policy, range);
+        return decision.Allowed && decision.ToCaller().Permits(commandClass);
     }
 
     public static string WriteDenialMessage(uint uid, PeerPolicy policy) => WriteDenialMessage(uid, policy, UnixAccountRange.MacOS);
@@ -161,6 +200,22 @@ public static class PeerAuthorization
     {
         ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(range);
+        return $"This command changes machine-wide settings and is only allowed for {AllowedCallers(policy, range)}; " +
+               $"uid {uid.ToString(CultureInfo.InvariantCulture)} may only read public service health.";
+    }
+
+    public static string ReadDenialMessage(uint uid, PeerPolicy policy) => ReadDenialMessage(uid, policy, UnixAccountRange.MacOS);
+
+    public static string ReadDenialMessage(uint uid, PeerPolicy policy, UnixAccountRange range)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentNullException.ThrowIfNull(range);
+        return $"This command discloses machine-wide activity and is only allowed for {AllowedCallers(policy, range)}; " +
+               $"uid {uid.ToString(CultureInfo.InvariantCulture)} may only read public service health.";
+    }
+
+    private static string AllowedCallers(PeerPolicy policy, UnixAccountRange range)
+    {
         var allowed = policy.OwnerUid is { } owner
             ? $"root, the user who installed Axiom (uid {owner.ToString(CultureInfo.InvariantCulture)})"
             : "root";
@@ -169,11 +224,11 @@ public static class PeerAuthorization
             allowed += " and members of " + range.AdminGroupsText;
         }
 
-        return $"This command changes machine-wide settings and is only allowed for {allowed}; " +
-               $"uid {uid.ToString(CultureInfo.InvariantCulture)} may only read.";
+        return allowed;
     }
 
     /// <summary>The macOS description (kept for the launchd daemon's startup log).</summary>
     public const string Description =
-        "root and console users (uid 0 or uid >= 501, checked with getpeereid); writes: root, the installing user and the admin group";
+        "connect: root and console users (uid 0 or uid >= 501, checked with getpeereid); " +
+        "private reads and writes: root, the installing user and (policy) the admin group; other users: public health only";
 }

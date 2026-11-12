@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -10,9 +11,9 @@ using Axiom.Contracts.Agents;
 namespace Axiom.Persistence;
 
 /// <summary>
-/// Reads host-owned Claude session descriptors, Codex thread metadata and OpenCode/OpenChamber
-/// session rows. Read-only, bounded and fail-open; it never writes to the agent databases or
-/// stores raw session identifiers in the UI.
+/// Reads host-owned Claude session descriptors, Codex thread metadata, OpenCode/OpenChamber
+/// session rows and Antigravity conversation summaries. Read-only, bounded and fail-open; it never
+/// writes to the agent databases or stores raw session identifiers in the UI.
 /// </summary>
 public sealed class AgentSessionReader : IAgentSessionSource
 {
@@ -28,16 +29,20 @@ public sealed class AgentSessionReader : IAgentSessionSource
 
     private readonly string? _opencodeDb;
 
+    private readonly string? _antigravityHome;
+
     public AgentSessionReader(
         string? userProfile = null,
         string? claudeHome = null,
         string? codexHome = null,
-        string? opencodeDb = null)
+        string? opencodeDb = null,
+        string? antigravityHome = null)
     {
         _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _claudeHome = claudeHome;
         _codexHome = codexHome;
         _opencodeDb = opencodeDb;
+        _antigravityHome = antigravityHome;
     }
 
     public IReadOnlyList<AgentSessionInfo> Read()
@@ -64,6 +69,14 @@ public sealed class AgentSessionReader : IAgentSessionSource
             result.AddRange(ReadOpenCode());
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SqliteException)
+        {
+        }
+
+        try
+        {
+            result.AddRange(ReadAntigravity());
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or SqliteException)
         {
         }
 
@@ -347,6 +360,165 @@ public sealed class AgentSessionReader : IAgentSessionSource
                 lastSeen,
                 live);
         }
+    }
+
+    private IEnumerable<AgentSessionInfo> ReadAntigravity()
+    {
+        var home = _antigravityHome ?? Path.Combine(_userProfile, ".gemini", "antigravity");
+        var dbPath = Path.Combine(home, "conversation_summaries.db");
+        if (!File.Exists(dbPath))
+        {
+            yield break;
+        }
+
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = dbPath,
+            Mode = SqliteOpenMode.ReadOnly,
+            DefaultTimeout = 1,
+            Pooling = false,
+        }.ToString();
+
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+        if (!TableExists(connection, "conversation_summaries"))
+        {
+            yield break;
+        }
+
+        var columns = ReadColumns(connection, "conversation_summaries");
+        if (!columns.Contains("conversation_id") || !columns.Contains("last_modified_time"))
+        {
+            yield break;
+        }
+
+        var titleColumn = columns.Contains("title") && columns.Contains("preview")
+            ? "COALESCE(NULLIF(title, ''), NULLIF(preview, ''), 'Antigravity session')"
+            : columns.Contains("title")
+                ? "COALESCE(NULLIF(title, ''), 'Antigravity session')"
+                : "'Antigravity session'";
+        var workspaceColumn = columns.Contains("workspace_uris") ? "workspace_uris" : "''";
+        var statusColumn = columns.Contains("status") ? "status" : "''";
+        var parentFilter = columns.Contains("parent_conversation_id")
+            ? "WHERE parent_conversation_id IS NULL OR parent_conversation_id = ''"
+            : string.Empty;
+
+        var query = connection.CreateCommand();
+        query.CommandText =
+            $"SELECT conversation_id, {titleColumn}, {workspaceColumn}, last_modified_time, {statusColumn} " +
+            $"FROM conversation_summaries {parentFilter} ORDER BY last_modified_time DESC LIMIT 16";
+
+        var now = DateTimeOffset.UtcNow;
+        using var rows = query.ExecuteReader();
+        while (rows.Read())
+        {
+            if (rows.IsDBNull(0))
+            {
+                continue;
+            }
+
+            var id = rows.GetString(0);
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                continue;
+            }
+
+            var title = rows.IsDBNull(1) ? "Antigravity session" : rows.GetString(1);
+            var workspaceJson = rows.IsDBNull(2) ? string.Empty : rows.GetString(2);
+            var rawTime = rows.IsDBNull(3) ? string.Empty : rows.GetString(3);
+            var status = rows.IsDBNull(4) ? string.Empty : rows.GetString(4);
+
+            if (!DateTimeOffset.TryParse(
+                    rawTime,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal,
+                    out var lastSeen))
+            {
+                lastSeen = DateTimeOffset.MinValue;
+            }
+
+            lastSeen = MaxWithConversationFiles(home, id, lastSeen);
+            if (lastSeen == DateTimeOffset.MinValue)
+            {
+                continue;
+            }
+
+            var live = now - lastSeen <= ActiveWindow ||
+                       string.Equals(status, "CASCADE_RUN_STATUS_RUNNING", StringComparison.OrdinalIgnoreCase);
+            if (!live && now - lastSeen > HistoryWindow)
+            {
+                continue;
+            }
+
+            yield return new AgentSessionInfo(
+                "antigravity",
+                SessionKey("antigravity", id),
+                Truncate(title, 120),
+                ParseFirstWorkspaceUri(workspaceJson),
+                lastSeen,
+                live);
+        }
+    }
+
+    private static DateTimeOffset MaxWithConversationFiles(string home, string id, DateTimeOffset current)
+    {
+        var candidates = new[]
+        {
+            Path.Combine(home, "brain", id, ".system_generated", "logs", "transcript.jsonl"),
+            Path.Combine(home, "conversations", id + ".db-wal"),
+            Path.Combine(home, "conversations", id + ".db"),
+        };
+
+        foreach (var path in candidates)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    var writeTime = new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
+                    if (writeTime > current)
+                    {
+                        current = writeTime;
+                    }
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return current;
+    }
+
+    private static string ParseFirstWorkspaceUri(string rawJson)
+    {
+        if (string.IsNullOrWhiteSpace(rawJson))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(rawJson);
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String &&
+                        item.GetString() is { Length: > 0 } value)
+                    {
+                        return Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.IsFile
+                            ? uri.LocalPath
+                            : Uri.UnescapeDataString(value);
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return string.Empty;
     }
 
     private static bool TableExists(SqliteConnection connection, string table)

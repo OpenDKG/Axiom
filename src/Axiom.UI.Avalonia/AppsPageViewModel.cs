@@ -251,9 +251,9 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
                 .SendAsync<RuleApplyResult>(IpcCommandTypes.RuleApply, spec, CancellationToken.None)
                 .ConfigureAwait(true);
 
-            WriteStatusText = result.Success
+            WriteStatusText = result.Success && result.State != RuleState.Pending
                 ? $"Block applied for {app.Name} ({directionText}); verified at {result.VerifiedUtc:HH:mm:ss}."
-                : $"Block failed: {result.ErrorCode} — {result.ErrorMessage}";
+                : RuleApplyResultText.Describe(result, "Block");
         }
         catch (ServiceUnavailableException exception)
         {

@@ -47,6 +47,26 @@ public enum RuleState
     Failed = 4,
 }
 
+/// <summary>
+/// Whether the OS filter is known to enforce the published rule table right now. Reported by
+/// adapters that publish a table to a separate enforcement component (macOS AxiomFilter, a future
+/// Linux engine); Windows applies rules synchronously and does not use it.
+/// </summary>
+public enum FilterEnforcementState
+{
+    /// <summary>The filter has never connected to the service (not installed, not activated, or not approved).</summary>
+    Unavailable = 0,
+
+    /// <summary>The filter was seen before but is not connected now; published rules are not known to be enforced.</summary>
+    Degraded = 1,
+
+    /// <summary>The filter is connected but has not yet acknowledged the published generation (or rejected the file).</summary>
+    Pending = 2,
+
+    /// <summary>The filter is connected and acknowledged exactly the published generation on its current connection.</summary>
+    Verified = 3,
+}
+
 /// <summary>Availability of the underlying firewall policy adapter.</summary>
 public enum FirewallCapabilityStatus
 {

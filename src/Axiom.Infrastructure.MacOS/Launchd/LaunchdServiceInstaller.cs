@@ -152,7 +152,8 @@ public sealed class LaunchdServiceInstaller
     /// <summary>
     /// The <c>/etc/newsyslog.d</c> entry: rotate <paramref name="logFilePath"/> at
     /// <see cref="LogRotateSizeKiB"/> KiB, keep <see cref="LogRotateKeep"/> archives, bzip2 them
-    /// (flag <c>J</c>). launchd reopens the file per write, so no signal is needed.
+    /// (flag <c>J</c>), mode 600 so the new log and the archives stay root-only
+    /// (<see cref="MacLogPermissions"/>). launchd reopens the file per write, so no signal is needed.
     /// </summary>
     public static string BuildNewsyslogConf(string logFilePath)
     {
@@ -162,7 +163,7 @@ public sealed class LaunchdServiceInstaller
             $"""
             # Axiom daemon log rotation (written by axiomd --install-service, removed by --uninstall-service).
             # logfilename{"\t"}[owner:group]{"\t"}mode{"\t"}count{"\t"}size{"\t"}when{"\t"}flags
-            {logFilePath}{"\t"}root:wheel{"\t"}644{"\t"}{LogRotateKeep}{"\t"}{LogRotateSizeKiB}{"\t"}*{"\t"}J
+            {logFilePath}{"\t"}root:wheel{"\t"}{MacLogPermissions.NewsyslogMode}{"\t"}{LogRotateKeep}{"\t"}{LogRotateSizeKiB}{"\t"}*{"\t"}J
 
             """);
     }
@@ -203,8 +204,14 @@ public sealed class LaunchdServiceInstaller
                 }
             }
 
-            Directory.CreateDirectory(_options.LogDirectory);
+            // Pre-create the log root-only before launchd opens StandardOutPath with the default
+            // umask; an upgrade also fixes the modes of an existing log and its archives.
             var logFile = Path.Combine(_options.LogDirectory, Path.GetFileName(MacServicePaths.LogFilePath));
+            foreach (var fixedPath in MacLogPermissions.Enforce(_options.LogDirectory, logFile))
+            {
+                output.WriteLine($"Restricted {fixedPath} to root.");
+            }
+
             var plist = BuildPlist(_options.DaemonPath, logFile);
 
             // Stop the running instance (upgrade); "not loaded" is expected on first install. Like

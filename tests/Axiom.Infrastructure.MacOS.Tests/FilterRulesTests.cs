@@ -155,12 +155,14 @@ public sealed class FilterRulesTests
         var paths = MacServicePaths.ForRoot(temp.Path);
         var time = new ManualTimeProvider(Start);
         var status = new FilterStatus();
-        using var adapter = new MacFirewallPolicyAdapter(paths, status, () => true, time);
+        using var adapter = new MacFirewallPolicyAdapter(paths, status, () => true, time, TimeSpan.Zero);
 
         var curl = Specs.Block("/usr/bin/curl");
         var applied = await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
         Assert.True(applied.Success, applied.ErrorMessage);
-        Assert.Equal(RuleState.Applied, applied.State);
+        // No connected extension: published, never "applied" (review P0 #2).
+        Assert.Equal(RuleState.Pending, applied.State);
+        Assert.Null(applied.VerifiedUtc);
 
         var table = FilterRulesFile.TryRead(paths.RulesFile)!;
         Assert.Equal(1, table.Generation);
@@ -168,24 +170,28 @@ public sealed class FilterRulesTests
 
         var second = await adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/nc"), CancellationToken.None);
         Assert.True(second.Success);
+        Assert.Equal(RuleState.Pending, second.State);
         Assert.Equal(2, FilterRulesFile.TryRead(paths.RulesFile)!.Generation);
 
         // A new adapter instance (daemon restart) reads the owned rules back.
-        using var restarted = new MacFirewallPolicyAdapter(paths, status, () => true, time);
+        using var restarted = new MacFirewallPolicyAdapter(paths, status, () => true, time, TimeSpan.Zero);
         Assert.Equal(2, (await restarted.ListOwnedRulesAsync(CancellationToken.None)).Count);
+        Assert.All(await restarted.ListOwnedRulesAsync(CancellationToken.None), rule => Assert.Equal(RuleState.Pending, rule.State));
         Assert.Equal(3, await restarted.PublishAsync(CancellationToken.None));
 
         var verify = await restarted.VerifyAsync(curl, CancellationToken.None);
         Assert.True(verify.PresentInOs);
         Assert.True(verify.MatchesSpec);
-        Assert.Equal(FirewallAction.Block, verify.EffectiveAction);
-        Assert.Contains(verify.Notes, note => note.Contains("not connected", StringComparison.Ordinal));
+        Assert.Null(verify.EffectiveAction);
+        Assert.False(verify.EnforcementVerified);
+        Assert.Contains(verify.Notes, note => note.Contains("never connected", StringComparison.Ordinal));
 
         var changed = await restarted.VerifyAsync(curl with { Action = FirewallAction.Allow }, CancellationToken.None);
         Assert.False(changed.MatchesSpec);
 
         var removed = await restarted.RemoveOwnedRuleAsync(curl.ManagedRuleId, CancellationToken.None);
         Assert.True(removed.Success);
+        Assert.Null(removed.VerifiedUtc);
         table = FilterRulesFile.TryRead(paths.RulesFile)!;
         Assert.Equal(4, table.Generation);
         Assert.Equal("/usr/bin/nc", Assert.Single(table.Rules).AppPath);
@@ -205,25 +211,37 @@ public sealed class FilterRulesTests
     }
 
     [Fact]
-    public async Task CapabilitiesReportFilterState()
+    public async Task CapabilitiesReportLiveConnectionNotRecentHello()
     {
         using var temp = new TempDirectory();
         var time = new ManualTimeProvider(Start);
         var status = new FilterStatus();
-        using var adapter = new MacFirewallPolicyAdapter(MacServicePaths.ForRoot(temp.Path), status, () => true, time);
+        using var adapter = new MacFirewallPolicyAdapter(MacServicePaths.ForRoot(temp.Path), status, () => true, time, TimeSpan.Zero);
 
         var noFilter = await adapter.GetCapabilitiesAsync(CancellationToken.None);
-        Assert.Equal(FirewallCapabilityStatus.Available, noFilter.Status);
+        Assert.Equal(FirewallCapabilityStatus.Degraded, noFilter.Status);
         Assert.False(noFilter.FirewallServiceRunning);
         Assert.Contains("has not connected", noFilter.Reason, StringComparison.Ordinal);
 
+        // A hello without a live connection (High #4) must not count as running.
         status.Hello("1.0", 0, time.GetUtcNow());
-        var withFilter = await adapter.GetCapabilitiesAsync(CancellationToken.None);
-        Assert.True(withFilter.FirewallServiceRunning);
-        Assert.Null(withFilter.Reason);
+        var helloOnly = await adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.False(helloOnly.FirewallServiceRunning);
+        Assert.Equal(FirewallCapabilityStatus.Degraded, helloOnly.Status);
+        Assert.Equal(FilterEnforcementState.Degraded, helloOnly.FilterEnforcement!.State);
+        Assert.Equal(time.GetUtcNow(), helloOnly.FilterEnforcement.LastSeenUtc);
 
-        time.Advance(FilterStatus.HelloLifetime + TimeSpan.FromSeconds(1));
-        Assert.False((await adapter.GetCapabilitiesAsync(CancellationToken.None)).FirewallServiceRunning);
+        status.ClientConnected();
+        var connected = await adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.True(connected.FirewallServiceRunning);
+        Assert.Equal(FirewallCapabilityStatus.Available, connected.Status);
+        Assert.True(connected.FilterEnforcement!.Connected);
+
+        status.ClientDisconnected();
+        var dropped = await adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.False(dropped.FirewallServiceRunning);
+        Assert.Equal(FirewallCapabilityStatus.Degraded, dropped.Status);
+        Assert.Contains("disconnected (last seen", dropped.Reason, StringComparison.Ordinal);
     }
 
     [Fact]

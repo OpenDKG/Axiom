@@ -87,7 +87,9 @@ internal static class ServicePlatform
         var paths = MacServicePaths.Default;
         try
         {
-            var changed = UnixDataDirectoryPermissions.Enforce(paths.MachineDataDirectory);
+            var changed = UnixDataDirectoryPermissions.Enforce(paths.MachineDataDirectory)
+                .Concat(MacLogPermissions.Enforce(MacServicePaths.LogDirectory, MacServicePaths.LogFilePath))
+                .ToList();
             if (changed.Count > 0)
             {
                 Console.Error.WriteLine($"Data directory permissions: tightened {changed.Count} entries under {paths.MachineDataDirectory}.");

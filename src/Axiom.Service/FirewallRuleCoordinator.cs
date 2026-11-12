@@ -63,13 +63,24 @@ public sealed partial class FirewallRuleCoordinator(
 
                 if (result.Success)
                 {
+                    // An adapter that publishes to a separate enforcement component (macOS filter)
+                    // answers Pending until that component acknowledged the rule; the audit record
+                    // must not say "applied" before it did. Windows applies synchronously and
+                    // always returns Applied here.
+                    var verified = result.State != RuleState.Pending;
                     var applied = pending with
                     {
-                        State = RuleState.Applied,
-                        LastVerifiedUtc = result.VerifiedUtc ?? DateTimeOffset.UtcNow,
+                        State = verified ? RuleState.Applied : RuleState.Pending,
+                        LastVerifiedUtc = verified ? result.VerifiedUtc ?? DateTimeOffset.UtcNow : null,
                     };
 
-                    await store.SaveFirewallRuleAsync(applied, actorSid, "rule.apply", "applied", null, cancellationToken)
+                    await store.SaveFirewallRuleAsync(
+                            applied,
+                            actorSid,
+                            "rule.apply",
+                            verified ? "applied" : "pending",
+                            verified ? null : result.ErrorMessage,
+                            cancellationToken)
                         .ConfigureAwait(false);
                     return result;
                 }

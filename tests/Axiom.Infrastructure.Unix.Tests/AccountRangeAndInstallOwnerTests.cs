@@ -39,7 +39,7 @@ public sealed class AccountRangeAndInstallOwnerTests
 
         Assert.True(PeerAuthorization.Decide(0, policy, UnixAccountRange.Linux).CanWrite);
         Assert.Equal("installing user", PeerAuthorization.Decide(1000, policy, UnixAccountRange.Linux).Reason);
-        Assert.Equal("admin group member", PeerAuthorization.Decide(1001, policy, UnixAccountRange.Linux).Reason);
+        Assert.Equal("admin group member (AllowAdminGroupWrites)", PeerAuthorization.Decide(1001, policy, UnixAccountRange.Linux).Reason);
 
         var reader = PeerAuthorization.Decide(1002, policy, UnixAccountRange.Linux);
         Assert.True(reader.Allowed);

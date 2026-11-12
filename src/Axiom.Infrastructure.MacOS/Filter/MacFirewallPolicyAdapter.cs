@@ -12,6 +12,11 @@ namespace Axiom.Infrastructure.MacOS.Filter;
 /// <c>filter/managed-rules.json</c> (its durable record of Axiom-owned rules, the equivalent of the
 /// Axiom-named Windows Firewall rules) and republishes rules.json atomically with a new generation
 /// after every change. Writes require the same gate as Windows (<see cref="FirewallWriteGate"/>).
+/// Publishing is not enforcing (review 2026-11-12 P0 #2/#3): a rule is <see cref="RuleState.Applied"/>
+/// only once <see cref="FilterStatus"/> proves the extension is connected and acknowledged the
+/// published generation without rejecting the file or the rule; until then it is
+/// <see cref="RuleState.Pending"/>, and a rejection is <see cref="RuleState.Failed"/> with the
+/// filter's reason. The same conditions gate <see cref="Verify"/>'s effective action.
 /// </summary>
 public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRuleRecoveryAdapter, IDisposable
 {
@@ -27,8 +32,17 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    private readonly TimeSpan _ackTimeout;
+
+    /// <summary>
+    /// How long a write waits for the extension's <c>filter.rules</c> acknowledgement before
+    /// answering <see cref="RuleState.Pending"/>. The filter reloads within about 50 ms; the
+    /// bound keeps a stalled extension from blocking the IPC caller.
+    /// </summary>
+    public static readonly TimeSpan DefaultAckTimeout = TimeSpan.FromSeconds(2);
+
     public MacFirewallPolicyAdapter(MacServicePaths paths, FilterStatus status)
-        : this(paths, status, () => FirewallWriteGate.IsOpen, TimeProvider.System)
+        : this(paths, status, () => FirewallWriteGate.IsOpen, TimeProvider.System, DefaultAckTimeout)
     {
     }
 
@@ -37,12 +51,23 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         FilterStatus status,
         Func<bool> writeGate,
         TimeProvider time)
+        : this(paths, status, writeGate, time, DefaultAckTimeout)
+    {
+    }
+
+    public MacFirewallPolicyAdapter(
+        MacServicePaths paths,
+        FilterStatus status,
+        Func<bool> writeGate,
+        TimeProvider time,
+        TimeSpan ackTimeout)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _status = status ?? throw new ArgumentNullException(nameof(status));
         _writeGate = writeGate ?? throw new ArgumentNullException(nameof(writeGate));
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _store = new ManagedRuleStore(_paths.ManagedRulesFile);
+        _ackTimeout = ackTimeout < TimeSpan.Zero ? TimeSpan.Zero : ackTimeout;
     }
 
     public void Dispose() => _gate.Dispose();
@@ -59,7 +84,7 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 Status = FirewallCapabilityStatus.Unavailable,
                 Reason = $"The AxiomFilter rule table {_paths.RulesFile} is not writable ({problem}). " +
                          "Firewall rules need the root axiomd launchd daemon.",
-                FirewallServiceRunning = _status.HasRecentHello(now),
+                FirewallServiceRunning = _status.IsConnected,
                 ManagedRulesReadable = false,
                 ManagedRuleCount = null,
                 ProbedUtc = now,
@@ -67,51 +92,85 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         }
 
         var state = LoadState();
-        var hello = _status.HasRecentHello(now);
-        string? reason = null;
-        if (!hello)
+        var enforcement = _status.Snapshot(state.Generation);
+        var reason = enforcement.State switch
         {
-            reason = "The AxiomFilter network extension has not connected to " +
-                     $"{_paths.FilterSocketPath}; rules are written to {_paths.RulesFile} " +
-                     "but are not enforced until the extension is activated.";
-        }
-        else if (_status.LoadedGeneration is { } loaded && loaded < state.Generation)
-        {
-            reason = $"AxiomFilter has loaded rules generation {loaded}; generation {state.Generation} is pending.";
-        }
+            FilterEnforcementState.Unavailable =>
+                "The AxiomFilter network extension has not connected to " +
+                $"{_paths.FilterSocketPath}; rules are written to {_paths.RulesFile} " +
+                "but are not enforced until the extension is activated.",
+            FilterEnforcementState.Degraded =>
+                "The AxiomFilter network extension is disconnected (last seen " + Utc(enforcement.LastSeenUtc) + "); " +
+                "published rules are not known to be enforced.",
+            FilterEnforcementState.Pending =>
+                "AxiomFilter has not acknowledged rules generation " + state.Generation.ToString(CultureInfo.InvariantCulture) + " yet" +
+                (enforcement.AckedGeneration is { } acked ? " (last acknowledged " + acked.ToString(CultureInfo.InvariantCulture) + ")" : string.Empty) + ".",
+            _ => null,
+        };
 
         return Task.FromResult(new FirewallCapabilityReport
         {
-            Status = FirewallCapabilityStatus.Available,
+            Status = enforcement.Connected ? FirewallCapabilityStatus.Available : FirewallCapabilityStatus.Degraded,
             Reason = reason,
-            FirewallServiceRunning = hello,
+            FirewallServiceRunning = enforcement.Connected,
             ManagedRulesReadable = true,
             ManagedRuleCount = state.Rules.Count,
             ProbedUtc = now,
-            FilterEnforcement = ToEnforcementReport(_status.Rules),
+            FilterEnforcement = ToEnforcementReport(enforcement),
         });
     }
 
-    /// <summary>Maps the last <c>filter.rules</c> event to the IPC contract (null until one arrived).</summary>
-    public static FilterEnforcementReport? ToEnforcementReport(FilterRulesReport? rules) =>
-        rules is null
-            ? null
-            : new FilterEnforcementReport
-            {
-                Generation = rules.Generation,
-                AppliedRuleCount = rules.Applied,
-                RejectedRules = rules.Rejected
-                    .Select(rejected => new FilterRuleRejection { RuleId = rejected.Id, Reason = rejected.Reason })
-                    .ToArray(),
-                FileError = rules.Error,
-                DroppedEvents = rules.Dropped,
-                ReportedUtc = rules.ReceivedUtc,
-            };
+    /// <summary>Maps the enforcement snapshot (and the last <c>filter.rules</c> event in it) to the IPC contract.</summary>
+    public static FilterEnforcementReport ToEnforcementReport(FilterEnforcementSnapshot enforcement)
+    {
+        ArgumentNullException.ThrowIfNull(enforcement);
+        var rules = enforcement.Rules;
+        return new FilterEnforcementReport
+        {
+            State = enforcement.State,
+            Connected = enforcement.Connected,
+            PublishedGeneration = enforcement.PublishedGeneration,
+            AckedGeneration = enforcement.AckedGeneration,
+            LastSeenUtc = enforcement.LastSeenUtc,
+            LastAckUtc = enforcement.LastAckUtc,
+            Generation = rules?.Generation ?? -1,
+            AppliedRuleCount = rules?.Applied ?? 0,
+            RejectedRules = (rules?.Rejected ?? [])
+                .Select(rejected => new FilterRuleRejection { RuleId = rejected.Id, Reason = rejected.Reason })
+                .ToArray(),
+            FileError = rules?.Error,
+            DroppedEvents = rules?.Dropped ?? 0,
+            ReportedUtc = rules?.ReceivedUtc ?? default,
+        };
+    }
 
+    /// <summary>
+    /// Owned rules with their state as of now: <see cref="RuleState.Applied"/> only while the
+    /// published generation is verified and the filter did not reject the rule,
+    /// <see cref="RuleState.Failed"/> for a rule the filter rejected, otherwise
+    /// <see cref="RuleState.Pending"/>. The stored record keeps the outcome of the last write.
+    /// </summary>
     public Task<IReadOnlyList<ManagedRule>> ListOwnedRulesAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        return Task.FromResult<IReadOnlyList<ManagedRule>>(LoadState().Rules);
+        var state = LoadState();
+        var enforcement = _status.Snapshot(state.Generation);
+        return Task.FromResult<IReadOnlyList<ManagedRule>>(
+            state.Rules.Select(rule => rule with { State = ProjectState(rule, enforcement) }).ToList());
+    }
+
+    /// <summary>Pure state projection of one stored rule under the current enforcement snapshot.</summary>
+    public static RuleState ProjectState(ManagedRule rule, FilterEnforcementSnapshot enforcement)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(enforcement);
+        var id = FilterRuleTable.ToFilterRule(rule.Spec).Id;
+        if (enforcement.IsVerified)
+        {
+            return enforcement.RejectionReason(id) is null ? RuleState.Applied : RuleState.Failed;
+        }
+
+        return rule.State == RuleState.Failed ? RuleState.Failed : RuleState.Pending;
     }
 
     public async Task<RuleApplyResult> UpsertOwnedRuleAsync(RuleSpec spec, CancellationToken ct)
@@ -130,8 +189,8 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 OsRuleName = OwnedRuleName.Create(spec.ManagedRuleId, spec.Direction),
                 OwnershipGroup = OwnedRuleOwnership.GroupName,
                 Spec = spec,
-                State = RuleState.Applied,
-                LastVerifiedUtc = now,
+                State = RuleState.Pending,
+                LastVerifiedUtc = null,
             };
 
             var rules = state.Rules.Where(existing => existing.ManagedRuleId != spec.ManagedRuleId).Append(rule).ToList();
@@ -154,14 +213,18 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 };
             }
 
-            return new RuleApplyResult
+            // Published, not enforced: wait (bounded) for the extension's acknowledgement of this
+            // generation and report exactly what it proved.
+            await _status.WaitForAcknowledgementAsync(published, now, _ackTimeout, ct).ConfigureAwait(false);
+            var result = Outcome(spec.ManagedRuleId, rule.OsRuleName, expected.Id, published, now, _status.Snapshot(published));
+            SaveState(new ManagedRuleState
             {
-                Success = true,
-                ManagedRuleId = spec.ManagedRuleId,
-                State = RuleState.Applied,
-                OsRuleName = rule.OsRuleName,
-                VerifiedUtc = now,
-            };
+                Generation = published,
+                Rules = rules.Select(candidate => candidate.ManagedRuleId == spec.ManagedRuleId
+                    ? candidate with { State = result.State, LastVerifiedUtc = result.VerifiedUtc, LastErrorCode = result.ErrorCode }
+                    : candidate).ToList(),
+            });
+            return result;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -171,6 +234,82 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         {
             _gate.Release();
         }
+    }
+
+    /// <summary>
+    /// Pure lifecycle decision after a publish (review 2026-11-12 P0 #2): the filter's
+    /// acknowledgement of <paramref name="published"/> without a file error and without rejecting
+    /// the rule is <see cref="RuleState.Applied"/> (verified at the ack time); a rejected file or
+    /// rule is <see cref="RuleState.Failed"/> with the filter's reason; anything else is
+    /// <see cref="RuleState.Pending"/> with a message naming why.
+    /// </summary>
+    public static RuleApplyResult Outcome(
+        Guid managedRuleId,
+        string? osRuleName,
+        string filterRuleId,
+        long published,
+        DateTimeOffset publishedUtc,
+        FilterEnforcementSnapshot enforcement)
+    {
+        ArgumentNullException.ThrowIfNull(enforcement);
+
+        if (enforcement.FileRejectionSince(publishedUtc) is { } fileError)
+        {
+            return new RuleApplyResult
+            {
+                Success = false,
+                ManagedRuleId = managedRuleId,
+                State = RuleState.Failed,
+                OsRuleName = osRuleName,
+                ErrorCode = "filter.file_rejected",
+                ErrorMessage = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"AxiomFilter rejected rules generation {published} ({fileError}); generation {enforcement.Rules?.Generation ?? -1} stays in force."),
+            };
+        }
+
+        if (enforcement.IsVerified)
+        {
+            if (enforcement.RejectionReason(filterRuleId) is { } rejection)
+            {
+                return new RuleApplyResult
+                {
+                    Success = false,
+                    ManagedRuleId = managedRuleId,
+                    State = RuleState.Failed,
+                    OsRuleName = osRuleName,
+                    ErrorCode = "filter.rule_rejected",
+                    ErrorMessage = $"AxiomFilter does not enforce this rule: {rejection}",
+                };
+            }
+
+            return new RuleApplyResult
+            {
+                Success = true,
+                ManagedRuleId = managedRuleId,
+                State = RuleState.Applied,
+                OsRuleName = osRuleName,
+                VerifiedUtc = enforcement.LastAckUtc,
+            };
+        }
+
+        var why = enforcement.State switch
+        {
+            FilterEnforcementState.Unavailable => " (the network extension has not connected)",
+            FilterEnforcementState.Degraded => " (the network extension is disconnected)",
+            _ => enforcement.AckedGeneration is { } acked
+                ? string.Create(CultureInfo.InvariantCulture, $" (last acknowledged generation {acked})")
+                : string.Empty,
+        };
+        return new RuleApplyResult
+        {
+            Success = true,
+            ManagedRuleId = managedRuleId,
+            State = RuleState.Pending,
+            OsRuleName = osRuleName,
+            ErrorCode = null,
+            ErrorMessage = string.Create(CultureInfo.InvariantCulture, $"awaiting AxiomFilter acknowledgement of generation {published}{why}"),
+        };
     }
 
     public async Task<RuleApplyResult> RemoveOwnedRuleAsync(Guid managedRuleId, CancellationToken ct)
@@ -185,18 +324,26 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            var now = _time.GetUtcNow();
             var state = LoadState();
             var existing = state.Rules.FirstOrDefault(rule => rule.ManagedRuleId == managedRuleId);
             var rules = state.Rules.Where(rule => rule.ManagedRuleId != managedRuleId).ToList();
-            Publish(rules, state.Generation);
+            var published = Publish(rules, state.Generation);
 
+            // The rule is gone from the table; whether the filter stopped enforcing it is only
+            // known once it acknowledged the new generation.
+            await _status.WaitForAcknowledgementAsync(published, now, _ackTimeout, ct).ConfigureAwait(false);
+            var enforcement = _status.Snapshot(published);
             return new RuleApplyResult
             {
                 Success = true,
                 ManagedRuleId = managedRuleId,
                 State = RuleState.Desired,
                 OsRuleName = existing?.OsRuleName,
-                VerifiedUtc = _time.GetUtcNow(),
+                VerifiedUtc = enforcement.IsVerified ? enforcement.LastAckUtc : null,
+                ErrorMessage = enforcement.IsVerified
+                    ? null
+                    : string.Create(CultureInfo.InvariantCulture, $"removed from rules.json; awaiting AxiomFilter acknowledgement of generation {published}"),
             };
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -311,7 +458,12 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         return Task.FromResult(Verify(spec, FilterRulesFile.TryRead(_paths.RulesFile), _status, _time.GetUtcNow()));
     }
 
-    /// <summary>Compares a spec with the published table (pure, for tests).</summary>
+    /// <summary>
+    /// Compares a spec with the published table and the filter's acknowledgement (pure, for
+    /// tests). <see cref="EffectiveRuleReport.EffectiveAction"/> is set only when the published
+    /// generation is verified (connected + acknowledged on this connection, no file error) and the
+    /// filter did not reject the rule; otherwise it is null and a note says why (review P0 #3).
+    /// </summary>
     public static EffectiveRuleReport Verify(
         RuleSpec spec,
         FilterRuleTable? table,
@@ -333,21 +485,32 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 EffectiveAction = null,
                 ObservedUtc = now,
                 Notes = notes,
+                EnforcementVerified = false,
             };
         }
 
         var expected = FilterRuleTable.ToFilterRule(spec);
         var written = table.Rules.FirstOrDefault(rule =>
             string.Equals(rule.Id, expected.Id, StringComparison.OrdinalIgnoreCase));
+        var enforcement = status.Snapshot(table.Generation);
 
         notes.Add(string.Create(CultureInfo.InvariantCulture, $"rules.json generation {table.Generation}."));
-        if (!status.HasRecentHello(now))
+        switch (enforcement.State)
         {
-            notes.Add("AxiomFilter is not connected; the rule is published but not enforced.");
-        }
-        else if (status.LoadedGeneration is { } loaded && loaded < table.Generation)
-        {
-            notes.Add(string.Create(CultureInfo.InvariantCulture, $"AxiomFilter reports generation {loaded}; reload pending."));
+            case FilterEnforcementState.Unavailable:
+                notes.Add("AxiomFilter has never connected; the rule is published but not enforced.");
+                break;
+            case FilterEnforcementState.Degraded:
+                notes.Add("AxiomFilter is disconnected (last seen " + Utc(enforcement.LastSeenUtc) + "); the rule is published but not known to be enforced.");
+                break;
+            case FilterEnforcementState.Pending:
+                notes.Add(enforcement.AckedGeneration is { } acked
+                    ? string.Create(CultureInfo.InvariantCulture, $"AxiomFilter acknowledged generation {acked}, not {table.Generation}; enforcement of this table is pending.")
+                    : string.Create(CultureInfo.InvariantCulture, $"AxiomFilter has not acknowledged generation {table.Generation} yet; enforcement is pending."));
+                break;
+            default:
+                notes.Add("AxiomFilter acknowledged generation " + table.Generation.ToString(CultureInfo.InvariantCulture) + " at " + Utc(enforcement.LastAckUtc) + ".");
+                break;
         }
 
         if (written is null)
@@ -362,7 +525,7 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         // The filter's own verdict on this rule (review #6): a rejected rule is published but not
         // enforced, so it has no effective action even though it is present in the table.
         string? rejection = null;
-        if (status.Rules is { } report)
+        if (enforcement.Rules is { } report)
         {
             if (report.Error is { Length: > 0 } fileError)
             {
@@ -371,21 +534,20 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                     $"AxiomFilter rejected the rules file ({fileError}); generation {report.Generation} stays in force."));
             }
 
-            rejection = report.Rejected
-                .FirstOrDefault(rejected => string.Equals(rejected.Id, expected.Id, StringComparison.OrdinalIgnoreCase))
-                ?.Reason;
+            rejection = enforcement.RejectionReason(expected.Id);
             if (rejection is not null)
             {
                 notes.Add($"AxiomFilter rejected this rule and does not enforce it: {rejection}");
             }
         }
 
+        var verified = enforcement.IsVerified && rejection is null;
         return new EffectiveRuleReport
         {
             ManagedRuleId = spec.ManagedRuleId,
             PresentInOs = written is not null,
             MatchesSpec = expected.SameAs(written),
-            EffectiveAction = written is { Enabled: true } && rejection is null
+            EffectiveAction = verified && written is { Enabled: true }
                 ? string.Equals(written.Action, FilterRuleTable.ActionBlock, StringComparison.Ordinal)
                     ? FirewallAction.Block
                     : FirewallAction.Allow
@@ -393,6 +555,7 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             ObservedUtc = now,
             Notes = notes,
             FilterRejectionReason = rejection,
+            EnforcementVerified = verified,
         };
     }
 
@@ -457,6 +620,8 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                       $"{FirewallWriteGate.WriteEnableVariable}=1 and {FirewallWriteGate.WriteConfirmVariable}=yes on an isolated test VM.");
         }
     }
+
+    private static string Utc(DateTimeOffset? value) => value?.ToString("u", CultureInfo.InvariantCulture) ?? "never";
 
     private static RuleApplyResult Failed(Guid id, string code, string message) => new()
     {

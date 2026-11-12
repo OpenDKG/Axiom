@@ -70,9 +70,9 @@ public sealed class ConnectionActionService(
                 .SendAsync<RuleApplyResult>(IpcCommandTypes.RuleApply, spec, CancellationToken.None)
                 .ConfigureAwait(true);
 
-            return result.Success
+            return result.Success && result.State != RuleState.Pending
                 ? $"Block applied for {appName} ({directionText}); verified at {result.VerifiedUtc:HH:mm:ss}."
-                : $"Block failed: {result.ErrorCode} — {result.ErrorMessage}";
+                : RuleApplyResultText.Describe(result, "Block");
         }
         catch (ServiceUnavailableException exception)
         {

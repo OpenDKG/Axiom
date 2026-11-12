@@ -124,15 +124,20 @@ public sealed class FilterRulesEventTests
 
         Assert.Equal(42, status.LoadedGeneration);
 
-        var report = MacFirewallPolicyAdapter.ToEnforcementReport(status.Rules);
-        Assert.NotNull(report);
+        var report = MacFirewallPolicyAdapter.ToEnforcementReport(status.Snapshot(43));
         Assert.Equal("invalid JSON", report.FileError);
         Assert.Equal(42, report.Generation);
         Assert.Equal(7, report.AppliedRuleCount);
         Assert.Empty(report.RejectedRules);
         Assert.Equal(Start.AddSeconds(5), report.ReportedUtc);
+        Assert.Equal(43, report.PublishedGeneration);
+        Assert.Null(report.AckedGeneration); // a rejected file is not an acknowledgement
+        Assert.Equal(FilterEnforcementState.Degraded, report.State); // seen, not connected
 
-        Assert.Null(MacFirewallPolicyAdapter.ToEnforcementReport(null));
+        var empty = MacFirewallPolicyAdapter.ToEnforcementReport(new FilterStatus().Snapshot(1));
+        Assert.Equal(FilterEnforcementState.Unavailable, empty.State);
+        Assert.Equal(-1, empty.Generation);
+        Assert.Empty(empty.RejectedRules);
     }
 
     [Fact]
@@ -142,18 +147,20 @@ public sealed class FilterRulesEventTests
         var paths = MacServicePaths.ForRoot(temp.Path);
         var time = new ManualTimeProvider(Start);
         var status = new FilterStatus();
-        using var adapter = new MacFirewallPolicyAdapter(paths, status, () => true, time);
+        using var adapter = new MacFirewallPolicyAdapter(paths, status, () => true, time, TimeSpan.Zero);
 
         var bad = Specs.Block("/usr/bin/curl") with { RemoteAddresses = ["1.2.3"] };
         var good = Specs.Block("/usr/bin/nc");
         Assert.True((await adapter.UpsertOwnedRuleAsync(bad, CancellationToken.None)).Success);
         Assert.True((await adapter.UpsertOwnedRuleAsync(good, CancellationToken.None)).Success);
 
-        // Before the filter reports anything the contract fields stay null (Windows shape).
+        // Before the filter reports anything the report says so (no table, nothing acknowledged).
         var before = await adapter.GetCapabilitiesAsync(CancellationToken.None);
-        Assert.Null(before.FilterEnforcement);
+        Assert.Equal(FilterEnforcementState.Unavailable, before.FilterEnforcement!.State);
+        Assert.Equal(-1, before.FilterEnforcement.Generation);
         Assert.Null((await adapter.VerifyAsync(bad, CancellationToken.None)).FilterRejectionReason);
 
+        status.ClientConnected();
         status.Hello("1.0.0", 2, 0, time.GetUtcNow());
         status.RulesReported(
             FlowEventParser.TryParse(

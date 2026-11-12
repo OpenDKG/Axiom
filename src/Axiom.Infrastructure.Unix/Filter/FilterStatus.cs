@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Contracts.Firewall;
+
 namespace Axiom.Infrastructure.Unix.Filter;
 
 /// <summary>
@@ -25,26 +27,69 @@ public sealed record FilterRulesReport
 }
 
 /// <summary>
-/// Liveness of the AxiomFilter system extension as seen on the flow-event socket: connection
-/// count, the last <c>filter.hello</c> (version and the rules generation it loaded), the last
-/// <c>filter.rules</c> report and the last event of any kind. Thread-safe.
+/// Point-in-time answer to "is generation <see cref="PublishedGeneration"/> enforced right now?"
+/// (review 2026-11-12 P0 #2/#3, High #4). <see cref="State"/> is
+/// <see cref="FilterEnforcementState.Verified"/> only while the extension is connected and has
+/// acknowledged exactly that generation on the current connection with a <c>filter.rules</c>
+/// event that carried no file error; the other fields are the evidence behind it.
+/// </summary>
+public sealed record FilterEnforcementSnapshot(
+    FilterEnforcementState State,
+    bool Connected,
+    long PublishedGeneration,
+    long? AckedGeneration,
+    DateTimeOffset? LastSeenUtc,
+    DateTimeOffset? LastAckUtc,
+    FilterRulesReport? Rules)
+{
+    public bool IsVerified => State == FilterEnforcementState.Verified;
+
+    /// <summary>The filter's own rejection of one rule in the acknowledged table, if any.</summary>
+    public string? RejectionReason(string ruleId) =>
+        Rules?.Rejected.FirstOrDefault(rejected => string.Equals(rejected.Id, ruleId, StringComparison.OrdinalIgnoreCase))?.Reason;
+
+    /// <summary>A file-level rejection reported after <paramref name="publishedUtc"/> (so it concerns the published table).</summary>
+    public string? FileRejectionSince(DateTimeOffset publishedUtc) =>
+        Rules is { Error: { Length: > 0 } error } report && report.ReceivedUtc >= publishedUtc ? error : null;
+}
+
+/// <summary>
+/// Liveness and enforcement state of the AxiomFilter system extension as seen on the flow-event
+/// socket. Four things are kept apart on purpose (High #4): when the extension was last seen
+/// (<see cref="LastSeenUtc"/>, diagnostic only), whether it is connected now
+/// (<see cref="IsConnected"/>, live connection count), which rules generation it last acknowledged
+/// (<see cref="AckedGeneration"/>, from <c>filter.rules</c> without an error) and the derived
+/// <see cref="Evaluate"/> enforcement state for a published generation. A disconnect degrades
+/// enforcement immediately: a hello that was recent a minute ago proves nothing now. After a
+/// reconnect the acknowledgement must be fresh (sent on the new connection), which is why the
+/// daemon republishes the table on every connect. Thread-safe.
 /// </summary>
 public sealed class FilterStatus
 {
-    /// <summary>A hello older than this (with no connection) no longer proves the extension is active.</summary>
-    public static readonly TimeSpan HelloLifetime = TimeSpan.FromMinutes(10);
-
     private readonly object _gate = new();
 
+    private TaskCompletionSource _changed = NewSignal();
+
     private int _connections;
+
+    /// <summary>Incremented per accepted connection; an ack counts only for the connection it arrived on.</summary>
+    private long _connectionEpoch;
+
+    private long _ackEpoch = -1;
 
     private DateTimeOffset? _lastHelloUtc;
 
     private DateTimeOffset? _lastEventUtc;
 
+    private DateTimeOffset? _lastSeenUtc;
+
+    private DateTimeOffset? _lastAckUtc;
+
     private string? _version;
 
     private long? _generation;
+
+    private long? _ackedGeneration;
 
     private long _dropped;
 
@@ -83,6 +128,18 @@ public sealed class FilterStatus
         }
     }
 
+    /// <summary>Last time any byte arrived from the extension (hello, rules or flow event). Diagnostic only.</summary>
+    public DateTimeOffset? LastSeenUtc
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _lastSeenUtc;
+            }
+        }
+    }
+
     public string? Version
     {
         get
@@ -94,7 +151,7 @@ public sealed class FilterStatus
         }
     }
 
-    /// <summary>Rules generation reported by the extension in its last hello or rules report.</summary>
+    /// <summary>Rules generation the extension named in its last hello or rules report (diagnostic; not an acknowledgement).</summary>
     public long? LoadedGeneration
     {
         get
@@ -102,6 +159,29 @@ public sealed class FilterStatus
             lock (_gate)
             {
                 return _generation;
+            }
+        }
+    }
+
+    /// <summary>Generation of the last <c>filter.rules</c> event without a file error, on any connection.</summary>
+    public long? AckedGeneration
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _ackedGeneration;
+            }
+        }
+    }
+
+    public DateTimeOffset? LastAckUtc
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _lastAckUtc;
             }
         }
     }
@@ -135,6 +215,8 @@ public sealed class FilterStatus
         lock (_gate)
         {
             _connections++;
+            _connectionEpoch++;
+            Signal();
         }
     }
 
@@ -143,6 +225,7 @@ public sealed class FilterStatus
         lock (_gate)
         {
             _connections = Math.Max(0, _connections - 1);
+            Signal();
         }
     }
 
@@ -155,6 +238,7 @@ public sealed class FilterStatus
         {
             _lastHelloUtc = now;
             _lastEventUtc = now;
+            _lastSeenUtc = now;
             _version = version;
             _generation = generation;
             if (dropped is { } count)
@@ -164,7 +248,10 @@ public sealed class FilterStatus
         }
     }
 
-    /// <summary>Records a <c>filter.rules</c> event; the latest report replaces the previous one.</summary>
+    /// <summary>
+    /// Records a <c>filter.rules</c> event; the latest report replaces the previous one. A report
+    /// without a file error is the extension's acknowledgement of its generation.
+    /// </summary>
     public void RulesReported(FlowEvent rulesEvent, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(rulesEvent);
@@ -176,6 +263,7 @@ public sealed class FilterStatus
         lock (_gate)
         {
             _lastEventUtc = now;
+            _lastSeenUtc = now;
             if (rulesEvent.Dropped is { } count)
             {
                 _dropped = Math.Max(_dropped, count);
@@ -185,6 +273,12 @@ public sealed class FilterStatus
             if (rulesEvent.Generation is { } generation)
             {
                 _generation = generation;
+                if (string.IsNullOrEmpty(rulesEvent.Error))
+                {
+                    _ackedGeneration = generation;
+                    _ackEpoch = _connectionEpoch;
+                    _lastAckUtc = now;
+                }
             }
 
             _rules = new FilterRulesReport
@@ -196,6 +290,7 @@ public sealed class FilterStatus
                 Dropped = _dropped,
                 ReceivedUtc = now,
             };
+            Signal();
         }
     }
 
@@ -204,15 +299,80 @@ public sealed class FilterStatus
         lock (_gate)
         {
             _lastEventUtc = now;
+            _lastSeenUtc = now;
         }
     }
 
-    /// <summary>The extension is connected, or said hello within <see cref="HelloLifetime"/>.</summary>
-    public bool HasRecentHello(DateTimeOffset now)
+    /// <summary>
+    /// Enforcement state of <paramref name="publishedGeneration"/> now: never seen →
+    /// <see cref="FilterEnforcementState.Unavailable"/>; seen but not connected →
+    /// <see cref="FilterEnforcementState.Degraded"/>; connected without a matching acknowledgement
+    /// on this connection (older or newer generation, file rejected, nothing yet) →
+    /// <see cref="FilterEnforcementState.Pending"/>; otherwise <see cref="FilterEnforcementState.Verified"/>.
+    /// </summary>
+    public FilterEnforcementState Evaluate(long publishedGeneration)
     {
         lock (_gate)
         {
-            return _lastHelloUtc is { } hello && (_connections > 0 || now - hello <= HelloLifetime);
+            return EvaluateLocked(publishedGeneration);
+        }
+    }
+
+    public FilterEnforcementSnapshot Snapshot(long publishedGeneration)
+    {
+        lock (_gate)
+        {
+            return new FilterEnforcementSnapshot(
+                EvaluateLocked(publishedGeneration),
+                _connections > 0,
+                publishedGeneration,
+                _ackedGeneration,
+                _lastSeenUtc,
+                _lastAckUtc,
+                _rules);
+        }
+    }
+
+    /// <summary>
+    /// Waits (bounded by <paramref name="timeout"/>) until the extension acknowledges
+    /// <paramref name="publishedGeneration"/>, rejects the file published at
+    /// <paramref name="publishedUtc"/>, or disconnects. Returns at once when the extension is
+    /// not connected; the caller re-reads <see cref="Snapshot"/> afterwards.
+    /// </summary>
+    public async Task WaitForAcknowledgementAsync(
+        long publishedGeneration,
+        DateTimeOffset publishedUtc,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        var deadline = Environment.TickCount64 + (long)Math.Max(0, timeout.TotalMilliseconds);
+        while (true)
+        {
+            Task changed;
+            lock (_gate)
+            {
+                var state = EvaluateLocked(publishedGeneration);
+                if (state != FilterEnforcementState.Pending ||
+                    (_rules is { Error.Length: > 0 } report && report.ReceivedUtc >= publishedUtc))
+                {
+                    return;
+                }
+
+                changed = _changed.Task;
+            }
+
+            var remaining = deadline - Environment.TickCount64;
+            if (remaining <= 0)
+            {
+                return;
+            }
+
+            var completed = await Task.WhenAny(changed, Task.Delay(TimeSpan.FromMilliseconds(remaining), cancellationToken)).ConfigureAwait(false);
+            if (completed != changed)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return;
+            }
         }
     }
 
@@ -224,4 +384,25 @@ public sealed class FilterStatus
             return _connections > 0 || (_lastEventUtc is { } last && now - last <= window);
         }
     }
+
+    private FilterEnforcementState EvaluateLocked(long publishedGeneration)
+    {
+        if (_connections == 0)
+        {
+            return _lastSeenUtc is null ? FilterEnforcementState.Unavailable : FilterEnforcementState.Degraded;
+        }
+
+        return _ackEpoch == _connectionEpoch && _ackedGeneration == publishedGeneration
+            ? FilterEnforcementState.Verified
+            : FilterEnforcementState.Pending;
+    }
+
+    private void Signal()
+    {
+        var previous = _changed;
+        _changed = NewSignal();
+        previous.TrySetResult();
+    }
+
+    private static TaskCompletionSource NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 }

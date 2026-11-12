@@ -42,6 +42,24 @@ public sealed record FilterRuleRejection
 /// </summary>
 public sealed record FilterEnforcementReport
 {
+    /// <summary>Derived enforcement state of <see cref="PublishedGeneration"/> (review 2026-11-12: published is not enforced).</summary>
+    public FilterEnforcementState State { get; init; }
+
+    /// <summary>The filter holds a live connection to the service right now (not "was seen recently").</summary>
+    public bool Connected { get; init; }
+
+    /// <summary>Generation the service last published to the filter.</summary>
+    public long PublishedGeneration { get; init; }
+
+    /// <summary>Generation the filter last acknowledged with a <c>filter.rules</c> event without a file error; null before the first.</summary>
+    public long? AckedGeneration { get; init; }
+
+    /// <summary>Last time anything arrived from the filter (diagnostic; does not imply enforcement).</summary>
+    public DateTimeOffset? LastSeenUtc { get; init; }
+
+    /// <summary>Time of the last acknowledgement (<see cref="AckedGeneration"/>).</summary>
+    public DateTimeOffset? LastAckUtc { get; init; }
+
     /// <summary>Generation of the rule table in force (-1 before any table loaded).</summary>
     public long Generation { get; init; } = -1;
 

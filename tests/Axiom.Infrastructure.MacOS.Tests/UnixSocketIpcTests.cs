@@ -187,6 +187,174 @@ public sealed class UnixSocketIpcTests
         }
     }
 
+    /// <summary>
+    /// P0 #1 (GitHub review 2026-11-12): a second standard user on the same Mac. The transport
+    /// identifies the peer; here the policy sees it as uid 502 while the install record names 501.
+    /// Over the real socket it must get public health only, with every private read and every
+    /// write refused as <c>unauthorized</c> before any handler runs.
+    /// </summary>
+    [Fact]
+    public async Task SecondStandardUserGetsPublicHealthOnlyOverTheSocket()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var paths = MacServicePaths.ForRoot(temp.Path);
+        var logs = new List<string>();
+        var policy = new PeerPolicy(OwnerUid: 501, AdminGroupMayWrite: true, _ => false);
+        var transport = new UnixSocketIpcTransport(paths, _ => PeerAuthorization.Decide(502, policy));
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var server = transport.RunAsync(PrivateDispatcher(line => { lock (logs) { logs.Add(line); } }), line => { lock (logs) { logs.Add(line); } }, cts.Token);
+        try
+        {
+            await WaitForSocketAsync(paths.IpcSocketPath, cts.Token);
+
+            var health = await RequestAsync(paths.IpcSocketPath, IpcCommandTypes.ServiceHealth, cts.Token);
+            Assert.True(health!.Ok);
+            var redacted = health.Result!.Value.Deserialize<ServiceHealth>(IpcJson.Options)!;
+            Assert.Equal("Running", redacted.Status);
+            Assert.Equal(0, redacted.ConnectionCount);
+            Assert.Null(redacted.LastError);
+            Assert.Equal([IpcCommandAccess.HealthRedactedNote], redacted.Limitations);
+            Assert.DoesNotContain("secret", health.Result.Value.GetRawText(), StringComparison.OrdinalIgnoreCase);
+
+            var capabilities = await RequestAsync(paths.IpcSocketPath, IpcCommandTypes.Capabilities, cts.Token);
+            Assert.True(capabilities!.Ok);
+
+            string[] privateReads =
+            [
+                IpcCommandTypes.Snapshot, IpcCommandTypes.HistoryQuery, IpcCommandTypes.LiveEvents,
+                IpcCommandTypes.DiagnosticsExport, IpcCommandTypes.PrivacyStatus, IpcCommandTypes.ThreatShareStatus,
+                IpcCommandTypes.RulesQuery, IpcCommandTypes.ProtectionStatus,
+            ];
+            foreach (var command in privateReads)
+            {
+                var denied = await RequestAsync(paths.IpcSocketPath, command, cts.Token);
+                Assert.False(denied!.Ok, command);
+                Assert.Equal(IpcErrorCodes.Unauthorized, denied.Error!.Code);
+                Assert.Contains("discloses machine-wide activity", denied.Error.Message, StringComparison.Ordinal);
+                Assert.Contains("uid 502 may only read public service health", denied.Error.Message, StringComparison.Ordinal);
+            }
+
+            foreach (var command in new[] { IpcCommandTypes.PrivacyConfigure, IpcCommandTypes.RuleApply, IpcCommandTypes.ProtectionEnable, "something.new" })
+            {
+                var denied = await RequestAsync(paths.IpcSocketPath, command, cts.Token);
+                Assert.False(denied!.Ok, command);
+                Assert.Equal(IpcErrorCodes.Unauthorized, denied.Error!.Code);
+                Assert.Contains("changes machine-wide settings", denied.Error.Message, StringComparison.Ordinal);
+            }
+
+            lock (logs)
+            {
+                Assert.Contains(logs, line => line.Contains("Denied 'history.query' for uid:502: private read", StringComparison.Ordinal));
+                Assert.Contains(logs, line => line.Contains("Denied 'rule.apply' for uid:502: write", StringComparison.Ordinal));
+                Assert.Contains(logs, line => line.Contains("uid:502 connected with public health access only", StringComparison.Ordinal));
+                Assert.DoesNotContain(logs, line => line.Contains("handler reached", StringComparison.Ordinal));
+            }
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            await server;
+        }
+    }
+
+    /// <summary>The installing user keeps full access over the same transport and dispatcher.</summary>
+    [Fact]
+    public async Task InstallingUserReadsPrivateDataOverTheSocket()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var paths = MacServicePaths.ForRoot(temp.Path);
+        var policy = new PeerPolicy(OwnerUid: 501, AdminGroupMayWrite: true, _ => false);
+        var transport = new UnixSocketIpcTransport(paths, _ => PeerAuthorization.Decide(501, policy));
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var server = transport.RunAsync(PrivateDispatcher(_ => { }), _ => { }, cts.Token);
+        try
+        {
+            await WaitForSocketAsync(paths.IpcSocketPath, cts.Token);
+
+            var health = await RequestAsync(paths.IpcSocketPath, IpcCommandTypes.ServiceHealth, cts.Token);
+            Assert.True(health!.Ok);
+            Assert.Equal("secret-last-error", health.Result!.Value.Deserialize<ServiceHealth>(IpcJson.Options)!.LastError);
+
+            // Private reads pass the authorization layer and reach the handlers (which answer with
+            // their own, non-authorization errors here).
+            var snapshot = await RequestAsync(paths.IpcSocketPath, IpcCommandTypes.Snapshot, cts.Token);
+            Assert.Equal(IpcErrorCodes.ServiceUnavailable, snapshot!.Error!.Code);
+            var history = await RequestAsync(paths.IpcSocketPath, IpcCommandTypes.HistoryQuery, cts.Token);
+            Assert.Equal(IpcErrorCodes.InvalidRequest, history!.Error!.Code);
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            await server;
+        }
+    }
+
+    /// <summary>Unknown peer credentials never reach the dispatcher, regardless of policy.</summary>
+    [Fact]
+    public async Task UnknownPeerCredentialsAreClosedWithoutReply()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var paths = MacServicePaths.ForRoot(temp.Path);
+        var logs = new List<string>();
+        var policy = new PeerPolicy(OwnerUid: 501, AdminGroupMayWrite: true, _ => true);
+        var transport = new UnixSocketIpcTransport(paths, _ => PeerAuthorization.Decide(null, policy));
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var server = transport.RunAsync(PrivateDispatcher(_ => { }), line => { lock (logs) { logs.Add(line); } }, cts.Token);
+        try
+        {
+            await WaitForSocketAsync(paths.IpcSocketPath, cts.Token);
+            Assert.Null(await RequestAsync(paths.IpcSocketPath, IpcCommandTypes.ServiceHealth, cts.Token));
+            lock (logs)
+            {
+                Assert.Contains(logs, line => line.Contains("Rejected IPC client uid:unknown", StringComparison.Ordinal));
+            }
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            await server;
+        }
+    }
+
+    private static IpcRequestDispatcher PrivateDispatcher(Action<string> log) => new(
+        new IpcRequestHandlers
+        {
+            SnapshotProvider = () => (ConnectionSnapshot?)null,
+            HealthProvider = () => new ServiceHealth
+            {
+                Status = "Running",
+                UptimeSeconds = 1,
+                SourceName = "test",
+                PollIntervalSeconds = 2,
+                ConnectionCount = 5,
+                ProcessCount = 3,
+                Limitations = ["secret limitation /Applications/Secret.app"],
+                LastError = "secret-last-error",
+            },
+            HistoryQuery = (_, _) => throw new InvalidOperationException("history handler reached"),
+            PrivacyConfigure = (_, _) => throw new InvalidOperationException("write handler reached"),
+        },
+        writeGateOpen: () => true,
+        log: log);
+
     [Fact]
     public void UidCapIsFourForUsersAndUnlimitedForRoot()
     {

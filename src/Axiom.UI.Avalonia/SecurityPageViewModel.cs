@@ -1398,6 +1398,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         InstallStatusText =
             $"Hook install result: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
             $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}, " +
+            $"Antigravity {(antigravity ? "installed" : "skipped")}, " +
             $"Cursor {(cursor ? "installed" : "skipped")}, GitHub Copilot CLI {(copilot ? "installed" : "skipped")}, " +
             $"Gemini CLI {(gemini ? "installed" : "skipped")}, Windsurf Cascade {(windsurf ? "installed" : "skipped")}, " +
             $"Cline {(cline ? "installed" : "skipped")}, ZCode {(zCode ? "installed" : "skipped")}, " +

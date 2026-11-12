@@ -214,6 +214,8 @@
         </StackPanel>
         <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Right">
           <controls:AxiomSelectableTextBlock Text="{Binding CapabilityStatusText}" Foreground="{DynamicResource Axiom.TextPrimary}" FontSize="12" FontWeight="Medium" HorizontalAlignment="Right" />
+          <!-- macOS only: live filter connection and acknowledged generation (empty on Windows). -->
+          <controls:AxiomSelectableTextBlock IsVisible="{Binding HasFilterConnectionText}" Text="{Binding FilterConnectionText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10.5" HorizontalAlignment="Right" />
           <controls:AxiomSelectableTextBlock Text="{Binding WritePathText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10.5" HorizontalAlignment="Right" />
           <Button Content="Recheck" Command="{Binding RefreshCommand}" HorizontalAlignment="Right" Padding="12,5" Margin="0,4,0,0" />
         </StackPanel>
