@@ -528,11 +528,12 @@ public sealed partial class ProtectionController(
         }
     }
 
-    private static string CurrentAccount()
+    private static readonly Lazy<string> CachedAccountName = new(() =>
     {
         try
         {
-            return WindowsIdentity.GetCurrent().Name;
+            using var identity = WindowsIdentity.GetCurrent();
+            return identity.Name;
         }
 #pragma warning disable CA1031 // The account name is display-only.
         catch (Exception)
@@ -540,5 +541,7 @@ public sealed partial class ProtectionController(
         {
             return "unknown";
         }
-    }
+    });
+
+    private static string CurrentAccount() => CachedAccountName.Value;
 }

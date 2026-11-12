@@ -7,7 +7,7 @@ using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
 
-public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposable
+public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatablePage, IDisposable
 {
     private readonly ConnectionMonitor _monitor;
     private readonly IUserInteraction _ui;
@@ -15,6 +15,8 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
     private readonly Dictionary<string, ConnectionAppGroup> _groupIndex =
         new(StringComparer.OrdinalIgnoreCase);
     private string? _selectedKey;
+    private bool _isActive = true;
+    private bool _dirty;
 
     public ConnectionsPageViewModel(
         ConnectionMonitor monitor,
@@ -165,12 +167,35 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         }
     }
 
+    public void Activate()
+    {
+        _isActive = true;
+        if (_dirty)
+        {
+            _dirty = false;
+            RefreshFromMonitor();
+        }
+    }
+
+    public void Deactivate() => _isActive = false;
+
     public void Dispose()
     {
         _monitor.Updated -= OnUpdated;
     }
 
     private void OnUpdated(object? sender, EventArgs e)
+    {
+        if (!_isActive)
+        {
+            _dirty = true;
+            return;
+        }
+
+        RefreshFromMonitor();
+    }
+
+    private void RefreshFromMonitor()
     {
         ApplyFilters();
         if (_monitor.LastError is { } error)
@@ -190,17 +215,22 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IDisposabl
         var search = SearchText.Trim();
         var protocol = ProtocolFilter;
 
-        var filtered = _monitor.Connections.Where(row =>
-            (search.Length == 0 || row.SearchBlob.Contains(search, StringComparison.OrdinalIgnoreCase)) &&
-            (protocol == "All" ||
-             string.Equals(row.ProtocolText, protocol, StringComparison.OrdinalIgnoreCase)) &&
-            (!OnlyNew || row.IsNew) &&
-            (!OnlyLoopback || row.IsLoopback));
+        var filtered = _monitor.Connections
+            .Where(row =>
+                (search.Length == 0 || row.SearchBlob.Contains(search, StringComparison.OrdinalIgnoreCase)) &&
+                (protocol == "All" ||
+                 string.Equals(row.ProtocolText, protocol, StringComparison.OrdinalIgnoreCase)) &&
+                (!OnlyNew || row.IsNew) &&
+                (!OnlyLoopback || row.IsLoopback))
+            .ToList();
 
-        VisibleConnections.Clear();
-        foreach (var row in filtered)
+        if (!VisibleConnections.SequenceEqual(filtered))
         {
-            VisibleConnections.Add(row);
+            VisibleConnections.Clear();
+            foreach (var row in filtered)
+            {
+                VisibleConnections.Add(row);
+            }
         }
 
         var traffic = _monitor.AppTraffic.ToDictionary(

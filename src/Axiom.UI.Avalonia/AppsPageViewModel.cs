@@ -12,7 +12,7 @@ namespace Axiom.UI.Avalonia;
 /// Executables observed in the live socket inventory. Reads are always available from the monitor;
 /// firewall writes require the service write gate and one explicit confirmation per rule.
 /// </summary>
-public sealed partial class AppsPageViewModel : PageViewModel, IDisposable
+public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage, IDisposable
 {
     private const double MaxBarWidth = 190;
 
@@ -23,6 +23,8 @@ public sealed partial class AppsPageViewModel : PageViewModel, IDisposable
     private readonly IProcessActions _processes;
     private readonly FirewallDefaultsStore _firewallDefaults = FirewallDefaultsStore.Shared;
     private string? _selectedKey;
+    private bool _isActive = true;
+    private bool _dirty;
 
     public AppsPageViewModel(
         ConnectionMonitor monitor,
@@ -89,6 +91,18 @@ public sealed partial class AppsPageViewModel : PageViewModel, IDisposable
     public string ModeBadgeText => _client is null ? "LIVE · READ-ONLY" : "LIVE · SERVICE";
 
     public IReadOnlyList<string> ProtocolOptions { get; } = ["Any", "TCP", "UDP"];
+
+    public void Activate()
+    {
+        _isActive = true;
+        if (_dirty)
+        {
+            _dirty = false;
+            Rebuild();
+        }
+    }
+
+    public void Deactivate() => _isActive = false;
 
     public void Dispose()
     {
@@ -305,7 +319,16 @@ public sealed partial class AppsPageViewModel : PageViewModel, IDisposable
         };
     }
 
-    private void OnMonitorUpdated(object? sender, EventArgs e) => Rebuild();
+    private void OnMonitorUpdated(object? sender, EventArgs e)
+    {
+        if (!_isActive)
+        {
+            _dirty = true;
+            return;
+        }
+
+        Rebuild();
+    }
 
     private void OnFirewallDefaultsChanged(object? sender, EventArgs e) =>
         ApplyFirewallDefaults(_firewallDefaults.Load());

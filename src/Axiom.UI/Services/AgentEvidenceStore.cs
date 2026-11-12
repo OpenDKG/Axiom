@@ -33,6 +33,12 @@ public sealed record AgentEvidenceEvent(
 /// </summary>
 public sealed class AgentEvidenceStore
 {
+    private readonly object _cacheGate = new();
+    private List<AgentEvidenceEvent> _cachedEvents = [];
+    private long _cachedLength = -1;
+    private long _cachedWriteTicks = -1;
+    private int _cachedMax;
+
     public AgentEvidenceStore(string? path = null)
     {
         EvidencePath = path ?? Path.Combine(
@@ -45,15 +51,38 @@ public sealed class AgentEvidenceStore
 
     public IReadOnlyList<AgentEvidenceEvent> ReadRecent(int max = 200)
     {
+        if (max <= 0)
+        {
+            return [];
+        }
+
         try
         {
-            if (!File.Exists(EvidencePath))
+            var info = new FileInfo(EvidencePath);
+            if (!info.Exists || info.Length == 0)
             {
                 return [];
             }
 
-            var events = new List<AgentEvidenceEvent>();
-            foreach (var line in File.ReadLines(EvidencePath).TakeLast(max))
+            var writeTicks = info.LastWriteTimeUtc.Ticks;
+            var length = info.Length;
+
+            lock (_cacheGate)
+            {
+                if (length == _cachedLength &&
+                    writeTicks == _cachedWriteTicks &&
+                    max <= _cachedMax)
+                {
+                    return _cachedEvents.Count <= max
+                        ? _cachedEvents
+                        : _cachedEvents.Skip(_cachedEvents.Count - max).ToArray();
+                }
+            }
+
+            var readTarget = Math.Max(max, 500);
+            var tailLines = ReadTailLines(EvidencePath, length, readTarget);
+            var events = new List<AgentEvidenceEvent>(tailLines.Count);
+            foreach (var line in tailLines)
             {
                 if (TryParse(line) is { } item)
                 {
@@ -61,12 +90,62 @@ public sealed class AgentEvidenceStore
                 }
             }
 
-            return events;
+            lock (_cacheGate)
+            {
+                _cachedEvents = events;
+                _cachedLength = length;
+                _cachedWriteTicks = writeTicks;
+                _cachedMax = readTarget;
+            }
+
+            return events.Count <= max
+                ? events
+                : events.Skip(events.Count - max).ToArray();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             return [];
         }
+    }
+
+    private static List<string> ReadTailLines(string path, long fileLength, int maxLines)
+    {
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+
+        var tailBytes = Math.Min(fileLength, Math.Max(65_536L, maxLines * 512L));
+        var startOffset = fileLength - tailBytes;
+        if (startOffset > 0)
+        {
+            stream.Seek(startOffset, SeekOrigin.Begin);
+        }
+
+        using var reader = new StreamReader(stream);
+        if (startOffset > 0)
+        {
+            _ = reader.ReadLine();
+        }
+
+        var ring = new Queue<string>(Math.Min(maxLines, 1024));
+        while (reader.ReadLine() is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            if (ring.Count == maxLines)
+            {
+                _ = ring.Dequeue();
+            }
+
+            ring.Enqueue(line);
+        }
+
+        return [.. ring];
     }
 
     public AgentEvidenceEvent? Latest(string framework, TimeSpan? maxAge = null)

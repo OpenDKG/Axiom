@@ -18,9 +18,12 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private readonly IServiceRequestClient? _serviceClient;
     private readonly List<NewConnectionMarkerEvent> _sessionEvents = [];
     private readonly HashSet<string> _seenEventKeys = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AppRow> _topAppRows = new(StringComparer.OrdinalIgnoreCase);
 
     private int _rangeRequest;
     private DateTimeOffset _lastHistoryUtc = DateTimeOffset.MinValue;
+    private bool _isActive = true;
+    private bool _dirty;
 
     public OverviewPageViewModel(
         ConnectionMonitor monitor,
@@ -46,9 +49,22 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     /// <summary>Agent/audit surface shown on Overview, as in the WPF application.</summary>
     public AgentsPageViewModel? AgentActivity { get; set; }
 
-    public void Activate() => AgentActivity?.Activate();
+    public void Activate()
+    {
+        _isActive = true;
+        AgentActivity?.Activate();
+        if (_dirty)
+        {
+            _dirty = false;
+            Refresh();
+        }
+    }
 
-    public void Deactivate() => AgentActivity?.Deactivate();
+    public void Deactivate()
+    {
+        _isActive = false;
+        AgentActivity?.Deactivate();
+    }
 
     public ObservableCollection<ConnectionRow> Connections => _monitor.Connections;
 
@@ -307,22 +323,8 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         }
     }
 
-    private void UpdateLiveCounters()
+    private void RecordSessionEvents()
     {
-        var window = SelectedRange switch
-        {
-            "1h" => TimeSpan.FromHours(1),
-            "12h" => TimeSpan.FromHours(12),
-            "24h" => TimeSpan.FromDays(1),
-            "7d" => TimeSpan.FromDays(7),
-            "30d" => TimeSpan.FromDays(30),
-            _ => TimeSpan.FromMinutes(5),
-        };
-        var now = DateTimeOffset.UtcNow;
-
-        NewConnectionsText =
-            $"{_monitor.Connections.Count(connection => connection.IsNew)} new in the last 60 s";
-
         foreach (var connection in _monitor.Connections.Where(item => item.IsNew))
         {
             var source = connection.Source;
@@ -362,6 +364,25 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
                     string.Join("|", item.Protocol, item.ProcessId, item.Local, item.Remote, item.FirstSeenUtc.UtcTicks));
             }
         }
+    }
+
+    private void UpdateLiveCounters()
+    {
+        var window = SelectedRange switch
+        {
+            "1h" => TimeSpan.FromHours(1),
+            "12h" => TimeSpan.FromHours(12),
+            "24h" => TimeSpan.FromDays(1),
+            "7d" => TimeSpan.FromDays(7),
+            "30d" => TimeSpan.FromDays(30),
+            _ => TimeSpan.FromMinutes(5),
+        };
+        var now = DateTimeOffset.UtcNow;
+
+        NewConnectionsText =
+            $"{_monitor.Connections.Count(connection => connection.IsNew)} new in the last 60 s";
+
+        RecordSessionEvents();
 
         var selectedKey = _selectedEventKey;
         var events = _sessionEvents
@@ -384,26 +405,35 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
             events = events.OrderBy(item => item.FirstSeenUtc).ToList();
         }
 
-        // Clearing the observable collection makes the ListBox push null into SelectedEvent.
-        // Keep the user's selected event key across the refresh and restore it afterwards.
-        _restoringEvents = true;
-        try
+        var numberedEvents = new List<NewConnectionMarkerEvent>(events.Count);
+        for (var index = 0; index < events.Count; index++)
         {
-            NewConnectionEvents.Clear();
-            for (var index = 0; index < events.Count; index++)
-            {
-                NewConnectionEvents.Add(events[index] with { Number = index + 1 });
-            }
-
-            SelectedEvent = selectedKey is null
-                ? null
-                : NewConnectionEvents.FirstOrDefault(item => EventKey(item) == selectedKey);
-            SelectedEventDetails = SelectedEvent?.Details
-                ?? "Select a first-observed connection to see details.";
+            numberedEvents.Add(events[index] with { Number = index + 1 });
         }
-        finally
+
+        // Only rebuild NewConnectionEvents when the list actually changes so open context menus
+        // and item containers are not destroyed on every 1-second poll.
+        if (!NewConnectionEvents.SequenceEqual(numberedEvents))
         {
-            _restoringEvents = false;
+            _restoringEvents = true;
+            try
+            {
+                NewConnectionEvents.Clear();
+                foreach (var item in numberedEvents)
+                {
+                    NewConnectionEvents.Add(item);
+                }
+
+                SelectedEvent = selectedKey is null
+                    ? null
+                    : NewConnectionEvents.FirstOrDefault(item => EventKey(item) == selectedKey);
+                SelectedEventDetails = SelectedEvent?.Details
+                    ?? "Select a first-observed connection to see details.";
+            }
+            finally
+            {
+                _restoringEvents = false;
+            }
         }
 
         HasNewConnectionEvents = events.Count > 0;
@@ -413,11 +443,37 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
 
         var groups = AppGrouping.Group(_monitor.Connections).Take(5).ToList();
         var largest = groups.Count == 0 ? 0 : groups[0].SocketCount;
-        TopApps.Clear();
+        var desiredRows = new List<AppRow>(groups.Count);
+        var activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var group in groups)
         {
             var width = largest == 0 ? 0 : Math.Max(4, group.SocketCount / (double)largest * 200);
-            TopApps.Add(new AppRow(group, width));
+            activeKeys.Add(group.Key);
+            if (_topAppRows.TryGetValue(group.Key, out var existing))
+            {
+                existing.Update(group, width);
+                desiredRows.Add(existing);
+            }
+            else
+            {
+                var created = new AppRow(group, width);
+                _topAppRows[group.Key] = created;
+                desiredRows.Add(created);
+            }
+        }
+
+        foreach (var staleKey in _topAppRows.Keys.Where(key => !activeKeys.Contains(key)).ToList())
+        {
+            _topAppRows.Remove(staleKey);
+        }
+
+        if (!TopApps.SequenceEqual(desiredRows))
+        {
+            TopApps.Clear();
+            foreach (var row in desiredRows)
+            {
+                TopApps.Add(row);
+            }
         }
     }
 
@@ -591,10 +647,26 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         _traffic.Updated -= OnTrafficUpdated;
     }
 
-    private void OnMonitorUpdated(object? sender, EventArgs e) => Refresh();
+    private void OnMonitorUpdated(object? sender, EventArgs e)
+    {
+        if (!_isActive)
+        {
+            RecordSessionEvents();
+            _dirty = true;
+            return;
+        }
+
+        Refresh();
+    }
 
     private void OnTrafficUpdated(object? sender, EventArgs e)
     {
+        if (!_isActive)
+        {
+            _dirty = true;
+            return;
+        }
+
         UploadText = ByteFormatter.Rate(_traffic.LatestUpload);
         DownloadText = ByteFormatter.Rate(_traffic.LatestDownload);
         BucketLabel = _traffic.BucketLabel;

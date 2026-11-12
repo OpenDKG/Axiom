@@ -148,6 +148,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         AiAnalyst.GroupLabel = "INTELLIGENCE";
         Settings.GroupLabel = "GENERAL";
         _selectedPage = Overview;
+        _activePage = Overview;
         _selectedTheme = ThemeLabel(_theme.Current);
         _theme.Changed += OnThemeChanged;
         _monitor.Updated += OnMonitorUpdated;
@@ -298,6 +299,15 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _monitor.Start();
         _traffic.Start();
         Overview.Refresh();
+        foreach (var page in Pages)
+        {
+            if (!ReferenceEquals(page, SelectedPage))
+            {
+                (page as IActivatablePage)?.Deactivate();
+            }
+        }
+
+        _activePage = SelectedPage;
         (SelectedPage as IActivatablePage)?.Activate();
         RefreshStatus();
         _ = ProbeServiceAsync(force: true);

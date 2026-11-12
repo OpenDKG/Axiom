@@ -53,4 +53,35 @@ public sealed class AgentEvidenceStoreTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void ReadRecent_reads_tail_and_invalidates_cache_when_file_grows()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"axiom-evidence-{Guid.NewGuid():N}.jsonl");
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var lines = Enumerable.Range(1, 600)
+                .Select(index =>
+                    $"{{\"timestampUtc\":\"{now.AddSeconds(-600 + index):O}\",\"framework\":\"codex\",\"eventType\":\"GUARD_ALLOWED\",\"tool\":\"tool-{index}\",\"decision\":\"allowed\",\"guardStatus\":\"ok\",\"durationMs\":1}}")
+                .ToArray();
+            File.WriteAllLines(path, lines);
+
+            var store = new AgentEvidenceStore(path);
+            var initial = store.ReadRecent(10);
+            Assert.Equal(10, initial.Count);
+            Assert.Equal("tool-600", initial[^1].Tool);
+
+            File.AppendAllLines(path,
+            [
+                $"{{\"timestampUtc\":\"{now.AddSeconds(1):O}\",\"framework\":\"codex\",\"eventType\":\"GUARD_ALLOWED\",\"tool\":\"tool-601\",\"decision\":\"allowed\",\"guardStatus\":\"ok\",\"durationMs\":1}}",
+            ]);
+
+            Assert.Equal("tool-601", store.Latest("codex")?.Tool);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }
