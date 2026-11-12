@@ -171,3 +171,28 @@ Nothing in the Windows projects (`Axiom.Infrastructure.Windows`, `Axiom.UI`, `Ax
 - Suggested upstream PR order: (1) `Axiom.Infrastructure.Unix` extraction + macOS facades, (2) `Axiom.Contracts`
   /`Axiom.Service` Linux hooks, (3) `Axiom.Infrastructure.Linux` without `Nft/`, (4) the `Nft/` engine + tests +
   e2e script, (5) docs.
+
+## 5. Status after the PR #276 review (LNX-1, LNX-2) — supersedes older statements above
+
+Several statements above predate later phases (desktop app, packages and the eBPF build exist now). What
+is **proven**, and only that:
+
+- **Platform evidence: Ubuntu 24.04.5 LTS, x86_64, kernel 7.0.0-42-generic, nftables 1.0.9, bpftool 7.7.0
+  (libbpf 1.7), systemd 255, GNOME 46 on X11 — one box, the author's.** No other distribution, kernel,
+  desktop or architecture has been run.
+- LNX-1 fixed: the BPF map sync is part of the effective rule state; a failed delete/update can no longer
+  yield a verified removal/application (LINUX_EBPF.md §10). Proven by red→green tests and live fault
+  injection through the packaged daemon (renamed map pin → `rule.remove` `success:false`,
+  `bpf.delete_failed`, layer neutralised, re-attached 1 s later, retry verified).
+- LNX-2 fixed: teardown in `finally`, bounded independent steps, startup reconciliation; live SIGKILL →
+  restart reconciled (4 programs, not 8), `systemctl stop` leaves no `table inet axiom`, no `axiom_*`
+  attachment, no `axiom.slice`, no pins; a third-party `table inet zz_thirdparty` was byte-identical
+  before and after publish/stop/teardown.
+- `.deb`: built, installed, upgraded in place, removed, purged on this box. **`.rpm`: built only; a Fedora
+  install/upgrade/remove with SELinux is pending** — no Fedora/RPM readiness is claimed.
+- **Untested:** Debian, Fedora/SELinux, firewalld coexistence, Wayland (GNOME or KDE), KDE Plasma, arm64,
+  kernels without BTF or `nft_socket`, NetworkManager/resolv.conf DNS backends live, live IPv6 traffic (the
+  box has no IPv6 default route; the `inet` rules carry no `ip`/`ip6` qualifier and `connect6`/`sendmsg6`
+  are attached — structural, not traffic, evidence).
+- CI: no machine-readable CI run for the Linux suites; all results are author-run on this box. Windows
+  regression suites were not run on Windows by the author.

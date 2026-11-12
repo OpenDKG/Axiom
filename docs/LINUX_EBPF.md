@@ -152,9 +152,13 @@ libbpf binding — load/attach/pin/map writes go through `bpftool`, the ring buf
   before the nft teardown. `--uninstall-service` stops the unit, which runs the same stop path.
 - `NftFirewallPolicyAdapter.PublishAsync` calls `layer.SyncAsync(rules, generation)` after every
   **successful** nft apply (upsert, remove, recovery removal, republish by the watcher). A refused
-  batch never touches the maps; a map write failure is logged and never fails the publish.
-- Pins survive a daemon crash/restart; `StartAsync` detects `/sys/fs/bpf/axiom`, detaches and removes
-  it, then loads fresh (deterministic; the maps are rebuilt from `managed-rules.json` anyway).
+  batch never touches the maps. Since the PR #276 review (LNX-1) the sync returns a `LayerSyncResult`
+  that the adapter folds into the rule result, the enforcement report and the capabilities (§10); the
+  nft batch itself is never rolled back for a map failure.
+- Pins survive a daemon crash/restart; `StartAsync` detaches every `axiom_*` program by pin **and** by id
+  (`bpftool -j cgroup show /sys/fs/cgroup`, so an unpinned leftover is found too), removes the pin tree,
+  then loads fresh (deterministic; the maps are rebuilt from `managed-rules.json` anyway). Proven after
+  `systemctl kill -s KILL axiomd`: 4 programs attached after the restart, not 8 (`LINUX_TEST_REPORT.md`).
 
 Degradation (`BpfCapabilityProbe`, in this order, each a journal line `BPF layer inactive: …`):
 not root → objects not shipped → `bpftool` missing → no kernel BTF → bpffs not mounted; then runtime
@@ -241,3 +245,63 @@ process killed except the helper the script started; every object the script cre
   8 ms, `--limit-rate 400k` rc=7, still rc=7 while `table inet axiom` was deleted, `--doctor` `PASS bpf
   layer: bpftool v7.7.0; 4 programs pinned at /sys/fs/bpf/axiom`.
 - Residual: §8 unchanged (scoped/inbound rules nft-only, allowed flows not evented, BTF-less kernels).
+
+## 10. Effective state: sync result, reconciliation, neutralisation (PR #276 review, LNX-1)
+
+Before the review, a failed `bpftool map delete` was only logged: the adapter reported a removed rule as
+`Desired`/verified while the stale exe/cgroup verdict kept blocking at connect time. Now the BPF maps
+are an enforcement layer of their own and a rule is only "removed" when every attached layer stopped
+enforcing it.
+
+**`IVerdictLayer.SyncAsync` → `Task<LayerSyncResult>`** (Linux-only interface):
+`Generation`, `Attached` (the layer's programs enforce after the sync), `Pinned`, `Applied` (every desired
+entry written, every stale entry deleted), `Verified` (a `bpftool -j map dump` read-back matched the plan),
+`Neutralised`, `Attempts`, `FailedUpdates[]`, `FailedDeletes[]` (`{operation, map, keyHex, ruleId,
+describe, error}`), `CoveredRules[]`, `Uncovered[]` (rule id + reason), `Status`;
+`StaleEntriesCanBlock = Attached && FailedDeletes.Count > 0`.
+
+**Bounded reconciliation** (`BpfEngine.SyncAsync`, `ReconcileAttempts = 3`, backoff 250 ms → 500 ms):
+
+1. write pass: delete keys the plan no longer wants, update every wanted key;
+2. read back both verdict maps and repair against the plan: unknown keys (a crashed daemon's leftovers,
+   a delete that lied) are deleted, missing or different entries rewritten;
+3. repeat while anything failed, at most 3 passes.
+
+A missing map pin is not "key already gone": the ENOENT of `bpf obj get` is told apart from the ENOENT
+of a missing key, so a renamed/removed pin fails the delete instead of passing it. A missing/unrunnable
+`bpftool` is a failed result (exit 127, `bpftool could not be run`), never an exception.
+
+**Neutralisation.** When a stale entry still cannot be deleted after the passes, the only safe move is
+to stop the layer from enforcing anything: the engine detaches **only Axiom's four programs** (by pin,
+then by id for any `axiom_*` program `bpftool cgroup show` lists — third-party programs are never
+selected), removes `/sys/fs/bpf/axiom`, and reports `Neutralised` (status `degraded: detached after …;
+nftables only until re-attached`). nftables keeps enforcing every rule. The supervisor's watch tick
+re-attaches the layer (one attempt per tick: `StartAsync` + resync from `managed-rules.json`). If the
+detach fails too, the result says so (`StaleEntriesCanBlock`): the engine stays `degraded: … could not be
+detached` and nothing claims success. Programs detached by another tool are detected after each sync
+(fewer than 4 `axiom_*` at the root) and handled as neutralised (re-attached by the watcher).
+
+**Fail-safe direction, explicitly.** A stale *block* verdict errs towards blocking (connectivity loss
+for one app); the engine trades that for nft-only enforcement (security unchanged for every rule nft
+expresses — all of them — only the ~1 s exec window reopens) and says so in every surface.
+
+**What the adapter reports** (`NftFirewallPolicyAdapter`):
+
+| Situation | `rule.remove` | `rule.apply` | enforcement / capabilities | `rule.verify` |
+|---|---|---|---|---|
+| sync applied + read back | `Success`, `Desired`, `verifiedUtc` set | `Applied` | `Verified` / `Available` | `BPF-backed: … read back verified` or `nft-only: <reason>` |
+| delete failed → neutralised | `Success=false`, `Pending`, `bpf.delete_failed`, "detached its own BPF programs … retry rule.remove" | — | `Degraded`, reason "BPF layer neutralised" | not verified, note |
+| delete and detach failed | `Success=false`, `Pending`, `bpf.stale_entry`, "may still be blocked … restart axiomd or bpftool map delete" | — | `Degraded`, "stale entries … removed rules may still block" | `EnforcementVerified=false`, "still in an attached map" |
+| update failed (partial) | verified only if the rule's own state is clean; message names the failed updates | `Pending`, `bpf.update_failed` | `Pending`, limitation "BPF map sync failed …" | "connect-time verdict … not written" |
+| read-back unavailable | `Success`, not verified, "connect-time state is unconfirmed" | `Applied` | `Verified` (nft) | "read-back unavailable" |
+| layer never attached (no BTF/bpftool/root) | nft decides | `Applied` (nft) | `Available` + "BPF layer inactive" | "BPF layer inactive … nftables alone" |
+
+`managed-rules.json` keeps the generation; the engine's applied set is in memory only and starts empty
+after every attach, and the first read-back after a (re)start deletes whatever a previous instance left in
+the maps — so generation/epoch is coherent across restarts by rebuilding, not by trusting old pins.
+Every operation is idempotent: re-applying the same rule writes the same keys (`any`), re-removing a
+removed rule republishes and resyncs without it.
+
+Tests: `BpfEffectiveStateTests` (red tests of the review, green now), `LinuxFaultMatrixTests` (16), over
+`FakeBpftool`, which models map contents, attachments, transient (`FailTimes`) and persistent
+(`FailPrefixes`) faults, EPERM text and a missing binary.

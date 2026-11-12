@@ -285,3 +285,69 @@ pattern as the macOS test projects merged from `buba/macos`): the projects still
 `IsOSPlatform('Linux')`: the assemblies disappear from the solution test run). The `MacBundleLayoutTests` path fix
 and the deterministic `Firewall_page_requeries_enforcement_when_stale` come in with the `buba/macos` merge. Not
 re-run on the Windows VM in this pass.
+
+## PR #276 review (LNX-1, LNX-2): red run, fix, fault matrix, live evidence (2026-11-12)
+
+Host: Ubuntu 24.04.5 LTS, x86_64, kernel `7.0.0-42-generic`, `nftables v1.0.9 (Old Doc Yak #3)`, `bpftool v7.7.0`
+(`libbpf v1.7`), systemd 255. Branch `buba/linux`: red tests `4ff73d5` on `62b6406`; fixes `983ef21` (LNX-1),
+`bd33548` (LNX-2), `f2063fa` (hardening + fault matrix), `d8949e9` (CA1873). Author-run; not CI.
+
+### Red run (tests at `4ff73d5`, fix absent)
+
+`dotnet test tests/Axiom.Infrastructure.Linux.Nft.Tests -c Release` in a detached worktree of `4ff73d5`:
+`Failed!  - Failed: 7, Passed: 83, Skipped: 0, Total: 90`. Failing:
+`BpfEffectiveStateTests.Remove_whose_bpf_map_delete_failed_must_not_report_a_verified_removal` ("a removal with a
+stale BPF entry must not be reported as verified"), `…Partial_bpf_map_update_failure_leaves_the_rule_pending_not_applied`,
+`NftEnforcementSupervisorTests.{Attribution,Watcher,Events,Trace}_loop_fault_still_tears_down*` (the events and
+trace variants hit the 5 s guard: the loop fault never ended the run), `…Teardown_step_failure_does_not_skip_the_other_steps_and_is_reported`.
+
+### Green gate (at `d8949e9`)
+
+`dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` → `0 Warning(s) 0 Error(s)`.
+Infrastructure.Linux.Nft **106/106** (82 before + 8 red tests + 16 fault matrix; stable over 4 runs),
+Infrastructure.Linux 32/32, Infrastructure.Unix 32/32, Desktop.Avalonia.Linux 51/51; macOS unchanged:
+Infrastructure.MacOS 199/199, Desktop.Avalonia.MacOS 35/35. `dotnet build-server shutdown`; `git checkout -- '*.lock.json'`.
+
+### Fault matrix (unit, `LinuxFaultMatrixTests` + `BpfEffectiveStateTests` + supervisor tests)
+
+| Fault | Expected | Result |
+|---|---|---|
+| unscoped outbound block | nft rule + exe and cgroup verdicts, `Verified` | PASS |
+| `bpftool map delete` fails persistently | remove `Success=false`, `Pending`, `bpf.delete_failed`; 3 passes; only `axiom_*` detached; `Degraded`; watcher re-attaches; retry verified | PASS |
+| delete **and** detach fail | `bpf.stale_entry`, "may still be blocked", engine `degraded:`, verify not verified | PASS |
+| transient update failure (1×) | repaired by the read-back pass, `Applied` | PASS |
+| persistent partial update | `Pending` `bpf.update_failed`, report `Pending`; retry after recovery → `Applied`, no duplicates | PASS |
+| unknown key in a pinned map | deleted by reconciliation | PASS |
+| EPERM on map writes | `Pending`, message carries "Operation not permitted", limitation "BPF map sync failed" | PASS |
+| bpftool vanishes at runtime | failed result (exit 127), not an exception; not verified | PASS |
+| bpftool missing at start | layer inactive, rules `Applied` by nft, "BPF layer inactive … nftables alone" | PASS |
+| map pin missing | not mistaken for a deleted key; removal `Pending` | PASS |
+| programs detached by another tool | `bpf.neutralised`, `Degraded`, watcher re-attaches | PASS |
+| scoped / inbound vs unscoped | `nft-only: <reason>` vs `BPF-backed`; coverage statement in limitations | PASS |
+| fault in each loop (attribution, watcher, trace, events) | teardown of layer, table, cgroups; fault logged then rethrown | PASS |
+| teardown: BPF stop throws / hangs / nft delete fails | other steps still run; errors aggregated; hang bounded | PASS |
+| 3 rapid stop/start cycles | 4 attachments while running, 0 after; no pins; no `axiom.slice/*` | PASS |
+| crash (no teardown) + new instance | old programs detached (4 not 8), orphan cgroup released, journal lines | PASS |
+| every test | pre-seeded third-party program id 7 attached and never addressed; every nft call only `inet axiom`, no `flush ruleset` | PASS |
+
+### Live, packaged daemon (`scripts/linux/package.sh deb` → `build/linux/axiom_0.13.2_amd64.deb`, 62 889 452 bytes)
+
+Baseline: `axiomd` active (0.13.2 package), no rules, protection off, Privacy Shield `Disabled`, `Link 2 (eno2):
+192.168.70.1`, `/etc/resolv.conf` → `nameserver 127.0.0.53`; tables `ip filter, ip6 filter, ip nat, ip6 nat, inet axiom`;
+4 `axiom_*` programs at `/sys/fs/cgroup`.
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| L-0 | third-party table before publish: `nft add table inet zz_thirdparty` + output chain prio 10 + `tcp dport 9 counter comment "axiom-test thirdparty"` | — | listing sha256 `bf34380d…9119` |
+| L-1 | upgrade: `sudo -n dpkg -i build/linux/axiom_0.13.2_amd64.deb` | PASS | `Installed and started axiomd.service from /usr/libexec/axiom`; `/usr/libexec/axiom/Axiom.Infrastructure.Linux.dll` sha256 `bbe0fc74…f9a8` = build; journal: old instance `BPF layer detached and /sys/fs/bpf/axiom removed.` + `Removed table inet axiom …`; new: `BPF verdicts generation 2: … (read back verified).` |
+| L-2 | `protection.enable {"defaultPolicy":"ask"}`, `rule.apply` block `/usr/bin/curl` | PASS | `state:"applied"`; bare `curl -sS -m 8 https://example.com` → `Failed to connect … after 8 ms`, `000 rc=7`; `bpftool -j map dump pinned …/axiom_exe_verdicts` → key `08 00 00 00 02 00 00 00 a5 02 14 03 …` (dev 8:2 ino 51643045), value action 2, generation 3 |
+| L-3 | fault: `sudo -n mv /sys/fs/bpf/axiom/maps/axiom_exe_verdicts …/held_exe_verdicts`, then `rule.remove` | PASS | `success:false`, `state:"pending"`, `errorCode:"bpf.delete_failed"`, `verifiedUtc:null`, message `… could not be deleted after 3 pass(es) (… map pin /sys/fs/bpf/axiom/maps/axiom_exe_verdicts is missing …); the daemon detached its own BPF programs …`; journal 23:26:35 `pass 1 left 1 stale … retrying in 250 ms`, `pass 2 … 500 ms`, `neutralising: detaching Axiom's programs …`; curl → `200` (nothing stale enforces) |
+| L-4 | restore/reconcile | PASS | the neutralisation removed the pin tree (incl. the renamed pin), so there was nothing to rename back; 23:26:37 `BPF layer is neutralised; re-attaching …`, `BPF layer attached …`, `BPF verdicts generation 4: 0 exe, 0 cgroup entries … (read back verified)`, `BPF layer re-attached; enforcement verified.`; retry `rule.remove` → `success:true`, `state:"desired"`, `verifiedUtc` set; `rule.verify` → `presentInOs:false`; curl `200` |
+| L-5 | re-apply, then `sudo -n systemctl kill -s KILL axiomd` | PASS | `Main process exited, code=killed, status=9/KILL`; `Scheduled restart job, restart counter is at 1`; new pid: `Startup reconciliation: table inet axiom generation 6 (replaced by the first publish); 1 axiom.slice cgroup(s) from a previous daemon (1 still ruled, 0 removed: )`, `BPF layer: reconciled orphaned state from a previous daemon: pinned axiom_connect4, … pins /sys/fs/bpf/axiom`, `Published … generation 7 … enforcement verified`; `bpftool -j cgroup show /sys/fs/cgroup` → **4** programs (`axiom_connect4/6`, `axiom_sendmsg4/6`), not 8; curl rc=7 |
+| L-6 | `sudo -n systemctl stop axiomd` | PASS | `inactive`; `nft list tables` → no `inet axiom`, `inet zz_thirdparty` present; `bpftool cgroup show /sys/fs/cgroup` → empty; `/sys/fs/cgroup/axiom.slice` absent; `test -e /sys/fs/bpf/axiom` → rc 1; journal `BPF layer detached …`, `Removed table inet axiom and the Axiom cgroups …`; `zz_thirdparty` listing sha256 identical (`bf34380d…9119`) |
+| L-7 | `sudo -n systemctl start axiomd` | PASS | `Published table inet axiom generation 8 (1 applied …)`, `BPF verdicts generation 8: 1 exe, 1 cgroup entries … (read back verified)`; curl rc=7 |
+| L-8 | IPv6 | structural only | no IPv6 default route on this box (`ip -6 route show default` empty), so `curl -6` fails regardless (`rc=7 after 0 ms`) and proves nothing; the generated rules are `meta l4proto … socket cgroupv2 level 2 "axiom.slice/a-…"` in an `inet` table (no `ip`/`ip6` qualifier, so both families match), loopback accepts exist for `::1`, and `connect6`/`sendmsg6` are attached. Live v6 traffic: **untested** |
+| L-9 | cleanup | PASS | `rule.remove` → `desired`, verified; `protection.disable` → `enabled:false`; `rules.query` → `managedRuleCount:0`; Privacy Shield `Disabled`; `nft delete table inet zz_thirdparty`; tables back to the baseline set; no `axiom.slice/a-*`; `Link 2 (eno2): 192.168.70.1`, resolv.conf unchanged; `axiomd` active |
+
+Not done here: uninstall/purge/rollback of this build (the box keeps the packaged daemon by instruction; P-6/P-7 above
+cover remove/purge of the same packaging), RPM install, other distributions.

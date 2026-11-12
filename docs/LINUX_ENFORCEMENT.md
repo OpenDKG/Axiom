@@ -196,5 +196,42 @@ copy of the shell. Rule-removal restored them, teardown returned their pids.)
 7. Unit: `CapabilityBoundingSet` needs `CAP_NET_ADMIN` (nft) and `CAP_SYS_ADMIN` (`cgroup.procs` of foreign cgroups), `ReadWritePaths=/sys/fs/cgroup`.
 8. P2b: `LinuxEnforcement.CreateBpfEngine(adapter, sink)` → `adapter.VerdictLayer`; the supervisor takes it as
    its `IEnforcementLayer` (start after the first publish, resync, events loop, stop before teardown); every
-   successful publish calls `layer.SyncAsync(rules, generation)`. Unit adds `CAP_BPF CAP_PERFMON` and
+   successful publish calls `layer.SyncAsync(rules, generation)` and folds the returned
+   `LayerSyncResult` into the rule state (LINUX_EBPF.md §10). Unit adds `CAP_BPF CAP_PERFMON` and
    `ReadWritePaths` `/sys/fs/bpf`. Details and the proof plan: `docs/LINUX_EBPF.md`.
+
+## 7. Effective rule state across both layers (PR #276 review, LNX-1)
+
+A rule's state is the conjunction of every layer that can enforce it: nftables (`table inet axiom`,
+read back by generation and per-rule counters) and, when attached, the BPF verdict maps (read back with
+`bpftool -j map dump`). `Applied`/verified requires both to agree with the published generation; any
+disagreement is `Pending` (`bpf.update_failed`, `bpf.neutralised`, `bpf.delete_failed`, `bpf.stale_entry`)
+with the failed map operations in the message, and the enforcement report is `Pending` (missing entries)
+or `Degraded` (stale entry, neutralised layer) — the existing `RuleState`/`FilterEnforcementState`
+contract, no new states. The table of outcomes is in LINUX_EBPF.md §10.
+
+**Coverage, stated per rule.** Only unscoped outbound block rules get a connect-time BPF verdict.
+Scoped (address/port), inbound and allow rules are nftables-only, with the ~1 s exec window of the
+attribution loop; `rule.verify` notes `BPF-backed: …` or `nft-only: <reason>` per rule and the
+capability limitations carry the coverage statement. Release notes/UI should say "connect-time
+blocking for unscoped outbound block rules; other rules apply within ~1 s of a process starting".
+
+## 8. Daemon lifetime, teardown and crash recovery (PR #276 review, LNX-2)
+
+`NftEnforcementSupervisor.RunAsync` is `try { reconcile orphans; publish; start BPF layer; loops }
+finally { teardown }`. The first loop that faults cancels the others, is logged first, the teardown runs,
+and the fault is rethrown; `NftEnforcementWorker` sets exit code 70 so `Restart=on-failure` restarts the
+daemon (a firewall daemon without enforcement must not keep running as healthy). Teardown = three
+independent steps, each bounded by `TeardownStepTimeout` (8 s; 3 × 8 s < `TimeoutStopSec=30`) and run even
+when another throws or hangs: BPF stop (detach + unpin Axiom's programs), `nft delete table inet axiom`
+(a failed delete is now an error, not a silent success), release herded processes + remove `axiom.slice`
+cgroups. Errors are aggregated (`TeardownErrors`, one journal line). Only `table inet axiom`,
+`axiom.slice/*` and `axiom_*` programs are ever listed or touched; no `flush ruleset`.
+
+Start after a crash (SIGKILL/OOM/watchdog): the leftover table is replaced atomically by the first publish
+(one `nft -f` batch that deletes and recreates only `table inet axiom`), `axiom.slice` cgroups of apps
+without rules are released and removed, and the BPF engine detaches/unpins the old programs before
+loading. The journal shows `Startup reconciliation: …` and `BPF layer: reconciled orphaned state from a
+previous daemon: …`. Limitation: the origin cgroup of a process herded by the killed instance lives only
+in memory, so on release it goes to its parent's cgroup, else the cgroup root — never left in
+`axiom.slice`, but not necessarily back in its original systemd unit.

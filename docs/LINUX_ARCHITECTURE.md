@@ -250,6 +250,31 @@ processes and every later connection are blocked with an immediate TCP reset (`c
 0 ms`). Same class of caveat as the macOS UDP note; closing it needs the eBPF `cgroup/connect4`
 helper (P2b) or a proc-connector exec watcher.
 
+**Supervisor lifetime (PR #276 review, LNX-2).** `RunAsync` = `try { ReconcileOrphansAsync; publish;
+StartLayerAsync; loops (attribution 1 s, watcher, nft trace, BPF events) } finally { TeardownAsync }`.
+A loop fault cancels the sibling loops (linked token), is logged first, the teardown runs, the fault is
+rethrown and `NftEnforcementWorker` exits 70 for `Restart=on-failure`. Teardown steps are independent and
+bounded (8 s each, under `TimeoutStopSec=30`): BPF detach/unpin, `delete table inet axiom`, cgroup
+release; errors aggregated in one journal line. Startup reconciliation logs and repairs what a killed
+instance left (table, `axiom.slice` cgroups, attached/pinned `axiom_*` programs) — see
+LINUX_ENFORCEMENT.md §8. Proven live with `systemctl kill -s KILL`, `systemctl stop/start` and a package
+upgrade (LINUX_TEST_REPORT.md, "PR #276 review").
+
+**Capabilities, justified one by one** (bounding set; the daemon runs as root inside it):
+
+| Capability | Why | Without it |
+|---|---|---|
+| `CAP_NET_ADMIN` | nftables batches (`table inet axiom`), `nft monitor trace`, netlink | no enforcement at all |
+| `CAP_SYS_ADMIN` | write `cgroup.procs` of foreign cgroups (herding), attach BPF programs at the cgroup root (`BPF_PROG_ATTACH` on a cgroup requires it), bpffs pins | no attribution, no BPF layer |
+| `CAP_BPF` | `bpf()` program load and map create/update/delete/dump | BPF layer inactive (nft-only, reported) |
+| `CAP_PERFMON` | the CO-RE exe lookup (`bpf_get_current_task_btf`, `bpf_probe_read_kernel`) is gated on `perfmon_capable()` | verifier rejects the programs → nft-only |
+| `CAP_NET_BIND_SERVICE` | Privacy Shield resolver on 127.0.0.1:53 (found missing by the P3 e2e) | `privacy.configure` fails with EACCES |
+| `CAP_NET_RAW` | reserved for raw/packet sockets of a future helper (unit comment); not re-audited in this pass — candidate for removal once confirmed unused | to be confirmed |
+| `CAP_SYS_PTRACE`, `CAP_DAC_READ_SEARCH` | `/proc/<pid>/{exe,fd}` of other users (attribution, socket owners) | other users' processes unattributed |
+| `CAP_DAC_OVERRIDE` | `/etc/resolv.conf`, resolved runtime files | DNS backends fail |
+| `CAP_CHOWN`, `CAP_FOWNER` | enforce 0700/0600 ownership on data/log files | permission repair fails |
+| `CAP_KILL` | ending a blocked process of another user on request | that action fails |
+
 **Unit capabilities (as installed).** `CAP_NET_ADMIN CAP_NET_RAW` (nft, raw sockets),
 `CAP_SYS_ADMIN` (`cgroup.procs` of foreign cgroups), `CAP_SYS_PTRACE CAP_DAC_READ_SEARCH`
 (`/proc/<pid>/{exe,fd}` of other users), `CAP_DAC_OVERRIDE` (resolv.conf / resolved runtime
