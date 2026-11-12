@@ -102,16 +102,25 @@ Nothing in the Windows projects (`Axiom.Infrastructure.Windows`, `Axiom.UI`, `Ax
 - **Install layout.** `/usr/libexec/axiom` root-owned read-only (audited with `stat -c`, SHA-256 of the installer
   binary vs the installed one), `/etc/systemd/system/axiomd.service` 0644, `/var/lib/axiom` 0700 kept on uninstall
   (as macOS keeps its data root), `/run/axiom` by systemd.
-- **No desktop app yet.** Everything is reachable over IPC (`scripts/linux/axipc.py`) and the Avalonia UI projects
-  build on Linux, but `Axiom.Desktop.Avalonia.Linux` (tray via StatusNotifierItem — optional on GNOME, portal
-  color-scheme, `pkexec` + polkit action for install, autostart `.desktop`) is not started.
+- **Desktop app (P4) done.** `Axiom.Desktop.Avalonia.Linux` (49 unit tests) is the unprivileged window: single
+  instance via `flock` + socket under `$XDG_RUNTIME_DIR`, daemon install through `pkexec <bundle>/axiomd/axiomd
+  --install-service` (polkit action file `packaging/linux/com.axiom.firewall.policy`), optional StatusNotifierItem tray
+  (probed on the session bus; stock GNOME gets window-only mode), XDG autostart entry, Secret Service / 0600-file
+  secret protector, portal colour scheme, SIGTERM/SIGKILL process actions. Every page was walked on a GNOME X11
+  session against the real daemon (`docs/screenshots/linux/`, `LINUX_TEST_REPORT.md` P4); Windows-only firewall
+  profile checkboxes are hidden off Windows and the DNS adapter list comes from `resolvectl`.
 - **Packaging not done.** Only `dotnet publish … -r linux-x64 --self-contained` + `--install-service`; `.deb`/`.rpm`
   (nfpm), AppImage, SELinux/AppArmor profiles, firewalld coexistence are open.
 
 ## 4. Not done / unverified
 
 - eBPF helper (P2b) — the exec-time race above is the main functional gap versus the macOS content filter.
-- Desktop app (P4), packaging (P5), security review (P6) — see `LINUX_PORT_PLAN.md` §11.2.
+- Packaging (P5): `.deb`/`.rpm` with the daemon under `/usr/libexec/axiom`, the polkit policy under
+  `/usr/share/polkit-1/actions/` (today the first install from the bundle gets pkexec's generic prompt because
+  `exec.path` does not match), a `.desktop` launcher + icon, postinst `--install-service`. Security review (P6).
+- Desktop verified on one GNOME 46 X11 session with the AppIndicator extension only; Wayland (XWayland), KDE Plasma
+  (native SNI tray), stock GNOME without a tray, and a box with `secret-tool` (keyring path of the protector) are
+  untested live — the file fallback is what this box exercised.
 - Only systemd-resolved was exercised live; NetworkManager and resolv.conf backends, inbound rules and
   address/port-scoped rules on a live kernel, Fedora/SELinux, kernels without `nft_socket`, non-x64.
 - `--restore-dns` as a standalone command does not exist on Linux; `--uninstall-service` and

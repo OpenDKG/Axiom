@@ -135,4 +135,47 @@ Infrastructure.Linux 27/27, Infrastructure.Linux.Nft 54/54.
 - NetworkManager-only and plain `/etc/resolv.conf` hosts (this box runs systemd-resolved); the other two backends are unit-tested only.
 - Inbound rules and remote-address/port rule shapes on the live kernel (unit-tested; the e2e used an outbound app-only block).
 - Fedora/SELinux, firewalld coexistence, kernels without `nft_socket`.
-- Desktop app, packaging, polkit: not built.
+- Desktop app, packaging, polkit: not built (see P4 below).
+
+# Phase P4 — desktop host on this box (2026-11-12, branch `buba/linux`)
+
+Same host, GNOME 46 on X11 (`DISPLAY=:1`, AppIndicator extension present so a StatusNotifierWatcher exists),
+`axiomd.service` installed from `build/linux/axiomd`. Desktop published with `dotnet publish
+src/Axiom.Desktop.Avalonia.Linux -r linux-x64 -c Release --self-contained -o build/linux/Axiom.next` and the daemon
+tree copied to `build/linux/Axiom.next/axiomd/`. Driven with `xdotool` clicks and `scrot`; every screenshot was
+inspected before it was kept (`docs/screenshots/linux/*.png`: no glyph boxes, no clipped layout). Rows marked
+*(first run, re-verified)* were proven by the first walkthrough on the pre-`f85bdba` bundle and proven again on the
+final bundle; rows marked *(first run)* come from that walkthrough's log and were not repeated.
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| 1 | Launch, daemon detection, tray probe | PASS (first run, re-verified) | `desktop.log`: `[startup] Axiom 0.13.0.0 pid=… base=…/build/linux/Axiom.next/`, `[tray] StatusNotifierWatcher present; creating tray icon`, `[daemon] state=Running unit=active endpoint=/var/run/axiom/axiom.sock`. The 10:21 launch, before the AppIndicator extension was active, logged `[tray] no StatusNotifierWatcher on the session bus; no tray, close = quit` — both branches of `StatusNotifierProbe` seen live. |
+| 2 | Every page renders (dashboard, connections, applications, events, network control, privacy shield, agent protection, agent activity, AI analyst, integrations, settings, help, first-run, light theme) | PASS (first run) | `docs/screenshots/linux/*.png` (16 files). Settings shows `Milestone: Avalonia UI · Linux port`, `Protocol: IPC contract v1 (service connected)`, `Storage: /var/lib/axiom/axiom.db (daemon)`, `OS: Linux 7.0.0 · Ubuntu 24.04.5 LTS`. |
+| 3 | Block rule from the UI (`curl`), then remove | PASS (first run) | `nft list table inet axiom` → `comment "axiom generation 9"`, `socket cgroupv2 level 2 "axiom.slice/a-f0da955d46aa49e3" … reject with tcp reset comment "axiom:f070ab4f-…"`; herded curl: second connect reset, `rc=7`; after Unblock from the Remembered Shield decisions row: `after-remove:200`. `network-control-rule.png`. |
+| 4 | Privacy Shield on/off from the UI | PASS (first run) | After Enable: `resolvectl status eno2` → `DNS Servers: 127.0.0.1`, resolver answers (`104.20.23.154`), `ss -ulpn` shows `127.0.0.1:53` next to the resolved stubs; `privacy-shield-enabled.png`. After Disable: `192.168.70.1`, `diff` against the baseline empty (`RESOLVED BASELINE RESTORED`, the `DNS Domain: ~.` residue seen once came from the pre-fix daemon image and was cleared with `resolvectl domain eno2 ''`). |
+| 5 | Process actions | PASS (first run) | End-process on a root-owned pid refused by policy: `[process] pid 12 not ended: RootOwned`, `pid 1 not ended: InitProcess` (no signal sent). |
+| 6 | AI analyst key persisted through the protector | PASS (first run, re-verified) | Saved dummy key `test-key-123` → `~/.local/share/Axiom/ai-analyst.json` holds only `"apiKeyProtected": "ss1:…"`; `~/.local/state/axiom/secret-protection-key` 0600 in a 0700 directory (no `secret-tool` on this box, so the file store was used). Relaunch on the final bundle: the field shows the placeholder `stored with keyring`, hint `API key is stored with the Secret Service keyring (file fallback under ~/.local/state/axiom); it is never shown or logged.` The key text never appeared in the UI, the settings file or `desktop.log`. |
+| 7 | Windows firewall profiles hidden | PASS (re-verified) | Network Control page and the `New owned rule` editor after relaunch: checkboxes are `Enabled` only; no `Domain`/`Private`/`Public`; `PROFILES` column of the owned-rules table is present but empty. |
+| 8 | Single instance | FAIL on the first bundle → fixed in `f85bdba` → PASS (re-verified) | First run: second launch logged `Another Axiom instance is running; show signal delivered=True` and then `[fatal] System.InvalidOperationException: Cannot perform requested operation because the Dispatcher shut down` (lock taken inside `App`). After moving the lock into `Main`: second launch of `build/linux/Axiom.next/Axiom` prints the `show signal delivered=True` line, `second rc=0`, no fatal, first pid still running and its window raised. |
+| 9 | Autostart toggle | PASS (re-verified) | First run: ticking *Start at login* wrote `~/.config/autostart/com.axiom.firewall.desktop` (`Exec="…/build/linux/Axiom/Axiom" --autostart`, `X-GNOME-Autostart-enabled=true`). Relaunch from `Axiom.next`: Settings shows the box ticked with `Autostart: path is stale; repair` + an enabled *Repair startup entry* button; unticking → `ls ~/.config/autostart/` empty, `Autostart: off`, repair button disabled. |
+| 10 | Disable protection from the UI | PASS | *Disable protection* → confirmation `Disable Axiom Shield — Turn protection off and remove every Axiom-owned nftables firewall rule?` → badge `OFF`, `Protection is off. Axiom only observes.`, nftables section `READ-ONLY`. |
+| 11 | Install path through pkexec | PASS | `sudo -n /usr/libexec/axiom/axiomd --uninstall-service` (`Removed /usr/libexec/axiom. Stopped and removed axiomd.service.`), app relaunched → `[daemon] state=NotInstalled unit=inactive …` and the startup offer `Install the Axiom background service … polkit will ask for an administrator password once.` *Install* with a bundle that lacked `axiomd/`: message `The Axiom daemon was not found at …/Axiom.next/axiomd/axiomd. Reinstall Axiom.` (graceful). With the daemon tree copied in: `pkexec …/Axiom.next/axiomd/axiomd --install-service` + `polkit-agent-helper-1 buba` running, GNOME Shell dialog `Authentication Required — Authentication is needed to run '…/axiomd --install-service' as the super user` (`polkit-install.png`; generic text because the policy's `exec.path` is `/usr/libexec/axiom/axiomd` and the policy is not installed on this box). *Cancel* clicked, nobody typed a password → `[daemon] install: Administrator approval was cancelled.` and the message `Background service not installed — Administrator approval was cancelled.`; no `pkexec` left. Daemon reinstalled afterwards with `sudo -n build/linux/axiomd/axiomd --install-service` (`active`, `enabled`, installed `Axiom.Infrastructure.Linux.dll` hash = publish hash `2da3b118…`). |
+| 12 | Not exercised | — | Tray menu clicks (GNOME's AppIndicator menu is not reachable with `xdotool`; the menu items are unit-tested), portal theme change at runtime (light theme was selected from the palette, `settings-light.png`), restart/shutdown actions, `secret-tool` keyring path. |
+
+## Gates after P4
+
+`dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` → `Build succeeded. 0 Warning(s) 0 Error(s)`.
+Contracts 142/142, Core 117/128 (the same 11 pre-existing Windows-path failures as P1/P3 and the pristine
+`7a48bdf`), McpServer 33/33, Persistence 19/19, Presentation 90/90, UI.Avalonia 40/40, Infrastructure.MacOS
+155/155, Desktop.Avalonia.MacOS 35/35, Infrastructure.Unix 22/22, Infrastructure.Linux 27/27,
+Infrastructure.Linux.Nft 54/54, Desktop.Avalonia.Linux 49/49. `git checkout -- '*.lock.json'` afterwards.
+
+## Box state after P4 (owner's instruction: daemon stays installed)
+
+`axiomd.service` active + enabled from the newest image, `table inet axiom` holds only the loopback accept rules
+(0 `cgroupv2` rules), no `/sys/fs/cgroup/axiom.slice`, protection off (`firewallWrites: false`), Privacy Shield
+disabled, `resolvectl status eno2` → `DNS Servers: 192.168.70.1` and no `DNS Domain` line, `/etc/resolv.conf`
+unchanged (stub). Removed: the test key (`apiKeyProtected` cleared, `secret-protection-key` deleted),
+`~/.config/autostart/com.axiom.firewall.desktop`, the `axiom-desktop.lock/.sock` runtime files, every Axiom
+desktop process. Kept on purpose: `/var/lib/axiom`, `packaging/linux/com.axiom.firewall.policy` (not installed
+system-wide), `build/linux/*`.

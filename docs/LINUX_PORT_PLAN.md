@@ -185,6 +185,6 @@ Gate numbers and the local run are in `docs/LINUX_TEST_REPORT.md`; the contract 
 | P2 enforcement | done as `NftFirewallPolicyAdapter` + `AppCgroupManager` (1 s `/proc` herding, no proc-connector watcher) + `NftTraceMonitor`; `cgroupsv2` sets not used (one `socket cgroupv2` rule per app); 54 unit tests + root e2e script |
 | P2b BPF helper | not started (the exec-time race remains) |
 | P3 daemon | done: engine wired into `axiomd`, root install/upgrade/uninstall, IPC rule lifecycle, Privacy Shield with resolved, network recovery, restart persistence all proven on this box (`LINUX_TEST_REPORT.md` P3). `--restore-dns` is covered by `--uninstall-service` + `networkRecovery.restore`; no NM dispatcher script |
-| P4 desktop | not started |
+| P4 desktop | done (`LINUX_ARCHITECTURE.md` §11, `LINUX_TEST_REPORT.md` P4). Deviations from §6: `LinuxProtectionSetup` (not `PkexecProtectionSetup`), `LinuxAutostartService`, `LinuxThemeService`; the secret-key fallback is `$XDG_STATE_HOME/axiom/secret-protection-key` (0600), not `~/.config/axiom/secret.key`; no in-app "install AppIndicator" banner — a missing watcher is logged and the window simply does not close to tray |
 | P5 packaging | not started (publish tree only) |
 | P6 security review | not started; the e2e found and fixed three unit/daemon defects (`CAP_NET_BIND_SERVICE`, `NOTIFY_SOCKET` leak, `resolvectl domain` restore) |

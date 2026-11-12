@@ -227,3 +227,29 @@ systemd, which logs "reception only permitted for main PID" every probe.
 **Doctor.** `enforcement` is PASS when the daemon is active and `table inet axiom` is present
 (`nftables v1.0.9; table inet axiom generation N is in force`), FAIL when the daemon runs without
 the table, WARN when `nft` is missing.
+
+## 11. As built in P4: the desktop host (`src/Axiom.Desktop.Avalonia.Linux`)
+
+Same `Program.cs`/`App.axaml.cs` shape as the macOS host, `UsePlatformDetect()` (X11 on this box;
+Wayland sessions run it through XWayland). The window process is unprivileged and never touches
+nftables, DNS or `/var/lib/axiom`: everything machine-wide goes over the IPC socket to `axiomd`.
+The bundle is `dotnet publish src/Axiom.Desktop.Avalonia.Linux -r linux-x64 --self-contained` plus a
+copy of the daemon publish tree at `<bundle>/axiomd/` (the installer is looked up there).
+
+| Concern | Host service | Mechanism (as built) |
+|---|---|---|
+| Single instance | `LinuxSingleInstance` (taken in `Main` before Avalonia starts) | `flock` on `$XDG_RUNTIME_DIR/axiom-desktop.lock` + Unix socket `axiom-desktop.sock`; a second launch writes `show` to the socket, logs `Another Axiom instance is running; show signal delivered=True` and exits 0 before any Avalonia object exists (the earlier in-`App` variant crashed with `Dispatcher shut down`) |
+| Daemon install / upgrade | `LinuxProtectionSetup` + `ProtectionServiceInstall.InstallAndStartLinuxAsync` | Detects the daemon through the IPC socket, the unit file and `systemctl is-active` (`Running` / `InstalledNotResponding` / `NotInstalled`). On `NotInstalled` it asks once at startup (declining writes `~/.local/state/axiom/daemon-install-declined`); the tray menu and the Shield page re-offer it. Install runs `pkexec <bundle>/axiomd/axiomd --install-service`; polkit's agent shows the password prompt, a cancel surfaces as "Administrator approval was cancelled.", a missing `<bundle>/axiomd/axiomd` as "The Axiom daemon was not found at …. Reinstall Axiom.". The desktop never starts, stops or restarts the unit itself |
+| Polkit policy | `packaging/linux/com.axiom.firewall.policy` | Action `com.axiom.firewall.install`, `auth_admin_keep`, `exec.path=/usr/libexec/axiom/axiomd`. Installed by the package to `/usr/share/polkit-1/actions/`; the first install runs the daemon from the bundle, which does not match `exec.path`, so pkexec shows its generic "Authentication is needed to run … as the super user" text (seen in `docs/screenshots/linux/polkit-install.png`); the package postinst avoids that by running the install itself |
+| Tray | `StatusNotifierProbe` + Avalonia `TrayIcon` | Probes `org.kde.StatusNotifierWatcher` on the session bus at startup. Present (KDE, GNOME + AppIndicator extension — this box) → tray icon with status / Install / notifications items and close-to-tray; absent (stock GNOME) → no tray, closing the window quits, logged as `[tray] no StatusNotifierWatcher on the session bus; no tray, close = quit` |
+| Autostart | `LinuxAutostartService : IAutostartService` | Writes only `~/.config/autostart/com.axiom.firewall.desktop` (`Exec="<bundle>/Axiom" --autostart`, `X-GNOME-Autostart-enabled`, `X-KDE-autostart-after=panel`); unticking deletes the file; reports `path is stale; repair` when the entry points at another bundle; no machine-wide entry |
+| Secrets (AI analyst key, reputation key, community token) | `SecretServiceApiKeyProtector : IApiKeyProtector` over `ISecretKeyStore` | Same AES-256-GCM envelope as the macOS Keychain protector (`ss1:` prefix in the settings file). The 256-bit key lives in the Secret Service keyring via `secret-tool` (`service=com.axiom.firewall account=secret-protection-key`, key passed on stdin) when libsecret's CLI is on `PATH`, else in `$XDG_STATE_HOME/axiom/secret-protection-key` (0600 in a 0700 directory; this box has no `secret-tool`, so it used the file). `ChainedSecretKeyStore` reads keyring then file. The UI shows "stored with keyring" and never the key |
+| Theme | `LinuxThemeService` | `org.freedesktop.portal.Settings` `color-scheme` (1 dark, 2 light) until the user picks a palette; follows changes |
+| DNS adapter list | `LinuxDnsAdapterHelper` | Read-only `resolvectl status` per link; the daemon changes DNS, the desktop only displays it |
+| Process actions | `ProcessActions` | SIGTERM then SIGKILL after a grace period, refused for pid 1, root-owned and other users' processes (`pid 12 not ended: RootOwned`); `xdg-open` for paths |
+| Restart / shutdown | `AvaloniaShellActions` | Relaunches the executable after a delay so the new process does not meet the old lock |
+| Diagnostics | `StartupLog` | `~/.local/state/axiom/desktop.log` (+ stderr); fixed messages and exception text only |
+
+Not in P4: Windows firewall profiles are hidden off Windows (shared `FirewallPageViewModel`),
+there is no `.desktop` launcher/icon installation (packaging), no Wayland-native backend, and the
+polkit policy file is shipped but not installed by anything yet.
