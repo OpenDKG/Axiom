@@ -194,3 +194,16 @@ Restore network settings again; the DNS/adapter part of the recovery is unaffect
 
 Gate: see "Gate (review #2)" below.
 
+### Gate (review #2)
+
+Linux host, `-c Release -p:EnableWindowsTargeting=true`, at `031fda7` (code identical to `5e7b673`; `d657fd9` only
+restores the `net10.0/win-x64` lock sections that `5e7b673` dropped by accident):
+
+- `Axiom.sln` build 0 warnings / 0 errors; `Axiom.Portable.slnx` build 0 / 0.
+- Pass: Infrastructure.MacOS 214/214, Desktop.Avalonia.MacOS 35/35, Presentation 93/93, UI.Avalonia 42/42,
+  Contracts 142/142, McpServer 33/33, Persistence 21/21.
+- Core 117/128 and Service.Tests 67/79 (12 failed): the failing test **names** are identical to the reviewed head
+  `fa12fe1` built and run the same way (Core 11, Service 12: Windows paths / kernel32; `FirewallRuleCoordinatorTests`,
+  `NetworkRecoveryCommandTests`, `PrivacyShieldTests.Settings_write_failure_restores_the_previous_resolver`). The new
+  `NetworkRecoveryControllerTests` case passes on Linux. These two suites still need a Windows run for runtime evidence.
+
