@@ -1,8 +1,9 @@
 # Axiom for Linux — port report for the maintainer
 
-Date: 2026-11-12. Branch `buba/linux` on top of `buba/macos` (`2436b3d`: upstream **v0.13.2** + the PR #274 review
-remediations; earlier base `7a48bdf` = v0.13.0 + perf audit).
-Not pushed; local only. Scope: the **root daemon** (`axiomd`) with nftables enforcement, systemd lifecycle,
+Date: 2026-11-13. Branch `buba/linux` on top of `buba/macos` (upstream **v0.16.0 `2a834c2`** + the PR #274 review
+remediations, merged as `ec39023`; see §"Upstream merge v0.16.0"; earlier bases `2436b3d` = v0.13.2, `7a48bdf` =
+v0.13.0 + perf audit).
+Pushed as draft PR #276 (`feature/linux-port`). Scope: the **root daemon** (`axiomd`) with nftables enforcement, systemd lifecycle,
 Privacy Shield DNS on systemd-resolved/NetworkManager/resolv.conf hosts, network recovery, `/proc` monitoring and
 `--doctor` — proven end to end as root on an Ubuntu 24.04 box (kernel 7.0, systemd 255, nft 1.0.9). No desktop
 app and no packages yet.
@@ -204,3 +205,26 @@ is **proven**, and only that:
   are attached — structural, not traffic, evidence).
 - CI: no machine-readable CI run for the Linux suites; all results are author-run on this box. Windows
   regression suites were not run on Windows by the author.
+
+
+## Upstream merge v0.16.0
+
+`ec39023` merges `buba/macos` after it took upstream `2a834c2` (0.14.0 dashboard reorder, 0.15.0 agent/network
+dashboard split, `0e71bc1` write-gated Network Events actions + read-only `rule.verify` advertised in capabilities,
+0.16.0 Agent Health page). One conflict on this side: the Settings milestone text (upstream's version-derived
+`ProductMilestone.Current` plus a ` · Linux port` suffix; Windows text unchanged). No upstream change touched the
+files moved into `Axiom.Infrastructure.Unix`. `rule.verify` stays **PrivateRead** in `IpcCommandAccess`: upstream
+now lists it outside the write gate, which we keep, but listing is not authorisation, because the report carries
+rule and application paths; other local users still get `unauthorized`.
+
+Gate after the merge: `Axiom.sln` (Windows targeting) and `Axiom.Portable.slnx` 0 warnings / 0 errors;
+Nft 123, Linux 32, Unix 32, Desktop.Linux 51, Infrastructure.MacOS 214, Desktop.MacOS 35, Presentation 93,
+UI.Avalonia 43, Contracts 142, McpServer 33, Persistence 21 all pass. Core 11/128 and Service 12/79 failures on
+Linux are the same tests as on a pristine upstream `main` build (plus the port's Windows-path
+`Apply_pending_is_stored_as_pending_not_applied`, which passes on Windows); no new failures.
+
+Not done for this merge: Linux desktop screenshots of the 0.16.0 pages. On the test box's GNOME X11 session every
+build (including the 0.13 build and the packaged one that launched normally earlier the same day) currently maps
+its window as Iconic, so this is a session issue, not a merge regression; to be re-shot once the session is reset.
+Upstream items noticed, not changed here: mojibake `hooksâ€¦` in `AgentHealthView.axaml`/`AgentsView.axaml`, and
+page-header subtitles clipped next to SYSTEM STATUS at 1280 px.
