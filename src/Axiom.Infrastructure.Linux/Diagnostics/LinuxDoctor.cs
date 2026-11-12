@@ -32,7 +32,7 @@ public sealed record LinuxDoctorTargets(
 /// <summary>
 /// <c>axiomd --doctor [--json]</c> on Linux: unit state and target, image ownership, socket and
 /// data-directory modes, resolver backend and per-link DNS, Privacy Shield backup, IPC owner, and
-/// the enforcement engine (not available in this build). Exit code 0 when nothing is WARN/FAIL;
+/// the nftables engine (table inet axiom present while the daemon runs). Exit code 0 when nothing is WARN/FAIL;
 /// root-only checks are SKIP for a normal user. Pure inspection: nothing is changed.
 /// </summary>
 public sealed class LinuxDoctor
@@ -216,12 +216,50 @@ public sealed class LinuxDoctor
             : new DoctorCheck(DoctorCheck.Warn, "ipc owner", "no installing user recorded; only root (and admin groups when enabled) may write."));
     }
 
+    /// <summary>
+    /// nftables engine: <c>nft</c> must exist; while the daemon is active <c>table inet axiom</c>
+    /// must be present (the daemon publishes it at start and republishes when it vanishes), and
+    /// when the daemon is not running a leftover table or <c>axiom.slice</c> is a problem.
+    /// </summary>
     private void CheckEnforcement(List<DoctorCheck> checks)
     {
-        var nft = _runner.Run("/usr/sbin/nft", ["--version"], ToolTimeout);
-        checks.Add(new DoctorCheck(
-            DoctorCheck.Warn,
-            "enforcement",
-            $"firewall enforcement is not available in this build (nftables engine pending); nft {(nft.Succeeded ? nft.StandardOutput.Trim() : "not found")}."));
+        if (!OperatingSystem.IsLinux())
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Skip, "enforcement", "nftables is Linux-only."));
+            return;
+        }
+
+        var nft = _runner.Run(Nft.NftProcessRunner.DefaultBinary, ["--version"], ToolTimeout);
+        if (!nft.Succeeded)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Fail, "enforcement", $"{Nft.NftProcessRunner.DefaultBinary} is not available; install the nftables package."));
+            return;
+        }
+
+        var version = nft.StandardOutput.Trim();
+        if (!_isRoot)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Skip, "enforcement", $"{version}; table inet axiom is readable as root."));
+            return;
+        }
+
+        var active = string.Equals(
+            _runner.Run(SystemdServiceInstaller.Systemctl, ["is-active", SystemdServiceInstaller.ServiceTarget], ToolTimeout).StandardOutput.Trim(),
+            "active",
+            StringComparison.Ordinal);
+        var list = _runner.Run(Nft.NftProcessRunner.DefaultBinary, ["-j", "list", "table", "inet", Nft.NftRuleCompiler.TableName], ToolTimeout);
+        var generation = list.Succeeded ? Nft.NftTable.ParseGeneration(list.StandardOutput) : null;
+        var sliceExists = Directory.Exists(Path.Combine(Nft.ProcCgroupFs.DefaultCgroupRoot, Nft.AppCgroupManager.DefaultSlice));
+        if (active)
+        {
+            checks.Add(generation is { } live
+                ? new DoctorCheck(DoctorCheck.Pass, "enforcement", string.Create(CultureInfo.InvariantCulture, $"{version}; table inet axiom generation {live} is in force{(sliceExists ? ", axiom.slice present" : string.Empty)}."))
+                : new DoctorCheck(DoctorCheck.Fail, "enforcement", $"{version}; {SystemdServiceInstaller.ServiceTarget} is active but table inet axiom is {(list.Succeeded ? "foreign (no Axiom generation comment)" : "missing")}; the daemon republishes within 10 s — if it stays missing check `journalctl -u axiomd`."));
+            return;
+        }
+
+        checks.Add(list.Succeeded || sliceExists
+            ? new DoctorCheck(DoctorCheck.Warn, "enforcement", $"{version}; {SystemdServiceInstaller.ServiceTarget} is not active but {(list.Succeeded ? "table inet axiom" : string.Empty)}{(list.Succeeded && sliceExists ? " and " : string.Empty)}{(sliceExists ? "/sys/fs/cgroup/axiom.slice" : string.Empty)} remain(s); run `sudo nft delete table inet axiom` / `sudo axiomd --uninstall-service`.")
+            : new DoctorCheck(DoctorCheck.Pass, "enforcement", $"{version}; daemon not active, no table inet axiom, no axiom.slice."));
     }
 }

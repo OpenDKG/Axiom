@@ -30,7 +30,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Axiom.Infrastructure.Linux\Nft\Axiom.Infrastructure.Linux.Nft.csproj" />
+    <ProjectReference Include="..\..\src\Axiom.Infrastructure.Linux\Axiom.Infrastructure.Linux.csproj" />
   </ItemGroup>
 
 </Project>

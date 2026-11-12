@@ -6,7 +6,6 @@ using Axiom.Contracts.Firewall;
 using Axiom.Core.Firewall;
 using Axiom.Core.Protection;
 using Axiom.Infrastructure.Linux.Diagnostics;
-using Axiom.Infrastructure.Linux.Firewall;
 using Axiom.Infrastructure.Linux.Systemd;
 using Axiom.Infrastructure.Unix.Diagnostics;
 using Axiom.Infrastructure.Unix.Interop;
@@ -205,43 +204,7 @@ public sealed class SystemdAndPathsTests
     }
 
     [Fact]
-    public async Task FirewallStubReportsUnavailableAndKeepsDesiredRules()
-    {
-        using var temp = new TempDirectory();
-        var paths = LinuxServicePaths.ForRoot(temp.Path);
-        using var adapter = new LinuxFirewallPolicyAdapter(paths, () => true, TimeProvider.System);
-
-        var capabilities = await adapter.GetCapabilitiesAsync(CancellationToken.None);
-        Assert.Equal(FirewallCapabilityStatus.Unavailable, capabilities.Status);
-        Assert.Contains("not available on Linux", capabilities.Reason, StringComparison.Ordinal);
-        Assert.Equal(0, capabilities.ManagedRuleCount);
-
-        var id = Guid.NewGuid();
-        var spec = new RuleSpec { ManagedRuleId = id, AppPath = "/usr/bin/curl", Direction = FirewallDirection.Outbound, Action = FirewallAction.Block, CreatedBy = "uid:1000" };
-        var applied = await adapter.UpsertOwnedRuleAsync(spec, CancellationToken.None);
-        Assert.True(applied.Success);
-        Assert.Equal(RuleState.Desired, applied.State);
-        Assert.Equal("enforcement.unavailable", applied.ErrorCode);
-
-        var owned = Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None));
-        Assert.Equal(OwnedRuleOwnership.GroupName, owned.OwnershipGroup);
-        Assert.Equal(OwnedRulePresence.Owned, await adapter.InspectOwnedRuleAsync(id, FirewallDirection.Outbound, CancellationToken.None));
-        Assert.Equal(OwnedRulePresence.ForeignOrChanged, await adapter.InspectOwnedRuleAsync(id, FirewallDirection.Inbound, CancellationToken.None));
-        Assert.Equal(1, (await adapter.GetCapabilitiesAsync(CancellationToken.None)).ManagedRuleCount);
-
-        var report = await adapter.VerifyAsync(spec, CancellationToken.None);
-        Assert.False(report.PresentInOs);
-        Assert.Contains(report.Notes, note => note.Contains("desired, not enforced", StringComparison.Ordinal));
-
-        Assert.True((await adapter.RemoveOwnedRuleAsync(id, CancellationToken.None)).Success);
-        Assert.Empty(await adapter.ListOwnedRulesAsync(CancellationToken.None));
-
-        using var closed = new LinuxFirewallPolicyAdapter(paths, () => false, TimeProvider.System);
-        await Assert.ThrowsAsync<NotSupportedException>(() => closed.UpsertOwnedRuleAsync(spec, CancellationToken.None));
-    }
-
-    [Fact]
-    public void DoctorReportsMissingInstallAndTheEnforcementGap()
+    public void DoctorReportsMissingInstallAndSkipsRootOnlyEnforcementCheck()
     {
         using var temp = new TempDirectory();
         var targets = new LinuxDoctorTargets(
@@ -268,7 +231,7 @@ public sealed class SystemdAndPathsTests
         Assert.Contains(checks, check => check.Name == "data directory" && check.Status == DoctorCheck.Skip);
         Assert.Contains(checks, check => check.Name == "dns backend" && check.Status == DoctorCheck.Pass && check.Detail.Contains("192.168.70.1", StringComparison.Ordinal));
         Assert.Contains(checks, check => check.Name == "privacy shield dns" && check.Status == DoctorCheck.Pass);
-        Assert.Contains(checks, check => check.Name == "enforcement" && check.Status == DoctorCheck.Warn && check.Detail.Contains("v1.0.9", StringComparison.Ordinal));
+        Assert.Contains(checks, check => check.Name == "enforcement" && check.Status == DoctorCheck.Skip && check.Detail.Contains("v1.0.9", StringComparison.Ordinal));
         Assert.Contains("unprivileged; root-only checks skipped", output.ToString(), StringComparison.Ordinal);
         Assert.Contains("problem(s).", output.ToString(), StringComparison.Ordinal);
     }

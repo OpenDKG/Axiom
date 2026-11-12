@@ -39,25 +39,35 @@ public sealed class LinuxConnectionSource : IConnectionSnapshotSource
 
     private readonly bool _privileged;
 
+    private readonly FlowTable? _flows;
+
     private readonly ConcurrentDictionary<string, DateTimeOffset> _firstSeen = new(StringComparer.Ordinal);
 
     public LinuxConnectionSource(
         Func<IReadOnlyList<ProcSocket>> enumerateSockets,
         ILinuxProcessIdentitySource identities,
         TimeProvider time,
-        bool privileged)
+        bool privileged,
+        FlowTable? flows = null)
     {
         _enumerateSockets = enumerateSockets ?? throw new ArgumentNullException(nameof(enumerateSockets));
         _identities = identities ?? throw new ArgumentNullException(nameof(identities));
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _privileged = privileged;
+        _flows = flows;
     }
 
-    public static LinuxConnectionSource Create() => new(
+    /// <summary>
+    /// Production wiring: /proc socket tables for live sockets plus, when the nftables engine is
+    /// wired, the blocked attempts it traced (<paramref name="flows"/>, verdict <c>block</c>) — a
+    /// rejected SYN never shows up in /proc, so the Connections page would otherwise not see blocks.
+    /// </summary>
+    public static LinuxConnectionSource Create(FlowTable? flows = null) => new(
         ProcSocketScanner.Shared.Current,
         new ProcProcessIdentityResolver(),
         TimeProvider.System,
-        Environment.IsPrivilegedProcess);
+        Environment.IsPrivilegedProcess,
+        flows);
 
     public string Name => SourceName;
 
@@ -146,6 +156,13 @@ public sealed class LinuxConnectionSource : IConnectionSnapshotSource
             limitations.Insert(0, UnprivilegedLimitation);
         }
 
+        if (_flows is not null)
+        {
+            _flows.Prune(now);
+            connections.AddRange(BlockedFlows(_flows.Capture(now), now, cancellationToken));
+            limitations.Add("Blocked attempts come from the nftables trace of Axiom's block rules (TCP reset / UDP drop); allowed flows are not traced.");
+        }
+
         return new ConnectionSnapshot
         {
             CapturedUtc = now,
@@ -154,5 +171,61 @@ public sealed class LinuxConnectionSource : IConnectionSnapshotSource
             SourceName = SourceName,
             Limitations = limitations,
         };
+    }
+
+    /// <summary>Blocked flows traced by the engine, in the shape MacConnectionSource gives AxiomFilter blocks.</summary>
+    private IEnumerable<LiveConnection> BlockedFlows(IReadOnlyList<FlowObservation> observations, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        foreach (var flow in observations)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.Equals(flow.Verdict, "block", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var protocol = flow.Protocol switch
+            {
+                "tcp" => TransportProtocol.Tcp,
+                "udp" => TransportProtocol.Udp,
+                _ => (TransportProtocol?)null,
+            };
+            if (protocol is null)
+            {
+                continue;
+            }
+
+            var identity = flow.ProcessId > 0
+                ? _identities.Resolve(flow.ProcessId, flow.Path)
+                : new LinuxProcessIdentity { ProcessId = 0, Path = flow.Path, DisplayName = Path.GetFileName(flow.Path), Uid = 0 };
+            var remote = IPAddress.TryParse(flow.RemoteAddress, out var parsed) ? parsed : null;
+            yield return new LiveConnection
+            {
+                AppDisplayName = identity.DisplayName.Length > 0 ? identity.DisplayName : Path.GetFileName(flow.Path),
+                AppPath = flow.Path.Length > 0 ? flow.Path : identity.Path,
+                ProcessId = Math.Max(0, flow.ProcessId),
+                Protocol = protocol.Value,
+                LocalEndpoint = EndpointText.Format(flow.LocalAddress, flow.LocalPort),
+                RemoteEndpoint = EndpointText.Format(flow.RemoteAddress, flow.RemotePort),
+                RemoteHost = flow.RemoteHost,
+                State = flow.State,
+                Direction = flow.Direction switch
+                {
+                    "inbound" => ConnectionDirection.Inbound,
+                    "outbound" => ConnectionDirection.Outbound,
+                    _ => ConnectionDirection.Unknown,
+                },
+                InterfaceName = string.Empty,
+                FirstObservedUtc = flow.OpenedUtc,
+                IsLoopback = remote is not null && IPAddress.IsLoopback(remote),
+                IsNew = now - flow.OpenedUtc <= NewConnectionWindow,
+                RuleStatus = flow.RuleId is null ? ConnectionRuleStatus.BlockedByExternalPolicy : ConnectionRuleStatus.BlockedByOwnedRule,
+                Quality = DataQuality.Observed,
+                ParentProcessId = identity.ParentProcessId,
+                ParentProcessName = identity.ParentProcessName,
+                ParentChain = identity.ParentChain,
+                CommandLine = identity.CommandLine,
+            };
+        }
     }
 }

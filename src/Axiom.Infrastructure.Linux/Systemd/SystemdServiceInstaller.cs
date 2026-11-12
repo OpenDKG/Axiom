@@ -220,6 +220,7 @@ public sealed class SystemdServiceInstaller
         {
             output.WriteLine($"[dry-run] systemctl disable --now {ServiceTarget}");
             output.WriteLine($"[dry-run] remove {_options.UnitPath}; systemctl daemon-reload");
+            output.WriteLine($"[dry-run] nft delete table inet {Nft.NftRuleCompiler.TableName}; return herded processes and remove /sys/fs/cgroup/{Nft.AppCgroupManager.DefaultSlice} when present");
             output.WriteLine($"[dry-run] restore Privacy Shield DNS from {_options.DnsBackupPath} when present");
             output.WriteLine($"[dry-run] remove {_options.ImageDirectory}");
             output.WriteLine($"[dry-run] keep {_options.MachineDataDirectory} (rules, settings, database)");
@@ -249,6 +250,10 @@ public sealed class SystemdServiceInstaller
         }
 
         _runner.Run(Systemctl, ["daemon-reload"], ToolTimeout);
+
+        // The daemon's own stop tears the nftables table and cgroups down; repeat it here for a
+        // daemon that crashed or was killed, so no Axiom rule ever outlives the install.
+        RemoveEnforcementLeftovers(output);
 
         // The daemon may have been stopped, crashed or never started: restore DNS from the backup
         // here so an uninstall never leaves the system pointing at a resolver that is gone.
@@ -288,6 +293,35 @@ public sealed class SystemdServiceInstaller
         output.WriteLine($"[dry-run] write {_options.UnitPath} (0644); systemctl daemon-reload; systemctl enable --now {ServiceTarget}");
         output.WriteLine("[dry-run] unit file:");
         output.Write(unit);
+    }
+
+    private void RemoveEnforcementLeftovers(TextWriter output)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var deleted = _runner.Run(Nft.NftProcessRunner.DefaultBinary, ["delete", "table", "inet", Nft.NftRuleCompiler.TableName], ToolTimeout);
+        if (deleted.Succeeded)
+        {
+            output.WriteLine($"Removed leftover table inet {Nft.NftRuleCompiler.TableName}.");
+        }
+
+        if (!Directory.Exists(Path.Combine(Nft.ProcCgroupFs.DefaultCgroupRoot, Nft.AppCgroupManager.DefaultSlice)))
+        {
+            return;
+        }
+
+        try
+        {
+            var removed = new Nft.AppCgroupManager(new Nft.ProcCgroupFs()).RemoveAll();
+            output.WriteLine($"Removed leftover cgroups: {string.Join(", ", removed)}.");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            output.WriteLine($"Could not remove /sys/fs/cgroup/{Nft.AppCgroupManager.DefaultSlice}: {exception.Message}");
+        }
     }
 
     private static bool RestoreDns(IProcessRunner runner, string backupPath, TextWriter output)

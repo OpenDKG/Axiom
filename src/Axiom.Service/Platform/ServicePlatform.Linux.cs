@@ -8,9 +8,12 @@ using Axiom.Infrastructure.Linux.Diagnostics;
 using Axiom.Infrastructure.Linux.Dns;
 using Axiom.Infrastructure.Linux.Firewall;
 using Axiom.Infrastructure.Linux.Monitoring;
+using Axiom.Infrastructure.Linux.Nft;
 using Axiom.Infrastructure.Linux.Systemd;
 using Axiom.Infrastructure.Unix;
+using Axiom.Infrastructure.Unix.Filter;
 using Axiom.Infrastructure.Unix.Ipc;
+using Axiom.Infrastructure.Unix.Monitoring;
 using Axiom.Service.Hosting.Dns;
 using Axiom.Service.Hosting.Ipc;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +27,7 @@ namespace Axiom.Service;
 /// Axiom.Infrastructure.Unix. <see cref="ServicePlatform"/> forwards here when
 /// <see cref="OperatingSystem.IsLinux"/>; the macOS paths in ServicePlatform.Unix.cs are untouched.
 /// </summary>
+[System.Runtime.Versioning.SupportedOSPlatform("linux")]
 internal static class LinuxServicePlatform
 {
     public static bool TryRunCommand(string[] args, out int exitCode)
@@ -89,10 +93,20 @@ internal static class LinuxServicePlatform
         var paths = LinuxServicePaths.Default;
         builder.Services.AddSingleton(paths);
         builder.Services.AddSingleton<UnixServicePaths>(paths);
-        builder.Services.AddSingleton<IConnectionSnapshotSource>(_ => LinuxConnectionSource.Create());
-        builder.Services.AddSingleton<LinuxFirewallPolicyAdapter>();
-        builder.Services.AddSingleton<IFirewallPolicyAdapter>(provider => provider.GetRequiredService<LinuxFirewallPolicyAdapter>());
-        builder.Services.AddSingleton<IOwnedRuleRecoveryAdapter>(provider => provider.GetRequiredService<LinuxFirewallPolicyAdapter>());
+        // Same event plumbing as macOS (FilterStatus/FlowTable/FilterEventServer); the nftables
+        // engine feeds it in-process through FilterEventPipe instead of a socket client.
+        builder.Services.AddSingleton<FilterStatus>();
+        builder.Services.AddSingleton<FlowTable>();
+        builder.Services.AddSingleton<FilterEventServer>();
+        builder.Services.AddSingleton<FilterEventPipe>();
+        builder.Services.AddSingleton<IConnectionSnapshotSource>(provider => LinuxConnectionSource.Create(
+            provider.GetRequiredService<FlowTable>()));
+        builder.Services.AddSingleton(provider => LinuxEnforcement.CreateAdapter(
+            provider.GetRequiredService<LinuxServicePaths>(),
+            provider.GetRequiredService<FilterEventPipe>()));
+        builder.Services.AddSingleton<IFirewallPolicyAdapter>(provider => provider.GetRequiredService<NftFirewallPolicyAdapter>());
+        builder.Services.AddSingleton<IOwnedRuleRecoveryAdapter>(provider => provider.GetRequiredService<NftFirewallPolicyAdapter>());
+        builder.Services.AddHostedService<NftEnforcementWorker>();
         builder.Services.AddSingleton<INetworkRecoveryDnsAdapter>(_ => LinuxDnsRecoveryAdapter.Create());
         builder.Services.AddSingleton<IPrivacyDnsPlatform>(_ => CreateDefaultPrivacyDnsPlatform());
         builder.Services.AddSingleton<IIpcTransport>(provider => new UnixSocketIpcTransport(
@@ -106,7 +120,7 @@ internal static class LinuxServicePlatform
 
     public static (INetworkRecoveryDnsAdapter Dns, IOwnedRuleRecoveryAdapter Firewall, IDisposable? Owner) CreateRecoveryAdapters()
     {
-        var firewall = new LinuxFirewallPolicyAdapter(LinuxServicePaths.Default);
+        var firewall = LinuxEnforcement.CreateAdapter(LinuxServicePaths.Default, NullFilterEventSink.Instance);
         return (LinuxDnsRecoveryAdapter.Create(), firewall, firewall);
     }
 }
