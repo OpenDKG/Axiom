@@ -1,7 +1,7 @@
 # Axiom for macOS — port report for the maintainer
 
-Date: 2026-11-12. Branch `buba/macos-desktop` (57 commits on top of `main` 3aaaad5 / v0.11.0, merged 2026-11-12). Not pushed; local only.
-Scope: 247 files, +23.3k / −1.6k lines. Shared (Windows-relevant) code: 99 files, +2.6k / −2.2k, mostly
+Date: 2026-11-12. Branch `buba/macos-desktop` (60 commits on top of `main` c21380d / v0.13.0, merged 2026-11-12). Not pushed; local only.
+Scope: 248 files, +23.9k / −1.7k lines. Shared (Windows-relevant) code: 99 files, +2.6k / −2.2k, mostly
 extraction into portable projects. The WPF projects (`Axiom.UI`, `Axiom.Desktop`) are untouched except 26 lines.
 
 Detailed docs in the branch: `docs/MACOS_ARCHITECTURE.md` (contract + as built), `docs/MACOS_TEST_REPORT.md`
@@ -31,8 +31,8 @@ the installing user and `admin` members (reads for any uid ≥ 501); data dir 07
 must be root-owned and not group/world-writable; per-uid connection cap; `axiomd --doctor` self-check;
 upstream's `axiomd --recover-network [--apply]` offline recovery (v0.11.0) wired to macOS.
 
-Gate on Linux (after the v0.11.0 merge): `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` 0 errors / 0 warnings.
-Tests: Contracts 142, McpServer 33, Persistence 19, Presentation 90, UI.Avalonia 39, Infrastructure.MacOS 155,
+Gate on Linux (after the v0.13.0 merge): `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` 0 errors / 0 warnings.
+Tests: Contracts 142, McpServer 33, Persistence 19, Presentation 90, UI.Avalonia 40, Infrastructure.MacOS 155,
 Desktop.Avalonia.MacOS 35 pass; Swift filter 147 checks + 61 e2e checks pass in the VM. Pre-existing Linux-only
 failures are byte-identical to upstream `origin/main` run on the same host: Core 11/128 (Windows paths); Service and
 Infrastructure.Windows suites are Windows-only.
@@ -85,6 +85,27 @@ upstream's logic and the macOS seam is re-applied on top:
   off-Windows native-chrome/vector-icon code is untouched. Page subtitles: upstream copy with `PlatformText.HostKind`.
 - `PipeServer`: ours (transport only); the old constructor gained the two recovery delegates so upstream's
   `PipeServerTests` compile unchanged.
+
+Merge of upstream v0.13.0 (`c21380d`, 4 commits: 0.12.0, Antigravity UI/UX overhaul + full context menus +
+v0.12.0 network recovery fixes, 0.13.0) — conflicts in 6 views, resolved with upstream's XAML and only the
+off-Windows bits re-applied:
+
+- `AiAnalystView`, `PrivacyShieldView`, `FirewallView`: `PlatformText` bindings (API-key placeholder, adapter DNS
+  title, firewall rules title, ask-queue explanation) on upstream's new `section-title`/`mono` styles.
+- `FirewallView`: the macOS-only filter banner + rejected-rules block (`FilterEnforcementSummary`) under the status
+  line, restyled to upstream's radii/font sizes. `SecurityView`: `DisplayGlyph`. `EventsView`: toolbar gaps.
+- `ConnectionsView`: upstream now binds grouped rows' `SelectedItem` TwoWay to `SelectedConnection`, which is what
+  our `OnGroupRowSelectionChanged` handler did; the handler is gone and the code-behind is upstream's.
+- Network recovery contract (v0.12.0): `NetworkRecoveryController.SameServers` and `WindowsDnsRecoveryAdapter` are
+  now order-sensitive, so `MacDnsRecoveryAdapter` compares resolver lists in order too (`networksetup` preserves
+  order). The controller's new re-hardening after a capture into the default location
+  (`MachineStateSecurity.HardenProgramData`, a Windows-only file here) goes through
+  `ServicePlatform.HardenRecoverySnapshotLocation()`: Windows calls `HardenProgramData()` verbatim, macOS re-asserts
+  0700/0600 via `HardenMachineState()`. `NetworkRecoveryCommand`'s new reparse-point refusal is a no-op off Windows
+  by upstream's own guard. `IOwnedRuleRecoveryAdapter` / `ServicePlatform.Unix` hooks are unchanged.
+- VM smoke after the merge (osx-x64, unsigned): daemon `state = running`, `serviceHealth` ok, `rule.apply` on
+  `/usr/bin/curl` → `curl` rc 7, `rule.remove` → HTTP 200; `screenshots/macos/connections-v0.13.0.png`,
+  `firewall-v0.13.0.png`.
 
 ## 3. macOS-specific notes the maintainer must know
 
@@ -164,6 +185,9 @@ Useful commands: `axiomd --install-service | --uninstall-service | --doctor [--j
 - Agent protection: config/hook locations (`~/.claude`, `~/.codex`, …) assumed equal to the Windows
   equivalents under `~`; not verified tool by tool. DKG/Blackbox guided installers are not available on macOS.
 - No CI. Known flaky test under load: `HeadlessNavigationTests` (passes alone).
+- Row context menus (upstream v0.13.0 "full context menus", and the older Remembered-decisions menu) do not open on a
+  right-click in the VM, while the TextBox Cut/Copy/Paste flyout does; the toolbar buttons cover the same actions.
+  Not investigated (QEMU tablet right button reaches Avalonia, so this is a ContextMenu-on-macOS issue, not input).
 - Cosmetic: in the VM the application menu shows Avalonia's default menu instead of the custom NativeMenu
   (menu-bar icon menu works); AppleScript `quit` returns −128 although the app quits.
 - Upstream: the shared-code changes are behaviour-neutral on Windows but touch 99 files. Suggested PR order:
