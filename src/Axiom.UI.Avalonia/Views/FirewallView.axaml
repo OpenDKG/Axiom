@@ -345,9 +345,9 @@
             <controls:AxiomSelectableTextBlock Text="Rule defaults" Classes="section-title" />
             <controls:AxiomSelectableTextBlock Text="{Binding DefaultsStatusText}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             <WrapPanel>
-              <CheckBox Content="Domain" Margin="0,0,12,0" IsChecked="{Binding DefaultDomain}" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <CheckBox Content="Private" Margin="0,0,12,0" IsChecked="{Binding DefaultPrivate}" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <CheckBox Content="Public" IsChecked="{Binding DefaultPublic}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <CheckBox Content="Domain" Margin="0,0,12,0" IsVisible="{Binding ShowProfiles}" IsChecked="{Binding DefaultDomain}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <CheckBox Content="Private" Margin="0,0,12,0" IsVisible="{Binding ShowProfiles}" IsChecked="{Binding DefaultPrivate}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <CheckBox Content="Public" IsVisible="{Binding ShowProfiles}" IsChecked="{Binding DefaultPublic}" Foreground="{DynamicResource Axiom.TextPrimary}" />
             </WrapPanel>
             <ComboBox ItemsSource="{Binding ProtocolOptions}" SelectedItem="{Binding DefaultProtocolText}" Width="120" HorizontalAlignment="Left" />
             <TextBox Text="{Binding DefaultPortsText}" PlaceholderText="Remote ports, e.g. 443,8000-8100" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
@@ -375,9 +375,9 @@
               </StackPanel>
             </Grid>
             <WrapPanel>
-              <CheckBox Content="Domain" Margin="0,0,12,0" IsChecked="{Binding NewRuleDomain}" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <CheckBox Content="Private" Margin="0,0,12,0" IsChecked="{Binding NewRulePrivate}" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <CheckBox Content="Public" Margin="0,0,12,0" IsChecked="{Binding NewRulePublic}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <CheckBox Content="Domain" Margin="0,0,12,0" IsVisible="{Binding ShowProfiles}" IsChecked="{Binding NewRuleDomain}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <CheckBox Content="Private" Margin="0,0,12,0" IsVisible="{Binding ShowProfiles}" IsChecked="{Binding NewRulePrivate}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <CheckBox Content="Public" Margin="0,0,12,0" IsVisible="{Binding ShowProfiles}" IsChecked="{Binding NewRulePublic}" Foreground="{DynamicResource Axiom.TextPrimary}" />
               <CheckBox Content="Enabled" IsChecked="{Binding NewRuleEnabled}" Foreground="{DynamicResource Axiom.TextPrimary}" />
             </WrapPanel>
             <Grid ColumnDefinitions="*,10,*">

@@ -1323,20 +1323,27 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         HasStatsHint = true;
     }
 
-    private static PrivacyShieldAdapterOption[] BuildAdapterOptions() =>
-        NetworkInterface.GetAllNetworkInterfaces()
+    private static PrivacyShieldAdapterOption[] BuildAdapterOptions()
+    {
+        // systemd-resolved: per-link servers come from resolvectl, never the 127.0.0.53 stub.
+        var resolved = ResolvedLinkDns.Read();
+        return NetworkInterface.GetAllNetworkInterfaces()
             .Where(network => network.OperationalStatus == OperationalStatus.Up &&
                               network.NetworkInterfaceType != NetworkInterfaceType.Loopback)
             .Select(network =>
             {
                 var properties = network.GetIPProperties();
-                var usesResolver = properties.DnsAddresses.Any(IPAddress.IsLoopback);
-                var resolverAddress = properties.DnsAddresses
+                IReadOnlyList<IPAddress> dnsAddresses =
+                    resolved is not null && resolved.TryGetValue(network.Name, out var linkDns)
+                        ? linkDns
+                        : properties.DnsAddresses.Where(address => !ResolvedLinkDns.IsStub(address)).ToArray();
+                var usesResolver = dnsAddresses.Any(IPAddress.IsLoopback);
+                var resolverAddress = dnsAddresses
                     .Where(IPAddress.IsLoopback)
                     .OrderBy(address => address.AddressFamily == AddressFamily.InterNetwork ? 0 : 1)
                     .Select(address => address.ToString())
                     .FirstOrDefault();
-                var otherDns = properties.DnsAddresses
+                var otherDns = dnsAddresses
                     .Where(address => !IPAddress.IsLoopback(address))
                     .Select(address => address.ToString())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -1363,6 +1370,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             .OrderByDescending(adapter => adapter.HasDefaultRoute)
             .ThenBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
 
     private void RefreshAdapters(bool force = true)
     {

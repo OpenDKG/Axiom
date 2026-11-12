@@ -213,6 +213,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
 
     public bool HasIgnoredMicrosoft => IgnoredMicrosoftCount > 0;
 
+    /// <summary>Domain/Private/Public profiles exist only in Windows Firewall; nftables and the macOS filter have none.</summary>
+    public bool ShowProfiles => OperatingSystem.IsWindows();
+
     public IReadOnlyList<string> ProtocolOptions { get; } = ["Any", "TCP", "UDP"];
 
     public IReadOnlyList<string> DirectionOptions { get; } = ["Outbound", "Inbound"];

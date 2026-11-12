@@ -2,6 +2,7 @@
 using Avalonia.Platform;
 using Axiom.Desktop.Avalonia.Linux;
 using Axiom.Presentation;
+using Axiom.UI.Avalonia;
 using Xunit;
 
 namespace Axiom.Desktop.Avalonia.Linux.Tests;
@@ -399,5 +400,26 @@ public sealed class LinuxPathsAndWordingTests
     {
         Assert.Equal("sleep 2; '/opt/axiom/Axiom' '--autostart' >/dev/null 2>&1 &", AvaloniaShellActions.BuildRelaunchCommand("/opt/axiom/Axiom", ["--autostart"]));
         Assert.Null(AvaloniaShellActions.BuildRelaunchCommand(null, []));
+    }
+}
+
+public sealed class ResolvedLinkDnsTests
+{
+    [Fact]
+    public void Resolvectl_dns_output_maps_links_to_servers()
+    {
+        var links = ResolvedLinkDns.Parse("Global:\nLink 2 (eno2): 192.168.70.1 fe80::1%eno2\nLink 3 (wlo1):\nLink 7 (tailscale0): 100.100.100.100#dns.tailscale\n");
+        Assert.Equal(["192.168.70.1", "fe80::1"], links["eno2"].Select(address => address.ToString()));
+        Assert.Empty(links["wlo1"]);
+        Assert.Equal(["100.100.100.100"], links["tailscale0"].Select(address => address.ToString()));
+        Assert.False(links.ContainsKey("Global"));
+    }
+
+    [Fact]
+    public void Stub_listeners_are_not_the_privacy_shield_resolver()
+    {
+        Assert.True(ResolvedLinkDns.IsStub(System.Net.IPAddress.Parse("127.0.0.53")));
+        Assert.True(ResolvedLinkDns.IsStub(System.Net.IPAddress.Parse("127.0.0.54")));
+        Assert.False(ResolvedLinkDns.IsStub(System.Net.IPAddress.Loopback));
     }
 }
