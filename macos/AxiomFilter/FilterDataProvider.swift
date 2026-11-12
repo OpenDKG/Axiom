@@ -48,13 +48,13 @@ final class FilterDataProvider: NEFilterDataProvider {
             // Tell the daemon which generation is now enforced, then what was rejected.
             self.events.send(.hello(ts: Date(), version: FilterDataProvider.version, generation: table.generation))
             self.events.send(.rules(ts: Date(), generation: table.generation, applied: table.ruleCount,
-                                    rejected: table.rejected, error: nil))
+                                    rejected: table.rejected, error: nil, ruleIds: table.enforcedRuleIds))
         }
         rules.onRejectedFile = { [weak self] reason in
             guard let self else { return }
             let table = self.rules.snapshot()
             self.events.send(.rules(ts: Date(), generation: table.generation, applied: table.ruleCount,
-                                    rejected: table.rejected, error: reason))
+                                    rejected: table.rejected, error: reason, ruleIds: table.enforcedRuleIds))
         }
         rules.start()
         events.start()

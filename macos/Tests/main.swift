@@ -304,14 +304,18 @@ check(hello?["type"] as? String == "filter.hello" && hello?["generation"] as? In
 
 // filter.rules event JSON (review #6)
 let rulesEvent = json(sink.testEncode(.rules(ts: Date(), generation: 9, applied: 2,
-                                             rejected: [RejectedRule(id: "r1", reason: "unknown action x")], error: nil)))
+                                             rejected: [RejectedRule(id: "r1", reason: "unknown action x")], error: nil,
+                                             ruleIds: ["a", "b"])))
 check(rulesEvent?["type"] as? String == "filter.rules" && rulesEvent?["generation"] as? Int == 9
       && rulesEvent?["applied"] as? Int == 2 && rulesEvent?["error"] is NSNull && rulesEvent?["dropped"] as? Int == 6,
       "filter.rules fields: \(rulesEvent ?? [:])")
 let rej = rulesEvent?["rejected"] as? [[String: Any]]
 check(rej?.count == 1 && rej?[0]["id"] as? String == "r1" && rej?[0]["reason"] as? String == "unknown action x", "filter.rules rejected list")
-let fileErr = json(sink.testEncode(.rules(ts: Date(), generation: 9, applied: 2, rejected: [], error: "unreadable: owned by uid 501")))
+check(rulesEvent?["ruleIds"] as? [String] == ["a", "b"], "filter.rules echoes enforced rule ids (review #2 MAC-1)")
+let fileErr = json(sink.testEncode(.rules(ts: Date(), generation: 9, applied: 2, rejected: [], error: "unreadable: owned by uid 501",
+                                          ruleIds: nil)))
 check(fileErr?["error"] as? String == "unreadable: owned by uid 501", "filter.rules error field")
+check(fileErr?["ruleIds"] == nil, "filter.rules omits ruleIds when unknown")
 let openEvent = json(sink.testEncode(.open(FlowRecord(id: UUID(), ts: Date(), pid: 5, path: "/usr/bin/curl", direction: .outbound,
                                                    proto: .tcp, localAddress: nil, localPort: nil, remoteAddress: "1.2.3.4",
                                                    remotePort: 443, remoteHost: nil, verdict: .block, ruleId: "b",

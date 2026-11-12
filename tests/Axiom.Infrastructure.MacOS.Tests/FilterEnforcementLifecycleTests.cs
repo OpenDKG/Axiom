@@ -473,7 +473,7 @@ public sealed class FilterEnforcementLifecycleTests
         var report = new FilterRulesReport { Generation = 3, Applied = 1, ReceivedUtc = Start.AddSeconds(1) };
 
         var verified = MacFirewallPolicyAdapter.Outcome(id, "Axiom::x::OUT", ruleId, 3, Start,
-            new FilterEnforcementSnapshot(FilterEnforcementState.Verified, true, 3, 3, Start.AddSeconds(1), Start.AddSeconds(1), report));
+            new FilterEnforcementSnapshot(FilterEnforcementState.Verified, true, 3, 3, Start.AddSeconds(1), Start.AddSeconds(1), report, [ruleId]));
         Assert.True(verified is { Success: true, State: RuleState.Applied, VerifiedUtc: not null });
 
         var pending = MacFirewallPolicyAdapter.Outcome(id, null, ruleId, 3, Start,
