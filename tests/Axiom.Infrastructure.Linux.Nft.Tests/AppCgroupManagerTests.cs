@@ -17,6 +17,12 @@ public sealed class AppCgroupManagerTests
         fs.Processes[103] = ("/usr/bin/wget", "user.slice/user-1000.slice/session-3.scope");
         fs.Processes[104] = ("/opt/App/bin/app", "user.slice/user-1000.slice/user@1000.service/app.slice/app-gnome-org.gnome.Terminal.slice/vte-spawn-1.scope");
         fs.Processes[105] = ("/opt/Application/bin/x", "user.slice/user-1000.slice/session-3.scope");
+        // Real cgroup directories outlive their last process (systemd garbage-collects them later).
+        foreach (var process in fs.Processes.Values)
+        {
+            fs.CreateCgroup(process.Cgroup);
+        }
+
         return fs;
     }
 
@@ -94,14 +100,13 @@ public sealed class AppCgroupManagerTests
         manager.TryResolve("/opt/App", out var appCgroup, out _);
         manager.Attribute();
 
+        fs.Unmovable.Add(100); // cannot be returned: the cgroup stays until it exits
         manager.Retain(["/opt/App"]);
         var report = manager.Attribute();
 
-        Assert.Empty(report.RemovedCgroups); // curl processes still live in it
-        foreach (var pid in fs.ReadProcs(curlCgroup).ToList())
-        {
-            fs.Processes.Remove(pid);
-        }
+        Assert.Empty(report.RemovedCgroups);
+        Assert.Equal(curlCgroup, fs.Processes[100].Cgroup);
+        fs.Processes.Remove(100);
 
         Assert.Equal([curlCgroup], manager.Attribute().RemovedCgroups);
         Assert.Contains(appCgroup, fs.Cgroups);
@@ -109,14 +114,22 @@ public sealed class AppCgroupManagerTests
     }
 
     [Fact]
-    public void RemoveAll_deletes_empty_cgroups_and_the_slice()
+    public void RemoveAll_returns_processes_to_their_origin_and_deletes_the_slice()
     {
         var fs = Box();
         var manager = new AppCgroupManager(fs);
         manager.TryResolve("/usr/bin/curl", out var curlCgroup, out _);
         manager.TryResolve("/opt/App", out var appCgroup, out _);
         manager.Attribute();
-        fs.Processes.Clear();
+        // 200: forked inside the Axiom cgroup by 100 (no recorded origin) -> parent's cgroup.
+        fs.Processes[200] = ("/usr/bin/curl", curlCgroup);
+        fs.Parents[200] = 100;
+        // 201: unknown origin, parent gone -> cgroup root.
+        fs.Processes[201] = ("/usr/bin/curl", curlCgroup);
+        // 102's origin cgroup disappeared; its parent 100 is released first (pid order), so 102 follows it.
+        fs.Cgroups.Remove("system.slice/cron.service");
+        fs.Parents[102] = 100;
+        Assert.False(fs.CgroupExists("system.slice/cron.service"));
 
         var removed = manager.RemoveAll();
 
@@ -125,6 +138,30 @@ public sealed class AppCgroupManagerTests
         Assert.Contains(appCgroup, removed);
         Assert.Contains("axiom.slice", removed);
         Assert.Empty(manager.Apps);
+        Assert.Equal("user.slice/user-1000.slice/session-3.scope", fs.Processes[100].Cgroup);
+        Assert.Equal("user.slice/user-1000.slice/user@1000.service/app.slice/app-gnome-curl-101.scope", fs.Processes[101].Cgroup);
+        Assert.Equal("user.slice/user-1000.slice/session-3.scope", fs.Processes[102].Cgroup);
+        Assert.Equal("user.slice/user-1000.slice/user@1000.service/app.slice/app-gnome-org.gnome.Terminal.slice/vte-spawn-1.scope", fs.Processes[104].Cgroup);
+        Assert.Equal("user.slice/user-1000.slice/session-3.scope", fs.Processes[200].Cgroup);
+        Assert.Equal("", fs.Processes[201].Cgroup);
+    }
+
+    [Fact]
+    public void Dropping_an_apps_rules_releases_its_processes_before_pruning()
+    {
+        var fs = Box();
+        var manager = new AppCgroupManager(fs);
+        manager.TryResolve("/usr/bin/curl", out var curlCgroup, out _);
+        manager.TryResolve("/opt/App", out _, out _);
+        manager.Attribute();
+
+        manager.Retain(["/opt/App"]);
+        var report = manager.Attribute();
+
+        Assert.Equal([curlCgroup], report.RemovedCgroups);
+        Assert.Equal("user.slice/user-1000.slice/session-3.scope", fs.Processes[100].Cgroup);
+        Assert.Equal("system.slice/cron.service", fs.Processes[102].Cgroup);
+        Assert.DoesNotContain(curlCgroup, fs.Cgroups);
     }
 
     [Theory]

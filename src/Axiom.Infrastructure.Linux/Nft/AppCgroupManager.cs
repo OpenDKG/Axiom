@@ -64,6 +64,7 @@ public sealed class AppCgroupManager : IAppCgroupResolver
     private readonly string _slice;
     private readonly object _gate = new();
     private readonly Dictionary<string, string> _apps = new(StringComparer.Ordinal);
+    private readonly Dictionary<int, string> _origins = [];
 
     public AppCgroupManager(ICgroupFs fs, string? slice = null)
     {
@@ -72,6 +73,8 @@ public sealed class AppCgroupManager : IAppCgroupResolver
     }
 
     public string Slice => _slice;
+
+    public IReadOnlyList<int> ReadProcs(string cgroupPath) => _fs.ReadProcs(cgroupPath);
 
     /// <summary>Apps currently keyed (canonical app path → cgroup path).</summary>
     public IReadOnlyDictionary<string, string> Apps
@@ -189,6 +192,15 @@ public sealed class AppCgroupManager : IAppCgroupResolver
                 try
                 {
                     _fs.MoveProcess(pid, target);
+                    lock (_gate)
+                    {
+                        // Remember where it came from so the pid can be returned when its rules go away.
+                        if (kind != SourceCgroupKind.AxiomOwned)
+                        {
+                            _origins[pid] = source;
+                        }
+                    }
+
                     placements.Add(new CgroupPlacement(pid, exe, app, source, kind, target, true, null));
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -202,16 +214,65 @@ public sealed class AppCgroupManager : IAppCgroupResolver
         var live = new HashSet<string>(apps.Values, StringComparer.Ordinal);
         foreach (var child in _fs.ListChildCgroups(_slice))
         {
-            if (!live.Contains(child) && _fs.ReadProcs(child).Count == 0 && _fs.TryRemoveCgroup(child))
+            if (!live.Contains(child))
             {
-                removed.Add(child);
+                // The app has no rules any more: give its processes back, then drop the cgroup.
+                ReleaseProcesses(child);
+                if (_fs.ReadProcs(child).Count == 0 && _fs.TryRemoveCgroup(child))
+                {
+                    removed.Add(child);
+                }
             }
         }
 
         return new AttributionReport(placements, removed);
     }
 
-    /// <summary>Removes every Axiom cgroup that is empty (daemon shutdown / uninstall). Populated ones stay.</summary>
+    /// <summary>
+    /// Moves every process of an Axiom cgroup back to where it came from: the recorded origin when
+    /// the daemon moved it (and the cgroup still exists), else its parent's cgroup (children were
+    /// forked inside the Axiom cgroup, or the daemon restarted), else the cgroup root.
+    /// </summary>
+    public IReadOnlyList<CgroupPlacement> ReleaseProcesses(string cgroupPath)
+    {
+        ArgumentNullException.ThrowIfNull(cgroupPath);
+        var released = new List<CgroupPlacement>();
+        foreach (var pid in _fs.ReadProcs(cgroupPath))
+        {
+            string? origin;
+            lock (_gate)
+            {
+                _origins.Remove(pid, out origin);
+            }
+
+            if (origin is null || !_fs.CgroupExists(origin))
+            {
+                origin = null;
+                var parent = _fs.ReadParentPid(pid);
+                if (parent is { } ppid && _fs.ReadProcessCgroup(ppid) is { } parentCgroup &&
+                    !parentCgroup.StartsWith(_slice + "/", StringComparison.Ordinal) && parentCgroup != _slice)
+                {
+                    origin = parentCgroup;
+                }
+            }
+
+            origin ??= string.Empty;
+            var exe = _fs.ReadProcessExe(pid) ?? string.Empty;
+            try
+            {
+                _fs.MoveProcess(pid, origin);
+                released.Add(new CgroupPlacement(pid, exe, string.Empty, cgroupPath, SourceCgroupKind.AxiomOwned, origin, true, null));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                released.Add(new CgroupPlacement(pid, exe, string.Empty, cgroupPath, SourceCgroupKind.AxiomOwned, origin, false, exception.Message));
+            }
+        }
+
+        return released;
+    }
+
+    /// <summary>Returns every herded process and removes every Axiom cgroup (daemon shutdown / uninstall).</summary>
     public IReadOnlyList<string> RemoveAll()
     {
         lock (_gate)
@@ -222,6 +283,7 @@ public sealed class AppCgroupManager : IAppCgroupResolver
         var removed = new List<string>();
         foreach (var child in _fs.ListChildCgroups(_slice))
         {
+            ReleaseProcesses(child);
             if (_fs.ReadProcs(child).Count == 0 && _fs.TryRemoveCgroup(child))
             {
                 removed.Add(child);

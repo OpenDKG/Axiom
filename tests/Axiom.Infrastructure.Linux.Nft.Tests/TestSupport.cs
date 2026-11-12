@@ -100,7 +100,7 @@ internal sealed class FakeNftRunner : INftRunner
 /// <summary>In-memory cgroup tree + process table.</summary>
 internal sealed class FakeCgroupFs : ICgroupFs
 {
-    public HashSet<string> Cgroups { get; } = new(StringComparer.Ordinal) { "user.slice", "system.slice", "init.scope" };
+    public HashSet<string> Cgroups { get; } = new(StringComparer.Ordinal) { "", "user.slice", "system.slice", "init.scope" };
 
     public Dictionary<int, (string Exe, string Cgroup)> Processes { get; } = [];
 
@@ -139,7 +139,7 @@ internal sealed class FakeCgroupFs : ICgroupFs
 
     public void MoveProcess(int pid, string cgroupPath)
     {
-        if (!Cgroups.Contains(cgroupPath))
+        if (!CgroupExists(cgroupPath))
         {
             throw new IOException("No such file or directory");
         }
@@ -165,6 +165,10 @@ internal sealed class FakeCgroupFs : ICgroupFs
     public string? ReadProcessExe(int pid) => Processes.TryGetValue(pid, out var p) ? p.Exe : null;
 
     public string? ResolveAppPath(string appPath) => AppPaths.TryGetValue(appPath, out var resolved) ? resolved : null;
+
+    public Dictionary<int, int> Parents { get; } = [];
+
+    public int? ReadParentPid(int pid) => Parents.TryGetValue(pid, out var ppid) ? ppid : null;
 }
 
 internal static class Specs

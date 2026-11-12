@@ -34,6 +34,9 @@ public interface ICgroupFs
 
     /// <summary>Canonical form of a rule's appPath: realpath when it exists, null when the path is unreachable.</summary>
     string? ResolveAppPath(string appPath);
+
+    /// <summary>Parent pid (field 4 of <c>/proc/pid/stat</c>) or null when gone.</summary>
+    int? ReadParentPid(int pid);
 }
 
 /// <summary>Real cgroup v2 + procfs access for the root daemon.</summary>
@@ -170,6 +173,22 @@ public sealed class ProcCgroupFs : ICgroupFs
             var info = new FileInfo(appPath);
             var resolved = info.ResolveLinkTarget(returnFinalTarget: true);
             return Path.GetFullPath(resolved?.FullName ?? appPath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    public int? ReadParentPid(int pid)
+    {
+        try
+        {
+            var stat = File.ReadAllText(Path.Combine(_procRoot, pid.ToString(System.Globalization.CultureInfo.InvariantCulture), "stat"));
+            // "pid (comm) state ppid ..." — comm may contain spaces/parentheses, so cut after the last ')'.
+            var close = stat.LastIndexOf(')');
+            var fields = close < 0 ? [] : stat[(close + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return fields.Length > 1 && int.TryParse(fields[1], out var ppid) ? ppid : null;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

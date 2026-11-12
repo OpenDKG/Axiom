@@ -413,7 +413,37 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         return report;
     }
 
-    /// <summary>Deletes the table and empty Axiom cgroups (daemon stop / uninstall).</summary>
+    /// <summary>
+    /// Fallback attribution for a traced block when the socket owner is gone already (a rejected SYN
+    /// closes fast): the rule's app path and the first process still in its cgroup (-1 when none).
+    /// </summary>
+    public (int Pid, string? Path)? DescribeRuleApp(Guid ruleId)
+    {
+        var rule = LoadState().Rules.FirstOrDefault(rule => rule.ManagedRuleId == ruleId);
+        if (rule is null)
+        {
+            return null;
+        }
+
+        var appPath = rule.Spec.AppPath.Trim();
+        if (!_cgroups.TryResolve(appPath, out var cgroupPath, out _))
+        {
+            return (-1, appPath);
+        }
+
+        var pids = _cgroups.ReadProcs(cgroupPath);
+        return (pids.Count > 0 ? pids[0] : -1, appPath);
+    }
+
+    /// <summary>Re-keys the cgroups of every stored rule without publishing (a fresh process joining a live table).</summary>
+    public IReadOnlyList<string> ReattachCgroups()
+    {
+        var apps = LoadState().Rules.Where(rule => rule.Spec.Enabled).Select(rule => rule.Spec.AppPath.Trim()).Distinct(StringComparer.Ordinal).ToList();
+        _cgroups.Retain(apps);
+        return apps.Where(app => _cgroups.TryResolve(app, out _, out _)).ToList();
+    }
+
+    /// <summary>Deletes the table, returns herded processes and removes the Axiom cgroups (daemon stop / uninstall).</summary>
     public async Task TeardownAsync(CancellationToken ct)
     {
         await _table.DeleteAsync(ct).ConfigureAwait(false);
