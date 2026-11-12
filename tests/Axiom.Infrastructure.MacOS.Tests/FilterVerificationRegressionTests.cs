@@ -330,4 +330,98 @@ public sealed class FilterVerificationRegressionTests
             Assert.NotEqual(time.GetUtcNow(), removal.VerifiedUtc);
         }
     }
+
+    // ----- MAC-1: the filter's own list of enforced ids (optional ruleIds field) -----
+
+    private static FlowEvent RulesEventWithIds(long generation, string? error, params string[] ids) =>
+        FlowEventParser.TryParse(string.Create(
+            CultureInfo.InvariantCulture,
+            $"{{\"type\":\"filter.rules\",\"generation\":{generation},\"applied\":{ids.Length},\"rejected\":[],\"error\":{(error is null ? "null" : "\"" + error + "\"")},\"ruleIds\":[{string.Join(",", ids.Select(id => "\"" + id + "\""))}],\"dropped\":0}}"))!;
+
+    [Fact]
+    public void Parser_ReadsRuleIds_AndTreatsAMissingListAsUnknown()
+    {
+        var withIds = RulesEventWithIds(4, null, "a", "b");
+        Assert.Equal(["a", "b"], withIds.RuleIds);
+        Assert.Null(RulesEvent(4, applied: 2).RuleIds);
+    }
+
+    [Fact]
+    public async Task AcknowledgedTableThatDoesNotListTheRule_IsNotVerified()
+    {
+        using var temp = new TempDirectory();
+        var (paths, time, status, adapter) = Harness(temp);
+        using (adapter)
+        {
+            status.ClientConnected();
+            var curl = Specs.Block("/usr/bin/curl");
+            await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
+            var generation = PublishedGeneration(paths);
+            var id = FilterRuleTable.ToFilterRule(curl).Id;
+
+            // Clean ack of the right generation, but the filter's effective table lacks the rule.
+            status.RulesReported(RulesEventWithIds(generation, null), time.GetUtcNow());
+            Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(generation));
+            Assert.False((await adapter.VerifyAsync(curl, CancellationToken.None)).EnforcementVerified);
+            Assert.Equal(RuleState.Failed, Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
+
+            // The filter lists it: verified.
+            status.RulesReported(RulesEventWithIds(generation, null, id), time.GetUtcNow());
+            var verify = await adapter.VerifyAsync(curl, CancellationToken.None);
+            Assert.True(verify.EnforcementVerified);
+            Assert.Equal(FirewallAction.Block, verify.EffectiveAction);
+        }
+    }
+
+    [Fact]
+    public async Task DisabledRule_IsVerifiedWhenTheFilterDoesNotEnforceIt()
+    {
+        using var temp = new TempDirectory();
+        var (paths, time, status, adapter) = Harness(temp);
+        using (adapter)
+        {
+            status.ClientConnected();
+            var curl = Specs.Block("/usr/bin/curl") with { Enabled = false };
+            await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
+            var generation = PublishedGeneration(paths);
+            status.RulesReported(RulesEventWithIds(generation, null), time.GetUtcNow());
+            Assert.Equal(RuleState.Applied, Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
+            var verify = await adapter.VerifyAsync(curl, CancellationToken.None);
+            Assert.True(verify.EnforcementVerified);
+            Assert.Null(verify.EffectiveAction);
+        }
+    }
+
+    [Fact]
+    public async Task RecoveryRemoval_FilterStillListsTheRule_IsFailedNotVerified()
+    {
+        using var temp = new TempDirectory();
+        using var host = new ServiceHostScope();
+        var (paths, time, status, adapter) = Harness(temp);
+        using (adapter)
+        {
+            status.ClientConnected();
+            var curl = Specs.Block("/usr/bin/curl");
+            await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
+            var id = FilterRuleTable.ToFilterRule(curl).Id;
+            status.RulesReported(RulesEventWithIds(PublishedGeneration(paths), null, id), time.GetUtcNow());
+
+            // The removal publishes N+1; an ack of N+1 that still lists the rule is not a removal.
+            var removalTask = adapter.RemoveCapturedOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None);
+            var removal = await removalTask;
+            Assert.False(removal.Success);
+            status.RulesReported(RulesEventWithIds(PublishedGeneration(paths), null, id), time.GetUtcNow());
+            var retry = await adapter.RemoveCapturedOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None);
+            Assert.False(retry.Success);
+            Assert.Null(retry.VerifiedUtc);
+            Assert.Equal("filter.rule_still_enforced", retry.ErrorCode);
+            Assert.NotEqual(OwnedRulePresence.Absent, await adapter.InspectOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None));
+
+            // A clean ack without it proves the removal.
+            status.RulesReported(RulesEventWithIds(PublishedGeneration(paths), null), time.GetUtcNow());
+            var done = await adapter.RemoveCapturedOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None);
+            Assert.True(done.Success);
+            Assert.NotNull(done.VerifiedUtc);
+        }
+    }
 }
