@@ -250,7 +250,8 @@ public sealed class NftLifecycleTests
 
         public string Status => "active";
 
-        public Task SyncAsync(IReadOnlyList<ManagedRule> rules, long generation, CancellationToken ct) => Task.CompletedTask;
+        public Task<LayerSyncResult> SyncAsync(IReadOnlyList<ManagedRule> rules, long generation, CancellationToken ct) =>
+            Task.FromResult(new LayerSyncResult { Generation = generation, Attached = true, Pinned = true, Applied = true, Verified = true, Attempts = 1, Status = Status });
     }
 
     [Fact]

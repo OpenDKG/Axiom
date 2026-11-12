@@ -58,6 +58,11 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
     private DateTimeOffset? _lastSeenUtc;
     private DateTimeOffset? _lastAckUtc;
     private IReadOnlyList<CgroupPlacement> _attributionFailures = [];
+    private LayerSyncResult? _layerSync;
+
+    /// <summary>Coverage statement of the connect-time layer (docs/LINUX_EBPF.md §3): never advertised wider than it is.</summary>
+    public const string BpfCoverageStatement =
+        "BPF connect-time coverage: unscoped outbound block rules only; scoped (address/port), inbound and allow rules are enforced by nftables alone with the ~1 s exec window.";
 
     /// <summary>Limitation every Linux build carries: the attribution loop is periodic.</summary>
     public const string ExecRaceLimitation =
@@ -146,7 +151,23 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             _ => null,
         };
 
-        if (VerdictLayer is { Active: false } layer && enforcement.State != FilterEnforcementState.Unavailable)
+        var layerSync = LayerSync;
+        if (layerSync is { StaleEntriesCanBlock: true })
+        {
+            var note = string.Create(CultureInfo.InvariantCulture, $"BPF verdict maps hold {layerSync.FailedDeletes.Count} stale entr{(layerSync.FailedDeletes.Count == 1 ? "y" : "ies")} that could not be deleted and the programs could not be detached: removed rules may still block at connect time ({string.Join("; ", layerSync.FailedDeletes)}).");
+            reason = reason is null ? note : reason + " " + note;
+        }
+        else if (layerSync is { Neutralised: true })
+        {
+            var note = $"BPF layer neutralised ({VerdictLayer?.Status}); nftables alone enforces until the daemon re-attaches it (watch tick).";
+            reason = reason is null ? note : reason + " " + note;
+        }
+        else if (layerSync is { Attached: true, Applied: false })
+        {
+            var note = string.Create(CultureInfo.InvariantCulture, $"BPF map sync for generation {layerSync.Generation} is incomplete ({layerSync.FailedUpdates.Count} update(s) failed after {layerSync.Attempts} pass(es)); affected rules are enforced by nftables alone until the next publish succeeds.");
+            reason = reason is null ? note : reason + " " + note;
+        }
+        else if (VerdictLayer is { Active: false } layer && enforcement.State != FilterEnforcementState.Unavailable)
         {
             // Still Available: nftables enforces every rule; only the exec-time race window is open.
             var note = $"Connect-time BPF layer {layer.Status}; a process that connects within ~1 s of exec is not blocked until herded.";
@@ -156,7 +177,8 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         return new FirewallCapabilityReport
         {
             // Pending (table holds another generation for a moment) stays Available with a reason, as on macOS;
-            // Degraded is the lost/foreign table, unreadable nft or a rejected batch.
+            // Degraded is the lost/foreign table, unreadable nft, a rejected batch, or a BPF layer that holds
+            // stale verdicts / had to be neutralised (LNX-1).
             Status = enforcement.State == FilterEnforcementState.Degraded ? FirewallCapabilityStatus.Degraded : FirewallCapabilityStatus.Available,
             Reason = reason,
             FirewallServiceRunning = enforcement.Connected,
@@ -174,13 +196,52 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
     /// </summary>
     public bool ConnectTimeLayerActive => VerdictLayer is { Active: true };
 
+    /// <summary>Outcome of the last BPF map sync (null before the first or without a layer); part of the effective state.</summary>
+    public LayerSyncResult? LayerSync
+    {
+        get
+        {
+            lock (_reportGate)
+            {
+                return _layerSync;
+            }
+        }
+    }
+
     /// <summary>Limitations of this enforcement build (shown with the capability report).</summary>
-    public IReadOnlyList<string> Limitations() =>
-        ConnectTimeLayerActive
-            ? [ExecRaceLimitation + " The BPF layer closes this window for unscoped outbound block rules."]
-            : VerdictLayer is { } layer
-                ? [ExecRaceLimitation, $"BPF layer inactive ({layer.Status}): connect-time verdicts are not enforced; nftables (socket cgroupv2) is the only boundary."]
-                : [ExecRaceLimitation, BpfLayerInactiveLimitation];
+    public IReadOnlyList<string> Limitations()
+    {
+        var lines = new List<string>();
+        var sync = LayerSync;
+        if (ConnectTimeLayerActive)
+        {
+            lines.Add(ExecRaceLimitation + " The BPF layer closes this window for unscoped outbound block rules.");
+            lines.Add(BpfCoverageStatement);
+        }
+        else if (VerdictLayer is { } layer)
+        {
+            lines.Add(ExecRaceLimitation);
+            lines.Add(layer.Neutralised
+                ? $"BPF layer neutralised ({layer.Status}): the daemon detached its own programs after a stale verdict could not be deleted; nftables (socket cgroupv2) is the only boundary until it re-attaches."
+                : $"BPF layer inactive ({layer.Status}): connect-time verdicts are not enforced; nftables (socket cgroupv2) is the only boundary.");
+        }
+        else
+        {
+            lines.Add(ExecRaceLimitation);
+            lines.Add(BpfLayerInactiveLimitation);
+        }
+
+        if (sync is { StaleEntriesCanBlock: true })
+        {
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"BPF map sync failed: {sync.FailedDeletes.Count} stale verdict(s) still attached after {sync.Attempts} pass(es) ({string.Join("; ", sync.FailedDeletes)}); removed rules may still block at connect time."));
+        }
+        else if (sync is { Attached: true, Applied: false })
+        {
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"BPF map sync failed for generation {sync.Generation}: {sync.FailedUpdates.Count} update(s) not written after {sync.Attempts} pass(es) ({string.Join("; ", sync.FailedUpdates)}); those rules are enforced by nftables alone."));
+        }
+
+        return lines;
+    }
 
     private string? _nftError;
 
@@ -249,13 +310,36 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         return live == published ? FilterEnforcementState.Verified : FilterEnforcementState.Pending;
     }
 
+    /// <summary>
+    /// <see cref="Evaluate(long, long?, bool, bool)"/> folded with the connect-time layer (LNX-1):
+    /// a stale verdict that still enforces, or a layer that had to detach itself, is
+    /// <see cref="FilterEnforcementState.Degraded"/>; an attached layer whose maps miss entries is
+    /// <see cref="FilterEnforcementState.Pending"/>. A layer that never attached (no BTF, no root)
+    /// does not degrade anything: nftables is then the whole, verified boundary.
+    /// </summary>
+    public static FilterEnforcementState Evaluate(long published, long? live, bool nftReadable, bool fileRejected, LayerSyncResult? layer)
+    {
+        var state = Evaluate(published, live, nftReadable, fileRejected);
+        if (state is FilterEnforcementState.Unavailable or FilterEnforcementState.Degraded || layer is null)
+        {
+            return state;
+        }
+
+        if (layer.StaleEntriesCanBlock || layer.Neutralised)
+        {
+            return FilterEnforcementState.Degraded;
+        }
+
+        return layer is { Attached: true, Applied: false } ? FilterEnforcementState.Pending : state;
+    }
+
     private FilterEnforcementReport Rebuild(Readback readback)
     {
         lock (_reportGate)
         {
             var previous = _enforcement;
             var fileRejected = previous?.FileError is { Length: > 0 };
-            var state = Evaluate(_published, readback.Generation, readback.NftError is null, fileRejected);
+            var state = Evaluate(_published, readback.Generation, readback.NftError is null, fileRejected, _layerSync);
             var report = new FilterEnforcementReport
             {
                 State = state,
@@ -287,8 +371,9 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         ct.ThrowIfCancellationRequested();
         var report = Enforcement;
         var compilation = _lastCompilation;
+        var layerFailed = LayerSync is { Attached: true } sync ? sync.FailedRuleIds.ToHashSet() : [];
         return Task.FromResult<IReadOnlyList<ManagedRule>>(
-            LoadState().Rules.Select(rule => rule with { State = ProjectState(rule, report, compilation) }).ToList());
+            LoadState().Rules.Select(rule => rule with { State = layerFailed.Contains(rule.ManagedRuleId) && rule.State != RuleState.Failed ? RuleState.Pending : ProjectState(rule, report, compilation) }).ToList());
     }
 
     /// <summary>Pure projection of one stored rule under the current report (see <see cref="ListOwnedRulesAsync"/>).</summary>
@@ -338,7 +423,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             // The batch is in the kernel. Applied needs the readback and the cgroup, nothing less.
             var readback = await ReadbackAsync(ct).ConfigureAwait(false);
             var report = Rebuild(readback);
-            var result = Outcome(spec, rule.OsRuleName, outcome.Compilation, readback.Generation, readback.Counters, report, CgroupPresent(outcome.Compilation, spec.ManagedRuleId), _attributionFailures);
+            var result = Outcome(spec, rule.OsRuleName, outcome.Compilation, readback.Generation, readback.Counters, report, CgroupPresent(outcome.Compilation, spec.ManagedRuleId), _attributionFailures, LayerSync);
             SaveState(new ManagedRuleState
             {
                 Generation = outcome.Compilation.Generation,
@@ -366,6 +451,9 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
     /// of the app failed to be herded; any other combination is <see cref="RuleState.Pending"/>
     /// with the reason (<c>nft.readback_mismatch</c> / <c>nft.cgroup_missing</c> / <c>nft.attribution_failed</c>).
     /// A disabled rule has no nft lines and is Applied once the generation is verified.
+    /// With a connect-time layer (LNX-1): a stale verdict that still enforces is <c>bpf.stale_entry</c>,
+    /// a map update of this rule that failed is <c>bpf.update_failed</c>, a layer that had to detach
+    /// itself is <c>bpf.neutralised</c> — all <see cref="RuleState.Pending"/>, never Applied.
     /// </summary>
     public static RuleApplyResult Outcome(
         RuleSpec spec,
@@ -375,7 +463,8 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         IReadOnlyList<NftRuleCounter> counters,
         FilterEnforcementReport report,
         bool cgroupExists,
-        IReadOnlyList<CgroupPlacement> attributionFailures)
+        IReadOnlyList<CgroupPlacement> attributionFailures,
+        LayerSyncResult? layer = null)
     {
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(compilation);
@@ -411,6 +500,25 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         {
             pendingCode = "nft.attribution_failed";
             pendingWhy = string.Create(CultureInfo.InvariantCulture, $"live process pid {failure.Pid} ({failure.ExePath}) could not be moved into {failure.TargetCgroup}: {failure.Error}");
+        }
+        else if (layer is { StaleEntriesCanBlock: true })
+        {
+            pendingCode = "bpf.stale_entry";
+            pendingWhy = string.Create(CultureInfo.InvariantCulture, $"the BPF verdict maps still hold {layer.FailedDeletes.Count} stale entr{(layer.FailedDeletes.Count == 1 ? "y" : "ies")} that could not be deleted ({string.Join("; ", layer.FailedDeletes)}) and the programs could not be detached; connect-time verdicts are not the published rule set");
+        }
+        else if (layer is { Neutralised: true })
+        {
+            pendingCode = "bpf.neutralised";
+            pendingWhy = "the BPF layer detached itself after a stale verdict could not be deleted; nftables enforces this rule alone until the daemon re-attaches the layer";
+        }
+        else if (layer is { Attached: true, Applied: false } && spec.Enabled && (layer.FailedUpdates.Any(failure => failure.RuleId == spec.ManagedRuleId || failure.RuleId is null) || layer.CoveredRules.Contains(spec.ManagedRuleId)))
+        {
+            var mine = layer.FailedUpdates.Where(failure => failure.RuleId == spec.ManagedRuleId || failure.RuleId is null).ToList();
+            if (mine.Count > 0)
+            {
+                pendingCode = "bpf.update_failed";
+                pendingWhy = string.Create(CultureInfo.InvariantCulture, $"BPF map update failed after {layer.Attempts} pass(es) ({string.Join("; ", mine)}); nftables enforces the rule, the connect-time verdict is missing");
+            }
         }
 
         if (pendingCode is not null)
@@ -462,10 +570,30 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 return Failed(managedRuleId, "nft.apply_failed", error);
             }
 
-            // Gone from the batch; verified gone only when the readback shows the new generation without it.
+            // Gone from the batch; verified gone only when the readback shows the new generation without it
+            // AND no attached layer still holds a verdict for it (LNX-1): a stale BPF entry keeps blocking.
             var readback = await ReadbackAsync(ct).ConfigureAwait(false);
             var report = Rebuild(readback);
-            var verified = report.State == FilterEnforcementState.Verified && readback.Counters.All(counter => counter.RuleId != managedRuleId);
+            var layer = LayerSync;
+            var nftVerified = Evaluate(_published, readback.Generation, readback.NftError is null, report.FileError is { Length: > 0 }) == FilterEnforcementState.Verified && readback.Counters.All(counter => counter.RuleId != managedRuleId);
+            if (layer is { StaleEntriesCanBlock: true } || layer is { Neutralised: true })
+            {
+                var stale = layer.FailedDeletes.Count > 0 ? string.Join("; ", layer.FailedDeletes) : "(no detail)";
+                var neutralised = layer.Neutralised;
+                return new RuleApplyResult
+                {
+                    Success = false,
+                    ManagedRuleId = managedRuleId,
+                    State = RuleState.Pending,
+                    OsRuleName = existing?.OsRuleName,
+                    ErrorCode = neutralised ? "bpf.delete_failed" : "bpf.stale_entry",
+                    ErrorMessage = neutralised
+                        ? string.Create(CultureInfo.InvariantCulture, $"removed from nftables (generation {outcome.Compilation.Generation}), but the BPF verdict entry could not be deleted after {layer.Attempts} pass(es) ({stale}); the daemon detached its own BPF programs so the stale entry cannot block, and re-attaches them on its next watch tick. Retry rule.remove to confirm; nothing of this rule enforces now.")
+                        : string.Create(CultureInfo.InvariantCulture, $"removed from nftables (generation {outcome.Compilation.Generation}), but the BPF verdict entry could not be deleted after {layer.Attempts} pass(es) ({stale}) and the BPF programs could not be detached: the app may still be blocked at connect time. Retry rule.remove; if it persists, restart axiomd (the start reconciles the maps) or run `bpftool map delete` on /sys/fs/bpf/axiom/maps."),
+                };
+            }
+
+            var verified = nftVerified && (layer is null || !layer.Attached || layer.Applied);
             return new RuleApplyResult
             {
                 Success = true,
@@ -473,7 +601,11 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 State = RuleState.Desired,
                 OsRuleName = existing?.OsRuleName,
                 VerifiedUtc = verified ? readback.At : null,
-                ErrorMessage = verified ? null : string.Create(CultureInfo.InvariantCulture, $"removed from the batch; generation {outcome.Compilation.Generation} not verified in nftables yet"),
+                ErrorMessage = verified
+                    ? null
+                    : nftVerified
+                        ? string.Create(CultureInfo.InvariantCulture, $"removed from nftables; BPF map sync for generation {outcome.Compilation.Generation} is incomplete ({layer!.FailedUpdates.Count} update(s) failed), other rules are affected")
+                        : string.Create(CultureInfo.InvariantCulture, $"removed from the batch; generation {outcome.Compilation.Generation} not verified in nftables yet"),
             };
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -633,6 +765,57 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
 
         var present = counters.Count > 0;
         var verified = report.State == FilterEnforcementState.Verified && present && rejection is null && cgroupExists;
+
+        // The connect-time layer is part of the effective state (LNX-1): say which layer enforces this
+        // rule, and never call it verified while the layer disagrees with the table.
+        var layer = LayerSync;
+        if (VerdictLayer is null)
+        {
+            notes.Add("BPF layer: not configured; nftables (socket cgroupv2) alone enforces this rule.");
+        }
+        else if (layer is { StaleEntriesCanBlock: true } && layer.FailedDeletes.Any(failure => failure.RuleId == spec.ManagedRuleId))
+        {
+            notes.Add(string.Create(CultureInfo.InvariantCulture, $"BPF: a stale verdict for this rule is still in an attached map ({string.Join("; ", layer.FailedDeletes.Where(failure => failure.RuleId == spec.ManagedRuleId))}); the app may still be blocked at connect time although the rule is removed."));
+            present = true;
+            verified = false;
+        }
+        else if (layer is { StaleEntriesCanBlock: true })
+        {
+            notes.Add("BPF: stale verdicts of other rules are still attached; the layer's state is not trusted.");
+            verified = false;
+        }
+        else if (layer is { Neutralised: true } || VerdictLayer.Neutralised)
+        {
+            notes.Add($"BPF layer neutralised ({VerdictLayer.Status}); nftables alone enforces until the daemon re-attaches it.");
+            verified = false;
+        }
+        else if (!VerdictLayer.Active)
+        {
+            notes.Add($"BPF layer inactive ({VerdictLayer.Status}); nftables alone enforces this rule (~1 s exec window).");
+        }
+        else if (layer is null)
+        {
+            notes.Add("BPF layer attached; maps not synced yet.");
+            verified = false;
+        }
+        else if (layer.FailedUpdates.Any(failure => failure.RuleId == spec.ManagedRuleId))
+        {
+            notes.Add(string.Create(CultureInfo.InvariantCulture, $"BPF: the connect-time verdict for this rule was not written ({string.Join("; ", layer.FailedUpdates.Where(failure => failure.RuleId == spec.ManagedRuleId))}); nftables alone enforces it."));
+            verified = false;
+        }
+        else if (layer.CoveredRules.Contains(spec.ManagedRuleId))
+        {
+            notes.Add(string.Create(CultureInfo.InvariantCulture, $"BPF-backed: connect-time verdict for this rule in the maps (generation {layer.Generation}{(layer.Verified ? ", read back verified" : ", read-back unavailable")})."));
+        }
+        else if (layer.Uncovered.FirstOrDefault(rule => rule.RuleId == spec.ManagedRuleId) is { } uncovered)
+        {
+            notes.Add($"nft-only: {uncovered.Reason}; the ~1 s exec window applies to this rule.");
+        }
+        else if (stored is { Spec.Enabled: true })
+        {
+            notes.Add("nft-only: the BPF layer does not express this rule.");
+        }
+
         if (!verified && stored is not null && rejection is null)
         {
             notes.Add($"Enforcement not verified: state {report.State.ToString().ToLowerInvariant()}.");
@@ -728,7 +911,11 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             var state = LoadState();
             if (_tableApplied)
             {
-                await layer.SyncAsync(state.Rules, state.Generation, ct).ConfigureAwait(false);
+                var sync = await layer.SyncAsync(state.Rules, state.Generation, ct).ConfigureAwait(false);
+                lock (_reportGate)
+                {
+                    _layerSync = sync;
+                }
             }
         }
         finally
@@ -737,17 +924,71 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         }
     }
 
-    /// <summary>Deletes the table, returns herded processes and removes the Axiom cgroups (daemon stop / uninstall).</summary>
+    /// <summary>Deletes the table, returns herded processes and removes the Axiom cgroups (daemon stop / uninstall). Each step runs even when the other failed.</summary>
     public async Task TeardownAsync(CancellationToken ct)
     {
-        await _table.DeleteAsync(ct).ConfigureAwait(false);
-        _cgroups.RemoveAll();
+        Exception? first = null;
+        try
+        {
+            await DeleteTableAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            first = exception;
+        }
+
+        try
+        {
+            ReleaseCgroups();
+        }
+        catch (Exception exception) when (first is null && exception is IOException or UnauthorizedAccessException)
+        {
+            first = exception;
+        }
+
+        ForgetPublished();
+        if (first is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(first).Throw();
+        }
+    }
+
+    /// <summary>Teardown step 1: <c>nft delete table inet axiom</c> (only that table).</summary>
+    public Task DeleteTableAsync(CancellationToken ct) => _table.DeleteAsync(ct);
+
+    /// <summary>Teardown step 2: returns herded processes and removes every <c>axiom.slice</c> app cgroup.</summary>
+    public void ReleaseCgroups() => _cgroups.RemoveAll();
+
+    /// <summary>Teardown step 3 (in-memory): nothing is published any more.</summary>
+    public void ForgetPublished()
+    {
         _tableApplied = false;
         _published = -1;
         lock (_reportGate)
         {
             _enforcement = null;
+            _layerSync = null;
         }
+    }
+
+    /// <summary>
+    /// Startup reconciliation of cgroups (LNX-2): keys the apps that have stored rules and releases the
+    /// processes of every other <c>axiom.slice</c> cgroup a crashed daemon left behind, removing the
+    /// empty ones. Returns what it found (for the journal). Only <c>axiom.slice</c> is ever listed.
+    /// </summary>
+    public IReadOnlyList<string> ReconcileCgroups()
+    {
+        var found = new List<string>();
+        var before = _cgroups.ListSliceCgroups();
+        if (before.Count == 0)
+        {
+            return found;
+        }
+
+        var apps = ReattachCgroups();
+        var report = _cgroups.Attribute();
+        found.Add(string.Create(CultureInfo.InvariantCulture, $"{before.Count} axiom.slice cgroup(s) from a previous daemon ({apps.Count} still ruled, {report.RemovedCgroups.Count} removed: {string.Join(", ", report.RemovedCgroups)})"));
+        return found;
     }
 
     private async Task<(NftCompilation Compilation, string? Error)> PublishAsync(IReadOnlyList<ManagedRule> rules, long stateGeneration, CancellationToken ct)
@@ -773,8 +1014,13 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         UpdateEnforcement(compilation, applied.Success ? null : applied.Error, placements);
         if (applied.Success && VerdictLayer is { } layer)
         {
-            // The layer is additive: a map write failure is logged by the layer and never fails the publish.
-            await layer.SyncAsync(rules, generation, ct).ConfigureAwait(false);
+            // The layer's outcome is part of the effective state (LNX-1): the callers fold it into the
+            // rule result, the enforcement report and the capability reason; the nft batch itself stands.
+            var sync = await layer.SyncAsync(rules, generation, ct).ConfigureAwait(false);
+            lock (_reportGate)
+            {
+                _layerSync = sync;
+            }
         }
 
         return (compilation, applied.Success ? null : applied.Error);

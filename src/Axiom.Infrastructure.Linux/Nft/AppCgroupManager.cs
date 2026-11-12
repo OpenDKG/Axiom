@@ -275,6 +275,10 @@ public sealed class AppCgroupManager : IAppCgroupResolver
         return released;
     }
 
+    /// <summary>Existing app cgroups under <c>axiom.slice</c> (only that slice is ever listed).</summary>
+    public IReadOnlyList<string> ListSliceCgroups() =>
+        _fs.CgroupExists(_slice) ? _fs.ListChildCgroups(_slice) : [];
+
     /// <summary>Returns every herded process and removes every Axiom cgroup (daemon shutdown / uninstall).</summary>
     public IReadOnlyList<string> RemoveAll()
     {

@@ -51,7 +51,7 @@ public sealed class BpfEffectiveStateTests
             Inodes.CgroupIds[curlCgroup] = 93;
             BpfPaths = BpfTestPaths.Create(Dir);
             Bpftool = new FakeBpftool(BpfPaths.PinDirectory);
-            Engine = new BpfEngine(Bpftool, BpfPaths, Inodes, cgroups, null, _ => null, _ => null, new CollectingSink(), privileged: true, Time) { Log = Log.Add };
+            Engine = new BpfEngine(Bpftool, BpfPaths, Inodes, cgroups, null, _ => null, _ => null, new CollectingSink(), privileged: true, Time) { Log = Log.Add, ReconcileBackoff = TimeSpan.FromMilliseconds(1) };
             Adapter = new NftFirewallPolicyAdapter(new NftEnginePaths(Path.Combine(Dir.Path, "filter")), new NftTable(Nft), cgroups, new CollectingSink(), () => true, Time)
             {
                 VerdictLayer = Engine,

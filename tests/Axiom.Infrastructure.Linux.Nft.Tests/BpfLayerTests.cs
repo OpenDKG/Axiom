@@ -20,20 +20,61 @@ internal sealed class FakeInodes : IInodeReader
     public ulong? CgroupId(string cgroupPath) => CgroupIds.TryGetValue(cgroupPath, out var id) ? id : null;
 }
 
-/// <summary>Records bpftool invocations; `prog loadall` materialises the pins so the engine's file checks behave.</summary>
+/// <summary>
+/// Records bpftool invocations and models the kernel side: `prog loadall` materialises the pins,
+/// `cgroup attach/detach/show` track attached programs (third-party ones can be pre-seeded),
+/// `map update/delete/dump` keep per-map contents so read-back reconciliation is exercised.
+/// </summary>
 internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
 {
+    private long _nextId = 100;
+
     public List<string> Calls { get; } = [];
 
     public HashSet<string> FailPrefixes { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Fail only the first N matching calls (transient faults); keyed by prefix.</summary>
+    public Dictionary<string, int> FailTimes { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Error text returned for a failing call (e.g. "Operation not permitted").</summary>
+    public string FailureText { get; set; } = "Error: simulated failure";
+
+    /// <summary>Map pin path → key hex → value hex.</summary>
+    public Dictionary<string, Dictionary<string, string>> Maps { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Programs attached at the cgroup root: id → (name, attach type).</summary>
+    public Dictionary<long, (string Name, string Hook)> Attached { get; } = [];
+
+    /// <summary>bpftool missing from PATH: every call throws like the real runner.</summary>
+    public bool Missing { get; set; }
 
     public ProcessResult Run(string fileName, IReadOnlyList<string> arguments, TimeSpan timeout)
     {
         var line = string.Join(' ', new[] { Path.GetFileName(fileName) }.Concat(arguments));
         Calls.Add(line);
+        if (Missing)
+        {
+            throw new System.ComponentModel.Win32Exception(2, "No such file or directory");
+        }
+
+        foreach (var (prefix, times) in FailTimes.ToList())
+        {
+            if (times > 0 && line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                FailTimes[prefix] = times - 1;
+                return new ProcessResult(1, string.Empty, FailureText + "\n");
+            }
+        }
+
         if (FailPrefixes.Any(prefix => line.StartsWith(prefix, StringComparison.Ordinal)))
         {
-            return new ProcessResult(1, string.Empty, "Error: simulated failure\n");
+            return new ProcessResult(1, string.Empty, FailureText + "\n");
+        }
+
+        var args = arguments.ToList();
+        if (args.Count > 0 && args[0] == "-j")
+        {
+            args.RemoveAt(0);
         }
 
         if (line.StartsWith("bpftool version", StringComparison.Ordinal))
@@ -51,12 +92,65 @@ internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
 
             foreach (var map in new[] { BpfLayout.ExeMap, BpfLayout.CgroupMap, BpfLayout.EventsMap, BpfLayout.StatsMap })
             {
-                File.WriteAllText(Path.Combine(pinDirectory, "maps", map), string.Empty);
+                var pin = Path.Combine(pinDirectory, "maps", map);
+                File.WriteAllText(pin, string.Empty);
+                Maps[pin] = new Dictionary<string, string>(StringComparer.Ordinal);
+            }
+
+            return Ok();
+        }
+
+        if (args.Count >= 2 && args[0] == "cgroup")
+        {
+            switch (args[1])
+            {
+                case "attach" when args.Count >= 6:
+                    Attached[_nextId++] = (Path.GetFileName(args[5]), args[3]);
+                    return Ok();
+                case "detach" when args.Count >= 6 && args[4] == "pinned":
+                    var name = Path.GetFileName(args[5]);
+                    foreach (var id in Attached.Where(pair => pair.Value.Name == name && pair.Value.Hook == args[3]).Select(pair => pair.Key).ToList())
+                    {
+                        Attached.Remove(id);
+                    }
+
+                    return Ok();
+                case "detach" when args.Count >= 6 && args[4] == "id":
+                    return Attached.Remove(long.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture)) ? Ok() : new ProcessResult(1, string.Empty, "Error: failed to detach program\n");
+                case "show":
+                    return Ok("[" + string.Join(',', Attached.Select(pair => $"{{\"id\":{pair.Key},\"attach_type\":\"{pair.Value.Hook}\",\"attach_flags\":\"multi\",\"name\":\"{pair.Value.Name}\"}}")) + "]");
             }
         }
 
-        return new ProcessResult(0, string.Empty, string.Empty);
+        if (args.Count >= 4 && args[0] == "map" && args[2] == "pinned")
+        {
+            if (!Maps.TryGetValue(args[3], out var contents) || !File.Exists(args[3]))
+            {
+                return new ProcessResult(255, string.Empty, $"Error: bpf obj get ({args[3]}): No such file or directory\n");
+            }
+
+            var keyEnd = args.IndexOf("value");
+            var key = args[1] is "update" or "delete" ? string.Concat(args.Skip(6).Take((keyEnd < 0 ? args.Count : keyEnd) - 6)) : string.Empty;
+            switch (args[1])
+            {
+                case "update":
+                    contents[key] = string.Concat(args.Skip(keyEnd + 2).TakeWhile(token => token != "any"));
+                    return Ok();
+                case "delete":
+                    return contents.Remove(key) ? Ok() : new ProcessResult(255, string.Empty, "Error: delete failed: No such file or directory\n");
+                case "dump":
+                    return Ok("[" + string.Join(',', contents.Select(pair => $"{{\"key\":[{Bytes(pair.Key)}],\"value\":[{Bytes(pair.Value)}]}}")) + "]");
+            }
+        }
+
+        return Ok();
     }
+
+    public IReadOnlyDictionary<string, string> Map(string pin) => Maps.TryGetValue(pin, out var contents) ? contents : new Dictionary<string, string>();
+
+    private static string Bytes(string hex) => string.Join(',', Enumerable.Range(0, hex.Length / 2).Select(index => string.Concat("\"0x", hex.AsSpan(index * 2, 2), "\"")));
+
+    private static ProcessResult Ok(string output = "") => new(0, output, string.Empty);
 }
 
 internal sealed class RecordingLayer : IEnforcementLayer
@@ -104,10 +198,12 @@ internal sealed class RecordingLayer : IEnforcementLayer
         await Task.Delay(Timeout.Infinite, ct);
     }
 
-    public Task SyncAsync(IReadOnlyList<ManagedRule> rules, long generation, CancellationToken ct)
+    public Task<LayerSyncResult> SyncAsync(IReadOnlyList<ManagedRule> rules, long generation, CancellationToken ct)
     {
         Syncs.Add((rules.Count, generation));
-        return Task.CompletedTask;
+        return Task.FromResult(Active
+            ? new LayerSyncResult { Generation = generation, Attached = true, Pinned = true, Applied = true, Verified = true, Attempts = 1, Status = Status }
+            : LayerSyncResult.Inactive(generation, Status));
     }
 }
 
