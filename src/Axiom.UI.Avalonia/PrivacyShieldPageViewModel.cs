@@ -227,9 +227,11 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private readonly HashSet<string> _expandedHistoryApps = new(StringComparer.OrdinalIgnoreCase);
     private string? _blockedHistorySignature;
     private DateTimeOffset _lastDohScanUtc = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastAdapterScanUtc = DateTimeOffset.MinValue;
     private bool _dohScanRunning;
 
     private static readonly TimeSpan DohScanInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan AdapterScanInterval = TimeSpan.FromSeconds(15);
 
     public PrivacyShieldPageViewModel(
         IServiceRequestClient? serviceClient,
@@ -1063,7 +1065,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             .ToList();
 
         UpdateBlockedHistory(historyRows);
-        RefreshAdapters();
+        RefreshAdapters(force: false);
     }
 
     /// <summary>
@@ -1364,21 +1366,26 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             .ThenBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    private void RefreshAdapters()
+    private void RefreshAdapters(bool force = true)
     {
-        var selectedName = SelectedAdapter?.Name;
-        var options = BuildAdapterOptions();
-        if (!Adapters.SequenceEqual(options))
+        var now = DateTimeOffset.UtcNow;
+        if (force || now - _lastAdapterScanUtc >= AdapterScanInterval)
         {
-            Adapters.Clear();
-            foreach (var option in options)
+            _lastAdapterScanUtc = now;
+            var selectedName = SelectedAdapter?.Name;
+            var options = BuildAdapterOptions();
+            if (!Adapters.SequenceEqual(options))
             {
-                Adapters.Add(option);
-            }
+                Adapters.Clear();
+                foreach (var option in options)
+                {
+                    Adapters.Add(option);
+                }
 
-            SelectedAdapter = Adapters.FirstOrDefault(adapter =>
-                                  string.Equals(adapter.Name, selectedName, StringComparison.OrdinalIgnoreCase))
-                              ?? Adapters.FirstOrDefault();
+                SelectedAdapter = Adapters.FirstOrDefault(adapter =>
+                                      string.Equals(adapter.Name, selectedName, StringComparison.OrdinalIgnoreCase))
+                                  ?? Adapters.FirstOrDefault();
+            }
         }
 
         UpdateDnsOutageWarning();

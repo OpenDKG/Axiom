@@ -32,6 +32,9 @@ public sealed partial class ProcessMetadataProvider
     private readonly ConcurrentDictionary<string, CachedMetadata> _metadataCache =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly ConcurrentDictionary<string, CachedImageMetadata> _imageCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private readonly object _wmiGate = new();
     private WmiSnapshot _wmi = WmiSnapshot.Empty;
     private DateTimeOffset _wmiUtc = DateTimeOffset.MinValue;
@@ -89,28 +92,7 @@ public sealed partial class ProcessMetadataProvider
             ? string.Join(", ", parentServices.Take(8))
             : string.Empty;
 
-        var signer = string.Empty;
-        var signatureStatus = "Unavailable";
-        var product = string.Empty;
-        var version = string.Empty;
-
-        if (!string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath))
-        {
-            try
-            {
-                var versionInfo = FileVersionInfo.GetVersionInfo(executablePath);
-                product = versionInfo.ProductName ?? string.Empty;
-                version = versionInfo.FileVersion ?? string.Empty;
-            }
-            catch (Exception exception) when (exception is
-                         IOException or UnauthorizedAccessException or
-                         System.Security.SecurityException or InvalidOperationException)
-            {
-                // Version metadata is optional.
-            }
-
-            (signer, signatureStatus) = VerifySignature(executablePath);
-        }
+        var (signer, signatureStatus, product, version) = ResolveImageMetadata(executablePath);
 
         return new ProcessMetadata(
             parentId > 4 ? parentId : null,
@@ -123,6 +105,59 @@ public sealed partial class ProcessMetadataProvider
             version,
             parentHostedServices,
             hostedServices);
+    }
+
+    private (string Signer, string SignatureStatus, string Product, string Version) ResolveImageMetadata(string executablePath)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+        {
+            return (string.Empty, "Unavailable", string.Empty, string.Empty);
+        }
+
+        long writeTicks = 0;
+        try
+        {
+            writeTicks = File.GetLastWriteTimeUtc(executablePath).Ticks;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Fall back to un-timestamped cache entry.
+        }
+
+        if (_imageCache.TryGetValue(executablePath, out var cached) &&
+            cached.LastWriteTicks == writeTicks)
+        {
+            return (cached.Signer, cached.SignatureStatus, cached.Product, cached.Version);
+        }
+
+        var product = string.Empty;
+        var version = string.Empty;
+        try
+        {
+            var versionInfo = FileVersionInfo.GetVersionInfo(executablePath);
+            product = versionInfo.ProductName ?? string.Empty;
+            version = versionInfo.FileVersion ?? string.Empty;
+        }
+        catch (Exception exception) when (exception is
+                     IOException or UnauthorizedAccessException or
+                     System.Security.SecurityException or InvalidOperationException)
+        {
+            // Version metadata is optional.
+        }
+
+        var (signer, signatureStatus) = VerifySignature(executablePath);
+        var entry = new CachedImageMetadata(signer, signatureStatus, product, version, writeTicks);
+        _imageCache[executablePath] = entry;
+
+        if (_imageCache.Count > 512)
+        {
+            foreach (var key in _imageCache.Keys.Take(128))
+            {
+                _imageCache.TryRemove(key, out _);
+            }
+        }
+
+        return (signer, signatureStatus, product, version);
     }
 
     private static string BuildParentChain(
@@ -322,13 +357,19 @@ public sealed partial class ProcessMetadataProvider
                 _wmiUtc = now;
             }
             else if (processId > 4 &&
-                     !_wmi.CommandLines.ContainsKey(processId) &&
+                     !_wmi.SeenProcessIds.Contains(processId) &&
                      now - _wmiUtc >= TimeSpan.FromSeconds(5))
             {
-                // A process may have started after the last snapshot. Refresh once for a missing
-                // PID, then let the normal lifetime avoid repeated WMI queries.
+                // A process may have started after the last snapshot. Refresh once for a genuinely
+                // unseen PID, then record it so processes with empty/protected command lines do not
+                // re-trigger WMI queries every 5 seconds.
                 _wmi = ReadWmi();
                 _wmiUtc = now;
+            }
+
+            if (processId > 4)
+            {
+                _wmi.SeenProcessIds.Add(processId);
             }
 
             return _wmi;
@@ -337,6 +378,7 @@ public sealed partial class ProcessMetadataProvider
 
     private static WmiSnapshot ReadWmi()
     {
+        var seenProcessIds = new HashSet<int>();
         var commandLines = new Dictionary<int, string>();
         var services = new Dictionary<int, List<string>>();
 
@@ -355,6 +397,7 @@ public sealed partial class ProcessMetadataProvider
                         continue;
                     }
 
+                    seenProcessIds.Add(processId);
                     if (item["CommandLine"] is string commandLine && !string.IsNullOrWhiteSpace(commandLine))
                     {
                         commandLines[processId] = commandLine;
@@ -385,6 +428,7 @@ public sealed partial class ProcessMetadataProvider
                         continue;
                     }
 
+                    seenProcessIds.Add(processId);
                     if (!services.TryGetValue(processId, out var names))
                     {
                         names = [];
@@ -405,7 +449,7 @@ public sealed partial class ProcessMetadataProvider
             // Service ownership is optional.
         }
 
-        return new WmiSnapshot(commandLines, services);
+        return new WmiSnapshot(seenProcessIds, commandLines, services);
     }
 
     private static int ToInt(object? value)
@@ -494,15 +538,24 @@ public sealed partial class ProcessMetadataProvider
     private sealed record ProcessNode(int ParentProcessId, string ProcessName);
 
     private sealed record WmiSnapshot(
+        HashSet<int> SeenProcessIds,
         IReadOnlyDictionary<int, string> CommandLines,
         IReadOnlyDictionary<int, List<string>> Services)
     {
         public static WmiSnapshot Empty { get; } = new(
+            [],
             new Dictionary<int, string>(),
             new Dictionary<int, List<string>>());
     }
 
     private sealed record CachedMetadata(ProcessMetadata Metadata, DateTimeOffset ResolvedUtc);
+
+    private sealed record CachedImageMetadata(
+        string Signer,
+        string SignatureStatus,
+        string Product,
+        string Version,
+        long LastWriteTicks);
 }
 
 /// <summary>Resolved metadata for one process, with empty strings where Windows exposes nothing.</summary>

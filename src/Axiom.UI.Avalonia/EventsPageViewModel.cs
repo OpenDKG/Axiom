@@ -16,7 +16,7 @@ namespace Axiom.UI.Avalonia;
 /// Event timeline for persisted network flows. It queries the local service; without a service the
 /// page says so instead of generating events. File, agent, system and blocked feeds are not stored.
 /// </summary>
-public sealed partial class EventsPageViewModel : PageViewModel, IDisposable
+public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePage, IDisposable
 {
     private const int PageLimit = 1000;
 
@@ -189,6 +189,14 @@ public sealed partial class EventsPageViewModel : PageViewModel, IDisposable
         {
         }
     }
+
+    public void Activate()
+    {
+        _refreshTimer?.Start();
+        _ = RefreshAsync();
+    }
+
+    public void Deactivate() => _refreshTimer?.StopTimer();
 
     public void Dispose()
     {

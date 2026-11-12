@@ -18,7 +18,11 @@ public sealed class ProtectionSettingsStore
         WriteIndented = true,
     };
 
+    private readonly object _gate = new();
     private readonly string _path;
+    private ProtectionSettings? _cached;
+    private long _cachedWriteTicks = -1;
+    private long _cachedLength = -1;
 
     public ProtectionSettingsStore(string? path = null)
     {
@@ -33,35 +37,56 @@ public sealed class ProtectionSettingsStore
 
     public ProtectionSettings Load()
     {
-        try
+        lock (_gate)
         {
-            if (!File.Exists(_path))
+            try
+            {
+                var info = new FileInfo(_path);
+                if (!info.Exists)
+                {
+                    _cached = null;
+                    _cachedWriteTicks = -1;
+                    _cachedLength = -1;
+                    return new ProtectionSettings();
+                }
+
+                var writeTicks = info.LastWriteTimeUtc.Ticks;
+                var length = info.Length;
+                if (_cached is not null &&
+                    writeTicks == _cachedWriteTicks &&
+                    length == _cachedLength)
+                {
+                    return _cached;
+                }
+
+                var settings = JsonSerializer.Deserialize<ProtectionSettings>(File.ReadAllText(_path), JsonOptions);
+                if (settings is null || settings.SchemaVersion != CurrentSchemaVersion)
+                {
+                    return new ProtectionSettings();
+                }
+
+                var normalized = settings with
+                {
+                    Decisions = (settings.Decisions ?? [])
+                        .Where(decision => !string.IsNullOrWhiteSpace(decision.AppPath))
+                        .ToList(),
+                    Pending = (settings.Pending ?? [])
+                        .Where(item => !string.IsNullOrWhiteSpace(item.AppPath))
+                        .ToList(),
+                    Dismissals = (settings.Dismissals ?? [])
+                        .Where(item => !string.IsNullOrWhiteSpace(item.AppPath))
+                        .ToList(),
+                };
+
+                _cached = normalized;
+                _cachedWriteTicks = writeTicks;
+                _cachedLength = length;
+                return normalized;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
             {
                 return new ProtectionSettings();
             }
-
-            var settings = JsonSerializer.Deserialize<ProtectionSettings>(File.ReadAllText(_path), JsonOptions);
-            if (settings is null || settings.SchemaVersion != CurrentSchemaVersion)
-            {
-                return new ProtectionSettings();
-            }
-
-            return settings with
-            {
-                Decisions = (settings.Decisions ?? [])
-                    .Where(decision => !string.IsNullOrWhiteSpace(decision.AppPath))
-                    .ToList(),
-                Pending = (settings.Pending ?? [])
-                    .Where(item => !string.IsNullOrWhiteSpace(item.AppPath))
-                    .ToList(),
-                Dismissals = (settings.Dismissals ?? [])
-                    .Where(item => !string.IsNullOrWhiteSpace(item.AppPath))
-                    .ToList(),
-            };
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return new ProtectionSettings();
         }
     }
 
@@ -69,45 +94,64 @@ public sealed class ProtectionSettingsStore
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        try
+        lock (_gate)
         {
-            var directory = System.IO.Path.GetDirectoryName(_path);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            var payload = JsonSerializer.Serialize(
-                settings with { SchemaVersion = CurrentSchemaVersion },
-                JsonOptions);
-
-            // A predictable temp name lets another user pre-create the file and keep ownership of
-            // the saved settings. Use a random name and move over the target atomically.
-            var temporary = _path + "." + Path.GetRandomFileName() + ".tmp";
             try
             {
-                File.WriteAllText(temporary, payload);
-                if (!OperatingSystem.IsWindows())
+                var directory = System.IO.Path.GetDirectoryName(_path);
+                if (!string.IsNullOrEmpty(directory))
                 {
-                    // Machine-wide state written by the root daemon: not readable by other local users.
-                    File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                    Directory.CreateDirectory(directory);
                 }
 
-                File.Move(temporary, _path, overwrite: true);
+                var normalized = settings with
+                {
+                    SchemaVersion = CurrentSchemaVersion,
+                    Decisions = (settings.Decisions ?? [])
+                        .Where(decision => !string.IsNullOrWhiteSpace(decision.AppPath))
+                        .ToList(),
+                    Pending = (settings.Pending ?? [])
+                        .Where(item => !string.IsNullOrWhiteSpace(item.AppPath))
+                        .ToList(),
+                    Dismissals = (settings.Dismissals ?? [])
+                        .Where(item => !string.IsNullOrWhiteSpace(item.AppPath))
+                        .ToList(),
+                };
+
+                var payload = JsonSerializer.Serialize(normalized, JsonOptions);
+
+                // A predictable temp name lets another user pre-create the file and keep ownership of
+                // the saved settings. Use a random name and move over the target atomically.
+                var temporary = _path + "." + Path.GetRandomFileName() + ".tmp";
+                try
+                {
+                    File.WriteAllText(temporary, payload);
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        // Machine-wide state written by the root daemon: not readable by other local users.
+                        File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                    }
+
+                    File.Move(temporary, _path, overwrite: true);
+                }
+                finally
+                {
+                    if (File.Exists(temporary))
+                    {
+                        File.Delete(temporary);
+                    }
+                }
+
+                var info = new FileInfo(_path);
+                _cached = normalized;
+                _cachedWriteTicks = info.Exists ? info.LastWriteTimeUtc.Ticks : -1;
+                _cachedLength = info.Exists ? info.Length : -1;
+                return true;
             }
-            finally
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                if (File.Exists(temporary))
-                {
-                    File.Delete(temporary);
-                }
+                return false;
             }
-
-            return true;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            return false;
         }
     }
 }

@@ -34,6 +34,8 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
 
     private readonly List<PrivacyShieldBlockedEvent> _pending = [];
 
+    private readonly List<PrivacyShieldBlockedEvent> _persisted = [];
+
     private readonly Timer _flushTimer;
 
     private int _count;
@@ -47,7 +49,8 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
         _path = path ?? Path.Combine(
             Axiom.Contracts.AxiomPaths.ServicePrivateDataDirectory,
             "privacy-shield-blocked.jsonl");
-        _count = CountLines();
+        _persisted.AddRange(ReadPersistedFromDisk());
+        _count = _persisted.Count;
         _flushTimer = new Timer(_ => Flush(), null, FlushInterval, FlushInterval);
     }
 
@@ -98,6 +101,19 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
                     File.SetUnixFileMode(_path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
                 }
 
+                foreach (var item in _pending)
+                {
+                    if (!string.IsNullOrWhiteSpace(item.Domain))
+                    {
+                        _persisted.Add(item);
+                    }
+                }
+
+                if (_persisted.Count > MaxEntries)
+                {
+                    _persisted.RemoveRange(0, _persisted.Count - MaxEntries);
+                }
+
                 _count += _pending.Count;
                 _pending.Clear();
             }
@@ -112,39 +128,27 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
     {
         lock (_gate)
         {
-            try
+            var limit = Math.Clamp(max, 1, MaxEntries);
+            var startIndex = Math.Max(0, _persisted.Count - limit);
+            var events = new List<PrivacyShieldBlockedEvent>((_persisted.Count - startIndex) + _pending.Count);
+            for (var i = startIndex; i < _persisted.Count; i++)
             {
-                var limit = Math.Clamp(max, 1, MaxEntries);
-                var events = new List<PrivacyShieldBlockedEvent>();
-                if (File.Exists(_path))
-                {
-                    foreach (var line in File.ReadLines(_path).TakeLast(limit))
-                    {
-                        try
-                        {
-                            var item = JsonSerializer.Deserialize<PrivacyShieldBlockedEvent>(line, JsonOptions);
-                            if (item is not null && !string.IsNullOrWhiteSpace(item.Domain))
-                            {
-                                events.Add(item);
-                            }
-                        }
-                        catch (JsonException)
-                        {
-                        }
-                    }
-                }
+                events.Add(_persisted[i]);
+            }
 
-                // Newly blocked entries are still in RAM; show them before the periodic flush.
-                events.AddRange(_pending);
-                return events
-                    .OrderByDescending(item => item.BlockedUtc)
-                    .Take(limit)
-                    .ToArray();
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            // Newly blocked entries are still in RAM; show them before the periodic flush.
+            foreach (var item in _pending)
             {
-                return _pending.ToArray();
+                if (!string.IsNullOrWhiteSpace(item.Domain))
+                {
+                    events.Add(item);
+                }
             }
+
+            return events
+                .OrderByDescending(item => item.BlockedUtc)
+                .Take(limit)
+                .ToArray();
         }
     }
 
@@ -155,6 +159,7 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
             try
             {
                 _pending.Clear();
+                _persisted.Clear();
                 if (File.Exists(_path))
                 {
                     File.Delete(_path);
@@ -176,22 +181,47 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
 
     private void CompactLocked()
     {
+        var keepCount = MaxEntries / 2;
         var lines = File.Exists(_path)
-            ? File.ReadLines(_path).TakeLast(MaxEntries / 2).ToArray()
+            ? File.ReadLines(_path).TakeLast(keepCount).ToArray()
             : [];
         File.WriteAllLines(_path, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         _count = lines.Length;
+        if (_persisted.Count > keepCount)
+        {
+            _persisted.RemoveRange(0, _persisted.Count - keepCount);
+        }
     }
 
-    private int CountLines()
+    private List<PrivacyShieldBlockedEvent> ReadPersistedFromDisk()
     {
+        var events = new List<PrivacyShieldBlockedEvent>();
         try
         {
-            return File.Exists(_path) ? File.ReadLines(_path).Count() : 0;
+            if (!File.Exists(_path))
+            {
+                return events;
+            }
+
+            foreach (var line in File.ReadLines(_path).TakeLast(MaxEntries))
+            {
+                try
+                {
+                    var item = JsonSerializer.Deserialize<PrivacyShieldBlockedEvent>(line, JsonOptions);
+                    if (item is not null && !string.IsNullOrWhiteSpace(item.Domain))
+                    {
+                        events.Add(item);
+                    }
+                }
+                catch (JsonException)
+                {
+                }
+            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            return 0;
         }
+
+        return events;
     }
 }
