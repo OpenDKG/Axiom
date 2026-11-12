@@ -946,12 +946,17 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     /// </summary>
     public static readonly TimeSpan EnforcementRefreshInterval = TimeSpan.FromSeconds(5);
 
-    private DateTimeOffset _lastEnforcementRefreshUtc;
+    /// <summary>
+    /// When the rules/enforcement section was last queried (UTC); the reference point for
+    /// <see cref="RefreshEnforcementIfStale"/>. Exposed so tests can derive their "now" from it
+    /// instead of racing the wall clock.
+    /// </summary>
+    public DateTimeOffset LastEnforcementRefreshUtc { get; private set; }
 
     /// <summary>Re-queries rules + capability when the last query is older than <see cref="EnforcementRefreshInterval"/>.</summary>
     public void RefreshEnforcementIfStale(DateTimeOffset now)
     {
-        if (now - _lastEnforcementRefreshUtc < EnforcementRefreshInterval)
+        if (now - LastEnforcementRefreshUtc < EnforcementRefreshInterval)
         {
             return;
         }
@@ -1391,7 +1396,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         }
 
         IsBusy = true;
-        _lastEnforcementRefreshUtc = DateTimeOffset.UtcNow;
+        LastEnforcementRefreshUtc = DateTimeOffset.UtcNow;
 
         try
         {

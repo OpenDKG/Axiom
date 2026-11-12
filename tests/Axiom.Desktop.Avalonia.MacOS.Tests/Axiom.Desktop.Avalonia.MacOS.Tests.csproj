@@ -3,6 +3,12 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <!--
+      macOS-only runtime behaviour ('/' paths, File.SetUnixFileMode, launchd/sysext wording): the
+      project still compiles everywhere, but `dotnet test Axiom.sln` on a Windows runner skips it.
+    -->
+    <IsTestProject Condition="!$([MSBuild]::IsOSPlatform('Windows'))">true</IsTestProject>
+    <IsTestProject Condition="$([MSBuild]::IsOSPlatform('Windows'))">false</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
