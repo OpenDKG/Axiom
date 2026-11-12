@@ -51,6 +51,7 @@ public sealed class SystemdAndPathsTests
         Assert.Contains("ReadWritePaths=/var/lib/axiom /run/axiom", unit, StringComparison.Ordinal);
         Assert.Contains("NoNewPrivileges=yes", unit, StringComparison.Ordinal);
         Assert.Contains("CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN", unit, StringComparison.Ordinal);
+        Assert.Contains(" CAP_NET_BIND_SERVICE", unit, StringComparison.Ordinal); // Privacy Shield binds 127.0.0.1:53
         Assert.Contains("Environment=AXIOM_SERVICE=1", unit, StringComparison.Ordinal);
         Assert.Equal("/usr/libexec/axiom/axiomd", SystemdUnit.ReadExecStart(unit));
 

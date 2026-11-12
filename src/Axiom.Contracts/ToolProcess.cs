@@ -49,6 +49,9 @@ public static class ToolProcess
             RedirectStandardError = true,
             RedirectStandardInput = false,
         };
+        // systemd tools (resolvectl, systemctl) report EXIT_STATUS= to an inherited $NOTIFY_SOCKET;
+        // under NotifyAccess=main that only produces "reception only permitted for main PID" noise.
+        startInfo.Environment.Remove("NOTIFY_SOCKET");
         foreach (var argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);

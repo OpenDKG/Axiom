@@ -31,6 +31,7 @@ public sealed class NftTraceProcessSource : INftTraceSource
             RedirectStandardError = true,
             UseShellExecute = false,
         };
+        start.Environment.Remove("NOTIFY_SOCKET"); // keep systemd's notify channel to the main pid
         start.ArgumentList.Add("monitor");
         start.ArgumentList.Add("trace");
         using var process = new Process { StartInfo = start };

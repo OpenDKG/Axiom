@@ -22,10 +22,11 @@ public static class SystemdUnit
     /// <c>cmdline</c> of every user's processes for socket attribution), CAP_DAC_OVERRIDE
     /// (<c>/etc/resolv.conf</c> fallback and NetworkManager/resolved state files),
     /// CAP_CHOWN + CAP_FOWNER (0700/0600 enforcement of <c>/var/lib/axiom</c>), CAP_KILL
-    /// (ending a blocked process on request).
+    /// (ending a blocked process on request), CAP_NET_BIND_SERVICE (the Privacy Shield resolver
+    /// listens on 127.0.0.1:53; without it the bind fails with EACCES even as root).
     /// </summary>
     public const string CapabilityBoundingSet =
-        "CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN CAP_FOWNER CAP_KILL";
+        "CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN CAP_FOWNER CAP_KILL CAP_NET_BIND_SERVICE";
 
     /// <summary>The unit text (pure; unit-tested).</summary>
     public static string Build(string executablePath, string machineDataDirectory, string runDirectory)

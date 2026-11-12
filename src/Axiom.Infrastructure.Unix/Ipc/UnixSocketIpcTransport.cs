@@ -62,7 +62,8 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
     public static bool IsWithinUidCap(uint? uid, int activeForUid) =>
         uid == 0 || activeForUid < MaxConnectionsPerUid;
 
-    public string Prepare() => PeerAuthorization.Description;
+    // The startup log must describe the range of the running OS (Linux: uid >= 1000, SO_PEERCRED).
+    public string Prepare() => UnixAccountRange.Current.Describe();
 
     public async Task RunAsync(IpcRequestDispatcher dispatcher, Action<string> log, CancellationToken cancellationToken)
     {

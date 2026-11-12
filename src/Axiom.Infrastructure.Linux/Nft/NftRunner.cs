@@ -42,6 +42,7 @@ public sealed class NftProcessRunner : INftRunner
             RedirectStandardError = true,
             UseShellExecute = false,
         };
+        start.Environment.Remove("NOTIFY_SOCKET"); // keep systemd's notify channel to the main pid
         foreach (var arg in args)
         {
             start.ArgumentList.Add(arg);
