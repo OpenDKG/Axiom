@@ -337,6 +337,15 @@
           "Axiom.Contracts": "[0.13.0, )"
         }
       },
+      "axiom.infrastructure.linux": {
+        "type": "Project",
+        "dependencies": {
+          "Axiom.Contracts": "[0.13.0, )",
+          "Axiom.Core": "[0.13.0, )",
+          "Axiom.Infrastructure.Unix": "[0.13.0, )",
+          "Axiom.Service.Hosting": "[0.13.0, )"
+        }
+      },
       "axiom.infrastructure.macos": {
         "type": "Project",
         "dependencies": {

@@ -49,10 +49,18 @@ public static class AxiomPaths
         CurrentPlatform,
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData));
 
+    /// <summary>
+    /// Overrides the machine data directory on Unix (development and non-root runs of the daemon,
+    /// e.g. <c>AXIOM_DATA_ROOT=$TMPDIR/axiom</c>). Ignored on Windows, where ProgramData is the
+    /// only machine root the service and its ACL hardening know.
+    /// </summary>
+    public const string MachineDataRootVariable = "AXIOM_DATA_ROOT";
+
     /// <summary>Machine-wide data directory (service database, shield, privacy, filter state).</summary>
     public static string MachineDataDirectory => MachineDataDirectoryFor(
         CurrentPlatform,
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData));
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        Environment.GetEnvironmentVariable(MachineDataRootVariable));
 
     /// <summary>Parent directory of the per-user data directory (LocalApplicationData).</summary>
     public static string UserBaseDirectory =>
@@ -108,6 +116,12 @@ public static class AxiomPaths
         Path.Combine(
             MachineBaseDirectoryFor(platform, commonApplicationData),
             platform == AxiomPlatform.Linux ? LinuxDirectoryName : DirectoryName);
+
+    /// <summary>Pure rule with the Unix-only <c>AXIOM_DATA_ROOT</c> override (Windows ignores it).</summary>
+    public static string MachineDataDirectoryFor(AxiomPlatform platform, string? commonApplicationData, string? machineDataRootOverride) =>
+        platform != AxiomPlatform.Windows && !string.IsNullOrWhiteSpace(machineDataRootOverride)
+            ? Path.GetFullPath(machineDataRootOverride.Trim())
+            : MachineDataDirectoryFor(platform, commonApplicationData);
 
     /// <summary>Pure service-mode decision so every platform rule is unit-testable.</summary>
     public static bool IsServiceProcessFor(

@@ -30,6 +30,11 @@ internal static class ServicePlatform
 
     public static bool TryRunCommand(string[] args, out int exitCode)
     {
+        if (OperatingSystem.IsLinux())
+        {
+            return LinuxServicePlatform.TryRunCommand(args, out exitCode);
+        }
+
         exitCode = 0;
         if (args.Length > 0 && args[0].StartsWith("--", StringComparison.Ordinal))
         {
@@ -68,6 +73,12 @@ internal static class ServicePlatform
     /// </summary>
     public static void HardenMachineState()
     {
+        if (OperatingSystem.IsLinux())
+        {
+            LinuxServicePlatform.HardenMachineState();
+            return;
+        }
+
         if (!Environment.IsPrivilegedProcess)
         {
             return;
@@ -89,7 +100,9 @@ internal static class ServicePlatform
     }
 
     /// <summary>Network recovery baseline in the machine data root (<c>network-recovery.txt</c>, 0600).</summary>
-    public static string RecoverySnapshotPath => MacServicePaths.Default.RecoverySnapshotFile;
+    public static string RecoverySnapshotPath => OperatingSystem.IsLinux()
+        ? LinuxServicePlatform.RecoverySnapshotPath
+        : MacServicePaths.Default.RecoverySnapshotFile;
 
     /// <summary>
     /// After a snapshot lands in the machine data directory, re-assert 0700/0600 on it
@@ -100,10 +113,18 @@ internal static class ServicePlatform
     public static IPrivacyDnsPlatform CreateDefaultPrivacyDnsPlatform() =>
         OperatingSystem.IsMacOS()
             ? MacPrivacyDnsPlatform.Create(MacServicePaths.Default)
-            : NullPrivacyDnsPlatform.Instance;
+            : OperatingSystem.IsLinux()
+                ? LinuxServicePlatform.CreateDefaultPrivacyDnsPlatform()
+                : NullPrivacyDnsPlatform.Instance;
 
     public static void ConfigureServices(HostApplicationBuilder builder)
     {
+        if (OperatingSystem.IsLinux())
+        {
+            LinuxServicePlatform.ConfigureServices(builder);
+            return;
+        }
+
         var paths = MacServicePaths.Default;
         builder.Services.AddSingleton(paths);
         builder.Services.AddSingleton<FilterStatus>();
@@ -151,6 +172,11 @@ internal static class ServicePlatform
 
     public static (INetworkRecoveryDnsAdapter Dns, IOwnedRuleRecoveryAdapter Firewall, IDisposable? Owner) CreateRecoveryAdapters()
     {
+        if (OperatingSystem.IsLinux())
+        {
+            return LinuxServicePlatform.CreateRecoveryAdapters();
+        }
+
         var paths = MacServicePaths.Default;
         var firewall = new MacFirewallPolicyAdapter(paths, new FilterStatus());
         return (MacDnsRecoveryAdapter.Create(paths), firewall, firewall);

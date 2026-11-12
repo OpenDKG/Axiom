@@ -5,6 +5,7 @@
     <Project Path="src/Axiom.Desktop.Avalonia.MacOS/Axiom.Desktop.Avalonia.MacOS.csproj" />
     <Project Path="src/Axiom.Infrastructure.MacOS/Axiom.Infrastructure.MacOS.csproj" />
     <Project Path="src/Axiom.Infrastructure.Unix/Axiom.Infrastructure.Unix.csproj" />
+    <Project Path="src/Axiom.Infrastructure.Linux/Axiom.Infrastructure.Linux.csproj" />
     <Project Path="src/Axiom.McpServer/Axiom.McpServer.csproj" />
     <Project Path="src/Axiom.Persistence/Axiom.Persistence.csproj" />
     <Project Path="src/Axiom.Presentation/Axiom.Presentation.csproj" />
@@ -17,6 +18,7 @@
     <Project Path="tests/Axiom.Desktop.Avalonia.MacOS.Tests/Axiom.Desktop.Avalonia.MacOS.Tests.csproj" />
     <Project Path="tests/Axiom.Infrastructure.MacOS.Tests/Axiom.Infrastructure.MacOS.Tests.csproj" />
     <Project Path="tests/Axiom.Infrastructure.Unix.Tests/Axiom.Infrastructure.Unix.Tests.csproj" />
+    <Project Path="tests/Axiom.Infrastructure.Linux.Tests/Axiom.Infrastructure.Linux.Tests.csproj" />
     <Project Path="tests/Axiom.McpServer.Tests/Axiom.McpServer.Tests.csproj" />
     <Project Path="tests/Axiom.Persistence.Tests/Axiom.Persistence.Tests.csproj" />
     <Project Path="tests/Axiom.Presentation.Tests/Axiom.Presentation.Tests.csproj" />
