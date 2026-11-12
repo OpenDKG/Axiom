@@ -2,6 +2,19 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.15.0
+
+- **Agent and Network dashboards are separate.** The default landing page is now **Agent
+  Dashboard**: sessions, tool calls, blocked and flagged counts plus the agent activity table and
+  security findings. **Network** keeps sockets, processes, loopback, throughput, new connections,
+  top apps and live sockets.
+- **Navigation.** A new **OVERVIEW** group holds Agent Dashboard first and Network second;
+  **MONITORING** now starts at Live Connections. The PROTECTION order is unchanged.
+- **One audit load.** The dashboard shares the existing `AgentsPageViewModel`, so opening it does
+  not start a second Blackbox audit or duplicate its polling.
+- **Verification.** `Axiom.UI.Avalonia` builds with 0 warnings and 0 errors; the Avalonia UI test
+  suite passes 36/36, including headless navigation through all 13 pages.
+
 ## What's in 0.14.0
 
 - **Dashboard hierarchy.** The full-width System status card moved out of the Dashboard into the
