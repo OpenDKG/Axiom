@@ -113,8 +113,8 @@ public partial class MainWindow : Window
         }
 
         var fallback = IsGlassLight()
-            ? Color.Parse("#EDF3F8")
-            : Color.Parse("#0B1019");
+            ? Color.Parse("#F4F7FA")
+            : Color.Parse("#090C12");
         Resources[WindowBrushKey] = new SolidColorBrush(fallback);
     }
 
@@ -148,13 +148,14 @@ public partial class MainWindow : Window
 
     private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        var properties = e.GetCurrentPoint(this).Properties;
+        if (!properties.IsLeftButtonPressed && !properties.IsRightButtonPressed)
         {
             return;
         }
 
         // Selectable text handles the pointer before the row does. Keep row selection working when
-        // the user clicks text inside a ListBox item, while still allowing the text selection.
+        // the user left-clicks or right-clicks text inside a ListBox item.
         SelectContainingListItem(e.Source as Visual);
     }
 

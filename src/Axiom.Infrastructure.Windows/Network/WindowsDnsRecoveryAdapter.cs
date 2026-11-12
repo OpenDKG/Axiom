@@ -347,10 +347,8 @@ public sealed class WindowsDnsRecoveryAdapter : INetworkRecoveryDnsAdapter
             return false;
         }
 
-        var leftSet = new HashSet<string>(
-            left.Select(NormalizeAddress),
-            StringComparer.OrdinalIgnoreCase);
-        return right.All(server => leftSet.Contains(NormalizeAddress(server)));
+        return left.Select(NormalizeAddress)
+            .SequenceEqual(right.Select(NormalizeAddress), StringComparer.OrdinalIgnoreCase);
     }
 
     private static string NormalizeAddress(string value) =>
@@ -450,8 +448,8 @@ public sealed class WindowsDnsRecoveryAdapter : INetworkRecoveryDnsAdapter
                     $"{failureMessage}: PowerShell could not be started.");
             }
 
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
 
             if (!process.WaitForExit(CommandTimeoutMilliseconds))
             {
@@ -467,6 +465,10 @@ public sealed class WindowsDnsRecoveryAdapter : INetworkRecoveryDnsAdapter
                     "dns_command_timeout",
                     $"{failureMessage}: the network command timed out.");
             }
+
+            Task.WaitAll(stdoutTask, stderrTask);
+            var stdout = stdoutTask.GetAwaiter().GetResult();
+            var stderr = stderrTask.GetAwaiter().GetResult();
 
             if (process.ExitCode != 0)
             {

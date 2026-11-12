@@ -67,6 +67,12 @@ internal static class ServicePlatform
     /// <summary>Machine-wide location written by the elevated service and the recovery command.</summary>
     public static string RecoverySnapshotPath => NetworkRecoverySnapshotStore.DefaultPath;
 
+    /// <summary>
+    /// After a snapshot lands in the machine-wide location, re-assert the directory ACLs
+    /// (upstream v0.12.0: <c>MachineStateSecurity.HardenProgramData()</c> on capture).
+    /// </summary>
+    public static void HardenRecoverySnapshotLocation() => MachineStateSecurity.HardenProgramData();
+
     public static IPrivacyDnsPlatform CreateDefaultPrivacyDnsPlatform() =>
         new WindowsPrivacyDnsPlatform(PrivacyDnsFailSafe.RestoreIfNeeded);
 

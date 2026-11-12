@@ -18,9 +18,9 @@ namespace Axiom.UI.Avalonia;
 /// </summary>
 public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUserInteraction
 {
-    private static readonly IBrush Background = new SolidColorBrush(Color.Parse("#161B22"));
-    private static readonly IBrush Border = new SolidColorBrush(Color.Parse("#2E3A47"));
-    private static readonly IBrush PrimaryText = new SolidColorBrush(Color.Parse("#E6EDF3"));
+    private static readonly IBrush Background = new SolidColorBrush(Color.Parse("#12151C"));
+    private static readonly IBrush Border = new SolidColorBrush(Color.Parse("#293244"));
+    private static readonly IBrush PrimaryText = new SolidColorBrush(Color.Parse("#F3F5F8"));
 
     public async Task<bool> ConfirmAsync(
         string title,
@@ -281,18 +281,25 @@ public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUser
         return panel;
     }
 
-    private static Button CreateButton(string label, bool destructive) => new()
+    private static Button CreateButton(string label, bool destructive)
     {
-        Content = label,
-        MinWidth = 96,
-        Padding = new Thickness(14, 7),
-        HorizontalContentAlignment = HorizontalAlignment.Center,
-        Background = destructive
-            ? new SolidColorBrush(Color.Parse("#7F1D1D"))
-            : new SolidColorBrush(Color.Parse("#1F6FEB")),
-        Foreground = PrimaryText,
-        BorderBrush = Border,
-        BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(6),
-    };
+        var button = new Button
+        {
+            Content = label,
+            MinWidth = 96,
+            Padding = new Thickness(14, 7),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            CornerRadius = new CornerRadius(6),
+        };
+        if (destructive)
+        {
+            button.Classes.Add("danger");
+        }
+        else if (!string.Equals(label, "Cancel", StringComparison.OrdinalIgnoreCase))
+        {
+            button.Classes.Add("primary");
+        }
+
+        return button;
+    }
 }

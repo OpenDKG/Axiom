@@ -31,6 +31,12 @@ internal static class NetworkRecoveryCommand
         Write("Axiom network recovery");
         Write($"Snapshot: {path}");
 
+        if (MachineStateSecurity.IsReparsePointInPath(path))
+        {
+            Write("Refusing to act: The recovery snapshot path contains a junction or symbolic link.");
+            return ExitCodes.SnapshotRefused;
+        }
+
         var read = NetworkRecoverySnapshotStore.Read(path);
         switch (read.Status)
         {

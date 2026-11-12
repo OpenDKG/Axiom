@@ -747,6 +747,34 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     }
 
     [RelayCommand]
+    private async Task CopyBlockedDomainAsync(object? item)
+    {
+        var domain = item switch
+        {
+            BlockedEventRow row => row.Domain,
+            RecentBlockedGroup group => group.Domain,
+            BlockedHistoryDomainRow history => history.Domain,
+            PrivacyShieldTopDomain top => top.Domain,
+            string text => text,
+            _ => null,
+        };
+
+        if (string.IsNullOrWhiteSpace(domain))
+        {
+            return;
+        }
+
+        try
+        {
+            await _ui.CopyTextAsync(domain, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is
+                     InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
+        {
+        }
+    }
+
+    [RelayCommand]
     private async Task ImportBlocklistAsync()
     {
         var path = await _ui

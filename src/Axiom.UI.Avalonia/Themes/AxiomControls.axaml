@@ -4,38 +4,115 @@
     <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="8" />
-    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="Padding" Value="12,5" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="Medium" />
     <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
   <Style Selector="Button /template/ ContentPresenter">
-    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="CornerRadius" Value="6" />
   </Style>
   <Style Selector="Button:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
   </Style>
   <Style Selector="Button:pressed /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.Border}" />
   </Style>
   <Style Selector="Button:disabled /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
-    <Setter Property="Opacity" Value="0.55" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="Opacity" Value="0.48" />
   </Style>
   <Style Selector="Button.primary">
     <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
     <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
   </Style>
   <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.AccentStrong}" />
-    <Setter Property="Opacity" Value="0.88" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="Opacity" Value="0.90" />
   </Style>
   <Style Selector="Button.primary:pressed /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
-    <Setter Property="Opacity" Value="0.78" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="Opacity" Value="0.80" />
+  </Style>
+  <Style Selector="Button.danger">
+    <Setter Property="Background" Value="{DynamicResource Axiom.DangerBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Critical}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.DangerBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Critical}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+    <Setter Property="Opacity" Value="0.90" />
+  </Style>
+  <Style Selector="Button.danger:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.DangerBackground}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+    <Setter Property="Opacity" Value="0.80" />
+  </Style>
+
+  <Style Selector="TextBox">
+    <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="Padding" Value="10,5" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+  <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="ComboBox">
+    <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="Padding" Value="10,4" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+
+  <Style Selector="CheckBox">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+
+  <Style Selector="ContextMenu">
+    <Setter Property="Background" Value="{DynamicResource Axiom.Surface}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="4" />
+  </Style>
+  <Style Selector="MenuItem">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="Padding" Value="10,6" />
+  </Style>
+
+  <Style Selector="ListBox.data-list > ListBoxItem">
+    <Setter Property="Padding" Value="8,5" />
+    <Setter Property="Margin" Value="0,1" />
+    <Setter Property="CornerRadius" Value="6" />
   </Style>
   <Style Selector="ListBox.data-list > ListBoxItem:selected">
     <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
@@ -43,13 +120,16 @@
   </Style>
   <Style Selector="ListBox.data-list > ListBoxItem:selected /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+    <Setter Property="CornerRadius" Value="6" />
   </Style>
   <Style Selector="ListBox.data-list > ListBoxItem:pointerover">
     <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
   </Style>
   <Style Selector="ListBox.data-list > ListBoxItem:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="CornerRadius" Value="6" />
   </Style>
+
   <Style Selector="ListBox.nav-list > ListBoxItem">
     <Setter Property="Padding" Value="0" />
     <Setter Property="Margin" Value="0,1" />
@@ -69,8 +149,8 @@
   </Style>
   <Style Selector="ListBox.nav-list > ListBoxItem Border.nav-item">
     <Setter Property="Background" Value="Transparent" />
-    <Setter Property="CornerRadius" Value="8" />
-    <Setter Property="Padding" Value="6,6,10,6" />
+    <Setter Property="CornerRadius" Value="7" />
+    <Setter Property="Padding" Value="8,7,12,7" />
   </Style>
   <Style Selector="ListBox.nav-list > ListBoxItem:pointerover Border.nav-item">
     <Setter Property="Background" Value="{DynamicResource Axiom.NavHover}" />
@@ -78,46 +158,56 @@
   <Style Selector="ListBox.nav-list > ListBoxItem:selected Border.nav-item">
     <Setter Property="Background" Value="{DynamicResource Axiom.NavSelected}" />
   </Style>
+
   <Style Selector="Border.card">
     <Setter Property="Background" Value="{DynamicResource Axiom.Surface}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="CornerRadius" Value="10" />
     <Setter Property="Padding" Value="16" />
   </Style>
   <Style Selector="Grid.glass Border.card">
-    <Setter Property="BoxShadow" Value="0 16 38 0 #73000000, inset 0 1 0 0 #26FFFFFF" />
+    <Setter Property="BoxShadow" Value="0 12 32 0 #66000000, inset 0 1 0 0 #1FFFFFFF" />
   </Style>
   <Style Selector="Grid.glasslight Border.card">
-    <Setter Property="BoxShadow" Value="0 16 34 0 #26000000, inset 0 1 0 0 #99FFFFFF" />
+    <Setter Property="BoxShadow" Value="0 12 28 0 #1A000000, inset 0 1 0 0 #B3FFFFFF" />
   </Style>
-  <Style Selector="TextBlock.page-title">
-    <Setter Property="FontSize" Value="22" />
+
+  <Style Selector=":is(TextBlock).page-title">
+    <Setter Property="FontSize" Value="21" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
   </Style>
-  <Style Selector="TextBlock.page-subtitle">
+  <Style Selector=":is(TextBlock).page-subtitle">
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource Axiom.TextSecondary}" />
   </Style>
-  <Style Selector="TextBlock.section-title">
-    <Setter Property="FontSize" Value="16" />
+  <Style Selector=":is(TextBlock).section-title">
+    <Setter Property="FontSize" Value="15" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
   </Style>
-  <Style Selector="TextBlock.kpi-label">
-    <Setter Property="FontSize" Value="10" />
+  <Style Selector=":is(TextBlock).kpi-label">
+    <Setter Property="FontSize" Value="10.5" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
   </Style>
-  <Style Selector="TextBlock.kpi-value">
-    <Setter Property="FontSize" Value="30" />
+  <Style Selector=":is(TextBlock).kpi-value">
+    <Setter Property="FontSize" Value="28" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
   </Style>
-  <Style Selector="TextBlock.eyebrow">
-    <Setter Property="FontSize" Value="9.5" />
+  <Style Selector=":is(TextBlock).eyebrow">
+    <Setter Property="FontSize" Value="10" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource Axiom.Accent}" />
+  </Style>
+  <Style Selector=":is(TextBlock).table-header">
+    <Setter Property="FontSize" Value="10.5" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
+  <Style Selector=":is(TextBlock).mono">
+    <Setter Property="FontFamily" Value="Cascadia Mono, JetBrains Mono, Consolas, monospace" />
   </Style>
 </Styles>

@@ -16,6 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Required for self-contained single-file publish under central package management. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="Resources\support-links.json" />
     <EmbeddedResource Include="Resources\support-links.json"
                       LogicalName="Axiom.Presentation.Resources.support-links.json" />

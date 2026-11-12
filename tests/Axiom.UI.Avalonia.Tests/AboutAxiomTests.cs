@@ -104,6 +104,38 @@ public sealed class AboutAxiomTests
         Assert.True(page.IsReducedEffects);
     }
 
+    [Fact]
+    public async Task Events_context_commands_inspect_and_copy_event_details()
+    {
+        var interaction = new RecordingInteraction();
+        using var eventsPage = new EventsPageViewModel(null, new NoOpTimerFactory(), interaction);
+        var row = new EventRowView(new Axiom.Contracts.History.HistoryRow
+        {
+            AppDisplayName = "curl.exe",
+            AppPath = @"C:\Windows\System32\curl.exe",
+            ProcessId = 4120,
+            Protocol = "TCP",
+            LocalEndpoint = "10.0.0.5:51234",
+            RemoteEndpoint = "93.184.216.34:443",
+            Direction = "Outbound",
+            State = "Established",
+            Quality = "Exact",
+            FirstSeenUtc = new DateTimeOffset(2026, 11, 12, 0, 10, 0, TimeSpan.Zero),
+            LastSeenUtc = new DateTimeOffset(2026, 11, 12, 0, 11, 0, TimeSpan.Zero),
+        });
+
+        await eventsPage.InspectEventCommand.ExecuteAsync(row);
+        await eventsPage.CopyEventDetailsCommand.ExecuteAsync(row);
+        await eventsPage.CopyEventRemoteCommand.ExecuteAsync(row);
+
+        Assert.Single(interaction.Messages);
+        Assert.Contains("curl.exe", interaction.Messages[0].Title, StringComparison.Ordinal);
+        Assert.Contains("93.184.216.34:443", interaction.Messages[0].Message, StringComparison.Ordinal);
+        Assert.Equal(2, interaction.CopiedTexts.Count);
+        Assert.Contains("C:\\Windows\\System32\\curl.exe", interaction.CopiedTexts[0], StringComparison.Ordinal);
+        Assert.Equal("93.184.216.34:443", interaction.CopiedTexts[1]);
+    }
+
     private sealed class MutableThemeService : IThemeService
     {
         public UiTheme Current { get; private set; } = UiTheme.GlassDark;
@@ -154,6 +186,10 @@ public sealed class AboutAxiomTests
     {
         public List<(string Title, string Text)> Documents { get; } = [];
 
+        public List<(string Title, string Message)> Messages { get; } = [];
+
+        public List<string> CopiedTexts { get; } = [];
+
         public List<string> OpenedUrls { get; } = [];
 
         public Task<bool> ConfirmAsync(
@@ -163,8 +199,11 @@ public sealed class AboutAxiomTests
             bool destructive,
             CancellationToken cancellationToken) => Task.FromResult(false);
 
-        public Task ShowMessageAsync(string title, string message, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task ShowMessageAsync(string title, string message, CancellationToken cancellationToken)
+        {
+            Messages.Add((title, message));
+            return Task.CompletedTask;
+        }
 
         public Task ShowDocumentAsync(string title, string document, CancellationToken cancellationToken)
         {
@@ -187,7 +226,11 @@ public sealed class AboutAxiomTests
         public Task<string?> PickFolderAsync(string title, CancellationToken cancellationToken) =>
             Task.FromResult<string?>(null);
 
-        public Task CopyTextAsync(string text, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task CopyTextAsync(string text, CancellationToken cancellationToken)
+        {
+            CopiedTexts.Add(text);
+            return Task.CompletedTask;
+        }
 
         public Task OpenExternalAsync(string url, CancellationToken cancellationToken)
         {

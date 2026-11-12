@@ -84,7 +84,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Events = new EventsPageViewModel(
             IsServiceMode ? serviceClient : null,
             timers,
-            interaction);
+            interaction,
+            processes);
         Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction, _monitor);
         PrivacyShield = new PrivacyShieldPageViewModel(
             IsServiceMode ? serviceClient : null,

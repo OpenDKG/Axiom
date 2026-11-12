@@ -88,6 +88,12 @@ internal static class ServicePlatform
     /// <summary>Network recovery baseline in the machine data root (<c>network-recovery.txt</c>, 0600).</summary>
     public static string RecoverySnapshotPath => MacServicePaths.Default.RecoverySnapshotFile;
 
+    /// <summary>
+    /// After a snapshot lands in the machine data directory, re-assert 0700/0600 on it
+    /// (the macOS counterpart of upstream's ProgramData re-hardening on capture).
+    /// </summary>
+    public static void HardenRecoverySnapshotLocation() => HardenMachineState();
+
     public static IPrivacyDnsPlatform CreateDefaultPrivacyDnsPlatform() =>
         OperatingSystem.IsMacOS()
             ? MacPrivacyDnsPlatform.Create(MacServicePaths.Default)
