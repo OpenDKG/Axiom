@@ -392,6 +392,16 @@ final class RuleTable: @unchecked Sendable {
 
     var ruleCount: Int { blockRules.count + allowRules.count }
 
+    /// Upper bound on the ids echoed in `filter.rules` (`ruleIds`): the daemon reads events as
+    /// lines of at most 16 KiB, so a larger table reports no list ("unknown") instead.
+    static let maxEchoedRuleIds = 200
+
+    /// Ids of the enabled, compiled rules in force (`ruleIds` of `filter.rules`); nil above the cap.
+    var enforcedRuleIds: [String]? {
+        guard ruleCount <= RuleTable.maxEchoedRuleIds else { return nil }
+        return (blockRules + allowRules).map { $0.id }
+    }
+
     /// Human-readable problems with individual rules that were skipped (log lines).
     var warnings: [String] { rejected.map { "rule \($0.id): \($0.reason) (skipped)" } }
 

@@ -66,6 +66,13 @@ public sealed record FlowEvent
     /// <summary><c>filter.rules</c>: why the whole rules file was rejected; null when it loaded.</summary>
     public string? Error { get; init; }
 
+    /// <summary>
+    /// <c>filter.rules</c>: ids of the rules the filter enforces from the table in force (review #2
+    /// MAC-1, optional additive field; null when the extension predates it or the list exceeded
+    /// <see cref="FlowEventParser.MaxRuleIds"/>, i.e. "unknown", never a truncated list).
+    /// </summary>
+    public IReadOnlyList<string>? RuleIds { get; init; }
+
     /// <summary><c>filter.hello</c> / <c>filter.rules</c>: events the filter dropped so far (monotonic per process).</summary>
     public long? Dropped { get; init; }
 }
@@ -81,6 +88,9 @@ public static class FlowEventParser
 
     /// <summary>Upper bound on the rejected-rule entries kept from one <c>filter.rules</c> event.</summary>
     public const int MaxRejectedRules = 256;
+
+    /// <summary>Upper bound on the <c>ruleIds</c> echoed by one <c>filter.rules</c> event; above it the list is treated as unknown.</summary>
+    public const int MaxRuleIds = 16384;
 
     private static readonly JsonDocumentOptions DocumentOptions = new()
     {
@@ -150,6 +160,7 @@ public static class FlowEventParser
                     ? (int?)Math.Clamp(NonNegative(GetLong(root, "applied")) ?? 0, 0, int.MaxValue)
                     : null,
                 Rejected = eventType == FlowEventType.Rules ? GetRejected(root) : [],
+                RuleIds = eventType == FlowEventType.Rules ? GetRuleIds(root) : null,
                 Error = GetString(root, "error") is { Length: > 0 } error ? error : null,
                 Dropped = NonNegative(GetLong(root, "dropped")),
             };
@@ -190,6 +201,32 @@ public static class FlowEventParser
         }
 
         return rejected;
+    }
+
+    private static List<string>? GetRuleIds(JsonElement root)
+    {
+        if (!root.TryGetProperty("ruleIds", out var list) || list.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var ids = new List<string>();
+        foreach (var entry in list.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.String || entry.GetString() is not { Length: > 0 } id)
+            {
+                continue;
+            }
+
+            if (ids.Count >= MaxRuleIds)
+            {
+                return null;
+            }
+
+            ids.Add(id.Length > MaxStringLength ? id[..MaxStringLength] : id);
+        }
+
+        return ids;
     }
 
     private static string GetString(JsonElement root, string name)

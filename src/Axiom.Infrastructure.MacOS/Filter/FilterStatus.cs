@@ -24,14 +24,36 @@ public sealed record FilterRulesReport
     public long Dropped { get; init; }
 
     public DateTimeOffset ReceivedUtc { get; init; }
+
+    /// <summary>
+    /// The connection the report arrived on (<see cref="FilterStatus"/> epoch). A report from a
+    /// previous connection is history, never an acknowledgement for the current extension instance.
+    /// </summary>
+    public long ConnectionEpoch { get; init; } = -1;
+
+    /// <summary>
+    /// Ids the filter says it enforces (additive <c>ruleIds</c> field of <c>filter.rules</c>);
+    /// null when the extension did not echo them, which means "unknown", not "none".
+    /// </summary>
+    public IReadOnlyList<string>? AppliedRuleIds { get; init; }
+
+    /// <summary>The report says the rules file was rejected (the generation named is the one still in force).</summary>
+    public bool IsError => !string.IsNullOrEmpty(Error);
+
+    public bool Enforces(string ruleId) =>
+        AppliedRuleIds?.Any(id => string.Equals(id, ruleId, StringComparison.OrdinalIgnoreCase)) == true;
 }
 
 /// <summary>
 /// Point-in-time answer to "is generation <see cref="PublishedGeneration"/> enforced right now?"
-/// (review 2026-11-12 P0 #2/#3, High #4). <see cref="State"/> is
-/// <see cref="FilterEnforcementState.Verified"/> only while the extension is connected and has
-/// acknowledged exactly that generation on the current connection with a <c>filter.rules</c>
-/// event that carried no file error; the other fields are the evidence behind it.
+/// (review 2026-11-12 P0 #2/#3, High #4; review #2 MAC-1). <see cref="State"/> is
+/// <see cref="FilterEnforcementState.Verified"/> only while the extension is connected and its
+/// <b>latest</b> <c>filter.rules</c> report arrived on the current connection, carried no file
+/// error and names exactly that generation; the other fields are the evidence behind it.
+/// <see cref="ExpectedRuleIds"/> is the daemon's own record of what it published under that
+/// generation (null when the generation was not published by this daemon process), so the
+/// per-rule questions <see cref="RuleVerified"/> / <see cref="RuleVerifiedAbsent"/> are answered
+/// against the acknowledged effective table, not the global generation alone.
 /// </summary>
 public sealed record FilterEnforcementSnapshot(
     FilterEnforcementState State,
@@ -40,13 +62,40 @@ public sealed record FilterEnforcementSnapshot(
     long? AckedGeneration,
     DateTimeOffset? LastSeenUtc,
     DateTimeOffset? LastAckUtc,
-    FilterRulesReport? Rules)
+    FilterRulesReport? Rules,
+    IReadOnlyList<string>? ExpectedRuleIds = null)
 {
     public bool IsVerified => State == FilterEnforcementState.Verified;
 
     /// <summary>The filter's own rejection of one rule in the acknowledged table, if any.</summary>
     public string? RejectionReason(string ruleId) =>
         Rules?.Rejected.FirstOrDefault(rejected => string.Equals(rejected.Id, ruleId, StringComparison.OrdinalIgnoreCase))?.Reason;
+
+    /// <summary>The daemon published <paramref name="ruleId"/> under <see cref="PublishedGeneration"/>.</summary>
+    public bool Expected(string ruleId) =>
+        ExpectedRuleIds?.Any(id => string.Equals(id, ruleId, StringComparison.OrdinalIgnoreCase)) == true;
+
+    /// <summary>
+    /// The rule is proven in force as published: the generation is verified, the daemon published
+    /// the rule in it, the filter did not reject it and, when the filter echoes its effective ids
+    /// (<c>ruleIds</c>), lists it — or, for a disabled rule (<paramref name="enabled"/> false,
+    /// which the filter skips by contract), does not list it.
+    /// </summary>
+    public bool RuleVerified(string ruleId, bool enabled = true) =>
+        IsVerified &&
+        Expected(ruleId) &&
+        RejectionReason(ruleId) is null &&
+        (Rules?.AppliedRuleIds is null || Rules.Enforces(ruleId) == enabled);
+
+    /// <summary>
+    /// The rule is proven gone: the generation is verified, the daemon's published table for it
+    /// does not contain the rule and the filter (when it echoes ids) does not enforce it.
+    /// </summary>
+    public bool RuleVerifiedAbsent(string ruleId) =>
+        IsVerified &&
+        ExpectedRuleIds is not null &&
+        !Expected(ruleId) &&
+        !(Rules?.Enforces(ruleId) ?? false);
 
     /// <summary>A file-level rejection reported after <paramref name="publishedUtc"/> (so it concerns the published table).</summary>
     public string? FileRejectionSince(DateTimeOffset publishedUtc) =>
@@ -75,8 +124,6 @@ public sealed class FilterStatus
     /// <summary>Incremented per accepted connection; an ack counts only for the connection it arrived on.</summary>
     private long _connectionEpoch;
 
-    private long _ackEpoch = -1;
-
     private DateTimeOffset? _lastHelloUtc;
 
     private DateTimeOffset? _lastEventUtc;
@@ -93,7 +140,11 @@ public sealed class FilterStatus
 
     private long _dropped;
 
+    /// <summary>Latest <c>filter.rules</c> report (ok or error), tagged with its connection epoch.</summary>
     private FilterRulesReport? _rules;
+
+    /// <summary>What this daemon process last published: generation and the rule ids in that table.</summary>
+    private (long Generation, IReadOnlyList<string> RuleIds)? _published;
 
     public bool IsConnected
     {
@@ -249,8 +300,25 @@ public sealed class FilterStatus
     }
 
     /// <summary>
-    /// Records a <c>filter.rules</c> event; the latest report replaces the previous one. A report
-    /// without a file error is the extension's acknowledgement of its generation.
+    /// Records what the daemon just wrote to rules.json: the expected-rules snapshot for
+    /// <paramref name="generation"/>. Only the latest publish is kept; an acknowledgement is matched
+    /// against it rule by rule (<see cref="FilterEnforcementSnapshot.RuleVerified"/>).
+    /// </summary>
+    public void Published(long generation, IEnumerable<string> ruleIds)
+    {
+        ArgumentNullException.ThrowIfNull(ruleIds);
+        lock (_gate)
+        {
+            _published = (generation, ruleIds.ToArray());
+            Signal();
+        }
+    }
+
+    /// <summary>
+    /// Records a <c>filter.rules</c> event; the latest report replaces the previous one, whatever
+    /// its outcome. A report without a file error is the extension's acknowledgement of its
+    /// generation; a report <b>with</b> an error revokes any earlier acknowledgement of the same
+    /// generation (review #2 MAC-1): the file in force is no longer the one the daemon published.
     /// </summary>
     public void RulesReported(FlowEvent rulesEvent, DateTimeOffset now)
     {
@@ -276,7 +344,6 @@ public sealed class FilterStatus
                 if (string.IsNullOrEmpty(rulesEvent.Error))
                 {
                     _ackedGeneration = generation;
-                    _ackEpoch = _connectionEpoch;
                     _lastAckUtc = now;
                 }
             }
@@ -289,6 +356,8 @@ public sealed class FilterStatus
                 Error = rulesEvent.Error,
                 Dropped = _dropped,
                 ReceivedUtc = now,
+                ConnectionEpoch = _connectionEpoch,
+                AppliedRuleIds = rulesEvent.RuleIds,
             };
             Signal();
         }
@@ -306,8 +375,10 @@ public sealed class FilterStatus
     /// <summary>
     /// Enforcement state of <paramref name="publishedGeneration"/> now: never seen →
     /// <see cref="FilterEnforcementState.Unavailable"/>; seen but not connected →
-    /// <see cref="FilterEnforcementState.Degraded"/>; connected without a matching acknowledgement
-    /// on this connection (older or newer generation, file rejected, nothing yet) →
+    /// <see cref="FilterEnforcementState.Degraded"/>; connected but the latest report is not a
+    /// clean acknowledgement of exactly this generation on this connection (older or newer
+    /// generation, file rejected — also when rejected after an earlier ack of the same generation —,
+    /// nothing yet, report from the previous connection) →
     /// <see cref="FilterEnforcementState.Pending"/>; otherwise <see cref="FilterEnforcementState.Verified"/>.
     /// </summary>
     public FilterEnforcementState Evaluate(long publishedGeneration)
@@ -329,7 +400,8 @@ public sealed class FilterStatus
                 _ackedGeneration,
                 _lastSeenUtc,
                 _lastAckUtc,
-                _rules);
+                _rules,
+                _published is { } published && published.Generation == publishedGeneration ? published.RuleIds : null);
         }
     }
 
@@ -392,7 +464,13 @@ public sealed class FilterStatus
             return _lastSeenUtc is null ? FilterEnforcementState.Unavailable : FilterEnforcementState.Degraded;
         }
 
-        return _ackEpoch == _connectionEpoch && _ackedGeneration == publishedGeneration
+        // Verified needs the LATEST report, on THIS connection, error-free, for THIS generation.
+        // An earlier successful ack with the same number does not count once a later report said
+        // the file is rejected (MAC-1), nor does any report from a previous connection.
+        return _rules is { } latest &&
+               latest.ConnectionEpoch == _connectionEpoch &&
+               !latest.IsError &&
+               latest.Generation == publishedGeneration
             ? FilterEnforcementState.Verified
             : FilterEnforcementState.Pending;
     }

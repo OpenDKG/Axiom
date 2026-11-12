@@ -107,6 +107,10 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             FilterEnforcementState.Degraded =>
                 "The AxiomFilter network extension is disconnected (last seen " + Utc(enforcement.LastSeenUtc) + "); " +
                 "published rules are not known to be enforced.",
+            FilterEnforcementState.Pending when enforcement.Rules is { IsError: true } rejected =>
+                "AxiomFilter rejected the rules file (" + rejected.Error + "); generation " +
+                rejected.Generation.ToString(CultureInfo.InvariantCulture) + " stays in force and rules generation " +
+                state.Generation.ToString(CultureInfo.InvariantCulture) + " is not verified.",
             FilterEnforcementState.Pending =>
                 "AxiomFilter has not acknowledged rules generation " + state.Generation.ToString(CultureInfo.InvariantCulture) + " yet" +
                 (enforcement.AckedGeneration is { } acked ? " (last acknowledged " + acked.ToString(CultureInfo.InvariantCulture) + ")" : string.Empty) + ".",
@@ -172,7 +176,10 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         var id = FilterRuleTable.ToFilterRule(rule.Spec).Id;
         if (enforcement.IsVerified)
         {
-            return enforcement.RejectionReason(id) is null ? RuleState.Applied : RuleState.Failed;
+            // Verified generation: the rule is Applied only when it is proven in the acknowledged
+            // effective table (published under this generation, not rejected, echoed by the filter
+            // when it echoes ids); otherwise the filter runs a table without it.
+            return enforcement.RuleVerified(id, rule.Spec.Enabled) ? RuleState.Applied : RuleState.Failed;
         }
 
         return rule.State == RuleState.Failed ? RuleState.Failed : RuleState.Pending;
@@ -221,7 +228,7 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             // Published, not enforced: wait (bounded) for the extension's acknowledgement of this
             // generation and report exactly what it proved.
             await _status.WaitForAcknowledgementAsync(published, now, _ackTimeout, ct).ConfigureAwait(false);
-            var result = Outcome(spec.ManagedRuleId, rule.OsRuleName, expected.Id, published, now, _status.Snapshot(published));
+            var result = Outcome(spec.ManagedRuleId, rule.OsRuleName, expected.Id, published, now, _status.Snapshot(published), spec.Enabled);
             SaveState(new ManagedRuleState
             {
                 Generation = published,
@@ -254,7 +261,8 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         string filterRuleId,
         long published,
         DateTimeOffset publishedUtc,
-        FilterEnforcementSnapshot enforcement)
+        FilterEnforcementSnapshot enforcement,
+        bool enabled = true)
     {
         ArgumentNullException.ThrowIfNull(enforcement);
 
@@ -285,6 +293,21 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                     OsRuleName = osRuleName,
                     ErrorCode = "filter.rule_rejected",
                     ErrorMessage = $"AxiomFilter does not enforce this rule: {rejection}",
+                };
+            }
+
+            if (!enforcement.RuleVerified(filterRuleId, enabled))
+            {
+                return new RuleApplyResult
+                {
+                    Success = false,
+                    ManagedRuleId = managedRuleId,
+                    State = RuleState.Failed,
+                    OsRuleName = osRuleName,
+                    ErrorCode = "filter.rule_not_effective",
+                    ErrorMessage = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"AxiomFilter acknowledged rules generation {published} but its effective table does not contain this rule."),
                 };
             }
 
@@ -546,12 +569,25 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             }
         }
 
-        var verified = enforcement.IsVerified && rejection is null;
+        // Per-rule proof (review #2 MAC-1): the generation being verified is necessary, not
+        // sufficient. The rule must be in the table as published (present, same content), the
+        // daemon must have published it under this generation, and the filter must not have
+        // rejected it (and must list it when it echoes its effective ids).
+        var matches = expected.SameAs(written);
+        var ruleVerified = enforcement.RuleVerified(expected.Id, expected.Enabled);
+        if (enforcement.IsVerified && rejection is null && !ruleVerified)
+        {
+            notes.Add(enforcement.ExpectedRuleIds is null
+                ? "The published table for this generation is not known to this daemon process; the rule is not verified."
+                : "The acknowledged effective table does not contain this rule; it is not verified.");
+        }
+
+        var verified = enforcement.IsVerified && rejection is null && written is not null && matches && ruleVerified;
         return new EffectiveRuleReport
         {
             ManagedRuleId = spec.ManagedRuleId,
             PresentInOs = written is not null,
-            MatchesSpec = expected.SameAs(written),
+            MatchesSpec = matches,
             EffectiveAction = verified && written is { Enabled: true }
                 ? string.Equals(written.Action, FilterRuleTable.ActionBlock, StringComparison.Ordinal)
                     ? FirewallAction.Block
@@ -587,7 +623,10 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         // Persist ownership first: a crash between the two writes leaves the next start able to
         // republish the complete table, never a table with rules the daemon no longer knows.
         SaveState(new ManagedRuleState { Generation = generation, Rules = rules });
-        FilterRulesFile.WriteAtomic(_paths.RulesFile, FilterRuleTable.Create(rules.Select(rule => rule.Spec), generation));
+        var table = FilterRuleTable.Create(rules.Select(rule => rule.Spec), generation);
+        FilterRulesFile.WriteAtomic(_paths.RulesFile, table);
+        // Expected-rules snapshot for this generation: the acknowledgement is matched against it.
+        _status.Published(generation, table.Rules.Select(rule => rule.Id));
         return generation;
     }
 

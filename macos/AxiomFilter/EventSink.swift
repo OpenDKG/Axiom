@@ -29,7 +29,7 @@ enum FilterEvent {
     /// Outcome of a rules reload: `applied` rules enforced, `rejected` skipped.
     /// `error` is set (and the counts describe the table still in force) when the file
     /// as a whole was rejected.
-    case rules(ts: Date, generation: Int64, applied: Int, rejected: [RejectedRule], error: String?)
+    case rules(ts: Date, generation: Int64, applied: Int, rejected: [RejectedRule], error: String?, ruleIds: [String]?)
 }
 
 /// Everything flow.open carries. Built on the verdict path from cheap values.
@@ -278,11 +278,15 @@ final class EventSink: @unchecked Sendable {
         case let .hello(ts, version, generation):
             object = ["type": "filter.hello", "ts": timestampFormatter.string(from: ts), "version": version,
                       "generation": generation, "dropped": totalDroppedOnQueue()]
-        case let .rules(ts, generation, applied, rejected, error):
-            object = ["type": "filter.rules", "ts": timestampFormatter.string(from: ts), "generation": generation,
-                      "applied": applied,
-                      "rejected": rejected.map { ["id": $0.id, "reason": $0.reason] },
-                      "error": error ?? null, "dropped": totalDroppedOnQueue()]
+        case let .rules(ts, generation, applied, rejected, error, ruleIds):
+            var rules: [String: Any] = ["type": "filter.rules", "ts": timestampFormatter.string(from: ts), "generation": generation,
+                                        "applied": applied,
+                                        "rejected": rejected.map { ["id": $0.id, "reason": $0.reason] },
+                                        "error": error ?? null, "dropped": totalDroppedOnQueue()]
+            // Optional, additive (review #2 MAC-1): ids of the rules this table enforces, so the daemon
+            // can prove a specific rule. Omitted (= "unknown") when absent or too long for one line.
+            if let ruleIds { rules["ruleIds"] = ruleIds }
+            object = rules
         }
         guard var data = try? JSONSerialization.data(withJSONObject: object, options: [.withoutEscapingSlashes]) else {
             return nil
