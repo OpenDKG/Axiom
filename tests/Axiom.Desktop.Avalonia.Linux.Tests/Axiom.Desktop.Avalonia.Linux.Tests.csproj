@@ -3,6 +3,11 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <!--
+      Linux-only desktop behaviour (pkexec wording, '/' paths, desktop.lock): the project still compiles everywhere, but `dotnet test Axiom.sln` on a Windows runner skips it.
+    -->
+    <IsTestProject Condition="!$([MSBuild]::IsOSPlatform('Windows'))">true</IsTestProject>
+    <IsTestProject Condition="$([MSBuild]::IsOSPlatform('Windows'))">false</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>

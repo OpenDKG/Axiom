@@ -272,3 +272,16 @@ unchanged (stub). Removed: the test key (`apiKeyProtected` cleared, `secret-prot
 `~/.config/autostart/com.axiom.firewall.desktop`, the `axiom-desktop.lock/.sock` runtime files, every Axiom
 desktop process. Kept on purpose: `/var/lib/axiom`, `packaging/linux/com.axiom.firewall.policy` (not installed
 system-wide), `build/linux/*`.
+
+## Windows runner
+
+`Axiom.Infrastructure.Linux.Tests`, `Axiom.Infrastructure.Linux.Nft.Tests`, `Axiom.Infrastructure.Unix.Tests` and
+`Axiom.Desktop.Avalonia.Linux.Tests` exercise Linux/Unix-only runtime behaviour (`/` path expectations,
+`File.SetUnixFileMode`, `pkexec` wording, Doctor WARN vs SKIP, `desktop.lock` cleanup) and went red on the Windows 11
+VM run (`docs/WINDOWS_REGRESSION_2026-11-12.md`: 4 + 1 + 2 + 5 failures) without any Windows code being involved.
+Each csproj now sets `<IsTestProject Condition="$([MSBuild]::IsOSPlatform('Windows'))">false</IsTestProject>` (same
+pattern as the macOS test projects merged from `buba/macos`): the projects still compile on every OS, but
+`dotnet test Axiom.sln` on a Windows runner no longer executes them (verified on Linux by inverting the condition to
+`IsOSPlatform('Linux')`: the assemblies disappear from the solution test run). The `MacBundleLayoutTests` path fix
+and the deterministic `Firewall_page_requeries_enforcement_when_stale` come in with the `buba/macos` merge. Not
+re-run on the Windows VM in this pass.
