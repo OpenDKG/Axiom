@@ -36,7 +36,8 @@ public sealed class LaunchdServiceInstallerTests
         var text = LaunchdServiceInstaller.BuildNewsyslogConf("/Library/Logs/Axiom/axiomd.log");
 
         var entry = text.Split('\n').Single(line => line.StartsWith("/Library", StringComparison.Ordinal));
-        Assert.Equal(["/Library/Logs/Axiom/axiomd.log", "root:wheel", "644", "5", "5120", "*", "J"], entry.Split('\t'));
+        // Review 2026-11-12 Medium #5: the rotated log must not be world-readable.
+        Assert.Equal(["/Library/Logs/Axiom/axiomd.log", "root:wheel", "600", "5", "5120", "*", "J"], entry.Split('\t'));
         Assert.Equal("/etc/newsyslog.d/com.axiom.service.conf", LaunchdServiceInstaller.NewsyslogConfPath);
     }
 
@@ -89,8 +90,14 @@ public sealed class LaunchdServiceInstallerTests
         Assert.Equal(MacDataDirectoryPermissions.PrivateDirectoryMode, File.GetUnixFileMode(layout.MachineDataDirectory));
         Assert.Equal(MacDataDirectoryPermissions.PrivateFileMode, File.GetUnixFileMode(layout.ProtectionSettingsPath));
         Assert.Contains("uid 501", output.ToString(), StringComparison.Ordinal);
-        Assert.Contains("axiomd.log\troot:wheel\t644\t5\t5120\t*\tJ", File.ReadAllText(layout.NewsyslogConfPath), StringComparison.Ordinal);
+        Assert.Contains("axiomd.log\troot:wheel\t600\t5\t5120\t*\tJ", File.ReadAllText(layout.NewsyslogConfPath), StringComparison.Ordinal);
         Assert.Equal(PrivilegedHelperLayout.FileMode, File.GetUnixFileMode(layout.NewsyslogConfPath));
+
+        // Install pre-creates the log root-only (launchd would otherwise create it 0644).
+        var logFile = Path.Combine(layout.LogDirectory, "axiomd.log");
+        Assert.Equal(MacLogPermissions.DirectoryMode, File.GetUnixFileMode(layout.LogDirectory));
+        Assert.Equal(MacLogPermissions.FileMode, File.GetUnixFileMode(logFile));
+        Assert.Contains($"Restricted {logFile} to root.", output.ToString(), StringComparison.Ordinal);
 
         Assert.Contains(runner.Calls, call => call.StartsWith("chown -R 0:0 ", StringComparison.Ordinal));
         Assert.Equal(
@@ -102,9 +109,18 @@ public sealed class LaunchdServiceInstallerTests
             ],
             runner.Calls.Where(call => call.StartsWith("launchctl", StringComparison.Ordinal)).ToList());
 
-        // Upgrade in place: a second install replaces the copy and leaves no staging directory.
+        // Upgrade in place: a second install replaces the copy and leaves no staging directory,
+        // and fixes a log plus archives left world-readable by an older version or by launchd.
         File.WriteAllText(Path.Combine(bundle, "Axiom.Core.dll"), "dll2");
+        var archive = Path.Combine(layout.LogDirectory, "axiomd.log.0.bz2");
+        File.WriteAllText(archive, "old");
+        File.SetUnixFileMode(archive, MacDataDirectoryPermissions.SharedFileMode);
+        File.SetUnixFileMode(logFile, MacDataDirectoryPermissions.SharedFileMode);
+        File.SetUnixFileMode(layout.LogDirectory, MacDataDirectoryPermissions.SharedDirectoryMode);
         Assert.Equal(0, installer.Install(exe, TextWriter.Null, TextWriter.Null));
+        Assert.Equal(MacLogPermissions.DirectoryMode, File.GetUnixFileMode(layout.LogDirectory));
+        Assert.Equal(MacLogPermissions.FileMode, File.GetUnixFileMode(logFile));
+        Assert.Equal(MacLogPermissions.FileMode, File.GetUnixFileMode(archive));
         Assert.Equal("dll2", File.ReadAllText(Path.Combine(layout.HelperDirectory, "Axiom.Core.dll")));
         Assert.Single(Directory.GetDirectories(layout.HelperRoot));
 
@@ -114,6 +130,9 @@ public sealed class LaunchdServiceInstallerTests
         Assert.False(File.Exists(layout.PlistPath));
         Assert.False(Directory.Exists(layout.HelperDirectory));
         Assert.False(File.Exists(layout.NewsyslogConfPath));
+        // Logs are kept for diagnostics but stay root-only after uninstall.
+        Assert.Equal(MacLogPermissions.DirectoryMode, File.GetUnixFileMode(layout.LogDirectory));
+        Assert.Equal(MacLogPermissions.FileMode, File.GetUnixFileMode(logFile));
         Assert.Contains("networksetup -listallnetworkservices", runner.Calls);
         Assert.Contains("Privacy Shield", uninstallOutput.ToString(), StringComparison.Ordinal);
     }
