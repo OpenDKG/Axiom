@@ -27,78 +27,39 @@
       </Border>
 
       <Grid ColumnDefinitions="*,14,*,14,*,14,*">
-        <Border Grid.Column="0" Classes="card">
-          <StackPanel Spacing="5">
-            <Border Width="32" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}" HorizontalAlignment="Left" />
+        <Border Grid.Column="0" Classes="card" Padding="14,8">
+          <StackPanel Spacing="3">
+            <Border Width="24" Height="2" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}" HorizontalAlignment="Left" />
             <controls:AxiomSelectableTextBlock Text="ACTIVE SOCKETS" Classes="kpi-label" />
-            <controls:AxiomSelectableTextBlock Text="{Binding ConnectionsText}" Classes="kpi-value" />
+            <controls:AxiomSelectableTextBlock Text="{Binding ConnectionsText}" Classes="kpi-value" FontSize="24" />
             <controls:AxiomSelectableTextBlock Text="{Binding SourceBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="11" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="2" Classes="card">
-          <StackPanel Spacing="5">
-            <Border Width="32" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.Download}" HorizontalAlignment="Left" />
+        <Border Grid.Column="2" Classes="card" Padding="14,8">
+          <StackPanel Spacing="3">
+            <Border Width="24" Height="2" CornerRadius="1.5" Background="{DynamicResource Axiom.Download}" HorizontalAlignment="Left" />
             <controls:AxiomSelectableTextBlock Text="PROCESSES" Classes="kpi-label" />
-            <controls:AxiomSelectableTextBlock Text="{Binding ProcessesText}" Classes="kpi-value" />
+            <controls:AxiomSelectableTextBlock Text="{Binding ProcessesText}" Classes="kpi-value" FontSize="24" />
             <controls:AxiomSelectableTextBlock Text="with at least one socket" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="4" Classes="card">
-          <StackPanel Spacing="5">
-            <Border Width="32" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.AccentStrong}" HorizontalAlignment="Left" />
+        <Border Grid.Column="4" Classes="card" Padding="14,8">
+          <StackPanel Spacing="3">
+            <Border Width="24" Height="2" CornerRadius="1.5" Background="{DynamicResource Axiom.AccentStrong}" HorizontalAlignment="Left" />
             <controls:AxiomSelectableTextBlock Text="LOOPBACK" Classes="kpi-label" />
-            <controls:AxiomSelectableTextBlock Text="{Binding LoopbackText}" Classes="kpi-value" />
+            <controls:AxiomSelectableTextBlock Text="{Binding LoopbackText}" Classes="kpi-value" FontSize="24" />
             <controls:AxiomSelectableTextBlock Text="local-only endpoints" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="6" Classes="card">
-          <StackPanel Spacing="5">
-            <Border Width="32" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.Success}" HorizontalAlignment="Left" />
+        <Border Grid.Column="6" Classes="card" Padding="14,8">
+          <StackPanel Spacing="3">
+            <Border Width="24" Height="2" CornerRadius="1.5" Background="{DynamicResource Axiom.Success}" HorizontalAlignment="Left" />
             <controls:AxiomSelectableTextBlock Text="THROUGHPUT" Classes="kpi-label" />
-            <controls:AxiomSelectableTextBlock Text="{Binding DownloadText}" Classes="kpi-value" FontSize="25" />
+            <controls:AxiomSelectableTextBlock Text="{Binding DownloadText}" Classes="kpi-value" FontSize="23" />
             <controls:AxiomSelectableTextBlock Text="{Binding UploadText, StringFormat=Upload: {0}}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" />
           </StackPanel>
         </Border>
       </Grid>
-
-      <Border Classes="card">
-        <StackPanel Spacing="10">
-          <Grid ColumnDefinitions="*,Auto">
-            <StackPanel Grid.Column="0" Spacing="2">
-              <controls:AxiomSelectableTextBlock Text="System-wide throughput" Classes="section-title" />
-              <controls:AxiomSelectableTextBlock Text="{Binding BucketLabel}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            </StackPanel>
-            <ComboBox Grid.Column="1" ItemsSource="{Binding RangeOptions}" SelectedItem="{Binding SelectedRange}" Width="96" />
-          </Grid>
-          <Grid>
-            <controls:TrafficChartControl Height="180" UploadSeries="{Binding UploadSeries}" DownloadSeries="{Binding DownloadSeries}"
-                                          GridLineBrush="{DynamicResource Axiom.GridLine}"
-                                          UploadBrush="{DynamicResource Axiom.Upload}"
-                                          DownloadBrush="{DynamicResource Axiom.Download}"
-                                          MutedBrush="{DynamicResource Axiom.TextMuted}" />
-            <Border IsVisible="{Binding ShowNoDataOverlay}"
-                    Background="{DynamicResource Axiom.Surface}"
-                    BorderBrush="{DynamicResource Axiom.Border}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="14">
-              <controls:AxiomSelectableTextBlock Text="{Binding NoDataText}"
-                         Foreground="{DynamicResource Axiom.TextMuted}"
-                         FontSize="11.5"
-                         TextWrapping="Wrap"
-                         HorizontalAlignment="Center"
-                         VerticalAlignment="Center"
-                         TextAlignment="Center"
-                         MaxWidth="460" />
-            </Border>
-          </Grid>
-          <Grid ColumnDefinitions="Auto,Auto,*">
-            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding DownloadText, StringFormat=Down: {0}}" Foreground="{DynamicResource Axiom.Download}" FontSize="11" FontWeight="Medium" Margin="0,0,16,0" />
-            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding UploadText, StringFormat=Up: {0}}" Foreground="{DynamicResource Axiom.Accent}" FontSize="11" FontWeight="Medium" Margin="0,0,16,0" />
-            <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding RangeNote}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" MaxWidth="520" />
-          </Grid>
-        </StackPanel>
-      </Border>
 
       <Border Classes="card">
         <StackPanel Spacing="10">
@@ -340,6 +301,45 @@
               </Grid>
             </StackPanel>
           </Border>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0" Spacing="2">
+              <controls:AxiomSelectableTextBlock Text="System-wide throughput" Classes="section-title" />
+              <controls:AxiomSelectableTextBlock Text="{Binding BucketLabel}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            </StackPanel>
+            <ComboBox Grid.Column="1" ItemsSource="{Binding RangeOptions}" SelectedItem="{Binding SelectedRange}" Width="96" />
+          </Grid>
+          <Grid>
+            <controls:TrafficChartControl Height="180" UploadSeries="{Binding UploadSeries}" DownloadSeries="{Binding DownloadSeries}"
+                                          GridLineBrush="{DynamicResource Axiom.GridLine}"
+                                          UploadBrush="{DynamicResource Axiom.Upload}"
+                                          DownloadBrush="{DynamicResource Axiom.Download}"
+                                          MutedBrush="{DynamicResource Axiom.TextMuted}" />
+            <Border IsVisible="{Binding ShowNoDataOverlay}"
+                    Background="{DynamicResource Axiom.Surface}"
+                    BorderBrush="{DynamicResource Axiom.Border}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="14">
+              <controls:AxiomSelectableTextBlock Text="{Binding NoDataText}"
+                         Foreground="{DynamicResource Axiom.TextMuted}"
+                         FontSize="11.5"
+                         TextWrapping="Wrap"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         TextAlignment="Center"
+                         MaxWidth="460" />
+            </Border>
+          </Grid>
+          <Grid ColumnDefinitions="Auto,Auto,*">
+            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding DownloadText, StringFormat=Down: {0}}" Foreground="{DynamicResource Axiom.Download}" FontSize="11" FontWeight="Medium" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding UploadText, StringFormat=Up: {0}}" Foreground="{DynamicResource Axiom.Accent}" FontSize="11" FontWeight="Medium" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding RangeNote}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" MaxWidth="520" />
+          </Grid>
         </StackPanel>
       </Border>
 
