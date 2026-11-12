@@ -10,7 +10,8 @@ namespace Axiom.Presentation;
 public static class PlatformText
 {
     private static readonly bool Mac = OperatingSystem.IsMacOS();
-    private static readonly bool Linux = OperatingSystem.IsLinux();
+    /// <summary>True on Linux hosts (nftables daemon, systemd, polkit).</summary>
+    public static bool Linux { get; } = OperatingSystem.IsLinux();
 
     /// <summary>True where the root daemon switches system DNS itself (macOS, Linux).</summary>
     public static bool DaemonSwitchesDns => Mac || Linux;
@@ -64,6 +65,12 @@ public static class PlatformText
         : "Hide background console windows (Node, PowerShell, Python)";
 
     public static string FirewallRulesTitle => Firewall + " · Axiom-owned rules";
+
+    /// <summary>The enforcement component the daemon publishes to: "the network filter" (macOS AxiomFilter) / "nftables".</summary>
+    public static string FilterName => Linux ? "nftables" : "the network filter";
+
+    /// <summary>What the daemon publishes: the macOS rules file / the Linux enforcement table.</summary>
+    public static string FilterTableName => Linux ? "Axiom enforcement table (table inet axiom)" : "rules file";
 
     /// <summary>The system resolver the daemon reconfigures: "systemd-resolved" / "networksetup".</summary>
     public static string DnsResolverName => Linux ? "systemd-resolved" : Mac ? "networksetup" : "the adapter DNS settings";

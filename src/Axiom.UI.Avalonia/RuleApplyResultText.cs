@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Globalization;
 using Axiom.Contracts.Firewall;
+using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
 
@@ -24,7 +25,7 @@ public static class RuleApplyResultText
 
         if (result.State == RuleState.Pending)
         {
-            return $"{subject} published; waiting for the network filter to acknowledge it (not enforced yet" +
+            return $"{subject} published; waiting for {PlatformText.FilterName} to acknowledge it (not enforced yet" +
                    $"{(string.IsNullOrWhiteSpace(result.ErrorMessage) ? string.Empty : ": " + result.ErrorMessage)}).";
         }
 

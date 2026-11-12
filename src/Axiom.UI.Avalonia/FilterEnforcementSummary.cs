@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Globalization;
 using Axiom.Contracts.Firewall;
+using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
 
@@ -63,17 +64,19 @@ public sealed record FilterEnforcementSummary
         switch (report.State)
         {
             case FilterEnforcementState.Unavailable:
-                banner.Add("The network filter has not connected. Rules are published but NOT enforced until the extension is activated.");
+                banner.Add(PlatformText.Linux
+                    ? $"The {PlatformText.FilterTableName} has not been published. Rules are stored but NOT enforced until the daemon publishes it."
+                    : "The network filter has not connected. Rules are published but NOT enforced until the extension is activated.");
                 break;
             case FilterEnforcementState.Degraded:
-                banner.Add(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The network filter is disconnected (last seen {LocalTime(report.LastSeenUtc)}). Published rules are not known to be enforced; protection is degraded."));
+                banner.Add(PlatformText.Linux
+                    ? string.Create(CultureInfo.InvariantCulture, $"{PlatformText.FilterName} is disconnected (last seen {LocalTime(report.LastSeenUtc)}): table inet axiom is missing or nft cannot be read. Published rules are not known to be enforced; protection is degraded.")
+                    : string.Create(CultureInfo.InvariantCulture, $"The network filter is disconnected (last seen {LocalTime(report.LastSeenUtc)}). Published rules are not known to be enforced; protection is degraded."));
                 break;
             case FilterEnforcementState.Pending:
-                banner.Add(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The network filter has not acknowledged rules generation {report.PublishedGeneration} yet; rules are pending, not verified."));
+                banner.Add(PlatformText.Linux
+                    ? string.Create(CultureInfo.InvariantCulture, $"{PlatformText.FilterName} has not acknowledged rules generation {report.PublishedGeneration} yet (table read back with another generation); rules are pending, not verified.")
+                    : string.Create(CultureInfo.InvariantCulture, $"The network filter has not acknowledged rules generation {report.PublishedGeneration} yet; rules are pending, not verified."));
                 break;
             default:
                 break;
@@ -81,9 +84,9 @@ public sealed record FilterEnforcementSummary
 
         if (report.FileError is { Length: > 0 } error)
         {
-            banner.Add(string.Create(
-                CultureInfo.InvariantCulture,
-                $"The filter rejected the whole rules file ({error}). The previous table (generation {report.Generation}) stays in force; new rules are not enforced."));
+            banner.Add(PlatformText.Linux
+                ? string.Create(CultureInfo.InvariantCulture, $"{PlatformText.FilterName} rejected the whole rules file ({error}). The previous table (generation {report.Generation}) stays in force; new rules are not enforced.")
+                : string.Create(CultureInfo.InvariantCulture, $"The filter rejected the whole rules file ({error}). The previous table (generation {report.Generation}) stays in force; new rules are not enforced."));
         }
 
         if (report.DroppedEvents > 0)
