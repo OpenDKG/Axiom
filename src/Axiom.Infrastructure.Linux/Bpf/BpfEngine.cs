@@ -309,7 +309,16 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 }
             }
 
-            var attached = !neutralised;
+            var detachedExternally = false;
+            if (!neutralised && ProgramsAttached() is { } attachedCount && attachedCount < BpfLayout.Programs.Count)
+            {
+                // Someone detached Axiom's programs (bpftool cgroup detach, a cgroup tool): the maps no
+                // longer enforce anything. Report it and let the watcher re-attach (Neutralised).
+                detachedExternally = true;
+                Log(string.Create(CultureInfo.InvariantCulture, $"BPF layer: only {attachedCount} of {BpfLayout.Programs.Count} Axiom programs are attached at {_paths.CgroupRoot}; connect-time verdicts are not enforced until re-attached."));
+            }
+
+            var attached = !neutralised && !detachedExternally;
             if (failedDeletes.Count > 0 && !neutralised)
             {
                 lock (_stateGate)
@@ -327,6 +336,13 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
 
                 _generation = failedDeletes.Count == 0 && failedUpdates.Count == 0 ? generation : neutralised ? -1 : _generation;
                 _uncovered = plan.Uncovered;
+                if (detachedExternally)
+                {
+                    _active = false;
+                    _neutralised = true;
+                    _status = string.Create(CultureInfo.InvariantCulture, $"degraded: Axiom's BPF programs were detached by another tool (generation {generation}); nftables only until re-attached");
+                }
+
                 if (neutralised)
                 {
                     _active = false;
@@ -342,7 +358,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 Pinned = Directory.Exists(_paths.PinDirectory),
                 Applied = attached && failedDeletes.Count == 0 && failedUpdates.Count == 0,
                 Verified = attached && verified && failedDeletes.Count == 0 && failedUpdates.Count == 0,
-                Neutralised = neutralised,
+                Neutralised = neutralised || detachedExternally,
                 Attempts = attempts,
                 FailedDeletes = failedDeletes.ToList(),
                 FailedUpdates = failedUpdates.ToList(),
@@ -541,8 +557,15 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
 
     private bool TryDelete(BpfMapEntry entry, out string error)
     {
+        if (!File.Exists(_paths.MapPin(entry.Map)))
+        {
+            // ENOENT from a missing pin is not "key already gone": the map may still be attached, unpinned.
+            error = $"map pin {_paths.MapPin(entry.Map)} is missing; the entry cannot be deleted or confirmed absent";
+            return false;
+        }
+
         var delete = Run(["map", "delete", "pinned", _paths.MapPin(entry.Map), "key", "hex", .. BpfLayout.HexTokens(entry.Key)]);
-        if (delete.Succeeded || delete.StandardError.Contains("No such", StringComparison.OrdinalIgnoreCase))
+        if (delete.Succeeded || (delete.StandardError.Contains("No such", StringComparison.OrdinalIgnoreCase) && !delete.StandardError.Contains("obj get", StringComparison.OrdinalIgnoreCase)))
         {
             error = string.Empty;
             return true;
@@ -604,6 +627,19 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         return found;
     }
 
+    /// <summary>Number of Axiom programs attached at the cgroup root, or null when <c>bpftool cgroup show</c> is unreadable.</summary>
+    private int? ProgramsAttached()
+    {
+        var show = Run("-j", "cgroup", "show", _paths.CgroupRoot);
+        if (!show.Succeeded)
+        {
+            return null;
+        }
+
+        var names = BpfLayout.Programs.Select(program => program.Program).ToHashSet(StringComparer.Ordinal);
+        return BpfMapDump.ParseAttached(show.StandardOutput).Select(program => program.Name).Where(names.Contains).Distinct(StringComparer.Ordinal).Count();
+    }
+
     /// <summary>Axiom's programs still attached at the cgroup root (name prefix <c>axiom_</c> as in <see cref="BpfLayout.Programs"/>).</summary>
     private List<(string Hook, long Id, string Name)> ListAttachedAxiomPrograms()
     {
@@ -622,7 +658,18 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
 
     private ProcessResult Run(params string[] arguments) => Run((IReadOnlyList<string>)arguments);
 
-    private ProcessResult Run(IReadOnlyList<string> arguments) => _runner.Run(BpfCapabilityProbe.Bpftool, arguments, Timeout);
+    /// <summary>One bpftool call; a missing/unrunnable bpftool is a failed result (exit 127), never an exception.</summary>
+    private ProcessResult Run(IReadOnlyList<string> arguments)
+    {
+        try
+        {
+            return _runner.Run(BpfCapabilityProbe.Bpftool, arguments, Timeout);
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return new ProcessResult(127, string.Empty, $"bpftool could not be run: {exception.Message}");
+        }
+    }
 
     private void SetState(bool active, string status)
     {

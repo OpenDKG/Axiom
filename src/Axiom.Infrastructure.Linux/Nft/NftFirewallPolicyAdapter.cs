@@ -576,7 +576,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             var report = Rebuild(readback);
             var layer = LayerSync;
             var nftVerified = Evaluate(_published, readback.Generation, readback.NftError is null, report.FileError is { Length: > 0 }) == FilterEnforcementState.Verified && readback.Counters.All(counter => counter.RuleId != managedRuleId);
-            if (layer is { StaleEntriesCanBlock: true } || layer is { Neutralised: true })
+            if (layer is { StaleEntriesCanBlock: true } || layer is { Neutralised: true, FailedDeletes.Count: > 0 })
             {
                 var stale = layer.FailedDeletes.Count > 0 ? string.Join("; ", layer.FailedDeletes) : "(no detail)";
                 var neutralised = layer.Neutralised;
@@ -593,7 +593,9 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 };
             }
 
-            var verified = nftVerified && (layer is null || !layer.Attached || layer.Applied);
+            // An attached layer must have written AND read back the plan; a layer that is detached (never
+            // attached, or detached by another tool) cannot enforce the removed rule.
+            var verified = nftVerified && (layer is null || !layer.Attached || (layer.Applied && layer.Verified));
             return new RuleApplyResult
             {
                 Success = true,
@@ -604,7 +606,9 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 ErrorMessage = verified
                     ? null
                     : nftVerified
-                        ? string.Create(CultureInfo.InvariantCulture, $"removed from nftables; BPF map sync for generation {outcome.Compilation.Generation} is incomplete ({layer!.FailedUpdates.Count} update(s) failed), other rules are affected")
+                        ? layer!.Applied
+                            ? string.Create(CultureInfo.InvariantCulture, $"removed from nftables; the BPF maps of generation {outcome.Compilation.Generation} could not be read back (bpftool map dump failed), so the connect-time state is unconfirmed")
+                            : string.Create(CultureInfo.InvariantCulture, $"removed from nftables; BPF map sync for generation {outcome.Compilation.Generation} is incomplete ({layer.FailedUpdates.Count} update(s) failed), other rules are affected")
                         : string.Create(CultureInfo.InvariantCulture, $"removed from the batch; generation {outcome.Compilation.Generation} not verified in nftables yet"),
             };
         }
@@ -916,6 +920,9 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 {
                     _layerSync = sync;
                 }
+
+                // The report folds the layer in (Evaluate): refresh it so a re-attached layer clears Degraded.
+                Rebuild(await ReadbackAsync(ct).ConfigureAwait(false));
             }
         }
         finally
@@ -954,7 +961,14 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
     }
 
     /// <summary>Teardown step 1: <c>nft delete table inet axiom</c> (only that table).</summary>
-    public Task DeleteTableAsync(CancellationToken ct) => _table.DeleteAsync(ct);
+    public async Task DeleteTableAsync(CancellationToken ct)
+    {
+        var deleted = await _table.DeleteAsync(ct).ConfigureAwait(false);
+        if (!deleted.Success)
+        {
+            throw new IOException("nft delete table inet axiom failed: " + deleted.Error);
+        }
+    }
 
     /// <summary>Teardown step 2: returns herded processes and removes every <c>axiom.slice</c> app cgroup.</summary>
     public void ReleaseCgroups() => _cgroups.RemoveAll();
