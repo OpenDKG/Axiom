@@ -7,9 +7,12 @@ using Axiom.Infrastructure.MacOS;
 using Axiom.Infrastructure.MacOS.Diagnostics;
 using Axiom.Infrastructure.MacOS.Dns;
 using Axiom.Infrastructure.MacOS.Filter;
-using Axiom.Infrastructure.MacOS.Ipc;
 using Axiom.Infrastructure.MacOS.Launchd;
 using Axiom.Infrastructure.MacOS.Monitoring;
+using Axiom.Infrastructure.Unix;
+using Axiom.Infrastructure.Unix.Filter;
+using Axiom.Infrastructure.Unix.Ipc;
+using Axiom.Infrastructure.Unix.Monitoring;
 using Axiom.Service.Hosting.Dns;
 using Axiom.Service.Hosting.Ipc;
 using Microsoft.Extensions.DependencyInjection;
@@ -73,7 +76,7 @@ internal static class ServicePlatform
         var paths = MacServicePaths.Default;
         try
         {
-            var changed = MacDataDirectoryPermissions.Enforce(paths.MachineDataDirectory);
+            var changed = UnixDataDirectoryPermissions.Enforce(paths.MachineDataDirectory);
             if (changed.Count > 0)
             {
                 Console.Error.WriteLine($"Data directory permissions: tightened {changed.Count} entries under {paths.MachineDataDirectory}.");

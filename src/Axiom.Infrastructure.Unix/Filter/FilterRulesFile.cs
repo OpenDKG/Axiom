@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Text;
 
-namespace Axiom.Infrastructure.MacOS.Filter;
+namespace Axiom.Infrastructure.Unix.Filter;
 
 /// <summary>
 /// Atomic publication of daemon files: write a temp file in the same directory, flush it to
@@ -12,10 +12,10 @@ namespace Axiom.Infrastructure.MacOS.Filter;
 public static class FilterRulesFile
 {
     /// <summary>0644: the rule table read by the filter extension.</summary>
-    public const UnixFileMode PublishedMode = MacDataDirectoryPermissions.SharedFileMode;
+    public const UnixFileMode PublishedMode = UnixDataDirectoryPermissions.SharedFileMode;
 
     /// <summary>0600: daemon-private state (managed rules, DNS backup).</summary>
-    public const UnixFileMode PrivateMode = MacDataDirectoryPermissions.PrivateFileMode;
+    public const UnixFileMode PrivateMode = UnixDataDirectoryPermissions.PrivateFileMode;
 
     public static void WriteAtomic(string path, string content) => WriteAtomic(path, content, PublishedMode);
 

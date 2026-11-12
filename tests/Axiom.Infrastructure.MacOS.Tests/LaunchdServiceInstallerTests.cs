@@ -86,8 +86,8 @@ public sealed class LaunchdServiceInstallerTests
         Assert.Contains($"<string>{layout.DaemonPath}</string>", File.ReadAllText(layout.PlistPath), StringComparison.Ordinal);
 
         Assert.Equal(501u, new ProtectionSettingsStore(layout.ProtectionSettingsPath).Load().AllowedUid);
-        Assert.Equal(MacDataDirectoryPermissions.PrivateDirectoryMode, File.GetUnixFileMode(layout.MachineDataDirectory));
-        Assert.Equal(MacDataDirectoryPermissions.PrivateFileMode, File.GetUnixFileMode(layout.ProtectionSettingsPath));
+        Assert.Equal(UnixDataDirectoryPermissions.PrivateDirectoryMode, File.GetUnixFileMode(layout.MachineDataDirectory));
+        Assert.Equal(UnixDataDirectoryPermissions.PrivateFileMode, File.GetUnixFileMode(layout.ProtectionSettingsPath));
         Assert.Contains("uid 501", output.ToString(), StringComparison.Ordinal);
         Assert.Contains("axiomd.log\troot:wheel\t644\t5\t5120\t*\tJ", File.ReadAllText(layout.NewsyslogConfPath), StringComparison.Ordinal);
         Assert.Equal(PrivilegedHelperLayout.FileMode, File.GetUnixFileMode(layout.NewsyslogConfPath));

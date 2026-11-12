@@ -99,22 +99,31 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )"
+          "Axiom.Contracts": "[0.13.0, )"
         }
       },
       "axiom.infrastructure.macos": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )",
-          "Axiom.Core": "[0.10.6, )",
-          "Axiom.Service.Hosting": "[0.10.6, )"
+          "Axiom.Contracts": "[0.13.0, )",
+          "Axiom.Core": "[0.13.0, )",
+          "Axiom.Infrastructure.Unix": "[0.13.0, )",
+          "Axiom.Service.Hosting": "[0.13.0, )"
+        }
+      },
+      "axiom.infrastructure.unix": {
+        "type": "Project",
+        "dependencies": {
+          "Axiom.Contracts": "[0.13.0, )",
+          "Axiom.Core": "[0.13.0, )",
+          "Axiom.Service.Hosting": "[0.13.0, )"
         }
       },
       "axiom.service.hosting": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )",
-          "Axiom.Core": "[0.10.6, )"
+          "Axiom.Contracts": "[0.13.0, )",
+          "Axiom.Core": "[0.13.0, )"
         }
       }
     }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts;
 
-namespace Axiom.Infrastructure.MacOS.Interop;
+namespace Axiom.Infrastructure.Unix.Interop;
 
 /// <summary>Result of a helper tool invocation.</summary>
 public sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError)

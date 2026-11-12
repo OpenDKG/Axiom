@@ -1,22 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Globalization;
-using Axiom.Infrastructure.MacOS.Interop;
+using Axiom.Infrastructure.Unix.Interop;
 
-namespace Axiom.Infrastructure.MacOS.Launchd;
+namespace Axiom.Infrastructure.Unix.Install;
 
 /// <summary>
-/// Where the root daemon lives and what the copy must look like. launchd trusts the plist owner,
-/// not the program, so a daemon that runs from the user-writable <c>Axiom.app</c> bundle could be
-/// replaced by any process of that user. <c>--install-service</c> therefore copies the published
-/// daemon into <c>/Library/PrivilegedHelperTools/com.axiom.service</c> (root:wheel, 0755 dirs,
-/// 0644 files, 0755 executables) and refuses to bootstrap unless <see cref="Audit"/> passes.
+/// What the root-owned copy of the daemon must look like, on any Unix. The init system trusts the
+/// job definition's owner, not the program, so a daemon that runs from a user-writable location
+/// could be replaced by any process of that user. <c>--install-service</c> therefore copies the
+/// published daemon into a root-owned directory (<c>/Library/PrivilegedHelperTools/com.axiom.service</c>
+/// on macOS, <c>/usr/libexec/axiom</c> on Linux; 0755 dirs, 0644 files, 0755 executables) and
+/// refuses to start it unless <see cref="Audit"/> passes. This is the Unix twin of upstream's
+/// Windows <c>ServiceImageProtection</c>.
 /// </summary>
-public static class PrivilegedHelperLayout
+public static class ProtectedImageLayout
 {
-    public const string HelperRoot = "/Library/PrivilegedHelperTools";
-
-    public const string HelperDirectory = HelperRoot + "/" + MacServicePaths.LaunchdLabel;
-
     public const string DaemonFileName = "axiomd";
 
     public const UnixFileMode DirectoryMode =
@@ -31,9 +29,6 @@ public static class PrivilegedHelperLayout
 
     public const UnixFileMode AnyExecute = UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
 
-    /// <summary>Daemon path inside the helper directory.</summary>
-    public static string DaemonPath => Path.Combine(HelperDirectory, DaemonFileName);
-
     /// <summary>Mode a copied entry gets: directories and anything executable 0755, data 0644.</summary>
     public static UnixFileMode ModeFor(bool isDirectory, UnixFileMode sourceMode) =>
         isDirectory || (sourceMode & AnyExecute) != 0 ? ExecutableMode : FileMode;
@@ -43,21 +38,21 @@ public static class PrivilegedHelperLayout
     /// world-writable, the directory and the daemon must be present, and the daemon executable.
     /// Returns the problems found (empty = pass).
     /// </summary>
-    public static IReadOnlyList<string> Audit(string helperDirectory, IReadOnlyList<UnixFileEntry> entries)
+    public static IReadOnlyList<string> Audit(string imageDirectory, IReadOnlyList<UnixFileEntry> entries)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(helperDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(imageDirectory);
         ArgumentNullException.ThrowIfNull(entries);
 
         var problems = new List<string>();
-        var daemonPath = Path.Combine(helperDirectory, DaemonFileName);
-        var directory = entries.FirstOrDefault(entry => entry.Path == helperDirectory);
+        var daemonPath = Path.Combine(imageDirectory, DaemonFileName);
+        var directory = entries.FirstOrDefault(entry => entry.Path == imageDirectory);
         if (directory is null)
         {
-            problems.Add($"{helperDirectory} is missing from the listing.");
+            problems.Add($"{imageDirectory} is missing from the listing.");
         }
         else if (!directory.IsDirectory)
         {
-            problems.Add($"{helperDirectory} is not a directory.");
+            problems.Add($"{imageDirectory} is not a directory.");
         }
 
         var daemon = entries.FirstOrDefault(entry => entry.Path == daemonPath);
@@ -94,5 +89,27 @@ public static class PrivilegedHelperLayout
             .EnumerateFileSystemEntries(directory, "*", SearchOption.AllDirectories)
             .Order(StringComparer.Ordinal));
         return paths;
+    }
+
+    /// <summary>
+    /// Same check as the Windows installer after the copy to Program Files: the installed daemon
+    /// must be byte-identical (SHA-256) to the image the administrator prompt ran.
+    /// </summary>
+    public static bool FilesMatch(string left, string right)
+    {
+        try
+        {
+            return string.Equals(Hash(left), Hash(right), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static string Hash(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
     }
 }

@@ -49,7 +49,7 @@ public sealed class MacDoctorTests
         File.WriteAllText(targets.PlistPath, LaunchdServiceInstaller.BuildPlist("/Applications/Axiom.app/Contents/Resources/service/axiomd", "/tmp/log"));
         var runner = new FakeRunner()
             .On("launchctl print", "Could not find service \"com.axiom.service\" in domain for system\n", exitCode: 113)
-            .On("stat", arguments => new Interop.ProcessResult(0, string.Join('\n', arguments.Skip(2).Select(path =>
+            .On("stat", arguments => new ProcessResult(0, string.Join('\n', arguments.Skip(2).Select(path =>
                 $"501 20 {(Directory.Exists(path) ? "40755" : "100644")} {path}")), string.Empty))
             .On("networksetup -listallnetworkservices", "An asterisk (*) denotes that a network service is disabled.\nEthernet\n")
             .On("networksetup -getdnsservers", "127.0.0.1\n")
@@ -95,7 +95,7 @@ public sealed class MacDoctorTests
         File.WriteAllText(Path.Combine(data, "axiom.db"), "x");
         File.WriteAllText(Path.Combine(data, "filter", "rules.json"), "{}");
         File.WriteAllText(Path.Combine(data, "privacy-shield.json"), "{\"enabled\":true}");
-        MacDataDirectoryPermissions.Enforce(data);
+        UnixDataDirectoryPermissions.Enforce(data);
         var plist = Path.Combine(temp.Path, "com.axiom.service.plist");
         return new DoctorTargets(
             plist,

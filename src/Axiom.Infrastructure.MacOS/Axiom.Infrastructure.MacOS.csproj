@@ -15,6 +15,18 @@
     <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
     <ProjectReference Include="..\Axiom.Core\Axiom.Core.csproj" />
     <ProjectReference Include="..\Axiom.Service.Hosting\Axiom.Service.Hosting.csproj" />
+    <ProjectReference Include="..\Axiom.Infrastructure.Unix\Axiom.Infrastructure.Unix.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Unix-generic types (moved to Axiom.Infrastructure.Unix) keep their short names here. -->
+    <Using Include="Axiom.Infrastructure.Unix" />
+    <Using Include="Axiom.Infrastructure.Unix.Diagnostics" />
+    <Using Include="Axiom.Infrastructure.Unix.Filter" />
+    <Using Include="Axiom.Infrastructure.Unix.Install" />
+    <Using Include="Axiom.Infrastructure.Unix.Interop" />
+    <Using Include="Axiom.Infrastructure.Unix.Ipc" />
+    <Using Include="Axiom.Infrastructure.Unix.Monitoring" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-namespace Axiom.Infrastructure.MacOS;
+namespace Axiom.Infrastructure.Unix;
 
 /// <summary>
 /// Modes of the machine data directory (<c>/Library/Application Support/Axiom</c>). The root
@@ -8,7 +8,7 @@ namespace Axiom.Infrastructure.MacOS;
 /// AxiomFilter extension reads it; everything else there is daemon state, 0600). Applied at
 /// daemon start (<see cref="Enforce"/>, idempotent) and by every store at write time.
 /// </summary>
-public static class MacDataDirectoryPermissions
+public static class UnixDataDirectoryPermissions
 {
     public const string FilterDirectoryName = "filter";
 

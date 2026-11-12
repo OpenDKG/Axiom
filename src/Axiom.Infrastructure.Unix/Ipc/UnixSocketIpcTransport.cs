@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net.Sockets;
 using System.Runtime.Versioning;
-using Axiom.Infrastructure.MacOS.Interop;
+using Axiom.Infrastructure.Unix.Interop;
 using Axiom.Service.Hosting.Ipc;
 
-namespace Axiom.Infrastructure.MacOS.Ipc;
+namespace Axiom.Infrastructure.Unix.Ipc;
 
 /// <summary>
 /// The daemon IPC endpoint: a Unix domain socket (default <c>/var/run/axiom/axiom.sock</c>, mode
@@ -24,12 +24,12 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
 
     private readonly Dictionary<uint, int> _perUid = [];
 
-    private readonly MacServicePaths _paths;
+    private readonly UnixServicePaths _paths;
 
     private readonly Func<uint?, PeerDecision> _authorize;
 
     /// <summary>Connection check only (every console user may write); kept for tests and tools.</summary>
-    public UnixSocketIpcTransport(MacServicePaths paths)
+    public UnixSocketIpcTransport(UnixServicePaths paths)
         : this(paths, uid => PeerAuthorization.Decide(uid))
     {
     }
@@ -39,7 +39,7 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
     /// <paramref name="settings"/> for every connection so an install or a settings change
     /// applies without a daemon restart.
     /// </summary>
-    public UnixSocketIpcTransport(MacServicePaths paths, Axiom.Core.Protection.ProtectionSettingsStore settings)
+    public UnixSocketIpcTransport(UnixServicePaths paths, Axiom.Core.Protection.ProtectionSettingsStore settings)
         : this(paths, uid => PeerAuthorization.Decide(
             uid,
             PeerPolicy.FromSettings(settings.Load(), member => UnixGroups.IsMember(member, PeerPolicy.AdminGroup))))
@@ -47,7 +47,7 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
         ArgumentNullException.ThrowIfNull(settings);
     }
 
-    public UnixSocketIpcTransport(MacServicePaths paths, Func<uint?, PeerDecision> authorize)
+    public UnixSocketIpcTransport(UnixServicePaths paths, Func<uint?, PeerDecision> authorize)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _authorize = authorize ?? throw new ArgumentNullException(nameof(authorize));

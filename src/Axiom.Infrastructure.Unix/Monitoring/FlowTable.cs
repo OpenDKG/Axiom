@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using Axiom.Infrastructure.MacOS.Filter;
+using Axiom.Infrastructure.Unix.Filter;
 
-namespace Axiom.Infrastructure.MacOS.Monitoring;
+namespace Axiom.Infrastructure.Unix.Monitoring;
 
 /// <summary>One flow as reported by <see cref="FlowTable.Capture"/>.</summary>
 public sealed record FlowObservation

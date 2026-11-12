@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Infrastructure.MacOS.Filter;
+using Axiom.Infrastructure.Unix.Filter;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 

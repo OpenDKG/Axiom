@@ -18,6 +18,13 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="Axiom.Infrastructure.Unix" />
+    <Using Include="Axiom.Infrastructure.Unix.Diagnostics" />
+    <Using Include="Axiom.Infrastructure.Unix.Filter" />
+    <Using Include="Axiom.Infrastructure.Unix.Install" />
+    <Using Include="Axiom.Infrastructure.Unix.Interop" />
+    <Using Include="Axiom.Infrastructure.Unix.Ipc" />
+    <Using Include="Axiom.Infrastructure.Unix.Monitoring" />
   </ItemGroup>
 
   <ItemGroup>

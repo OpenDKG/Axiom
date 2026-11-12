@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net.Sockets;
 using System.Runtime.Versioning;
-using Axiom.Infrastructure.MacOS.Interop;
-using Axiom.Infrastructure.MacOS.Monitoring;
+using Axiom.Infrastructure.Unix.Interop;
+using Axiom.Infrastructure.Unix.Monitoring;
 
-namespace Axiom.Infrastructure.MacOS.Filter;
+namespace Axiom.Infrastructure.Unix.Filter;
 
 /// <summary>
 /// Listens on <c>/var/run/axiom/filter.sock</c> (root, 0600) for the AxiomFilter extension and
@@ -19,7 +19,7 @@ public sealed class FilterEventServer
 
     private const int MaxConcurrentClients = 4;
 
-    private readonly MacServicePaths _paths;
+    private readonly UnixServicePaths _paths;
 
     private readonly FlowTable _flows;
 
@@ -33,13 +33,13 @@ public sealed class FilterEventServer
 
     private long _acceptedEvents;
 
-    public FilterEventServer(MacServicePaths paths, FlowTable flows, FilterStatus status)
+    public FilterEventServer(UnixServicePaths paths, FlowTable flows, FilterStatus status)
         : this(paths, flows, status, uid => uid == 0, TimeProvider.System)
     {
     }
 
     public FilterEventServer(
-        MacServicePaths paths,
+        UnixServicePaths paths,
         FlowTable flows,
         FilterStatus status,
         Func<uint?, bool> authorizePeer,

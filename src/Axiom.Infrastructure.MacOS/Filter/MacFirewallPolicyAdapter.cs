@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Globalization;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Axiom.Contracts.Firewall;
 using Axiom.Core.Firewall;
 using Axiom.Core.Protection;
@@ -17,13 +15,9 @@ namespace Axiom.Infrastructure.MacOS.Filter;
 /// </summary>
 public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRuleRecoveryAdapter, IDisposable
 {
-    private static readonly JsonSerializerOptions StateJson = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
-    };
-
     private readonly MacServicePaths _paths;
+
+    private readonly ManagedRuleStore _store;
 
     private readonly FilterStatus _status;
 
@@ -48,6 +42,7 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         _status = status ?? throw new ArgumentNullException(nameof(status));
         _writeGate = writeGate ?? throw new ArgumentNullException(nameof(writeGate));
         _time = time ?? throw new ArgumentNullException(nameof(time));
+        _store = new ManagedRuleStore(_paths.ManagedRulesFile);
     }
 
     public void Dispose() => _gate.Dispose();
@@ -428,38 +423,10 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         return generation;
     }
 
-    private ManagedRuleState LoadState()
-    {
-        try
-        {
-            if (!File.Exists(_paths.ManagedRulesFile))
-            {
-                return new ManagedRuleState();
-            }
+    // managed-rules.json is the daemon's own 0600 record (shared Unix ManagedRuleStore).
+    private ManagedRuleState LoadState() => _store.Load();
 
-            var state = JsonSerializer.Deserialize<ManagedRuleState>(File.ReadAllText(_paths.ManagedRulesFile), StateJson);
-            // managed-rules.json is the daemon's own 0600 record, so every entry is Axiom-owned;
-            // records written before the recovery feature carry no group and get the marker here.
-            return state is { SchemaVersion: ManagedRuleState.CurrentSchemaVersion }
-                ? state with
-                {
-                    Rules = (state.Rules ?? [])
-                        .Where(rule => rule.ManagedRuleId != Guid.Empty)
-                        .Select(rule => string.IsNullOrWhiteSpace(rule.OwnershipGroup)
-                            ? rule with { OwnershipGroup = OwnedRuleOwnership.GroupName }
-                            : rule)
-                        .ToList(),
-                }
-                : new ManagedRuleState();
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return new ManagedRuleState();
-        }
-    }
-
-    private void SaveState(ManagedRuleState state) =>
-        FilterRulesFile.WriteAtomic(_paths.ManagedRulesFile, JsonSerializer.Serialize(state, StateJson) + "\n", FilterRulesFile.PrivateMode);
+    private void SaveState(ManagedRuleState state) => _store.Save(state);
 
     private bool TryProbeWritable(out string problem)
     {
@@ -499,15 +466,4 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         ErrorCode = code,
         ErrorMessage = message,
     };
-
-    private sealed record ManagedRuleState
-    {
-        public const int CurrentSchemaVersion = 1;
-
-        public int SchemaVersion { get; init; } = CurrentSchemaVersion;
-
-        public long Generation { get; init; }
-
-        public IReadOnlyList<ManagedRule> Rules { get; init; } = [];
-    }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Core.Protection;
 using Axiom.Infrastructure.MacOS.Interop;
-using Axiom.Infrastructure.MacOS.Ipc;
+using Axiom.Infrastructure.Unix.Ipc;
 
 namespace Axiom.Infrastructure.MacOS.Tests;
 

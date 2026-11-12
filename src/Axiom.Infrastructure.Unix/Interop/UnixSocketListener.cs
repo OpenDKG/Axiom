@@ -2,7 +2,7 @@
 using System.Net.Sockets;
 using System.Runtime.Versioning;
 
-namespace Axiom.Infrastructure.MacOS.Interop;
+namespace Axiom.Infrastructure.Unix.Interop;
 
 /// <summary>Creates a listening Unix domain stream socket with an explicit file mode.</summary>
 [UnsupportedOSPlatform("windows")]

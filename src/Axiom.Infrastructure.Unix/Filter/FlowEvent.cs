@@ -2,7 +2,7 @@
 using System.Globalization;
 using System.Text.Json;
 
-namespace Axiom.Infrastructure.MacOS.Filter;
+namespace Axiom.Infrastructure.Unix.Filter;
 
 public enum FlowEventType
 {

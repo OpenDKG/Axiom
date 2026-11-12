@@ -8,22 +8,6 @@ using Axiom.Infrastructure.MacOS.Launchd;
 
 namespace Axiom.Infrastructure.MacOS.Diagnostics;
 
-/// <summary>One line of <c>axiomd --doctor</c>.</summary>
-public sealed record DoctorCheck(string Status, string Name, string Detail)
-{
-    public const string Pass = "PASS";
-
-    public const string Warn = "WARN";
-
-    public const string Fail = "FAIL";
-
-    public const string Skip = "SKIP";
-
-    public bool IsProblem => Status is Warn or Fail;
-
-    public override string ToString() => $"{Status,-4} {Name}: {Detail}";
-}
-
 /// <summary>Everything the doctor needs to look at (production paths by default; tests use a temp root).</summary>
 public sealed record DoctorTargets(
     string PlistPath,
@@ -258,7 +242,7 @@ public sealed class MacDoctor
             return;
         }
 
-        var expectedRoot = (int)MacDataDirectoryPermissions.PrivateDirectoryMode;
+        var expectedRoot = (int)UnixDataDirectoryPermissions.PrivateDirectoryMode;
         var rootOk = rootEntry.IsDirectory && rootEntry.IsRootOwned && rootEntry.Permissions == expectedRoot;
         checks.Add(new DoctorCheck(rootOk ? DoctorCheck.Pass : DoctorCheck.Fail, "data root", $"{root} {rootEntry.Describe()}" + (rootOk ? string.Empty : " (expected uid 0 mode 700)")));
 
@@ -288,7 +272,7 @@ public sealed class MacDoctor
                 continue;
             }
 
-            var expected = (int)MacDataDirectoryPermissions.ExpectedMode(root, entry.Path, entry.IsDirectory);
+            var expected = (int)UnixDataDirectoryPermissions.ExpectedMode(root, entry.Path, entry.IsDirectory);
             var ok = entry.IsRootOwned && entry.Permissions == expected;
             checks.Add(new DoctorCheck(
                 ok ? DoctorCheck.Pass : DoctorCheck.Warn,

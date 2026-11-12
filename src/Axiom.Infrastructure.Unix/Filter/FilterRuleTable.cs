@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Axiom.Contracts.Firewall;
 
-namespace Axiom.Infrastructure.MacOS.Filter;
+namespace Axiom.Infrastructure.Unix.Filter;
 
 /// <summary>
 /// One rule of the AxiomFilter rule table (docs/MACOS_ARCHITECTURE.md section 3.1). Property names

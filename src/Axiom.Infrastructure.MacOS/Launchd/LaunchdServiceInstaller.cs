@@ -234,7 +234,7 @@ public sealed class LaunchdServiceInstaller
                 return 7;
             }
 
-            MacDataDirectoryPermissions.Enforce(_options.MachineDataDirectory);
+            UnixDataDirectoryPermissions.Enforce(_options.MachineDataDirectory);
             RecordOwner(ownerUid, output);
             FilterRulesFile.WriteAtomic(_options.PlistPath, plist, PrivilegedHelperLayout.FileMode);
             WriteNewsyslogConf(logFile, output);
@@ -497,23 +497,7 @@ public sealed class LaunchdServiceInstaller
     /// Same check as the Windows installer after the copy to Program Files: the installed daemon
     /// must be byte-identical to the image the administrator prompt ran.
     /// </summary>
-    internal static bool FilesMatch(string left, string right)
-    {
-        try
-        {
-            return string.Equals(Hash(left), Hash(right), StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
-
-    private static string Hash(string path)
-    {
-        using var stream = File.OpenRead(path);
-        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
-    }
+    internal static bool FilesMatch(string left, string right) => ProtectedImageLayout.FilesMatch(left, right);
 
     private static void TryDeleteDirectory(string? path)
     {

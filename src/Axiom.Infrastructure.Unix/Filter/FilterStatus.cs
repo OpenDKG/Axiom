@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-namespace Axiom.Infrastructure.MacOS.Filter;
+namespace Axiom.Infrastructure.Unix.Filter;
 
 /// <summary>
 /// The latest <c>filter.rules</c> event (docs/MACOS_ARCHITECTURE.md section 3.2): the table the

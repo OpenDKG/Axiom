@@ -4,7 +4,7 @@ namespace Axiom.Service;
 /// <summary>
 /// Unix counterpart of the Windows <c>MachineStateSecurity</c> (ProgramData ACLs, protected
 /// service image). On macOS the data root modes are enforced by
-/// <c>MacDataDirectoryPermissions</c> and the root-owned helper copy by
+/// <c>UnixDataDirectoryPermissions</c> and the root-owned helper copy by
 /// <c>LaunchdServiceInstaller</c>; this type only keeps the path check the shared
 /// <see cref="NetworkRecoveryController"/> relies on.
 /// </summary>

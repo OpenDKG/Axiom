@@ -2,7 +2,7 @@
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 
-namespace Axiom.Infrastructure.MacOS.Interop;
+namespace Axiom.Infrastructure.Unix.Interop;
 
 /// <summary>
 /// Effective uid of the process on the other end of a connected Unix domain socket:

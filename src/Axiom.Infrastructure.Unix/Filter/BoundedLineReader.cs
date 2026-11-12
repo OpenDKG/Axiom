@@ -2,7 +2,7 @@
 using System.Buffers;
 using System.Text;
 
-namespace Axiom.Infrastructure.MacOS.Filter;
+namespace Axiom.Infrastructure.Unix.Filter;
 
 /// <summary>
 /// Newline-delimited reader for an untrusted stream. Unlike the IPC reader it does not end the

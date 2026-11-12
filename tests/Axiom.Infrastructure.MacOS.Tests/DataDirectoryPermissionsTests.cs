@@ -32,7 +32,7 @@ public sealed class DataDirectoryPermissionsTests
         const string root = "/Library/Application Support/Axiom";
         var path = relative.Length == 0 ? root : Path.Combine(root, relative);
 
-        Assert.Equal(expected, MacDataDirectoryPermissions.ExpectedMode(root, path, isDirectory));
+        Assert.Equal(expected, UnixDataDirectoryPermissions.ExpectedMode(root, path, isDirectory));
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public sealed class DataDirectoryPermissionsTests
             File.SetUnixFileMode(file, Mode644);
         }
 
-        var changed = MacDataDirectoryPermissions.Enforce(root);
+        var changed = UnixDataDirectoryPermissions.Enforce(root);
 
         Assert.Equal(Mode700, File.GetUnixFileMode(root));
         Assert.Equal(Mode755, File.GetUnixFileMode(Path.Combine(root, "filter")));
@@ -67,7 +67,7 @@ public sealed class DataDirectoryPermissionsTests
         Assert.Equal(Mode644, File.GetUnixFileMode(rules));
         Assert.Equal(Mode600, File.GetUnixFileMode(managed));
         Assert.Equal([root, db, wal, managed], changed.Order(StringComparer.Ordinal).ToList().Order(StringComparer.Ordinal));
-        Assert.Empty(MacDataDirectoryPermissions.Enforce(root));
+        Assert.Empty(UnixDataDirectoryPermissions.Enforce(root));
     }
 
     [Fact]

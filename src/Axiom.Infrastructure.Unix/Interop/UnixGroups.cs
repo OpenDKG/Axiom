@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Runtime.InteropServices;
 
-namespace Axiom.Infrastructure.MacOS.Interop;
+namespace Axiom.Infrastructure.Unix.Interop;
 
 /// <summary>
 /// Group membership of a uid through libc (<c>getpwuid</c>, <c>getgrnam</c>, <c>getgrouplist</c>).
