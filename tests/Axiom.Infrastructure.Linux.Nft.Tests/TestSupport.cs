@@ -55,6 +55,12 @@ internal sealed class FakeNftRunner : INftRunner
 
     public string? ApplyError { get; set; }
 
+    /// <summary>When set, <c>-j list</c> throws (nft binary missing / not executable).</summary>
+    public Exception? ListFailure { get; set; }
+
+    /// <summary>When true the synthesized readback omits the rule entries (table comment only).</summary>
+    public bool ReadbackWithoutRules { get; set; }
+
     public Task<NftResult> RunAsync(IReadOnlyList<string> args, string? standardInput, CancellationToken ct)
     {
         Calls.Add((args, standardInput));
@@ -75,15 +81,17 @@ internal sealed class FakeNftRunner : INftRunner
 
         if (joined.StartsWith("-j list table inet axiom", StringComparison.Ordinal))
         {
+            if (ListFailure is not null)
+            {
+                throw ListFailure;
+            }
+
             if (TableGeneration is null)
             {
                 return Task.FromResult(new NftResult(1, string.Empty, "Error: No such file or directory"));
             }
 
-            var json = ListJson ??
-                       "{\"nftables\":[{\"table\":{\"family\":\"inet\",\"name\":\"axiom\",\"handle\":1,\"comment\":\"axiom generation " +
-                       TableGeneration.Value.ToString(CultureInfo.InvariantCulture) + "\"}}]}";
-            return Task.FromResult(new NftResult(0, json, string.Empty));
+            return Task.FromResult(new NftResult(0, ListJson ?? SynthesizeReadback(), string.Empty));
         }
 
         if (joined == "delete table inet axiom")
@@ -94,6 +102,26 @@ internal sealed class FakeNftRunner : INftRunner
         }
 
         return Task.FromResult(new NftResult(0, string.Empty, string.Empty));
+    }
+
+    /// <summary>What <c>nft -j list table inet axiom</c> would print for the applied script: the table comment plus one rule entry per <c>axiom:&lt;id&gt;:&lt;n&gt;</c> comment.</summary>
+    private string SynthesizeReadback()
+    {
+        var items = new List<string>
+        {
+            "{\"table\":{\"family\":\"inet\",\"name\":\"axiom\",\"handle\":1,\"comment\":\"axiom generation " + TableGeneration!.Value.ToString(CultureInfo.InvariantCulture) + "\"}}",
+        };
+        if (!ReadbackWithoutRules && AppliedScript is not null)
+        {
+            var handle = 2;
+            foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(AppliedScript, "comment \"(axiom:[0-9a-f-]+:[0-9]+)\""))
+            {
+                items.Add("{\"rule\":{\"family\":\"inet\",\"table\":\"axiom\",\"chain\":\"axiom_out\",\"handle\":" + (handle++).ToString(CultureInfo.InvariantCulture) +
+                          ",\"comment\":\"" + match.Groups[1].Value + "\",\"expr\":[{\"counter\":{\"packets\":0,\"bytes\":0}},{\"reject\":{\"type\":\"tcp reset\"}}]}}");
+            }
+        }
+
+        return "{\"nftables\":[" + string.Join(',', items) + "]}";
     }
 }
 

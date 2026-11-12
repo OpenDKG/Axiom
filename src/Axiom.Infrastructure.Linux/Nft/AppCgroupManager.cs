@@ -76,6 +76,9 @@ public sealed class AppCgroupManager : IAppCgroupResolver
 
     public IReadOnlyList<int> ReadProcs(string cgroupPath) => _fs.ReadProcs(cgroupPath);
 
+    /// <summary>Whether the cgroup directory exists right now (the enforcement check behind "Applied").</summary>
+    public bool Exists(string cgroupPath) => !string.IsNullOrEmpty(cgroupPath) && _fs.CgroupExists(cgroupPath);
+
     /// <summary>Apps currently keyed (canonical app path → cgroup path).</summary>
     public IReadOnlyDictionary<string, string> Apps
     {

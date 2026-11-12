@@ -63,8 +63,14 @@ public sealed class NftFirewallPolicyAdapterTests
             Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(h.Paths.ManagedRulesFile));
         }
 
+        Assert.NotNull(result.VerifiedUtc);
         var enforcement = h.Adapter.Enforcement;
         Assert.NotNull(enforcement);
+        Assert.Equal(FilterEnforcementState.Verified, enforcement.State);
+        Assert.True(enforcement.Connected);
+        Assert.Equal(1, enforcement.PublishedGeneration);
+        Assert.Equal(1, enforcement.AckedGeneration);
+        Assert.Equal(Start, enforcement.LastAckUtc);
         Assert.Equal(1, enforcement.Generation);
         Assert.Equal(1, enforcement.AppliedRuleCount);
         Assert.Empty(enforcement.RejectedRules);
@@ -82,7 +88,9 @@ public sealed class NftFirewallPolicyAdapterTests
         Assert.Equal(FirewallCapabilityStatus.Available, capabilities.Status);
         Assert.True(capabilities.FirewallServiceRunning);
         Assert.Equal(1, capabilities.ManagedRuleCount);
-        Assert.Same(enforcement, capabilities.FilterEnforcement);
+        Assert.Equal(FilterEnforcementState.Verified, capabilities.FilterEnforcement!.State);
+        Assert.Contains(capabilities.Limitations, limitation => limitation.Contains("1 s loop", StringComparison.Ordinal));
+        Assert.Contains(capabilities.Limitations, limitation => limitation.Contains("BPF layer inactive", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -97,11 +105,15 @@ public sealed class NftFirewallPolicyAdapterTests
         await h.Adapter.UpsertOwnedRuleAsync(missing, CancellationToken.None);
         await h.Adapter.UpsertOwnedRuleAsync(good, CancellationToken.None);
 
-        Assert.True(badResult.Success);
-        Assert.Equal(RuleState.Pending, badResult.State);
+        // A rule the compiler refused is Failed (stored, listed, never claimed enforced).
+        Assert.False(badResult.Success);
+        Assert.Equal(RuleState.Failed, badResult.State);
         Assert.Equal("nft.rule_rejected", badResult.ErrorCode);
         Assert.Contains("invalid address '1.2.3'", badResult.ErrorMessage, StringComparison.Ordinal);
-        Assert.Equal(3, (await h.Adapter.ListOwnedRulesAsync(CancellationToken.None)).Count);
+        var listed = await h.Adapter.ListOwnedRulesAsync(CancellationToken.None);
+        Assert.Equal(3, listed.Count);
+        Assert.Equal(RuleState.Failed, listed.Single(rule => rule.ManagedRuleId == bad.ManagedRuleId).State);
+        Assert.Equal(RuleState.Applied, listed.Single(rule => rule.ManagedRuleId == good.ManagedRuleId).State);
         var enforcement = h.Adapter.Enforcement!;
         Assert.Equal(3, enforcement.Generation);
         Assert.Equal(1, enforcement.AppliedRuleCount);
@@ -115,7 +127,11 @@ public sealed class NftFirewallPolicyAdapterTests
         Assert.False(verify.PresentInOs);
         Assert.True(verify.MatchesSpec);
         Assert.Null(verify.EffectiveAction);
+        Assert.False(verify.EnforcementVerified);
         Assert.Contains("invalid address", verify.FilterRejectionReason, StringComparison.Ordinal);
+        var goodVerify = await h.Adapter.VerifyAsync(good, CancellationToken.None);
+        Assert.True(goodVerify.EnforcementVerified);
+        Assert.Equal(FirewallAction.Block, goodVerify.EffectiveAction);
 
         using var rules = JsonDocument.Parse(h.Sink.Lines[^1]);
         Assert.Equal(2, rules.RootElement.GetProperty("rejected").GetArrayLength());
@@ -137,6 +153,7 @@ public sealed class NftFirewallPolicyAdapterTests
         Assert.True(verify.PresentInOs);
         Assert.True(verify.MatchesSpec);
         Assert.Equal(FirewallAction.Block, verify.EffectiveAction);
+        Assert.True(verify.EnforcementVerified);
         Assert.Null(verify.FilterRejectionReason);
         Assert.Contains(verify.Notes, note => note.Contains("1 nft rule(s), 2 packet(s) matched", StringComparison.Ordinal));
 
@@ -144,6 +161,7 @@ public sealed class NftFirewallPolicyAdapterTests
         var removed = await h.Adapter.RemoveOwnedRuleAsync(spec.ManagedRuleId, CancellationToken.None);
         Assert.True(removed.Success);
         Assert.Equal(RuleState.Desired, removed.State);
+        Assert.NotNull(removed.VerifiedUtc); // generation 2 read back without the rule
         Assert.Equal(2, h.Nft.TableGeneration);
         Assert.DoesNotContain("axiom:0f8fad5b", h.Nft.AppliedScript, StringComparison.Ordinal);
         Assert.Empty(await h.Adapter.ListOwnedRulesAsync(CancellationToken.None));
@@ -193,6 +211,10 @@ public sealed class NftFirewallPolicyAdapterTests
         Assert.Equal(FirewallCapabilityStatus.Degraded, capabilities.Status);
         Assert.Contains("table inet axiom is missing", capabilities.Reason, StringComparison.Ordinal);
         Assert.False(capabilities.FirewallServiceRunning);
+        Assert.Equal(FilterEnforcementState.Degraded, capabilities.FilterEnforcement!.State);
+        Assert.False(capabilities.FilterEnforcement.Connected);
+        Assert.Null(capabilities.FilterEnforcement.AckedGeneration);
+        Assert.Equal(RuleState.Pending, Assert.Single(await h.Adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
 
         h.Fs.Processes.Clear();
         await h.Adapter.TeardownAsync(CancellationToken.None);
@@ -201,7 +223,7 @@ public sealed class NftFirewallPolicyAdapterTests
     }
 
     [Fact]
-    public async Task Unmovable_live_process_marks_the_rule_rejected()
+    public async Task Unmovable_live_process_leaves_the_rule_pending_with_the_reason()
     {
         using var h = new Harness();
         h.Fs.Unmovable.Add(500);
@@ -210,10 +232,16 @@ public sealed class NftFirewallPolicyAdapterTests
         var result = await h.Adapter.UpsertOwnedRuleAsync(spec, CancellationToken.None);
 
         Assert.True(result.Success);
-        Assert.Equal("nft.rule_rejected", result.ErrorCode);
+        Assert.Equal(RuleState.Pending, result.State);
+        Assert.Equal("nft.attribution_failed", result.ErrorCode);
         Assert.Contains("live process pid 500 (/usr/bin/curl) could not be moved", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Null(result.VerifiedUtc);
         Assert.Equal(0, h.Adapter.Enforcement!.AppliedRuleCount);
         Assert.Single(h.Adapter.Enforcement.RejectedRules);
+        Assert.Equal(RuleState.Pending, Assert.Single(await h.Adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
+        var verify = await h.Adapter.VerifyAsync(spec, CancellationToken.None);
+        Assert.False(verify.EnforcementVerified);
+        Assert.Null(verify.EffectiveAction);
     }
 
     [Fact]

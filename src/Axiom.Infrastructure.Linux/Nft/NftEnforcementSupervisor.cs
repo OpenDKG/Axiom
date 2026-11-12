@@ -61,6 +61,11 @@ public sealed class NftEnforcementSupervisor
     /// <summary>Times the watcher found the table missing and republished it.</summary>
     public long Republishes => Interlocked.Read(ref _republishes);
 
+    private long _degradations;
+
+    /// <summary>Times the watcher degraded the enforcement report before republishing.</summary>
+    public long Degradations => Interlocked.Read(ref _degradations);
+
     public long AttributionPasses => Interlocked.Read(ref _attributionPasses);
 
     /// <summary>Publishes, runs the loops until cancelled, then tears down. Never throws on cancellation.</summary>
@@ -122,7 +127,7 @@ public sealed class NftEnforcementSupervisor
     /// </summary>
     public async Task<bool> WatchOnceAsync(CancellationToken ct)
     {
-        var expected = _adapter.Enforcement?.Generation;
+        var expected = _adapter.Enforcement?.PublishedGeneration;
         if (expected is null || expected < 0)
         {
             return false;
@@ -135,7 +140,9 @@ public sealed class NftEnforcementSupervisor
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
-            _log($"Ruleset watcher: nft is unavailable ({exception.Message}).");
+            // Degrade at once: nothing proves the table is enforced while nft cannot be read.
+            var degraded = await _adapter.MarkTableLostAsync(ct).ConfigureAwait(false);
+            _log($"Ruleset watcher: nft is unavailable ({exception.Message}); enforcement {degraded.State.ToString().ToLowerInvariant()}.");
             return false;
         }
 
@@ -144,14 +151,19 @@ public sealed class NftEnforcementSupervisor
             return false;
         }
 
+        // The Linux counterpart of the macOS filter disconnect: degrade the report immediately,
+        // then republish; the fresh readback is what makes the new generation verified again.
+        var lost = await _adapter.MarkTableLostAsync(ct).ConfigureAwait(false);
+        Interlocked.Increment(ref _degradations);
         _log(live is null
-            ? string.Create(CultureInfo.InvariantCulture, $"table inet axiom disappeared (generation {expected} was published); republishing.")
-            : string.Create(CultureInfo.InvariantCulture, $"table inet axiom holds generation {live}, expected {expected}; republishing."));
+            ? string.Create(CultureInfo.InvariantCulture, $"table inet axiom disappeared (generation {expected} was published); enforcement {lost.State.ToString().ToLowerInvariant()}; republishing.")
+            : string.Create(CultureInfo.InvariantCulture, $"table inet axiom holds generation {live}, expected {expected}; enforcement {lost.State.ToString().ToLowerInvariant()}; republishing."));
         try
         {
             var generation = await _adapter.PublishAsync(ct).ConfigureAwait(false);
             Interlocked.Increment(ref _republishes);
-            _log(string.Create(CultureInfo.InvariantCulture, $"Republished table inet axiom generation {generation}."));
+            var after = await _adapter.RefreshAsync(ct).ConfigureAwait(false);
+            _log(string.Create(CultureInfo.InvariantCulture, $"Republished table inet axiom generation {generation}; enforcement {after.State.ToString().ToLowerInvariant()}."));
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -166,10 +178,14 @@ public sealed class NftEnforcementSupervisor
         try
         {
             StartGeneration = await _adapter.PublishAsync(ct).ConfigureAwait(false);
-            var report = _adapter.Enforcement;
-            _log(report?.FileError is { Length: > 0 } error
+            var report = await _adapter.RefreshAsync(ct).ConfigureAwait(false);
+            _log(report.FileError is { Length: > 0 } error
                 ? string.Create(CultureInfo.InvariantCulture, $"nftables rejected table inet axiom generation {StartGeneration}: {error}")
-                : string.Create(CultureInfo.InvariantCulture, $"Published table inet axiom generation {StartGeneration} ({report?.AppliedRuleCount ?? 0} applied, {report?.RejectedRules.Count ?? 0} rejected)."));
+                : string.Create(CultureInfo.InvariantCulture, $"Published table inet axiom generation {StartGeneration} ({report.AppliedRuleCount} applied, {report.RejectedRules.Count} rejected); enforcement {report.State.ToString().ToLowerInvariant()}."));
+            foreach (var limitation in _adapter.Limitations())
+            {
+                _log("Enforcement limitation: " + limitation);
+            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

@@ -25,6 +25,12 @@ public sealed record FirewallCapabilityReport
     /// Windows and until the extension has reported once.
     /// </summary>
     public FilterEnforcementReport? FilterEnforcement { get; init; }
+
+    /// <summary>
+    /// Known limitations of the enforcement boundary on this host (Linux: the attribution loop's
+    /// exec race, an inactive connect-time BPF layer). Empty on Windows and macOS.
+    /// </summary>
+    public IReadOnlyList<string> Limitations { get; init; } = [];
 }
 
 /// <summary>One rule the OS filter refused to enforce, with its reason.</summary>

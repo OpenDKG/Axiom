@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Runtime.CompilerServices;
+using Axiom.Contracts.Firewall;
 using Axiom.Infrastructure.Linux.Nft;
 
 namespace Axiom.Infrastructure.Linux.Nft.Tests;
@@ -62,8 +63,20 @@ public sealed class NftEnforcementSupervisorTests
         Assert.True(await supervisor.WatchOnceAsync(CancellationToken.None));
         Assert.NotNull(h.Nft.TableGeneration);
         Assert.Equal(1, supervisor.Republishes);
-        Assert.Contains(h.Log, line => line.Contains("disappeared", StringComparison.Ordinal));
-        Assert.Contains(h.Log, line => line.StartsWith("Republished table inet axiom generation", StringComparison.Ordinal));
+        Assert.Equal(1, supervisor.Degradations);
+        Assert.Contains(h.Log, line => line.Contains("disappeared", StringComparison.Ordinal) && line.Contains("enforcement degraded", StringComparison.Ordinal));
+        Assert.Contains(h.Log, line => line.StartsWith("Republished table inet axiom generation", StringComparison.Ordinal) && line.EndsWith("enforcement verified.", StringComparison.Ordinal));
+        Assert.Equal(FilterEnforcementState.Verified, h.Adapter.Enforcement!.State);
+        Assert.Equal(2, h.Adapter.Enforcement.AckedGeneration);
+
+        // nft itself gone: degraded at once, nothing republished.
+        h.Nft.ListFailure = new System.ComponentModel.Win32Exception(2, "No such file or directory");
+        Assert.False(await supervisor.WatchOnceAsync(CancellationToken.None));
+        Assert.Equal(FilterEnforcementState.Degraded, h.Adapter.Enforcement!.State);
+        Assert.False(h.Adapter.Enforcement.Connected);
+        Assert.Contains(h.Log, line => line.Contains("nft is unavailable", StringComparison.Ordinal) && line.Contains("enforcement degraded", StringComparison.Ordinal));
+        h.Nft.ListFailure = null;
+        Assert.False(await supervisor.WatchOnceAsync(CancellationToken.None));
 
         // A new curl process appears in a system service between polls: the 1 s loop herds and reports it.
         h.Fs.Processes[501] = ("/usr/bin/curl", "system.slice/cron.service");
@@ -101,7 +114,8 @@ public sealed class NftEnforcementSupervisorTests
         Assert.Null(h.Nft.TableGeneration);
         Assert.DoesNotContain(h.Fs.Cgroups, cgroup => cgroup.StartsWith("axiom.slice", StringComparison.Ordinal));
         Assert.Equal("system.slice/cron.service", h.Fs.Processes[500].Cgroup);
-        Assert.Contains(h.Log, line => line.StartsWith("Published table inet axiom generation", StringComparison.Ordinal));
+        Assert.Contains(h.Log, line => line.StartsWith("Published table inet axiom generation", StringComparison.Ordinal) && line.Contains("enforcement verified", StringComparison.Ordinal));
+        Assert.Contains(h.Log, line => line.StartsWith("Enforcement limitation: Attribution is a 1 s loop", StringComparison.Ordinal));
         Assert.Contains(h.Log, line => line.StartsWith("Removed table inet axiom", StringComparison.Ordinal));
     }
 
