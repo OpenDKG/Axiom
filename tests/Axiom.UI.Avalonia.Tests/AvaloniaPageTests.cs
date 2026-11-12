@@ -36,10 +36,10 @@ public sealed class AvaloniaPageTests
                 "Live Connections",
                 "Applications",
                 "Network Events",
-                "Network Control",
-                "Privacy Shield",
                 "Agent Protection",
                 "Agent Activity",
+                "Network Control",
+                "Privacy Shield",
                 "AI Analyst",
                 "Integrations",
                 "Settings",
@@ -63,7 +63,7 @@ public sealed class AvaloniaPageTests
         Assert.Equal(
             [
                 ("Dashboard", "MONITORING"),
-                ("Network Control", "PROTECTION"),
+                ("Agent Protection", "PROTECTION"),
                 ("AI Analyst", "INTELLIGENCE"),
                 ("Settings", "GENERAL"),
             ],

@@ -131,10 +131,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             Connections,
             Apps,
             Events,
-            Firewall,
-            PrivacyShield,
             Agents,
             AgentStats,
+            Firewall,
+            PrivacyShield,
             AiAnalyst,
             Security,
             Settings,
@@ -144,7 +144,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         // Navigation groups follow the UI terminology audit; only the first page of a group
         // carries the header so the nav list keeps one selection model.
         Overview.GroupLabel = "MONITORING";
-        Firewall.GroupLabel = "PROTECTION";
+        Agents.GroupLabel = "PROTECTION";
         AiAnalyst.GroupLabel = "INTELLIGENCE";
         Settings.GroupLabel = "GENERAL";
         _selectedPage = Overview;
