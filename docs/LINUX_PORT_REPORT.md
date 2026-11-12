@@ -128,8 +128,19 @@ Nothing in the Windows projects (`Axiom.Infrastructure.Windows`, `Axiom.UI`, `Ax
   secret protector, portal colour scheme, SIGTERM/SIGKILL process actions. Every page was walked on a GNOME X11
   session against the real daemon (`docs/screenshots/linux/`, `LINUX_TEST_REPORT.md` P4); Windows-only firewall
   profile checkboxes are hidden off Windows and the DNS adapter list comes from `resolvectl`.
-- **Packaging not done.** Only `dotnet publish … -r linux-x64 --self-contained` + `--install-service`; `.deb`/`.rpm`
-  (nfpm), AppImage, SELinux/AppArmor profiles, firewalld coexistence are open.
+- **Packaging (P5) done for `.deb`; `.rpm` built, uninstalled.** `scripts/linux/package.sh [deb|rpm|all]` builds the
+  BPF objects, publishes axiomd and the desktop (the desktop csproj's `PublishBundledDaemon` target now copies or
+  publishes `axiomd/` into every Linux publish), stages `/opt/axiom` + desktop entry + hicolor icons + polkit action +
+  DEP-5 copyright, computes `Depends` with `dpkg-shlibdeps` and builds `axiom_0.13.2_amd64.deb` (63 MB) with
+  `fakeroot dpkg-deb`; `postinst` runs `axiomd --install-service` (upgrade in place, also over a dev install), `prerm`
+  `--uninstall-service`, `postrm purge` deletes `/var/lib/axiom` + `/var/log/axiom` only. bpftool is a `Recommends`
+  (`linux-tools-common | bpftool`; see docs/LINUX_PACKAGING.md §4 for why). The desktop detects a package install
+  (`/opt/axiom`) and never offers the pkexec install at startup. Proven on this box: install over the dev daemon,
+  app-grid launch without a prompt, rule flow through the packaged daemon, remove/purge leaving nothing but (on
+  remove) the data directory (`LINUX_TEST_REPORT.md` P-1…P-8). The polkit action file shipped so far was not
+  well-formed XML and polkitd dropped it silently; fixed and validated at build time. The `.rpm` is produced with
+  nfpm from the same root (`packaging/linux/nfpm.yaml.in`, RPM scriptlets under `packaging/linux/rpm/`) but was not
+  installed anywhere. AppImage, SELinux/AppArmor profiles and firewalld coexistence remain open.
 
 ## 4. Not done / unverified
 
@@ -144,9 +155,9 @@ Nothing in the Windows projects (`Axiom.Infrastructure.Windows`, `Axiom.UI`, `Ax
   verifier's acceptance of the CO-RE exe lookup under `cgroup/connect4`, and the bpftool `loadall`/`attach
   multi` path are untested on a kernel. Run `scripts/linux/bpf/e2e.sh --daemon` after `apt install clang
   libbpf-dev`; the rest of the branch does not depend on it (nft stays the primary boundary).
-- Packaging (P5): `.deb`/`.rpm` with the daemon under `/usr/libexec/axiom`, the polkit policy under
-  `/usr/share/polkit-1/actions/` (today the first install from the bundle gets pkexec's generic prompt because
-  `exec.path` does not match), a `.desktop` launcher + icon, postinst `--install-service`. Security review (P6).
+- Packaging remainder: the `.rpm` on a Fedora/openSUSE host (SELinux label of `/usr/libexec/axiom`, firewalld
+  ordering against `table inet axiom`), arm64 packages, lintian (not installed on the evidence box), package
+  signing / apt repository. Security review (P6).
 - Desktop verified on one GNOME 46 X11 session with the AppIndicator extension only; Wayland (XWayland), KDE Plasma
   (native SNI tray), stock GNOME without a tray, and a box with `secret-tool` (keyring path of the protector) are
   untested live — the file fallback is what this box exercised.

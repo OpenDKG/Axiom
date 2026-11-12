@@ -215,6 +215,34 @@ csproj ships `bpf/*` because `Bpf/native/out` exists) and installed in place wit
 
 Not exercised: a second *admin* uid (no spare `sudo`-group account; the pure table is covered by `LinuxPeerAuthorizationTests`), Pending-state UI banner on a real desktop (text covered by `FilterEnforcementSummaryTests`), BPF on another kernel.
 
+## P5: packaging (`.deb`), 2026-11-12, branch `buba/linux` after `ab1c976`
+
+Box: Ubuntu 24.04, GNOME 46 X11 `DISPLAY=:1`, kernel 7.0.0-42, systemd 255, dpkg 1.22.6, fakeroot, no lintian.
+Before: `axiomd.service` active from the P3 dev image (`Axiom.Infrastructure.Linux.dll` sha256 `963b9087…`),
+protection off, 0 managed rules, Privacy Shield disabled, `resolvectl status` eno2 → `DNS Servers: 192.168.70.1`,
+`/etc/resolv.conf` → `nameserver 127.0.0.53` (recorded to a file and diffed at the end).
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| P-0 | `scripts/linux/package.sh deb` (clang present: BPF objects rebuilt; publish both; stage; shlibdeps; fakeroot dpkg-deb) | PASS | `build/linux/axiom_0.13.2_amd64.deb` 62 874 284 bytes, control archive with `postinst`/`prerm`/`postrm`, 504 entries, `Installed-Size: 193480`; `dpkg -c` shows `/opt/axiom/Axiom`, `/opt/axiom/axiomd/axiomd`, `/opt/axiom/axiomd/bpf/{axiom_connect.bpf.o,axiom-bpf-events}`, desktop entry, 8 hicolor icons, polkit action, `usr/share/doc/axiom/{copyright,README.md}`, everything `root/root`. `Depends: libbpf1 (>= 1:0.0.9), libc6 (>= 2.34), libfontconfig1 (>= 2.12.6), libgcc-s1 (>= 3.0), libstdc++6 (>= 6), libicu76 \| libicu74 \| …, nftables, polkitd \| policykit-1, pkexec \| policykit-1, systemd`; `Recommends: linux-tools-common \| bpftool, libsecret-1-0, gnome-shell-extension-appindicator \| plasma-workspace`. `ls build/linux/Axiom/axiomd/axiomd` → present (publish target) |
+| P-1 | `sudo -n dpkg -i build/linux/axiom_0.13.2_amd64.deb` over the running dev daemon | PASS | `Setting up axiom (0.13.2)… Installed and started axiomd.service from /usr/libexec/axiom (/etc/systemd/system/axiomd.service).` + hicolor/desktop-file/gnome-menus triggers; `systemctl is-active axiomd` → `active`; image dll sha256 now `de43b936…` (replaced in place); `/usr/libexec/axiom/bpf` has both objects; `dpkg -L axiom \| wc -l` → 504; `dpkg -s` → `install ok installed` |
+| P-2 | `sudo -n /opt/axiom/axiomd/axiomd --doctor` | PASS | 11/11 PASS incl. `protected image: /usr/libexec/axiom: 234 entries root-owned and read-only`, `enforcement: … table inet axiom generation 19 is in force`, `bpf layer: bpftool v7.7.0; 4 programs pinned at /sys/fs/bpf/axiom`; `Result: all checks passed.` |
+| P-3 | polkit action visible | FAIL → fixed → PASS | first build: `pkaction --action-id com.axiom.firewall.install` → `No action with action id`; cause: the shipped policy's XML comment contained `--` (`xml.dom.minidom` → `not well-formed (invalid token): line 6, column 58`), polkitd drops the file silently. Comment rewritten, `package.sh` validates the policy; after the rebuilt package was installed: `pkaction \| grep axiom` → `com.axiom.firewall.install` |
+| P-4 | Launch from the desktop: `gtk-launch com.axiom.firewall` on `DISPLAY=:1` (bells off first) | PASS | process `/opt/axiom/Axiom` pid 1208031; window `Axiom — Free Open-Source Network & AI Agent Security`; `desktop.log`: `[startup] Axiom 0.13.2.0 … base=/opt/axiom/`, `[tray] StatusNotifierWatcher present`, `[daemon] state=Running unit=active`; 0 `pkexec`/`polkit-agent-helper` processes, no install dialog; `docs/screenshots/linux/packaged-launch.png` (vision-checked: Dashboard, "Protection: off", no dialog); `ls /usr/share/icons/hicolor/*/apps/com.axiom*` → 8 files; closed with `xdotool windowclose` (to tray) + `kill <pid>` |
+| P-5 | Rule flow through the packaged daemon (`scripts/linux/axipc.py`) | PASS | `protection.enable {"defaultPolicy":"ask"}` → `writeGateOpen:true`; `rule.apply` block `/usr/bin/curl` (GUID id, `createdBy:"uid:1000"`) → `state:"applied"`; bare `curl https://example.com` → `000 rc=7`; `rule.remove` → `state:"desired"`; curl → `200 rc=0`; `protection.disable` → `enabled:false`; `rules.query` → `managedRuleCount:0`. (A non-GUID `managedRuleId` is refused with `invalid_request`.) |
+| P-6 | `sudo -n apt-get remove -y axiom` | PASS | `Removed /usr/libexec/axiom. Stopped and removed axiomd.service.`; `is-active` → `inactive`; unit file, `/usr/libexec/axiom`, `/opt/axiom`, desktop entry, policy all gone; `bpftool cgroup tree \| grep -c axiom_` → 0; `nft list tables` → no axiom; `/var/lib/axiom` kept; `dpkg -s` → `deinstall ok config-files`; DNS `192.168.70.1` |
+| P-7 | `sudo -n dpkg -P axiom` | PASS | `Purging configuration files for axiom (0.13.2)…`; `/var/lib/axiom` gone, `/var/log/axiom` gone, `/run/axiom` gone; package unknown to dpkg |
+| P-8 | Reinstall (box keeps a packaged daemon) | PASS | `dpkg -i` → `Installed and started axiomd.service`; `active`; `pkaction` lists `com.axiom.firewall.install`; `--doctor` → `Result: all checks passed.`; protection `enabled:false`, shield `Disabled`, `managedRuleCount:0`; `resolvectl status` Link 2 block identical to the recorded baseline, `/etc/resolv.conf` unchanged |
+| P-9 | `scripts/linux/package.sh rpm --skip-publish` (nfpm 2.49.0, sha256 verified against the release `checksums.txt`) | PASS (build only) | `build/linux/axiom-0.13.2-1.x86_64.rpm` 76 256 524 bytes; not installed (no RPM host; `rpm` not on this box) |
+
+Held by the host guard (not retried in that form): a one-liner combining `kill` with a `pgrep` expansion; the app was
+closed with `xdotool windowclose` and `kill <explicit pid>` in a separate command instead.
+
+Gate after P5: `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` → `0 Warning(s) 0 Error(s)`;
+Infrastructure.Linux 32/32, Infrastructure.Linux.Nft 82/82, Infrastructure.Unix 32/32, Desktop.Avalonia.Linux 51/51
+(+2: startup-offer rule, package prefix); `bash -n` on every maintainer script (shellcheck and lintian not installed);
+`git checkout -- '*.lock.json'`.
+
 ## Gates after the security parity + BPF merge
 
 `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` → `0 Warning(s) 0 Error(s)`. `Axiom.Portable.slnx` build → `0 Warning(s) 0 Error(s)`; test: Contracts 142/142, Core 117/128

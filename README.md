@@ -323,6 +323,12 @@ runtime, Windows service registration, firewall change or elevation is involved.
 The desktop starts the bundled local service automatically. VirusTotal remains optional; its API
 key is configured later on the Security page.
 
+**Linux (preview, `feature/linux-port`):** a `.deb` built by `scripts/linux/package.sh` installs
+the desktop app under `/opt/axiom`, the app-grid entry and icon, the polkit action and registers
+the `axiomd` systemd service (nftables + optional eBPF enforcement) in its postinst; no terminal
+or password prompt at first launch. `.rpm` is built with nfpm but untested. Details:
+[docs/LINUX_PACKAGING.md](docs/LINUX_PACKAGING.md).
+
 **Complete installation** also runs the official Blackbox and DKG installers, starts their local
 services and installs agent hooks after Blackbox is ready. Those third-party installers may download
 large packages, require network access and show their own prompts/terms. **Partial installation**
