@@ -238,10 +238,19 @@ public sealed class NftLifecycleTests
         Assert.Contains(limitations, l => l.Contains("within ~1 s of exec", StringComparison.Ordinal));
         Assert.Contains(limitations, l => l.StartsWith("BPF layer inactive", StringComparison.Ordinal));
 
-        h.Adapter.ConnectTimeLayerActive = true;
+        h.Adapter.VerdictLayer = new ActiveLayer();
         var closed = (await h.Adapter.GetCapabilitiesAsync(CancellationToken.None)).Limitations;
         Assert.DoesNotContain(closed, l => l.StartsWith("BPF layer inactive", StringComparison.Ordinal));
         Assert.Contains(closed, l => l.Contains("BPF layer closes this window", StringComparison.Ordinal));
+    }
+
+    private sealed class ActiveLayer : IVerdictLayer
+    {
+        public bool Active => true;
+
+        public string Status => "active";
+
+        public Task SyncAsync(IReadOnlyList<ManagedRule> rules, long generation, CancellationToken ct) => Task.CompletedTask;
     }
 
     [Fact]

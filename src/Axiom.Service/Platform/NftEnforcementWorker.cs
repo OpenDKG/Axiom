@@ -15,6 +15,7 @@ namespace Axiom.Service;
 internal sealed partial class NftEnforcementWorker(
     NftFirewallPolicyAdapter firewall,
     FilterEventPipe events,
+    Axiom.Infrastructure.Linux.Bpf.BpfEngine bpf,
     ILogger<NftEnforcementWorker> logger) : BackgroundService
 {
     [LoggerMessage(EventId = 2201, Level = LogLevel.Information, Message = "{Message}")]
@@ -27,7 +28,7 @@ internal sealed partial class NftEnforcementWorker(
             return Task.CompletedTask;
         }
 
-        var supervisor = LinuxEnforcement.CreateSupervisor(firewall, events, message => LogMessage(logger, message));
+        var supervisor = LinuxEnforcement.CreateSupervisor(firewall, events, message => LogMessage(logger, message), bpf);
         return supervisor.RunAsync(stoppingToken);
     }
 }

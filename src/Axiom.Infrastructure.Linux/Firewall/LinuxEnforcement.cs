@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Runtime.Versioning;
+using Axiom.Infrastructure.Linux.Bpf;
 using Axiom.Infrastructure.Linux.Nft;
 using Axiom.Infrastructure.Unix.Filter;
+using Axiom.Infrastructure.Unix.Interop;
 
 namespace Axiom.Infrastructure.Linux.Firewall;
 
@@ -72,13 +74,45 @@ public static class LinuxEnforcement
         return new NftTraceMonitor(new NftTraceProcessSource(), new ProcNetSocketLookup(), adapter.DescribeRuleApp, sink, TimeProvider.System);
     }
 
-    public static NftEnforcementSupervisor CreateSupervisor(NftFirewallPolicyAdapter adapter, IFilterEventSink sink, Action<string> log)
+    /// <summary>
+    /// The connect-time BPF layer over the shipped objects (<c>bpf/</c> next to the daemon), wired
+    /// as the adapter's <see cref="NftFirewallPolicyAdapter.VerdictLayer"/> so every publish syncs
+    /// the verdict maps. Inactive (nft-only) when the probe says no; see docs/LINUX_EBPF.md §6.
+    /// </summary>
+    public static BpfEngine CreateBpfEngine(NftFirewallPolicyAdapter adapter, IFilterEventSink sink)
     {
         ArgumentNullException.ThrowIfNull(adapter);
+        ArgumentNullException.ThrowIfNull(sink);
+        var paths = BpfEnginePaths.Default;
+        var fs = new ProcCgroupFs();
+        var engine = new BpfEngine(
+            ProcessRunner.Instance,
+            paths,
+            new StatInodeReader(ProcessRunner.Instance),
+            adapter.Cgroups,
+            () => new BpfEventProcessSource(paths.EventsHelper, paths.MapPin(BpfLayout.EventsMap)),
+            fs.ReadProcessExe,
+            adapter.DescribeRuleApp,
+            sink,
+            Environment.IsPrivilegedProcess,
+            TimeProvider.System);
+        adapter.VerdictLayer = engine;
+        return engine;
+    }
+
+    public static NftEnforcementSupervisor CreateSupervisor(NftFirewallPolicyAdapter adapter, IFilterEventSink sink, Action<string> log, BpfEngine? bpf = null)
+    {
+        ArgumentNullException.ThrowIfNull(adapter);
+        if (bpf is not null)
+        {
+            bpf.Log = log;
+        }
+
         return new NftEnforcementSupervisor(
             adapter,
             new NftTable(new NftProcessRunner()),
             () => CreateTraceMonitor(adapter, sink),
+            bpf,
             log,
             TimeProvider.System);
     }

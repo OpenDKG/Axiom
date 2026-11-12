@@ -39,8 +39,10 @@ Detailed docs in the branch: `docs/LINUX_ARCHITECTURE.md` (contract + as built, 
   (`doubleclick.net` NXDOMAIN, `example.com` resolves) and restores → `networkRecovery.restore` restores DNS →
   restart republishes the rule → in-place upgrade keeps the rule → uninstall leaves no unit/image/table/cgroup/
   socket and DNS identical to the baseline.
-- Tests: Infrastructure.Unix 22, Infrastructure.Linux 27, Infrastructure.Linux.Nft 54 (fake `nft` runner + fake
-  cgroup/proc fs; the same test exe is the root e2e harness). Full solution build with `EnableWindowsTargeting`:
+- Tests: Infrastructure.Unix 22, Infrastructure.Linux 27, Infrastructure.Linux.Nft 67 (fake `nft` runner + fake
+  cgroup/proc fs + fake `bpftool`; the same test exe is the root e2e harness).
+- **P2b (branch `buba/linux-enforce`)**: the connect-time BPF layer that closes the exec-time race — see §4
+  for its (unproven) status and `docs/LINUX_EBPF.md` for the design as built. Full solution build with `EnableWindowsTargeting`:
   0 warnings, 0 errors; every other suite unchanged (Core 117/128 is the pre-existing Windows-path baseline).
 
 ## 2. What changed in shared code since `7a48bdf`
@@ -114,7 +116,16 @@ Nothing in the Windows projects (`Axiom.Infrastructure.Windows`, `Axiom.UI`, `Ax
 
 ## 4. Not done / unverified
 
-- eBPF helper (P2b) — the exec-time race above is the main functional gap versus the macOS content filter.
+- eBPF helper (P2b) — **implemented, not proven live** (`docs/LINUX_EBPF.md`): `cgroup/connect4,6` +
+  `sendmsg4,6` programs (C, CO-RE, `src/Axiom.Infrastructure.Linux/Bpf/native/`), verdict maps keyed by exe
+  inode and cgroup id, ring-buffer events via the `axiom-bpf-events` helper, `BpfEngine` (bpftool-driven
+  load/pin/attach/map sync, `IEnforcementLayer` of the supervisor, `VerdictLayer` of the adapter), probe that
+  degrades to nft-only with the reason in `capabilities`/`snapshot.limitations`/`--doctor`, unit `CAP_BPF
+  CAP_PERFMON` + `/sys/fs/bpf`, 13 unit tests, `scripts/linux/bpf/e2e.sh`. The evidence box has `bpftool`
+  and kernel BTF but no `clang`/`libbpf-dev`, so the object was never compiled: the BPF C source, the
+  verifier's acceptance of the CO-RE exe lookup under `cgroup/connect4`, and the bpftool `loadall`/`attach
+  multi` path are untested on a kernel. Run `scripts/linux/bpf/e2e.sh --daemon` after `apt install clang
+  libbpf-dev`; the rest of the branch does not depend on it (nft stays the primary boundary).
 - Packaging (P5): `.deb`/`.rpm` with the daemon under `/usr/libexec/axiom`, the polkit policy under
   `/usr/share/polkit-1/actions/` (today the first install from the bundle gets pkexec's generic prompt because
   `exec.path` does not match), a `.desktop` launcher + icon, postinst `--install-service`. Security review (P6).

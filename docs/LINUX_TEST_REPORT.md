@@ -170,6 +170,21 @@ Contracts 142/142, Core 117/128 (the same 11 pre-existing Windows-path failures 
 155/155, Desktop.Avalonia.MacOS 35/35, Infrastructure.Unix 22/22, Infrastructure.Linux 27/27,
 Infrastructure.Linux.Nft 54/54, Desktop.Avalonia.Linux 49/49. `git checkout -- '*.lock.json'` afterwards.
 
+## P2b: connect-time BPF layer (branch `buba/linux-enforce`, 2026-11-12)
+
+Same host (Ubuntu 24.04.5, kernel 7.0.0-42-generic, cgroup2fs, `bpftool` 7.x at `/usr/sbin/bpftool`,
+`/sys/kernel/btf/vmlinux` present, `unprivileged_bpf_disabled=2`, `bpftool cgroup tree` shows systemd's
+`sd_fw_egress`/`sd_devices` programs attached `multi` on ~15 service cgroups and snap's `cgroup_device` ones).
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| 1 | Toolchain probe `which clang llvm-strip bpftool; ls /sys/kernel/btf/vmlinux; dpkg -l \| grep -E 'libbpf\|clang'` | **BLOCKED** | `bpftool` and the BTF file exist; `clang` and `llvm-strip` are absent (`find / -name clang*` → only `libclang-cpp18`/`libclang1-18` libraries), `libbpf1` runtime only — no `/usr/include/bpf/bpf_helpers.h`. Per the brief nothing was installed; needs `apt install clang libbpf-dev`. |
+| 2 | Design + sources | done, uncompiled | `docs/LINUX_EBPF.md`; `src/Axiom.Infrastructure.Linux/Bpf/native/{axiom_bpf.h,axiom_connect.bpf.c,axiom-bpf-events.c,Makefile}`. `make check-tools` reports the missing pieces before touching anything. |
+| 3 | .NET engine + wiring | done | `Bpf/{BpfLayout,BpfVerdictPlanner,BpfCapabilityProbe,BpfEngine,BpfEventMonitor}.cs`, `Nft/IVerdictLayer.cs`; adapter `VerdictLayer` + `ResyncLayerAsync`, supervisor layer lifecycle, `LinuxEnforcement.CreateBpfEngine`, DI + `NftEnforcementWorker`, doctor check `bpf layer`, `snapshot.limitations`, unit caps `CAP_BPF CAP_PERFMON` + `ReadWritePaths /sys/fs/bpf`, csproj ships `bpf/*` when built. |
+| 4 | Unit tests | PASS | `Axiom.Infrastructure.Linux.Nft.Tests` 67/67 (13 new in `BpfLayerTests`: byte layout, stat parsing, planner coverage/merging/never-widening, probe order, event parsing + flow pair with `bpf-N` ids, engine load/attach/sync/delete/unpin over a fake `bpftool`, attach-failure rollback, no-objects/non-root paths, adapter sync after publish + inactive-layer reason, supervisor start/stop ordering, unit caps, doctor WARN-never-FAIL). `Axiom.Infrastructure.Linux.Tests` 27/27. |
+| 5 | Part A e2e (`scripts/linux/bpf/e2e.sh`: load/pin/attach, curl inode entry, bare curl rc=7, event, delete → 200, detach/unpin clean) | **not run** | Needs the compiled object (row 1). Script written and syntax-checked; nothing BPF-related was created on the box. |
+| 6 | Part B daemon path (`--daemon`: install in place, `rule.apply` block curl → bare curl rc=7, `snapshot` `bpf-` flow, journal `BPF layer attached`) | **not run** | Same blocker. The daemon on the box is unchanged (P4 image, active, no rules, shield off). Expected behaviour of the new image without the objects: journal `BPF layer inactive: BPF object not shipped: /usr/libexec/axiom/bpf/axiom_connect.bpf.o (…)`, nft-only. |
+
 ## Box state after P4 (owner's instruction: daemon stays installed)
 
 `axiomd.service` active + enabled from the newest image, `table inet axiom` holds only the loopback accept rules

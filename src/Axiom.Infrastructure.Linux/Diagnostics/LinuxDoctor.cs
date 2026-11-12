@@ -18,7 +18,9 @@ public sealed record LinuxDoctorTargets(
     string MachineDataDirectory,
     string IpcSocketPath,
     string DnsBackupPath,
-    string ProtectionSettingsPath)
+    string ProtectionSettingsPath,
+    string? BtfFile = null,
+    string? BpfPinDirectory = null)
 {
     /// <summary>systemd <c>LogsDirectory=</c>; checked for root 0700 / 0600 files when it exists.</summary>
     public string LogDirectory { get; init; } = LinuxServicePaths.LogDirectory;
@@ -29,7 +31,9 @@ public sealed record LinuxDoctorTargets(
         LinuxServicePaths.Default.MachineDataDirectory,
         LinuxServicePaths.Default.IpcSocketPath,
         LinuxServicePaths.Default.DnsBackupFile,
-        ProtectionSettingsStore.DefaultPath);
+        ProtectionSettingsStore.DefaultPath,
+        Bpf.BpfEnginePaths.DefaultBtfFile,
+        Bpf.BpfEnginePaths.DefaultPinDirectory);
 }
 
 /// <summary>
@@ -112,7 +116,69 @@ public sealed class LinuxDoctor
         CheckDns(checks);
         CheckOwner(checks);
         CheckEnforcement(checks);
+        CheckBpfLayer(checks);
         return checks;
+    }
+
+    /// <summary>
+    /// Connect-time BPF layer (docs/LINUX_EBPF.md): WARN (never FAIL — nftables still enforces)
+    /// when bpftool, kernel BTF or the shipped object are missing; as root, PASS when the daemon
+    /// is active and the programs are pinned, WARN when the daemon is active without pins (see
+    /// the journal for the probe reason) or when pins remain after the daemon stopped.
+    /// </summary>
+    private void CheckBpfLayer(List<DoctorCheck> checks)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Skip, "bpf layer", "Linux-only."));
+            return;
+        }
+
+        var bpftool = _runner.Run(Bpf.BpfCapabilityProbe.Bpftool, ["version"], ToolTimeout);
+        if (!bpftool.Succeeded)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "bpf layer", "bpftool is not available; the connect-time layer is off (nftables only, exec-time race window ~1 s)."));
+            return;
+        }
+
+        var version = bpftool.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? "bpftool";
+        var btf = _targets.BtfFile ?? Bpf.BpfEnginePaths.DefaultBtfFile;
+        if (!File.Exists(btf))
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "bpf layer", $"{version}; {btf} is missing (kernel without BTF); the connect-time layer is off."));
+            return;
+        }
+
+        var objectFile = Path.Combine(_targets.ImageDirectory, "bpf", Bpf.BpfEnginePaths.ObjectFileName);
+        if (!File.Exists(objectFile))
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "bpf layer", $"{version}; {objectFile} is not shipped (build Bpf/native with clang + libbpf-dev); the connect-time layer is off."));
+            return;
+        }
+
+        var pinDirectory = _targets.BpfPinDirectory ?? Bpf.BpfEnginePaths.DefaultPinDirectory;
+        if (!_isRoot)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Skip, "bpf layer", $"{version}; {pinDirectory} is readable as root."));
+            return;
+        }
+
+        var active = string.Equals(
+            _runner.Run(SystemdServiceInstaller.Systemctl, ["is-active", SystemdServiceInstaller.ServiceTarget], ToolTimeout).StandardOutput.Trim(),
+            "active",
+            StringComparison.Ordinal);
+        var pinned = Bpf.BpfLayout.Programs.Count(program => File.Exists(Path.Combine(pinDirectory, program.Program)));
+        if (active)
+        {
+            checks.Add(pinned == Bpf.BpfLayout.Programs.Count
+                ? new DoctorCheck(DoctorCheck.Pass, "bpf layer", string.Create(CultureInfo.InvariantCulture, $"{version}; {pinned} programs pinned at {pinDirectory} (connect4/connect6/sendmsg4/sendmsg6 at the cgroup root)."))
+                : new DoctorCheck(DoctorCheck.Warn, "bpf layer", string.Create(CultureInfo.InvariantCulture, $"{version}; {SystemdServiceInstaller.ServiceTarget} is active but {pinned}/{Bpf.BpfLayout.Programs.Count} programs are pinned at {pinDirectory}; nftables only — `journalctl -u axiomd | grep 'BPF layer'` has the reason.")));
+            return;
+        }
+
+        checks.Add(pinned > 0 || Directory.Exists(pinDirectory)
+            ? new DoctorCheck(DoctorCheck.Warn, "bpf layer", $"{version}; {SystemdServiceInstaller.ServiceTarget} is not active but {pinDirectory} remains; run `sudo axiomd --uninstall-service` or `sudo bpftool cgroup detach / … && sudo rm -r {pinDirectory}`.")
+            : new DoctorCheck(DoctorCheck.Pass, "bpf layer", $"{version}; daemon not active, nothing pinned."));
     }
 
     private void CheckUnit(List<DoctorCheck> checks)

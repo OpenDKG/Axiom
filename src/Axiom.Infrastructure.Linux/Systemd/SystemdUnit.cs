@@ -23,10 +23,13 @@ public static class SystemdUnit
     /// (<c>/etc/resolv.conf</c> fallback and NetworkManager/resolved state files),
     /// CAP_CHOWN + CAP_FOWNER (0700/0600 enforcement of <c>/var/lib/axiom</c>), CAP_KILL
     /// (ending a blocked process on request), CAP_NET_BIND_SERVICE (the Privacy Shield resolver
-    /// listens on 127.0.0.1:53; without it the bind fails with EACCES even as root).
+    /// listens on 127.0.0.1:53; without it the bind fails with EACCES even as root), CAP_BPF +
+    /// CAP_PERFMON (the connect-time BPF layer, docs/LINUX_EBPF.md: <c>bpf()</c> load/map ops need
+    /// CAP_BPF, <c>bpf_get_current_task_btf</c>/CO-RE reads need CAP_PERFMON; attaching to the
+    /// cgroup root also needs CAP_SYS_ADMIN, already present).
     /// </summary>
     public const string CapabilityBoundingSet =
-        "CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN CAP_FOWNER CAP_KILL CAP_NET_BIND_SERVICE";
+        "CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN CAP_FOWNER CAP_KILL CAP_NET_BIND_SERVICE CAP_BPF CAP_PERFMON";
 
     /// <summary>The unit text (pure; unit-tested).</summary>
     public static string Build(string executablePath, string machineDataDirectory, string runDirectory)
@@ -77,10 +80,11 @@ public static class SystemdUnit
 
             # Hardening. The daemon runs as root (it must program nftables, read every process's
             # /proc entries and rewrite system DNS) but with a reduced capability set and a read-only
-            # view of the OS; only the state/run directories, the cgroup tree and the resolver
+            # view of the OS; only the state/run directories, the cgroup tree, the bpffs pin
+            # directory (/sys/fs/bpf/axiom, connect-time BPF layer) and the resolver
             # configuration are writable.
             ProtectSystem=strict
-            ReadWritePaths={Q(machineDataDirectory)} {Q(runDirectory)} /sys/fs/cgroup /etc/resolv.conf /run/systemd/resolve /run/NetworkManager
+            ReadWritePaths={Q(machineDataDirectory)} {Q(runDirectory)} /sys/fs/cgroup /sys/fs/bpf /etc/resolv.conf /run/systemd/resolve /run/NetworkManager
             ProtectHome=read-only
             PrivateTmp=yes
             ProtectKernelTunables=yes

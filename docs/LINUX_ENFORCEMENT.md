@@ -87,9 +87,14 @@ help when keying on foreign cgroups (systemd scopes), which the herding design b
   pids ≈ ms). The exec-time race (a process that connects before the next poll) is real: the e2e's
   step 4 shows `curl` started in a fresh scope connecting before a 50 ms poll caught it. Children forked
   by a herded process inherit the cgroup (step 3 proves it), so long-lived apps are covered from their
-  first poll on; one-shot CLI tools are the gap. Closing it needs either the proc connector
-  (`PROC_EVENT_EXEC`, netlink + `CAP_NET_ADMIN`, still a race of ~100 µs) or the BPF helper (P2b,
-  `cgroup/connect4` verdicts, no race). Documented like the macOS UDP caveat.
+  first poll on; one-shot CLI tools are the gap. **P2b closes it** with the connect-time BPF layer
+  (`docs/LINUX_EBPF.md`): `cgroup/connect4,6` + `sendmsg4,6` programs at the cgroup root decide inside
+  `connect()` from the task's exe inode and cgroup id (both true at exec time, no herding needed) and
+  fail the syscall with `EPERM` for unscoped outbound block rules — the same rules nft keys on the
+  cgroup. Residual window after P2b: address/port-scoped block rules and inbound rules stay nft-only
+  (still ≤ 1 s), and the layer is off (nft-only, reported in `capabilities`, `snapshot.limitations`
+  and `--doctor`) on kernels without BTF or boxes without `bpftool`. The layer is implemented and
+  unit-tested but **not yet compiled/proven live** (the evidence box lacks `clang`/`libbpf-dev`).
 - Containers/sandboxes: Flatpak and Snap apps run in their own mount namespace; `/proc/<pid>/exe` shows
   the path inside it (`/app/bin/foo`, `/snap/foo/123/bin/foo`), AppImages run from a FUSE mount
   (`/tmp/.mount_fooXXXX/usr/bin/foo`). A rule must name that path (directory rules — `/snap/foo`,
@@ -189,3 +194,7 @@ copy of the shell. Rule-removal restored them, teardown returned their pids.)
 5. The sink: feed lines into the existing `FilterEventServer.ConsumeAsync`/`FlowEventParser` + `FilterStatus` (in-process pipe) so `capabilities.filterEnforcement`, the Connections page and the "not enforced" block work as on macOS; `adapter.Enforcement` can be used directly where `FilterStatus.Rules` was.
 6. A ruleset watcher (`nft monitor` or a 10 s `ReadGenerationAsync` poll) that republishes when the table disappears; `--doctor` FAIL on the same condition.
 7. Unit: `CapabilityBoundingSet` needs `CAP_NET_ADMIN` (nft) and `CAP_SYS_ADMIN` (`cgroup.procs` of foreign cgroups), `ReadWritePaths=/sys/fs/cgroup`.
+8. P2b: `LinuxEnforcement.CreateBpfEngine(adapter, sink)` → `adapter.VerdictLayer`; the supervisor takes it as
+   its `IEnforcementLayer` (start after the first publish, resync, events loop, stop before teardown); every
+   successful publish calls `layer.SyncAsync(rules, generation)`. Unit adds `CAP_BPF CAP_PERFMON` and
+   `ReadWritePaths` `/sys/fs/bpf`. Details and the proof plan: `docs/LINUX_EBPF.md`.
