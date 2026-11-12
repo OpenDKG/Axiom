@@ -71,6 +71,11 @@ internal sealed class RecordingLayer : IEnforcementLayer
 
     public string Status { get; set; } = "inactive: test";
 
+    /// <summary>Fault seams for the supervisor tests.</summary>
+    public Exception? StopFailure { get; set; }
+
+    public Exception? EventsFailure { get; set; }
+
     public Task StartAsync(CancellationToken ct)
     {
         Started = true;
@@ -80,10 +85,24 @@ internal sealed class RecordingLayer : IEnforcementLayer
     public Task StopAsync()
     {
         Stopped = true;
+        if (StopFailure is { } failure)
+        {
+            throw failure;
+        }
+
         return Task.CompletedTask;
     }
 
-    public Task RunEventsAsync(CancellationToken ct) => Task.Delay(Timeout.Infinite, ct);
+    public async Task RunEventsAsync(CancellationToken ct)
+    {
+        if (EventsFailure is { } failure)
+        {
+            await Task.Yield();
+            throw failure;
+        }
+
+        await Task.Delay(Timeout.Infinite, ct);
+    }
 
     public Task SyncAsync(IReadOnlyList<ManagedRule> rules, long generation, CancellationToken ct)
     {

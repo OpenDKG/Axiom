@@ -186,7 +186,18 @@ internal sealed class FakeCgroupFs : ICgroupFs
         Moves.Add((pid, cgroupPath));
     }
 
-    public IReadOnlyList<int> ListPids() => Processes.Keys.OrderBy(pid => pid).ToList();
+    /// <summary>Fault seam for the supervisor tests: thrown from the attribution loop's pid scan.</summary>
+    public Exception? ListPidsFailure { get; set; }
+
+    public IReadOnlyList<int> ListPids()
+    {
+        if (ListPidsFailure is { } failure)
+        {
+            throw failure;
+        }
+
+        return Processes.Keys.OrderBy(pid => pid).ToList();
+    }
 
     public string? ReadProcessCgroup(int pid) => Processes.TryGetValue(pid, out var p) ? p.Cgroup : null;
 

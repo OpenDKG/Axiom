@@ -119,6 +119,114 @@ public sealed class NftEnforcementSupervisorTests
         Assert.Contains(h.Log, line => line.StartsWith("Removed table inet axiom", StringComparison.Ordinal));
     }
 
+    // PR #276 review, LNX-2: an unexpected loop fault must still run every teardown step.
+
+    [Fact]
+    public async Task Attribution_loop_fault_still_tears_down_table_cgroups_and_layer()
+    {
+        using var h = new Harness();
+        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl"), CancellationToken.None);
+        var layer = new RecordingLayer { Active = true };
+        h.Adapter.VerdictLayer = layer;
+        var supervisor = new NftEnforcementSupervisor(h.Adapter, new NftTable(h.Nft), null, layer, h.Log.Add, h.Time)
+        {
+            AttributionInterval = TimeSpan.FromMilliseconds(10),
+            WatchInterval = TimeSpan.FromSeconds(30),
+        };
+        h.Fs.ListPidsFailure = new InvalidOperationException("simulated attribution fault");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var fault = await Record.ExceptionAsync(() => supervisor.RunAsync(cts.Token));
+
+        Assert.False(cts.IsCancellationRequested, "the loop fault, not the timeout, must end the run");
+        Assert.True(layer.Stopped, "BPF layer detached");
+        Assert.Null(h.Nft.TableGeneration);
+        Assert.DoesNotContain(h.Fs.Cgroups, cgroup => cgroup.StartsWith("axiom.slice", StringComparison.Ordinal));
+        Assert.Equal("system.slice/cron.service", h.Fs.Processes[500].Cgroup);
+        Assert.Contains(h.Log, line => line.Contains("simulated attribution fault", StringComparison.Ordinal));
+        Assert.NotNull(fault);
+    }
+
+    [Fact]
+    public async Task Watcher_loop_fault_still_tears_down()
+    {
+        using var h = new Harness();
+        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl"), CancellationToken.None);
+        var supervisor = new NftEnforcementSupervisor(h.Adapter, new NftTable(h.Nft), null, null, h.Log.Add, h.Time)
+        {
+            AttributionInterval = TimeSpan.FromSeconds(30),
+            WatchInterval = TimeSpan.FromMilliseconds(10),
+        };
+        h.Nft.ListFailure = new InvalidOperationException("simulated watcher fault");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await Record.ExceptionAsync(() => supervisor.RunAsync(cts.Token));
+
+        Assert.False(cts.IsCancellationRequested);
+        Assert.Contains(h.Nft.Calls, call => string.Join(' ', call.Args) == "delete table inet axiom");
+        Assert.DoesNotContain(h.Fs.Cgroups, cgroup => cgroup.StartsWith("axiom.slice", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Events_loop_fault_still_tears_down()
+    {
+        using var h = new Harness();
+        var layer = new RecordingLayer { Active = true, EventsFailure = new InvalidOperationException("simulated events fault") };
+        h.Adapter.VerdictLayer = layer;
+        var supervisor = new NftEnforcementSupervisor(h.Adapter, new NftTable(h.Nft), null, layer, h.Log.Add, h.Time)
+        {
+            AttributionInterval = TimeSpan.FromSeconds(30),
+            WatchInterval = TimeSpan.FromSeconds(30),
+        };
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await Record.ExceptionAsync(() => supervisor.RunAsync(cts.Token));
+
+        Assert.False(cts.IsCancellationRequested);
+        Assert.True(layer.Stopped);
+        Assert.Null(h.Nft.TableGeneration);
+    }
+
+    [Fact]
+    public async Task Trace_loop_fault_still_tears_down()
+    {
+        using var h = new Harness();
+        var supervisor = h.Supervisor(() => throw new ArgumentException("simulated trace fault"));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await Record.ExceptionAsync(() => supervisor.RunAsync(cts.Token));
+
+        Assert.False(cts.IsCancellationRequested);
+        Assert.Null(h.Nft.TableGeneration);
+        Assert.Contains(h.Log, line => line.Contains("simulated trace fault", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Teardown_step_failure_does_not_skip_the_other_steps_and_is_reported()
+    {
+        using var h = new Harness();
+        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl"), CancellationToken.None);
+        var layer = new RecordingLayer { Active = true, StopFailure = new NotSupportedException("simulated bpf stop failure") };
+        h.Adapter.VerdictLayer = layer;
+        var supervisor = new NftEnforcementSupervisor(h.Adapter, new NftTable(h.Nft), null, layer, h.Log.Add, h.Time)
+        {
+            AttributionInterval = TimeSpan.FromSeconds(30),
+            WatchInterval = TimeSpan.FromSeconds(30),
+        };
+
+        using var cts = new CancellationTokenSource();
+        var run = supervisor.RunAsync(cts.Token);
+        await Task.Delay(50);
+        await cts.CancelAsync();
+        await run;
+
+        Assert.True(layer.Stopped);
+        Assert.Null(h.Nft.TableGeneration);
+        Assert.DoesNotContain(h.Fs.Cgroups, cgroup => cgroup.StartsWith("axiom.slice", StringComparison.Ordinal));
+        Assert.Equal("system.slice/cron.service", h.Fs.Processes[500].Cgroup);
+        Assert.Contains(h.Log, line => line.Contains("simulated bpf stop failure", StringComparison.Ordinal));
+    }
+
     private sealed class EmptySource : INftTraceSource
     {
         public async IAsyncEnumerable<string> ReadLinesAsync([EnumeratorCancellation] CancellationToken ct)
