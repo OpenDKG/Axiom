@@ -52,6 +52,13 @@ jobs:
           xcode-select -p || true
           swiftc --version || true
 
+      - name: Use a short temp directory for macOS Unix sockets
+        run: |
+          # macOS Unix domain socket paths are limited to 104 characters. The GitHub
+          # runner temp path is longer than that, so point Path.GetTempPath() at /tmp.
+          mkdir -p /tmp/axiom-ci
+          echo "TMPDIR=/tmp/axiom-ci" >> "$GITHUB_ENV"
+
       - name: Build the solution
         run: dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true
 
@@ -74,6 +81,7 @@ jobs:
 
       - name: Portable core tests (Contracts, MCP, Persistence, Presentation)
         run: |
+          status=0
           for project in \
             tests/Axiom.Contracts.Tests/Axiom.Contracts.Tests.csproj \
             tests/Axiom.McpServer.Tests/Axiom.McpServer.Tests.csproj \
@@ -82,8 +90,9 @@ jobs:
             dotnet test "$project" \
               -c Release --no-build \
               --logger "trx;LogFileName=$(basename "$project" .csproj).trx" \
-              --results-directory "${{ runner.temp }}/test-results"
+              --results-directory "${{ runner.temp }}/test-results" || status=1
           done
+          exit $status
 
       - name: Avalonia UI tests
         run: |
