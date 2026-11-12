@@ -32,6 +32,8 @@ public sealed class EventRowView(HistoryRow row)
 
     public string Quality => row.Quality;
 
+    public DateTimeOffset FirstSeenUtc => row.FirstSeenUtc;
+
     public DateTimeOffset LastSeenUtc => row.LastSeenUtc;
 
     public string FirstSeenText => row.FirstSeenUtc.ToLocalTime()
@@ -42,4 +44,12 @@ public sealed class EventRowView(HistoryRow row)
 
     public string RowTooltip =>
         $"{row.AppPath}\nFirst seen: {row.FirstSeenUtc:O}\nLast seen: {row.LastSeenUtc:O}";
+
+    public string Details =>
+        $"Application: {row.AppDisplayName} (PID {row.ProcessId})\n" +
+        $"Executable: {(string.IsNullOrWhiteSpace(row.AppPath) ? "—" : row.AppPath)}\n" +
+        $"Flow: {Protocol} · {DirectionText} · {LocalEndpoint} -> {RemoteEndpoint}\n" +
+        $"State: {State} · Attribution: {Quality}\n" +
+        $"First seen: {row.FirstSeenUtc.ToLocalTime():yyyy-MM-dd HH:mm:ss} ({row.FirstSeenUtc:O})\n" +
+        $"Last seen: {row.LastSeenUtc.ToLocalTime():yyyy-MM-dd HH:mm:ss} ({row.LastSeenUtc:O})";
 }

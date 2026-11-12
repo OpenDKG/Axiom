@@ -412,6 +412,21 @@ public sealed class NetworkRecoveryControllerTests : IDisposable
         Assert.Empty(_firewall.Removed);
     }
 
+    [Fact]
+    public async Task Restore_fails_verification_when_dns_server_order_is_reversed()
+    {
+        _dns.Adapters.Add(Adapter("Ethernet", staticV4: ["1.1.1.1", "8.8.8.8"]));
+        var controller = Create();
+        await controller.CaptureAsync(Actor, CancellationToken.None);
+
+        _dns.ReverseAppliedServers = true;
+        var result = await controller.RestoreAsync(Actor, CancellationToken.None);
+
+        Assert.Equal(NetworkRecoveryStatus.PartialFailure, result.Status);
+        Assert.False(result.Verified);
+        Assert.Contains(result.Problems, problem => problem.Code == "dns.verify_failed");
+    }
+
     private NetworkRecoveryController Create(string? path = null, bool loopbackExpected = false) => new(
         _dns,
         _firewall,
@@ -464,6 +479,8 @@ public sealed class NetworkRecoveryControllerTests : IDisposable
 
         public string? FailAlias { get; set; }
 
+        public bool ReverseAppliedServers { get; set; }
+
         public TimeSpan ApplyDelay { get; set; }
 
         public bool Overlapped { get; private set; }
@@ -490,14 +507,17 @@ public sealed class NetworkRecoveryControllerTests : IDisposable
                     throw new NetworkRecoveryPlatformException("dns.test_failure", "The test adapter refused the change.");
                 }
 
+                var appliedState = ReverseAppliedServers
+                    ? state with { Ipv4Servers = state.Ipv4Servers.Reverse().ToArray() }
+                    : state;
                 var index = Adapters.FindIndex(adapter => adapter.AdapterId == state.AdapterId);
                 if (index >= 0)
                 {
-                    Adapters[index] = state;
+                    Adapters[index] = appliedState;
                 }
                 else
                 {
-                    Adapters.Add(state);
+                    Adapters.Add(appliedState);
                 }
 
                 Applied.Add(state.InterfaceAlias);

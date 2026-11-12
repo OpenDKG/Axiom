@@ -16,11 +16,11 @@ namespace Axiom.UI.Avalonia;
 /// </summary>
 public sealed class FirstRunDialog : Window
 {
-    private static readonly IBrush BackgroundBrush = new SolidColorBrush(Color.Parse("#0E1116"));
-    private static readonly IBrush SurfaceBrush = new SolidColorBrush(Color.Parse("#161B22"));
-    private static readonly IBrush BorderBrushStatic = new SolidColorBrush(Color.Parse("#2E3A47"));
-    private static readonly IBrush ForegroundBrush = new SolidColorBrush(Color.Parse("#E6EDF3"));
-    private static readonly IBrush MutedBrush = new SolidColorBrush(Color.Parse("#9BA9B8"));
+    private static readonly IBrush BackgroundBrush = new SolidColorBrush(Color.Parse("#0B0D11"));
+    private static readonly IBrush SurfaceBrush = new SolidColorBrush(Color.Parse("#12151C"));
+    private static readonly IBrush BorderBrushStatic = new SolidColorBrush(Color.Parse("#232936"));
+    private static readonly IBrush ForegroundBrush = new SolidColorBrush(Color.Parse("#F3F5F8"));
+    private static readonly IBrush MutedBrush = new SolidColorBrush(Color.Parse("#9EA7B8"));
 
     private readonly CheckBox _dkg = new() { Content = "OriginTrail DKG testnet (npm package, local node)", Foreground = ForegroundBrush };
     private readonly CheckBox _blackbox = new() { Content = "Blackbox (Umanitek official installer; large third-party download)", Foreground = ForegroundBrush };
@@ -39,8 +39,7 @@ public sealed class FirstRunDialog : Window
         Content = "Apply",
         IsEnabled = false,
         Padding = new Thickness(14, 7),
-        Background = new SolidColorBrush(Color.Parse("#1F6FEB")),
-        Foreground = ForegroundBrush,
+        Classes = { "primary" },
     };
     private readonly IApiKeyProtector _protector;
     private bool _accepted;

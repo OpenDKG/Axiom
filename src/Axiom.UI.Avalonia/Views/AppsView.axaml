@@ -2,16 +2,16 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.AppsView">
-  <Grid ColumnDefinitions="1.55*,7,*" Margin="24,18,24,24">
-    <Border Grid.Column="0" Classes="card" Padding="10" MinWidth="320">
+  <Grid ColumnDefinitions="1.55*,8,*" Margin="24,18,24,24">
+    <Border Grid.Column="0" Classes="card" Padding="12" MinWidth="320">
       <Grid RowDefinitions="Auto,*">
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="8,4,8,10">
-          <StackPanel Grid.Column="0">
-            <controls:AxiomSelectableTextBlock Text="Observed executables" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <controls:AxiomSelectableTextBlock Text="{Binding SummaryText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,2,0,0" />
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="6,4,6,12">
+          <StackPanel Grid.Column="0" Spacing="2">
+            <controls:AxiomSelectableTextBlock Text="Observed executables" Classes="section-title" />
+            <controls:AxiomSelectableTextBlock Text="{Binding SummaryText}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
           </StackPanel>
-          <Border Grid.Column="1" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,2" VerticalAlignment="Top">
-            <controls:AxiomSelectableTextBlock Text="{Binding ModeBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="9" FontWeight="Bold" />
+          <Border Grid.Column="1" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="5" Padding="8,3" VerticalAlignment="Top">
+            <controls:AxiomSelectableTextBlock Text="{Binding ModeBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" FontWeight="Bold" />
           </Border>
         </Grid>
 
@@ -20,7 +20,7 @@
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
             <DataTemplate>
-              <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4"
+              <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3"
                     Tag="{Binding $parent[ListBox].DataContext}">
                 <Grid.ContextMenu>
                   <ContextMenu>
@@ -39,21 +39,21 @@
                               CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                   </ContextMenu>
                 </Grid.ContextMenu>
-                <Border Grid.Column="0" Width="34" Height="34" CornerRadius="8" Background="{DynamicResource Axiom.AccentSoft}" Margin="0,0,10,0">
-                  <controls:AxiomSelectableTextBlock Text="{Binding Initial}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource Axiom.Accent}"
+                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" Background="{DynamicResource Axiom.AccentSoft}" Margin="0,0,12,0">
+                  <controls:AxiomSelectableTextBlock Text="{Binding Initial}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource Axiom.Accent}"
                              HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                  <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-                  <controls:AxiomSelectableTextBlock Text="{Binding PathText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}"
-                             TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" MaxWidth="420" />
+                  <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+                  <controls:AxiomSelectableTextBlock Text="{Binding PathText}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}"
+                             TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" MaxWidth="440" />
                   <Border Width="{Binding BarWidth}" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}"
                           HorizontalAlignment="Left" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0"
                             HorizontalAlignment="Right" Spacing="2">
-                  <controls:AxiomSelectableTextBlock Text="{Binding SocketsText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" HorizontalAlignment="Right" />
-                  <controls:AxiomSelectableTextBlock Text="{Binding ProtocolText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" HorizontalAlignment="Right" />
+                  <controls:AxiomSelectableTextBlock Text="{Binding SocketsText}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" HorizontalAlignment="Right" />
+                  <controls:AxiomSelectableTextBlock Text="{Binding ProtocolText}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" HorizontalAlignment="Right" />
                 </StackPanel>
               </Grid>
             </DataTemplate>
@@ -62,7 +62,7 @@
       </Grid>
     </Border>
 
-    <GridSplitter Grid.Column="1" Width="7" Background="{DynamicResource Axiom.Border}" ResizeDirection="Columns"
+    <GridSplitter Grid.Column="1" Width="8" Background="Transparent" ResizeDirection="Columns"
                   ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
 
     <Border Grid.Column="2" Classes="card" Padding="18" MinWidth="300">
@@ -72,30 +72,30 @@
           <Grid ColumnDefinitions="*,Auto">
             <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding SelectedApp.Name}" FontSize="17" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-            <Border Grid.Column="1" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,2" VerticalAlignment="Top">
-              <controls:AxiomSelectableTextBlock Text="OBSERVED" Foreground="{DynamicResource Axiom.Accent}" FontSize="9" FontWeight="Bold" />
+            <Border Grid.Column="1" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="5" Padding="8,3" VerticalAlignment="Top">
+              <controls:AxiomSelectableTextBlock Text="OBSERVED" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" FontWeight="Bold" />
             </Border>
           </Grid>
 
-          <controls:AxiomSelectableTextBlock Text="{Binding SelectedApp.PathText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding SelectedApp.PathText}" Classes="mono" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <Border Height="1" Background="{DynamicResource Axiom.Border}" Margin="0,4" />
 
           <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
-            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="Sockets" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedApp.SocketsText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Protocols" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedApp.ProtocolText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="States" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedApp.StatesText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="First seen" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedApp.FirstSeenText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="Rule" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-            <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedApp.RuleText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="Sockets" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedApp.SocketsText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Protocols" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedApp.ProtocolText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="States" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedApp.StatesText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="First seen" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedApp.FirstSeenText}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="Rule" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedApp.RuleText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
           </Grid>
 
           <Expander Header="Advanced scope (protocol, ports, addresses, profiles)" IsExpanded="False"
                     Foreground="{DynamicResource Axiom.TextPrimary}" HorizontalAlignment="Stretch">
-            <StackPanel Spacing="5" Margin="0,8,0,0">
+            <StackPanel Spacing="6" Margin="0,8,0,0">
               <controls:AxiomSelectableTextBlock Text="Protocol" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
               <ComboBox ItemsSource="{Binding ProtocolOptions}" SelectedItem="{Binding SelectedProtocolText}" Width="120" HorizontalAlignment="Left" />
               <controls:AxiomSelectableTextBlock Text="Remote ports (TCP/UDP only; e.g. 443,8000-8100)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
@@ -108,7 +108,7 @@
                 <CheckBox Content="Private" IsChecked="{Binding BlockPrivate}" Foreground="{DynamicResource Axiom.TextPrimary}" />
                 <CheckBox Content="Public" IsChecked="{Binding BlockPublic}" Foreground="{DynamicResource Axiom.TextPrimary}" />
               </StackPanel>
-              <controls:AxiomSelectableTextBlock Text="Scope applies to the next block action." FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+              <controls:AxiomSelectableTextBlock Text="Scope applies to the next block action." FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
             </StackPanel>
           </Expander>
 
@@ -117,20 +117,20 @@
                     IsEnabled="{Binding CanWrite}" Margin="0,0,8,8" Padding="12,6" />
             <Button Content="Block inbound" Command="{Binding BlockInboundCommand}"
                     IsEnabled="{Binding CanWrite}" Margin="0,0,8,8" Padding="12,6" />
-            <Button Content="End task" Command="{Binding EndTaskAppCommand}"
+            <Button Content="End task" Classes="danger" Command="{Binding EndTaskAppCommand}"
                     CommandParameter="{Binding SelectedApp}" Margin="0,0,8,8" Padding="12,6" />
             <Button Content="Copy path" Command="{Binding CopyPathAppCommand}"
                     CommandParameter="{Binding SelectedApp}" Margin="0,0,8,8" Padding="12,6" />
           </WrapPanel>
 
-          <controls:AxiomSelectableTextBlock Text="{Binding WriteStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding WriteStatusText}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
         </StackPanel>
 
         <StackPanel IsVisible="{Binding !HasSelection}" HorizontalAlignment="Center" VerticalAlignment="Center"
                     Spacing="6" MaxWidth="300">
           <controls:AxiomSelectableTextBlock Text="No executable selected" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}"
                      HorizontalAlignment="Center" />
-          <controls:AxiomSelectableTextBlock Text="Select an application from the live inventory." FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}"
+          <controls:AxiomSelectableTextBlock Text="Select an application from the live inventory." FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}"
                      TextAlignment="Center" TextWrapping="Wrap" />
         </StackPanel>
         </Grid>

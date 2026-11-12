@@ -469,6 +469,104 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         }
     }
 
+    [RelayCommand]
+    private async Task InspectMarkerEventAsync(NewConnectionMarkerEvent? item)
+    {
+        var target = item ?? SelectedEvent;
+        if (target is null)
+        {
+            return;
+        }
+
+        await _ui
+            .ShowMessageAsync($"Event #{target.Number} — {target.App}", target.Details, CancellationToken.None)
+            .ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private Task CopyMarkerEventAsync(NewConnectionMarkerEvent? item) =>
+        CopyAsync((item ?? SelectedEvent)?.Details);
+
+    [RelayCommand]
+    private Task CopyMarkerPathAsync(NewConnectionMarkerEvent? item) =>
+        CopyAsync((item ?? SelectedEvent)?.AppPath);
+
+    [RelayCommand]
+    private Task CopyMarkerRemoteAsync(NewConnectionMarkerEvent? item) =>
+        CopyAsync((item ?? SelectedEvent)?.Remote);
+
+    [RelayCommand]
+    private async Task BlockMarkerOutboundAsync(NewConnectionMarkerEvent? item)
+    {
+        var target = item ?? SelectedEvent;
+        if (target is not null)
+        {
+            ActionStatusText = await _actions
+                .BlockAsync(target.App, target.AppPath, FirewallDirection.Outbound)
+                .ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private async Task BlockMarkerInboundAsync(NewConnectionMarkerEvent? item)
+    {
+        var target = item ?? SelectedEvent;
+        if (target is not null)
+        {
+            ActionStatusText = await _actions
+                .BlockAsync(target.App, target.AppPath, FirewallDirection.Inbound)
+                .ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private async Task EndMarkerTaskAsync(NewConnectionMarkerEvent? item)
+    {
+        var target = item ?? SelectedEvent;
+        if (target is not null)
+        {
+            ActionStatusText = await _actions
+                .EndTaskAsync(target.App, [target.ProcessId])
+                .ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private Task CopyTopAppPathAsync(AppRow? app) => CopyAsync(app?.PathText);
+
+    [RelayCommand]
+    private async Task BlockTopAppOutboundAsync(AppRow? app)
+    {
+        if (app is not null)
+        {
+            ActionStatusText = await _actions
+                .BlockAsync(app.Name, app.PathText, FirewallDirection.Outbound)
+                .ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private async Task BlockTopAppInboundAsync(AppRow? app)
+    {
+        if (app is not null)
+        {
+            ActionStatusText = await _actions
+                .BlockAsync(app.Name, app.PathText, FirewallDirection.Inbound)
+                .ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private async Task EndTopAppTaskAsync(AppRow? app)
+    {
+        if (app is not null)
+        {
+            ActionStatusText = await _actions
+                .EndTaskAsync(app.Name, app.ProcessIds)
+                .ConfigureAwait(true);
+        }
+    }
+
     private async Task CopyAsync(string? value)
     {
         if (string.IsNullOrWhiteSpace(value) || value == "—")

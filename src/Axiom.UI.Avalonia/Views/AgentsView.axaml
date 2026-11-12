@@ -66,7 +66,7 @@
       <Grid ColumnDefinitions="*,14,*">
         <Border Grid.Column="0" Classes="card" Padding="14">
           <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-            <Border Grid.Column="0" Background="#0B1024" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
+            <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
               <Image Source="avares://Axiom.UI.Avalonia/Assets/origintrail-logo.png"
                      Width="104" Height="23" Stretch="Uniform" />
             </Border>
@@ -86,7 +86,7 @@
         </Border>
         <Border Grid.Column="2" Classes="card" Padding="14">
           <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-            <Border Grid.Column="0" Background="#0B1024" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
+            <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
               <Image Source="avares://Axiom.UI.Avalonia/Assets/blackbox-logo.png"
                      Width="104" Height="18" Stretch="Uniform" />
             </Border>

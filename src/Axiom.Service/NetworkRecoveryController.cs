@@ -192,6 +192,15 @@ public sealed partial class NetworkRecoveryController : IDisposable
                     error ?? "The recovery snapshot could not be written.");
             }
 
+            if (OperatingSystem.IsWindows() &&
+                string.Equals(
+                    Path.GetFullPath(_snapshotPath),
+                    Path.GetFullPath(NetworkRecoverySnapshotStore.DefaultPath),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                MachineStateSecurity.HardenProgramData();
+            }
+
             LogCaptured(_logger, actor, adapters.Count, rules.Count, snapshot.ProtectionWasActive);
             return CaptureResult(NetworkRecoveryStatus.Succeeded, snapshot, persisted: true);
         }
@@ -493,9 +502,7 @@ public sealed partial class NetworkRecoveryController : IDisposable
 
     private static bool SameServers(IReadOnlyList<string> left, IReadOnlyList<string> right) =>
         left.Count == right.Count &&
-        left.OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-            .SequenceEqual(right.OrderBy(value => value, StringComparer.OrdinalIgnoreCase),
-                StringComparer.OrdinalIgnoreCase);
+        left.SequenceEqual(right, StringComparer.OrdinalIgnoreCase);
 
     private static bool IsLoopbackOnly(IReadOnlyList<string> servers) =>
         servers.Count > 0 &&

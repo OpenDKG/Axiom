@@ -14,7 +14,7 @@
     </Style>
   </UserControl.Styles>
   <ScrollViewer VerticalScrollBarVisibility="Auto">
-    <StackPanel Margin="28,20,28,28" Spacing="18">
+    <StackPanel Margin="26,20,26,26" Spacing="16">
       <Border Classes="card" Padding="18,14">
         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
           <Border Width="4" CornerRadius="2" Background="{DynamicResource Axiom.Accent}" />
@@ -32,7 +32,7 @@
             <Border Width="32" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}" HorizontalAlignment="Left" />
             <controls:AxiomSelectableTextBlock Text="ACTIVE SOCKETS" Classes="kpi-label" />
             <controls:AxiomSelectableTextBlock Text="{Binding ConnectionsText}" Classes="kpi-value" />
-            <controls:AxiomSelectableTextBlock Text="{Binding SourceBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10.5" />
+            <controls:AxiomSelectableTextBlock Text="{Binding SourceBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="11" />
           </StackPanel>
         </Border>
         <Border Grid.Column="2" Classes="card">
@@ -40,7 +40,7 @@
             <Border Width="32" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.Download}" HorizontalAlignment="Left" />
             <controls:AxiomSelectableTextBlock Text="PROCESSES" Classes="kpi-label" />
             <controls:AxiomSelectableTextBlock Text="{Binding ProcessesText}" Classes="kpi-value" />
-            <controls:AxiomSelectableTextBlock Text="with at least one socket" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10.5" />
+            <controls:AxiomSelectableTextBlock Text="with at least one socket" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" />
           </StackPanel>
         </Border>
         <Border Grid.Column="4" Classes="card">
@@ -48,27 +48,27 @@
             <Border Width="32" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.AccentStrong}" HorizontalAlignment="Left" />
             <controls:AxiomSelectableTextBlock Text="LOOPBACK" Classes="kpi-label" />
             <controls:AxiomSelectableTextBlock Text="{Binding LoopbackText}" Classes="kpi-value" />
-            <controls:AxiomSelectableTextBlock Text="local-only endpoints" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10.5" />
+            <controls:AxiomSelectableTextBlock Text="local-only endpoints" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" />
           </StackPanel>
         </Border>
         <Border Grid.Column="6" Classes="card">
           <StackPanel Spacing="5">
             <Border Width="32" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.Success}" HorizontalAlignment="Left" />
             <controls:AxiomSelectableTextBlock Text="THROUGHPUT" Classes="kpi-label" />
-            <controls:AxiomSelectableTextBlock Text="{Binding DownloadText}" Classes="kpi-value" FontSize="26" />
-            <controls:AxiomSelectableTextBlock Text="{Binding UploadText, StringFormat=Upload: {0}}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10.5" />
+            <controls:AxiomSelectableTextBlock Text="{Binding DownloadText}" Classes="kpi-value" FontSize="25" />
+            <controls:AxiomSelectableTextBlock Text="{Binding UploadText, StringFormat=Upload: {0}}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" />
           </StackPanel>
         </Border>
       </Grid>
 
       <Border Classes="card">
-        <StackPanel Spacing="8">
+        <StackPanel Spacing="10">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
               <controls:AxiomSelectableTextBlock Text="System-wide throughput" Classes="section-title" />
-              <controls:AxiomSelectableTextBlock Text="{Binding BucketLabel}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+              <controls:AxiomSelectableTextBlock Text="{Binding BucketLabel}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
             </StackPanel>
-            <ComboBox Grid.Column="1" ItemsSource="{Binding RangeOptions}" SelectedItem="{Binding SelectedRange}" Width="92" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding RangeOptions}" SelectedItem="{Binding SelectedRange}" Width="96" />
           </Grid>
           <Grid>
             <controls:TrafficChartControl Height="180" UploadSeries="{Binding UploadSeries}" DownloadSeries="{Binding DownloadSeries}"
@@ -80,11 +80,11 @@
                     Background="{DynamicResource Axiom.Surface}"
                     BorderBrush="{DynamicResource Axiom.Border}"
                     BorderThickness="1"
-                    CornerRadius="6"
-                    Padding="12">
+                    CornerRadius="8"
+                    Padding="14">
               <controls:AxiomSelectableTextBlock Text="{Binding NoDataText}"
                          Foreground="{DynamicResource Axiom.TextMuted}"
-                         FontSize="11"
+                         FontSize="11.5"
                          TextWrapping="Wrap"
                          HorizontalAlignment="Center"
                          VerticalAlignment="Center"
@@ -93,9 +93,9 @@
             </Border>
           </Grid>
           <Grid ColumnDefinitions="Auto,Auto,*">
-            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding DownloadText, StringFormat=Down: {0}}" Foreground="{DynamicResource Axiom.Download}" FontSize="10" Margin="0,0,14,0" />
-            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding UploadText, StringFormat=Up: {0}}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" Margin="0,0,14,0" />
-            <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding RangeNote}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" MaxWidth="520" />
+            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding DownloadText, StringFormat=Down: {0}}" Foreground="{DynamicResource Axiom.Download}" FontSize="11" FontWeight="Medium" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding UploadText, StringFormat=Up: {0}}" Foreground="{DynamicResource Axiom.Accent}" FontSize="11" FontWeight="Medium" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding RangeNote}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" TextTrimming="CharacterEllipsis" HorizontalAlignment="Right" MaxWidth="520" />
           </Grid>
         </StackPanel>
       </Border>
@@ -106,46 +106,48 @@
             <StackPanel Grid.Column="0" Spacing="2">
               <controls:AxiomSelectableTextBlock Text="Agent activity" Classes="section-title" />
               <controls:AxiomSelectableTextBlock Text="Recorded sessions, API calls, tool calls and installs from the local Blackbox audit."
-                         FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+                         FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             </StackPanel>
-            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="Local audit - secrets masked" FontSize="10"
-                       Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+            <Border Grid.Column="1" Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="5" Padding="8,3" VerticalAlignment="Center">
+              <controls:AxiomSelectableTextBlock Text="Local audit · secrets masked" FontSize="10.5"
+                         Foreground="{DynamicResource Axiom.TextSecondary}" />
+            </Border>
           </Grid>
 
           <StackPanel Orientation="Horizontal" Spacing="8">
             <ComboBox ItemsSource="{Binding AgentActivity.ActivityFilters}"
-                      SelectedItem="{Binding AgentActivity.SelectedActivityFilter, Mode=TwoWay}" Width="130"
+                      SelectedItem="{Binding AgentActivity.SelectedActivityFilter, Mode=TwoWay}" Width="136"
                       ToolTip.Tip="Filter by recorded sessions, API calls, tool calls, installs, file access or threats." />
             <ComboBox ItemsSource="{Binding AgentActivity.AgentFilters}"
-                      SelectedItem="{Binding AgentActivity.SelectedAgentFilter, Mode=TwoWay}" Width="130"
+                      SelectedItem="{Binding AgentActivity.SelectedAgentFilter, Mode=TwoWay}" Width="136"
                       ToolTip.Tip="Filter by agent." />
             <ComboBox ItemsSource="{Binding AgentActivity.SeverityFilters}"
-                      SelectedItem="{Binding AgentActivity.SelectedSeverityFilter, Mode=TwoWay}" Width="140"
+                      SelectedItem="{Binding AgentActivity.SelectedSeverityFilter, Mode=TwoWay}" Width="144"
                       ToolTip.Tip="Filter by severity." />
           </StackPanel>
 
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
-              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ActivityStatusText}" FontSize="10"
+              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ActivityStatusText}" FontSize="11"
+                         Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ActivityBreakdownText}" FontSize="10.5"
                          Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ActivityBreakdownText}" FontSize="10"
+              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.SummaryText}" FontSize="10.5"
                          Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.SummaryText}" FontSize="10"
+              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.LastBlockedText}" FontSize="10.5"
                          Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.LastBlockedText}" FontSize="10"
+              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ProtectedPathViolationsText}" FontSize="10.5"
                          Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ProtectedPathViolationsText}" FontSize="10"
+              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.UnresolvedText}" FontSize="10.5"
                          Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.UnresolvedText}" FontSize="10"
-                         Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ActivityFreshnessText}" FontSize="10"
+              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ActivityFreshnessText}" FontSize="10.5"
                          Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap"
                          IsVisible="{Binding !AgentActivity.HasStaleAgentActivity}" />
-              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ActivityFreshnessText}" FontSize="10"
+              <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ActivityFreshnessText}" FontSize="10.5"
                          Foreground="{DynamicResource Axiom.Warning}" TextWrapping="Wrap"
                          IsVisible="{Binding AgentActivity.HasStaleAgentActivity}" />
             </StackPanel>
-            <Button Grid.Column="1" Content="Load more" Padding="9,4" FontSize="11" Margin="8,0,0,0"
+            <Button Grid.Column="1" Content="Load more" Padding="10,5" Margin="8,0,0,0"
                     VerticalAlignment="Top"
                     Command="{Binding AgentActivity.LoadMoreActivityCommand}"
                     IsVisible="{Binding AgentActivity.CanLoadMoreActivity}"
@@ -153,51 +155,45 @@
           </Grid>
 
           <Grid ColumnDefinitions="*,12,360">
-            <StackPanel Grid.Column="0" Spacing="2">
-              <Grid ColumnDefinitions="58,84,104,*,64,72" Margin="6,0,6,3">
-                <controls:AxiomSelectableTextBlock Grid.Column="0" Text="TIME" FontSize="9" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Axiom.TextMuted}" />
-                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="AGENT" FontSize="9" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Axiom.TextMuted}" />
-                <controls:AxiomSelectableTextBlock Grid.Column="2" Text="EVENT" FontSize="9" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Axiom.TextMuted}" />
-                <controls:AxiomSelectableTextBlock Grid.Column="3" Text="DETAILS" FontSize="9" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Axiom.TextMuted}" />
-                <controls:AxiomSelectableTextBlock Grid.Column="4" Text="SECURITY" FontSize="9" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Axiom.TextMuted}" />
-                <controls:AxiomSelectableTextBlock Grid.Column="5" Text="SEVERITY" FontSize="9" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Axiom.TextMuted}" />
+            <StackPanel Grid.Column="0" Spacing="4">
+              <Grid ColumnDefinitions="64,90,110,*,70,76" Margin="8,0,8,2">
+                <controls:AxiomSelectableTextBlock Grid.Column="0" Text="TIME" Classes="table-header" />
+                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="AGENT" Classes="table-header" />
+                <controls:AxiomSelectableTextBlock Grid.Column="2" Text="EVENT" Classes="table-header" />
+                <controls:AxiomSelectableTextBlock Grid.Column="3" Text="DETAILS" Classes="table-header" />
+                <controls:AxiomSelectableTextBlock Grid.Column="4" Text="SECURITY" Classes="table-header" />
+                <controls:AxiomSelectableTextBlock Grid.Column="5" Text="SEVERITY" Classes="table-header" />
               </Grid>
               <ListBox Classes="data-list" ItemsSource="{Binding AgentActivity.Activity}"
-                       SelectedItem="{Binding AgentActivity.SelectedActivity, Mode=TwoWay}" Height="190"
+                       SelectedItem="{Binding AgentActivity.SelectedActivity, Mode=TwoWay}" Height="196"
                        Background="Transparent" BorderThickness="0"
                        ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemTemplate>
                   <DataTemplate>
-                    <Grid ColumnDefinitions="58,84,104,*,64,72" Margin="0,2"
+                    <Grid ColumnDefinitions="64,90,110,*,70,76" Margin="0,1"
                           Tag="{Binding $parent[ListBox].DataContext}">
                       <Grid.ContextMenu>
                         <ContextMenu>
                           <MenuItem Header="Copy event"
-                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyActivityEventCommand}" />
+                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityEventCommand}" />
                           <MenuItem Header="Copy details"
-                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyActivityDetailsCommand}" />
+                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityDetailsCommand}" />
                           <MenuItem Header="Copy raw event JSON"
-                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyActivityJsonCommand}" />
+                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityJsonCommand}" />
                         </ContextMenu>
                       </Grid.ContextMenu>
-                      <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" FontSize="9"
+                      <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
                                  Foreground="{DynamicResource Axiom.TextMuted}" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="9"
+                      <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11"
                                  Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding EventLabel}" FontSize="9"
+                      <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding EventLabel}" FontSize="11"
                                  Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding ActionSummary}" FontSize="10"
+                      <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding ActionSummary}" FontSize="11.5"
                                  Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding SecurityOutcome}" FontSize="9"
+                      <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding SecurityOutcome}" FontSize="10.5"
                                  FontWeight="SemiBold" ToolTip.Tip="{Binding SecurityOutcomeDetail}"
                                  Classes="security" Classes.threat="{Binding IsSecurityThreat}" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding Severity}" FontSize="9"
+                      <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding Severity}" FontSize="10.5"
                                  Foreground="{DynamicResource Axiom.TextMuted}" />
                     </Grid>
                   </DataTemplate>
@@ -206,7 +202,7 @@
             </StackPanel>
 
             <Border Grid.Column="2" Background="{DynamicResource Axiom.SurfaceAlt}" BorderBrush="{DynamicResource Axiom.Border}"
-                    BorderThickness="1" CornerRadius="6" Padding="10" Height="212">
+                    BorderThickness="1" CornerRadius="8" Padding="12" Height="220">
               <Border.ContextMenu>
                 <ContextMenu>
                   <MenuItem Header="Copy event" Command="{Binding AgentActivity.CopyActivityEventCommand}" />
@@ -217,31 +213,31 @@
               <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Spacing="6">
                   <StackPanel Spacing="6" IsVisible="{Binding AgentActivity.HasSelectedActivity}">
-                    <controls:AxiomSelectableTextBlock Text="Activity details" FontSize="11" FontWeight="SemiBold"
+                    <controls:AxiomSelectableTextBlock Text="Activity details" FontSize="12" FontWeight="SemiBold"
                                Foreground="{DynamicResource Axiom.TextPrimary}" />
-                    <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.SelectedActivityTitle}" FontSize="10"
+                    <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.SelectedActivityTitle}" FontSize="11"
                                Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
                     <ItemsControl ItemsSource="{Binding AgentActivity.SelectedActivityDetails}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                          <Grid ColumnDefinitions="90,*" Margin="0,3,0,0">
-                            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding Label}" FontSize="9"
+                          <Grid ColumnDefinitions="92,*" Margin="0,3,0,0">
+                            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding Label}" FontSize="10.5"
                                        Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Top" />
-                            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontSize="9.5"
+                            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontSize="11"
                                        Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
                           </Grid>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
-                      <Button Content="Copy event" Padding="8,3" FontSize="10" Margin="0,0,6,0"
+                      <Button Content="Copy event" Padding="8,3" FontSize="11" Margin="0,0,6,0"
                               Command="{Binding AgentActivity.CopyActivityEventCommand}" />
-                      <Button Content="Copy details" Padding="8,3" FontSize="10"
+                      <Button Content="Copy details" Padding="8,3" FontSize="11"
                               Command="{Binding AgentActivity.CopyActivityDetailsCommand}" />
                     </WrapPanel>
                   </StackPanel>
                   <controls:AxiomSelectableTextBlock Text="Select a recorded event to see its details."
-                             FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap"
+                             FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap"
                              IsVisible="{Binding !AgentActivity.HasSelectedActivity}" />
                 </StackPanel>
               </ScrollViewer>
@@ -249,45 +245,52 @@
           </Grid>
 
           <Border Background="{DynamicResource Axiom.SurfaceAlt}" BorderBrush="{DynamicResource Axiom.Border}"
-                  BorderThickness="1" CornerRadius="6" Padding="10">
+                  BorderThickness="1" CornerRadius="8" Padding="12">
             <StackPanel Spacing="6">
               <Grid ColumnDefinitions="*,Auto">
-                <controls:AxiomSelectableTextBlock Text="Security findings" FontSize="11" FontWeight="SemiBold"
+                <controls:AxiomSelectableTextBlock Text="Security findings" FontSize="12.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource Axiom.TextPrimary}" />
                 <controls:AxiomSelectableTextBlock Grid.Column="1" Text="blocked is not the same as flagged"
-                           FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+                           FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
               </Grid>
               <controls:AxiomSelectableTextBlock
-                         Text="Only a finding with an explicit decision of block counts as blocked. Select a row to see what was recorded."
-                         FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+                         Text="Only a finding with an explicit decision of block counts as blocked. Select or right-click a row to inspect or copy."
+                         FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
               <Grid ColumnDefinitions="*,12,320">
-                <StackPanel Grid.Column="0" Spacing="2">
-                  <Grid ColumnDefinitions="58,84,90,64,*,84" Margin="6,0,6,3">
-                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="TIME" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="AGENT" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="2" Text="CATEGORY" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="3" Text="SEVERITY" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="4" Text="IDENTIFIER" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="5" Text="SECURITY" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
+                <StackPanel Grid.Column="0" Spacing="4">
+                  <Grid ColumnDefinitions="64,90,94,70,*,84" Margin="8,0,8,2">
+                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="TIME" Classes="table-header" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="AGENT" Classes="table-header" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="2" Text="CATEGORY" Classes="table-header" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="3" Text="SEVERITY" Classes="table-header" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="4" Text="IDENTIFIER" Classes="table-header" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="5" Text="SECURITY" Classes="table-header" />
                   </Grid>
                   <ListBox Classes="data-list" ItemsSource="{Binding AgentActivity.Findings}"
-                           SelectedItem="{Binding AgentActivity.SelectedFinding, Mode=TwoWay}" Height="126"
+                           SelectedItem="{Binding AgentActivity.SelectedFinding, Mode=TwoWay}" Height="134"
                            Background="Transparent" BorderThickness="0"
                            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemTemplate>
                       <DataTemplate>
-                        <Grid ColumnDefinitions="58,84,90,64,*,84" Margin="0,2">
-                          <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" FontSize="9"
+                        <Grid ColumnDefinitions="64,90,94,70,*,84" Margin="0,1"
+                              Tag="{Binding $parent[ListBox].DataContext}">
+                          <Grid.ContextMenu>
+                            <ContextMenu>
+                              <MenuItem Header="Copy finding"
+                                        Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyFindingCommand}" />
+                            </ContextMenu>
+                          </Grid.ContextMenu>
+                          <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="9"
+                          <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                          <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding Category}" FontSize="9"
+                          <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding Category}" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                          <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding Severity}" FontSize="9"
+                          <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding Severity}" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding Identifier}" FontSize="10"
+                          <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding Identifier}" Classes="mono" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                          <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding SecurityOutcome}" FontSize="9"
+                          <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding SecurityOutcome}" FontSize="10.5"
                                      FontWeight="SemiBold" Classes="security"
                                      Classes.threat="{Binding IsBlocked}" Classes.flagged="{Binding IsFlagged}" />
                         </Grid>
@@ -297,39 +300,39 @@
                 </StackPanel>
 
                 <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}"
-                        BorderThickness="1" CornerRadius="6" Padding="10" Height="146">
+                        BorderThickness="1" CornerRadius="8" Padding="12" Height="156">
                   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Spacing="5">
                       <StackPanel Spacing="5" IsVisible="{Binding AgentActivity.HasSelectedFinding}">
-                        <controls:AxiomSelectableTextBlock Text="Finding details" FontSize="11" FontWeight="SemiBold"
+                        <controls:AxiomSelectableTextBlock Text="Finding details" FontSize="12" FontWeight="SemiBold"
                                    Foreground="{DynamicResource Axiom.TextPrimary}" />
-                        <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.SelectedFinding.Title}" FontSize="10"
+                        <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.SelectedFinding.Title}" FontSize="11"
                                    Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
                         <Grid ColumnDefinitions="86,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="3">
-                          <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="Identifier" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Identifier}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Category" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Category}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="Severity" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Severity}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="Agent" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Agent}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="Tool" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Tool}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="0" Text="Session" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Session}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="0" Text="Source" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Source}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="7" Grid.Column="0" Text="Security" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="7" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.SecurityOutcome}" FontSize="9.5" FontWeight="SemiBold" Classes="security"
+                          <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="Identifier" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Identifier}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Category" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Category}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="Severity" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Severity}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="Agent" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Agent}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="Tool" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Tool}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="0" Text="Session" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Session}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="0" Text="Source" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Source}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="7" Grid.Column="0" Text="Security" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="7" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.SecurityOutcome}" FontSize="10.5" FontWeight="SemiBold" Classes="security"
                                      Classes.threat="{Binding AgentActivity.SelectedFinding.IsBlocked}"
                                      Classes.flagged="{Binding AgentActivity.SelectedFinding.IsFlagged}" />
                         </Grid>
-                        <Button Content="Copy finding" Padding="8,3" FontSize="10" HorizontalAlignment="Left"
+                        <Button Content="Copy finding" Padding="8,3" FontSize="11" HorizontalAlignment="Left"
                                 Command="{Binding AgentActivity.CopyFindingCommand}" />
                       </StackPanel>
                       <controls:AxiomSelectableTextBlock Text="Select a finding to see its details."
-                                 FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap"
+                                 FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap"
                                  IsVisible="{Binding !AgentActivity.HasSelectedFinding}" />
                     </StackPanel>
                   </ScrollViewer>
@@ -340,55 +343,104 @@
         </StackPanel>
       </Border>
 
-      <Grid ColumnDefinitions="1.6*,12,*">
-        <Border Grid.Column="0" Classes="card" Padding="14">
+      <Grid ColumnDefinitions="1.6*,14,*">
+        <Border Grid.Column="0" Classes="card" Padding="16">
           <StackPanel Spacing="8">
             <Grid ColumnDefinitions="*,Auto">
-              <controls:AxiomSelectableTextBlock Grid.Column="0" Text="New connection events" FontSize="14" FontWeight="SemiBold"
-                         Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding NewConnectionsText}" FontSize="10"
-                         Foreground="{DynamicResource Axiom.TextMuted}" />
+              <controls:AxiomSelectableTextBlock Grid.Column="0" Text="New connection events" Classes="section-title" />
+              <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding NewConnectionsText}" FontSize="11"
+                         Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
             </Grid>
             <ListBox Classes="data-list" ItemsSource="{Binding NewConnectionEvents}"
                      SelectedItem="{Binding SelectedEvent, Mode=TwoWay}"
-                     MaxHeight="190" Background="Transparent" BorderThickness="0"
+                     MaxHeight="196" Background="Transparent" BorderThickness="0"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
               <ListBox.ItemTemplate>
                 <DataTemplate>
-                  <Grid ColumnDefinitions="70,*" Margin="0,2">
-                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" FontSize="9"
+                  <Grid ColumnDefinitions="72,*" Margin="0,2"
+                        Tag="{Binding $parent[ListBox].DataContext}">
+                    <Grid.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="Inspect event details"
+                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.InspectMarkerEventCommand}"
+                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                        <MenuItem Header="Copy event details"
+                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyMarkerEventCommand}"
+                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                        <MenuItem Header="Copy executable path"
+                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyMarkerPathCommand}"
+                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                        <MenuItem Header="Copy remote endpoint"
+                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyMarkerRemoteCommand}"
+                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                        <Separator />
+                        <MenuItem Header="Block outbound"
+                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockMarkerOutboundCommand}"
+                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                        <MenuItem Header="Block inbound"
+                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockMarkerInboundCommand}"
+                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                        <Separator />
+                        <MenuItem Header="End task"
+                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndMarkerTaskCommand}"
+                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                      </ContextMenu>
+                    </Grid.ContextMenu>
+                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
                                Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Summary}" FontSize="10"
+                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Summary}" FontSize="11.5"
                                Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
                   </Grid>
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
-            <controls:AxiomSelectableTextBlock Text="{Binding NewConnectionEventsEmptyText}" FontSize="10"
+            <controls:AxiomSelectableTextBlock Text="{Binding NewConnectionEventsEmptyText}" FontSize="11"
                        Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap"
                        IsVisible="{Binding !HasNewConnectionEvents}" />
-            <controls:AxiomSelectableTextBlock Text="{Binding SelectedEventDetails}" FontSize="10"
-                       Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+            <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="6" Padding="10,8">
+              <controls:AxiomSelectableTextBlock Text="{Binding SelectedEventDetails}" FontSize="11"
+                         Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+            </Border>
           </StackPanel>
         </Border>
 
-        <Border Grid.Column="2" Classes="card" Padding="14">
-          <StackPanel Spacing="8">
-            <controls:AxiomSelectableTextBlock Text="Top applications" FontSize="14" FontWeight="SemiBold"
-                       Foreground="{DynamicResource Axiom.TextPrimary}" />
+        <Border Grid.Column="2" Classes="card" Padding="16">
+          <StackPanel Spacing="10">
+            <controls:AxiomSelectableTextBlock Text="Top applications" Classes="section-title" />
             <ItemsControl ItemsSource="{Binding TopApps}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                  <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                    <StackPanel Grid.Column="0" Spacing="1">
-                      <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}"
-                                 TextTrimming="CharacterEllipsis" />
-                      <Border Width="{Binding BarWidth}" Height="3" CornerRadius="1.5"
-                              Background="{DynamicResource Axiom.Accent}" HorizontalAlignment="Left" />
-                    </StackPanel>
-                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding SocketsText}" FontSize="9"
-                               Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
-                  </Grid>
+                  <Border Padding="6,4" CornerRadius="6" Background="Transparent"
+                          Tag="{Binding $parent[UserControl].DataContext}">
+                    <Border.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="Copy executable path"
+                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyTopAppPathCommand}"
+                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                        <Separator />
+                        <MenuItem Header="Block outbound"
+                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockTopAppOutboundCommand}"
+                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                        <MenuItem Header="Block inbound"
+                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockTopAppInboundCommand}"
+                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                        <Separator />
+                        <MenuItem Header="End task"
+                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndTopAppTaskCommand}"
+                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                      </ContextMenu>
+                    </Border.ContextMenu>
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="3">
+                        <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <Border Width="{Binding BarWidth}" Height="3" CornerRadius="1.5"
+                                Background="{DynamicResource Axiom.Accent}" HorizontalAlignment="Left" />
+                      </StackPanel>
+                      <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding SocketsText}" FontSize="11"
+                                 Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+                    </Grid>
+                  </Border>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -398,30 +450,35 @@
 
       <Border Classes="card" Padding="16">
         <StackPanel Spacing="10">
-          <controls:AxiomSelectableTextBlock Text="Live sockets" Classes="section-title" />
-          <controls:AxiomSelectableTextBlock Text="{Binding SourceText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
+          <Grid ColumnDefinitions="*,Auto">
+            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="Live sockets" Classes="section-title" />
+            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding SourceText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" VerticalAlignment="Center" />
+          </Grid>
           <StackPanel Orientation="Horizontal" Spacing="8">
             <Button Content="Block outbound" Padding="10,4"
                     Command="{Binding BlockOutboundCommand}" CommandParameter="{Binding SelectedSocket}" />
             <Button Content="Block inbound" Padding="10,4"
                     Command="{Binding BlockInboundCommand}" CommandParameter="{Binding SelectedSocket}" />
-            <Button Content="End task" Padding="10,4"
+            <Button Content="End task" Classes="danger" Padding="10,4"
                     Command="{Binding EndTaskCommand}" CommandParameter="{Binding SelectedSocket}" />
             <Button Content="Copy path" Padding="10,4"
                     Command="{Binding CopyPathCommand}" CommandParameter="{Binding SelectedSocket}" />
+            <Button Content="Copy remote" Padding="10,4"
+                    Command="{Binding CopyRemoteCommand}" CommandParameter="{Binding SelectedSocket}" />
           </StackPanel>
-          <Grid ColumnDefinitions="180,80,220,*" Margin="12,2,12,0">
-            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="APPLICATION" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="PROTOCOL" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <controls:AxiomSelectableTextBlock Grid.Column="2" Text="REMOTE ENDPOINT" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <controls:AxiomSelectableTextBlock Grid.Column="3" Text="STATE" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
+          <Grid ColumnDefinitions="200,84,240,*" Margin="8,4,8,2">
+            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="APPLICATION" Classes="table-header" />
+            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="PROTOCOL" Classes="table-header" />
+            <controls:AxiomSelectableTextBlock Grid.Column="2" Text="REMOTE ENDPOINT" Classes="table-header" />
+            <controls:AxiomSelectableTextBlock Grid.Column="3" Text="STATE" Classes="table-header" />
           </Grid>
           <ListBox Classes="data-list" ItemsSource="{Binding Connections}" Height="390" Background="Transparent" BorderThickness="0"
                    SelectedItem="{Binding SelectedSocket}"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
               <DataTemplate>
-                <Grid ColumnDefinitions="180,80,220,*" Margin="0,3"
+                <Grid ColumnDefinitions="200,84,240,*" Margin="0,2"
+                      ToolTip.Tip="{Binding RowTooltip}"
                       Tag="{Binding $parent[ListBox].DataContext}">
                   <Grid.ContextMenu>
                     <ContextMenu>
@@ -447,16 +504,16 @@
                                 CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                     </ContextMenu>
                   </Grid.ContextMenu>
-                  <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding AppDisplayName}" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                  <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding ProtocolText}" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                  <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding RemoteEndpoint}" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                  <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding State}" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding AppDisplayName}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding ProtocolText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding RemoteEndpoint}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding State}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
-          <controls:AxiomSelectableTextBlock Text="{Binding ActionStatusText}" FontSize="10"
-                     Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <controls:AxiomSelectableTextBlock Text="{Binding ActionStatusText}" FontSize="11"
+                     Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
     </StackPanel>

@@ -17,9 +17,9 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
 {
     private static readonly string[] Severities = ["info", "low", "medium", "high", "critical"];
 
-    private static readonly IBrush Background = new SolidColorBrush(Color.Parse("#161B22"));
-    private static readonly IBrush Foreground = new SolidColorBrush(Color.Parse("#E6EDF3"));
-    private static readonly IBrush Muted = new SolidColorBrush(Color.Parse("#9BA8B8"));
+    private static readonly IBrush Background = new SolidColorBrush(Color.Parse("#12151C"));
+    private static readonly IBrush Foreground = new SolidColorBrush(Color.Parse("#F3F5F8"));
+    private static readonly IBrush Muted = new SolidColorBrush(Color.Parse("#9EA7B8"));
 
     public async Task ShowSettingsAsync(BlackboxDashboardClient client, CancellationToken cancellationToken)
     {
@@ -372,19 +372,22 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
         Foreground = Foreground,
     };
 
-    private static Button Button(string label, bool primary) => new()
+    private static Button Button(string label, bool primary)
     {
-        Content = label,
-        MinWidth = 96,
-        Padding = new Thickness(12, 6),
-        Background = primary
-            ? new SolidColorBrush(Color.Parse("#1F6FEB"))
-            : new SolidColorBrush(Color.Parse("#1A2430")),
-        Foreground = Foreground,
-        BorderBrush = new SolidColorBrush(Color.Parse("#2E3A47")),
-        BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(6),
-    };
+        var button = new Button
+        {
+            Content = label,
+            MinWidth = 96,
+            Padding = new Thickness(12, 6),
+            CornerRadius = new CornerRadius(6),
+        };
+        if (primary)
+        {
+            button.Classes.Add("primary");
+        }
+
+        return button;
+    }
 
     private sealed class CategoryControls(string key, string label)
     {

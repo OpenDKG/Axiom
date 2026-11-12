@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Axiom.Contracts.Firewall;
 using Axiom.Contracts.History;
 using Axiom.Contracts.Ipc;
 using Axiom.Presentation;
@@ -23,6 +24,7 @@ public sealed partial class EventsPageViewModel : PageViewModel, IDisposable
 
     private readonly IServiceRequestClient? _client;
     private readonly IUserInteraction _ui;
+    private readonly ConnectionActionService _actions;
     private readonly Dictionary<string, EventAppGroup> _appGroups = new(StringComparer.OrdinalIgnoreCase);
     private readonly IUiTimer? _refreshTimer;
     private readonly IUiTimer? _searchDebounce;
@@ -30,13 +32,18 @@ public sealed partial class EventsPageViewModel : PageViewModel, IDisposable
     public EventsPageViewModel(
         IServiceRequestClient? client,
         IUiTimerFactory timers,
-        IUserInteraction ui)
+        IUserInteraction ui,
+        IProcessActions? processActions = null)
         : base("Network Events", "Unified timeline — network events from the local service", "E")
     {
         ArgumentNullException.ThrowIfNull(timers);
         ArgumentNullException.ThrowIfNull(ui);
         _client = client;
         _ui = ui;
+        _actions = new ConnectionActionService(
+            client,
+            ui,
+            processActions ?? new UnsupportedProcessActions());
 
         if (client is null)
         {
@@ -96,6 +103,92 @@ public sealed partial class EventsPageViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private bool _canExport;
+
+    [ObservableProperty]
+    private EventRowView? _selectedEvent;
+
+    [RelayCommand]
+    private async Task InspectEventAsync(EventRowView? row)
+    {
+        var target = row ?? SelectedEvent;
+        if (target is null)
+        {
+            return;
+        }
+
+        await _ui
+            .ShowMessageAsync($"Event — {target.AppDisplayName}", target.Details, CancellationToken.None)
+            .ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private Task CopyEventDetailsAsync(EventRowView? row) =>
+        CopyAsync((row ?? SelectedEvent)?.Details);
+
+    [RelayCommand]
+    private Task CopyEventPathAsync(EventRowView? row) =>
+        CopyAsync((row ?? SelectedEvent)?.AppPath);
+
+    [RelayCommand]
+    private Task CopyEventLocalAsync(EventRowView? row) =>
+        CopyAsync((row ?? SelectedEvent)?.LocalEndpoint);
+
+    [RelayCommand]
+    private Task CopyEventRemoteAsync(EventRowView? row) =>
+        CopyAsync((row ?? SelectedEvent)?.RemoteEndpoint);
+
+    [RelayCommand]
+    private async Task BlockEventOutboundAsync(EventRowView? row)
+    {
+        var target = row ?? SelectedEvent;
+        if (target is not null)
+        {
+            StatusText = await _actions
+                .BlockAsync(target.AppDisplayName, target.AppPath, FirewallDirection.Outbound)
+                .ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private async Task BlockEventInboundAsync(EventRowView? row)
+    {
+        var target = row ?? SelectedEvent;
+        if (target is not null)
+        {
+            StatusText = await _actions
+                .BlockAsync(target.AppDisplayName, target.AppPath, FirewallDirection.Inbound)
+                .ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private async Task EndEventTaskAsync(EventRowView? row)
+    {
+        var target = row ?? SelectedEvent;
+        if (target is not null)
+        {
+            StatusText = await _actions
+                .EndTaskAsync(target.AppDisplayName, [target.ProcessId])
+                .ConfigureAwait(true);
+        }
+    }
+
+    private async Task CopyAsync(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value == "—")
+        {
+            return;
+        }
+
+        try
+        {
+            await _ui.CopyTextAsync(value, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is
+                     InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
+        {
+        }
+    }
 
     public void Dispose()
     {

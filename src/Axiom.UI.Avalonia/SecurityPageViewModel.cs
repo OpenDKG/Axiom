@@ -1404,6 +1404,32 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private void Restart() => _shell.Restart();
 
+    [RelayCommand]
+    private Task CopyScanHashAsync(FileScanRow? row) => CopyTextSafeAsync(row?.Sha256);
+
+    [RelayCommand]
+    private Task CopyScanPathAsync(FileScanRow? row) => CopyTextSafeAsync(row?.Path);
+
+    [RelayCommand]
+    private Task CopyCommunityHashAsync(CommunityFeedRow? row) => CopyTextSafeAsync(row?.Sha256);
+
+    private async Task CopyTextSafeAsync(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value == "—")
+        {
+            return;
+        }
+
+        try
+        {
+            await _ui.CopyTextAsync(value, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is
+                     InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
+        {
+        }
+    }
+
     private static OptionalModuleStatus StoreModule(string detail) => new()
     {
         Status = "NOT INCLUDED",

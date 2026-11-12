@@ -750,6 +750,38 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             ? ConfirmAndUnblockAsync(row.AppPath, row.Application)
             : Task.CompletedTask;
 
+    [RelayCommand]
+    private Task CopyPendingPathAsync(PendingAppRow? row) => CopyTextSafeAsync(row?.AppPath);
+
+    [RelayCommand]
+    private Task CopyPendingRemoteAsync(PendingAppRow? row) => CopyTextSafeAsync(row?.RemoteSummary);
+
+    [RelayCommand]
+    private Task CopyDecisionPathAsync(ShieldDecisionRow? row) => CopyTextSafeAsync(row?.AppPath);
+
+    [RelayCommand]
+    private Task CopyRulePathAsync(FirewallRuleRow? row) => CopyTextSafeAsync(row?.AppPath);
+
+    [RelayCommand]
+    private Task CopyRuleDetailsAsync(FirewallRuleRow? row) => CopyTextSafeAsync(row?.Tooltip);
+
+    private async Task CopyTextSafeAsync(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value == "—")
+        {
+            return;
+        }
+
+        try
+        {
+            await _ui.CopyTextAsync(value, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is
+                     InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
+        {
+        }
+    }
+
     private async Task ConfirmAndBlockAsync(string appPath, string appName)
     {
         var confirmed = await _ui.ConfirmAsync(
