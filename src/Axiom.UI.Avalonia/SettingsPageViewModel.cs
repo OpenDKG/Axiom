@@ -75,7 +75,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public bool IsAutostartSupported { get; }
 
-    public string MilestoneText => OperatingSystem.IsMacOS() ? "Avalonia UI · macOS port" : "Avalonia UI migration · Windows-first";
+    public string MilestoneText => OperatingSystem.IsMacOS() ? "Avalonia UI · macOS port" : OperatingSystem.IsLinux() ? "Avalonia UI · Linux port" : "Avalonia UI migration · Windows-first";
 
     public string ProtocolText { get; }
 
@@ -87,11 +87,15 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public string StorageText => OperatingSystem.IsMacOS()
         ? "/Library/Application Support/Axiom/axiom.db (daemon)"
-        : @"%LOCALAPPDATA%\Axiom\axiom.db (service mode)";
+        : OperatingSystem.IsLinux()
+            ? "/var/lib/axiom/axiom.db (daemon)"
+            : @"%LOCALAPPDATA%\Axiom\axiom.db (service mode)";
 
     public string OsText => OperatingSystem.IsMacOS()
         ? "macOS " + Environment.OSVersion.Version.ToString(3)
-        : Environment.OSVersion.VersionString;
+        : OperatingSystem.IsLinux()
+            ? "Linux " + Environment.OSVersion.Version.ToString(3) + " · " + RuntimeInformation.OSDescription
+            : Environment.OSVersion.VersionString;
 
     public string ProcessText =>
         $"{RuntimeInformation.ProcessArchitecture} · 64-bit process: " +

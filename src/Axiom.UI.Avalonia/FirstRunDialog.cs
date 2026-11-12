@@ -163,7 +163,7 @@ public sealed class FirstRunDialog : Window
                     ? "Selected installers run in a visible PowerShell window. They may download hundreds of MB, " +
                       "create a local testnet wallet/config and a scheduled task, and may ask for UAC or third-party terms. " +
                       "Axiom does not hide, bundle or vouch for third-party code."
-                    : "The OriginTrail DKG and Blackbox modules have no guided installer on macOS yet; install them manually " +
+                    : $"The OriginTrail DKG and Blackbox modules have no guided installer on {PlatformText.OsName} yet; install them manually " +
                       "if you want them. Axiom does not hide, bundle or vouch for third-party code.",
                 Foreground = MutedBrush,
                 FontSize = 11,

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Axiom
+GenericName=Network and AI agent security
+Comment=Free open-source network and AI agent security
+Exec=/opt/axiom/Axiom
+Icon=com.axiom.firewall
+Terminal=false
+Categories=Network;Security;Monitor;
+StartupWMClass=com.axiom.firewall
+Keywords=firewall;dns;privacy;agent;

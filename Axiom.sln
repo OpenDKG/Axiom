@@ -67,8 +67,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Infrastructure.Linux"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Infrastructure.Linux.Tests", "tests\Axiom.Infrastructure.Linux.Tests\Axiom.Infrastructure.Linux.Tests.csproj", "{4FF06133-4C00-4702-914B-14F46D4DC9B1}"
 EndProject
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Infrastructure.Linux.Nft.Tests", "tests\Axiom.Infrastructure.Linux.Nft.Tests\Axiom.Infrastructure.Linux.Nft.Tests.csproj", "{E4DF9C1D-33E9-41EF-BC0F-8CA5B78D0C8A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Desktop.Avalonia.Linux.Tests", "tests\Axiom.Desktop.Avalonia.Linux.Tests\Axiom.Desktop.Avalonia.Linux.Tests.csproj", "{F37A0533-0A06-4A21-B87F-6E5E41444451}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Desktop.Avalonia.Linux", "src\Axiom.Desktop.Avalonia.Linux\Axiom.Desktop.Avalonia.Linux.csproj", "{AA8D7D89-3F32-4370-99AB-1E14A672B50F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -452,6 +455,30 @@ Global
 		{E4DF9C1D-33E9-41EF-BC0F-8CA5B78D0C8A}.Release|x64.Build.0 = Release|Any CPU
 		{E4DF9C1D-33E9-41EF-BC0F-8CA5B78D0C8A}.Release|x86.ActiveCfg = Release|Any CPU
 		{E4DF9C1D-33E9-41EF-BC0F-8CA5B78D0C8A}.Release|x86.Build.0 = Release|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Debug|x64.Build.0 = Debug|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Debug|x86.Build.0 = Debug|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Release|x64.ActiveCfg = Release|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Release|x64.Build.0 = Release|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Release|x86.ActiveCfg = Release|Any CPU
+		{F37A0533-0A06-4A21-B87F-6E5E41444451}.Release|x86.Build.0 = Release|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Debug|x64.Build.0 = Debug|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Debug|x86.Build.0 = Debug|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Release|x64.ActiveCfg = Release|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Release|x64.Build.0 = Release|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Release|x86.ActiveCfg = Release|Any CPU
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -488,5 +515,7 @@ Global
 		{15904853-4C9D-4033-A57F-41C95BE94588} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{4FF06133-4C00-4702-914B-14F46D4DC9B1} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{E4DF9C1D-33E9-41EF-BC0F-8CA5B78D0C8A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{F37A0533-0A06-4A21-B87F-6E5E41444451} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{AA8D7D89-3F32-4370-99AB-1E14A672B50F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

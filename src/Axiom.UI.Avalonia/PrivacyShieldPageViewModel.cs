@@ -353,8 +353,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     public string StarterRulesText =>
         $"{PrivacyShieldPolicy.StarterRulesAll.Count} starter rules (manually reviewed, not a third-party list)";
 
-    public string ManualSetupText => OperatingSystem.IsMacOS()
-        ? "The Axiom daemon points the DNS servers of every network service at 127.0.0.1 while the " +
+    public string ManualSetupText => PlatformText.DaemonSwitchesDns
+        ? $"The Axiom daemon points the DNS servers of every network link ({PlatformText.DnsResolverName}) at 127.0.0.1 while the " +
           "Privacy Shield resolver runs, saves the previous servers first, and restores them when the " +
           "resolver stops, the service stops or Axiom is uninstalled. No manual change or password " +
           "prompt is needed. This is DNS filtering only: applications still connect directly to " +
@@ -647,16 +647,14 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
     }
 
-    private const string MacDnsNote =
-        "On macOS the Axiom daemon switches system DNS to Privacy Shield automatically while the resolver " +
-        "runs and restores the previous DNS servers when it stops. No manual change is needed.";
+    private static string MacDnsNote => PlatformText.DaemonDnsNote;
 
     [RelayCommand]
     private async Task EnableSystemDnsAsync()
     {
-        if (OperatingSystem.IsMacOS())
+        if (PlatformText.DaemonSwitchesDns)
         {
-            // The macOS daemon points system DNS at the resolver itself and restores it on stop.
+            // The macOS/Linux daemon points system DNS at the resolver itself and restores it on stop.
             DnsHelperStatusText = MacDnsNote;
             return;
         }
@@ -688,7 +686,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             return;
         }
 
-        DnsHelperStatusText = $"Waiting for {(OperatingSystem.IsMacOS() ? "the macOS administrator prompt" : "the Windows elevation prompt")}...";
+        DnsHelperStatusText = $"Waiting for {(OperatingSystem.IsWindows() ? "the Windows elevation prompt" : PlatformText.ElevationPrompt)}...";
         try
         {
             var exitCode = await _dnsHelper
@@ -710,9 +708,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     [RelayCommand]
     private async Task RestoreSystemDnsAsync()
     {
-        if (OperatingSystem.IsMacOS())
+        if (PlatformText.DaemonSwitchesDns)
         {
-            // The macOS daemon points system DNS at the resolver itself and restores it on stop.
+            // The macOS/Linux daemon points system DNS at the resolver itself and restores it on stop.
             DnsHelperStatusText = MacDnsNote;
             return;
         }
@@ -729,7 +727,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             return;
         }
 
-        DnsHelperStatusText = $"Waiting for {(OperatingSystem.IsMacOS() ? "the macOS administrator prompt" : "the Windows elevation prompt")}...";
+        DnsHelperStatusText = $"Waiting for {(OperatingSystem.IsWindows() ? "the Windows elevation prompt" : PlatformText.ElevationPrompt)}...";
         try
         {
             var exitCode = await _dnsHelper
@@ -1232,7 +1230,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         // system resolver configuration reaches this process a moment later. Only warn when the
         // adapter still points at 127.0.0.1 after a short grace period, so a normal Disable does
         // not raise a false "DNS is not answering" alert.
-        if (OperatingSystem.IsMacOS())
+        if (PlatformText.DaemonSwitchesDns)
         {
             var now = DateTimeOffset.UtcNow;
             _dnsOutageFirstSeenUtc ??= now;

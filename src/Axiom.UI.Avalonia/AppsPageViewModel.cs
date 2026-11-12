@@ -188,9 +188,9 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
                 .ConfigureAwait(true);
 
             CanWrite = capabilities.FirewallWrites;
-            WriteStatusText = OperatingSystem.IsMacOS()
+            WriteStatusText = !OperatingSystem.IsWindows()
                 ? (CanWrite
-                    ? "Firewall rules are enabled (Axiom Shield is on). Blocks are enforced by the AxiomFilter network extension."
+                    ? $"Firewall rules are enabled (Axiom Shield is on). Blocks are enforced by the {PlatformText.Firewall}."
                     : "Firewall rules are off. Turn on Axiom Shield on the Firewall page to create block rules.")
                 : CanWrite
                     ? "Firewall writes are enabled for this service session. Use only on an isolated test VM."

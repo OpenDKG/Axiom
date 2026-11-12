@@ -209,7 +209,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         ? string.Empty
         : OperatingSystem.IsWindows()
             ? $"{IgnoredMicrosoftCount} Microsoft-signed process(es) are not prompted."
-            : $"{IgnoredMicrosoftCount} macOS system process(es) are not prompted.";
+            : $"{IgnoredMicrosoftCount} {PlatformText.OsName} system process(es) are not prompted.";
 
     public bool HasIgnoredMicrosoft => IgnoredMicrosoftCount > 0;
 
@@ -330,7 +330,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     public string NoticeText => WritesEnabled
         ? OperatingSystem.IsWindows()
             ? "Axiom Shield is on. Rules are read and written through the elevated local service with the documented INetFwPolicy2 COM objects. Every change is confirmed and audited."
-            : "Axiom Shield is on. Rules are written by the root axiomd service and enforced by the AxiomFilter network extension. Every change is confirmed and audited."
+            : $"Axiom Shield is on. Rules are written by the root axiomd service and enforced by the {PlatformText.Firewall}. Every change is confirmed and audited."
         : $"This session is read-only for {PlatformText.Firewall} changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
 
     public string NoticeBadgeText => WritesEnabled ? "SHIELD ON" : "READ-ONLY";
@@ -682,6 +682,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
                 OperatingSystem.IsMacOS()
                     ? "Axiom installs and starts its background daemon (axiomd) so it can enforce firewall rules through the Axiom network filter.\n\n" +
                       "macOS will ask for an administrator password once. The desktop app itself stays unprivileged."
+                    : OperatingSystem.IsLinux()
+                    ? "Axiom installs and starts its background daemon (axiomd) as a systemd service so it can enforce firewall rules with nftables.\n\n" +
+                      "polkit will ask for an administrator password once. The desktop app itself stays unprivileged."
                     : $"Axiom installs and starts its {PlatformText.ServiceKind} so it can create machine-wide firewall rules.\n\n" +
                       $"{PlatformText.OsName} will ask for administrator approval once. The desktop app itself stays unprivileged.",
                 "Continue",
@@ -700,7 +703,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             {
                 var install = OperatingSystem.IsMacOS()
                     ? await ProtectionServiceInstall.InstallAndStartMacAsync(CancellationToken.None).ConfigureAwait(true)
-                    : ProtectionServiceInstall.InstallAndStart();
+                    : OperatingSystem.IsLinux()
+                        ? await ProtectionServiceInstall.InstallAndStartLinuxAsync(CancellationToken.None).ConfigureAwait(true)
+                        : ProtectionServiceInstall.InstallAndStart();
                 if (!install.Success)
                 {
                     ShieldStatusText = install.Message;
@@ -1275,7 +1280,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
                 : "Protection is off. Axiom only observes.";
 
         ShieldHintText = !status.ServiceElevated
-            ? (OperatingSystem.IsMacOS()
+            ? (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux()
                 ? "Enable installs the Axiom daemon (one administrator password). Until then Axiom can read rules but cannot enforce them."
                 : $"Enable installs the Axiom {PlatformText.ServiceKind} (one administrator approval). Until then Axiom can read rules but cannot enforce them.")
             : status.Enabled

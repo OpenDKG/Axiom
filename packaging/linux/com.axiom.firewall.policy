@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- SPDX-License-Identifier: GPL-3.0-or-later
+     Installed by the package to /usr/share/polkit-1/actions/com.axiom.firewall.policy.
+     The desktop runs `pkexec /usr/libexec/axiom/axiomd --install-service` (install, upgrade) and
+     `--uninstall-service`; polkit matches the exec.path annotation and shows this message instead
+     of the generic "Authentication is required to run /path as the super user". auth_admin_keep
+     keeps the authorization for a few minutes so install + uninstall in one sitting prompt once.
+     The very first install runs the daemon from the application directory, which does not match
+     exec.path, so pkexec falls back to its generic prompt; the package postinst avoids that by
+     running the install itself. -->
+<policyconfig>
+  <vendor>Axiom</vendor>
+  <vendor_url>https://github.com/a-51-50/Axiom</vendor_url>
+  <icon_name>com.axiom.firewall</icon_name>
+  <action id="com.axiom.firewall.install">
+    <description>Install or update the Axiom background service</description>
+    <message>Authentication is required to install the Axiom background service (axiomd)</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/axiom/axiomd</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">false</annotate>
+  </action>
+</policyconfig>

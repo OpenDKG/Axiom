@@ -47,14 +47,16 @@ public sealed partial class SupportPageViewModel : PageViewModel
             "2. Review firewall rules",
             OperatingSystem.IsWindows()
                 ? "Open Firewall to see only rules owned by Axiom. Writes are off until you consent: complete installation enables Axiom Shield during setup, while partial installation leaves it off. The explicit test-VM gate is still required before any rule can be created or removed."
-                : "Open Firewall to see the rules owned by Axiom. Rules are enforced by the AxiomFilter network extension, which macOS asks you to approve once in System Settings > General > Login Items & Extensions."),
+                : OperatingSystem.IsLinux()
+                    ? "Open Firewall to see the rules owned by Axiom. Rules are enforced by the root axiomd daemon with nftables (table inet axiom); Enable installs the daemon once through polkit."
+                    : "Open Firewall to see the rules owned by Axiom. Rules are enforced by the AxiomFilter network extension, which macOS asks you to approve once in System Settings > General > Login Items & Extensions."),
         new(
             "3. Make one deliberate change",
             "On Applications, select a process and choose Block outbound only when you understand the effect. Verify connectivity and remove the owned rule from Firewall if needed."),
         new(
             "4. Filter DNS only if needed",
-            OperatingSystem.IsMacOS()
-                ? "Privacy Shield runs a loopback resolver. While it runs, the Axiom daemon points system DNS at it and restores the previous DNS servers when it stops."
+            PlatformText.DaemonSwitchesDns
+                ? $"Privacy Shield runs a loopback resolver. While it runs, the Axiom daemon points system DNS ({PlatformText.DnsResolverName}) at it and restores the previous DNS servers when it stops."
                 : $"Privacy Shield runs a loopback resolver. Complete installation enables it; partial installation leaves it off. Adapter DNS changes require the separate {PlatformText.ElevationName} helper and can break name resolution."),
         new(
             "5. Inspect local files and optional modules",
