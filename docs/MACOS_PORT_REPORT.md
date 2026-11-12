@@ -1,6 +1,6 @@
 # Axiom for macOS — port report for the maintainer
 
-Date: 2026-11-11. Branch `buba/macos` (52 commits on top of `main` f08ffdd / v0.10.6). Not pushed; local only.
+Date: 2026-11-12. Branch `buba/macos-desktop` (57 commits on top of `main` 3aaaad5 / v0.11.0, merged 2026-11-12). Not pushed; local only.
 Scope: 247 files, +23.3k / −1.6k lines. Shared (Windows-relevant) code: 99 files, +2.6k / −2.2k, mostly
 extraction into portable projects. The WPF projects (`Axiom.UI`, `Axiom.Desktop`) are untouched except 26 lines.
 
@@ -29,12 +29,13 @@ Security hardening done after an independent review: daemon copied to a root-own
 `/Library/PrivilegedHelperTools/com.axiom.service/` and verified before launch; IPC writes limited to root,
 the installing user and `admin` members (reads for any uid ≥ 501); data dir 0700 / files 0600; rules file
 must be root-owned and not group/world-writable; per-uid connection cap; `axiomd --doctor` self-check;
-`axiomd --restore-dns` recovery.
+upstream's `axiomd --recover-network [--apply]` offline recovery (v0.11.0) wired to macOS.
 
-Gate on Linux: `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` 0 errors / 0 warnings.
-Tests: Contracts 78, McpServer 33, Persistence 18, Presentation 24, UI.Avalonia 33, Infrastructure.MacOS 152,
-Desktop.Avalonia.MacOS 35 pass; Swift filter 147 checks + 61 e2e checks pass in the VM. Pre-existing
-Linux-only failures unchanged: Core 10, Service 7, Infrastructure.Windows 19 (Windows paths / FileShare).
+Gate on Linux (after the v0.11.0 merge): `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` 0 errors / 0 warnings.
+Tests: Contracts 142, McpServer 33, Persistence 19, Presentation 90, UI.Avalonia 39, Infrastructure.MacOS 155,
+Desktop.Avalonia.MacOS 35 pass; Swift filter 147 checks + 61 e2e checks pass in the VM. Pre-existing Linux-only
+failures are byte-identical to upstream `origin/main` run on the same host: Core 11/128 (Windows paths); Service and
+Infrastructure.Windows suites are Windows-only.
 
 ## 2. What changed in shared code (Windows must stay byte-identical; it does, by test)
 
@@ -57,6 +58,33 @@ Linux-only failures unchanged: Core 10, Service 7, Infrastructure.Windows 19 (Wi
   across the 1 s refresh (fixes "Block outbound" doing nothing), Firewall page refresh on open + rejected-rules
   block, Events toolbar columns, one file re-encoded from cp1252 to UTF-8.
 - `Axiom.sln` / `Axiom.Portable.slnx` gained the MacOS projects and tests.
+
+Merge of upstream v0.11.0 (`3aaaad5`, 120 commits: security hardening 0.10.7, network recovery stages 1–4, Glass UI,
+disk write budget, DoH bypass detection, …) — conflicts in 9 source files + 6 lock files, resolved so that Windows keeps
+upstream's logic and the macOS seam is re-applied on top:
+
+- `IpcRulePolicy` (reject inbound allow on the pipe, 40d560f) moved from `Axiom.Infrastructure.Windows/Ipc` to
+  `Axiom.Service.Hosting/Ipc` (namespace change only) and is enforced in `IpcRequestDispatcher`, with upstream's
+  `networkRecovery.capture/restore` commands (payload must be empty), so both transports behave the same. The DNS reply
+  validation of 40d560f already lives in the portable `DnsProtocol`/`DnsProxyServer`.
+- `Program.cs` keeps upstream's shape; `ServicePlatform.{Windows,Unix}` gained `HardenMachineState()`
+  (Windows: `MachineStateSecurity.HardenProgramData` + `ServiceImageProtection`; macOS: `MacDataDirectoryPermissions`),
+  `RecoverySnapshotPath`, the `IOwnedRuleRecoveryAdapter`/`INetworkRecoveryDnsAdapter` registrations and the five
+  hooks `NetworkRecoveryCommand` needs (`AttachParentConsole`, `IsAdministrator`, `IsServiceProcessRunning`,
+  `CreateRecoveryAdapters`, `CurrentActor`). The Windows hook bodies are upstream's code moved verbatim.
+  `MachineStateSecurity.cs`, `ServiceInstaller.cs`, `ServiceImageProtection.cs` are excluded from `net10.0`;
+  `Platform/MachineStateSecurity.Unix.cs` provides `IsReparsePointInPath` only.
+- `NetworkRecoverySnapshotStore`: temp file gets 0600 before the atomic move off Windows (same pattern as
+  `ProtectionSettingsStore`, which now combines upstream's random temp name with the mode).
+- `PrivacyShieldBlockedHistoryStore`: upstream's batched append + 0600 on first create. `HistoryStore`'s 0600 sweep is
+  unaffected by the batched writer (5e5ec21).
+- `PrivacyShieldController`: upstream removed the threat-share hook and added `EnrichProvenance`; our
+  `IPrivacyDnsPlatform` parameter kept. `PrivacyShieldWorker` calls `dnsPlatform.RestoreIfNeeded()` where upstream calls
+  the static `PrivacyDnsFailSafe`.
+- `MainWindow.axaml`: upstream Glass UI chrome values (margins, 22 px icon, 44 px bell row) with our `x:Name` hooks; the
+  off-Windows native-chrome/vector-icon code is untouched. Page subtitles: upstream copy with `PlatformText.HostKind`.
+- `PipeServer`: ours (transport only); the old constructor gained the two recovery delegates so upstream's
+  `PipeServerTests` compile unchanged.
 
 ## 3. macOS-specific notes the maintainer must know
 
@@ -117,13 +145,13 @@ Layout on an installed Mac
 /Library/LaunchDaemons/com.axiom.service.plist            KeepAlive {SuccessfulExit:false}, ThrottleInterval 10, AXIOM_SERVICE=1
 /etc/newsyslog.d/com.axiom.service.conf                   log rotation (5 MB × 5)
 /Library/Logs/Axiom/axiomd.log
-/Library/Application Support/Axiom/                       0700; db, settings, DNS backup 0600; filter/rules.json 0644
+/Library/Application Support/Axiom/                       0700; db, settings, DNS backup, network-recovery.txt 0600; filter/rules.json 0644
 /var/run/axiom/axiom.sock (0666, auth by getpeereid)      /var/run/axiom/filter.sock (0600, filter → daemon)
 ~/Library/Application Support/Axiom/                      per-user UI settings, desktop.log
 ~/Library/LaunchAgents/com.axiom.firewall.agent.plist     autostart via `open -b com.axiom.firewall`
 ```
 
-Useful commands: `axiomd --install-service | --uninstall-service | --doctor [--json] | --restore-dns`,
+Useful commands: `axiomd --install-service | --uninstall-service | --doctor [--json] | --recover-network [--apply]`,
 `axiom-sysext activate|deactivate|enable|disable|status [--force]`, `systemextensionsctl list`,
 `log stream --predicate 'subsystem == "com.axiom.firewall.filter"'`.
 

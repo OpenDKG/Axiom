@@ -150,7 +150,7 @@ Verified on macOS 15.8.3 (x86_64 QEMU VM, SIP off, ad hoc signed); acceptance re
 - **`Axiom.Service.Hosting` extraction.** The portable dispatch code moved out of `Axiom.Service` into a shared project instead of being copied; `Axiom.Service` multi-targets `net10.0-windows;net10.0` and selects the platform in `Platform/ServicePlatform.{Windows,Unix}.cs`.
 - **Seams instead of forks.** `IIpcTransport` (named pipe with SID ACL on Windows, Unix socket on macOS), `IPrivacyDnsPlatform` (Windows: UAC helper changes adapter DNS; macOS: the daemon switches DNS itself) and `IDnsAppAttributor` (who sent a DNS query: Windows IP Helper table, macOS libproc lookup).
 - **Custom Unix socket transport.** §1 planned to reuse `NamedPipeServerStream`; the daemon uses its own listener at `/var/run/axiom/axiom.sock` instead, so the peer can be checked with `getpeereid` before any byte is read. Allowed peers: uid 0 and console users (uid ≥ 501); write commands are further restricted (§5.4). The line protocol is unchanged.
-- **DNS switching is owned by the daemon.** While the Privacy Shield resolver runs on port 53, `axiomd` saves every enabled network service's DNS servers to a backup file (machine data root, 0600) and points the service at 127.0.0.1 with `networksetup -setdnsservers`. On disable, resolver stop, service stop or uninstall it restores the saved servers (automatic DNS when the service had none). Fail-safe: the next daemon start restores any service still pointing only at loopback; unreadable services are retried and, if they were redirected by Axiom, restored from the backup, which is kept until the state is known. The desktop app shows this as "System DNS (switched by the Axiom daemon)" and never prompts. All changes are logged as `Privacy Shield DNS: …` in `axiomd.log`. Only enabled services whose device (`networksetup -listnetworkserviceorder`) reports `status: active` in `ifconfig` are redirected; services without a known device or status line are redirected conservatively; restore covers every enabled service in the backup. **Upstream rediscovery:** while the resolver runs, `UpstreamRediscovery` re-reads the system resolvers (`scutil --dns` through `MacDnsConfigurator.DiscoverSystemResolvers`) every 10 s, and every 2 s once three consecutive queries got no upstream answer (`DnsProxyServer.UpstreamFailureStreak`); a different list is swapped in with `DnsProxyServer.UpdateUpstreams` without restarting the listener; a discovery that only yields 127.0.0.1 (ourselves) or nothing keeps the current list (the platform substitutes the backup's saved servers). Without the daemon, `sudo axiomd --restore-dns` restores the saved servers from the backup file.
+- **DNS switching is owned by the daemon.** While the Privacy Shield resolver runs on port 53, `axiomd` saves every enabled network service's DNS servers to a backup file (machine data root, 0600) and points the service at 127.0.0.1 with `networksetup -setdnsservers`. On disable, resolver stop, service stop or uninstall it restores the saved servers (automatic DNS when the service had none). Fail-safe: the next daemon start restores any service still pointing only at loopback; unreadable services are retried and, if they were redirected by Axiom, restored from the backup, which is kept until the state is known. The desktop app shows this as "System DNS (switched by the Axiom daemon)" and never prompts. All changes are logged as `Privacy Shield DNS: …` in `axiomd.log`. Only enabled services whose device (`networksetup -listnetworkserviceorder`) reports `status: active` in `ifconfig` are redirected; services without a known device or status line are redirected conservatively; restore covers every enabled service in the backup. **Upstream rediscovery:** while the resolver runs, `UpstreamRediscovery` re-reads the system resolvers (`scutil --dns` through `MacDnsConfigurator.DiscoverSystemResolvers`) every 10 s, and every 2 s once three consecutive queries got no upstream answer (`DnsProxyServer.UpstreamFailureStreak`); a different list is swapped in with `DnsProxyServer.UpdateUpstreams` without restarting the listener; a discovery that only yields 127.0.0.1 (ourselves) or nothing keeps the current list (the platform substitutes the backup's saved servers). Without the daemon, `sudo axiomd --recover-network --apply` (upstream's offline recovery, §5.6) restores the saved servers.
 - **`AxiomPaths.ServicePrivateDataDirectory`.** Windows keeps `%LocalAppData%\Axiom` for the service account. On Unix the root daemon has no meaningful profile, so service-private stores (threat-share state, Privacy Shield blocked history) live in the machine data root with owner-only files.
 - **SIGCHLD re-exec for admin-prompt installs.** `osascript … with administrator privileges` starts the command with SIGCHLD ignored, so .NET never sees child processes exit (`launchctl` looked hung). Privileged CLI modes reset SIGCHLD to default and `execv` themselves once (`Interop/ChildSignal`).
 - **Filter is always fail-open.** `failOpen` in the rules file is parsed but ignored: without a valid table the filter allows everything.
@@ -198,12 +198,19 @@ Windows is unchanged: the named pipe admits one SID with full access.
 Machine data directory `/Library/Application Support/Axiom` (`MacDataDirectoryPermissions`, applied at every daemon start
 and at write time): the root is `root 0700`; `filter/` is 0755 and `filter/rules.json` 0644 (read by the extension);
 every other file the daemon writes — `axiom.db` with `-wal`/`-shm`, `filter/managed-rules.json`, `protection.json`,
-`privacy-shield-*.json`, `privacy-shield-blocked.jsonl`, `threat-share.json`, `privacy-shield-dns-backup.json` — is 0600.
+`privacy-shield-*.json`, `privacy-shield-blocked.jsonl`, `threat-share.json`, `privacy-shield-dns-backup.json`,
+`network-recovery.txt` — is 0600. Upstream's ProgramData hardening (`MachineStateSecurity`, Windows ACLs + protected
+service image under Program Files) is excluded from the `net10.0` target; `ServicePlatform.HardenMachineState()` calls
+`MacDataDirectoryPermissions.Enforce` on macOS at the same point of `Program.cs`, and `MachineStateSecurity.Unix.cs`
+keeps only the symlink check (`IsReparsePointInPath`) the shared `NetworkRecoveryController` needs.
 Sockets: `/var/run/axiom/axiom.sock` 0666 (peer-checked), `filter.sock` 0600.
 
-### 5.5 `axiomd --doctor`, `--restore-dns`
+### 5.5 `axiomd --doctor`, `--recover-network`
 
-`sudo axiomd --restore-dns` restores the system DNS from the Privacy Shield backup without the daemon (same code path as the fail-safe on daemon start / uninstall); use it if the daemon cannot start while the shield was on.
+`sudo axiomd --recover-network [--apply]` is upstream's offline recovery (v0.11.0, `NetworkRecoveryCommand`): it prints the
+plan from the saved baseline and, with `--apply`, restores the DNS of every saved network service and removes the captured
+Axiom-owned rules while the daemon is stopped (`sudo launchctl bootout system/com.axiom.service` first). It replaced the
+port's earlier `--restore-dns` (see §5.6).
 
 
 Prints one `PASS|WARN|FAIL|SKIP name: detail` line per check (`--json` for a machine-readable document) and exits 0 when
@@ -211,6 +218,37 @@ nothing is WARN/FAIL: launchd job state and program path, plist target and owner
 (existence, type, mode, owner), data root and per-file modes, DNS servers of every enabled network service plus the
 backup file, Privacy Shield state from the settings, and the filter extension from `systemextensionsctl list`. Run as a
 normal user it reports what it can and marks the root-only checks (data files, DNS backup, settings) as SKIP.
+
+### 5.6 Network recovery (upstream v0.11.0) on macOS
+
+Upstream added a machine baseline (`NetworkRecoverySnapshotStore`, `network-recovery.txt`): the service captures every
+adapter's DNS mode/servers and the Axiom-owned firewall rules at start (`NetworkRecoveryWorker`), the desktop asks for
+a capture once at start, Settings → *Restore network settings* (`networkRecovery.restore` over the pipe) and the offline
+`--recover-network` command restore from it, a DNS watchdog repairs a loopback-only resolver when the shield is off,
+and a rollback runs at startup when the previous run left the resolver redirected. The port plugs into that
+unchanged (shared `NetworkRecoveryController`/`Worker`/`Command`, IPC commands in `IpcRequestDispatcher`):
+
+- `MacDnsRecoveryAdapter : INetworkRecoveryDnsAdapter` (`Axiom.Infrastructure.MacOS/Dns`). A Windows adapter is a
+  macOS network service: alias = service name, description = device (`en0`), adapter id = SHA-256-derived UUID of the
+  service name (`networksetup` has no stable id; `ApplyDns` refuses an id that does not match the alias). "No DNS
+  servers set" = `Automatic`, restored with `-setdnsservers <service> Empty`; a static list is split by family and
+  written back verbatim. Reads/writes go through `MacDnsConfigurator`, the same tool path the shield redirect uses.
+- `MacFirewallPolicyAdapter : IOwnedRuleRecoveryAdapter`. `managed-rules.json` is the daemon's own 0600 record, so
+  every entry carries `OwnershipGroup = Axiom`; `InspectOwnedRuleAsync` checks id + direction + ownership,
+  `RemoveCapturedOwnedRuleAsync` republishes `rules.json` without the rule and is allowed only to the root daemon or a
+  privileged recovery process (not behind the interactive write gate, like Windows).
+- `ServicePlatform.Unix` supplies the snapshot path (machine data root, 0600 — the store's temp file gets the mode before
+  the atomic move), the adapters, `IsAdministrator` (euid 0), the running-daemon check (`axiomd`) and the actor
+  (`SUDO_USER`) for `NetworkRecoveryCommand`; on Windows the same hooks keep upstream's `AttachConsole`/`WindowsIdentity`
+  code so Windows behaviour is unchanged.
+
+**Decision — one mechanism, not two.** The port's `privacy-shield-dns-backup.json` is *not* a second recovery store: it is
+the shield's own undo record (what the redirect replaced, kept until the daemon has restored it) and stays because the
+fail-safe on daemon start/stop/uninstall (`IPrivacyDnsPlatform.RestoreIfNeeded`) must run without a baseline and the
+uninstaller must undo a redirect after the baseline is gone. Everything user-facing or administrator-facing is upstream's:
+the `--restore-dns` command and `LaunchdServiceInstaller.RestoreDns` were removed in favour of `--recover-network`, the
+Settings action is upstream's, and `--doctor` still reports the backup file only as shield state. Windows has the same
+split (`PrivacyDnsFailSafe` marker vs. `network-recovery.txt`).
 
 ## 6. Build, install, test
 
