@@ -4,6 +4,7 @@ using Axiom.Contracts.NetworkRecovery;
 using Axiom.Core.Firewall;
 using Axiom.Core.Protection;
 using Axiom.Infrastructure.Linux;
+using Axiom.Infrastructure.Linux.Bpf;
 using Axiom.Infrastructure.Linux.Diagnostics;
 using Axiom.Infrastructure.Linux.Dns;
 using Axiom.Infrastructure.Linux.Firewall;
@@ -100,9 +101,14 @@ internal static class LinuxServicePlatform
         builder.Services.AddSingleton<FilterEventServer>();
         builder.Services.AddSingleton<FilterEventPipe>();
         builder.Services.AddSingleton<IConnectionSnapshotSource>(provider => LinuxConnectionSource.Create(
-            provider.GetRequiredService<FlowTable>()));
+            provider.GetRequiredService<FlowTable>(),
+            () => provider.GetRequiredService<BpfEngine>().Limitations));
         builder.Services.AddSingleton(provider => LinuxEnforcement.CreateAdapter(
             provider.GetRequiredService<LinuxServicePaths>(),
+            provider.GetRequiredService<FilterEventPipe>()));
+        // Connect-time BPF layer (docs/LINUX_EBPF.md); becomes the adapter's VerdictLayer, nft-only when unusable.
+        builder.Services.AddSingleton(provider => LinuxEnforcement.CreateBpfEngine(
+            provider.GetRequiredService<NftFirewallPolicyAdapter>(),
             provider.GetRequiredService<FilterEventPipe>()));
         builder.Services.AddSingleton<IFirewallPolicyAdapter>(provider => provider.GetRequiredService<NftFirewallPolicyAdapter>());
         builder.Services.AddSingleton<IOwnedRuleRecoveryAdapter>(provider => provider.GetRequiredService<NftFirewallPolicyAdapter>());

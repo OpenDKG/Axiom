@@ -41,6 +41,8 @@ public sealed class LinuxConnectionSource : IConnectionSnapshotSource
 
     private readonly FlowTable? _flows;
 
+    private readonly Func<IReadOnlyList<string>>? _extraLimitations;
+
     private readonly ConcurrentDictionary<string, DateTimeOffset> _firstSeen = new(StringComparer.Ordinal);
 
     public LinuxConnectionSource(
@@ -48,13 +50,15 @@ public sealed class LinuxConnectionSource : IConnectionSnapshotSource
         ILinuxProcessIdentitySource identities,
         TimeProvider time,
         bool privileged,
-        FlowTable? flows = null)
+        FlowTable? flows = null,
+        Func<IReadOnlyList<string>>? extraLimitations = null)
     {
         _enumerateSockets = enumerateSockets ?? throw new ArgumentNullException(nameof(enumerateSockets));
         _identities = identities ?? throw new ArgumentNullException(nameof(identities));
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _privileged = privileged;
         _flows = flows;
+        _extraLimitations = extraLimitations;
     }
 
     /// <summary>
@@ -62,12 +66,13 @@ public sealed class LinuxConnectionSource : IConnectionSnapshotSource
     /// wired, the blocked attempts it traced (<paramref name="flows"/>, verdict <c>block</c>) — a
     /// rejected SYN never shows up in /proc, so the Connections page would otherwise not see blocks.
     /// </summary>
-    public static LinuxConnectionSource Create(FlowTable? flows = null) => new(
+    public static LinuxConnectionSource Create(FlowTable? flows = null, Func<IReadOnlyList<string>>? extraLimitations = null) => new(
         ProcSocketScanner.Shared.Current,
         new ProcProcessIdentityResolver(),
         TimeProvider.System,
         Environment.IsPrivilegedProcess,
-        flows);
+        flows,
+        extraLimitations);
 
     public string Name => SourceName;
 
@@ -151,6 +156,11 @@ public sealed class LinuxConnectionSource : IConnectionSnapshotSource
         }
 
         var limitations = new List<string>(BaseLimitations);
+        if (_extraLimitations is not null)
+        {
+            limitations.AddRange(_extraLimitations());
+        }
+
         if (!_privileged)
         {
             limitations.Insert(0, UnprivilegedLimitation);

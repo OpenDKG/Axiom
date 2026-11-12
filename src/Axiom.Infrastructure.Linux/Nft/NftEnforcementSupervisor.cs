@@ -27,6 +27,8 @@ public sealed class NftEnforcementSupervisor
 
     private readonly Func<NftTraceMonitor>? _traceMonitor;
 
+    private readonly IEnforcementLayer? _layer;
+
     private readonly Action<string> _log;
 
     private readonly TimeProvider _time;
@@ -41,10 +43,23 @@ public sealed class NftEnforcementSupervisor
         Func<NftTraceMonitor>? traceMonitor,
         Action<string> log,
         TimeProvider time)
+        : this(adapter, table, traceMonitor, null, log, time)
+    {
+    }
+
+    /// <param name="layer">Optional connect-time layer (BPF): started after the first publish, synced from the stored rules, stopped before teardown.</param>
+    public NftEnforcementSupervisor(
+        NftFirewallPolicyAdapter adapter,
+        NftTable table,
+        Func<NftTraceMonitor>? traceMonitor,
+        IEnforcementLayer? layer,
+        Action<string> log,
+        TimeProvider time)
     {
         _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
         _table = table ?? throw new ArgumentNullException(nameof(table));
         _traceMonitor = traceMonitor;
+        _layer = layer;
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _time = time ?? throw new ArgumentNullException(nameof(time));
     }
@@ -67,6 +82,7 @@ public sealed class NftEnforcementSupervisor
     public async Task RunAsync(CancellationToken ct)
     {
         await PublishAtStartAsync(ct).ConfigureAwait(false);
+        await StartLayerAsync(ct).ConfigureAwait(false);
 
         var loops = new List<Task>
         {
@@ -76,6 +92,11 @@ public sealed class NftEnforcementSupervisor
         if (_traceMonitor is not null)
         {
             loops.Add(RunTraceMonitorAsync(ct));
+        }
+
+        if (_layer is not null)
+        {
+            loops.Add(_layer.RunEventsAsync(ct));
         }
 
         try
@@ -200,8 +221,42 @@ public sealed class NftEnforcementSupervisor
         }
     }
 
+    /// <summary>Attaches the layer (never throws) and syncs it from the rules the first publish stored.</summary>
+    public async Task StartLayerAsync(CancellationToken ct)
+    {
+        if (_layer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _layer.StartAsync(ct).ConfigureAwait(false);
+            if (_layer.Active)
+            {
+                await _adapter.ResyncLayerAsync(ct).ConfigureAwait(false);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            _log($"Connect-time layer failed to start: {exception.Message}; nftables only.");
+        }
+    }
+
     private async Task TeardownAsync()
     {
+        if (_layer is not null)
+        {
+            try
+            {
+                await _layer.StopAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                _log($"Connect-time layer stop failed: {exception.Message}");
+            }
+        }
+
         try
         {
             await _adapter.TeardownAsync(CancellationToken.None).ConfigureAwait(false);

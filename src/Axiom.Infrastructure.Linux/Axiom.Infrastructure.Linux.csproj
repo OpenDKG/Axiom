@@ -27,4 +27,14 @@
     <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
   </ItemGroup>
 
+  <!--
+    Connect-time BPF layer (docs/LINUX_EBPF.md). The native objects are built separately
+    (`make -C Bpf/native`, needs clang + libbpf-dev) and shipped under bpf/ next to the daemon
+    when present; without them the daemon runs nft-only and says so in the journal/doctor.
+  -->
+  <ItemGroup Condition="Exists('Bpf/native/out/axiom_connect.bpf.o')">
+    <None Include="Bpf/native/out/axiom_connect.bpf.o" Link="bpf/axiom_connect.bpf.o" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Bpf/native/out/axiom-bpf-events" Link="bpf/axiom-bpf-events" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('Bpf/native/out/axiom-bpf-events')" />
+  </ItemGroup>
+
 </Project>

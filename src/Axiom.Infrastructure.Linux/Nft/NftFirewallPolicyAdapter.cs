@@ -81,6 +81,12 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
     /// <summary>The cgroup manager, for the attribution loop and the trace monitor's fallback.</summary>
     public AppCgroupManager Cgroups => _cgroups;
 
+    /// <summary>
+    /// Optional connect-time layer (the BPF engine, docs/LINUX_EBPF.md) synced after every
+    /// successful publish with the same rules and generation; null or inactive = nft only.
+    /// </summary>
+    public IVerdictLayer? VerdictLayer { get; set; }
+
     public void Dispose() => _gate.Dispose();
 
     public async Task<FirewallCapabilityReport> GetCapabilitiesAsync(CancellationToken ct)
@@ -118,6 +124,13 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         else if (enforcement is not null && tableGeneration < enforcement.Generation)
         {
             reason = string.Create(CultureInfo.InvariantCulture, $"nftables holds generation {tableGeneration}; generation {enforcement.Generation} is pending.");
+        }
+
+        if (VerdictLayer is { Active: false } layer && enforcement is not null)
+        {
+            // Still Available: nftables enforces every rule; only the exec-time race window is open.
+            var note = $"Connect-time BPF layer {layer.Status}; a process that connects within ~1 s of exec is not blocked until herded.";
+            reason = reason is null ? note : reason + " " + note;
         }
 
         return new FirewallCapabilityReport
@@ -443,6 +456,29 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         return apps.Where(app => _cgroups.TryResolve(app, out _, out _)).ToList();
     }
 
+    /// <summary>Re-syncs the verdict layer from the stored rules without republishing (after the layer attached at start).</summary>
+    public async Task ResyncLayerAsync(CancellationToken ct)
+    {
+        if (VerdictLayer is not { } layer)
+        {
+            return;
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var state = LoadState();
+            if (_tableApplied)
+            {
+                await layer.SyncAsync(state.Rules, state.Generation, ct).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>Deletes the table, returns herded processes and removes the Axiom cgroups (daemon stop / uninstall).</summary>
     public async Task TeardownAsync(CancellationToken ct)
     {
@@ -466,6 +502,12 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         _tableApplied = applied.Success;
         _lastCompilation = compilation;
         UpdateEnforcement(compilation, applied.Success ? null : applied.Error, placements);
+        if (applied.Success && VerdictLayer is { } layer)
+        {
+            // The layer is additive: a map write failure is logged by the layer and never fails the publish.
+            await layer.SyncAsync(rules, generation, ct).ConfigureAwait(false);
+        }
+
         return (compilation, applied.Success ? null : applied.Error);
     }
 
