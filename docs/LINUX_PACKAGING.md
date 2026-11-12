@@ -134,16 +134,78 @@ inside the comment); polkitd drops such a file silently and `pkaction` lists not
 Built with [nfpm](https://nfpm.goreleaser.com) (static Go binary, official goreleaser release,
 SHA-256 checked against the release's `checksums.txt`; v2.49.0 on the evidence box) from the same
 staged root: `packaging/linux/nfpm.yaml.in` carries the control mapping
-(`depends: nftables, polkit, systemd, libicu, openssl-libs, fontconfig, libX11…`,
+(`depends: nftables, polkit, systemd, libicu, libssl.so.3()(64bit), libcrypto.so.3()(64bit), libbpf.so.1()(64bit), fontconfig, libX11…`,
 `recommends: bpftool, libsecret`, `license: GPL-3.0-or-later`) and
 `packaging/linux/rpm/{postinstall,preremove,postremove}` translate the Debian semantics to RPM's
 numeric `$1` (`%post` 1/2 = install/upgrade → `--install-service`; `%preun` 0 = erase →
 `--uninstall-service` + pins; `%postun` 0 = erase → leftovers; upgrades do nothing). RPM has no
 purge: `/var/lib/axiom` stays after erase.
 
-**Status: built, not installed anywhere.** No RPM distribution on the evidence box; the
-`.rpm` has not been installed, and SELinux labelling of `/usr/libexec/axiom` plus firewalld
-coexistence (nft table ordering) remain open items from LINUX_PORT_REPORT.md.
+**Status: installed, upgraded and removed on Fedora 45** (Cloud Base 45-1.4, kernel 7.2.11-300.fc45, SELinux
+Enforcing, firewalld active, nftables 1.1.6, rpm 6.1.0, dnf5; LINUX_TEST_REPORT.md F-1…F-12). No other RPM
+distribution (RHEL/Alma 9–10, openSUSE) has been run.
+
+### 7.1 Fedora dependency mapping
+
+| Need | Debian/Ubuntu (`control.in` + `DLOPEN_DEPENDS`) | RPM (`nfpm.yaml.in`) | Fedora 45 provider |
+|---|---|---|---|
+| OpenSSL 3 (dlopened by the .NET crypto shim) | `libssl3t64 \| libssl3` | `libssl.so.3()(64bit)`, `libcrypto.so.3()(64bit)` | `openssl3-libs` (Fedora 45's `openssl-libs` is OpenSSL **4**, `libssl.so.4`) |
+| ICU | `libicu76 \| … \| libicu70` | `libicu` | `libicu` 78 |
+| libbpf for `bpf/axiom-bpf-events` | `libbpf1` (shlibdeps) | `libbpf.so.1()(64bit)` (omitted with `--no-bpf`) | `libbpf` 1.7 (preinstalled) |
+| polkit / pkexec | `polkitd \| policykit-1`, `pkexec \| policykit-1` | `polkit` (ships pkexec) | `polkit` 127 |
+| nftables / systemd | same names | same names | `nftables` 1.1.6, systemd |
+| X11/fontconfig (desktop) | `libx11-6`, … | `libX11`, `libXext`, …, `fontconfig` | same |
+| bpftool (Recommends) | `linux-tools-common \| bpftool` | `bpftool` | `bpftool` 7.7.0 (weak dep: installed by default by dnf) |
+
+Requiring the soname rather than `openssl-libs` is the fix for F-2: with `openssl-libs` the rpm installed and
+`%post` aborted (`No usable version of libssl was found`, exit 134). The capability form is also what Fedora
+≤ 44 / RHEL 9–10 (`openssl-libs` 3.x) and openSUSE (`libopenssl3`) provide, so no per-distro branch is needed.
+
+### 7.2 Signatures
+
+The rpm is unsigned. dnf installs it from the command line with a warning (`skipped OpenPGP checks for 1 package
+from repository: @commandline`); bare `rpm -U` on rpm 6 (`%_pkgverify_level all`) refuses it
+(`package axiom-0.13.2-1.x86_64 does not verify: no signature`) unless `--nosignature` is passed. Signing
+(`rpmsign`) stays a release-process item (§8).
+
+### 7.3 SELinux (Enforcing, targeted policy)
+
+No custom policy module and no `restorecon` in the scriptlets are needed: files the installer creates inherit
+the correct type from the parent directory, and `restorecon -Rnv` over every Axiom path reports nothing to change.
+Observed labels (type part = `matchpathcon`; only the SELinux *user* differs, `unconfined_u` for files created by
+the scriptlet, which `restorecon` without `-F` does not touch and the policy does not use):
+
+| Path | Label |
+|---|---|
+| `/usr/libexec/axiom`, `/usr/libexec/axiom/axiomd`, `bpf/*` | `unconfined_u:object_r:bin_t:s0` |
+| `/etc/systemd/system/axiomd.service` | `unconfined_u:object_r:systemd_unit_file_t:s0` |
+| `/opt/axiom`, `/opt/axiom/axiomd/axiomd` | `system_u:object_r:usr_t:s0` (rpm-installed) |
+| `/var/lib/axiom` | `unconfined_u:object_r:var_lib_t:s0` |
+| `/run/axiom`, `/run/axiom/axiom.sock` | `system_u:object_r:var_run_t:s0` |
+| polkit action | `system_u:object_r:usr_t:s0` |
+
+`axiomd` runs as `system_u:system_r:unconfined_service_t:s0` (the generic domain for a service binary labelled
+`bin_t` without its own policy), so nftables, bpftool, cgroup and BPF-pin operations are not confined.
+`ausearch -m avc,user_avc,selinux_err -ts boot` stayed `<no matches>` across install, IPC, rules, BPF attach,
+firewalld reload, stop/start, upgrade and removal. A confining policy module is future work, not a requirement.
+
+### 7.4 firewalld
+
+firewalld (nftables backend) owns `table inet firewalld`; Axiom owns `table inet axiom`. They coexist: a
+`firewall-cmd --reload` with an Axiom block rule active leaves `table inet axiom` in place (firewalld only replaces
+its own table), the rule keeps blocking and `rule.verify` stays `enforcementVerified:true`; Axiom's stop/uninstall
+never touched `table inet firewalld`. Both chains see the packet; a drop in either wins (Axiom only adds drops).
+
+### 7.5 Known gaps found on Fedora
+
+- **BPF exe verdicts never match on btrfs** (Fedora's default root FS) — not a packaging defect, see F-8 and
+  LINUX_PORT_REPORT.md: the exe map key comes from userspace `stat` (`st_dev` of the btrfs *subvolume*, `0:35`)
+  while the BPF program reads `inode->i_sb->s_dev` (the btrfs superblock, `0:33`). The layer attaches and reads
+  back fine, but a short-lived `curl` connects before the 1 s cgroup herding; long-lived processes are still
+  blocked by nftables.
+- The daemon's "bpftool is not available" hint says `apt install linux-tools-common …` on Fedora too (cosmetic).
+- RPM has no purge: `/var/lib/axiom` (rules, settings, history DB) and an empty `/var/log/axiom` stay after
+  `dnf remove`.
 
 ## 8. Not done
 

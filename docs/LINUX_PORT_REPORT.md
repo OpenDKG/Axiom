@@ -155,8 +155,7 @@ Nothing in the Windows projects (`Axiom.Infrastructure.Windows`, `Axiom.UI`, `Ax
   verifier's acceptance of the CO-RE exe lookup under `cgroup/connect4`, and the bpftool `loadall`/`attach
   multi` path are untested on a kernel. Run `scripts/linux/bpf/e2e.sh --daemon` after `apt install clang
   libbpf-dev`; the rest of the branch does not depend on it (nft stays the primary boundary).
-- Packaging remainder: the `.rpm` on a Fedora/openSUSE host (SELinux label of `/usr/libexec/axiom`, firewalld
-  ordering against `table inet axiom`), arm64 packages, lintian (not installed on the evidence box), package
+- Packaging remainder: the `.rpm` on openSUSE/RHEL (Fedora 45 done, §5), arm64 packages, lintian (not installed on the evidence box), package
   signing / apt repository. Security review (P6).
 - Desktop verified on one GNOME 46 X11 session with the AppIndicator extension only; Wayland (XWayland), KDE Plasma
   (native SNI tray), stock GNOME without a tray, and a box with `secret-tool` (keyring path of the protector) are
@@ -188,9 +187,14 @@ is **proven**, and only that:
   restart reconciled (4 programs, not 8), `systemctl stop` leaves no `table inet axiom`, no `axiom_*`
   attachment, no `axiom.slice`, no pins; a third-party `table inet zz_thirdparty` was byte-identical
   before and after publish/stop/teardown.
-- `.deb`: built, installed, upgraded in place, removed, purged on this box. **`.rpm`: built only; a Fedora
-  install/upgrade/remove with SELinux is pending** — no Fedora/RPM readiness is claimed.
-- **Untested:** Debian, Fedora/SELinux, firewalld coexistence, Wayland (GNOME or KDE), KDE Plasma, arm64,
+- `.deb`: built, installed, upgraded in place, removed, purged on this box. **`.rpm`: installed, upgraded
+  (`--replacepkgs`) and removed on a Fedora 45 VM** (kernel 7.2.11, SELinux Enforcing, firewalld active;
+  LINUX_TEST_REPORT.md F-1…F-12): no AVC denials, no custom policy needed, firewalld reload leaves `table inet axiom`
+  alone, stop/remove leave only `/var/lib/axiom` + `/var/log/axiom`. One packaging defect fixed (Fedora 45's
+  OpenSSL 4: require `libssl.so.3()(64bit)`). **Open: on btrfs (Fedora default) the BPF exe-verdict key never
+  matches** (`stat` `st_dev` of the subvolume `0:35` vs the kernel's `i_sb->s_dev` `0:33`), so on Fedora the
+  connect-time layer attaches but does not close the ~1 s exec window; nftables enforcement works.
+- **Untested:** Debian, the desktop app on Fedora, RHEL/openSUSE, Wayland (GNOME or KDE), KDE Plasma, arm64,
   kernels without BTF or `nft_socket`, NetworkManager/resolv.conf DNS backends live, live IPv6 traffic (the
   box has no IPv6 default route; the `inet` rules carry no `ip`/`ip6` qualifier and `connect6`/`sendmsg6`
   are attached — structural, not traffic, evidence).

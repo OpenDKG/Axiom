@@ -351,3 +351,36 @@ Baseline: `axiomd` active (0.13.2 package), no rules, protection off, Privacy Sh
 
 Not done here: uninstall/purge/rollback of this build (the box keeps the packaged daemon by instruction; P-6/P-7 above
 cover remove/purge of the same packaging), RPM install, other distributions.
+
+## Fedora 45 RPM (2026-11-13, branch `buba/linux` at `5ffc5ba` + packaging fix `a1b65f8`)
+
+VM: Fedora Cloud Base Generic 45-1.4 (image sha256 verified against `Fedora-Cloud-45-1.4-x86_64-CHECKSUM`), QEMU/KVM
+2.5 GB, 2 vCPU, root on btrfs (`/dev/vda3[/root]`). Kernel `7.2.11-300.fc45.x86_64`, `getenforce` → `Enforcing`
+(targeted), `firewalld` active (zone `public`, nftables backend, `table inet firewalld`), nftables 1.1.6, libbpf
+1.7.0-2.fc45, rpm 6.1.0, dnf5, `/sys/kernel/btf/vmlinux` present; polkit and bpftool not preinstalled. Each run
+starts from the `clean` qcow2 snapshot (firewalld installed, nothing else). Package built on the Ubuntu box with
+`scripts/linux/package.sh rpm` (full publish, then `--skip-publish` after the fix); IPC via `scripts/linux/axipc.py`
+as user `axiom` (wheel) unless noted.
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| F-1 | `dnf install ./axiom-0.13.2-1.x86_64.rpm` built at `5ffc5ba` (`Requires: openssl-libs`) | **FAIL** (fixed) | deps resolved (polkit, libX*, bpftool weak), then `>>> Non-critical error in %post scriptlet` / `No usable version of libssl was found` / `Aborted (core dumped) "$AXIOM_BUNDLED_DAEMON" --install-service` / `%post(axiom-0.13.2-1.x86_64) scriptlet failed, exit status 134`; dnf rc 1, `axiomd.service could not be found`. Cause: Fedora 45 `openssl-libs-4.0.3` ships `libssl.so.4`; the .NET shim probes `libssl.so.3/1.1/1.0.x/10` only |
+| F-2 | fix `a1b65f8`: require `libssl.so.3()(64bit)`, `libcrypto.so.3()(64bit)`, `libbpf.so.1()(64bit)`; `dnf install --setopt=install_weak_deps=False ./axiom-…rpm` from `clean` | PASS | dnf pulls `openssl3-libs 1:3.5.9-1.fc45` + polkit + X11 libs (16 packages); `%post`: `Installed and started axiomd.service from /usr/libexec/axiom (/etc/systemd/system/axiomd.service).`; `Complete!`, rc 0; `systemctl is-active axiomd` → `active` |
+| F-3 | `axiomd --doctor` without bpftool | PASS (1 WARN, expected) | all PASS (unit, image 234 entries root-owned, sock, data/log dirs, `dns backend: SystemdResolved; enp0s3: 10.0.2.3`, `table inet axiom generation 1 is in force`) + `WARN bpf layer: bpftool is not available; the connect-time layer is off`; journal `BPF layer inactive: bpftool is not available (apt install linux-tools-common …)` (Debian hint on Fedora: cosmetic) |
+| F-4 | SELinux | PASS | `ausearch -m avc,user_avc,selinux_err -ts boot` → `<no matches>` after every step (F-2…F-12); `ps -eZ` → `system_u:system_r:unconfined_service_t:s0 axiomd`; `/usr/libexec/axiom/axiomd` `bin_t`, unit `systemd_unit_file_t`, `/opt/axiom` `usr_t`, `/var/lib/axiom` `var_lib_t`, `/run/axiom/axiom.sock` `var_run_t`; `restorecon -Rnv` on all of them → nothing to change. No scriptlet change needed |
+| F-5 | polkit | PASS | `pkaction \| grep axiom` → `com.axiom.firewall.install` |
+| F-6 | nft-only: `protection.enable`, `rule.apply` block `/usr/bin/curl` | PASS (as designed) | `state:"applied"`; `rule.verify` (root) `enforcementVerified:true`, `nftables alone enforces this rule (~1 s exec window)`; bare `curl -m 8 https://example.com` → rc 0 (connects inside the 1 s herding window, documented limitation); curl that reads its config from stdin after 2 s → **rc 7**, `4 packet(s) matched`; `rule.remove` → curl `200`; `protection.disable` (root) → `enabled:false` |
+| F-7 | `dnf install bpftool` (7.7.0-3.fc45), restart | PASS | `BPF layer attached: connect4/connect6/sendmsg4/sendmsg6 at /sys/fs/cgroup (multi), pinned at /sys/fs/bpf/axiom.`; `--doctor` → `PASS bpf layer: bpftool v7.7.0; 4 programs pinned …`, `Result: all checks passed.`; `bpftool cgroup tree` → 4 `axiom_*` |
+| F-8 | BPF verdict for `/usr/bin/curl` | **FAIL** (open, C#) | `rule.verify` claims `BPF-backed: connect-time verdict for this rule in the maps (generation 7, read back verified)`, yet bare `curl -m 8` → rc 0. Map key `{dev_major:0, dev_minor:35, ino:3056}` = `stat -L -c '%Hd %Ld %i' /usr/bin/curl` → `0 35 3056`, but `findmnt -T /usr/bin/curl` MAJ:MIN → `0:33` (btrfs superblock `s_dev`, which `axiom_connect.bpf.c` reads via `inode->i_sb->s_dev`). On btrfs subvolumes `st_dev` ≠ `s_dev`, so the exe map never matches. nftables still blocks long-lived processes (rc 7) |
+| F-9 | `firewall-cmd --reload` with a block rule active (both runs) | PASS | `success`; tables before/after and +8 s: `table inet axiom`, `table inet firewalld` — firewalld does not touch Axiom's table; long-lived curl still rc 7; `rule.verify` still `enforcementVerified:true`; no republish needed (nothing in the journal) |
+| F-10 | `systemctl stop axiomd` / start | PASS | `inactive`; `nft list tables` → only `table inet firewalld`; `bpftool cgroup tree` → 0 `axiom_*`; no `/sys/fs/cgroup/axiom.slice`, no `/sys/fs/bpf/axiom`; start → `active` |
+| F-11 | upgrade `rpm -Uvh --replacepkgs` | PASS (with `--nosignature`) | without it rpm 6 refuses: `package axiom-0.13.2-1.x86_64 does not verify: no signature`, rc 2; with `--nosignature`: `%post` reinstalls the image, `%preun/%postun` of the old instance do nothing (`$1`=1), journal `BPF layer detached …` → `Started axiomd.service` → `BPF layer attached …`, `active`, doctor all PASS; `dnf reinstall ./axiom-…rpm` likewise |
+| F-12 | `dnf remove -y axiom` | PASS | `%preun`: `Removed /usr/libexec/axiom.` / `Stopped and removed axiomd.service.`; gone: unit, `/usr/libexec/axiom`, `/opt/axiom`, polkit action, `/run/axiom`, `/sys/fs/bpf/axiom`, `axiom.slice`, `table inet axiom`, `axiom_*` programs, `axiom*` units; tables → `table inet firewalld`; **left (by design, RPM has no purge):** `/var/lib/axiom` (`axiom.db filter network-recovery.txt protection.json threat-share.json`) and empty `/var/log/axiom`; DNS unchanged (`enp0s3: 10.0.2.3`) |
+
+Ubuntu regression after touching `scripts/linux/package.sh`: `package.sh deb --skip-publish` → `Depends` identical to the
+previous build; `sudo -n dpkg -i build/linux/axiom_0.13.2_amd64.deb` on the evidence box → `Installed and started
+axiomd.service`, doctor `all checks passed`, protection off, 0 owned rules, Privacy Shield not redirected, `eno2:
+192.168.70.1`.
+
+Not run on Fedora: the desktop app (Cloud image has no session), Wayland/GNOME, a real version-to-version upgrade
+(only `--replacepkgs`), NetworkManager-managed DNS / Privacy Shield, IPv6, RHEL/openSUSE.
