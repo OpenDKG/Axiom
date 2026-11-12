@@ -96,19 +96,22 @@ static __always_inline __u8 proto_bit(__u32 protocol)
     return AXIOM_PROTO_OTHER;
 }
 
-/* 127.0.0.0/8, ::1 and ::ffff:127.0.0.0/8 are never filtered (parity with the nft chains). */
-static __always_inline bool is_loopback(struct bpf_sock_addr *ctx)
+/*
+ * 127.0.0.0/8, ::1 and ::ffff:127.0.0.0/8 are never filtered (parity with the nft chains).
+ * The verifier only allows user_ip4 in the *4 programs and user_ip6 in the *6 programs
+ * ("invalid bpf_context access" otherwise), so the family is a compile-time parameter
+ * (`is6`) and every helper below is inlined into a program of exactly one family.
+ */
+static __always_inline bool is_loopback(struct bpf_sock_addr *ctx, const bool is6)
 {
-    if (ctx->user_family == AF_INET)
+    if (!is6)
         return (ctx->user_ip4 & 0xffu) == 127u; /* network order: first octet is the low byte */
 
-    if (ctx->user_family == AF_INET6) {
-        if (ctx->user_ip6[0] == 0 && ctx->user_ip6[1] == 0) {
-            if (ctx->user_ip6[2] == 0 && ctx->user_ip6[3] == bpf_htonl(1))
-                return true; /* ::1 */
-            if (ctx->user_ip6[2] == bpf_htonl(0x0000ffffu) && (ctx->user_ip6[3] & 0xffu) == 127u)
-                return true; /* ::ffff:127.x.x.x */
-        }
+    if (ctx->user_ip6[0] == 0 && ctx->user_ip6[1] == 0) {
+        if (ctx->user_ip6[2] == 0 && ctx->user_ip6[3] == bpf_htonl(1))
+            return true; /* ::1 */
+        if (ctx->user_ip6[2] == bpf_htonl(0x0000ffffu) && (ctx->user_ip6[3] & 0xffu) == 127u)
+            return true; /* ::ffff:127.x.x.x */
     }
 
     return false;
@@ -138,7 +141,7 @@ static __always_inline bool current_exe(struct axiom_exe_key *key)
 }
 
 static __always_inline void emit_event(struct bpf_sock_addr *ctx, __u64 cgroup_id, const struct axiom_exe_key *exe,
-                                       const struct axiom_verdict *verdict, __u8 source, __u8 hook)
+                                       const struct axiom_verdict *verdict, __u8 source, __u8 hook, const bool is6)
 {
     struct axiom_event *event = bpf_ringbuf_reserve(&axiom_events, sizeof(*event), 0);
     if (!event) {
@@ -153,14 +156,14 @@ static __always_inline void emit_event(struct bpf_sock_addr *ctx, __u64 cgroup_i
     event->dev_major = exe->dev_major;
     event->dev_minor = exe->dev_minor;
     event->rule_generation = verdict->rule_generation;
-    event->family = (__u16)ctx->user_family;
+    event->family = is6 ? AF_INET6 : AF_INET;
     event->dport = bpf_ntohs((__u16)ctx->user_port);
     event->proto = (__u8)ctx->protocol;
     event->verdict = verdict->action;
     event->source = source;
     event->hook = hook;
     __builtin_memset(event->daddr, 0, sizeof(event->daddr));
-    if (ctx->user_family == AF_INET) {
+    if (!is6) {
         __u32 ip4 = ctx->user_ip4;
         __builtin_memcpy(event->daddr, &ip4, 4);
     } else {
@@ -173,10 +176,10 @@ static __always_inline void emit_event(struct bpf_sock_addr *ctx, __u64 cgroup_i
 }
 
 /* Returns 1 (allow) or 0 (block → EPERM to the caller). */
-static __always_inline int decide(struct bpf_sock_addr *ctx, __u8 hook)
+static __always_inline int decide(struct bpf_sock_addr *ctx, __u8 hook, const bool is6)
 {
     stat_inc(AXIOM_STAT_LOOKUPS);
-    if (is_loopback(ctx)) {
+    if (is_loopback(ctx, is6)) {
         stat_inc(AXIOM_STAT_ALLOWED_LOOPBACK);
         return 1;
     }
@@ -206,7 +209,7 @@ static __always_inline int decide(struct bpf_sock_addr *ctx, __u8 hook)
     if (!hit)
         return 1;
 
-    emit_event(ctx, cgroup_id, &exe, hit, source, hook);
+    emit_event(ctx, cgroup_id, &exe, hit, source, hook, is6);
     if (hit->action == AXIOM_ACTION_BLOCK) {
         stat_inc(AXIOM_STAT_BLOCKED);
         return 0;
@@ -218,23 +221,23 @@ static __always_inline int decide(struct bpf_sock_addr *ctx, __u8 hook)
 SEC("cgroup/connect4")
 int axiom_connect4(struct bpf_sock_addr *ctx)
 {
-    return decide(ctx, AXIOM_HOOK_CONNECT);
+    return decide(ctx, AXIOM_HOOK_CONNECT, false);
 }
 
 SEC("cgroup/connect6")
 int axiom_connect6(struct bpf_sock_addr *ctx)
 {
-    return decide(ctx, AXIOM_HOOK_CONNECT);
+    return decide(ctx, AXIOM_HOOK_CONNECT, true);
 }
 
 SEC("cgroup/sendmsg4")
 int axiom_sendmsg4(struct bpf_sock_addr *ctx)
 {
-    return decide(ctx, AXIOM_HOOK_SENDMSG);
+    return decide(ctx, AXIOM_HOOK_SENDMSG, false);
 }
 
 SEC("cgroup/sendmsg6")
 int axiom_sendmsg6(struct bpf_sock_addr *ctx)
 {
-    return decide(ctx, AXIOM_HOOK_SENDMSG);
+    return decide(ctx, AXIOM_HOOK_SENDMSG, true);
 }
