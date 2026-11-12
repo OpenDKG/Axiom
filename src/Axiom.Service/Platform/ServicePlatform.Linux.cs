@@ -71,10 +71,12 @@ internal static class LinuxServicePlatform
         var paths = LinuxServicePaths.Default;
         try
         {
-            var changed = UnixDataDirectoryPermissions.Enforce(paths.MachineDataDirectory);
+            var changed = UnixDataDirectoryPermissions.Enforce(paths.MachineDataDirectory)
+                .Concat(UnixLogPermissions.EnforceDirectory(LinuxServicePaths.LogDirectory))
+                .ToList();
             if (changed.Count > 0)
             {
-                Console.Error.WriteLine($"Data directory permissions: tightened {changed.Count} entries under {paths.MachineDataDirectory}.");
+                Console.Error.WriteLine($"Data directory permissions: tightened {changed.Count} entries under {paths.MachineDataDirectory} and {LinuxServicePaths.LogDirectory}.");
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

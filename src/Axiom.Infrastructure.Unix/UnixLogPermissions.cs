@@ -62,6 +62,39 @@ public static class UnixLogPermissions
         return changed;
     }
 
+    /// <summary>
+    /// Linux flavour (journald is the primary log, <c>/var/log/axiom</c> is <c>LogsDirectory=</c>):
+    /// when the directory exists, make it 0700 and every regular file in it 0600 without creating a
+    /// log file. Returns the paths whose mode changed; a missing directory changes nothing.
+    /// </summary>
+    public static IReadOnlyList<string> EnforceDirectory(string logDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(logDirectory);
+        var changed = new List<string>();
+        if (OperatingSystem.IsWindows() || !Directory.Exists(logDirectory))
+        {
+            return changed;
+        }
+
+        Apply(logDirectory, DirectoryMode, changed);
+        IReadOnlyList<string> files;
+        try
+        {
+            files = Directory.EnumerateFiles(logDirectory).OrderBy(file => file, StringComparer.Ordinal).ToList();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return changed; // not ours to read (unprivileged caller); the daemon runs this as root
+        }
+
+        foreach (var file in files)
+        {
+            Apply(file, FileMode, changed);
+        }
+
+        return changed;
+    }
+
     /// <summary>The log and every rotated archive next to it (<c>name.N</c>, <c>name.N.bz2</c>, …).</summary>
     public static IEnumerable<string> Archives(string logDirectory, string logFilePath)
     {

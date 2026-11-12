@@ -243,5 +243,8 @@ public sealed class SystemdAndPathsTests
         Path.Combine(temp.Path, "var", "lib", "axiom"),
         Path.Combine(temp.Path, "run", "axiom"),
         Path.Combine(temp.Path, "var", "lib", "axiom", "privacy-shield-dns-backup.json"),
-        Path.Combine(temp.Path, "var", "lib", "axiom", "protection.json"));
+        Path.Combine(temp.Path, "var", "lib", "axiom", "protection.json"))
+    {
+        LogDirectory = Path.Combine(temp.Path, "var", "log", "axiom"),
+    };
 }

@@ -20,6 +20,9 @@ public sealed record LinuxDoctorTargets(
     string DnsBackupPath,
     string ProtectionSettingsPath)
 {
+    /// <summary>systemd <c>LogsDirectory=</c>; checked for root 0700 / 0600 files when it exists.</summary>
+    public string LogDirectory { get; init; } = LinuxServicePaths.LogDirectory;
+
     public static LinuxDoctorTargets Default { get; } = new(
         LinuxServicePaths.UnitFilePath,
         LinuxServicePaths.ImageDirectory,
@@ -105,6 +108,7 @@ public sealed class LinuxDoctor
         CheckImage(checks);
         CheckSocket(checks);
         CheckDataDirectory(checks);
+        CheckLogDirectory(checks);
         CheckDns(checks);
         CheckOwner(checks);
         CheckEnforcement(checks);
@@ -176,6 +180,39 @@ public sealed class LinuxDoctor
             : entry.IsRootOwned && entry.Permissions == 0x1C0
                 ? new DoctorCheck(DoctorCheck.Pass, "data directory", $"{_targets.MachineDataDirectory} root 0700.")
                 : new DoctorCheck(DoctorCheck.Fail, "data directory", $"{_targets.MachineDataDirectory} is {entry.Describe()}, expected root 0700."));
+    }
+
+    /// <summary>
+    /// Daemon logs go to the journal (readable by root and the adm/systemd-journal groups under
+    /// systemd's policy); <c>/var/log/axiom</c> exists for file logs and must be root 0700 with
+    /// 0600 files so a second local user cannot read process names, paths and rule ids.
+    /// </summary>
+    private void CheckLogDirectory(List<DoctorCheck> checks)
+    {
+        if (!_isRoot)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Skip, "log directory", $"{_targets.LogDirectory} modes are checked as root."));
+            return;
+        }
+
+        var entry = UnixFileStat.Stat(_runner, _targets.LogDirectory, StatFlavor.Gnu);
+        if (entry is null)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Pass, "log directory", $"{_targets.LogDirectory} does not exist; daemon logs go to the journal only."));
+            return;
+        }
+
+        if (!entry.IsRootOwned || entry.Permissions != 0x1C0)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "log directory", $"{_targets.LogDirectory} is {entry.Describe()}, expected root 0700; the daemon tightens it at start."));
+            return;
+        }
+
+        var files = Directory.Exists(_targets.LogDirectory) ? Directory.EnumerateFiles(_targets.LogDirectory).ToList() : [];
+        var loose = UnixFileStat.List(_runner, files, StatFlavor.Gnu).Where(file => !file.IsRootOwned || file.Permissions != 0x180).Select(file => file.Path).ToList();
+        checks.Add(loose.Count == 0
+            ? new DoctorCheck(DoctorCheck.Pass, "log directory", $"{_targets.LogDirectory} root 0700{(files.Count == 0 ? ", no file logs (journal only)" : $", {files.Count.ToString(CultureInfo.InvariantCulture)} file(s) 0600")}.")
+            : new DoctorCheck(DoctorCheck.Warn, "log directory", $"{_targets.LogDirectory}: not root 0600: {string.Join(", ", loose)}."));
     }
 
     private void CheckDns(List<DoctorCheck> checks)

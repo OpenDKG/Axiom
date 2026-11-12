@@ -26,6 +26,9 @@ public sealed record SystemdInstallerOptions(
         LinuxServicePaths.Default.DnsBackupFile,
         ProtectionSettingsStore.DefaultPath);
 
+    /// <summary>systemd's <c>LogsDirectory=</c> (<c>/var/log/axiom</c>); 0700 with 0600 files when present.</summary>
+    public string LogDirectory { get; init; } = LinuxServicePaths.LogDirectory;
+
     public string ImageRoot => Path.GetDirectoryName(ImageDirectory) ?? "/";
 
     public string DaemonPath => Path.Combine(ImageDirectory, ProtectedImageLayout.DaemonFileName);
@@ -169,6 +172,13 @@ public sealed class SystemdServiceInstaller
 
             Directory.CreateDirectory(_options.MachineDataDirectory);
             UnixDataDirectoryPermissions.Enforce(_options.MachineDataDirectory);
+            // An older unit created /var/log/axiom 0750; tighten it (and any file log) on upgrade
+            // before the new unit's LogsDirectoryMode=0700 takes over.
+            foreach (var fixedPath in UnixLogPermissions.EnforceDirectory(_options.LogDirectory))
+            {
+                output.WriteLine($"Tightened log permissions on {fixedPath}.");
+            }
+
             RecordOwner(ownerUid, output);
             Directory.CreateDirectory(Path.GetDirectoryName(_options.UnitPath) ?? "/");
             FilterRulesFile.WriteAtomic(_options.UnitPath, unit, ProtectedImageLayout.FileMode);

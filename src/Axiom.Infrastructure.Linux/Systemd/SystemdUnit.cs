@@ -65,14 +65,15 @@ public static class SystemdUnit
             # systemd creates and owns these directories with the modes below:
             #   /run/axiom      0755  IPC socket (0666, peer uid checked) and filter socket (0600)
             #   /var/lib/axiom  0700  database, rules, Privacy Shield backup, recovery baseline (root only)
-            #   /var/log/axiom  0750  reserved for file logs; stdout/stderr go to the journal
+            #   /var/log/axiom  0700  reserved for file logs (0600); stdout/stderr go to the journal
+            #                         (journal access follows systemd policy: root and the adm/systemd-journal groups)
             RuntimeDirectory=axiom
             RuntimeDirectoryMode=0755
             RuntimeDirectoryPreserve=no
             StateDirectory=axiom
             StateDirectoryMode=0700
             LogsDirectory=axiom
-            LogsDirectoryMode=0750
+            LogsDirectoryMode=0700
 
             # Hardening. The daemon runs as root (it must program nftables, read every process's
             # /proc entries and rewrite system DNS) but with a reduced capability set and a read-only
