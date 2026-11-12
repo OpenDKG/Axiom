@@ -215,9 +215,11 @@ build_rpm() {
     log "nfpm not on PATH: .rpm skipped (docs/LINUX_PACKAGING.md §7 has the control mapping)"
     return 0
   fi
-  local cfg="$OUT/nfpm.yaml"
+  local cfg="$OUT/nfpm.yaml" bpf_line='s| *# @IF_BPF@$||'
+  # The libbpf.so.1 requirement only exists when the BPF helper is shipped.
+  [[ -f "$STAGE/opt/axiom/axiomd/bpf/axiom-bpf-events" ]] || bpf_line='/@IF_BPF@/d'
   sed -e "s|@VERSION@|${VERSION//\~/_}|" -e "s|@ARCH@|$DEB_ARCH|" -e "s|@STAGE@|$STAGE|" -e "s|@PKG@|$PKG|" \
-      "$PKG/nfpm.yaml.in" >"$cfg"
+      -e "$bpf_line" "$PKG/nfpm.yaml.in" >"$cfg"
   for script in postinstall preremove postremove; do bash -n "$PKG/rpm/$script"; done
   log "nfpm package -p rpm -> $OUT"
   nfpm package -f "$cfg" -p rpm -t "$OUT/"

@@ -26,7 +26,16 @@ depends:
   - polkit
   - systemd
   - libicu
-  - openssl-libs
+  # The .NET crypto shim dlopens libssl.so.3 (then 1.1/1.0/10) and does not know OpenSSL 4's
+  # libssl.so.4. Fedora 45's openssl-libs is OpenSSL 4, so naming the package is not enough:
+  # require the soname capability (openssl3-libs on Fedora >= 45, openssl-libs on Fedora <= 44
+  # and RHEL 9/10, libopenssl3 on openSUSE). Without it axiomd aborts with
+  # "No usable version of libssl was found" (docs/LINUX_PACKAGING.md §7, F-2).
+  - libssl.so.3()(64bit)
+  - libcrypto.so.3()(64bit)
+  # bpf/axiom-bpf-events links libbpf.so.1 (the .deb gets libbpf1 from dpkg-shlibdeps; nfpm has no
+  # automatic requires). package.sh drops this line for --no-bpf builds.
+  - libbpf.so.1()(64bit) # @IF_BPF@
   - fontconfig
   - libX11
   - libXext
@@ -39,8 +48,6 @@ depends:
 recommends:
   - bpftool
   - libsecret
-suggests:
-  - libbpf
 contents:
   - src: "@STAGE@/opt/axiom"
     dst: /opt/axiom
