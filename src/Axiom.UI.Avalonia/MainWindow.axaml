@@ -44,6 +44,9 @@
     <DataTemplate DataType="local:AgentDashboardPageViewModel">
       <views:AgentDashboardView />
     </DataTemplate>
+    <DataTemplate DataType="local:AgentHealthPageViewModel">
+      <views:AgentHealthView />
+    </DataTemplate>
     <DataTemplate DataType="local:OverviewPageViewModel">
       <views:OverviewView />
     </DataTemplate>
