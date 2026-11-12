@@ -15,17 +15,6 @@
   </UserControl.Styles>
   <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="26,20,26,26" Spacing="16">
-      <Border Classes="card" Padding="18,14">
-        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
-          <Border Width="4" CornerRadius="2" Background="{DynamicResource Axiom.Accent}" />
-          <StackPanel Grid.Column="1" Spacing="3">
-            <TextBlock Text="SYSTEM STATUS" Classes="kpi-label" />
-            <controls:AxiomSelectableTextBlock Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextPrimary}"
-                                               FontSize="12.5" TextWrapping="Wrap" />
-          </StackPanel>
-        </Grid>
-      </Border>
-
       <Grid ColumnDefinitions="*,14,*,14,*,14,*">
         <Border Grid.Column="0" Classes="card" Padding="14,8">
           <StackPanel Spacing="3">

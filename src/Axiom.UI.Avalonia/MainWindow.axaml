@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:Axiom.UI.Avalonia"
         xmlns:views="using:Axiom.UI.Avalonia.Views"
+        xmlns:controls="using:Axiom.UI.Avalonia.Controls"
         xmlns:chrome="using:Avalonia.Controls.Chrome"
         x:Class="Axiom.UI.Avalonia.MainWindow"
         Title="Axiom — Free Open-Source Network &amp; AI Agent Security"
@@ -239,12 +240,22 @@
 
     <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="74,*,34">
       <Border Grid.Row="0" Background="{DynamicResource Axiom.Window}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
-        <Grid Margin="28,0,22,0" ColumnDefinitions="*,Auto">
+        <Grid Margin="28,0,22,0" ColumnDefinitions="*,Auto,Auto">
           <StackPanel VerticalAlignment="Center" Spacing="2">
             <TextBlock Text="{Binding SelectedPage.Title}" Classes="page-title" />
             <TextBlock Text="{Binding SelectedPage.Subtitle}" Classes="page-subtitle" />
           </StackPanel>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"
+                      Margin="24,0,20,0" MaxWidth="520">
+            <Border Width="3" Height="28" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}" />
+            <StackPanel Spacing="2">
+              <TextBlock Text="SYSTEM STATUS" Classes="kpi-label" />
+              <controls:AxiomSelectableTextBlock Text="{Binding Overview.StatusText}" FontSize="10.5"
+                                                 Foreground="{DynamicResource Axiom.TextSecondary}"
+                                                 TextWrapping="Wrap" MaxWidth="460" />
+            </StackPanel>
+          </StackPanel>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
             <ComboBox Width="170" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
                       ToolTip.Tip="Choose a theme. Axiom Glass is the new visual system." />
             <TextBlock Text="LOCAL-FIRST" Foreground="{DynamicResource Axiom.TextMuted}"
