@@ -2,6 +2,26 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.17.0
+
+- **Agent Health now carries the health surfaces.** Protected workspaces, **Blackbox health** and
+  **Module health** live on the same page, in that order, instead of being split between Agent
+  Protection and a separate page. The page shares `AgentsPageViewModel` and
+  `SecurityPageViewModel`, so the probes, health samples and timers stay single-owner.
+- **Agent Health page (introduced in 0.16.0).** Protected workspaces moved out of Agent Protection
+  into a page directly below Agent Activity.
+- **Network Dashboard rename (0.16.0).** The network page is now **Network Dashboard**, matching
+  **Agent Dashboard**.
+- **Network Events write gating (0.16.0, #288).** Block outbound/Block inbound are disabled when the
+  service cannot apply firewall changes, with the reason shown and a result row that survives the
+  10-second refresh.
+- **Accurate empty states (0.16.0, #287).** No search matches no longer claims the service is down.
+- **Read-only `rule.verify` (0.16.0, #277).** `rule.verify` is advertised even when writes are
+  disabled; only `rule.apply` and `rule.remove` require the write capability.
+- **Version-derived milestone (0.16.0, #278).** The FND-005 label follows the product version.
+- **Verification.** `Axiom.UI.Avalonia` builds with 0 warnings and 0 errors; its suite passes 37/37,
+  including headless navigation through all 14 pages.
+
 ## What's in 0.16.0
 
 - **Agent Health page.** Protected workspaces moved out of Agent Protection into a dedicated page
