@@ -341,8 +341,7 @@
       </Border>
 
       <Grid ColumnDefinitions="1.6*,12,*">
-        <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}"
-                BorderThickness="1" CornerRadius="8" Padding="14">
+        <Border Grid.Column="0" Classes="card" Padding="14">
           <StackPanel Spacing="8">
             <Grid ColumnDefinitions="*,Auto">
               <controls:AxiomSelectableTextBlock Grid.Column="0" Text="New connection events" FontSize="14" FontWeight="SemiBold"
@@ -373,8 +372,7 @@
           </StackPanel>
         </Border>
 
-        <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}"
-                BorderThickness="1" CornerRadius="8" Padding="14">
+        <Border Grid.Column="2" Classes="card" Padding="14">
           <StackPanel Spacing="8">
             <controls:AxiomSelectableTextBlock Text="Top applications" FontSize="14" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" />
@@ -398,9 +396,9 @@
         </Border>
       </Grid>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="10">
-          <controls:AxiomSelectableTextBlock Text="Live sockets" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <controls:AxiomSelectableTextBlock Text="Live sockets" Classes="section-title" />
           <controls:AxiomSelectableTextBlock Text="{Binding SourceText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
           <StackPanel Orientation="Horizontal" Spacing="8">
             <Button Content="Block outbound" Padding="10,4"
@@ -412,6 +410,12 @@
             <Button Content="Copy path" Padding="10,4"
                     Command="{Binding CopyPathCommand}" CommandParameter="{Binding SelectedSocket}" />
           </StackPanel>
+          <Grid ColumnDefinitions="180,80,220,*" Margin="12,2,12,0">
+            <controls:AxiomSelectableTextBlock Grid.Column="0" Text="APPLICATION" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="PROTOCOL" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="2" Text="REMOTE ENDPOINT" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <controls:AxiomSelectableTextBlock Grid.Column="3" Text="STATE" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextMuted}" />
+          </Grid>
           <ListBox Classes="data-list" ItemsSource="{Binding Connections}" Height="390" Background="Transparent" BorderThickness="0"
                    SelectedItem="{Binding SelectedSocket}"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">

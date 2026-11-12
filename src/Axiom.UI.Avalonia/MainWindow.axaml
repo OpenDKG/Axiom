@@ -127,9 +127,7 @@
            Placement="BottomEdgeAlignedRight"
            IsLightDismissEnabled="True"
            HorizontalOffset="0" VerticalOffset="4">
-      <Border Width="430" MaxHeight="470" Background="{DynamicResource Axiom.Surface}"
-              BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-              CornerRadius="8" Padding="12">
+      <Border Classes="card" Width="430" MaxHeight="470" Padding="12">
         <Grid RowDefinitions="Auto,*,Auto">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -197,15 +195,18 @@
               <StackPanel>
                 <TextBlock Text="{Binding GroupLabel}" IsVisible="{Binding HasGroupLabel}"
                            FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Axiom.TextMuted}"
-                           Margin="6,12,0,4" />
-                <Grid ColumnDefinitions="3,*">
-                  <Border Grid.Column="0" Width="3" Height="18" CornerRadius="1.5"
-                          Background="{DynamicResource Axiom.Accent}" Margin="0,0,11,0"
-                          VerticalAlignment="Center"
-                          IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
-                  <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="13"
-                             Foreground="{DynamicResource Axiom.TextPrimary}" Padding="0,7" />
-                </Grid>
+                           Margin="10,8,0,3" />
+                <Border Classes="nav-item">
+                  <Grid ColumnDefinitions="3,10,*">
+                    <Border Grid.Column="0" Width="3" Height="18" CornerRadius="1.5"
+                            Background="{DynamicResource Axiom.Accent}"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
+                    <TextBlock Grid.Column="2" Text="{Binding Title}" FontSize="13"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource Axiom.TextPrimary}" />
+                  </Grid>
+                </Border>
               </StackPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
@@ -264,13 +265,13 @@
             <TextBlock Text="{Binding StatusSourceText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" />
           </WrapPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2">
+            <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="4" Padding="7,2">
               <StackPanel Orientation="Horizontal" Spacing="5">
                 <Ellipse Width="6" Height="6" Fill="{DynamicResource Axiom.Accent}" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding StatusModeText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="9" />
               </StackPanel>
             </Border>
-            <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2">
+            <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="4" Padding="7,2">
               <StackPanel Orientation="Horizontal" Spacing="5">
                 <Ellipse Width="6" Height="6" Fill="{DynamicResource Axiom.Warning}" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding StatusFirewallBadgeText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="9" />

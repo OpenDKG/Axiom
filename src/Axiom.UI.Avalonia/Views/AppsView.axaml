@@ -3,8 +3,7 @@
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.AppsView">
   <Grid ColumnDefinitions="1.55*,7,*" Margin="24,18,24,24">
-    <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-            CornerRadius="8" Padding="10" MinWidth="320">
+    <Border Grid.Column="0" Classes="card" Padding="10" MinWidth="320">
       <Grid RowDefinitions="Auto,*">
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="8,4,8,10">
           <StackPanel Grid.Column="0">
@@ -66,8 +65,7 @@
     <GridSplitter Grid.Column="1" Width="7" Background="{DynamicResource Axiom.Border}" ResizeDirection="Columns"
                   ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
 
-    <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-            CornerRadius="8" Padding="18" MinWidth="300">
+    <Border Grid.Column="2" Classes="card" Padding="18" MinWidth="300">
       <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Grid>
         <StackPanel IsVisible="{Binding HasSelection}" Spacing="10">

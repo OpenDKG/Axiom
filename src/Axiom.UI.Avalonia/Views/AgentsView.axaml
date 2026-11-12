@@ -42,8 +42,7 @@
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24,18,24,24" Spacing="14">
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Warning}"
-              BorderThickness="1" CornerRadius="8" Padding="14">
+      <Border Classes="card" BorderBrush="{DynamicResource Axiom.Warning}" Padding="14">
         <StackPanel Spacing="5">
           <Grid ColumnDefinitions="*,Auto">
             <controls:AxiomSelectableTextBlock Grid.Column="0" Text="ENFORCEMENT" FontSize="10" FontWeight="SemiBold"
@@ -65,8 +64,7 @@
       </Border>
 
       <Grid ColumnDefinitions="*,14,*">
-        <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-                CornerRadius="8" Padding="14">
+        <Border Grid.Column="0" Classes="card" Padding="14">
           <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
             <Border Grid.Column="0" Background="#0B1024" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
               <Image Source="avares://Axiom.UI.Avalonia/Assets/origintrail-logo.png"
@@ -86,8 +84,7 @@
             </StackPanel>
           </Grid>
         </Border>
-        <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-                CornerRadius="8" Padding="14">
+        <Border Grid.Column="2" Classes="card" Padding="14">
           <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
             <Border Grid.Column="0" Background="#0B1024" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
               <Image Source="avares://Axiom.UI.Avalonia/Assets/blackbox-logo.png"
@@ -111,7 +108,7 @@
         </Border>
       </Grid>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="14">
+      <Border Classes="card" Padding="14">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -174,7 +171,7 @@
         </StackPanel>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="4">
@@ -197,7 +194,7 @@
         </StackPanel>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="0">
+      <Border Classes="card" Padding="0">
         <ItemsControl ItemsSource="{Binding Security.Modules}">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
@@ -243,7 +240,7 @@
         </ItemsControl>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
@@ -334,7 +331,7 @@
         </StackPanel>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <controls:AxiomSelectableTextBlock Text="Blackbox health" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
@@ -351,7 +348,7 @@
         </StackPanel>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
@@ -410,7 +407,7 @@
         </StackPanel>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
@@ -436,7 +433,7 @@
         </StackPanel>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="8">
+      <Border Classes="card" Padding="8">
         <controls:ThreatGraphControl Height="320"
                                      Threats="{Binding VerifiedGraphThreats}"
                                      Total="{Binding VerifiedGraphTotal}"
@@ -448,7 +445,7 @@
                                      BorderBrush="{DynamicResource Axiom.Border}" />
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="6">
           <controls:AxiomSelectableTextBlock Text="Verified graph threats" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <controls:AxiomSelectableTextBlock Text="{Binding VerifiedGraphListStatus}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />

@@ -112,8 +112,6 @@ The README uses `axiom-glass-dark-full.png`, which is the same capture as `glass
 - Motion preferences, UI density and a high-contrast variant are future work.
 - Formal WCAG 2.2 AA measurement across all six themes is still required; contrast was checked
   visually on the rendered surfaces.
-- Pages other than Dashboard and Settings inherit the palette and global styles but keep their
-  existing layouts.
 - Startup time and memory were not benchmarked for this change; the backdrop adds no timers or
   polling work.
 

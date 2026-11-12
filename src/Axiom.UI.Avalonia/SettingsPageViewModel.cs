@@ -304,6 +304,26 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         _visualEffects.Changed -= OnVisualEffectsChanged;
     }
 
+    public bool IsGlassDarkTheme => _theme.Current == UiTheme.GlassDark;
+
+    public bool IsGlassLightTheme => _theme.Current == UiTheme.GlassLight;
+
+    public bool IsDarkTheme => _theme.Current == UiTheme.Dark;
+
+    public bool IsLightTheme => _theme.Current == UiTheme.Light;
+
+    public bool IsDarkMidnightTheme => _theme.Current == UiTheme.DarkMidnight;
+
+    public bool IsLightWarmTheme => _theme.Current == UiTheme.LightWarm;
+
+    public bool IsAutoEffects => _visualEffects.Current == VisualEffects.Auto;
+
+    public bool IsFullEffects => _visualEffects.Current == VisualEffects.Full;
+
+    public bool IsReducedEffects => _visualEffects.Current == VisualEffects.Reduced;
+
+    public bool IsNoEffects => _visualEffects.Current == VisualEffects.Off;
+
     [RelayCommand]
     private void UseAutoEffects() => _visualEffects.Apply(VisualEffects.Auto);
 
@@ -316,8 +336,14 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private void UseNoEffects() => _visualEffects.Apply(VisualEffects.Off);
 
-    private void OnVisualEffectsChanged(object? sender, EventArgs e) =>
+    private void OnVisualEffectsChanged(object? sender, EventArgs e)
+    {
         CurrentVisualEffectsText = VisualEffectsText();
+        OnPropertyChanged(nameof(IsAutoEffects));
+        OnPropertyChanged(nameof(IsFullEffects));
+        OnPropertyChanged(nameof(IsReducedEffects));
+        OnPropertyChanged(nameof(IsNoEffects));
+    }
 
     private string VisualEffectsText() =>
         $"Visual effects: {VisualEffectsLabels.Label(_visualEffects.Current)}. " +
@@ -341,8 +367,16 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private void UseGlassLightTheme() => _theme.Apply(UiTheme.GlassLight);
 
-    private void OnThemeChanged(object? sender, EventArgs e) =>
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
         CurrentThemeText = ThemeLabel(_theme.Current);
+        OnPropertyChanged(nameof(IsGlassDarkTheme));
+        OnPropertyChanged(nameof(IsGlassLightTheme));
+        OnPropertyChanged(nameof(IsDarkTheme));
+        OnPropertyChanged(nameof(IsLightTheme));
+        OnPropertyChanged(nameof(IsDarkMidnightTheme));
+        OnPropertyChanged(nameof(IsLightWarmTheme));
+    }
 
     private static string ThemeLabel(UiTheme theme) => theme switch
     {

@@ -34,7 +34,15 @@ public static class TestAppBuilder
     {
         public override void Initialize()
         {
+            Resources.MergedDictionaries.Add(new global::Avalonia.Markup.Xaml.Styling.ResourceInclude((Uri?)null)
+            {
+                Source = new Uri("avares://Axiom.UI.Avalonia/Themes/AxiomPalette.axaml"),
+            });
             Styles.Add(new FluentTheme());
+            Styles.Add(new global::Avalonia.Markup.Xaml.Styling.StyleInclude((Uri?)null)
+            {
+                Source = new Uri("avares://Axiom.UI.Avalonia/Themes/AxiomControls.axaml"),
+            });
         }
     }
 }

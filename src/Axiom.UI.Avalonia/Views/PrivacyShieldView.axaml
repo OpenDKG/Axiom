@@ -4,8 +4,7 @@
              x:Class="Axiom.UI.Avalonia.Views.PrivacyShieldView">
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
   <Grid RowDefinitions="Auto,Auto,Auto" Margin="24,18,24,24">
-    <Border Grid.Row="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-            CornerRadius="8" Padding="14">
+    <Border Grid.Row="0" Classes="card" Padding="14">
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Grid.Column="0" Spacing="4">
           <StackPanel Orientation="Horizontal" Spacing="10">
@@ -29,8 +28,7 @@
                TextWrapping="Wrap" Margin="2,10,0,0" />
 
     <Grid Grid.Row="2" ColumnDefinitions="1.15*,10,*" Margin="0,10,0,0">
-      <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-              CornerRadius="8" Padding="14">
+      <Border Grid.Column="0" Classes="card" Padding="14">
         <StackPanel Spacing="8">
             <controls:AxiomSelectableTextBlock Text="Filter settings" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <CheckBox Content="Enable Privacy Shield resolver" IsChecked="{Binding Enabled}" Foreground="{DynamicResource Axiom.TextPrimary}" />
@@ -88,8 +86,7 @@
       </Border>
 
       <Grid Grid.Column="2" RowDefinitions="Auto,10,Auto,10,Auto">
-        <Border Grid.Row="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-                CornerRadius="8" Padding="14">
+        <Border Grid.Row="0" Classes="card" Padding="14">
           <StackPanel Spacing="6">
             <controls:AxiomSelectableTextBlock Text="Resolver statistics" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <controls:AxiomSelectableTextBlock Text="{Binding StatsText}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
@@ -111,8 +108,7 @@
           </StackPanel>
         </Border>
 
-        <Border Grid.Row="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-                CornerRadius="8" Padding="14">
+        <Border Grid.Row="2" Classes="card" Padding="14">
           <StackPanel Spacing="8">
             <controls:AxiomSelectableTextBlock Text="Adapter DNS (explicit UAC helper)" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <controls:AxiomSelectableTextBlock Text="{Binding ManualSetupText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
@@ -131,8 +127,7 @@
           </StackPanel>
         </Border>
 
-        <Border Grid.Row="4" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-                CornerRadius="8" Padding="14">
+        <Border Grid.Row="4" Classes="card" Padding="14">
           <StackPanel Spacing="8" HorizontalAlignment="Stretch">
               <Grid ColumnDefinitions="*,Auto">
                 <controls:AxiomSelectableTextBlock Grid.Column="0" Text="Recently blocked" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />

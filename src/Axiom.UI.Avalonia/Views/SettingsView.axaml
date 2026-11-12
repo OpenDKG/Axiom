@@ -10,20 +10,20 @@
             <controls:AxiomSelectableTextBlock Text="Appearance" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <controls:AxiomSelectableTextBlock Text="{Binding CurrentThemeText, StringFormat=Current theme: {0}}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" />
             <WrapPanel Orientation="Horizontal">
-              <Button Content="Axiom Glass Dark" Command="{Binding UseGlassDarkThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes="primary" />
-              <Button Content="Axiom Glass Light" Command="{Binding UseGlassLightThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
-              <Button Content="Dark" Command="{Binding UseDarkThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
-              <Button Content="Light" Command="{Binding UseLightThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
-              <Button Content="Dark Midnight" Command="{Binding UseDarkMidnightThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
-              <Button Content="Light Warm" Command="{Binding UseLightWarmThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
+              <Button Content="Axiom Glass Dark" Command="{Binding UseGlassDarkThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsGlassDarkTheme}" />
+              <Button Content="Axiom Glass Light" Command="{Binding UseGlassLightThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsGlassLightTheme}" />
+              <Button Content="Dark" Command="{Binding UseDarkThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsDarkTheme}" />
+              <Button Content="Light" Command="{Binding UseLightThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsLightTheme}" />
+              <Button Content="Dark Midnight" Command="{Binding UseDarkMidnightThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsDarkMidnightTheme}" />
+              <Button Content="Light Warm" Command="{Binding UseLightWarmThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsLightWarmTheme}" />
             </WrapPanel>
             <controls:AxiomSelectableTextBlock Text="Visual effects" FontSize="12"
                                                Foreground="{DynamicResource Axiom.TextSecondary}" Margin="0,4,0,0" />
             <WrapPanel Orientation="Horizontal">
-              <Button Content="Auto" Command="{Binding UseAutoEffectsCommand}" Padding="12,5" Margin="0,0,8,0" />
-              <Button Content="Full" Command="{Binding UseFullEffectsCommand}" Padding="12,5" Margin="0,0,8,0" />
-              <Button Content="Reduced" Command="{Binding UseReducedEffectsCommand}" Padding="12,5" Margin="0,0,8,0" />
-              <Button Content="Off" Command="{Binding UseNoEffectsCommand}" Padding="12,5" />
+              <Button Content="Auto" Command="{Binding UseAutoEffectsCommand}" Padding="12,5" Margin="0,0,8,0" Classes.primary="{Binding IsAutoEffects}" />
+              <Button Content="Full" Command="{Binding UseFullEffectsCommand}" Padding="12,5" Margin="0,0,8,0" Classes.primary="{Binding IsFullEffects}" />
+              <Button Content="Reduced" Command="{Binding UseReducedEffectsCommand}" Padding="12,5" Margin="0,0,8,0" Classes.primary="{Binding IsReducedEffects}" />
+              <Button Content="Off" Command="{Binding UseNoEffectsCommand}" Padding="12,5" Classes.primary="{Binding IsNoEffects}" />
             </WrapPanel>
             <controls:AxiomSelectableTextBlock Text="{Binding CurrentVisualEffectsText}" FontSize="10"
                                                Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
@@ -60,8 +60,7 @@
       </StackPanel>
 
       <StackPanel Grid.Column="2" Spacing="14" VerticalAlignment="Top">
-        <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-                CornerRadius="8" Padding="16">
+        <Border Classes="card" Padding="16">
         <StackPanel Spacing="8">
           <controls:AxiomSelectableTextBlock Text="Build information" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7">
@@ -86,8 +85,7 @@
         </StackPanel>
         </Border>
 
-        <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-                CornerRadius="8" Padding="16">
+        <Border Classes="card" Padding="16">
           <StackPanel Spacing="8">
             <Grid ColumnDefinitions="*,Auto">
               <controls:AxiomSelectableTextBlock Grid.Column="0" Text="About Axiom" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />

@@ -70,6 +70,74 @@ public sealed class AboutAxiomTests
         }
     }
 
+    [Fact]
+    public void Settings_tracks_active_theme_and_visual_effects_flags()
+    {
+        var theme = new MutableThemeService();
+        var effects = new MutableVisualEffectsService();
+        var monitor = new ConnectionMonitor(new FakeSource(), new NoOpTimerFactory());
+        using var page = new SettingsPageViewModel(
+            monitor,
+            serviceMode: false,
+            theme: theme,
+            autostart: new UnsupportedAutostartService(),
+            userInteraction: new RecordingInteraction(),
+            visualEffects: effects);
+
+        Assert.True(page.IsGlassDarkTheme);
+        Assert.False(page.IsGlassLightTheme);
+        Assert.True(page.IsAutoEffects);
+        Assert.False(page.IsReducedEffects);
+
+        page.UseGlassLightThemeCommand.Execute(null);
+        Assert.False(page.IsGlassDarkTheme);
+        Assert.True(page.IsGlassLightTheme);
+        Assert.Equal("Axiom Glass Light", page.CurrentThemeText);
+
+        page.UseDarkMidnightThemeCommand.Execute(null);
+        Assert.False(page.IsGlassLightTheme);
+        Assert.True(page.IsDarkMidnightTheme);
+        Assert.Equal("Dark Midnight", page.CurrentThemeText);
+
+        page.UseReducedEffectsCommand.Execute(null);
+        Assert.False(page.IsAutoEffects);
+        Assert.True(page.IsReducedEffects);
+    }
+
+    private sealed class MutableThemeService : IThemeService
+    {
+        public UiTheme Current { get; private set; } = UiTheme.GlassDark;
+
+        public event EventHandler? Changed;
+
+        public void Apply(UiTheme theme)
+        {
+            Current = theme;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private sealed class MutableVisualEffectsService : IVisualEffectsService
+    {
+        public VisualEffects Current { get; private set; } = VisualEffects.Auto;
+
+        public string BackdropStatus { get; private set; } = "AcrylicBlur (native backdrop active)";
+
+        public event EventHandler? Changed;
+
+        public void Apply(VisualEffects value)
+        {
+            Current = value;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void ReportBackdrop(string status)
+        {
+            BackdropStatus = status;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
 
     private static SettingsPageViewModel CreatePage(IUserInteraction interaction)
     {
