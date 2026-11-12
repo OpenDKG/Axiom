@@ -123,7 +123,49 @@ public sealed class LinuxDoctor
         CheckOwner(checks);
         CheckEnforcement(checks);
         CheckBpfLayer(checks);
+        CheckBpfExeKey(checks);
         return checks;
+    }
+
+    /// <summary>
+    /// "bpf exe key" (docs/LINUX_EBPF.md §3.1): derives the exe-verdict key of a system binary the way
+    /// the daemon does — superblock dev from mountinfo field 3, inode from stat — and shows where the
+    /// device came from and whether stat's st_dev differs (btrfs subvolume devices). WARN when the key
+    /// cannot be proven: exe rules then stay nft-only (with their cgroup key).
+    /// </summary>
+    private void CheckBpfExeKey(List<DoctorCheck> checks)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Skip, "bpf exe key", "Linux-only."));
+            return;
+        }
+
+        var probe = _targets.ExeKeyProbePath;
+        var reader = new Bpf.StatInodeReader(_runner, mountInfoPath: _targets.MountInfoPath);
+        var stat = reader.Stat(probe);
+        var real = stat is null ? null : reader.RealPath(probe);
+        if (stat is null || real is null)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "bpf exe key", $"could not stat/realpath {probe}; exe keys are unverified."));
+            return;
+        }
+
+        var mountInfo = reader.ReadMountInfo();
+        var resolution = mountInfo is null
+            ? new Bpf.BpfExeKeyResolution(null, $"{_targets.MountInfoPath} is unreadable", null)
+            : Bpf.BpfExeKey.Resolve(real, stat, Bpf.MountInfoTable.Parse(mountInfo));
+        var statDev = string.Create(CultureInfo.InvariantCulture, $"{stat.DevMajor}:{stat.DevMinor}");
+        if (resolution.Key is not { } key)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "bpf exe key", $"{real}: {resolution.Detail}; exe rules on such paths are left to nftables (cgroup key only)."));
+            return;
+        }
+
+        var subvolume = resolution.Mount is { FsType: "btrfs" } && statDev != resolution.Mount.Dev
+            ? $" stat st_dev {statDev} is a btrfs subvolume device and is NOT used."
+            : string.Empty;
+        checks.Add(new DoctorCheck(DoctorCheck.Pass, "bpf exe key", string.Create(CultureInfo.InvariantCulture, $"{real}: key dev {key.DevMajor}:{key.DevMinor} ino {key.Ino}, source mountinfo superblock dev ({resolution.Mount!.FsType} at {resolution.Mount.MountPoint}, {resolution.Mount.Source}).{subvolume}")));
     }
 
     /// <summary>
@@ -143,7 +185,7 @@ public sealed class LinuxDoctor
         var bpftool = _runner.Run(Bpf.BpfCapabilityProbe.Bpftool, ["version"], ToolTimeout);
         if (!bpftool.Succeeded)
         {
-            checks.Add(new DoctorCheck(DoctorCheck.Warn, "bpf layer", "bpftool is not available; the connect-time layer is off (nftables only, exec-time race window ~1 s)."));
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "bpf layer", $"bpftool is not available ({Bpf.BpftoolHint.Current()}); the connect-time layer is off (nftables only, exec-time race window ~1 s)."));
             return;
         }
 

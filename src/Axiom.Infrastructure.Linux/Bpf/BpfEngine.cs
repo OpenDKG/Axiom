@@ -362,7 +362,9 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 Attempts = attempts,
                 FailedDeletes = failedDeletes.ToList(),
                 FailedUpdates = failedUpdates.ToList(),
-                CoveredRules = attached ? plan.Entries.Select(entry => BpfLayout.ParseRuleId(Convert.ToHexStringLower(entry.Value.AsSpan(8, 16)))).OfType<Guid>().Distinct().ToList() : [],
+                // A rule whose exe key could not be proven (or that is a directory) may still have a cgroup
+                // entry; it is reported uncovered, never "BPF-backed" (the exec window is not closed for it).
+                CoveredRules = attached ? plan.Entries.Select(entry => BpfLayout.ParseRuleId(Convert.ToHexStringLower(entry.Value.AsSpan(8, 16)))).OfType<Guid>().Distinct().Where(id => plan.Uncovered.All(rule => rule.RuleId != id)).ToList() : [],
                 Uncovered = plan.Uncovered.Select(rule => new LayerUncoveredRule(rule.RuleId, rule.Reason)).ToList(),
                 Status = Status,
             };
@@ -375,6 +377,16 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             Log(string.Create(
                 CultureInfo.InvariantCulture,
                 $"BPF verdicts generation {generation}: {plan.ExeEntries} exe, {plan.CgroupEntries} cgroup entries; {plan.Uncovered.Count} rule(s) left to nftables{(failures.Count == 0 ? (verified ? " (read back verified)." : " (written; read-back unavailable).") : "; " + failures.Count + " map write(s) failed after " + attempts + " pass(es): " + string.Join("; ", failures) + (neutralised ? "; layer neutralised" : string.Empty))}"));
+            foreach (var entry in plan.Entries.Where(entry => entry.Map == BpfLayout.ExeMap))
+            {
+                Log($"BPF exe key: {entry.Describe}.");
+            }
+
+            foreach (var rule in plan.Uncovered.Where(rule => rule.Reason.StartsWith("exe key not provable", StringComparison.Ordinal)))
+            {
+                Log($"BPF exe key: rule {rule.RuleId} left to nftables: {rule.Reason}.");
+            }
+
             return result;
         }
         finally

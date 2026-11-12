@@ -84,7 +84,7 @@ public static class BpfCapabilityProbe
         var version = runner.Run(Bpftool, ["version"], Timeout);
         if (!version.Succeeded)
         {
-            return new BpfProbeResult(false, "bpftool is not available (apt install linux-tools-common linux-tools-$(uname -r))", null);
+            return new BpfProbeResult(false, $"bpftool is not available ({BpftoolHint.Current()})", null);
         }
 
         var versionText = version.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? "bpftool";

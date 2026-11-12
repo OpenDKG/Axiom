@@ -25,19 +25,28 @@ public interface IInodeReader
     string? ReadMountInfo();
 }
 
-/// <summary>GNU coreutils <c>stat</c> backed reader: <c>stat -L -c '%Hd %Ld %i'</c> (major, minor, inode).</summary>
+/// <summary>
+/// GNU coreutils backed reader: <c>stat -L -c '%Hd %Ld %i'</c> (major, minor, inode — the device is
+/// st_dev, NOT necessarily the superblock dev; see <see cref="BpfExeKey"/>), <c>realpath -e</c>, and
+/// <c>/proc/self/mountinfo</c> of the daemon (host mount namespace; systemd sandboxing only adds
+/// read-only remounts of the same superblocks).
+/// </summary>
 public sealed class StatInodeReader : IInodeReader
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
     private readonly IProcessRunner _runner;
     private readonly string _cgroupRoot;
+    private readonly string _mountInfoPath;
 
-    public StatInodeReader(IProcessRunner runner, string? cgroupRoot = null)
+    public StatInodeReader(IProcessRunner runner, string? cgroupRoot = null, string? mountInfoPath = null)
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _cgroupRoot = string.IsNullOrWhiteSpace(cgroupRoot) ? BpfEnginePaths.DefaultCgroupRoot : cgroupRoot;
+        _mountInfoPath = string.IsNullOrWhiteSpace(mountInfoPath) ? DefaultMountInfoPath : mountInfoPath;
     }
+
+    public const string DefaultMountInfoPath = "/proc/self/mountinfo";
 
     public BpfInode? Stat(string path)
     {
@@ -54,9 +63,29 @@ public sealed class StatInodeReader : IInodeReader
         return result.Succeeded && ulong.TryParse(result.StandardOutput.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var id) ? id : null;
     }
 
-    public string? RealPath(string path) => path;
+    public string? RealPath(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var result = _runner.Run("realpath", ["-e", "--", path], Timeout);
+        var real = result.StandardOutput.TrimEnd('\n');
+        return result.Succeeded && real.StartsWith('/') && !real.Contains('\n', StringComparison.Ordinal) ? real : null;
+    }
 
-    public string? ReadMountInfo() => null;
+    public string? ReadMountInfo()
+    {
+        try
+        {
+            return File.ReadAllText(_mountInfoPath);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>Parses "major minor inode" (pure; unit-tested).</summary>
     public static BpfInode? Parse(string statOutput)
@@ -121,6 +150,8 @@ public static class BpfVerdictPlanner
         }
 
         var entries = new List<BpfMapEntry>();
+        MountInfoTable? mounts = null;
+        var mountInfoReadable = true;
         foreach (var (app, (ruleId, protoMask)) in byApp.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
             var value = BpfLayout.Verdict(BpfLayout.ActionBlock, protoMask, generation, ruleId);
@@ -134,13 +165,34 @@ public static class BpfVerdictPlanner
                 // A directory rule matches by path prefix; one inode cannot express it. The cgroup key still applies.
                 uncovered.Add(new BpfUncoveredRule(ruleId, $"appPath is a directory; only its herded cgroup is keyed at connect time: {app}"));
             }
+            else if (inodes.RealPath(app) is not { } realPath)
+            {
+                uncovered.Add(new BpfUncoveredRule(ruleId, $"appPath could not be canonicalised (realpath); the connect-time exe key cannot be proven: {app}"));
+            }
             else
             {
-                entries.Add(new BpfMapEntry(
-                    BpfLayout.ExeMap,
-                    BpfLayout.ExeKey(inode.DevMajor, inode.DevMinor, inode.Ino),
-                    value,
-                    string.Create(CultureInfo.InvariantCulture, $"exe {app} dev {inode.DevMajor}:{inode.DevMinor} ino {inode.Ino} proto 0x{protoMask:x}")));
+                if (mounts is null)
+                {
+                    var text = inodes.ReadMountInfo();
+                    mountInfoReadable = text is not null;
+                    mounts = MountInfoTable.Parse(text);
+                }
+
+                var resolution = mountInfoReadable
+                    ? BpfExeKey.Resolve(realPath, inode, mounts)
+                    : new BpfExeKeyResolution(null, "/proc/self/mountinfo is unreadable; the superblock device the BPF program reads cannot be proven", null);
+                if (resolution.Key is not { } key)
+                {
+                    uncovered.Add(new BpfUncoveredRule(ruleId, $"exe key not provable for {app}: {resolution.Detail}"));
+                }
+                else
+                {
+                    entries.Add(new BpfMapEntry(
+                        BpfLayout.ExeMap,
+                        BpfLayout.ExeKey(key.DevMajor, key.DevMinor, key.Ino),
+                        value,
+                        string.Create(CultureInfo.InvariantCulture, $"exe {app} dev {key.DevMajor}:{key.DevMinor} ino {key.Ino} proto 0x{protoMask:x} ({resolution.Detail})")));
+                }
             }
 
             if (cgroups.TryResolve(app, out var cgroupPath, out _) && inodes.CgroupId(cgroupPath) is { } cgroupId)
