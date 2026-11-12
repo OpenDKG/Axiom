@@ -247,14 +247,16 @@ public sealed class IpcRequestDispatcher
             return true;
         }
 
-        if (!caller.CanWrite && IpcCommandAccess.IsWrite(envelope.Type))
+        var commandClass = IpcCommandAccess.Classify(envelope.Type);
+        if (!caller.Permits(commandClass))
         {
-            _log?.Invoke($"Denied '{envelope.Type}' for {actorSid}: write commands are not allowed for this caller.");
+            var kind = commandClass == IpcCommandClass.PrivateRead ? "private read" : "write";
+            _log?.Invoke($"Denied '{envelope.Type}' for {actorSid}: {kind} commands are not allowed for this caller.");
             await WriteErrorAsync(
                 stream,
                 envelope.Id,
                 IpcErrorCodes.Unauthorized,
-                caller.WriteDenialReason ?? $"Command '{envelope.Type}' is not allowed for {actorSid}.",
+                caller.DenialMessage(commandClass, envelope.Type),
                 cancellationToken).ConfigureAwait(false);
             return true;
         }
@@ -264,7 +266,12 @@ public sealed class IpcRequestDispatcher
             switch (envelope.Type)
             {
                 case IpcCommandTypes.ServiceHealth:
-                    await WriteResultAsync(stream, envelope.Id, _healthProvider(), cancellationToken).ConfigureAwait(false);
+                    var health = _healthProvider();
+                    await WriteResultAsync(
+                        stream,
+                        envelope.Id,
+                        caller.CanReadPrivate ? health : IpcCommandAccess.RedactHealth(health),
+                        cancellationToken).ConfigureAwait(false);
                     break;
 
                 case IpcCommandTypes.Capabilities:

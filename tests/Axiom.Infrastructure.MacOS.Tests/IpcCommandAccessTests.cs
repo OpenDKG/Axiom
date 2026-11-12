@@ -22,12 +22,67 @@ public sealed class IpcCommandAccessTests
 
         foreach (var command in commands)
         {
-            var readOnly = IpcCommandAccess.ReadOnlyCommands.Contains(command);
-            var write = IpcCommandAccess.WriteCommands.Contains(command);
-            Assert.True(readOnly ^ write, $"'{command}' must be in exactly one of ReadOnlyCommands/WriteCommands.");
+            var listed = (IpcCommandAccess.PublicReadCommands.Contains(command) ? 1 : 0)
+                + (IpcCommandAccess.PrivateReadCommands.Contains(command) ? 1 : 0)
+                + (IpcCommandAccess.WriteCommands.Contains(command) ? 1 : 0);
+            Assert.True(listed == 1, $"'{command}' must be in exactly one of PublicRead/PrivateRead/WriteCommands (found in {listed}).");
+            Assert.Equal(IpcCommandAccess.ReadOnlyCommands.Contains(command), !IpcCommandAccess.IsWrite(command));
         }
 
-        Assert.Equal(commands.Count, IpcCommandAccess.ReadOnlyCommands.Count + IpcCommandAccess.WriteCommands.Count);
+        Assert.Equal(
+            commands.Count,
+            IpcCommandAccess.PublicReadCommands.Count + IpcCommandAccess.PrivateReadCommands.Count + IpcCommandAccess.WriteCommands.Count);
+    }
+
+    /// <summary>The public set is exactly the two health commands; everything that shows activity is private.</summary>
+    [Theory]
+    [InlineData("serviceHealth", IpcCommandClass.PublicRead)]
+    [InlineData("capabilities", IpcCommandClass.PublicRead)]
+    [InlineData("snapshot", IpcCommandClass.PrivateRead)]
+    [InlineData("live.events", IpcCommandClass.PrivateRead)]
+    [InlineData("history.query", IpcCommandClass.PrivateRead)]
+    [InlineData("traffic.history", IpcCommandClass.PrivateRead)]
+    [InlineData("diagnostics.export", IpcCommandClass.PrivateRead)]
+    [InlineData("privacy.status", IpcCommandClass.PrivateRead)]
+    [InlineData("threatshare.status", IpcCommandClass.PrivateRead)]
+    [InlineData("protection.status", IpcCommandClass.PrivateRead)]
+    [InlineData("config.get", IpcCommandClass.PrivateRead)]
+    [InlineData("rules.query", IpcCommandClass.PrivateRead)]
+    [InlineData("rule.verify", IpcCommandClass.PrivateRead)]
+    [InlineData("rule.apply", IpcCommandClass.Write)]
+    [InlineData("privacy.configure", IpcCommandClass.Write)]
+    [InlineData("networkRecovery.restore", IpcCommandClass.Write)]
+    [InlineData("something.new", IpcCommandClass.Write)]
+    [InlineData(null, IpcCommandClass.Write)]
+    public void Classification(string? command, IpcCommandClass expected)
+    {
+        Assert.Equal(expected, IpcCommandAccess.Classify(command));
+    }
+
+    [Fact]
+    public void PublicSetIsOnlyTheHealthCommands()
+    {
+        Assert.Equal(["capabilities", "serviceHealth"], IpcCommandAccess.PublicReadCommands.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void CallerFlagsGateTheClasses()
+    {
+        var publicOnly = new IpcCaller("uid:502", false, "no writes", false, "no private reads");
+        Assert.True(publicOnly.Permits(IpcCommandClass.PublicRead));
+        Assert.False(publicOnly.Permits(IpcCommandClass.PrivateRead));
+        Assert.False(publicOnly.Permits(IpcCommandClass.Write));
+        Assert.Equal("no private reads", publicOnly.DenialMessage(IpcCommandClass.PrivateRead, "snapshot"));
+        Assert.Equal("no writes", publicOnly.DenialMessage(IpcCommandClass.Write, "rule.apply"));
+
+        var readOnly = new IpcCaller("uid:503", false, null, true);
+        Assert.True(readOnly.Permits(IpcCommandClass.PrivateRead));
+        Assert.False(readOnly.Permits(IpcCommandClass.Write));
+        Assert.Equal("Command 'rule.apply' is not allowed for uid:503.", readOnly.DenialMessage(IpcCommandClass.Write, "rule.apply"));
+
+        var full = IpcCaller.FullAccess("S-1-5-21-1");
+        Assert.True(full.Permits(IpcCommandClass.Write));
+        Assert.True(full.Permits(IpcCommandClass.PrivateRead));
     }
 
     [Theory]
