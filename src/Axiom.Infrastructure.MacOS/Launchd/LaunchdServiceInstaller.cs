@@ -207,9 +207,13 @@ public sealed class LaunchdServiceInstaller
             var logFile = Path.Combine(_options.LogDirectory, Path.GetFileName(MacServicePaths.LogFilePath));
             var plist = BuildPlist(_options.DaemonPath, logFile);
 
-            // Stop the running instance (upgrade); "not loaded" is expected on first install.
+            // Stop the running instance (upgrade); "not loaded" is expected on first install. Like
+            // the Windows installer, a pending stop is awaited before the protected image is replaced.
             _runner.Run(Launchctl, ["bootout", ServiceTarget], ToolTimeout);
-            WaitForJobRemoval();
+            if (!WaitForJobRemoval())
+            {
+                error.WriteLine("The existing Axiom service did not stop in time.");
+            }
 
             if (staged is not null)
             {
@@ -222,6 +226,12 @@ public sealed class LaunchdServiceInstaller
             {
                 Report(error, $"Refusing to bootstrap: {_options.HelperDirectory} is not root-owned and read-only.", problems);
                 return 3;
+            }
+
+            if (!runningFromHelper && !FilesMatch(executablePath, _options.DaemonPath))
+            {
+                error.WriteLine("The protected service copy does not match the installer image.");
+                return 7;
             }
 
             MacDataDirectoryPermissions.Enforce(_options.MachineDataDirectory);
@@ -467,18 +477,42 @@ public sealed class LaunchdServiceInstaller
     /// (DNS restore, socket cleanup). Poll <c>launchctl print</c> until it no longer finds the job,
     /// at most ~15 s, so the subsequent <c>bootstrap</c> does not fail with EIO.
     /// </summary>
-    private void WaitForJobRemoval()
+    private bool WaitForJobRemoval()
     {
         for (var attempt = 0; attempt < 30; attempt++)
         {
             var print = _runner.Run(Launchctl, ["print", ServiceTarget], ToolTimeout);
             if (!print.Succeeded)
             {
-                return;
+                return true;
             }
 
             Thread.Sleep(500);
         }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Same check as the Windows installer after the copy to Program Files: the installed daemon
+    /// must be byte-identical to the image the administrator prompt ran.
+    /// </summary>
+    internal static bool FilesMatch(string left, string right)
+    {
+        try
+        {
+            return string.Equals(Hash(left), Hash(right), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static string Hash(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
     }
 
     private static void TryDeleteDirectory(string? path)
