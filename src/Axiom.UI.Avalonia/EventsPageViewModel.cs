@@ -63,6 +63,7 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
             _ = RefreshAsync();
         };
 
+        _ = LoadWriteCapabilityAsync();
         _ = RefreshAsync();
     }
 
@@ -107,6 +108,54 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
     [ObservableProperty]
     private EventRowView? _selectedEvent;
 
+    /// <summary>
+    /// True only when the service advertises firewall writes (write gate open). Block actions are
+    /// disabled otherwise, matching the Applications page, instead of silently doing nothing.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(BlockEventOutboundCommand))]
+    [NotifyCanExecuteChangedFor(nameof(BlockEventInboundCommand))]
+    private bool _canWrite;
+
+    [ObservableProperty]
+    private string _writeStatusText = "Firewall writes are disabled (read-only). Block actions are unavailable.";
+
+    /// <summary>Result of the last row action; kept separate so the periodic refresh does not erase it.</summary>
+    [ObservableProperty]
+    private string _actionStatusText = string.Empty;
+
+    [ObservableProperty]
+    private string _emptyHintText =
+        "Network events require the local service (start with --service). File, agent, system and blocked event feeds are not recorded yet.";
+
+    private async Task LoadWriteCapabilityAsync()
+    {
+        if (_client is null)
+        {
+            CanWrite = false;
+            WriteStatusText = "Firewall writes require the local service.";
+            return;
+        }
+
+        try
+        {
+            var capabilities = await _client
+                .SendAsync<ServiceCapabilities>(IpcCommandTypes.Capabilities, null, CancellationToken.None)
+                .ConfigureAwait(true);
+            CanWrite = capabilities.FirewallWrites;
+            WriteStatusText = CanWrite
+                ? "Firewall writes are enabled for this service session."
+                : "Firewall writes are disabled (read-only). Block actions are unavailable.";
+        }
+#pragma warning disable CA1031 // Capability probing must never crash the page.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            CanWrite = false;
+            WriteStatusText = "Firewall write capability could not be read; block actions are disabled.";
+        }
+    }
+
     [RelayCommand]
     private async Task InspectEventAsync(EventRowView? row)
     {
@@ -137,40 +186,47 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
     private Task CopyEventRemoteAsync(EventRowView? row) =>
         CopyAsync((row ?? SelectedEvent)?.RemoteEndpoint);
 
-    [RelayCommand]
-    private async Task BlockEventOutboundAsync(EventRowView? row)
-    {
-        var target = row ?? SelectedEvent;
-        if (target is not null)
-        {
-            StatusText = await _actions
-                .BlockAsync(target.AppDisplayName, target.AppPath, FirewallDirection.Outbound)
-                .ConfigureAwait(true);
-        }
-    }
+    [RelayCommand(CanExecute = nameof(CanWrite))]
+    private Task BlockEventOutboundAsync(EventRowView? row) =>
+        BlockAsync(row, FirewallDirection.Outbound);
 
-    [RelayCommand]
-    private async Task BlockEventInboundAsync(EventRowView? row)
+    [RelayCommand(CanExecute = nameof(CanWrite))]
+    private Task BlockEventInboundAsync(EventRowView? row) =>
+        BlockAsync(row, FirewallDirection.Inbound);
+
+    private async Task BlockAsync(EventRowView? row, FirewallDirection direction)
     {
-        var target = row ?? SelectedEvent;
-        if (target is not null)
+        if (!CanWrite)
         {
-            StatusText = await _actions
-                .BlockAsync(target.AppDisplayName, target.AppPath, FirewallDirection.Inbound)
-                .ConfigureAwait(true);
+            ActionStatusText = WriteStatusText;
+            return;
         }
+
+        var target = row ?? SelectedEvent;
+        if (target is null)
+        {
+            ActionStatusText = "Select an event first.";
+            return;
+        }
+
+        ActionStatusText = await _actions
+            .BlockAsync(target.AppDisplayName, target.AppPath, direction)
+            .ConfigureAwait(true);
     }
 
     [RelayCommand]
     private async Task EndEventTaskAsync(EventRowView? row)
     {
         var target = row ?? SelectedEvent;
-        if (target is not null)
+        if (target is null)
         {
-            StatusText = await _actions
-                .EndTaskAsync(target.AppDisplayName, [target.ProcessId])
-                .ConfigureAwait(true);
+            ActionStatusText = "Select an event first.";
+            return;
         }
+
+        ActionStatusText = await _actions
+            .EndTaskAsync(target.AppDisplayName, [target.ProcessId])
+            .ConfigureAwait(true);
     }
 
     private async Task CopyAsync(string? value)
@@ -193,6 +249,7 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
     public void Activate()
     {
         _refreshTimer?.Start();
+        _ = LoadWriteCapabilityAsync();
         _ = RefreshAsync();
     }
 
@@ -275,6 +332,9 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
                 TotalCount = page.TotalCount;
                 DatabaseText = page.DatabasePath;
                 IsEmpty = page.TotalCount == 0;
+                EmptyHintText = string.IsNullOrWhiteSpace(requestedSearch)
+                    ? $"No network events were recorded in the selected range ({requestedRange}). Try a longer range."
+                    : $"No network events match \"{requestedSearch.Trim()}\" in the selected range ({requestedRange}). Clear or change the search.";
                 CanExport = page.Rows.Count > 0;
                 RebuildGroups();
                 StatusText = $"{page.Rows.Count} of {page.TotalCount} network events · {requestedRange}";

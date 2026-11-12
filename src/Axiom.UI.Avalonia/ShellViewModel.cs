@@ -125,18 +125,21 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             interaction,
             _visualEffects,
             restoreNetwork);
-        Overview.AgentActivity = Agents;
         AgentStats = new AgentStatsPageViewModel(Agents);
+        AgentDashboard = new AgentDashboardPageViewModel(Agents);
+        AgentHealth = new AgentHealthPageViewModel(Security);
         Pages =
         [
+            AgentDashboard,
             Overview,
             Connections,
             Apps,
             Events,
-            Firewall,
-            PrivacyShield,
             Agents,
             AgentStats,
+            AgentHealth,
+            Firewall,
+            PrivacyShield,
             AiAnalyst,
             Security,
             Settings,
@@ -145,12 +148,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         // Navigation groups follow the UI terminology audit; only the first page of a group
         // carries the header so the nav list keeps one selection model.
-        Overview.GroupLabel = "MONITORING";
-        Firewall.GroupLabel = "PROTECTION";
+        AgentDashboard.GroupLabel = "OVERVIEW";
+        Connections.GroupLabel = "MONITORING";
+        Agents.GroupLabel = "PROTECTION";
         AiAnalyst.GroupLabel = "INTELLIGENCE";
         Settings.GroupLabel = "GENERAL";
-        _selectedPage = Overview;
-        _activePage = Overview;
+        _selectedPage = AgentDashboard;
+        _activePage = AgentDashboard;
         _selectedTheme = ThemeLabel(_theme.Current);
         _theme.Changed += OnThemeChanged;
         _monitor.Updated += OnMonitorUpdated;
@@ -227,6 +231,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _ => "Dark",
     };
 
+    public AgentDashboardPageViewModel AgentDashboard { get; }
+
     public OverviewPageViewModel Overview { get; }
 
     public ConnectionsPageViewModel Connections { get; }
@@ -244,6 +250,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public AgentsPageViewModel Agents { get; }
 
     public AgentStatsPageViewModel AgentStats { get; }
+
+    public AgentHealthPageViewModel AgentHealth { get; }
 
     public AiAnalystPageViewModel AiAnalyst { get; }
 

@@ -46,10 +46,34 @@ public sealed class ActivityFreshnessTests
         Assert.Contains("no active agent session", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A temporary directory whose path has no symlinked ancestors. macOS runs its
+    /// temp directory under /var, which links to /private/var, and the hook installer
+    /// deliberately refuses paths that contain a reparse point.
+    /// </summary>
+    private static string CreateLinkFreeTempRoot(string prefix)
+    {
+        var candidate = Path.Combine(Path.GetTempPath(), $"{prefix}-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(candidate);
+        if (!StorageSafety.IsReparsePointInPath(candidate))
+        {
+            return candidate;
+        }
+
+        Directory.Delete(candidate, recursive: true);
+        var fallbackRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".axiom-test-tmp");
+        Directory.CreateDirectory(fallbackRoot);
+        var fallback = Path.Combine(fallbackRoot, $"{prefix}-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(fallback);
+        return fallback;
+    }
+
     [Fact]
     public void Antigravity_protection_writes_hooks_without_utf8_bom_and_repairs_existing_bom()
     {
-        var root = Path.Combine(Path.GetTempPath(), $"axiom-agy-{Guid.NewGuid():N}");
+        var root = CreateLinkFreeTempRoot("axiom-agy");
         var userProfile = Path.Combine(root, "user");
         var localAppData = Path.Combine(root, "local");
         try

@@ -31,7 +31,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         IUserInteraction? ui = null,
         IServiceRequestClient? serviceClient = null,
         IProcessActions? processActions = null)
-        : base("Dashboard", "Live sockets, system-wide counters and system status", "O")
+        : base("Network Dashboard", "Live sockets, throughput and recent network activity", "O")
     {
         _monitor = monitor;
         _traffic = traffic;
@@ -46,9 +46,6 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         Refresh();
     }
 
-    /// <summary>Agent/audit surface shown on Overview, as in the WPF application.</summary>
-    public AgentsPageViewModel? AgentActivity { get; set; }
-
     /// <summary>
     /// Whether protection is active (Privacy Shield resolver running or firewall writes enabled);
     /// null keeps the plain read-only wording. Set by the shell; polled on every refresh.
@@ -62,7 +59,6 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     public void Activate()
     {
         _isActive = true;
-        AgentActivity?.Activate();
         if (_dirty)
         {
             _dirty = false;
@@ -73,7 +69,6 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     public void Deactivate()
     {
         _isActive = false;
-        AgentActivity?.Deactivate();
     }
 
     public ObservableCollection<ConnectionRow> Connections => _monitor.Connections;

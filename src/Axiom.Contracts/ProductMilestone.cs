@@ -7,7 +7,24 @@ namespace Axiom.Contracts;
 /// </summary>
 public static class ProductMilestone
 {
-    public const string Current = "FND-005";
+    /// <summary>
+    /// Build label derived from the shared product version (Directory.Build.props), so IPC
+    /// capabilities, error text and every Settings page always agree with the shipped release.
+    /// </summary>
+    public static string Current { get; } = BuildLabel();
+
+    private static string BuildLabel()
+    {
+        var assembly = typeof(ProductMilestone).Assembly;
+        var informational = (Attribute.GetCustomAttribute(
+            assembly,
+            typeof(System.Reflection.AssemblyInformationalVersionAttribute))
+            as System.Reflection.AssemblyInformationalVersionAttribute)?.InformationalVersion;
+        var version = string.IsNullOrWhiteSpace(informational)
+            ? assembly.GetName().Version?.ToString(3) ?? "dev"
+            : informational.Split('+')[0];
+        return $"Axiom {version}";
+    }
 
     /// <summary>True: TCP/UDP inventory comes from the local Windows owner tables.</summary>
     public const bool LiveInventory = true;

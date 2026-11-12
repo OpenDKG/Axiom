@@ -1006,11 +1006,14 @@ public sealed class IpcRequestDispatcher
             {
                 commands.Add(IpcCommandTypes.RuleRemove);
             }
+        }
 
-            if (_ruleVerify is not null)
-            {
-                commands.Add(IpcCommandTypes.RuleVerify);
-            }
+        // rule.verify is read-only and dispatched without the write gate, so advertise it whenever
+        // the service can serve it. It stays a private read in IpcCommandAccess: the report names
+        // rule and application paths, so the per-connection read check still applies.
+        if (_ruleVerify is not null)
+        {
+            commands.Add(IpcCommandTypes.RuleVerify);
         }
 
         return new ServiceCapabilities

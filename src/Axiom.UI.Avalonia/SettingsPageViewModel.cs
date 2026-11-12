@@ -75,7 +75,9 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public bool IsAutostartSupported { get; }
 
-    public string MilestoneText => OperatingSystem.IsMacOS() ? "Avalonia UI · macOS port" : "Avalonia UI migration · Windows-first";
+    public string MilestoneText => OperatingSystem.IsMacOS()
+        ? $"{Axiom.Contracts.ProductMilestone.Current} · macOS port"
+        : $"{Axiom.Contracts.ProductMilestone.Current} · Windows-first";
 
     public string ProtocolText { get; }
 
