@@ -21,6 +21,9 @@ internal sealed partial class NftEnforcementWorker(
     [LoggerMessage(EventId = 2201, Level = LogLevel.Information, Message = "{Message}")]
     private static partial void LogMessage(ILogger logger, string message);
 
+    [LoggerMessage(EventId = 2202, Level = LogLevel.Critical, Message = "Enforcement supervisor failed; stopping the daemon with exit code 70 for a systemd restart.")]
+    private static partial void LogSupervisorFailed(ILogger logger, Exception exception);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!OperatingSystem.IsLinux())
@@ -39,7 +42,7 @@ internal sealed partial class NftEnforcementWorker(
             // not keep running as if healthy: exit non-zero so Restart=on-failure restarts it and the next
             // start reconciles. The host stops on a faulted BackgroundService (StopHost, the default).
             Environment.ExitCode = 70; // EX_SOFTWARE
-            LogMessage(logger, $"Enforcement supervisor failed ({exception.GetType().Name}: {exception.Message}); stopping the daemon with exit code 70 for a systemd restart.");
+            LogSupervisorFailed(logger, exception);
             throw;
         }
     }
