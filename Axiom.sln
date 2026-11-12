@@ -66,6 +66,7 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Infrastructure.Linux", "src\Axiom.Infrastructure.Linux\Axiom.Infrastructure.Linux.csproj", "{15904853-4C9D-4033-A57F-41C95BE94588}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Infrastructure.Linux.Tests", "tests\Axiom.Infrastructure.Linux.Tests\Axiom.Infrastructure.Linux.Tests.csproj", "{4FF06133-4C00-4702-914B-14F46D4DC9B1}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Infrastructure.Linux.Nft", "src\Axiom.Infrastructure.Linux\Nft\Axiom.Infrastructure.Linux.Nft.csproj", "{7FC74D2E-0BC6-476D-BEE7-F053A7843BCE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Infrastructure.Linux.Nft.Tests", "tests\Axiom.Infrastructure.Linux.Nft.Tests\Axiom.Infrastructure.Linux.Nft.Tests.csproj", "{E4DF9C1D-33E9-41EF-BC0F-8CA5B78D0C8A}"
