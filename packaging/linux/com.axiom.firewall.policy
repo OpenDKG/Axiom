@@ -3,13 +3,14 @@
   "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <!-- SPDX-License-Identifier: GPL-3.0-or-later
      Installed by the package to /usr/share/polkit-1/actions/com.axiom.firewall.policy.
-     The desktop runs `pkexec /usr/libexec/axiom/axiomd --install-service` (install, upgrade) and
-     `--uninstall-service`; polkit matches the exec.path annotation and shows this message instead
-     of the generic "Authentication is required to run /path as the super user". auth_admin_keep
-     keeps the authorization for a few minutes so install + uninstall in one sitting prompt once.
-     The very first install runs the daemon from the application directory, which does not match
-     exec.path, so pkexec falls back to its generic prompt; the package postinst avoids that by
-     running the install itself. -->
+     The desktop runs pkexec /usr/libexec/axiom/axiomd with the install-service flag (install,
+     upgrade) or the uninstall-service flag; polkit matches the exec.path annotation and shows this
+     message instead of the generic "Authentication is required to run /path as the super user".
+     auth_admin_keep keeps the authorization for a few minutes so install + uninstall in one
+     sitting prompt once. The very first install from an unpacked bundle runs the daemon from the
+     application directory, which does not match exec.path, so pkexec falls back to its generic
+     prompt; the package postinst avoids that by running the install itself.
+     (XML comments must not contain a double hyphen: polkitd silently drops a file that does.) -->
 <policyconfig>
   <vendor>Axiom</vendor>
   <vendor_url>https://github.com/a-51-50/Axiom</vendor_url>

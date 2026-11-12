@@ -127,6 +127,14 @@ rm -rf "$STAGE/opt/axiom/packaging"
 # LTTng trace provider of the runtime: optional, needs liblttng-ust (not a dependency we want).
 find "$STAGE/opt/axiom" -name 'libcoreclrtraceptprovider.so' -delete
 install -m 0644 "$PKG/com.axiom.firewall.desktop" "$STAGE/usr/share/applications/"
+# polkitd drops a malformed action file without a word (pkaction then lists nothing): check it.
+if command -v python3 >/dev/null 2>&1; then
+  python3 -I -c 'import sys, xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])' "$PKG/com.axiom.firewall.policy" \
+    || die "$PKG/com.axiom.firewall.policy is not well-formed XML"
+fi
+if command -v desktop-file-validate >/dev/null 2>&1; then
+  desktop-file-validate "$PKG/com.axiom.firewall.desktop" || die "desktop entry is invalid"
+fi
 install -m 0644 "$PKG/com.axiom.firewall.policy" "$STAGE/usr/share/polkit-1/actions/"
 cp -a "$PKG/icons/hicolor/." "$STAGE/usr/share/icons/hicolor/"
 install -m 0644 "$PKG/debian/copyright" "$STAGE/usr/share/doc/axiom/copyright"
