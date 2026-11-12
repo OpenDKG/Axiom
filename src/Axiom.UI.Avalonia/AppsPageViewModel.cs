@@ -29,7 +29,7 @@ public sealed partial class AppsPageViewModel : PageViewModel, IDisposable
         IServiceRequestClient? serviceClient,
         IUserInteraction ui,
         IProcessActions processes)
-        : base("Applications", "Executables observed on this host · grouped by resolved path", "A")
+        : base("Applications", "Executables observed on this host — grouped by resolved path", "A")
     {
         _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
         _client = serviceClient;

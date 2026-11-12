@@ -35,6 +35,7 @@ public sealed class PrivacyShieldWorker(
     /// </summary>
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
+        controller.FlushBlockedHistory();
         dnsPlatform.RestoreIfNeeded();
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
     }

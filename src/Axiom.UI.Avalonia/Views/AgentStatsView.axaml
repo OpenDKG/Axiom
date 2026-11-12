@@ -7,37 +7,37 @@
     <StackPanel Margin="24,18,24,24" Spacing="14">
 
       <Grid ColumnDefinitions="*,10,*,10,*,10,*,10,*,10,*">
-        <Border Grid.Column="0" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="12">
+        <Border Grid.Column="0" Classes="card" Padding="12">
           <StackPanel Spacing="2">
             <controls:AxiomSelectableTextBlock Text="SESSIONS" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
             <controls:AxiomSelectableTextBlock Text="{Binding SessionCount}" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="12">
+        <Border Grid.Column="2" Classes="card" Padding="12">
           <StackPanel Spacing="2">
             <controls:AxiomSelectableTextBlock Text="API CALLS" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
             <controls:AxiomSelectableTextBlock Text="{Binding ApiCallCount}" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="4" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="12">
+        <Border Grid.Column="4" Classes="card" Padding="12">
           <StackPanel Spacing="2">
             <controls:AxiomSelectableTextBlock Text="TOOL CALLS" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
             <controls:AxiomSelectableTextBlock Text="{Binding ToolCallCount}" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="6" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="12">
+        <Border Grid.Column="6" Classes="card" Padding="12">
           <StackPanel Spacing="2">
             <controls:AxiomSelectableTextBlock Text="INSTALLS" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
             <controls:AxiomSelectableTextBlock Text="{Binding InstallCount}" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="8" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="12">
+        <Border Grid.Column="8" Classes="card" Padding="12">
           <StackPanel Spacing="2">
             <controls:AxiomSelectableTextBlock Text="FILE ACCESS" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
             <controls:AxiomSelectableTextBlock Text="{Binding FileAccessCount}" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="10" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="12">
+        <Border Grid.Column="10" Classes="card" Padding="12">
           <StackPanel Spacing="2">
             <controls:AxiomSelectableTextBlock Text="THREATS" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
             <controls:AxiomSelectableTextBlock Text="{Binding ThreatCount}" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.Critical}" />
@@ -45,7 +45,7 @@
         </Border>
       </Grid>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="6">
           <controls:AxiomSelectableTextBlock Text="Findings summary" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <Grid ColumnDefinitions="Auto,16,Auto,16,Auto,*">
@@ -71,7 +71,7 @@
         </StackPanel>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <controls:AxiomSelectableTextBlock Text="Local Blackbox activity" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
@@ -141,7 +141,7 @@
         </StackPanel>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="6">
           <controls:AxiomSelectableTextBlock Text="Agent sessions" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <controls:AxiomSelectableTextBlock Text="{Binding SessionStatusText}" FontSize="10"
@@ -161,7 +161,7 @@
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
                         <Grid ColumnDefinitions="*,1.4*,110,80" Margin="0,1"
-                              Tag="{Binding $parent[ListBox].DataContext}">
+                              Tag="{Binding $parent[UserControl].DataContext}">
                           <Grid.ContextMenu>
                             <ContextMenu>
                               <MenuItem Header="Copy session details"
@@ -191,7 +191,7 @@
         </StackPanel>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="6">
           <controls:AxiomSelectableTextBlock Text="Hook evidence" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <controls:AxiomSelectableTextBlock Text="Runtime evidence reported by the guard. Installed hooks alone are not proof of blocking."
@@ -221,7 +221,7 @@
         </StackPanel>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="6">
           <controls:AxiomSelectableTextBlock Text="Findings" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <ListBox Classes="data-list" ItemsSource="{Binding Findings}" SelectedItem="{Binding SelectedFinding}"

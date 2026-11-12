@@ -6,16 +6,33 @@
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <Grid ColumnDefinitions="*,14,*" Margin="24,18,24,24">
       <StackPanel Grid.Column="0" Spacing="14">
-        <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+        <Border Classes="card" Padding="16">
           <StackPanel Spacing="8">
             <controls:AxiomSelectableTextBlock Text="Appearance" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <controls:AxiomSelectableTextBlock Text="{Binding CurrentThemeText, StringFormat=Current theme: {0}}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" />
             <WrapPanel Orientation="Horizontal">
-              <Button Content="Dark" Command="{Binding UseDarkThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
-              <Button Content="Light" Command="{Binding UseLightThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
-              <Button Content="Dark Midnight" Command="{Binding UseDarkMidnightThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
-              <Button Content="Light Warm" Command="{Binding UseLightWarmThemeCommand}" Padding="14,6" Margin="0,0,8,8" />
+              <Button Content="Axiom Glass Dark" Command="{Binding UseGlassDarkThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsGlassDarkTheme}" />
+              <Button Content="Axiom Glass Light" Command="{Binding UseGlassLightThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsGlassLightTheme}" />
+              <Button Content="Dark" Command="{Binding UseDarkThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsDarkTheme}" />
+              <Button Content="Light" Command="{Binding UseLightThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsLightTheme}" />
+              <Button Content="Dark Midnight" Command="{Binding UseDarkMidnightThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsDarkMidnightTheme}" />
+              <Button Content="Light Warm" Command="{Binding UseLightWarmThemeCommand}" Padding="14,6" Margin="0,0,8,8" Classes.primary="{Binding IsLightWarmTheme}" />
             </WrapPanel>
+            <controls:AxiomSelectableTextBlock Text="Visual effects" FontSize="12"
+                                               Foreground="{DynamicResource Axiom.TextSecondary}" Margin="0,4,0,0" />
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="Auto" Command="{Binding UseAutoEffectsCommand}" Padding="12,5" Margin="0,0,8,0" Classes.primary="{Binding IsAutoEffects}" />
+              <Button Content="Full" Command="{Binding UseFullEffectsCommand}" Padding="12,5" Margin="0,0,8,0" Classes.primary="{Binding IsFullEffects}" />
+              <Button Content="Reduced" Command="{Binding UseReducedEffectsCommand}" Padding="12,5" Margin="0,0,8,0" Classes.primary="{Binding IsReducedEffects}" />
+              <Button Content="Off" Command="{Binding UseNoEffectsCommand}" Padding="12,5" Classes.primary="{Binding IsNoEffects}" />
+            </WrapPanel>
+            <controls:AxiomSelectableTextBlock Text="{Binding CurrentVisualEffectsText}" FontSize="10"
+                                               Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <Button Content="Restore network settings" Command="{Binding RestoreNetworkSettingsCommand}"
+                    IsVisible="{Binding HasNetworkRecovery}" Padding="12,6" HorizontalAlignment="Left" Margin="0,2,0,0"
+                    ToolTip.Tip="Restores the DNS servers saved before the last protection change and removes only Axiom-owned firewall rules." />
+            <controls:AxiomSelectableTextBlock Text="{Binding NetworkRecoveryStatusText}" IsVisible="{Binding HasNetworkRecovery}"
+                                               FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             <CheckBox Content="Show notifications" IsChecked="{Binding NotificationsEnabled}"
                       Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
             <CheckBox Content="Show tray icon" IsChecked="{Binding TrayNotificationsEnabled}"
@@ -28,7 +45,7 @@
           </StackPanel>
         </Border>
 
-        <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+        <Border Classes="card" Padding="16">
           <StackPanel Spacing="8">
             <controls:AxiomSelectableTextBlock Text="Startup" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
             <CheckBox Content="{x:Static presentation:PlatformText.StartWithOs}" IsChecked="{Binding StartWithWindows}"
@@ -44,8 +61,7 @@
       </StackPanel>
 
       <StackPanel Grid.Column="2" Spacing="14" VerticalAlignment="Top">
-        <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-                CornerRadius="8" Padding="16">
+        <Border Classes="card" Padding="16">
         <StackPanel Spacing="8">
           <controls:AxiomSelectableTextBlock Text="Build information" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7">
@@ -70,38 +86,58 @@
         </StackPanel>
         </Border>
 
-        <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-                CornerRadius="8" Padding="16">
+        <Border Classes="card" Padding="16">
           <StackPanel Spacing="8">
-            <controls:AxiomSelectableTextBlock Text="About Axiom" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <StackPanel Spacing="2">
-              <controls:AxiomSelectableTextBlock Text="AXIOM" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <controls:AxiomSelectableTextBlock Text="{Binding AboutTagline}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
-            </StackPanel>
-            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7" Margin="0,4,0,0">
-              <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="Version" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-              <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AppVersion}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Original creator" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-              <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AboutCreatedBy}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="Contributors" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-              <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AboutContributors}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="Copyright" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-              <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding AboutCopyright}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="License" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-              <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding AboutLicense}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="0" Text="Affiliation" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-              <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="1" Text="{Binding AboutAffiliationLabel}" FontSize="11" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="0" Text="Source code" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,14,0" />
-              <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="1" Text="{Binding AboutSource}" FontSize="11" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,Auto">
+              <controls:AxiomSelectableTextBlock Grid.Column="0" Text="About Axiom" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding AppVersion}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
             </Grid>
-            <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
+            <controls:AxiomSelectableTextBlock Text="{Binding AboutTagline}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+
+            <controls:AxiomSelectableTextBlock Text="Project Leadership" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
+            <Grid ColumnDefinitions="116,*" ColumnSpacing="10">
+              <Button Grid.Column="0" Content="{Binding AboutFounder.GitHubHandle}" Command="{Binding OpenProfileCommand}"
+                      CommandParameter="{Binding AboutFounder.ProfileUrl}"
+                      Background="Transparent" BorderThickness="0" Padding="0" VerticalAlignment="Center"
+                      HorizontalAlignment="Left" Foreground="{DynamicResource Axiom.Accent}" FontSize="11.5" />
+              <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding AboutFounder.Role}" FontSize="10.5"
+                                                 Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap"
+                                                 VerticalAlignment="Center" />
+            </Grid>
+            <controls:AxiomSelectableTextBlock Text="Co-Founders &amp; Core Maintainers" FontSize="10.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,8,0,2" />
+            <ItemsControl ItemsSource="{Binding AboutCoreTeam}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="116,*" ColumnSpacing="10" Margin="0,0,0,4">
+                    <Button Grid.Column="0" Content="{Binding GitHubHandle}"
+                            Command="{Binding $parent[UserControl].DataContext.OpenProfileCommand}"
+                            CommandParameter="{Binding ProfileUrl}"
+                            Background="Transparent" BorderThickness="0" Padding="0" VerticalAlignment="Center"
+                            HorizontalAlignment="Left" Foreground="{DynamicResource Axiom.Accent}" FontSize="11.5" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Role}" FontSize="10.5"
+                                                       Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap"
+                                                       VerticalAlignment="Center" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <controls:AxiomSelectableTextBlock Text="{Binding AboutCoreTeamStatement}" FontSize="10"
+                                               Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" Margin="0,4,0,0" />
+
+            <Border Height="1" Background="{DynamicResource Axiom.Border}" Margin="0,6,0,2" />
+            <WrapPanel Orientation="Horizontal">
               <Button Content="View license" Command="{Binding ViewLicenseCommand}" Padding="12,6" Margin="0,0,8,8" />
-              <Button Content="Third-party notices" Command="{Binding ViewThirdPartyNoticesCommand}" Padding="12,6" Margin="0,0,8,8" />
-              <Button Content="Contributors" Command="{Binding ViewContributorsCommand}" Padding="12,6" Margin="0,0,8,8" />
+              <Button Content="Notices" Command="{Binding ViewThirdPartyNoticesCommand}" Padding="12,6" Margin="0,0,8,8" />
+              <Button Content="Authors" Command="{Binding ViewContributorsCommand}" Padding="12,6" Margin="0,0,8,8" />
               <Button Content="Source code" Command="{Binding OpenSourceCommand}" Padding="12,6" Margin="0,0,8,8" />
+              <Button Content="OpenDKG" Command="{Binding OpenAffiliationCommand}" Padding="12,6" Margin="0,0,8,8" />
             </WrapPanel>
-            <controls:AxiomSelectableTextBlock Text="{Binding AboutAffiliation}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
-            <controls:AxiomSelectableTextBlock Text="The complete license, notice and third-party texts are bundled with this installation and stay readable offline." FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Text="{Binding AboutLegalLine}" FontSize="10"
+                                               Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Text="{Binding AboutAffiliation}" FontSize="10"
+                                               Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
           </StackPanel>
         </Border>
       </StackPanel>

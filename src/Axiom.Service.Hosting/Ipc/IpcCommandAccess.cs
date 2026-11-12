@@ -53,6 +53,8 @@ public static class IpcCommandAccess
         IpcCommandTypes.ThreatShareEnqueue,
         IpcCommandTypes.ThreatShareDismiss,
         IpcCommandTypes.ThreatShareRecord,
+        IpcCommandTypes.NetworkRecoveryCapture,
+        IpcCommandTypes.NetworkRecoveryRestore,
     };
 
     /// <summary>True unless the command is explicitly read-only (unknown commands count as writes).</summary>

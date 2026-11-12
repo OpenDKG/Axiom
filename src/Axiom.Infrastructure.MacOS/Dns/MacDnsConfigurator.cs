@@ -381,7 +381,19 @@ public sealed class MacDnsConfigurator
         }
     }
 
-    private void FlushCache() => _runner.Run(DsCacheUtil, ["-flushcache"], ToolTimeout);
+    /// <summary>Flushes the system resolver cache (<c>dscacheutil -flushcache</c>).</summary>
+    public void FlushCache() => _runner.Run(DsCacheUtil, ["-flushcache"], ToolTimeout);
+
+    /// <summary>Service name → device (<c>en0</c>) from <c>networksetup -listnetworkserviceorder</c>.</summary>
+    public IReadOnlyDictionary<string, string> ListServiceDevices()
+    {
+        var order = _runner.Run(NetworkSetup, ["-listnetworkserviceorder"], ToolTimeout);
+        return order.Succeeded
+            ? NetworkSetupParser.ParseServiceOrder(order.StandardOutput)
+                .GroupBy(entry => entry.Name, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First().Device, StringComparer.Ordinal)
+            : new Dictionary<string, string>(StringComparer.Ordinal);
+    }
 }
 
 public sealed record RedirectResult(bool Changed, IReadOnlyList<string> Services, string? Error);

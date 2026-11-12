@@ -12,7 +12,7 @@ public sealed partial class SupportPageViewModel : PageViewModel
     private readonly IUserInteraction _ui;
 
     public SupportPageViewModel(IUserInteraction ui)
-        : base("Support", "How to use Axiom, report issues and support the project", "S")
+        : base("Help & Support", "How to use Axiom, report issues and support the project", "S")
     {
         _ui = ui ?? throw new ArgumentNullException(nameof(ui));
         _config = DonationDestinations.Load();

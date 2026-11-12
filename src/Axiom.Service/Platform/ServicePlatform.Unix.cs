@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Core.Firewall;
 using Axiom.Core.Protection;
 using Axiom.Contracts.Monitoring;
@@ -22,6 +23,8 @@ namespace Axiom.Service;
 /// </summary>
 internal static class ServicePlatform
 {
+    private const string ServiceProcessName = "axiomd";
+
     public static bool TryRunCommand(string[] args, out int exitCode)
     {
         exitCode = 0;
@@ -46,13 +49,6 @@ internal static class ServicePlatform
         }
 
         if (args.Length > 0 &&
-            string.Equals(args[0], "--restore-dns", StringComparison.OrdinalIgnoreCase))
-        {
-            exitCode = new LaunchdServiceInstaller().RestoreDns(Console.Out, Console.Error);
-            return true;
-        }
-
-        if (args.Length > 0 &&
             string.Equals(args[0], "--doctor", StringComparison.OrdinalIgnoreCase))
         {
             exitCode = MacDoctor.Run(args, Console.Out);
@@ -62,42 +58,19 @@ internal static class ServicePlatform
         return false;
     }
 
-    public static IPrivacyDnsPlatform CreateDefaultPrivacyDnsPlatform() =>
-        OperatingSystem.IsMacOS()
-            ? MacPrivacyDnsPlatform.Create(MacServicePaths.Default)
-            : NullPrivacyDnsPlatform.Instance;
-
-    public static void ConfigureServices(HostApplicationBuilder builder)
-    {
-        var paths = MacServicePaths.Default;
-        EnforceDataDirectoryPermissions(paths);
-        builder.Services.AddSingleton(paths);
-        builder.Services.AddSingleton<FilterStatus>();
-        builder.Services.AddSingleton<FlowTable>();
-        builder.Services.AddSingleton<FilterEventServer>();
-        builder.Services.AddHostedService<FilterEventWorker>();
-        builder.Services.AddSingleton<IConnectionSnapshotSource>(provider => MacConnectionSource.Create(
-            provider.GetRequiredService<FlowTable>(),
-            provider.GetRequiredService<FilterStatus>()));
-        builder.Services.AddSingleton<MacFirewallPolicyAdapter>();
-        builder.Services.AddSingleton<IFirewallPolicyAdapter>(provider => provider.GetRequiredService<MacFirewallPolicyAdapter>());
-        builder.Services.AddSingleton<IPrivacyDnsPlatform>(_ => CreateDefaultPrivacyDnsPlatform());
-        builder.Services.AddSingleton<IIpcTransport>(provider => new UnixSocketIpcTransport(
-            provider.GetRequiredService<MacServicePaths>(),
-            provider.GetRequiredService<ProtectionSettingsStore>()));
-    }
-
     /// <summary>
     /// The machine data directory is 0700 root with 0600 files (filter/ 0755, rules.json 0644 for
-    /// the extension). Applied on every daemon start so an older layout is tightened in place.
+    /// the extension). Applied on every daemon start so an older layout is tightened in place
+    /// (the macOS counterpart of the Windows ProgramData ACL hardening).
     /// </summary>
-    private static void EnforceDataDirectoryPermissions(MacServicePaths paths)
+    public static void HardenMachineState()
     {
         if (!Environment.IsPrivilegedProcess)
         {
             return;
         }
 
+        var paths = MacServicePaths.Default;
         try
         {
             var changed = MacDataDirectoryPermissions.Enforce(paths.MachineDataDirectory);
@@ -110,5 +83,73 @@ internal static class ServicePlatform
         {
             Console.Error.WriteLine($"Data directory permissions: {exception.Message}");
         }
+    }
+
+    /// <summary>Network recovery baseline in the machine data root (<c>network-recovery.txt</c>, 0600).</summary>
+    public static string RecoverySnapshotPath => MacServicePaths.Default.RecoverySnapshotFile;
+
+    public static IPrivacyDnsPlatform CreateDefaultPrivacyDnsPlatform() =>
+        OperatingSystem.IsMacOS()
+            ? MacPrivacyDnsPlatform.Create(MacServicePaths.Default)
+            : NullPrivacyDnsPlatform.Instance;
+
+    public static void ConfigureServices(HostApplicationBuilder builder)
+    {
+        var paths = MacServicePaths.Default;
+        builder.Services.AddSingleton(paths);
+        builder.Services.AddSingleton<FilterStatus>();
+        builder.Services.AddSingleton<FlowTable>();
+        builder.Services.AddSingleton<FilterEventServer>();
+        builder.Services.AddHostedService<FilterEventWorker>();
+        builder.Services.AddSingleton<IConnectionSnapshotSource>(provider => MacConnectionSource.Create(
+            provider.GetRequiredService<FlowTable>(),
+            provider.GetRequiredService<FilterStatus>()));
+        builder.Services.AddSingleton<MacFirewallPolicyAdapter>();
+        builder.Services.AddSingleton<IFirewallPolicyAdapter>(provider => provider.GetRequiredService<MacFirewallPolicyAdapter>());
+        builder.Services.AddSingleton<IOwnedRuleRecoveryAdapter>(provider => provider.GetRequiredService<MacFirewallPolicyAdapter>());
+        builder.Services.AddSingleton<INetworkRecoveryDnsAdapter>(provider => MacDnsRecoveryAdapter.Create(
+            provider.GetRequiredService<MacServicePaths>()));
+        builder.Services.AddSingleton<IPrivacyDnsPlatform>(_ => CreateDefaultPrivacyDnsPlatform());
+        builder.Services.AddSingleton<IIpcTransport>(provider => new UnixSocketIpcTransport(
+            provider.GetRequiredService<MacServicePaths>(),
+            provider.GetRequiredService<ProtectionSettingsStore>()));
+    }
+
+    // --- NetworkRecoveryCommand platform hooks (offline administrator recovery, `sudo axiomd --recover-network`) ---
+
+    /// <summary>axiomd is a console executable; its output already reaches the terminal.</summary>
+    public static void AttachParentConsole()
+    {
+    }
+
+    public static bool IsAdministrator() => Environment.IsPrivilegedProcess;
+
+    public static bool IsServiceProcessRunning()
+    {
+        var runningProcesses = System.Diagnostics.Process.GetProcessesByName(ServiceProcessName);
+        try
+        {
+            return runningProcesses.Any(process => process.Id != Environment.ProcessId);
+        }
+        finally
+        {
+            foreach (var process in runningProcesses)
+            {
+                process.Dispose();
+            }
+        }
+    }
+
+    public static (INetworkRecoveryDnsAdapter Dns, IOwnedRuleRecoveryAdapter Firewall, IDisposable? Owner) CreateRecoveryAdapters()
+    {
+        var paths = MacServicePaths.Default;
+        var firewall = new MacFirewallPolicyAdapter(paths, new FilterStatus());
+        return (MacDnsRecoveryAdapter.Create(paths), firewall, firewall);
+    }
+
+    public static string CurrentActor()
+    {
+        var sudoUser = Environment.GetEnvironmentVariable("SUDO_USER");
+        return string.IsNullOrWhiteSpace(sudoUser) ? Environment.UserName : sudoUser.Trim();
     }
 }

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Axiom.Contracts.Firewall;
 using Axiom.Core.Firewall;
+using Axiom.Core.Protection;
 
 namespace Axiom.Infrastructure.MacOS.Filter;
 
@@ -14,7 +15,7 @@ namespace Axiom.Infrastructure.MacOS.Filter;
 /// Axiom-named Windows Firewall rules) and republishes rules.json atomically with a new generation
 /// after every change. Writes require the same gate as Windows (<see cref="FirewallWriteGate"/>).
 /// </summary>
-public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisposable
+public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRuleRecoveryAdapter, IDisposable
 {
     private static readonly JsonSerializerOptions StateJson = new(JsonSerializerDefaults.Web)
     {
@@ -132,6 +133,7 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisposab
             {
                 ManagedRuleId = spec.ManagedRuleId,
                 OsRuleName = OwnedRuleName.Create(spec.ManagedRuleId, spec.Direction),
+                OwnershipGroup = OwnedRuleOwnership.GroupName,
                 Spec = spec,
                 State = RuleState.Applied,
                 LastVerifiedUtc = now,
@@ -199,6 +201,96 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisposab
                 ManagedRuleId = managedRuleId,
                 State = RuleState.Desired,
                 OsRuleName = existing?.OsRuleName,
+                VerifiedUtc = _time.GetUtcNow(),
+            };
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return Failed(managedRuleId, "filter.write_failed", exception.Message);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Recovery read: the captured identity must still be in <c>managed-rules.json</c> with the
+    /// strict <c>Axiom::{id}::{OUT|IN}</c> name, the same direction and Axiom ownership metadata.
+    /// </summary>
+    public Task<OwnedRulePresence> InspectOwnedRuleAsync(
+        Guid managedRuleId,
+        FirewallDirection direction,
+        CancellationToken ct)
+    {
+        if (managedRuleId == Guid.Empty)
+        {
+            throw new ArgumentException("Managed rule id must not be empty.", nameof(managedRuleId));
+        }
+
+        ct.ThrowIfCancellationRequested();
+        var existing = LoadState().Rules.FirstOrDefault(rule => rule.ManagedRuleId == managedRuleId);
+        if (existing is null)
+        {
+            return Task.FromResult(OwnedRulePresence.Absent);
+        }
+
+        return Task.FromResult(
+            existing.Spec.Direction == direction && OwnedRuleOwnership.IsRecoverable(existing)
+                ? OwnedRulePresence.Owned
+                : OwnedRulePresence.ForeignOrChanged);
+    }
+
+    /// <summary>
+    /// Recovery-only removal of one captured rule in one direction. Like Windows it is not behind
+    /// the interactive write gate (it must work while the shield is off) but is refused outside the
+    /// root daemon or an explicitly privileged administrator process, and it re-checks ownership
+    /// immediately before republishing the table without the rule.
+    /// </summary>
+    public async Task<RuleApplyResult> RemoveCapturedOwnedRuleAsync(
+        Guid managedRuleId,
+        FirewallDirection direction,
+        CancellationToken ct)
+    {
+        if (managedRuleId == Guid.Empty)
+        {
+            throw new ArgumentException("Managed rule id must not be empty.", nameof(managedRuleId));
+        }
+
+        if (!ProtectionWriteConsent.IsServiceHost && !Environment.IsPrivilegedProcess)
+        {
+            throw new UnauthorizedAccessException(
+                "Network recovery removal requires the root axiomd daemon or an administrator recovery command.");
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var state = LoadState();
+            var existing = state.Rules.FirstOrDefault(rule => rule.ManagedRuleId == managedRuleId);
+            if (existing is null)
+            {
+                return new RuleApplyResult
+                {
+                    Success = true,
+                    ManagedRuleId = managedRuleId,
+                    State = RuleState.Desired,
+                    VerifiedUtc = _time.GetUtcNow(),
+                };
+            }
+
+            if (existing.Spec.Direction != direction || !OwnedRuleOwnership.IsRecoverable(existing))
+            {
+                return Failed(managedRuleId, "rule.not_owned", "The rule identity exists but its ownership metadata changed; it was not removed.");
+            }
+
+            Publish(state.Rules.Where(rule => rule.ManagedRuleId != managedRuleId).ToList(), state.Generation);
+            return new RuleApplyResult
+            {
+                Success = true,
+                ManagedRuleId = managedRuleId,
+                State = RuleState.Desired,
+                OsRuleName = existing.OsRuleName,
                 VerifiedUtc = _time.GetUtcNow(),
             };
         }
@@ -346,8 +438,18 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IDisposab
             }
 
             var state = JsonSerializer.Deserialize<ManagedRuleState>(File.ReadAllText(_paths.ManagedRulesFile), StateJson);
+            // managed-rules.json is the daemon's own 0600 record, so every entry is Axiom-owned;
+            // records written before the recovery feature carry no group and get the marker here.
             return state is { SchemaVersion: ManagedRuleState.CurrentSchemaVersion }
-                ? state with { Rules = (state.Rules ?? []).Where(rule => rule.ManagedRuleId != Guid.Empty).ToList() }
+                ? state with
+                {
+                    Rules = (state.Rules ?? [])
+                        .Where(rule => rule.ManagedRuleId != Guid.Empty)
+                        .Select(rule => string.IsNullOrWhiteSpace(rule.OwnershipGroup)
+                            ? rule with { OwnershipGroup = OwnedRuleOwnership.GroupName }
+                            : rule)
+                        .ToList(),
+                }
                 : new ManagedRuleState();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)

@@ -43,47 +43,42 @@
           "SQLitePCLRaw.core": "2.1.13"
         }
       },
-      "System.CodeDom": {
-        "type": "Transitive",
-        "resolved": "10.0.14",
-        "contentHash": "oJYTzyBcc2g06mU699LaJfm964mdlFg6l7BPeqdu8bmK6Fdy9fL9BWugGsZAqWtjnNWp4tanZZ9DlZwHJmmhgg=="
-      },
       "axiom.contracts": {
         "type": "Project"
       },
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )"
+          "Axiom.Contracts": "[0.11.0, )"
         }
       },
       "axiom.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )",
-          "Axiom.Core": "[0.10.6, )",
-          "Axiom.Service.Hosting": "[0.10.6, )",
+          "Axiom.Contracts": "[0.11.0, )",
+          "Axiom.Core": "[0.11.0, )",
+          "Axiom.Presentation": "[0.11.0, )",
           "System.Management": "[10.0.14, )"
         }
       },
       "axiom.persistence": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )",
+          "Axiom.Contracts": "[0.11.0, )",
           "Microsoft.Data.Sqlite": "[10.0.14, )"
         }
       },
-      "axiom.service.hosting": {
+      "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )",
-          "Axiom.Core": "[0.10.6, )"
+          "Axiom.Contracts": "[0.11.0, )",
+          "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
       "axiom.ui": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )",
+          "Axiom.Contracts": "[0.11.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
@@ -108,10 +103,7 @@
         "type": "CentralTransitive",
         "requested": "[10.0.14, )",
         "resolved": "10.0.14",
-        "contentHash": "ywAltakc72Oe7liNatclpyq8oiLYx0VMSjQvphlsbPbiQ9glrV3JKvn5M2xFbsOzzh8sV3QAiUdmu2AV/ffN7Q==",
-        "dependencies": {
-          "System.CodeDom": "10.0.14"
-        }
+        "contentHash": "ywAltakc72Oe7liNatclpyq8oiLYx0VMSjQvphlsbPbiQ9glrV3JKvn5M2xFbsOzzh8sV3QAiUdmu2AV/ffN7Q=="
       }
     },
     "net10.0-windows7.0/win-x64": {
@@ -124,10 +116,7 @@
         "type": "CentralTransitive",
         "requested": "[10.0.14, )",
         "resolved": "10.0.14",
-        "contentHash": "ywAltakc72Oe7liNatclpyq8oiLYx0VMSjQvphlsbPbiQ9glrV3JKvn5M2xFbsOzzh8sV3QAiUdmu2AV/ffN7Q==",
-        "dependencies": {
-          "System.CodeDom": "10.0.14"
-        }
+        "contentHash": "ywAltakc72Oe7liNatclpyq8oiLYx0VMSjQvphlsbPbiQ9glrV3JKvn5M2xFbsOzzh8sV3QAiUdmu2AV/ffN7Q=="
       }
     }
   }

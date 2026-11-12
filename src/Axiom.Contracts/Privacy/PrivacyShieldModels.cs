@@ -96,6 +96,28 @@ public sealed record PrivacyShieldBlockedEvent(
 
     public string AgentPath { get; init; } = string.Empty;
 
+    /// <summary>The policy suffix that matched, which may be a parent of the queried domain.</summary>
+    public string MatchedRule { get; init; } = string.Empty;
+
+    /// <summary>Local blocklist source id, or "starter"/"custom". Used only for local provenance.</summary>
+    public string SourceId { get; init; } = string.Empty;
+
+    public string SourceName { get; init; } = string.Empty;
+
+    /// <summary>Pinned digest or last-update timestamp of the source, when available.</summary>
+    public string SourceVersion { get; init; } = string.Empty;
+
+    public string AxiomVersion { get; init; } = string.Empty;
+
+    /// <summary>Why the local resolver blocked it; never sent to Blackbox as free text.</summary>
+    public string DetectionReason { get; init; } = string.Empty;
+
+    /// <summary>True when the match came from a downloaded public list rather than a local rule.</summary>
+    public bool IsListDerived { get; init; }
+
+    /// <summary>True when the DNS lookup was blocked, not fetched; this is not a completed download.</summary>
+    public bool LookupBlocked { get; init; }
+
     public string AgentDisplay => string.IsNullOrWhiteSpace(AgentName) ? "unknown agent" : AgentName;
 
     public string AppDisplay => string.IsNullOrWhiteSpace(AppName) ? "unknown app" : AppName;
@@ -109,7 +131,8 @@ public sealed record PrivacyShieldSourceInfo(
     string Url,
     string License,
     PrivacyCategory Category,
-    string Description);
+    string Description,
+    string Sha256 = "");
 
 public sealed record PrivacyShieldStoredRule(
     string Domain,
@@ -133,10 +156,11 @@ public static class PrivacyShieldSourceCatalog
         new(
             "hagezi-pro",
             "HaGeZi Multi PRO",
-            "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt",
+            "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@924bb2a8306e609ae8b0113c2b676f5fde072d16/wildcard/pro-onlydomains.txt",
             "GPL-3.0",
             PrivacyCategory.Ads | PrivacyCategory.Tracking | PrivacyCategory.Analytics,
-            "Broad ads, trackers and telemetry; verify current upstream license and size."),
+            "Broad ads, trackers and telemetry; pinned to a commit and checked by digest.",
+            "ECF78F54E65FD78F70FB1636CE6BBAD563306246F8C00CDCDCE18B1C8BE01A7A"),
         new(
             "oisd-big",
             "OISD Big",
@@ -172,8 +196,8 @@ public static class PrivacyShieldSourceCatalog
             "MIT",
             PrivacyCategory.Malware,
             "Malware-only domains from the abuse.ch URLhaus feed, compiled by malware-filter (MIT, " +
-            "updated every 12 hours). Axiom may propose a blocked domain from this list for community " +
-            "sharing, but only when an agent actually fetched it and sharing is on."),
+            "updated every 12 hours). Matches stay local with source/version provenance and are not " +
+            "proposed to the community; they would only echo the same public list."),
     ];
 }
 

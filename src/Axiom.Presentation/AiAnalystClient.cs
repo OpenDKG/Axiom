@@ -31,7 +31,12 @@ public sealed class AiAnalystClient : IDisposable
         "this shape: {\"status\":\"INSUFFICIENT_DATA|UNKNOWN|LOW_OBSERVED_RISK|SUSPICIOUS|SUPPORTED_ALERT\"," +
         "\"severity\":\"unknown|low|medium|high|critical\",\"confidence\":\"none|low|medium|high\"," +
         "\"summary\":\"...\",\"observations\":[],\"evidenceReferences\":[]," +
-        "\"alternativeExplanations\":[],\"missingEvidence\":[],\"recommendedActions\":[]}. " +
+        "\"alternativeExplanations\":[],\"missingEvidence\":[],\"recommendedActions\":[]," +
+        "\"indicators\":[{\"type\":\"domain|url|ip|hash\",\"value\":\"...\",\"role\":\"malicious|suspicious|unknown\"}]}. " +
+        "Every indicator value must appear verbatim in the supplied evidence (a remote endpoint, " +
+        "command line or baseline remote). Never take an indicator from your own knowledge, the " +
+        "summary, a recommendation or a value you construct, and use role malicious only for a " +
+        "SUSPICIOUS or SUPPORTED_ALERT finding at high or critical severity. " +
         "A model warning is not proof of compromise. Never propose or perform a firewall, shell, " +
         "file, credential or agent-configuration change. Use INSUFFICIENT_DATA when evidence is " +
         "missing. Never return SAFE or CLEAN.";
@@ -937,6 +942,17 @@ public sealed class AiAnalystClient : IDisposable
             AlternativeExplanations = LimitList(parsed.AlternativeExplanations),
             MissingEvidence = LimitList(parsed.MissingEvidence),
             RecommendedActions = LimitList(parsed.RecommendedActions),
+            Indicators = (parsed.Indicators ?? [])
+                .Where(indicator => !string.IsNullOrWhiteSpace(indicator.Value))
+                .Select(indicator => new AiIndicator
+                {
+                    Type = (indicator.Type ?? string.Empty).Trim().ToLowerInvariant(),
+                    Value = Limit(indicator.Value, 500),
+                    Role = NormalizeValue(indicator.Role, ["malicious", "suspicious", "unknown"], "unknown"),
+                })
+                .Where(indicator => indicator.Type.Length > 0)
+                .Take(10)
+                .ToArray(),
             Model = model,
             AnalysisTimestampUtc = DateTimeOffset.UtcNow,
             HumanReviewed = false,

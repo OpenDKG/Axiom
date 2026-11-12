@@ -1,6 +1,7 @@
 # Privacy Shield (local DNS filtering)
 
-Privacy Shield is an optional, **default-disabled** local DNS policy module. It runs inside the
+Privacy Shield is an optional local DNS policy module: **partial installation leaves it disabled**,
+while an explicitly chosen complete installation can enable it with a Balanced profile. It runs inside the
 existing `Axiom.Service` process and listens only on loopback. It does not change Windows DNS
 settings, the hosts file, firewall rules, agent configuration or certificates.
 
@@ -30,18 +31,21 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
   allowed queries, and has a clear action. It is deliberately not shared machine-wide because it is
   the only DNS data kept. This is the one deliberate DNS history exception; it is local and
   user-clearable. Recent blocks are refreshed every 2 seconds and can be **Allowed** or **Blocked**
-  directly from the row. Allow adds the domain to the custom allowlist; Block removes it from the
-  allowlist and adds it to the custom blocklist.
+  directly from the row; a **Graph** action performs a user-triggered, read-only lookup against the
+  local Blackbox graph and reports Unknown when no entry/provenance is available. Allow adds the
+  domain to the custom allowlist; Block removes it from the allowlist and adds it to the custom
+  blocklist.
 - Application attribution is best-effort: Axiom maps the loopback UDP/TCP source port to the owning
   PID through the Windows owner tables. Protected or already-exited processes may show
   `unknown app`.
-- A catalog of **five HTTPS-only, license-labelled** sources (HaGeZi Multi PRO, OISD Big,
-  WindowsSpyBlocker, The Block List Project Ads and Tracking). A source update downloads with a
+- A catalog of **six HTTPS-only, license-labelled** sources (HaGeZi Multi PRO, OISD Big,
+  WindowsSpyBlocker, The Block List Project Ads and Tracking, and the dedicated malware-labelled
+  URLhaus domain feed compiled by malware-filter). A source update downloads with a
   20 MB/45 s bound, parses and normalizes domains, then atomically replaces the previous ruleset only
   if every selected source succeeds. The previous rules file is retained. The local cap is 500,000
   unique domains, and every selected source keeps a reserved share so a large list cannot starve a
   smaller telemetry list such as WindowsSpyBlocker.
-- Licenses: HaGeZi and OISD are GPL-3.0, WindowsSpyBlocker is MIT, and the two Block List Project
+- Licenses: HaGeZi and OISD are GPL-3.0, WindowsSpyBlocker and malware-filter are MIT, and the two Block List Project
   lists are Unlicense. Axiom downloads them from the upstream URL at runtime and does not bundle the
   list bytes; no separate approval is required beyond the license and attribution terms. Upstream
   terms must be rechecked before adding or redistributing a list. See
@@ -71,6 +75,19 @@ and points to the UAC helper. Once an adapter points at it, the adapter row show
 `127.0.0.1 · Privacy Shield` and the hint disappears as soon as the first query arrives.
 Manual queries to `127.0.0.1` still work for testing, but they do not prove that system-wide
 traffic is filtered.
+
+### Browser secure DNS (DoH)
+
+A browser switched to its own DNS-over-HTTPS provider stops asking Windows, so even a correctly
+pointed adapter sees none of its queries. The page reads the Chrome and Edge
+`User Data\<profile>\Preferences` files and Firefox `Profiles\<profile>\prefs.js`, and shows a
+warning when a profile uses secure DNS (`dns_over_https.mode` `secure`, or `automatic` with a
+custom template) or Firefox `network.trr.mode` 2 or 3. The warning names the browser and profile
+and where to turn secure DNS off.
+
+This is detection only; no browser setting is changed and nothing is written to the profile. It
+does not read Windows system DoH: that applies to a configured public DNS server, and an adapter
+pointed at `127.0.0.1` has no DoH template.
 
 ## What is not implemented
 
@@ -120,14 +137,23 @@ the field empty keeps the current Windows DNS servers. After enabling the resolv
 ## Safety and recovery
 
 - A **complete installation** enables Privacy Shield once, during setup, with the Balanced profile
-  and all five sources selected. A **partial installation** leaves it off. Updates and later starts
+  and the setup-selected initial sources. Six sources are available in the catalog; inspect the
+  enabled-source selections rather than assuming every source is active. A **partial installation** leaves it off. Updates and later starts
   never enable it by themselves, and no mode changes adapter DNS silently.
-- Stopping the resolver leaves the Windows adapter pointing at a non-responsive loopback address
-  if the user manually configured it. Restore the adapter DNS or set a real upstream before
-  stopping the resolver.
-- The service never modifies DNS adapter state, so a crash or uninstall cannot silently rewrite it.
-  Recovery is the same manual adapter setting.
-- No DNS payload is uploaded, sold or sent to AI/DKG/Blackbox services.
+- The elevated adapter helper preserves the previous adapter DNS servers and, when there is a real
+  fallback, places them behind the local resolver. If the resolver stops answering, Windows may use
+  that fallback. **DNS still resolves, but Axiom filtering is bypassed until the resolver returns.**
+- The service has a privileged failsafe that attempts to restore the saved adapter DNS on resolver
+  disable, service stop or failed resolver start, using a validated machine snapshot. It cannot
+  guarantee recovery on every damaged/missing snapshot or unusual corporate adapter.
+- If no fallback is available or DNS fails, use **Restore saved DNS (UAC)** or your original adapter
+  settings; see [Firewall and DNS recovery](FIREWALL_RECOVERY.md). Do not assume that disabling the
+  resolver leaves the adapter unchanged.
+- Raw local DNS browsing history is not uploaded, sold or sent as a dataset to AI/DKG/Blackbox.
+  **Allowed DNS questions are forwarded to the configured upstream resolver.** Public-list block
+  matches stay local with source/version provenance and are not proposed to the community; only an
+  evidence-bound AI Analyst indicator can enter the preview queue, and the user must explicitly
+  approve Blackbox submission. See [Threat intelligence](THREAT_INTELLIGENCE.md).
 - Query counters reset when the resolver restarts.
 
 ## Limitations

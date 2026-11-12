@@ -47,6 +47,11 @@ public sealed record MacServicePaths(string MachineDataDirectory, string RunDire
 
     public string DnsBackupFile => Path.Combine(MachineDataDirectory, "privacy-shield-dns-backup.json");
 
+    /// <summary>Upstream network recovery baseline (<c>network-recovery.txt</c>, 0600) in the machine data root.</summary>
+    public string RecoverySnapshotFile => Path.Combine(
+        MachineDataDirectory,
+        Axiom.Contracts.NetworkRecovery.NetworkRecoverySnapshotStore.FileName);
+
     /// <summary>A test layout rooted in <paramref name="root"/>.</summary>
     public static MacServicePaths ForRoot(string root) => new(
         Path.Combine(root, "data"),

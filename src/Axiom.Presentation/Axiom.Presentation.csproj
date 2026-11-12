@@ -19,6 +19,10 @@
     <None Remove="Resources\support-links.json" />
     <EmbeddedResource Include="Resources\support-links.json"
                       LogicalName="Axiom.Presentation.Resources.support-links.json" />
+    <EmbeddedResource Include="Resources\dkg\package.json"
+                      LogicalName="Axiom.Presentation.Resources.dkg.package.json" />
+    <EmbeddedResource Include="Resources\dkg\package-lock.json"
+                      LogicalName="Axiom.Presentation.Resources.dkg.package-lock.json" />
   </ItemGroup>
 
 </Project>

@@ -120,6 +120,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
         "openchamber" => "OpenChamber",
         "codex" => "Codex",
         "claude" => "Claude Code",
+        "antigravity" => "Antigravity",
         "cursor" => "Cursor",
         "copilot" => "GitHub Copilot CLI",
         "gemini" => "Gemini CLI",
@@ -187,7 +188,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
 /// </summary>
 public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 {
-    private readonly OptionalModuleProbe _probe = new();
+    private readonly OptionalModuleProbe _probe;
 
     private readonly OptionalModuleInstaller _installer = new();
 
@@ -212,6 +213,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     private readonly CodexProtection _codexProtection = new();
 
     private readonly ClaudeProtection _claudeProtection = new();
+
+    private readonly AntigravityProtection _antigravityProtection = new();
 
     private readonly CursorProtection _cursorProtection = new();
 
@@ -267,8 +270,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         IApiKeyProtector protector,
         IUiTimerFactory timers,
         IShellActions shell,
-        IServiceRequestClient? serviceClient = null)
-        : base("Security", "Optional intelligence and protection modules", "\uE8D7")
+        IServiceRequestClient? serviceClient = null,
+        ILoopbackListenerInspector? listenerInspector = null)
+        : base("Integrations", "Optional modules, API keys and integration health", "\uE8D7")
     {
         ArgumentNullException.ThrowIfNull(ui);
         ArgumentNullException.ThrowIfNull(dialogs);
@@ -279,6 +283,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         _dialogs = dialogs;
         _shell = shell;
         _actions = new ConnectionActionService(serviceClient, _ui, new UnsupportedProcessActions());
+        _probe = new OptionalModuleProbe(listenerInspector: listenerInspector);
         _reputationStore = new ReputationSettingsStore(protector);
         _communityStore = new CommunityFeedSettingsStore(protector);
 
@@ -1248,6 +1253,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             case "Blackbox":
                 allowedChanges.Add(_codexProtection.HooksPath);
                 allowedChanges.Add(_claudeProtection.SettingsPath);
+                allowedChanges.Add(_antigravityProtection.HooksPath);
                 allowedChanges.Add(_cursorProtection.HooksPath);
                 allowedChanges.Add(_copilotProtection.HooksPath);
                 allowedChanges.Add(_geminiProtection.SettingsPath);
@@ -1326,7 +1332,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
         if (choice == false)
         {
-            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber, Codex, Claude Code, Cursor, Copilot, Gemini, Windsurf, Cline, ZCode or DeepSeek Harness hook files were changed.";
+            InstallStatusText = "Partial installation selected. No OpenCode, OpenChamber, Codex, Claude Code, Antigravity, Cursor, Copilot, Gemini, Windsurf, Cline, ZCode or DeepSeek Harness hook files were changed.";
             return;
         }
 
@@ -1334,6 +1340,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         var openCode = _openCodeProtection.EnsureInstalled();
         var codex = _codexProtection.EnsureInstalled();
         var claude = _claudeProtection.EnsureInstalled();
+        var antigravity = _antigravityProtection.EnsureInstalled();
         var cursor = _cursorProtection.EnsureInstalled();
         var copilot = _copilotProtection.EnsureInstalled();
         var gemini = _geminiProtection.EnsureInstalled();
@@ -1356,6 +1363,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             _codexProtection.HookScriptPath,
             _claudeProtection.SettingsPath,
             _claudeProtection.HookScriptPath,
+            _antigravityProtection.HooksPath,
+            _antigravityProtection.HookScriptPath,
             _cursorProtection.HooksPath,
             _cursorProtection.HookScriptPath,
             _copilotProtection.HooksPath,
@@ -1493,6 +1502,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         // Status refresh is read-only. Startup provisioning handles Axiom-managed hooks separately.
         AddCodexAgents(blackboxConnected);
         AddClaudeAgents(blackboxConnected);
+        AddAntigravityAgents(blackboxConnected);
         AddCursorAgents(blackboxConnected);
         AddCopilotAgents(blackboxConnected);
         AddGeminiAgents(blackboxConnected);
@@ -1653,6 +1663,43 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         {
             ProcessRunning = processRunning,
             TrustRequired = trust.TrustRequired,
+        });
+    }
+
+    private void AddAntigravityAgents(bool blackboxConnected)
+    {
+        if (!_antigravityProtection.IsAntigravityDetected)
+        {
+            return;
+        }
+
+        var installed = _antigravityProtection.IsInstalled;
+        var processRunning = AgentProcessProbe.IsRunning("antigravity");
+        var evidence = _agentEvidence.Latest("antigravity", EvidenceLifetime);
+        var status = AgentProtectionClassifier.Classify(
+            detected: true,
+            hookConfigured: installed,
+            runtimeObserved: evidence is not null,
+            failureObserved: evidence?.IsFailure == true,
+            blackboxAvailable: blackboxConnected,
+            auditOnly: IsAuditOnly);
+        var detail = !installed
+            ? "Antigravity config detected; the Axiom PreToolUse hook is missing or malformed."
+            : evidence is null
+                ? (processRunning
+                    ? "Antigravity is running; the hook is installed but no invocation has been observed. Restart Antigravity if it was started before the hook."
+                    : "Hook is installed; start Antigravity to verify runtime loading.")
+                : evidence.IsFailure
+                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
+
+        ProtectedAgents.Add(new ProtectedAgent(
+            "antigravity",
+            _antigravityProtection.HooksPath,
+            status,
+            detail)
+        {
+            ProcessRunning = processRunning,
         });
     }
 

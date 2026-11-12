@@ -3,6 +3,7 @@ using Axiom.Contracts.Firewall;
 using Axiom.Contracts.History;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Contracts.Privacy;
 using Axiom.Contracts.Protection;
 using Axiom.Contracts.Threat;
@@ -59,4 +60,8 @@ public sealed class IpcRequestHandlers
     public Func<ThreatShareDismissRequest, CancellationToken, Task<ThreatShareQueueStatus>>? ThreatShareDismiss { get; init; }
 
     public Func<ThreatShareRecordRequest, CancellationToken, Task<ThreatShareQueueStatus>>? ThreatShareRecord { get; init; }
+
+    public Func<string, CancellationToken, Task<NetworkRecoveryCaptureResult>>? NetworkRecoveryCapture { get; init; }
+
+    public Func<string, CancellationToken, Task<NetworkRecoveryRestoreResult>>? NetworkRecoveryRestore { get; init; }
 }

@@ -36,17 +36,17 @@ public static class ThemeSettingsStore
         {
             if (!File.Exists(SettingsPath))
             {
-                return UiTheme.Dark;
+                return UiTheme.GlassDark;
             }
 
             var value = File.ReadAllText(SettingsPath).Trim();
             return Enum.TryParse<UiTheme>(value, ignoreCase: true, out var theme)
                 ? theme
-                : UiTheme.Dark;
+                : UiTheme.GlassDark;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            return UiTheme.Dark;
+            return UiTheme.GlassDark;
         }
     }
 

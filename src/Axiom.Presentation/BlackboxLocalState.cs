@@ -186,7 +186,7 @@ public static class BlackboxLocalState
 
         var candidates = new[]
         {
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "hermes", "blackbox"),
+            BlackboxPaths.ResolveBlackboxHome(),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".hermes", "blackbox"),
         };
 

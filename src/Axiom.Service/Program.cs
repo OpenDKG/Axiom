@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Core.Firewall;
 using Axiom.Core.Protection;
 using Axiom.Persistence;
 using Axiom.Service;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+// Explicit administrator recovery when the service or desktop cannot run. Dry run unless --apply.
+if (args.Length > 0 &&
+    string.Equals(args[0], "--recover-network", StringComparison.OrdinalIgnoreCase))
+{
+    return NetworkRecoveryCommand.Run(args);
+}
 
 // Elevated helper mode: register or remove the service (Windows service / macOS launchd daemon),
 // then exit. This runs once, from an elevation prompt started by the desktop app, and is the only
@@ -13,6 +22,11 @@ if (ServicePlatform.TryRunCommand(args, out var exitCode))
 {
     return exitCode;
 }
+
+// The service owns machine-wide state. Harden it (Windows: ProgramData ACL and the protected
+// service image; macOS: 0700/0600 modes of the machine data root) before anything reads settings
+// or migrates data.
+ServicePlatform.HardenMachineState();
 
 Axiom.Persistence.LegacyDataMigration.Migrate();
 
@@ -24,6 +38,16 @@ ServicePlatform.ConfigureServices(builder);
 
 builder.Services.AddSingleton<ConnectionSnapshotCache>();
 builder.Services.AddSingleton(new HistoryStore(DatabasePaths.ResolveForCurrentProcess()));
+builder.Services.AddSingleton(provider => new NetworkRecoveryController(
+    provider.GetRequiredService<INetworkRecoveryDnsAdapter>(),
+    provider.GetRequiredService<IOwnedRuleRecoveryAdapter>(),
+    () => ProtectionWriteConsent.IsServiceHost,
+    () => provider.GetRequiredService<ProtectionSettingsStore>().Load().Enabled,
+    ServicePlatform.RecoverySnapshotPath,
+    provider.GetRequiredService<HistoryStore>(),
+    provider.GetRequiredService<ILogger<NetworkRecoveryController>>(),
+    isLoopbackResolverExpected: () => provider.GetRequiredService<PrivacyShieldController>().IsEnabled));
+builder.Services.AddHostedService<NetworkRecoveryWorker>();
 builder.Services.AddSingleton<FirewallRuleCoordinator>();
 builder.Services.AddSingleton(new ProtectionSettingsStore());
 builder.Services.AddSingleton<ProtectionController>();

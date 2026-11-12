@@ -23,6 +23,7 @@ public sealed partial class PipeServerWorker(
     PrivacyShieldController privacyShield,
     ProtectionController protection,
     ThreatShareController threatShare,
+    NetworkRecoveryController networkRecovery,
     ILogger<PipeServerWorker> logger) : BackgroundService
 {
     // Windows logs "Pipe \\.\pipe\axiom allows SID S-1-…" (unchanged wording); macOS logs the socket
@@ -96,6 +97,10 @@ public sealed partial class PipeServerWorker(
                 threatShare.DismissAsync(request.Id, cancellationToken),
             ThreatShareRecord = (request, cancellationToken) =>
                 threatShare.RecordAsync(request, cancellationToken),
+            NetworkRecoveryCapture = (actorSid, cancellationToken) =>
+                networkRecovery.CaptureAsync(actorSid, cancellationToken),
+            NetworkRecoveryRestore = (actorSid, cancellationToken) =>
+                networkRecovery.RestoreAsync(actorSid, cancellationToken),
         };
 
         var dispatcher = new IpcRequestDispatcher(

@@ -5,6 +5,7 @@ using Axiom.Contracts.Firewall;
 using Axiom.Contracts.History;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Contracts.Privacy;
 using Axiom.Contracts.Protection;
 using Axiom.Contracts.Threat;
@@ -68,6 +69,10 @@ public sealed class IpcRequestDispatcher
 
     private readonly Func<ThreatShareRecordRequest, CancellationToken, Task<ThreatShareQueueStatus>>? _threatShareRecord;
 
+    private readonly Func<string, CancellationToken, Task<NetworkRecoveryCaptureResult>>? _networkRecoveryCapture;
+
+    private readonly Func<string, CancellationToken, Task<NetworkRecoveryRestoreResult>>? _networkRecoveryRestore;
+
     private readonly Func<bool> _writeGateOpen;
 
     private readonly Action<string>? _log;
@@ -104,6 +109,8 @@ public sealed class IpcRequestDispatcher
         _threatShareEnqueue = handlers.ThreatShareEnqueue;
         _threatShareDismiss = handlers.ThreatShareDismiss;
         _threatShareRecord = handlers.ThreatShareRecord;
+        _networkRecoveryCapture = handlers.NetworkRecoveryCapture;
+        _networkRecoveryRestore = handlers.NetworkRecoveryRestore;
         _writeGateOpen = writeGateOpen ?? (() => Axiom.Core.Firewall.FirewallWriteGate.IsOpen);
         _log = log;
     }
@@ -394,6 +401,20 @@ public sealed class IpcRequestDispatcher
                             envelope.Id,
                             IpcErrorCodes.InvalidRequest,
                             "Rule apply payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    // A same-user process can reach this pipe. Inbound allow is the one rule shape
+                    // that opens a listening port to the network, so it is not accepted here even
+                    // for the allowed SID; the interactive UI cannot request it either.
+                    if (IpcRulePolicy.IsRejected(spec))
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Inbound allow rules are not accepted over the local pipe.",
                             cancellationToken).ConfigureAwait(false);
                         break;
                     }
@@ -689,6 +710,66 @@ public sealed class IpcRequestDispatcher
                     await WriteResultAsync(stream, envelope.Id, recorded, cancellationToken).ConfigureAwait(false);
                     break;
 
+                case IpcCommandTypes.NetworkRecoveryCapture:
+                    if (_networkRecoveryCapture is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Network recovery is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    // The request never carries adapter ids, DNS servers or rule names. The service
+                    // captures machine state itself and the snapshot store validates it.
+                    if (envelope.Payload is not null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Network recovery capture does not accept client-supplied state.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var captured = await _networkRecoveryCapture(actorSid, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, captured, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.NetworkRecoveryRestore:
+                    if (_networkRecoveryRestore is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Network recovery is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    // Restore is limited to the validated machine snapshot; arbitrary DNS servers
+                    // or rule names are never accepted over the pipe.
+                    if (envelope.Payload is not null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Network recovery restore does not accept client-supplied state.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var restored = await _networkRecoveryRestore(actorSid, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, restored, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.PrivacyStatus:
                     if (_privacyStatus is null)
                     {
@@ -895,6 +976,16 @@ public sealed class IpcRequestDispatcher
         if (_threatShareRecord is not null)
         {
             commands.Add(IpcCommandTypes.ThreatShareRecord);
+        }
+
+        if (_networkRecoveryCapture is not null)
+        {
+            commands.Add(IpcCommandTypes.NetworkRecoveryCapture);
+        }
+
+        if (_networkRecoveryRestore is not null)
+        {
+            commands.Add(IpcCommandTypes.NetworkRecoveryRestore);
         }
 
         if (_writeGateOpen())

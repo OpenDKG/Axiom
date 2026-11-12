@@ -87,9 +87,16 @@ public sealed class BlockedEventRow(PrivacyShieldBlockedEvent blocked, bool isAl
 
     public string StateText => isAllowed ? "allowed" : "blocked";
 
-    public string Tooltip => string.IsNullOrWhiteSpace(blocked.AppPath)
+    public string Tooltip => (string.IsNullOrWhiteSpace(blocked.AppPath)
         ? $"{blocked.Domain}\nBlocked app: {blocked.AppDisplay}\nCategory: {blocked.CategoryText}"
-        : $"{blocked.Domain}\nBlocked app: {blocked.AppDisplay}\nPath: {blocked.AppPath}\nCategory: {blocked.CategoryText}";
+        : $"{blocked.Domain}\nBlocked app: {blocked.AppDisplay}\nPath: {blocked.AppPath}\nCategory: {blocked.CategoryText}") +
+        (string.IsNullOrWhiteSpace(ProvenanceText) ? string.Empty : $"\n{ProvenanceText}");
+
+    /// <summary>Local list provenance; never sent to Blackbox as free text.</summary>
+    public string ProvenanceText => blocked.SourceId.Length == 0
+        ? string.Empty
+        : $"Source: {blocked.SourceName} ({blocked.SourceId}) {blocked.SourceVersion} · " +
+          $"{blocked.DetectionReason} · Axiom {blocked.AxiomVersion}".TrimEnd(' ', '·');
 }
 
 /// <summary>One (domain, app) pair in the live list, so a chatty app cannot flood the page.</summary>
@@ -210,6 +217,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private readonly IUserInteraction _ui;
     private readonly IDnsAdapterHelper _dnsHelper;
     private readonly IUiTimer? _statsTimer;
+    private readonly BlackboxGraphLookup _graphLookup = new();
     private bool _updating;
     private bool _resolverActive;
 
@@ -218,13 +226,17 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private bool _statsRefreshing;
     private readonly HashSet<string> _expandedHistoryApps = new(StringComparer.OrdinalIgnoreCase);
     private string? _blockedHistorySignature;
+    private DateTimeOffset _lastDohScanUtc = DateTimeOffset.MinValue;
+    private bool _dohScanRunning;
+
+    private static readonly TimeSpan DohScanInterval = TimeSpan.FromSeconds(30);
 
     public PrivacyShieldPageViewModel(
         IServiceRequestClient? serviceClient,
         IUserInteraction ui,
         IDnsAdapterHelper dnsHelper,
         IUiTimerFactory timers)
-        : base("Privacy Shield", "Local DNS filtering · complete installation enables the resolver", "P")
+        : base("Privacy Shield", "DNS Protection — local DNS filtering; complete installation enables the resolver", "P")
     {
         ArgumentNullException.ThrowIfNull(ui);
         ArgumentNullException.ThrowIfNull(dnsHelper);
@@ -276,6 +288,12 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     [ObservableProperty]
     private string _dnsOutageWarningText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasDohBypass;
+
+    [ObservableProperty]
+    private string _dohBypassText = DohBypassDetector.NoBypassText;
 
     /// <summary>Grouped live list: one row per (domain, app), newest first, bounded.</summary>
     public ObservableCollection<RecentBlockedGroup> RecentBlockedGroups { get; } = [];
@@ -428,6 +446,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     public void Activate()
     {
         RefreshAdapters();
+        QueueDohScan(force: true);
         _statsTimer?.Start();
         _ = RefreshAsync();
     }
@@ -438,6 +457,23 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     {
         _statsTimer?.StopTimer();
         _statsTimer?.Dispose();
+        _graphLookup.Dispose();
+    }
+
+    [RelayCommand]
+    private async Task CheckGraphAsync(BlockedEventRow? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        var result = await _graphLookup
+            .LookupDomainAsync(row.Domain, CancellationToken.None)
+            .ConfigureAwait(true);
+        await _ui
+            .ShowMessageAsync("Local threat graph lookup", result.Describe(), CancellationToken.None)
+            .ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -1098,6 +1134,49 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Browser DoH is a property of a profile file, not of the resolver, so it is read off the UI
+    /// thread and refreshed at most every 30 seconds. A browser that resolves names itself leaves
+    /// the resolver's counters at zero without saying why.
+    /// </summary>
+    private void QueueDohScan(bool force = false)
+    {
+        if (_dohScanRunning)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!force && now - _lastDohScanUtc < DohScanInterval)
+        {
+            return;
+        }
+
+        _lastDohScanUtc = now;
+        _dohScanRunning = true;
+        _ = RefreshDohAsync();
+    }
+
+    private async Task RefreshDohAsync()
+    {
+        try
+        {
+            var findings = await Task
+                .Run(() => DohBypassDetector.Detect())
+                .ConfigureAwait(true);
+            DohBypassText = DohBypassDetector.BuildWarningText(findings);
+            HasDohBypass = findings.Count > 0;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            DohBypassText = "Browser secure-DNS settings could not be read: " + exception.Message;
+            HasDohBypass = false;
+        }
+        finally
+        {
+            _dohScanRunning = false;
+        }
+    }
 
     private static readonly TimeSpan MacDnsOutageGrace = TimeSpan.FromSeconds(8);
     private DateTimeOffset? _dnsOutageFirstSeenUtc;
@@ -1275,6 +1354,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
 
         UpdateDnsOutageWarning();
+        QueueDohScan();
     }
 
     private void ApplyProfileCategories(PrivacyShieldProfile profile)

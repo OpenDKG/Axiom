@@ -1,11 +1,14 @@
 # Optional integrations
 
 Axiom's standard build is the local network monitor and firewall policy manager. Blackbox and
-OriginTrail DKG are **optional third-party integrations**. Axiom reads their loopback status; the
-Install buttons launch the official installers only after an explicit confirmation.
+OriginTrail DKG are **optional third-party integrations**. Axiom checks their local loopback status,
+can explicitly install/start the modules and provides a Blackbox settings/sync/report interface.
+These operations require the user's choice or a separately enabled auto-sync preference; none of
+them is on the per-connection firewall enforcement path.
 
-Both probes accept only loopback URLs. A non-loopback endpoint is rejected, and no request leaves
-the machine.
+Both **status probes** accept only loopback URLs; a non-loopback module endpoint is rejected.
+This does not mean the third-party node, its package installer, sync or approved report submission
+is offline-only: those components may communicate with peers or external endpoints.
 
 The Microsoft Store MSIX build is **core-only**. It does not include these integrations, the
 Blackbox/DKG installers or any agent-hook adapter. See [STORE.md](STORE.md).
@@ -18,17 +21,32 @@ Privacy Shield is a separate optional local DNS resolver; it is documented in
 The Security page has an **Install** button next to each module that is not connected. It opens a
 visible PowerShell window only after a confirmation dialog:
 
-- **DKG**: installs `@origintrail-official/dkg` into
-  `%LOCALAPPDATA%\Axiom\modules\dkg` with `--ignore-scripts`, sets a per-user `DKG_HOME`, runs
-  the official interactive testnet setup (`--network testnet --role edge --store oxigraph`) and
-  starts the node.
+- **DKG**: installs the pinned `@origintrail-official/dkg@10.1.0` (the testnet tag, not npm's
+  mainnet `latest`) into `%LOCALAPPDATA%\Axiom\modules\dkg` with `npm ci` from the embedded
+  `package-lock.json`, sets a per-user `DKG_HOME`, runs the official interactive testnet setup
+  (`--network testnet --role edge --store oxigraph`), disables the package's five-minute
+  auto-updater, and starts the node. An existing Axiom-managed install with another version is
+  stopped and upgraded.
 - **Blackbox**: downloads the official Umanitek Windows installer to
   `%LOCALAPPDATA%\Axiom\modules\blackbox`, verifies its SHA-256 against the pinned digest in
   `OptionalModuleInstaller` (`261122F5E879596E88D63C30D5D36D12B4E155986F83AA3EB83ADEB406E41179`)
   and refuses to run on a mismatch, then runs it with `-StoreBackend oxigraph` (no Docker). Update
   the pin only after reviewing a new official vendor release. It then repairs the Python dependencies the dashboard
   needs (`aiohttp`, `cryptography`, `psutil`, FastAPI, uvicorn) and starts the dashboard at
-  `http://127.0.0.1:9700`.
+  `http://127.0.0.1:9700`. The status probe only treats the dashboard as connected when
+  `/api/graph-status` returns `mode`, `node_reachable`, `dkg_url` and `sync_progress`; another
+  listener on 9700 is reported as `UNKNOWN`.
+
+Axiom additionally checks **who owns the listening port**. On Windows the probe reads the owner
+from the IP Helper TCP tables and resolves its name, path and command line without elevation:
+
+- **Process observed**: the port belongs to the module runtime and its path or command line names
+  the module. The status detail shows the process and PID.
+- **Unverified**: the owner could not be read (protected process, non-Windows host). The documented
+  contract still decides the status, but the endpoint is never trusted for settings writes.
+- **Mismatch**: the port belongs to an unrelated process, so the module is reported as `UNKNOWN`
+  even when the JSON looks right. `OptionalModuleStatus.CanReceivePrivilegedSettings` is true only
+  for an observed process; no current code sends settings to these endpoints.
 
 If Blackbox or DKG is installed but not running, its action changes to **Start**; it starts the
 existing dashboard/node without reinstalling. The node/dashboard runs in the background, and child
@@ -40,8 +58,17 @@ after installation.
 The activity strip shows the last 30 loopback checks; it is a health indicator, not module event
 content. The Agents page also shows a **Threat sharing** card that reads the dashboard's `report`
 setting (`off · opt in` or `on · signed, redacted`) and can enable or disable signed, redacted
-community sharing after confirmation. Only privacy-safe indicators are shared; prompts, commands,
-file paths, credentials, model content and raw session ids are never sent.
+community sharing after confirmation. Only privacy-safe indicators are queued; prompts, commands,
+file paths, credentials, model content and raw session ids are never sent. A queued indicator is
+signed and sent only when the user presses **Share** on it or **Send now** for the queue — Axiom
+never sends on a timer. A timeout, missing CLI or offline node marks the item **deferred** with a
+retry time instead of rejecting it; a daily cap leaves it pending for the next day. Only an explicit
+schema or policy refusal is recorded as rejected.
+
+The card also shows which Hermes profile the reporter uses and whether its consent and
+`reporter_key.pem` are present. Axiom resolves the profile once: `HERMES_HOME` when set, then
+`%LOCALAPPDATA%\hermes`, then the legacy `~\.hermes`. `BLACKBOX_HOME` overrides the Blackbox folder
+inside it.
 
 Agent workspace labels are deliberately not interchangeable:
 
@@ -232,8 +259,10 @@ and quoting survive the mode update. Axiom does not write Codex `config.toml`.
 
 ## Blackbox control center
 
-The Agents page reads the local dashboard at `http://127.0.0.1:9700`. It never opens a public
-listener and never sends data off the machine.
+The Agents page reads the local dashboard at `http://127.0.0.1:9700`. Axiom does not open a
+public API listener; **dashboard API calls remain on loopback**, while a user-requested graph
+sync or approved reporter submission may cause the separate Blackbox/DKG components to contact
+external peers. The local-only API boundary must not be confused with network-silent integration.
 
 - **Configure** opens a native settings dialog. It reads `GET /api/settings`, edits only requested
   fields, and posts a patch to `POST /api/settings` with the per-process `X-Blackbox-Token` from
@@ -268,6 +297,9 @@ listener and never sends data off the machine.
   back to the local `authoritative-sync.json`, `sync_progress.json` and `ruleset.json` files for the
   last known counts and graph sample instead of falsely reporting the node offline. Null values are
   shown as `—`, never as zero, and an offline node is never presented as an empty or clean graph.
+  **Auto-sync is opt-in and off by default**; when enabled, Axiom asks the local dashboard for
+  incremental catch-up approximately every 15 minutes. A graph drawn from the local fallback files
+  is last-known state, not proof of a new remote verification.
 - **Test Protection** creates a temporary harmless canary, adds it to protected paths, requires
   Block mode, calls the local guard, restores the original paths and removes the canary. Its result
   is explicitly labelled guard-level; it does not claim that an agent hook was executed.
@@ -275,6 +307,10 @@ listener and never sends data off the machine.
   activation; a hook file alone is not presented as `PROTECTED`. Connected/configured states
   (`HOOK INSTALLED`, `HOOK LOADED`) are green, while `AUDIT ONLY` is amber and `DEGRADED`/`OFFLINE`
   are red.
+
+For the complete IOC lifecycle, SWM/VM distinctions, local retry semantics, upstream curation,
+provenance and paid VM publishing boundaries, see [Threat intelligence](THREAT_INTELLIGENCE.md).
+Axiom currently does not directly pay TRAC/gas or publish VM assets.
 
 ## Reputation provider (VirusTotal, opt-in)
 
@@ -322,10 +358,13 @@ URL; nothing is published and no local path or connection data is sent.
 Requirements: Node.js and npm, per the official DKG V10 documentation.
 
 ```powershell
-npm install -g @origintrail-official/dkg
-dkg init
+npm install -g @origintrail-official/dkg@10.1.0
+dkg init --network testnet --role edge --store oxigraph
 dkg start
 ```
+
+Axiom's own installer pins the same testnet release in a lockfile and turns off the node's
+auto-updater; a global install follows npm's tags and is the user's own choice.
 
 Verify the node directly:
 
@@ -334,7 +373,9 @@ Invoke-RestMethod http://127.0.0.1:9200/api/status
 ```
 
 Then open Axiom -> **Security** -> **Check again**. A running node shows `CONNECTED` with its
-version, peer id and role. The default endpoint is `http://127.0.0.1:9200`; override it only with a
+version, peer id, role and network. The probe only accepts the documented `/api/status` identity
+fields and a known testnet/mainnet `networkId`; any other listener on 9200 is reported as
+`UNKNOWN`, not connected. The default endpoint is `http://127.0.0.1:9200`; override it only with a
 loopback URL:
 
 ```powershell
@@ -351,7 +392,7 @@ Blackbox is Umanitek's runtime security product for AI agents. Follow Umanitek's
 prerequisites and review the installer before running it. The Windows installer is:
 
 ```powershell
-iwr -useb blackbox-w.umanitek.ai | iex
+iwr -useb https://blackbox-w.umanitek.ai | iex
 ```
 
 The installer sets up Hermes, the Blackbox plugin and a local DKG node; the dashboard listens on
@@ -373,8 +414,8 @@ Official documentation: <https://github.com/umanitek/agent-blackbox>
 ## Blackbox mode
 
 After Blackbox is installed, the Security page shows **Audit** and **Block** buttons next to it.
-They update only `~/.hermes/config.yaml` -> `plugins.entries.blackbox.mode`; no reinstall or admin is
-needed.
+They update only `plugins.entries.blackbox.mode` in the resolved Hermes profile's `config.yaml`
+(`HERMES_HOME`, then `%LOCALAPPDATA%\hermes`, then `~\.hermes`); no reinstall or admin is needed.
 
 - **Audit** logs and reports findings without stopping agent actions. Recommended for first use.
 - **Block** stops confirmed threats at or above the configured `block_severity` (default `critical`).
@@ -389,7 +430,8 @@ An **Uninstall** button appears when Axiom detects an installed/configured modul
 
 - **Blackbox**: stops processes whose command line points into
   `%LOCALAPPDATA%\Axiom\modules\blackbox`, removes that folder, the
-  `%USERPROFILE%\.local\bin\blackbox.cmd` shortcut, `.hermes\blackbox` and the
+  `%USERPROFILE%\.local\bin\blackbox.cmd` shortcut, the resolved Blackbox home (usually
+  `%LOCALAPPDATA%\hermes\blackbox`, or `~\.hermes\blackbox` on legacy profiles) and the
   `Agent Blackbox DKG node` scheduled task if present. Other Hermes profiles, logs and global
   Python/npm packages are kept.
 - **DKG**: stops local processes under the Axiom DKG folders and removes
@@ -404,10 +446,14 @@ Firewall rules, other applications or unrelated user data.
 
 | Status | Meaning |
 |---|---|
-| `CONNECTED` | The loopback endpoint answered. Axiom only read its status. |
-| `NOT RUNNING` | Nothing answered on the configured loopback endpoint. Start the module separately. |
-| `UNAVAILABLE` | The endpoint is invalid or not loopback; no request was sent. |
+| `CONNECTED` | An expected local module identity/status payload was returned; does **not** prove fresh graph sync or active agent blocking. |
+| `NOT RUNNING` | The configured local endpoint did not answer. Use the explicit Start action if installed. |
+| `UNKNOWN` | A listener answered but did not identify as the expected module. |
+| `UNAVAILABLE` | An invalid/non-loopback module endpoint was rejected; no probe was sent. |
 | `CHECKING` | The initial probe is still running. |
+
+Graph sync has separate `synced`, `syncing`, `node offline` and `unknown` states; a hook has
+separate installed, loaded, audited and confirmed-blocked states.
 
 ## Security boundaries
 
@@ -415,8 +461,14 @@ Firewall rules, other applications or unrelated user data.
   silently.
 - Uninstall stops only processes whose command line points into the Axiom module folder; it does
   not stop unrelated agents or global services.
-- Axiom does not configure or control a module after installation; it only reads status.
-- No remote endpoint, cloud lookup, token display or credential storage.
+- Axiom can explicitly configure Blackbox settings/mode, trigger a local-dashboard sync,
+  start an installed module and run user-approved reporter submissions. It does **not** silently
+  write third-party agent configurations outside its documented marker-owned adapters.
+- Local status probes are loopback-only, but selected feeds, AI providers, VirusTotal and the
+  underlying DKG/Blackbox components can access external endpoints when enabled.
+- Axiom stores selected opt-in provider/feed credentials using DPAPI, while Blackbox has its own
+  local profile, signing identity and consent files. A local status probe alone does not require a
+  DKG wallet.
 - No DKG wallet or token is required for the status probe.
 - Neither module is on the per-connection firewall enforcement path.
 - A `CONNECTED` status is not a malware verdict and does not replace Windows Firewall.

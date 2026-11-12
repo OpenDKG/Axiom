@@ -4,6 +4,7 @@ using Axiom.Contracts.Firewall;
 using Axiom.Contracts.History;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Contracts.Privacy;
 using Axiom.Contracts.Protection;
 using Axiom.Contracts.Threat;
@@ -56,6 +57,8 @@ public sealed class PipeServer
         Func<ThreatShareEnqueueRequest, CancellationToken, Task<ThreatShareQueueStatus>>? threatShareEnqueue = null,
         Func<ThreatShareDismissRequest, CancellationToken, Task<ThreatShareQueueStatus>>? threatShareDismiss = null,
         Func<ThreatShareRecordRequest, CancellationToken, Task<ThreatShareQueueStatus>>? threatShareRecord = null,
+        Func<string, CancellationToken, Task<NetworkRecoveryCaptureResult>>? networkRecoveryCapture = null,
+        Func<string, CancellationToken, Task<NetworkRecoveryRestoreResult>>? networkRecoveryRestore = null,
         Action<string>? log = null)
         : this(
             pipeName,
@@ -84,6 +87,8 @@ public sealed class PipeServer
                 ThreatShareEnqueue = threatShareEnqueue,
                 ThreatShareDismiss = threatShareDismiss,
                 ThreatShareRecord = threatShareRecord,
+                NetworkRecoveryCapture = networkRecoveryCapture,
+                NetworkRecoveryRestore = networkRecoveryRestore,
             },
             log)
     {

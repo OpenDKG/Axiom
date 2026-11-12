@@ -33,13 +33,13 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
     <ProjectReference Include="..\Axiom.Infrastructure.Windows\Axiom.Infrastructure.Windows.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
-    <Compile Remove="Platform\ServicePlatform.Unix.cs;Platform\FilterEventWorker.cs;Platform\UnixAssemblyInfo.cs" />
+    <Compile Remove="Platform\ServicePlatform.Unix.cs;Platform\MachineStateSecurity.Unix.cs;Platform\FilterEventWorker.cs;Platform\UnixAssemblyInfo.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <ProjectReference Include="..\Axiom.Infrastructure.MacOS\Axiom.Infrastructure.MacOS.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
-    <Compile Remove="Platform\ServicePlatform.Windows.cs;Platform\ServiceInfo.Windows.cs;ServiceInstaller.cs;PrivacyDnsFailSafe.cs" />
+    <Compile Remove="Platform\ServicePlatform.Windows.cs;Platform\ServiceInfo.Windows.cs;ServiceInstaller.cs;ServiceImageProtection.cs;MachineStateSecurity.cs;PrivacyDnsFailSafe.cs" />
   </ItemGroup>
 
   <ItemGroup>

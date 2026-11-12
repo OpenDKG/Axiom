@@ -6,7 +6,8 @@
         x:Class="Axiom.UI.Avalonia.MainWindow"
         Title="Axiom — Free Open-Source Network &amp; AI Agent Security"
         Width="1460" Height="900" MinWidth="900" MinHeight="600"
-        Background="{DynamicResource Axiom.Window}" Foreground="{DynamicResource Axiom.TextPrimary}"
+        Background="Transparent" Foreground="{DynamicResource Axiom.TextPrimary}"
+        FontFamily="Segoe UI Variable Text, Segoe UI, Inter, Noto Sans"
         UseLayoutRounding="True"
         WindowDecorations="BorderOnly"
         ExtendClientAreaToDecorationsHint="True"
@@ -14,7 +15,7 @@
   <Window.Styles>
     <Style Selector="Button.caption">
       <Setter Property="Width" Value="46" />
-      <Setter Property="Height" Value="38" />
+      <Setter Property="Height" Value="44" />
       <Setter Property="Padding" Value="0" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
@@ -77,21 +78,26 @@
     </DataTemplate>
   </Window.DataTemplates>
 
-  <Grid ColumnDefinitions="236,*" RowDefinitions="38,*">
+  <Grid x:Name="RootLayout" ColumnDefinitions="252,*" RowDefinitions="44,*"
+        Classes.glass="{Binding IsGlassTheme}"
+        Classes.glasslight="{Binding IsGlassLight}">
+    <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Window}" />
+    <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.AmbientGlow}" />
+    <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.AmbientWash}" />
     <Border Grid.Row="0" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}"
             BorderThickness="0,0,0,1" chrome:WindowDecorationProperties.ElementRole="TitleBar">
-      <Grid ColumnDefinitions="*,Auto" Margin="14,0,4,0">
-        <StackPanel x:Name="TitleContent" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png" Width="20" Height="20" Stretch="Uniform"
+      <Grid ColumnDefinitions="*,Auto" Margin="18,0,4,0">
+        <StackPanel x:Name="TitleContent" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png" Width="22" Height="22" Stretch="Uniform"
                  RenderOptions.BitmapInterpolationMode="HighQuality" />
-          <TextBlock Text="AXIOM" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-          <TextBlock Text="Free Open-Source Network &amp; AI Agent Security" FontSize="10"
+          <TextBlock Text="AXIOM" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <TextBlock Text="Free Open-Source Network &amp; AI Agent Security" FontSize="10.5"
                      Foreground="{DynamicResource Axiom.TextMuted}" />
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0" VerticalAlignment="Stretch">
           <Button x:Name="AlertsButton" Classes="caption" Click="OnAlertsClicked" ToolTip.Tip="Notifications"
                   chrome:WindowDecorationProperties.ElementRole="User">
-            <Grid Width="46" Height="38">
+            <Grid Width="46" Height="44">
               <TextBlock x:Name="BellGlyph" Text="&#xE7E7;" FontFamily="Segoe MDL2 Assets" FontSize="13"
                          Foreground="{DynamicResource Axiom.TextPrimary}"
                          HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -126,9 +132,7 @@
            Placement="BottomEdgeAlignedRight"
            IsLightDismissEnabled="True"
            HorizontalOffset="0" VerticalOffset="4">
-      <Border Width="430" MaxHeight="470" Background="{DynamicResource Axiom.Surface}"
-              BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1"
-              CornerRadius="8" Padding="12">
+      <Border Classes="card" Width="430" MaxHeight="470" Padding="12">
         <Grid RowDefinitions="Auto,*,Auto">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -178,25 +182,37 @@
 
     <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,*,Auto">
-        <StackPanel Grid.Row="0" Margin="20,14,20,12" Spacing="8">
-          <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-lockup.png" Height="54" Stretch="Uniform"
+        <StackPanel Grid.Row="0" Margin="20,18,20,14" Spacing="9">
+          <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-lockup.png" Height="56" Stretch="Uniform"
                  HorizontalAlignment="Left" RenderOptions.BitmapInterpolationMode="HighQuality" />
-          <TextBlock Text="LIVE · READ-ONLY" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" FontWeight="SemiBold" />
-          <TextBlock Text="{Binding VersionText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
+          <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="6" Padding="8,3"
+                  HorizontalAlignment="Left">
+            <TextBlock Text="LOCAL-FIRST · NO TELEMETRY" Foreground="{DynamicResource Axiom.Accent}"
+                       FontSize="9" FontWeight="SemiBold" />
+          </Border>
+          <TextBlock Text="{Binding VersionText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10.5" />
         </StackPanel>
 
         <ListBox Grid.Row="1" Classes="nav-list" ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
-                 Background="Transparent" BorderThickness="0" Margin="8,0">
+                 Background="Transparent" BorderThickness="0" Margin="10,0">
           <ListBox.ItemTemplate>
             <DataTemplate>
-              <Grid ColumnDefinitions="3,*">
-                <Border Grid.Column="0" Width="3" Height="16" CornerRadius="1.5"
-                        Background="{DynamicResource Axiom.Accent}" Margin="0,0,9,0"
-                        VerticalAlignment="Center"
-                        IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
-                <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="12.5"
-                           Foreground="{DynamicResource Axiom.TextPrimary}" Padding="0,4" />
-              </Grid>
+              <StackPanel>
+                <TextBlock Text="{Binding GroupLabel}" IsVisible="{Binding HasGroupLabel}"
+                           FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Axiom.TextMuted}"
+                           Margin="10,8,0,3" />
+                <Border Classes="nav-item">
+                  <Grid ColumnDefinitions="3,10,*">
+                    <Border Grid.Column="0" Width="3" Height="18" CornerRadius="1.5"
+                            Background="{DynamicResource Axiom.Accent}"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
+                    <TextBlock Grid.Column="2" Text="{Binding Title}" FontSize="13"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource Axiom.TextPrimary}" />
+                  </Grid>
+                </Border>
+              </StackPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
@@ -226,26 +242,26 @@
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="64,*,30">
+    <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="74,*,34">
       <Border Grid.Row="0" Background="{DynamicResource Axiom.Window}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
-        <Grid Margin="24,0,20,0" ColumnDefinitions="*,Auto">
-          <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="{Binding SelectedPage.Title}" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <TextBlock Text="{Binding SelectedPage.Subtitle}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" />
+        <Grid Margin="28,0,22,0" ColumnDefinitions="*,Auto">
+          <StackPanel VerticalAlignment="Center" Spacing="2">
+            <TextBlock Text="{Binding SelectedPage.Title}" Classes="page-title" />
+            <TextBlock Text="{Binding SelectedPage.Subtitle}" Classes="page-subtitle" />
           </StackPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-            <ComboBox Width="150" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
-                      ToolTip.Tip="Choose a theme." />
-            <TextBlock Text="Local only · no telemetry" Foreground="{DynamicResource Axiom.TextMuted}"
-                       FontSize="11" VerticalAlignment="Center" />
+            <ComboBox Width="170" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
+                      ToolTip.Tip="Choose a theme. Axiom Glass is the new visual system." />
+            <TextBlock Text="LOCAL-FIRST" Foreground="{DynamicResource Axiom.TextMuted}"
+                       FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
           </StackPanel>
         </Grid>
       </Border>
 
       <ContentControl Grid.Row="1" Content="{Binding SelectedPage}" />
 
-      <Border Grid.Row="2" Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
-        <Grid Margin="24,0,20,0" ColumnDefinitions="*,Auto">
+      <Border Grid.Row="2" Background="{DynamicResource Axiom.SurfaceAlt}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
+        <Grid Margin="28,0,22,0" ColumnDefinitions="*,Auto">
           <WrapPanel VerticalAlignment="Center" ItemHeight="13"
                      ClipToBounds="False">
             <TextBlock Text="{Binding StatusMonitoringText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
@@ -254,13 +270,13 @@
             <TextBlock Text="{Binding StatusSourceText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" />
           </WrapPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2">
+            <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="4" Padding="7,2">
               <StackPanel Orientation="Horizontal" Spacing="5">
                 <Ellipse Width="6" Height="6" Fill="{DynamicResource Axiom.Accent}" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding StatusModeText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="9" />
               </StackPanel>
             </Border>
-            <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2">
+            <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="4" Padding="7,2">
               <StackPanel Orientation="Horizontal" Spacing="5">
                 <Ellipse Width="6" Height="6" Fill="{DynamicResource Axiom.Warning}" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding StatusFirewallBadgeText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="9" />

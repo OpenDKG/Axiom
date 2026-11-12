@@ -333,27 +333,9 @@ public sealed class LaunchdServiceInstaller
     /// case the bundle or helper is gone while Privacy Shield still pointed the system at
     /// 127.0.0.1 (launchd cannot start a missing program, so the daemon's own fail-safe never runs).
     /// </summary>
-    public int RestoreDns(TextWriter output, TextWriter error)
-    {
-        ArgumentNullException.ThrowIfNull(output);
-        ArgumentNullException.ThrowIfNull(error);
-
-        if (!_isPrivileged())
-        {
-            error.WriteLine("Restoring system DNS requires root (run with sudo).");
-            return 5;
-        }
-
-        if (!File.Exists(_options.DnsBackupPath))
-        {
-            output.WriteLine($"No Privacy Shield DNS backup at {_options.DnsBackupPath}; nothing to restore.");
-            return 0;
-        }
-
-        RestoreDns(_runner, _options.DnsBackupPath, output);
-        return 0;
-    }
-
+    // Offline DNS/rule recovery without the daemon is upstream's `axiomd --recover-network [--apply]`
+    // (NetworkRecoveryCommand over the network-recovery.txt baseline); the Privacy Shield backup is
+    // only used here to undo a redirect when the daemon is removed.
     private static bool RestoreDns(IProcessRunner runner, string backupPath, TextWriter output)
     {
         var restored = new MacDnsConfigurator(runner, backupPath).RestoreIfNeeded();

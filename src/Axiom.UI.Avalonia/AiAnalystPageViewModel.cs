@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Ai;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.Privacy;
 using Axiom.Contracts.Threat;
 using Axiom.Presentation;
 
@@ -492,9 +493,10 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
                 : "Analysis returned no reliable result: " + finding.Error;
             UpdateStatus();
 
-            // Only a high-confidence malicious finding proposes indicators, and only into the
-            // Agents-page review list. Nothing leaves the machine until the user turns sharing on.
-            await QueueThreatShareCandidatesAsync(finding).ConfigureAwait(true);
+            // Only a high-confidence malicious finding proposes indicators, and only values Axiom
+            // itself observed. They go into the Agents-page review list; nothing leaves the machine
+            // until the user presses Share or Send now.
+            await QueueThreatShareCandidatesAsync(finding, evidence).ConfigureAwait(true);
         }
         finally
         {
@@ -503,7 +505,9 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
         }
     }
 
-    private async Task QueueThreatShareCandidatesAsync(AiFinding finding)
+    private async Task QueueThreatShareCandidatesAsync(
+        AiFinding finding,
+        AiEvidencePackage evidence)
     {
         if (_serviceClient is null || finding.Error is not null)
         {
@@ -512,7 +516,19 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
 
         try
         {
-            foreach (var candidate in ThreatShareIocExtractor.Extract(finding))
+            var (available, listDerived) = await ListDerivedValuesAsync().ConfigureAwait(true);
+            if (!available)
+            {
+                StatusText += " Threat-share candidates were not queued because local list " +
+                              "provenance is unavailable; independence cannot be established.";
+                return;
+            }
+
+            foreach (var candidate in ThreatShareIocExtractor.Extract(
+                         finding,
+                         evidence,
+                         listDerived,
+                         provenanceAvailable: true))
             {
                 await _serviceClient
                     .SendAsync<ThreatShareQueueStatus>(
@@ -527,6 +543,44 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
                      System.Text.Json.JsonException or System.IO.IOException)
         {
             // The preview list is optional; an offline service must not affect the analyst result.
+        }
+    }
+
+    /// <summary>
+    /// Values that local public-list blocks already contain, plus whether the lookup itself worked.
+    /// The analyst must not present the same public-list match as an independent sighting; if the
+    /// service cannot answer, the caller fails closed and queues nothing.
+    /// </summary>
+    private async Task<(bool Available, IReadOnlySet<string> Values)> ListDerivedValuesAsync()
+    {
+        var empty = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (_serviceClient is null)
+        {
+            return (false, empty);
+        }
+
+        try
+        {
+            var status = await _serviceClient
+                .SendAsync<PrivacyShieldStatus>(
+                    IpcCommandTypes.PrivacyStatus,
+                    null,
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+
+            var values = status.BlockedHistory
+                .Where(item => item.Category.HasFlag(PrivacyCategory.Malware))
+                .SelectMany(item => new[] { item.Domain, item.MatchedRule })
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.TrimEnd('.').ToLowerInvariant())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return (true, values);
+        }
+        catch (Exception exception) when (exception is
+                     ServiceUnavailableException or TimeoutException or
+                     System.Text.Json.JsonException or System.IO.IOException)
+        {
+            return (false, empty);
         }
     }
 

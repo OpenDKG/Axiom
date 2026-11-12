@@ -41,46 +41,6 @@ public sealed class LaunchdServiceInstallerTests
     }
 
     [Fact]
-    public void RestoreDnsRequiresRootAndIsANoOpWithoutABackup()
-    {
-        using var temp = new TempDirectory();
-        var layout = Layout(temp);
-        var runner = new FakeRunner().On("launchctl print", "Could not find service", 113);
-        var output = new StringWriter();
-
-        Assert.Equal(5, new LaunchdServiceInstaller(runner, layout, () => false, () => null).RestoreDns(TextWriter.Null, TextWriter.Null));
-        Assert.Equal(0, new LaunchdServiceInstaller(runner, layout, () => true, () => null).RestoreDns(output, TextWriter.Null));
-        Assert.Contains("nothing to restore", output.ToString(), StringComparison.Ordinal);
-        Assert.Empty(runner.Calls);
-    }
-
-    [Fact]
-    public void RestoreDnsPutsSavedServersBackFromTheBackupWithoutTheDaemon()
-    {
-        using var temp = new TempDirectory();
-        var layout = Layout(temp);
-        Directory.CreateDirectory(Path.GetDirectoryName(layout.DnsBackupPath)!);
-        File.WriteAllText(layout.DnsBackupPath, """{"schemaVersion":1,"services":[{"name":"Ethernet","servers":["10.0.2.3"]}],"upstreams":["10.0.2.3"]}""");
-        var dns = new Dictionary<string, string> { ["Ethernet"] = "127.0.0.1" };
-        var runner = new FakeRunner().On("launchctl print", "Could not find service", 113)
-            .On("networksetup -listallnetworkservices", "An asterisk (*) denotes that a network service is disabled.\nEthernet\n")
-            .On("networksetup -getdnsservers", arguments => new ProcessResult(0, dns[arguments[1]] + "\n", string.Empty))
-            .On("networksetup -setdnsservers", arguments =>
-            {
-                dns[arguments[1]] = string.Join(' ', arguments.Skip(2));
-                return new ProcessResult(0, string.Empty, string.Empty);
-            });
-        var output = new StringWriter();
-
-        var code = new LaunchdServiceInstaller(runner, layout, () => true, () => null).RestoreDns(output, TextWriter.Null);
-
-        Assert.Equal(0, code);
-        Assert.Equal("10.0.2.3", dns["Ethernet"]);
-        Assert.Contains("Restored system DNS", output.ToString(), StringComparison.Ordinal);
-        Assert.False(File.Exists(layout.DnsBackupPath));
-    }
-
-    [Fact]
     public void PlistEscapesPaths()
     {
         var text = LaunchdServiceInstaller.BuildPlist("/opt/A&B <x>/axiomd", "/tmp/log");

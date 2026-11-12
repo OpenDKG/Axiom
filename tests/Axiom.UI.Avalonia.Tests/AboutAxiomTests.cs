@@ -32,6 +32,7 @@ public sealed class AboutAxiomTests
             Assert.Contains("dreddster", page.AboutContributors, StringComparison.Ordinal);
             Assert.Contains("brxtrac", page.AboutContributors, StringComparison.Ordinal);
             Assert.Equal("OpenDKG Initiative", page.AboutAffiliationLabel);
+            Assert.Equal("https://opendkg.org", AxiomDocuments.AffiliationUrl);
             Assert.Equal("Axiom is an independent open-source project affiliated with the OpenDKG initiative.", page.AboutAffiliation);
             Assert.Equal("https://github.com/a-51-50/Axiom", page.AboutSource);
             Assert.Contains("2026 The Axiom contributors", page.AboutCopyright, StringComparison.Ordinal);
@@ -53,16 +54,87 @@ public sealed class AboutAxiomTests
             await page.ViewThirdPartyNoticesCommand.ExecuteAsync(null);
             await page.ViewContributorsCommand.ExecuteAsync(null);
             await page.OpenSourceCommand.ExecuteAsync(null);
+            await page.OpenAffiliationCommand.ExecuteAsync(null);
 
             Assert.Equal(3, interaction.Documents.Count);
             Assert.Contains("GNU GENERAL PUBLIC LICENSE", interaction.Documents[0].Text, StringComparison.Ordinal);
             Assert.Equal("Third-party notices", interaction.Documents[1].Title);
             Assert.Equal("Axiom contributors", interaction.Documents[2].Title);
-            Assert.Equal("https://github.com/a-51-50/Axiom", Assert.Single(interaction.OpenedUrls));
+            Assert.Equal(2, interaction.OpenedUrls.Count);
+            Assert.Equal("https://github.com/a-51-50/Axiom", interaction.OpenedUrls[0]);
+            Assert.Equal("https://opendkg.org", interaction.OpenedUrls[1]);
         }
         finally
         {
             page.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Settings_tracks_active_theme_and_visual_effects_flags()
+    {
+        var theme = new MutableThemeService();
+        var effects = new MutableVisualEffectsService();
+        var monitor = new ConnectionMonitor(new FakeSource(), new NoOpTimerFactory());
+        using var page = new SettingsPageViewModel(
+            monitor,
+            serviceMode: false,
+            theme: theme,
+            autostart: new UnsupportedAutostartService(),
+            userInteraction: new RecordingInteraction(),
+            visualEffects: effects);
+
+        Assert.True(page.IsGlassDarkTheme);
+        Assert.False(page.IsGlassLightTheme);
+        Assert.True(page.IsAutoEffects);
+        Assert.False(page.IsReducedEffects);
+
+        page.UseGlassLightThemeCommand.Execute(null);
+        Assert.False(page.IsGlassDarkTheme);
+        Assert.True(page.IsGlassLightTheme);
+        Assert.Equal("Axiom Glass Light", page.CurrentThemeText);
+
+        page.UseDarkMidnightThemeCommand.Execute(null);
+        Assert.False(page.IsGlassLightTheme);
+        Assert.True(page.IsDarkMidnightTheme);
+        Assert.Equal("Dark Midnight", page.CurrentThemeText);
+
+        page.UseReducedEffectsCommand.Execute(null);
+        Assert.False(page.IsAutoEffects);
+        Assert.True(page.IsReducedEffects);
+    }
+
+    private sealed class MutableThemeService : IThemeService
+    {
+        public UiTheme Current { get; private set; } = UiTheme.GlassDark;
+
+        public event EventHandler? Changed;
+
+        public void Apply(UiTheme theme)
+        {
+            Current = theme;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private sealed class MutableVisualEffectsService : IVisualEffectsService
+    {
+        public VisualEffects Current { get; private set; } = VisualEffects.Auto;
+
+        public string BackdropStatus { get; private set; } = "AcrylicBlur (native backdrop active)";
+
+        public event EventHandler? Changed;
+
+        public void Apply(VisualEffects value)
+        {
+            Current = value;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void ReportBackdrop(string status)
+        {
+            BackdropStatus = status;
+            Changed?.Invoke(this, EventArgs.Empty);
         }
     }
 

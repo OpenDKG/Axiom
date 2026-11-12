@@ -1,4 +1,5 @@
-﻿// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
+using System.Globalization;
 using System.Runtime;
 using Axiom.Contracts.Privacy;
 using Axiom.Service.Hosting.Dns;
@@ -21,7 +22,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private readonly PrivacyShieldBlockedHistoryStore _blockedHistory = new();
 
-    private readonly ThreatShareController? _threatShare;
+    /// <summary>Writes buffered blocked history before the service stops.</summary>
+    public void FlushBlockedHistory() => _blockedHistory.Flush();
 
     private readonly IPrivacyDnsPlatform _dns;
 
@@ -57,19 +59,20 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         PrivacyShieldSettingsStore store,
         PrivacyShieldRuleStore? ruleStore = null,
         PrivacyShieldSourceUpdater? sourceUpdater = null,
-        ThreatShareController? threatShare = null,
         IPrivacyDnsPlatform? dnsPlatform = null)
     {
         _dns = dnsPlatform ?? ServicePlatform.CreateDefaultPrivacyDnsPlatform();
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _ruleStore = ruleStore ?? new PrivacyShieldRuleStore();
         _sourceUpdater = sourceUpdater ?? new PrivacyShieldSourceUpdater();
-        _threatShare = threatShare;
         _settings = store.Load();
     }
 
     /// <summary>Whether the persisted configuration asks the resolver to run.</summary>
     public bool IsEnabled => _settings.Enabled;
+
+    /// <summary>Whether the loopback resolver is listening right now.</summary>
+    public bool IsResolverRunning => Volatile.Read(ref _server) is not null;
 
     public async Task<PrivacyShieldStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
@@ -370,8 +373,9 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 settings.Port,
                 blocked =>
                 {
-                    _blockedHistory.Append(blocked);
-                    _threatShare?.ObserveBlocked(blocked);
+                    // Public-list-only detections stay local: reporting the same URLhaus domain
+                    // from every install would look like independent corroboration on the graph.
+                    _blockedHistory.Append(EnrichProvenance(blocked));
                 },
                 _dns.Attributor);
             return true;
@@ -526,6 +530,34 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         _policySettings = settings;
         _policyRules = _rules;
         return policy;
+    }
+
+    private PrivacyShieldBlockedEvent EnrichProvenance(PrivacyShieldBlockedEvent blocked)
+    {
+        var source = PrivacyShieldSourceCatalog.All.FirstOrDefault(item =>
+            string.Equals(item.Id, blocked.SourceId, StringComparison.OrdinalIgnoreCase));
+        var sourceVersion = source?.Sha256 ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(sourceVersion) &&
+            _sourceTotals.TryGetValue(blocked.SourceId, out var total) &&
+            total.Updated is { } updated)
+        {
+            sourceVersion = updated.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        }
+
+        var sourceName = source?.Name ?? blocked.SourceId switch
+        {
+            "starter" => "Axiom starter rules",
+            "custom" => "User blocklist",
+            _ => blocked.SourceId,
+        };
+
+        return blocked with
+        {
+            SourceName = sourceName,
+            SourceVersion = sourceVersion,
+            AxiomVersion = typeof(PrivacyShieldController).Assembly.GetName().Version?.ToString(3)
+                           ?? string.Empty,
+        };
     }
 
     private PrivacyShieldStatus CreateStatus()

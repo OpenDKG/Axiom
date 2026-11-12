@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -68,7 +68,6 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private readonly ThreatShareCli _cli = new();
     private ThreatShareQueueStatus? _threatShareStatus;
     private bool _threatShareSubmitting;
-    private DateTimeOffset _lastThreatShareSubmitUtc = DateTimeOffset.MinValue;
 
     private readonly List<BlackboxAuditEntry> _allActivity = [];
 
@@ -103,7 +102,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         IBlackboxDialogService dialogs,
         IUiTimerFactory timers,
         IServiceRequestClient? serviceClient = null)
-        : base("Agents", "DKG, Blackbox and the workspaces they protect", "\uE99A")
+        : base("Agent Protection", "Hooks, DKG and Blackbox protection for local AI agents", "\uE99A")
     {
         Security = security ?? throw new ArgumentNullException(nameof(security));
         ArgumentNullException.ThrowIfNull(ui);
@@ -138,6 +137,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     public SecurityPageViewModel Security { get; }
 
     public bool IsAvailable => !DistributionContext.IsStorePackage;
+
+    /// <summary>Truthful enforcement status shown above the host list.</summary>
+    public EnforcementSurfaceState Enforcement => EnforcementSurfaceState.Current;
 
     public IReadOnlyList<string> ActivityFilters { get; } =
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
@@ -225,6 +227,12 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private string _activityStatusText = "Select the Agents page to load local Blackbox activity.";
 
     [ObservableProperty]
+    private bool _hasStaleAgentActivity;
+
+    [ObservableProperty]
+    private string _activityFreshnessText = string.Empty;
+
+    [ObservableProperty]
     private string _healthStatusText = "Blackbox health is not loaded yet.";
 
     [ObservableProperty]
@@ -252,10 +260,17 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private string _threatShareQueueText = "Loading the indicator preview...";
 
     [ObservableProperty]
+    private string _threatShareReporterText = string.Empty;
+
+    [ObservableProperty]
     private bool _hasThreatShareCandidates;
 
     [ObservableProperty]
     private bool _canSubmitThreatShare;
+
+    /// <summary>Per-row action availability; an unverified row must still be retryable on purpose.</summary>
+    [ObservableProperty]
+    private bool _canShareThreatShareItem;
 
     [ObservableProperty]
     private string _threatShareActionText = string.Empty;
@@ -1075,8 +1090,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private void ApplyThreatShareStatus(ThreatShareQueueStatus status)
     {
         _threatShareStatus = status;
+        ThreatShareReporterText = ThreatShareCli.DescribeReporterProfile();
         var pending = status.Items
-            .Where(item => item.State == ThreatShareState.Pending)
+            .Where(item => item.State is ThreatShareState.Pending or ThreatShareState.Deferred
+                or ThreatShareState.Unverified)
             .Take(8)
             .ToList();
 
@@ -1087,31 +1104,80 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         HasThreatShareCandidates = pending.Count > 0;
-        CanSubmitThreatShare = status.Pending > 0 &&
+        CanSubmitThreatShare = status.Items.Any(IsReady) &&
                                ThreatSharingEnabled &&
                                status.TodaySubmitted < status.DailyLimit;
+        CanShareThreatShareItem = pending.Count > 0 &&
+                                  ThreatSharingEnabled &&
+                                  status.TodaySubmitted < status.DailyLimit;
 
         var consent = ThreatShareCli.ConsentPresent()
             ? string.Empty
             : " Blackbox still needs the reporter terms accepted in its own settings.";
 
-        ThreatShareQueueText =
-            $"{status.Pending} waiting for review, {status.Submitted} shared in total, " +
-            $"{status.TodaySubmitted}/{status.DailyLimit} today. " +
-            (ThreatSharingEnabled
-                ? "Sharing is on; queued indicators are signed and sent by Blackbox from this session."
-                : "Sharing is off; nothing is sent until you enable it.") +
-            consent;
+        var deferred = status.Deferred > 0
+            ? $" {status.Deferred} deferred after a transient failure; retry when it is due."
+            : string.Empty;
 
-        if (ThreatSharingEnabled && status.Pending > 0 &&
-            DateTimeOffset.UtcNow - _lastThreatShareSubmitUtc >= TimeSpan.FromMinutes(1))
-        {
-            _ = SubmitThreatShareAsync();
-        }
+        var unverified = status.Unverified > 0
+            ? $" {status.Unverified} awaiting confirmation: the reporter outcome was unknown, so retry only after you check."
+            : string.Empty;
+
+        ThreatShareQueueText =
+            $"{status.Pending} waiting for your review, {status.Submitted} shared in total, " +
+            $"{status.TodaySubmitted}/{status.DailyLimit} today.{deferred}{unverified} " +
+            (ThreatSharingEnabled
+                ? "Sharing is on; nothing is sent until you press Share or Send now."
+                : "Sharing is off; nothing is signed or sent.") +
+            consent;
     }
 
     [RelayCommand]
-    private async Task SubmitThreatShareAsync()
+    private Task SubmitThreatShareAsync()
+    {
+        if (_threatShareStatus is not { } status)
+        {
+            return Task.CompletedTask;
+        }
+
+        var pending = status.Items
+            .Where(IsReady)
+            .Take(Math.Max(0, status.DailyLimit - status.TodaySubmitted))
+            .ToList();
+        return SubmitThreatShareItemsAsync(pending);
+    }
+
+    [RelayCommand]
+    private Task ShareThreatShareItemAsync(ThreatShareItem? item)
+    {
+        if (item is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (item.State == ThreatShareState.Unverified)
+        {
+            // The row says "Retry": the user has seen that the previous attempt may have published.
+            return SubmitThreatShareItemsAsync([item]);
+        }
+
+        if (!IsReady(item))
+        {
+            ThreatShareActionText =
+                $"This indicator is deferred after a transient failure. Retry after " +
+                $"{item.NextAttemptUtc?.ToLocalTime():HH:mm}.";
+            return Task.CompletedTask;
+        }
+
+        return SubmitThreatShareItemsAsync([item]);
+    }
+
+    private static bool IsReady(ThreatShareItem item) =>
+        item.State == ThreatShareState.Pending ||
+        (item.State == ThreatShareState.Deferred &&
+         (item.NextAttemptUtc is null || item.NextAttemptUtc <= DateTimeOffset.UtcNow));
+
+    private async Task SubmitThreatShareItemsAsync(List<ThreatShareItem> items)
     {
         if (_serviceClient is null || _threatShareSubmitting)
         {
@@ -1120,63 +1186,75 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         if (!ThreatSharingEnabled)
         {
-            ThreatShareActionText = "Turn threat sharing on before submitting indicators.";
+            ThreatShareActionText = "Turn threat sharing on before sharing indicators.";
             return;
         }
 
-        if (_threatShareStatus is not { } status)
+        if (_threatShareStatus is { } status && status.TodaySubmitted >= status.DailyLimit)
         {
+            ThreatShareActionText = "The daily sharing cap is reached; nothing was sent.";
+            return;
+        }
+
+        if (items.Count == 0)
+        {
+            ThreatShareActionText = "Nothing is waiting for review.";
             return;
         }
 
         _threatShareSubmitting = true;
-        _lastThreatShareSubmitUtc = DateTimeOffset.UtcNow;
         CanSubmitThreatShare = false;
         ThreatShareActionText = "Submitting through the Blackbox reporter...";
         try
         {
-            var pending = status.Items
-                .Where(item => item.State == ThreatShareState.Pending)
-                .Take(Math.Max(0, status.DailyLimit - status.TodaySubmitted))
-                .ToList();
-
-            if (pending.Count == 0)
-            {
-                ThreatShareActionText = "Nothing is waiting for review, or the daily cap is reached.";
-                return;
-            }
-
             var shared = 0;
+            var deferred = 0;
+            var unverified = 0;
             var rejected = 0;
+            var capReached = false;
             ThreatShareQueueStatus? latest = null;
-            foreach (var item in pending)
+            foreach (var item in items)
             {
-                var (submitted, outcome) = await _cli
+                var result = await _cli
                     .ReportAsync(item.Candidate, CancellationToken.None)
                     .ConfigureAwait(true);
+
+                // The cap is not an outcome for this indicator: leave it pending for tomorrow.
+                if (result.Status == ThreatShareReportStatus.CapReached)
+                {
+                    capReached = true;
+                    break;
+                }
+
                 latest = await _serviceClient
                     .SendAsync<ThreatShareQueueStatus>(
                         IpcCommandTypes.ThreatShareRecord,
                         new ThreatShareRecordRequest
                         {
                             Id = item.Candidate.Id,
-                            Submitted = submitted,
-                            Outcome = outcome,
+                            Submitted = result.Submitted,
+                            Deferred = result.Status == ThreatShareReportStatus.RetryableFailure,
+                            Ambiguous = result.Ambiguous,
+                            Outcome = result.Outcome,
                         },
                         CancellationToken.None)
                     .ConfigureAwait(true);
 
-                if (submitted)
+                switch (result.Status)
                 {
-                    shared++;
-                }
-                else
-                {
-                    rejected++;
-                    if (outcome.Contains("cap", StringComparison.OrdinalIgnoreCase))
-                    {
+                    case ThreatShareReportStatus.Shared:
+                    case ThreatShareReportStatus.AlreadyShared:
+                        shared++;
                         break;
-                    }
+                    case ThreatShareReportStatus.RetryableFailure:
+                        deferred++;
+                        break;
+                    case ThreatShareReportStatus.UnknownOutcome:
+                        unverified++;
+                        break;
+                    default:
+                        rejected++;
+                        break;
                 }
             }
 
@@ -1185,7 +1263,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 ApplyThreatShareStatus(latest);
             }
 
-            ThreatShareActionText = $"Submitted {shared}, rejected {rejected}.";
+            ThreatShareActionText =
+                $"Submitted {shared}, deferred {deferred}, awaiting confirmation {unverified}, rejected {rejected}." +
+                (capReached
+                    ? " The daily cap is reached; the remaining indicators stay queued."
+                    : string.Empty);
         }
         catch (Exception exception) when (exception is
                      ServiceUnavailableException or TimeoutException or
@@ -1485,6 +1567,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             : _allActivity.Count >= _activityTotal
                 ? $"Showing all {_allActivity.Count} recorded event(s)."
                 : $"Showing {_allActivity.Count} of {_activityTotal} recorded event(s).";
+
+        var newest = _allActivity.Count == 0
+            ? (DateTimeOffset?)null
+            : _allActivity.Max(entry => entry.Timestamp);
+        var now = DateTimeOffset.UtcNow;
+        HasStaleAgentActivity = ActivityFreshness.IsStale(newest, now);
+        ActivityFreshnessText = ActivityFreshness.Describe(newest, now);
     }
 
     private void ApplyFindings(BlackboxFindingPage page)
@@ -1687,8 +1776,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         var dkgModule = Security.Modules.FirstOrDefault(module => module.Name == "OriginTrail DKG");
         AxiomDkgHealthText = dkgModule is null
-            ? "Axiom DKG: unknown"
-            : $"Axiom DKG: {dkgModule.Status} · {dkgModule.Detail}";
+            ? "DKG: unknown"
+            : $"DKG: {dkgModule.Status} · {dkgModule.Detail}";
 
         var ruleset = graph["ruleset"] as JsonObject;
         var verified = ReadInt(ruleset, "injection") + ReadInt(ruleset, "escalation") +

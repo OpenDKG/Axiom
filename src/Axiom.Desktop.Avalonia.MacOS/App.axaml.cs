@@ -7,6 +7,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Presentation;
 using Axiom.UI.Avalonia;
 
@@ -92,6 +93,11 @@ public partial class App : Application
         RequestedThemeVariant = MacThemeService.VariantFor(theme.Current);
         var protector = new KeychainApiKeyProtector();
 
+        // Recovery needs the daemon because DNS and filter-rule writes require root. It uses a
+        // longer request timeout than the read-only UI commands.
+        var networkRecovery = new NetworkRecoveryClient(
+            new ServicePipeClient(requestTimeout: NetworkRecoveryClient.DefaultRequestTimeout));
+
         _shell = new ShellViewModel(
             source,
             new AvaloniaUiTimerFactory(),
@@ -106,7 +112,9 @@ public partial class App : Application
             new AvaloniaSecurityDialogs(() => window),
             new AvaloniaShellActions(() => desktop.Shutdown()),
             new AvaloniaBlackboxDialogs(() => window, interaction),
-            new Axiom.Persistence.AgentSessionReader());
+            new Axiom.Persistence.AgentSessionReader(),
+            visualEffects: null,
+            restoreNetwork: networkRecovery.RestoreAsync);
 
         window = new MainWindow { DataContext = _shell };
         _window = window;
@@ -144,6 +152,7 @@ public partial class App : Application
         _protection.Changed += (_, _) => Dispatcher.UIThread.Post(UpdateStatusItems);
 
         _shell.Start();
+        StartNetworkRecovery(networkRecovery);
 
         var autostartArgument = HasArgument(arguments, "--autostart");
         var startMinimized = HasArgument(arguments, "--start-minimized") ||
@@ -189,6 +198,33 @@ public partial class App : Application
         });
 
         desktop.Exit += (_, _) => Cleanup();
+    }
+
+    /// <summary>
+    /// Asks the daemon to save the machine baseline once. The daemon also captures at its own
+    /// start; this call is an idempotent fallback for a daemon that was already running. A failure
+    /// is logged and later reported truthfully as "no saved state"; it never changes the network.
+    /// </summary>
+    private static void StartNetworkRecovery(NetworkRecoveryClient recovery)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await recovery.CaptureAsync(CancellationToken.None).ConfigureAwait(false);
+                if (result.Status is not (NetworkRecoveryStatus.Succeeded or NetworkRecoveryStatus.AlreadyCaptured))
+                {
+                    StartupLog.Write(
+                        "recovery",
+                        $"Recovery baseline not saved: {result.Status}. " + NetworkRecoveryText.Problems(result.Problems));
+                }
+            }
+            catch (Exception exception) when (exception is
+                         InvalidOperationException or UnauthorizedAccessException or IOException)
+            {
+                StartupLog.Write("recovery", $"Recovery baseline request failed: {exception.Message}");
+            }
+        });
     }
 
     private static bool HasArgument(IEnumerable<string> arguments, string expected) =>

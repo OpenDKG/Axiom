@@ -10,7 +10,9 @@ using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.NetworkRecovery;
 using Axiom.Infrastructure.Windows.IpHelper;
+using Axiom.Infrastructure.Windows.Modules;
 using Axiom.Presentation;
 using Axiom.UI.Avalonia;
 
@@ -90,9 +92,22 @@ public partial class App : Application
                 UiTheme.Light => ThemeVariant.Light,
                 UiTheme.DarkMidnight => AxiomThemeVariants.DarkMidnight,
                 UiTheme.LightWarm => AxiomThemeVariants.LightWarm,
+                UiTheme.GlassDark => AxiomThemeVariants.GlassDark,
+                UiTheme.GlassLight => AxiomThemeVariants.GlassLight,
                 _ => ThemeVariant.Dark,
             };
             var autostart = new WindowsAutostartService();
+            var listenerInspector = new WindowsLoopbackListenerInspector();
+            var visualEffects = new WindowsVisualEffectsService();
+            NetworkRecoveryClient? networkRecovery = null;
+            if (serviceClient is not null)
+            {
+                // Recovery needs the service because firewall and DNS writes require elevation.
+                // It uses a longer request timeout than the read-only UI commands.
+                networkRecovery = new NetworkRecoveryClient(
+                    new ServicePipeClient(requestTimeout: NetworkRecoveryClient.DefaultRequestTimeout));
+            }
+
             var protector = new DpapiApiKeyProtector();
             _shell = new ShellViewModel(
                 source,
@@ -108,7 +123,10 @@ public partial class App : Application
                 new AvaloniaSecurityDialogs(() => window),
                 new AvaloniaShellActions(() => desktop.Shutdown()),
                 new AvaloniaBlackboxDialogs(() => window, interaction),
-                new Axiom.Persistence.AgentSessionReader());
+                new Axiom.Persistence.AgentSessionReader(),
+                visualEffects,
+                networkRecovery is null ? null : networkRecovery.RestoreAsync,
+                listenerInspector);
 
             window = new MainWindow { DataContext = _shell };
             _window = window;
@@ -132,6 +150,7 @@ public partial class App : Application
             };
 
             _shell.Start();
+            StartNetworkRecovery(networkRecovery);
 
             var autostartArgument = HasArgument(arguments, "--autostart");
             var startMinimized = HasArgument(arguments, "--start-minimized") ||
@@ -172,6 +191,54 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Asks the service to save the machine baseline once. The service also captures at its own
+    /// start; this call is an idempotent fallback for a service that was already running. A failure
+    /// is logged and later reported truthfully as "no saved state"; it never changes the network.
+    /// </summary>
+    private static void StartNetworkRecovery(NetworkRecoveryClient? recovery)
+    {
+        if (recovery is null)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await recovery.CaptureAsync(CancellationToken.None).ConfigureAwait(false);
+                if (result.Status is not (NetworkRecoveryStatus.Succeeded or NetworkRecoveryStatus.AlreadyCaptured))
+                {
+                    WriteRecoveryLog(
+                        $"Recovery baseline not saved: {result.Status}. " +
+                        NetworkRecoveryText.Problems(result.Problems));
+                }
+            }
+            catch (Exception exception) when (exception is
+                         InvalidOperationException or UnauthorizedAccessException or IOException)
+            {
+                WriteRecoveryLog($"Recovery baseline request failed: {exception.Message}");
+            }
+        });
+    }
+
+    private static void WriteRecoveryLog(string message)
+    {
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Axiom",
+                "network-recovery.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.AppendAllText(path, $"{DateTimeOffset.UtcNow:O} {message}\n");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     private static bool HasArgument(IEnumerable<string> arguments, string expected) =>

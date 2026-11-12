@@ -5,7 +5,7 @@
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24,18,24,24" Spacing="14">
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel Grid.Column="0" Spacing="4">
             <controls:AxiomSelectableTextBlock Text="{Binding SecurityStatusTitle}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
@@ -17,7 +17,7 @@
         </Grid>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="0">
+      <Border Classes="card" Padding="0">
         <ItemsControl ItemsSource="{Binding Modules}">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
@@ -52,7 +52,7 @@
         </ItemsControl>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
@@ -111,7 +111,7 @@
         </StackPanel>
       </Border>
 
-      <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <Border Classes="card" Padding="16">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">

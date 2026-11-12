@@ -382,6 +382,91 @@ public sealed partial class ProtectionController(
     /// Re-applies the agent lockdown to executables that appeared after the switch was enabled.
     /// Idempotent: the deterministic rule id is upserted, so repeated calls are cheap.
     /// </summary>
+    /// <summary>
+    /// Applies an existing decision to an updated install path. An application that was allowed or
+    /// blocked in one versioned folder keeps that decision when the updater moves it to a new
+    /// version or hash folder, instead of asking again. A block also creates the outbound rule for
+    /// the new path.
+    /// </summary>
+    public async Task ReconcileDecisionsAsync(string actor, CancellationToken cancellationToken)
+    {
+        var settings = store.Load();
+        if (!settings.Enabled)
+        {
+            return;
+        }
+
+        var connections = snapshots.Latest?.Connections;
+        if (connections is null || connections.Count == 0)
+        {
+            return;
+        }
+
+        var decisions = (settings.Decisions ?? []).ToList();
+        var exact = new HashSet<string>(
+            decisions.Select(decision => decision.AppPath),
+            StringComparer.OrdinalIgnoreCase);
+        var families = new Dictionary<string, ProtectionDecision>(StringComparer.OrdinalIgnoreCase);
+        foreach (var decision in decisions.Where(decision => !decision.IsAgentLockdown))
+        {
+            families[ProtectionPathFamily.Key(decision.AppPath)] = decision;
+        }
+
+        var changed = false;
+        foreach (var path in connections
+                     .Select(connection => connection.AppPath)
+                     .Where(path => !string.IsNullOrWhiteSpace(path))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (exact.Contains(path) ||
+                !families.TryGetValue(ProtectionPathFamily.Key(path), out var family))
+            {
+                continue;
+            }
+
+            Guid? ruleId = null;
+            if (family.Action == ProtectionDecisionAction.Block)
+            {
+                var candidate = RuleIdentity.ForApp(path, FirewallDirection.Outbound);
+                var spec = new RuleSpec
+                {
+                    ManagedRuleId = candidate,
+                    AppPath = path,
+                    Direction = FirewallDirection.Outbound,
+                    Action = FirewallAction.Block,
+                    Profiles = FirewallProfile.All,
+                    Protocol = NetworkProtocol.Any,
+                    CreatedBy = actor,
+                    Description = $"Axiom Shield block for {Path.GetFileName(path)} (updated path)",
+                };
+
+                var result = await coordinator.ApplyAsync(spec, actor, cancellationToken).ConfigureAwait(false);
+                if (!result.Success)
+                {
+                    continue;
+                }
+
+                ruleId = candidate;
+            }
+
+            decisions.Add(new ProtectionDecision
+            {
+                AppPath = path,
+                AppName = Path.GetFileName(path),
+                Action = family.Action,
+                DecidedUtc = DateTimeOffset.UtcNow,
+                ManagedRuleId = ruleId,
+            });
+            exact.Add(path);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            _ = store.Save(settings with { Decisions = decisions });
+        }
+    }
+
     public async Task ReconcileAgentLockdownAsync(string actor, CancellationToken cancellationToken)
     {
         var settings = store.Load();

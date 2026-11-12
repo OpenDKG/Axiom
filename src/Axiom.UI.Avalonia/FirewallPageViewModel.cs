@@ -163,7 +163,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     private readonly FirewallDefaultsStore _defaultsStore = FirewallDefaultsStore.Shared;
 
     public FirewallPageViewModel(IServiceRequestClient? serviceClient, IUserInteraction ui, ConnectionMonitor? monitor = null)
-        : base("Firewall", "Owned rules, defaults and rule editor", "F")
+        : base("Network Control", "Axiom-owned firewall rules, defaults and rule editor", "F")
     {
         ArgumentNullException.ThrowIfNull(ui);
         _client = serviceClient;
@@ -1234,7 +1234,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         AgentPathCount = status.AgentPaths.Count;
         AgentLockdownHintText = AgentPathCount == 0
             ? "No agent executable is connected right now."
-            : $"{AgentPathCount} agent executable(s) detected. Lockdown blocks internet access and keeps localhost reachable.";
+            : $"{AgentPathCount} agent executable(s) detected. Lockdown blocks internet access for these exact files and keeps localhost reachable; a renamed copy or another tool is not covered.";
 
         ShieldStatusText = !string.IsNullOrWhiteSpace(status.LastError)
             ? status.LastError!

@@ -121,6 +121,8 @@ public sealed class ProtectionTests
         Assert.True(AgentExecutables.IsAgentPath(@"C:\Tools\opencode.exe"));
         Assert.True(AgentExecutables.IsAgentPath(@"C:\Users\me\AppData\Local\Programs\@openchamberelectron\resources\opencode-cli\opencode.exe"));
         Assert.True(AgentExecutables.IsAgentPath(@"C:\Tools\Codex.exe"));
+        Assert.True(AgentExecutables.IsAgentPath(
+            @"C:\Users\me\AppData\Local\Programs\antigravity\Antigravity.exe"));
         Assert.False(AgentExecutables.IsAgentPath(@"C:\Windows\explorer.exe"));
         Assert.False(AgentExecutables.IsAgentPath(string.Empty));
     }

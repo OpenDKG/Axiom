@@ -25,6 +25,7 @@ public static class AgentExecutables
         "continue",
         "hermes",
         "goose",
+        "antigravity",
     ];
 
     private static readonly string[] PathHints =

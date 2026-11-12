@@ -43,6 +43,13 @@ public static class LegacyDataMigration
 
     private static void MigrateDirectory(string oldDirectory, string newDirectory)
     {
+        // Never follow a junction a standard user could have planted for the legacy name.
+        if (PathSafety.IsReparsePointInPath(oldDirectory) ||
+            PathSafety.IsReparsePointInPath(newDirectory))
+        {
+            return;
+        }
+
         if (!Directory.Exists(oldDirectory))
         {
             return;

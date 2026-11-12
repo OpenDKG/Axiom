@@ -28,7 +28,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         IUserInteraction? ui = null,
         IServiceRequestClient? serviceClient = null,
         IProcessActions? processActions = null)
-        : base("Overview", "Live sockets and system-wide interface counters", "O")
+        : base("Dashboard", "Live sockets, system-wide counters and system status", "O")
     {
         _monitor = monitor;
         _traffic = traffic;

@@ -327,7 +327,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
                     Interlocked.Increment(ref _blocked);
                     RecordBlocked(
                         parsed.Domain,
-                        decision.Category,
+                        decision,
                         client.Client.RemoteEndPoint as IPEndPoint,
                         tcp: true);
                     response = DnsProtocol.BuildResponse(query, parsed.QuestionEnd, 3);
@@ -390,7 +390,10 @@ public sealed class DnsProxyServer : IAsyncDisposable
                 }
 
                 var response = await ReadExactAsync(stream, length, timeout.Token).ConfigureAwait(false);
-                if (response is not null)
+                if (response is not null &&
+                    DnsProtocol.TryParseQuery(query, out var parsedTcp) &&
+                    parsedTcp is not null &&
+                    DnsProtocol.IsMatchingResponse(query, parsedTcp.QuestionEnd, response))
                 {
                     return response;
                 }
@@ -466,7 +469,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
         if (decision.Blocked)
         {
             Interlocked.Increment(ref _blocked);
-            RecordBlocked(parsed.Domain, decision.Category, request.RemoteEndPoint, tcp: false);
+            RecordBlocked(parsed.Domain, decision, request.RemoteEndPoint, tcp: false);
             await SendAsync(
                 client,
                 DnsProtocol.BuildResponse(query, parsed.QuestionEnd, 3),
@@ -515,7 +518,10 @@ public sealed class DnsProxyServer : IAsyncDisposable
                 var received = await socket
                     .ReceiveAsync(response.AsMemory(), SocketFlags.None, timeout.Token)
                     .ConfigureAwait(false);
-                if (received > 0)
+                if (received > 0 &&
+                    DnsProtocol.TryParseQuery(query, out var parsedUdp) &&
+                    parsedUdp is not null &&
+                    DnsProtocol.IsMatchingResponse(query, parsedUdp.QuestionEnd, response.AsSpan(0, received)))
                 {
                     return response[..received];
                 }
@@ -548,7 +554,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private void RecordBlocked(
         string domain,
-        PrivacyCategory category,
+        DnsPolicyDecision decision,
         IPEndPoint? source,
         bool tcp)
     {
@@ -560,13 +566,18 @@ public sealed class DnsProxyServer : IAsyncDisposable
         var app = ResolveApp(source, tcp);
         var blocked = new PrivacyShieldBlockedEvent(
             domain,
-            category,
+            decision.Category,
             DateTimeOffset.UtcNow)
         {
             AppName = app.Name,
             AppPath = app.Path,
             AgentName = app.AgentName,
             AgentPath = app.AgentPath,
+            MatchedRule = decision.MatchedRule ?? domain,
+            SourceId = decision.SourceId,
+            DetectionReason = "dns-blocklist-match",
+            IsListDerived = decision.SourceId is not ("" or "starter" or "custom"),
+            LookupBlocked = true,
         };
         _recentBlocked.Enqueue(blocked);
         while (_recentBlocked.Count > 50)

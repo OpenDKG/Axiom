@@ -3,12 +3,19 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.VisualTree;
+using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
 
 public partial class MainWindow : Window
 {
+    private const string WindowBrushKey = "Axiom.Window";
+
+    private IVisualEffectsService? _effects;
+    private bool _applyingBackdrop;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -20,6 +27,124 @@ public partial class MainWindow : Window
         UpdateCaptionGlyph();
         AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
     }
+
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+
+        if (DataContext is ShellViewModel shell)
+        {
+            _effects = shell.VisualEffects;
+            _effects.Changed += OnVisualEffectsChanged;
+        }
+
+        if (Application.Current is { } application)
+        {
+            application.ActualThemeVariantChanged += OnThemeVariantChanged;
+        }
+
+        ApplyBackdrop();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (_effects is not null)
+        {
+            _effects.Changed -= OnVisualEffectsChanged;
+            _effects = null;
+        }
+
+        if (Application.Current is { } application)
+        {
+            application.ActualThemeVariantChanged -= OnThemeVariantChanged;
+        }
+
+        base.OnClosed(e);
+    }
+
+    private void OnVisualEffectsChanged(object? sender, EventArgs e) => ApplyBackdrop();
+
+    private void OnThemeVariantChanged(object? sender, EventArgs e) => ApplyBackdrop();
+
+    /// <summary>
+    /// Requests the strongest backdrop the platform supports for the active theme. The window never
+    /// assumes success: <see cref="TopLevel.ActualTransparencyLevel"/> decides the reported status.
+    /// </summary>
+    private void ApplyBackdrop()
+    {
+        if (_applyingBackdrop)
+        {
+            return;
+        }
+
+        _applyingBackdrop = true;
+        try
+        {
+            var glass = IsGlassTheme();
+            var mode = _effects?.Current ?? VisualEffects.Auto;
+
+            TransparencyLevelHint = !glass || mode == VisualEffects.Off
+                ? [WindowTransparencyLevel.None]
+                : mode == VisualEffects.Reduced
+                    ? [WindowTransparencyLevel.Blur, WindowTransparencyLevel.None]
+                    : [WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Mica,
+                       WindowTransparencyLevel.Blur, WindowTransparencyLevel.None];
+
+            UpdateBackdropTint(glass);
+            ReportBackdrop(glass);
+        }
+        finally
+        {
+            _applyingBackdrop = false;
+        }
+    }
+
+    /// <summary>
+    /// Keeps the glass surface translucent only when a native backdrop is really composited. Without
+    /// one, the same theme falls back to an opaque graphite/pearl base so the desktop does not show
+    /// through unblurred.
+    /// </summary>
+    private void UpdateBackdropTint(bool glass)
+    {
+        if (!glass || IsNativeBackdrop(ActualTransparencyLevel))
+        {
+            Resources.Remove(WindowBrushKey);
+            return;
+        }
+
+        var fallback = IsGlassLight()
+            ? Color.Parse("#EDF3F8")
+            : Color.Parse("#0B1019");
+        Resources[WindowBrushKey] = new SolidColorBrush(fallback);
+    }
+
+    private void ReportBackdrop(bool glass)
+    {
+        if (_effects is null)
+        {
+            return;
+        }
+
+        var level = ActualTransparencyLevel;
+        var status = !glass
+            ? "classic theme, solid surfaces"
+            : IsNativeBackdrop(level)
+                ? $"{level} (native backdrop active)"
+                : "simulated glass, native backdrop unavailable";
+
+        _effects.ReportBackdrop(status);
+    }
+
+    private bool IsGlassTheme() =>
+        ActualThemeVariant.Equals(AxiomThemeVariants.GlassDark)
+        || ActualThemeVariant.Equals(AxiomThemeVariants.GlassLight);
+
+    private bool IsGlassLight() => ActualThemeVariant.Equals(AxiomThemeVariants.GlassLight);
+
+    private static bool IsNativeBackdrop(WindowTransparencyLevel level) =>
+        level == WindowTransparencyLevel.AcrylicBlur
+        || level == WindowTransparencyLevel.Mica
+        || level == WindowTransparencyLevel.Blur;
 
     private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -39,6 +164,13 @@ public partial class MainWindow : Window
         if (change.Property == WindowStateProperty)
         {
             UpdateCaptionGlyph();
+        }
+
+        if (change.Property == ActualTransparencyLevelProperty && !_applyingBackdrop)
+        {
+            var glass = IsGlassTheme();
+            UpdateBackdropTint(glass);
+            ReportBackdrop(glass);
         }
     }
 

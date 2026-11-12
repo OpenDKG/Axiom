@@ -17,4 +17,10 @@ public sealed record ManagedRule
 
     /// <summary>Machine-readable failure reason, never a raw exception dump.</summary>
     public string? LastErrorCode { get; init; }
+
+    /// <summary>OS rule group read during capture; part of the ownership evidence.</summary>
+    public string? OwnershipGroup { get; init; }
+
+    /// <summary>OS rule description read during capture; part of the ownership evidence.</summary>
+    public string? OwnershipDescription { get; init; }
 }

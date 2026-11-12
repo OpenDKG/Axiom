@@ -154,11 +154,13 @@ public sealed class OptionalModuleUninstaller
 
     private string BuildBlackboxUninstallScript()
     {
-        var hermes = Path.Combine(_userProfile, ".hermes");
+        var hermes = BlackboxPaths.ResolveHermesHome(_userProfile, _localAppData);
+        var blackboxHome = BlackboxPaths.ResolveBlackboxHome(_userProfile, _localAppData);
         return $$"""
             $ErrorActionPreference = 'Continue'
             $root = '{{Escape(BlackboxRoot)}}'
             $hermes = '{{Escape(hermes)}}'
+            $blackboxHome = '{{Escape(blackboxHome)}}'
             $command = '{{Escape(BlackboxCommand)}}'
             function Test-ReparsePath($path) {
               $current = [IO.Path]::GetFullPath($path)
@@ -200,7 +202,6 @@ public sealed class OptionalModuleUninstaller
             }
             Remove-SafeDirectory $root
             Remove-SafeFile $command
-            $blackboxHome = Join-Path $hermes 'blackbox'
             Remove-SafeDirectory $blackboxHome
             $logs = Join-Path $hermes 'logs'
             if ((Test-Path -LiteralPath $logs) -and -not (Test-ReparsePath $logs)) {

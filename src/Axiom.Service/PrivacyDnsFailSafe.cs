@@ -55,24 +55,49 @@ public static class PrivacyDnsFailSafe
             $targets = @(Get-DnsClientServerAddress -AddressFamily IPv4 |
               Where-Object { @($_.ServerAddresses) -contains '127.0.0.1' })
             if ($targets.Count -eq 0) { exit 0 }
+            $usable = $false
             if (Test-Path -LiteralPath $backup) {
-              $snapshot = Get-Content -LiteralPath $backup -Raw | ConvertFrom-Json
-              foreach ($entry in @($snapshot.interfaces)) {
-                if ($targets.InterfaceAlias -contains $entry.interfaceAlias) {
-                  if (@($entry.serverAddresses).Count -eq 0) {
-                    Set-DnsClientServerAddress -InterfaceAlias $entry.interfaceAlias -ResetServerAddresses
-                  } else {
-                    Set-DnsClientServerAddress -InterfaceAlias $entry.interfaceAlias -ServerAddresses @($entry.serverAddresses)
+              $item = Get-Item -LiteralPath $backup -Force
+              $ownerSid = (New-Object System.Security.Principal.NTAccount((Get-Acl -LiteralPath $backup).Owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+              if (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
+                  $ownerSid -in @('S-1-5-18', 'S-1-5-32-544')) {
+                $snapshot = Get-Content -LiteralPath $backup -Raw | ConvertFrom-Json
+                $valid = $true
+                foreach ($entry in @($snapshot.interfaces)) {
+                  foreach ($address in @($entry.serverAddresses)) {
+                    $parsed = $null
+                    if (-not [System.Net.IPAddress]::TryParse([string]$address, [ref]$parsed)) { $valid = $false }
+                  }
+                }
+                if ($valid) {
+                  $usable = $true
+                  $covered = @()
+                  foreach ($entry in @($snapshot.interfaces)) {
+                    if ($targets.InterfaceAlias -contains $entry.interfaceAlias) {
+                      $covered += [string]$entry.interfaceAlias
+                      if (@($entry.serverAddresses).Count -eq 0) {
+                        Set-DnsClientServerAddress -InterfaceAlias $entry.interfaceAlias -ResetServerAddresses
+                      } else {
+                        Set-DnsClientServerAddress -InterfaceAlias $entry.interfaceAlias -ServerAddresses @($entry.serverAddresses)
+                      }
+                    }
+                  }
+                  foreach ($target in $targets) {
+                    if ($covered -notcontains [string]$target.InterfaceAlias) {
+                      Set-DnsClientServerAddress -InterfaceAlias $target.InterfaceAlias -ResetServerAddresses
+                    }
                   }
                 }
               }
-            } else {
+            }
+            if (-not $usable) {
+              # No trustworthy snapshot: fall back to DHCP instead of applying attacker input.
               foreach ($target in $targets) {
                 Set-DnsClientServerAddress -InterfaceAlias $target.InterfaceAlias -ResetServerAddresses
               }
             }
             ipconfig /flushdns | Out-Null
-            Write-Host "Privacy Shield DNS failsafe restored $($targets.Count) adapter(s)."
+            Write-Host "Privacy Shield DNS failsafe processed $($targets.Count) adapter(s)."
             """;
 
         try

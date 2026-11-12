@@ -1,25 +1,26 @@
-# Installing Axiom (portable, per-user)
+# Installing Axiom — core, Complete and optional modules
 
 > **Development build - use at your own risk.** Axiom is under active development and may contain
 > defects, incomplete features or regressions. Firewall changes can interrupt connectivity, DNS
 > changes can break name resolution, and agent hooks can block tools or files. Do not rely on it as
-> your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
-> and keep a recovery path. The setup keeps
+> your only security control. Keep a backup of your existing network settings and a way to
+> restore connectivity if a rule or DNS change causes problems. The setup keeps
 > **Install Axiom** disabled until you acknowledge these risks.
 
-The bootstrap prefers `Axiom-*-win-x64.zip` release assets and falls back to the
-historical portable archives retained on releases published before the rename.
+The **core portable installer** can install the desktop application for the current Windows user
+without administrator rights, Windows service registration, a driver or firewall changes.
+**Complete installation is different:** it can download and install DKG, Blackbox and agent hooks
+with separate prerequisites, terms, prompts and network access. Later enabling **Axiom Shield**
+requires an explicit administrator approval to install the privileged Windows service.
 
-Axiom can be installed for the current Windows user without administrator rights, a Windows
-service registration, a driver or any firewall change. The recommended GitHub release asset is `Axiom-Setup.exe`: a single self-contained setup
+The recommended GitHub release asset is `Axiom-Setup.exe`: a single self-contained setup
 executable with the desktop and service payload embedded. Double-click it, keep or change the two
 options, and click **Install Axiom**. It installs for the current user, creates a Start Menu
 shortcut, and starts the application. No .NET runtime, administrator rights, service registration or
 firewall change is required.
 
-A core-only Microsoft Store (MSIX) build is also available for Store distribution. It excludes the
-optional DKG/Blackbox installers and agent hooks. See [STORE.md](STORE.md) for the package build,
-Partner Center identity, submission and local test procedure.
+Where a Microsoft Store edition is available, it contains the core features but excludes optional
+DKG/Blackbox installers and AI-agent hooks.
 
 The setup's **Complete installation** option runs the official Blackbox and DKG installers, starts
 their loopback services and installs agent hooks after Blackbox is ready. The third-party installers
@@ -38,12 +39,16 @@ Start Menu shortcut.
 
 - Windows 11 x64 (Windows 10 x64 is best-effort).
 - No .NET runtime: the published build is self-contained.
-- No administrator rights.
-- No network access during install; the executable is copied from a local file.
+- No administrator rights for **core portable copying/launching**; Axiom Shield and some optional
+  actions can require elevation.
+- A local core archive can be installed without internet. The online bootstrap, Complete
+  installation, source-list updates and third-party integrations require connectivity.
 
 ## Install
 
-The shortest path from a GitHub release is the bootstrap installer. It downloads the latest
+The shortest scripted path from a GitHub release is the bootstrap installer. **Review the remote
+script before executing it**; alternatively download the Axiom-Setup.exe binary from an authorized
+release and inspect its published SHA-256. The bootstrap downloads the latest
 `Axiom-<version>-win-x64.zip`, verifies `SHA256SUMS.txt`, installs for the current user and starts
 the app:
 
@@ -51,21 +56,14 @@ the app:
 irm https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-github.ps1 | iex
 ```
 
-This runs a remote script; read it first if you prefer. It needs no administrator rights and makes
-no firewall change. You can also download the release ZIP and run `install-portable.ps1` manually.
+This command executes a downloaded script immediately. Use it only if you trust the repository and
+have reviewed the script. You can instead download the graphical installer or release ZIP and run
+it locally. The core install does not modify Windows Firewall; enabling Axiom Shield is a separate
+action with additional consent.
 
-From the repository root, after a standalone build:
-
-```powershell
-.\scripts\publish-standalone.ps1
-.\scripts\install-portable.ps1
-```
-
-Or point at an existing executable:
-
-```powershell
-.\scripts\install-portable.ps1 -Source D:\Dist\Axiom.Desktop.exe
-```
+To install from a downloaded release ZIP without the online bootstrap, extract the archive and
+run `install-portable.ps1` from the extracted folder. The ordinary graphical installer is
+recommended for most users.
 
 Defaults:
 
@@ -85,7 +83,11 @@ The desktop starts the bundled `Axiom.Service.exe` automatically when it sits ne
 executable. This is a per-user console process, not a registered Windows service. If it cannot start,
 the app falls back to in-process monitoring.
 
-The first run shows a setup wizard:
+The first run can offer optional module setup. **Core monitoring, Axiom Shield, DNS-adapter changes
+and third-party agent hooks are different consent surfaces.** Do not assume selecting Complete
+means the firewall is already enforcing policy; verify Axiom Shield status separately.
+
+The first-run wizard:
 
 - built-in service and local file scanner are listed as already present;
 - DKG and Blackbox are optional and unchecked by default;
@@ -128,26 +130,10 @@ Get-FileHash .\Axiom-<version>-win-x64.zip -Algorithm SHA256
 
 Compare it with `SHA256SUMS.txt` from the same release.
 
-## Build a release archive
+## What the core `install-portable.ps1` copy step does not do
 
-```powershell
-.\scripts\build-release.ps1
-```
-
-This publishes the standalone desktop and service builds, packs `Axiom.Desktop.exe`,
-`Axiom.Service.exe`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` and the portable
-install/uninstall scripts into `artifacts\release\Axiom-<version>-win-x64.zip`, and writes
-`SHA256SUMS.txt`. Nothing is uploaded.
-
-From an extracted release archive:
-
-```powershell
-.\install-portable.ps1 -Source .\Axiom.Desktop.exe
-```
-
-Silent setup requires an explicit risk acknowledgement: `Axiom-Setup.exe --silent --accept-risk`.
-
-## What the portable install does not do
+The items below describe the core copy script, **not** all possible Complete setup, Shield and
+optional module actions.
 
 - It copies `Axiom.Service.exe` and the desktop starts it as a per-user console process; it does
   not register or start a Windows service.
@@ -156,5 +142,6 @@ Silent setup requires an explicit risk acknowledgement: `Axiom-Setup.exe --silen
 - It does not request administrator rights or elevation.
 - It does not download anything.
 
-A full MSI installer, service registration, signing and uninstall verification belong to the
-installer milestone; the portable script is the supported per-user path until then.
+The core portable script is separate from the consented Axiom Shield Windows service registration
+and from optional Blackbox/DKG installation. Portable release artifacts are not yet Authenticode
+signed; verify their provenance before installing and keep a recovery path for firewall/DNS changes.
