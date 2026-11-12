@@ -82,7 +82,7 @@ host's sudo guard on my side (row AL) — would appreciate a maintainer run of
 - Base: merged `origin/main` 6ff6061 (v0.13.2) as `79f4ff3`; one conflict (`AiAnalystPageViewModel.cs`) resolved
   keeping upstream's `_suppressApiKeyInputChanged` guard. No Windows behaviour changed (shared edits are gated on
   `RuleState.Pending`, which Windows adapters never return; `IpcCaller.FullAccess` unchanged).
-- Findings: #1 `b200c00`, #2/#3/#4 `7b2a95b`, #5 `5dd4532`; design in `docs/MACOS_ARCHITECTURE.md` §5.4 (authorization
+- Findings: #1 `b200c00`, #2/#3/#4 `7b2a95b` (+ `7986b8f`: Firewall page re-queries the live state every 5 s), #5 `5dd4532`; design in `docs/MACOS_ARCHITECTURE.md` §5.4 (authorization
   table, why the socket stays 0666) and §5.7 (FilterStatus fields, lifecycle state machine, log modes); tick list in
   `docs/MACOS_REVIEW.md` "GitHub review 2026-11-12"; evidence rows AF–AL in `docs/MACOS_TEST_REPORT.md`;
   `docs/MACOS_PORT_REPORT.md` updated (base v0.13.2, authorization, lifecycle, Linux implications).
@@ -90,7 +90,9 @@ host's sudo guard on my side (row AL) — would appreciate a maintainer run of
   (null on Windows). `RuleState` unchanged.
 - Gate (Linux, `-p:EnableWindowsTargeting=true`): `Axiom.sln` Release 0 errors / 0 warnings; Infrastructure.MacOS 199,
   Contracts 142, UI.Avalonia 40/41 (`HeadlessNavigationTests` flaky under parallel load, passes alone — pre-existing)
-  pass; `Axiom.Portable.slnx` build + test: see the final report. `Axiom.Service.Tests` (net10.0-windows) has 11
+  pass; `Axiom.Portable.slnx` Release build 0/0; its tests: McpServer 33, Desktop.Avalonia.MacOS 35, Contracts 142,
+  Presentation 93, Persistence 21, Infrastructure.MacOS 199, UI.Avalonia 41 pass, Core 117/128 (the 11 pre-existing
+  Windows-path failures, identical on `origin/main`). `Axiom.Service.Tests` (net10.0-windows) has 11
   pre-existing Linux failures identical on the merge base (kernel32 / Windows paths); the new coordinator test is in
   that group and needs a Windows run.
 - Still unverified: the second-standard-user IPC run and the forced newsyslog rotation on the VM (host sudo guard);
