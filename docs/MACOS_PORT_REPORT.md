@@ -1,7 +1,7 @@
 # Axiom for macOS — port report for the maintainer
 
-Date: 2026-11-12 (updated after the GitHub review of PR #274). Branch `buba/macos-desktop` on top of `main` 6ff6061 / v0.13.2
-(merged 2026-11-12 as `79f4ff3`; the earlier base was v0.13.0). Review remediation commits: `b200c00` (IPC authorization,
+Date: 2026-11-13 (updated after the GitHub review of PR #274). Branch `buba/macos` on top of `main` **2a834c2 / v0.16.0**
+(merged 2026-11-13 as `e07f112`; earlier bases v0.13.2 6ff6061 → `79f4ff3`, v0.13.0). Review remediation commits: `b200c00` (IPC authorization,
 P0 #1), `7b2a95b` (rule lifecycle + filter status, P0 #2/#3, High #4), `5dd4532` (log permissions, Medium #5); see
 `docs/MACOS_REVIEW.md` "GitHub review 2026-11-12" and `docs/pr274-review-replies.md`.
 Scope: 248 files, +23.9k / −1.7k lines. Shared (Windows-relevant) code: 99 files, +2.6k / −2.2k, mostly
@@ -225,3 +225,48 @@ Useful commands: `axiomd --install-service | --uninstall-service | --doctor [--j
   (1) `AxiomPaths` + `FirewallWriteGate` + `IpcRequestDispatcher`/seams + `PlatformText`/`AgentPlatform`,
   (2) `Axiom.Infrastructure.MacOS` + tests, (3) `Axiom.Service` dual-TFM, (4) `Axiom.Desktop.Avalonia.MacOS`,
   (5) UI fixes, (6) `macos/` + packaging.
+
+## 5. Upstream merge v0.16.0 (`2a834c2`, merge `e07f112`)
+
+Upstream since v0.13.2: 0.14.0 (Agent Protection/Activity above Network Control, compact KPIs, system status in the
+page header), the manual macOS GitHub Actions workflow + its two test fixes, 0.15.0 (agent and network dashboards
+split), `0e71bc1` (#288 #287 #277 #278), the 0.15.0 lock-file sync and 0.16.0 (Agent Health page, "Network
+Dashboard").
+
+Conflicts and decisions:
+
+- `Infrastructure.Windows/Ipc/PipeServer.cs`: the port moved the request switch into the shared
+  `Service.Hosting/Ipc/IpcRequestDispatcher.cs`; kept the delegation and replayed `0e71bc1` there
+  (`rule.verify` is advertised in `capabilities` whenever a handler exists, outside the write gate; the Windows
+  dispatch was already ungated). **`rule.verify` stays a `PrivateRead`** in `IpcCommandAccess`: it is read-only
+  but the report carries rule/app paths and enforcement state, so a non-owner local user still gets
+  `unauthorized` (the reflection test keeps every constant in exactly one set). Advertising ≠ authorizing.
+- `UI.Avalonia/OverviewPageViewModel.cs`: took upstream's removal of `AgentActivity` (now on
+  `AgentDashboardPageViewModel`); kept the port's `ProtectionActive` hook (review #25) so the header status follows
+  SHIELD ON.
+- `UI.Avalonia/SettingsPageViewModel.cs`: upstream's version-derived `ProductMilestone.Current` (`Axiom 0.16.0`)
+  with the per-OS suffix (`· macOS port`; Windows `· Windows-first`, byte-identical). The capability report's
+  `milestone` field now says `Axiom 0.16.0` on every platform (VM-verified); no other capability field changed.
+- Upstream's CI fixes (TMPDIR=/tmp/axiom-ci for 104-char socket paths; link-free temp root in
+  `ActivityFreshnessTests`) do not overlap the port's test helpers; both work.
+- Lock files: upstream's synced versions taken; restore on Linux drops the `net10.0/win-x64` sections, so that churn
+  was reverted and nothing lock-related is committed beyond upstream's.
+
+Gate on the merged head (Linux host): `Axiom.sln` (EnableWindowsTargeting) 0 warnings / 0 errors,
+`Axiom.Portable.slnx` 0/0; Infrastructure.MacOS 214/214, Desktop.Avalonia.MacOS 35/35, Presentation 93/93,
+UI.Avalonia 43/43, Contracts 142/142, McpServer 33/33, Persistence 21/21. Core 117/128 and Service.Tests 67/79:
+compared by failing test **name** with a pristine `origin/main` build on the same host: Core identical (11);
+Service: main fails 12 of its 70, the branch 12 of 79 — the only difference is the port-added
+`FirewallRuleCoordinatorTests.Apply_pending_is_stored_as_pending_not_applied` (Windows `C:\` app path, same cause as
+the coordinator tests main already fails; it was in the pre-merge failing set) on our side, and
+`PrivacyShieldTests.Failed_reconfiguration_keeps_previous_resolver_and_persisted_settings` failing only on main
+(not a regression on the branch). No new failures vs upstream.
+
+VM smoke (macOS 15.8.3, SIP disabled, redeployed ad hoc): `capabilities` → `rule.verify` advertised, milestone
+`Axiom 0.16.0`; `rules.query` → filter `verified`, connected, acked = published generation; `rule.apply` block
+`/usr/bin/curl` → `applied` with `verifiedUtc` = ack time, `rule.verify` effectiveAction `block`,
+enforcementVerified true, curl rc 7; `rule.remove` → curl HTTP 200, 0 rules. Screenshots:
+`docs/screenshots/macos/{overview-agent-dashboard,network-dashboard,agent-health,firewall-network-control}-v0.16.0.png`.
+Observed (upstream, not port): page-header subtitles are cut at 1280 px next to SYSTEM STATUS, and the Agent Health
+button reads `Install/repair agent hooksâ€¦` (mojibake already in `origin/main` `AgentHealthView.axaml` and
+`AgentsView.axaml`, shows on Windows too).
