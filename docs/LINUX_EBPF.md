@@ -61,7 +61,7 @@ Maps (pinned under `/sys/fs/bpf/axiom/maps/`):
 
 | Map | Type | Key | Value | Filled from |
 |---|---|---|---|---|
-| `axiom_exe_verdicts` | hash, 4096 | `struct axiom_exe_key {u32 dev_major; u32 dev_minor; u64 ino}` (16 B) | `struct axiom_verdict` | `stat -L -c '%Hd %Ld %i' <realpath(appPath)>` |
+| `axiom_exe_verdicts` | hash, 4096 | `struct axiom_exe_key {u32 dev_major; u32 dev_minor; u64 ino}` (16 B) | `struct axiom_verdict` | dev: `/proc/self/mountinfo` field 3 of the mount holding `realpath(appPath)`; ino: `stat -L -c %i` (§2.1) |
 | `axiom_cgroup_verdicts` | hash, 4096 | `u64 cgroup_id` | `struct axiom_verdict` | inode number of `/sys/fs/cgroup/axiom.slice/a-<hash>` (cgroup v2 id == directory inode) |
 | `axiom_events` | ringbuf, 256 KiB | — | `struct axiom_event` (72 B) | the programs |
 | `axiom_stats` | array, 4 | index | `u64` | lookups, blocked, events dropped, loopback allowed |
@@ -74,10 +74,60 @@ the encoding; `AXIOM_BPF_ABI`/`BpfLayout.Abi` (1) is printed by the helper and c
 
 Why dev **major/minor** and not raw `s_dev`: the kernel's `dev_t` is `MKDEV(ma, mi) = ma<<20 | mi`,
 glibc's `st_dev` packs differently; splitting removes the ambiguity (`stat` prints `%Hd %Ld`).
-Known caveat: on btrfs, user-space `st_dev` is the per-subvolume anonymous device while
-`i_sb->s_dev` is the real superblock's — the exe key would miss there (the cgroup key still works).
-Fix when needed: let the daemon learn the kernel-side dev by reading one event, or key on `ino` +
-filesystem id. Evidence box root is ext4 (`/usr/bin/curl` = `8:2 ino 51643045`).
+
+### 2.1 Exe key derivation (`BpfExeKey`, `MountInfoTable`)
+
+The kernel side is fixed: `MAJOR/MINOR(exe_file->f_inode->i_sb->s_dev)` and `i_ino`. User space must
+produce the same numbers, and `stat`'s `st_dev` is **not** always the superblock device: btrfs reports a
+per-subvolume anonymous device (Fedora 45: `/usr/bin/curl` → `stat` `0 35 3056`, `findmnt -T` → `0:33`).
+The first implementation keyed on `st_dev`, so on btrfs the exe map never matched while `rule.verify`
+claimed "BPF-backed … read back verified" (LINUX_TEST_REPORT.md F-8).
+
+Chosen design (kernel side unchanged): the planner derives
+
+- **dev** = `MAJ:MIN` (field 3) of the `/proc/self/mountinfo` entry whose mount point is the longest
+  whole-component prefix of `realpath -e <appPath>`; among identical mount points the *last* line wins
+  (it is mounted on top). Field 3 is `sb->s_dev` by definition (`show_mountinfo()`), so it is exactly
+  what the BPF program reads, for bind mounts too (a bind mount shares the superblock; field 4 `root`
+  differs, the device does not). Octal escapes (`\040` space, `\011`, `\012`, `\134`) are decoded.
+  The daemon runs as a system service in the host mount namespace; systemd's `ProtectSystem=`
+  sandboxing only adds read-only re-mounts of the same superblocks.
+- **ino** = `stat -L -c %i` (equals `i_ino` on ext4, xfs, btrfs, tmpfs, squashfs, NFS/FUSE on 64-bit).
+- **cross-check**: `st_dev` must equal the mountinfo dev; the only accepted difference is btrfs (subvolume
+  device by design). Anything else is "not provable".
+
+When the key is not provable the rule is reported **uncovered** (`exe key not provable for <app>: …`),
+never "BPF-backed": no mountinfo entry / unreadable mountinfo, `realpath` failure, overlayfs (and
+`fuse-overlayfs`/aufs) — there `exe_file->f_inode` is the overlay inode, whose device and inode number
+user-space `stat` does not report reliably (`xino`, samefs vs. multi-layer) — and an unexplained
+`st_dev` ≠ `s_dev`. The app's cgroup key is still written (herded processes stay blocked at connect
+time), but `LayerSyncResult.CoveredRules` excludes every uncovered rule, so `rule.verify` says
+`nft-only: … the ~1 s exec window applies` instead of claiming a connect-time verdict. Directory rules are
+reported the same way (previously their cgroup entry made them look "BPF-backed").
+
+Rejected alternative: keying the kernel side on something else (`f_path.mnt`, the btrfs root objectid).
+A mount pointer is per mount, not per file, and the btrfs root id needs non-CO-RE-stable internals;
+the mountinfo route needs no kernel change and is provable from user space.
+
+Known limitation (btrfs): inode numbers are unique per *subvolume*, not per superblock, so
+`{0:33, 3056}` also matches inode 3056 of another subvolume of the same filesystem (e.g. `/home`).
+The effect is over-blocking of that one unrelated file's connections, never under-blocking; the ino space
+is large and the collision needs a block rule on exactly that number. Containers: a process inside an
+overlay rootfs has an overlay exe inode, so host-path rules do not exe-match it (the cgroup key does if it
+is herded); this is the same behaviour nftables' cgroup rules have.
+
+The journal prints every key it writes and every rule it leaves to nftables:
+`BPF exe key: exe /usr/bin/curl dev 0:33 ino 3056 proto 0x7 (dev 0:33 from mountinfo (btrfs at / [root /root]; stat 0:35 is the btrfs subvolume device)).`
+
+`axiomd --doctor` has a **`bpf exe key`** check: it derives the key of `/usr/bin/env` the same way and
+prints the source, the filesystem and — on btrfs — that `st_dev` is a subvolume device and unused
+(`PASS bpf exe key: /usr/bin/env: key dev 0:33 ino … , source mountinfo superblock dev (btrfs at /, /dev/vda3). stat st_dev 0:35 is a btrfs subvolume device and is NOT used.`);
+WARN with the reason when the key is not provable (exe rules then stay nft-only).
+
+Tests: `BpfExeKeyTests` (mountinfo parser: btrfs subvolumes, ext4, xfs, overlay, bind mounts, escapes,
+longest component prefix, overmounts, garbage lines; planner with a Fedora btrfs fixture expecting
+`0:33`; symlink resolution; not-provable cases → uncovered; engine: cgroup-only ≠ covered; doctor; bpftool
+hint per distribution).
 
 ## 3. What the daemon writes into the maps (`BpfVerdictPlanner`)
 
@@ -190,7 +240,7 @@ daemon's), as root via `sudo -n`:
 1. `make` (as the developer), control `curl -m 8 https://example.com` → 200.
 2. `bpftool prog loadall … pinmaps …`, 4 × `cgroup attach / … multi`; `bpftool cgroup tree /` shows
    the four `axiom_*` programs at `/sys/fs/cgroup` next to systemd's.
-3. `stat -L -c '%Hd %Ld %i' /usr/bin/curl` → `python3 -I` packs `<IIQ` key and `<BBHI16s` value →
+3. `findmnt -no MAJ:MIN -T` (superblock dev) + `stat -L -c %i /usr/bin/curl` → `python3 -I` packs `<IIQ` key and `<BBHI16s` value →
    `bpftool map update pinned …/axiom_exe_verdicts key hex … value hex … any`. **Only** curl's inode
    is ever written (never a shell, never a system cgroup).
 4. `axiom-bpf-events` started on the pinned ring buffer; **bare** `curl -sS -m 8 https://example.com`
@@ -220,9 +270,11 @@ process killed except the helper the script started; every object the script cre
 - Allowed flows produce no BPF events (by design, §3); flow visibility of allowed traffic stays with
   `/proc/net` polling.
 - Kernels without BTF (some distro kernels, older LTS) and non-root test runs: nft-only, reported.
-- btrfs exe-key caveat (§2).
-- `bpftool` must exist on the target (Ubuntu: `linux-tools-$(uname -r)`); packaging must list it as a
-  recommends and the probe reports its absence.
+- btrfs: exe keys derived from mountinfo since the F-8 fix (§2.1); overlayfs exe paths stay nft-only (+ cgroup key).
+- `bpftool` must exist on the target; the probe and the doctor print a distribution-aware hint from
+  `/etc/os-release` `ID`/`ID_LIKE` (`BpftoolHint`): Ubuntu & derivatives `apt install linux-tools-common
+  linux-tools-$(uname -r)`, Debian `apt install bpftool`, Fedora/RHEL family `dnf install bpftool`, SUSE
+  `zypper install bpftool`, otherwise generic.
 
 ## 9. As built and proven (2026-11-12, kernel 7.0.0-42, clang 18, libbpf 1.3, bpftool 7.7)
 

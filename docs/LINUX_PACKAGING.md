@@ -198,12 +198,12 @@ never touched `table inet firewalld`. Both chains see the packet; a drop in eith
 
 ### 7.5 Known gaps found on Fedora
 
-- **BPF exe verdicts never match on btrfs** (Fedora's default root FS) — not a packaging defect, see F-8 and
-  LINUX_PORT_REPORT.md: the exe map key comes from userspace `stat` (`st_dev` of the btrfs *subvolume*, `0:35`)
-  while the BPF program reads `inode->i_sb->s_dev` (the btrfs superblock, `0:33`). The layer attaches and reads
-  back fine, but a short-lived `curl` connects before the 1 s cgroup herding; long-lived processes are still
-  blocked by nftables.
-- The daemon's "bpftool is not available" hint says `apt install linux-tools-common …` on Fedora too (cosmetic).
+- **BPF exe verdicts never matched on btrfs** (Fedora's default root FS; F-8): the key used `stat`'s subvolume
+  `st_dev` (`0:35`) instead of the superblock `s_dev` (`0:33`) the BPF program reads. Fixed in `3bc48fb` (device from
+  `/proc/self/mountinfo`; LINUX_EBPF.md §2.1, F-15: bare `curl` rc 7 on Fedora 45).
+- The "bpftool is not available" hint (journal + doctor) follows `/etc/os-release`: Fedora/RHEL `dnf install
+  bpftool`, Ubuntu `apt install linux-tools-common linux-tools-$(uname -r)`, Debian `apt install bpftool`, SUSE
+  `zypper install bpftool` (was the Ubuntu text everywhere).
 - RPM has no purge: `/var/lib/axiom` (rules, settings, history DB) and an empty `/var/log/axiom` stay after
   `dnf remove`.
 

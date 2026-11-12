@@ -191,9 +191,13 @@ is **proven**, and only that:
   (`--replacepkgs`) and removed on a Fedora 45 VM** (kernel 7.2.11, SELinux Enforcing, firewalld active;
   LINUX_TEST_REPORT.md F-1…F-12): no AVC denials, no custom policy needed, firewalld reload leaves `table inet axiom`
   alone, stop/remove leave only `/var/lib/axiom` + `/var/log/axiom`. One packaging defect fixed (Fedora 45's
-  OpenSSL 4: require `libssl.so.3()(64bit)`). **Open: on btrfs (Fedora default) the BPF exe-verdict key never
-  matches** (`stat` `st_dev` of the subvolume `0:35` vs the kernel's `i_sb->s_dev` `0:33`), so on Fedora the
-  connect-time layer attaches but does not close the ~1 s exec window; nftables enforcement works.
+  OpenSSL 4: require `libssl.so.3()(64bit)`). **Fixed (`3bc48fb`): on btrfs (Fedora default) the BPF exe-verdict
+  key never matched** (`stat` `st_dev` of the subvolume `0:35` vs the kernel's `i_sb->s_dev` `0:33`). The key's
+  device now comes from `/proc/self/mountinfo` (superblock dev), the inode from `stat`; keys that cannot be
+  proven (overlayfs, no mount entry, unexplained mismatch) leave the rule nft-only and `rule.verify` says so
+  (docs/LINUX_EBPF.md §2.1). Live: Fedora 45 bare `curl` → rc 7 in 10 ms with key `0:33 ino 3056`; Ubuntu ext4
+  key `8:2 ino 51643045`, rc 7 in 0 ms (LINUX_TEST_REPORT.md F-13…F-16). Doctor has a `bpf exe key` check; the
+  bpftool hint is distribution-aware.
 - **Untested:** Debian, the desktop app on Fedora, RHEL/openSUSE, Wayland (GNOME or KDE), KDE Plasma, arm64,
   kernels without BTF or `nft_socket`, NetworkManager/resolv.conf DNS backends live, live IPv6 traffic (the
   box has no IPv6 default route; the `inet` rules carry no `ip`/`ip6` qualifier and `connect6`/`sendmsg6`

@@ -65,7 +65,9 @@ attached_ours() { local n=0 id; for id in $OURS; do bpftool cgroup tree "$CGROUP
 [ "$(attached_ours)" = 4 ] && pass "four axiom_* programs attached at $CGROUP_ROOT (ids $OURS)" || fail "expected four attachments"
 
 echo "## A3 verdict entry for $TARGET only"
-read -r MAJ MIN INO < <(stat -L -c '%Hd %Ld %i' "$TARGET")
+# Superblock dev (what the BPF program reads), not stat's st_dev: they differ on btrfs (LINUX_EBPF.md §2.1).
+IFS=: read -r MAJ MIN < <(findmnt -no MAJ:MIN -T "$(realpath -e "$TARGET")" | tail -n1 | tr -d ' ')
+INO=$(stat -L -c '%i' "$TARGET")
 echo "  $TARGET dev $MAJ:$MIN ino $INO"
 KEY=$(python3 -I -c 'import struct,sys; print(" ".join(f"{b:02x}" for b in struct.pack("<IIQ", int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]))))' "$MAJ" "$MIN" "$INO")
 VALUE=$(python3 -I -c 'import struct,sys,uuid; print(" ".join(f"{b:02x}" for b in struct.pack("<BBHI16s", 2, 7, 0, 1, uuid.UUID(sys.argv[1]).bytes_le)))' "$RULE_ID")
