@@ -16,7 +16,8 @@ public sealed class AvaloniaPageTests
     {
         var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
 
-        Assert.Equal(12, shell.Pages.Count);
+        Assert.Equal(14, shell.Pages.Count);
+        Assert.Contains(shell.Pages, page => page.Title == "Agent Dashboard");
         Assert.Contains(shell.Pages, page => page.Title == "Integrations");
         Assert.Contains(shell.Pages, page => page.Title == "Agent Protection");
         Assert.Contains(shell.Pages, page => page.Title == "Agent Activity");
@@ -32,14 +33,16 @@ public sealed class AvaloniaPageTests
 
         Assert.Equal(
             [
-                "Dashboard",
+                "Agent Dashboard",
+                "Network Dashboard",
                 "Live Connections",
                 "Applications",
                 "Network Events",
-                "Network Control",
-                "Privacy Shield",
                 "Agent Protection",
                 "Agent Activity",
+                "Agent Health",
+                "Network Control",
+                "Privacy Shield",
                 "AI Analyst",
                 "Integrations",
                 "Settings",
@@ -62,8 +65,9 @@ public sealed class AvaloniaPageTests
 
         Assert.Equal(
             [
-                ("Dashboard", "MONITORING"),
-                ("Network Control", "PROTECTION"),
+                ("Agent Dashboard", "OVERVIEW"),
+                ("Live Connections", "MONITORING"),
+                ("Agent Protection", "PROTECTION"),
                 ("AI Analyst", "INTELLIGENCE"),
                 ("Settings", "GENERAL"),
             ],
@@ -80,6 +84,19 @@ public sealed class AvaloniaPageTests
         Assert.True(page.IsEmpty);
         Assert.Contains("local service", page.StatusText, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(page.Rows);
+
+        page.Dispose();
+    }
+
+    [Fact]
+    public void Events_page_disables_block_actions_without_firewall_writes()
+    {
+        var page = new EventsPageViewModel(null, new FakeTimerFactory(), new NullUserInteraction());
+
+        Assert.False(page.CanWrite);
+        Assert.False(page.BlockEventOutboundCommand.CanExecute(null));
+        Assert.False(page.BlockEventInboundCommand.CanExecute(null));
+        Assert.Contains("local service", page.EmptyHintText, StringComparison.OrdinalIgnoreCase);
 
         page.Dispose();
     }

@@ -1,0 +1,119 @@
+name: macOS port build and tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build
+        required: true
+        default: feature/macos-port
+        type: string
+      runner:
+        description: GitHub-hosted macOS runner
+        required: true
+        default: macos-15-intel
+        type: choice
+        options:
+          - macos-15-intel
+          - macos-15
+          - macos-14
+          - macos-13
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-port-${{ inputs.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-port:
+    name: Build and test (${{ inputs.runner }})
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.403
+
+      - name: Environment
+        run: |
+          sw_vers
+          uname -m
+          dotnet --info
+          xcode-select -p || true
+          swiftc --version || true
+
+      - name: Use a short temp directory for macOS Unix sockets
+        run: |
+          # macOS Unix domain socket paths are limited to 104 characters. The GitHub
+          # runner temp path is longer than that, so point Path.GetTempPath() at /tmp.
+          mkdir -p /tmp/axiom-ci
+          echo "TMPDIR=/tmp/axiom-ci" >> "$GITHUB_ENV"
+
+      - name: Build the solution
+        run: dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true
+
+      - name: Swift filter unit tests
+        run: bash macos/build.sh test
+
+      - name: macOS infrastructure tests
+        run: |
+          dotnet test tests/Axiom.Infrastructure.MacOS.Tests/Axiom.Infrastructure.MacOS.Tests.csproj \
+            -c Release --no-build \
+            --logger "trx;LogFileName=macos-infrastructure.trx" \
+            --results-directory "${{ runner.temp }}/test-results"
+
+      - name: macOS desktop host tests
+        run: |
+          dotnet test tests/Axiom.Desktop.Avalonia.MacOS.Tests/Axiom.Desktop.Avalonia.MacOS.Tests.csproj \
+            -c Release --no-build \
+            --logger "trx;LogFileName=macos-desktop.trx" \
+            --results-directory "${{ runner.temp }}/test-results"
+
+      - name: Portable core tests (Contracts, MCP, Persistence, Presentation)
+        run: |
+          status=0
+          for project in \
+            tests/Axiom.Contracts.Tests/Axiom.Contracts.Tests.csproj \
+            tests/Axiom.McpServer.Tests/Axiom.McpServer.Tests.csproj \
+            tests/Axiom.Persistence.Tests/Axiom.Persistence.Tests.csproj \
+            tests/Axiom.Presentation.Tests/Axiom.Presentation.Tests.csproj; do
+            dotnet test "$project" \
+              -c Release --no-build \
+              --logger "trx;LogFileName=$(basename "$project" .csproj).trx" \
+              --results-directory "${{ runner.temp }}/test-results" || status=1
+          done
+          exit $status
+
+      - name: Avalonia UI tests
+        run: |
+          dotnet test tests/Axiom.UI.Avalonia.Tests/Axiom.UI.Avalonia.Tests.csproj \
+            -c Release --no-build \
+            --logger "trx;LogFileName=avalonia-ui.trx" \
+            --results-directory "${{ runner.temp }}/test-results"
+
+      - name: Core tests (known non-Windows failures, informational)
+        continue-on-error: true
+        run: |
+          dotnet test tests/Axiom.Core.Tests/Axiom.Core.Tests.csproj \
+            -c Release --no-build \
+            --logger "trx;LogFileName=core-informational.trx" \
+            --results-directory "${{ runner.temp }}/test-results"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-test-results
+          path: ${{ runner.temp }}/test-results/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 7

@@ -2,6 +2,49 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.16.0
+
+- **Agent Health page.** Protected workspaces moved out of Agent Protection into a dedicated page
+  directly below Agent Activity. It reuses `SecurityPageViewModel`, so the protected-agent probes
+  and their timers are not duplicated.
+- **Network Dashboard.** The network page is now **Network Dashboard**, matching **Agent Dashboard**.
+- **Network Events honours read-only mode.** Block outbound/Block inbound are disabled when the
+  service cannot apply firewall changes, with the reason shown next to them; the action result row
+  survives the 10-second refresh (#288).
+- **Accurate empty states.** A search with no matches no longer claims the service is stopped (#287).
+- **Read-only `rule.verify`.** The service advertises `rule.verify` even when writes are disabled;
+  only `rule.apply` and `rule.remove` depend on the write capability (#277).
+- **Version-derived milestone.** The FND-005 label now follows the product version (#278).
+- **Verification.** `Axiom.UI.Avalonia` builds with 0 warnings and 0 errors; its suite passes 37/37,
+  including headless navigation through all 14 pages.
+
+## What's in 0.15.0
+
+- **Agent and Network dashboards are separate.** The default landing page is now **Agent
+  Dashboard**: sessions, tool calls, blocked and flagged counts plus the agent activity table and
+  security findings. **Network** keeps sockets, processes, loopback, throughput, new connections,
+  top apps and live sockets.
+- **Navigation.** A new **OVERVIEW** group holds Agent Dashboard first and Network second;
+  **MONITORING** now starts at Live Connections. The PROTECTION order is unchanged.
+- **One audit load.** The dashboard shares the existing `AgentsPageViewModel`, so opening it does
+  not start a second Blackbox audit or duplicate its polling.
+- **Verification.** `Axiom.UI.Avalonia` builds with 0 warnings and 0 errors; the Avalonia UI test
+  suite passes 36/36, including headless navigation through all 13 pages.
+
+## What's in 0.14.0
+
+- **Dashboard hierarchy.** The full-width System status card moved out of the Dashboard into the
+  page header, between the page title and the theme selector. The Dashboard now starts with the KPI
+  row, **Agent activity** sits above the **System-wide throughput** chart, and the Active sockets,
+  Processes, Loopback and Throughput cards use tighter padding, smaller value type and shorter
+  accent bars.
+- **Protection navigation order.** The PROTECTION group now reads **Agent Protection, Agent
+  Activity, Network Control, Privacy Shield**, with the group header starting on Agent Protection.
+- **Rollup.** Includes the 0.13.2 reliability fixes (AI Analyst key handling, live-history
+  `last_seen`, Events filter races, evidence tail reads, OpenCode bridge errors), the 0.13.x
+  Antigravity UI work, and the 0.12.0 service-owned network recovery / enforcement foundation.
+  No new enforcement, DNS or firewall behavior is introduced by the 0.14.0 layout changes.
+
 ## What's in 0.13.2
 
 - **Fixed AI Analyst API key clearing on Save (#270).** Clearing `ApiKeyInput` in the UI after

@@ -34,7 +34,7 @@ unchanged.
 | Support | Help & Support |
 
 The sidebar groups pages as **MONITORING** (Dashboard, Live Connections, Applications, Network
-Events), **PROTECTION** (Network Control, Privacy Shield, Agent Protection, Agent Activity),
+Events), **PROTECTION** (Agent Protection, Agent Activity, Network Control, Privacy Shield),
 **INTELLIGENCE** (AI Analyst, Integrations) and **GENERAL** (Settings, Help & Support). The
 Firewall Rules editor stays inside Network Control.
 
