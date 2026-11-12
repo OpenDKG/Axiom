@@ -13,7 +13,13 @@ public static class ActivityFreshness
     public static bool IsStale(DateTimeOffset? newestUtc, DateTimeOffset nowUtc) =>
         newestUtc is { } newest && nowUtc - newest > StaleAfter;
 
-    public static string Describe(DateTimeOffset? newestUtc, DateTimeOffset nowUtc)
+    public static bool IsStale(DateTimeOffset? newestUtc, DateTimeOffset nowUtc, bool anyAgentRunning) =>
+        anyAgentRunning && IsStale(newestUtc, nowUtc);
+
+    public static string Describe(DateTimeOffset? newestUtc, DateTimeOffset nowUtc) =>
+        Describe(newestUtc, nowUtc, anyAgentRunning: true);
+
+    public static string Describe(DateTimeOffset? newestUtc, DateTimeOffset nowUtc, bool anyAgentRunning)
     {
         if (newestUtc is not { } newest)
         {
@@ -29,6 +35,11 @@ public static class ActivityFreshness
 
         if (age > StaleAfter)
         {
+            if (!anyAgentRunning)
+            {
+                return $"Last agent activity at {local:HH:mm} ({Format(age)} ago) · no active agent session right now.";
+            }
+
             return $"No new agent activity since {local:HH:mm} ({Format(age)} ago). " +
                    "The Blackbox dashboard may be stalled or the agent hooks are not loaded; " +
                    "an agent keeps the hook it loaded at start, so restart it (especially after an " +

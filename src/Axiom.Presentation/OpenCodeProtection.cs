@@ -412,8 +412,12 @@ public sealed class OpenCodeProtection
               windowsHide: true,
               stdio: ["pipe", "ignore", "ignore"],
             })
-            child.stdin.write(JSON.stringify(payload))
-            child.stdin.end()
+            child.on("error", () => {})
+            if (child.stdin) {
+              child.stdin.on("error", () => {})
+              child.stdin.write(JSON.stringify(payload))
+              child.stdin.end()
+            }
           } catch {
           }
         }

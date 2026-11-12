@@ -95,6 +95,12 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private DateTimeOffset _lastAutoSyncAttempt = DateTimeOffset.MinValue;
 
+    private DateTimeOffset? _latestEvidenceUtc;
+
+    private DateTimeOffset? _latestSessionUtc;
+
+    private bool _hasLiveSession;
+
     public AgentsPageViewModel(
         SecurityPageViewModel security,
         IAgentSessionSource? agentSessions,
@@ -382,7 +388,6 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _pageActive = true;
         _timer.Start();
         _lastSessionRefresh = DateTimeOffset.MinValue;
-        _activityInitialized = false;
         _lastActivityRefresh = DateTimeOffset.MinValue;
         _ = RefreshAsync();
     }
@@ -1568,12 +1573,27 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 ? $"Showing all {_allActivity.Count} recorded event(s)."
                 : $"Showing {_allActivity.Count} of {_activityTotal} recorded event(s).";
 
+        UpdateActivityFreshness();
+    }
+
+    private void UpdateActivityFreshness()
+    {
         var newest = _allActivity.Count == 0
             ? (DateTimeOffset?)null
             : _allActivity.Max(entry => entry.Timestamp);
+        if (_latestEvidenceUtc is { } evidenceUtc && (newest is null || evidenceUtc > newest))
+        {
+            newest = evidenceUtc;
+        }
+
+        if (_latestSessionUtc is { } sessionUtc && (newest is null || sessionUtc > newest))
+        {
+            newest = sessionUtc;
+        }
+
         var now = DateTimeOffset.UtcNow;
-        HasStaleAgentActivity = ActivityFreshness.IsStale(newest, now);
-        ActivityFreshnessText = ActivityFreshness.Describe(newest, now);
+        HasStaleAgentActivity = ActivityFreshness.IsStale(newest, now, _hasLiveSession);
+        ActivityFreshnessText = ActivityFreshness.Describe(newest, now, _hasLiveSession);
     }
 
     private void ApplyFindings(BlackboxFindingPage page)
@@ -1807,6 +1827,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         _lastSessionRefresh = DateTimeOffset.UtcNow;
         var sessions = await Task.Run(_agentSessions.Read).ConfigureAwait(true);
+        _latestSessionUtc = sessions.Count == 0
+            ? null
+            : sessions.Max(item => (DateTimeOffset?)item.LastSeenUtc);
+        _hasLiveSession = sessions.Any(item => item.HostLive);
+
         SessionGroups.Clear();
         foreach (var group in sessions
                      .GroupBy(item => item.Framework, StringComparer.OrdinalIgnoreCase)
@@ -1845,8 +1870,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         SessionStatusText = SessionGroups.Count == 0
-            ? "No Claude Code, Codex or OpenCode/OpenChamber sessions were found. Hooks can still be installed and trusted."
-            : $"{SessionGroups.Sum(group => group.Sessions.Count)} host session(s) from Claude Code, Codex and OpenCode/OpenChamber metadata. 'Not running' is a historical session, not an error.";
+            ? "No Claude Code, Codex, Antigravity or OpenCode/OpenChamber sessions were found. Hooks can still be installed and trusted."
+            : $"{SessionGroups.Sum(group => group.Sessions.Count)} host session(s) from Claude Code, Codex, Antigravity and OpenCode/OpenChamber metadata. 'Not running' is a historical session, not an error.";
+        UpdateActivityFreshness();
     }
 
     private static string ProviderLabel(string framework) =>
@@ -1854,6 +1880,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         {
             "claude" or "claude-code" => "Claude Code",
             "codex" => "Codex",
+            "antigravity" => "Antigravity",
             "opencode" or "openchamber" => "OpenCode / OpenChamber",
             _ => framework,
         };
@@ -1867,6 +1894,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         {
             HookEvidence.Add(item);
         }
+
+        _latestEvidenceUtc = HookEvidence.Count == 0
+            ? null
+            : HookEvidence.Max(item => (DateTimeOffset?)item.Timestamp);
+        UpdateActivityFreshness();
     }
 
     partial void OnSelectedActivityChanged(BlackboxAuditEntry? value)
@@ -1888,13 +1920,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private void ApplyFilters()
     {
-        var selectedKey = SelectedActivity is null ? null : ActivityIdentity(SelectedActivity);
-        _preservingActivitySelection = true;
-        Activity.Clear();
         var severityFilter = SelectedSeverityFilter == "All severities"
             ? null
             : SelectedSeverityFilter.ToLowerInvariant();
-
+        var filtered = new List<BlackboxAuditEntry>();
         foreach (var entry in _allActivity)
         {
             if (!MatchesActivityFilter(entry, SelectedActivityFilter))
@@ -1914,6 +1943,19 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 continue;
             }
 
+            filtered.Add(entry);
+        }
+
+        if (Activity.SequenceEqual(filtered))
+        {
+            return;
+        }
+
+        var selectedKey = SelectedActivity is null ? null : ActivityIdentity(SelectedActivity);
+        _preservingActivitySelection = true;
+        Activity.Clear();
+        foreach (var entry in filtered)
+        {
             Activity.Add(entry);
         }
 

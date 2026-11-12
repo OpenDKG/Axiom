@@ -147,6 +147,68 @@ public sealed class AgentSessionReaderTests
         }
     }
 
+    [Fact]
+    public void Reads_Antigravity_conversation_summaries_and_decodes_workspace_uri()
+    {
+        var root = NewRoot();
+        try
+        {
+            var agyHome = Path.Combine(root, ".gemini", "antigravity");
+            Directory.CreateDirectory(agyHome);
+            var database = Path.Combine(agyHome, "conversation_summaries.db");
+            var nowIso = DateTimeOffset.UtcNow.ToString("O");
+            using (var connection = new SqliteConnection($"Data Source={database}"))
+            {
+                connection.Open();
+                using var create = connection.CreateCommand();
+                create.CommandText = """
+                    CREATE TABLE conversation_summaries (
+                        conversation_id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL DEFAULT '',
+                        preview TEXT NOT NULL DEFAULT '',
+                        last_modified_time DATETIME NOT NULL,
+                        workspace_uris TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT '',
+                        parent_conversation_id TEXT NOT NULL DEFAULT ''
+                    );
+                    """;
+                create.ExecuteNonQuery();
+
+                using var insert = connection.CreateCommand();
+                insert.CommandText = """
+                    INSERT INTO conversation_summaries(
+                        conversation_id, title, preview, last_modified_time, workspace_uris, status, parent_conversation_id)
+                    VALUES
+                        ('agy-root-secret', 'Firewall UI Overhaul', '', $now, '["file:///d%3A/Websites/Software/glasswire%20firewall"]', 'CASCADE_RUN_STATUS_RUNNING', ''),
+                        ('agy-subagent', 'Subagent task', '', $now, '["file:///d%3A/Websites/Software/glasswire%20firewall"]', 'CASCADE_RUN_STATUS_IDLE', 'agy-root-secret');
+                    """;
+                insert.Parameters.AddWithValue("$now", nowIso);
+                insert.ExecuteNonQuery();
+            }
+
+            var reader = new AgentSessionReader(
+                root,
+                Path.Combine(root, ".claude"),
+                Path.Combine(root, ".codex"),
+                Path.Combine(root, "opencode.db"),
+                agyHome);
+            var rows = reader.Read();
+
+            var row = Assert.Single(rows);
+            Assert.Equal("antigravity", row.Framework);
+            Assert.Equal("Firewall UI Overhaul", row.Title);
+            Assert.Contains("glasswire firewall", row.Workspace, StringComparison.OrdinalIgnoreCase);
+            Assert.True(row.HostLive);
+            Assert.Equal(24, row.SessionKey.Length);
+            Assert.DoesNotContain("agy-root-secret", row.SessionKey, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string NewRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), $"axiom-sessions-{Guid.NewGuid():N}");

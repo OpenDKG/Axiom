@@ -108,7 +108,10 @@ public sealed class AntigravityProtection
             var root = JsonNode.Parse(File.ReadAllText(HooksPath)) as JsonObject;
             if (root?.Remove(HookName) == true)
             {
-                File.WriteAllText(HooksPath, root.ToJsonString(JsonOptions), Encoding.UTF8);
+                File.WriteAllText(
+                    HooksPath,
+                    root.ToJsonString(JsonOptions),
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             }
         }
         catch (Exception exception) when (exception is
@@ -136,7 +139,10 @@ public sealed class AntigravityProtection
             root = [];
         }
 
-        var command = $"\"{PythonPath}\" \"{HookScriptPath}\"";
+        // Antigravity invokes hooks on Windows via Go's exec.Command("cmd", "/c", command).
+        // Go's syscall.EscapeArg escapes any embedded '"' as '\"', which cmd.exe rejects.
+        // Do not wrap paths in double quotes inside the command string.
+        var command = $"{PythonPath} {HookScriptPath}";
         root[HookName] = new JsonObject
         {
             ["PreToolUse"] = new JsonArray
@@ -157,7 +163,10 @@ public sealed class AntigravityProtection
             },
         };
 
-        File.WriteAllText(HooksPath, root.ToJsonString(JsonOptions), Encoding.UTF8);
+        File.WriteAllText(
+            HooksPath,
+            root.ToJsonString(JsonOptions),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         return true;
     }
 
@@ -165,7 +174,7 @@ public sealed class AntigravityProtection
     {
         try
         {
-            if (!File.Exists(HooksPath))
+            if (!File.Exists(HooksPath) || HasUtf8Bom(HooksPath))
             {
                 return false;
             }
@@ -180,7 +189,12 @@ public sealed class AntigravityProtection
             {
                 if (group?["hooks"] is JsonArray handlers &&
                     handlers.Any(handler =>
-                        handler?["command"]?.GetValue<string>()?.Contains(Marker, StringComparison.OrdinalIgnoreCase) == true))
+                    {
+                        var cmd = handler?["command"]?.GetValue<string>();
+                        return cmd is not null &&
+                               cmd.Contains(Marker, StringComparison.OrdinalIgnoreCase) &&
+                               !cmd.Contains('"', StringComparison.Ordinal);
+                    }))
                 {
                     return true;
                 }
@@ -194,52 +208,113 @@ public sealed class AntigravityProtection
         }
     }
 
+    private static bool HasUtf8Bom(string path)
+    {
+        Span<byte> prefix = stackalloc byte[3];
+        using var stream = File.OpenRead(path);
+        return stream.Read(prefix) == 3 &&
+               prefix[0] == 0xEF &&
+               prefix[1] == 0xBB &&
+               prefix[2] == 0xBF;
+    }
+
     private static string BuildScript() => """
         # Managed by Axiom. Antigravity PreToolUse hook: asks the Blackbox guard and
         # translates its decision into Antigravity's {"decision": ...} shape.
+        import contextlib
+        import datetime
         import json
         import os
-        import subprocess
         import sys
+        import time
         from pathlib import Path
 
         ROOT = Path(__file__).resolve().parent
-        BRIDGE = ROOT / "axiom-guard-bridge.py"
+        sys.path.insert(0, str(ROOT))
+        EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "agent-evidence.jsonl"
+
+
+        def record(event_type: str, tool: str, decision: str, guard_status: str, duration_ms: int,
+                   error_code: str = "", session: str = "", call: str = "") -> None:
+            try:
+                EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
+                if EVIDENCE.exists() and EVIDENCE.stat().st_size > 1_000_000:
+                    lines = EVIDENCE.read_text(encoding="utf-8").splitlines()[-500:]
+                    EVIDENCE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                entry = {
+                    "timestampUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "framework": "antigravity",
+                    "eventType": event_type,
+                    "tool": tool,
+                    "decision": decision,
+                    "guardStatus": guard_status,
+                    "durationMs": duration_ms,
+                    "errorCode": error_code,
+                    "session": session,
+                    "call": call,
+                }
+                with EVIDENCE.open("a", encoding="utf-8") as handle:
+                    handle.write(json.dumps(entry) + "\n")
+            except Exception:
+                pass
 
 
         def main() -> None:
+            started = time.monotonic()
+            tool = ""
+            session = ""
+            call = ""
             try:
-                payload = json.load(sys.stdin)
-                tool_call = payload.get("toolCall") or {}
-                request = {
-                    "framework": "antigravity",
-                    "event": "tool_call",
-                    "tool": str(tool_call.get("name") or ""),
-                    "args": tool_call.get("args") or {},
-                    "session": str(payload.get("conversationId") or ""),
-                    "call": str(payload.get("stepIdx") if payload.get("stepIdx") is not None else ""),
-                    "workspace": ",".join(payload.get("workspacePaths") or []),
-                }
-                completed = subprocess.run(
-                    [sys.executable, str(BRIDGE)],
-                    input=json.dumps(request),
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
+                raw = sys.stdin.read()
+                payload = json.loads(raw) if raw.strip() else {}
+                if not isinstance(payload, dict):
+                    print(json.dumps({"decision": "allow"}))
+                    return
+                tool_call = payload.get("toolCall") if isinstance(payload.get("toolCall"), dict) else {}
+                tool = str(tool_call.get("name") or payload.get("tool_name") or "")
+                args = tool_call.get("args") if "args" in tool_call else (payload.get("tool_input") or {})
+                session = str(payload.get("conversationId") or payload.get("session_id") or "")
+                step_idx = payload.get("stepIdx")
+                call = str(step_idx if step_idx is not None else (payload.get("tool_use_id") or ""))
+                workspaces = payload.get("workspacePaths")
+                workspace = ",".join(str(p) for p in workspaces) if isinstance(workspaces, list) else str(payload.get("cwd") or "")
+                with contextlib.redirect_stdout(sys.stderr):
+                    from plugins.blackbox.guard import hooks as guard
+                    decision = guard.on_pre_tool_call(
+                        tool_name=tool,
+                        args=args if isinstance(args, dict) else {},
+                        session_id=session,
+                        tool_call_id=call,
+                        framework="antigravity",
+                        workspace=workspace,
+                    )
+                blocked = bool(decision and str(decision.get("action") or "").lower() == "block")
+                record(
+                    "GUARD_BLOCKED" if blocked else "GUARD_ALLOWED",
+                    tool,
+                    "block" if blocked else "allowed",
+                    "blocked" if blocked else "allowed",
+                    int((time.monotonic() - started) * 1000),
+                    session=session,
+                    call=call,
                 )
-                try:
-                    decision = json.loads((completed.stdout or "").strip() or "{}")
-                except Exception:
-                    decision = {}
-                if str(decision.get("action") or "").lower() == "block":
-                    print(json.dumps({
-                        "decision": "deny",
-                        "reason": str(decision.get("reason") or "Blocked by the Axiom guard"),
-                    }))
+                if blocked:
+                    reason = str(decision.get("message") or decision.get("reason") or "Blocked by the Axiom guard")
+                    print(json.dumps({"decision": "deny", "reason": reason}))
                 else:
                     print(json.dumps({"decision": "allow"}))
-            except Exception:
+            except Exception as exc:
                 # Fail open, like the other Axiom hooks: a guard fault must not break the host agent.
+                record(
+                    "GUARD_FAILED",
+                    tool,
+                    "",
+                    "error",
+                    int((time.monotonic() - started) * 1000),
+                    type(exc).__name__,
+                    session=session,
+                    call=call,
+                )
                 print(json.dumps({"decision": "allow"}))
 
 
