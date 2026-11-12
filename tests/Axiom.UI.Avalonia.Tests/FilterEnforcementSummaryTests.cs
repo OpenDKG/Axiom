@@ -170,10 +170,39 @@ public sealed class FilterEnforcementSummaryTests
         page.Dispose();
     }
 
+    /// <summary>Review 2026-11-12 #4: the live filter state must be re-queried while the page is visible, throttled.</summary>
+    [Fact]
+    public async Task Firewall_page_requeries_enforcement_when_stale()
+    {
+        var client = new EnforcementClient(new FilterEnforcementReport { State = FilterEnforcementState.Verified, Connected = true });
+        var page = new FirewallPageViewModel(client, new NullUserInteraction());
+        await Task.Delay(300);
+        var initial = client.RulesQueries;
+        Assert.True(initial >= 1);
+
+        var now = DateTimeOffset.UtcNow;
+        page.RefreshEnforcementIfStale(now);
+        await Task.Delay(100);
+        Assert.Equal(initial, client.RulesQueries); // fresh: no extra query
+
+        page.RefreshEnforcementIfStale(now + FirewallPageViewModel.EnforcementRefreshInterval + TimeSpan.FromSeconds(1));
+        await Task.Delay(300);
+        Assert.Equal(initial + 1, client.RulesQueries);
+
+        page.Dispose();
+    }
+
     private sealed class EnforcementClient(FilterEnforcementReport report) : IServiceRequestClient
     {
+        public int RulesQueries { get; private set; }
+
         public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
         {
+            if (command == IpcCommandTypes.RulesQuery)
+            {
+                RulesQueries++;
+            }
+
             object result = command switch
             {
                 IpcCommandTypes.RulesQuery => new FirewallRulesSnapshot

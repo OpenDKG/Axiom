@@ -933,7 +933,31 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     }
 
     /// <summary>Applies a fresh protection snapshot while the Firewall page is visible.</summary>
-    public void UpdateProtectionStatus(ProtectionStatus status) => ApplyStatus(status);
+    public void UpdateProtectionStatus(ProtectionStatus status)
+    {
+        ApplyStatus(status);
+        RefreshEnforcementIfStale(DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>
+    /// How often the rules/enforcement section is re-queried while the page is visible. The filter
+    /// connection state is live (review 2026-11-12 #4): a page opened while the extension was
+    /// disconnected must not keep saying "disconnected" after it reconnected, and vice versa.
+    /// </summary>
+    public static readonly TimeSpan EnforcementRefreshInterval = TimeSpan.FromSeconds(5);
+
+    private DateTimeOffset _lastEnforcementRefreshUtc;
+
+    /// <summary>Re-queries rules + capability when the last query is older than <see cref="EnforcementRefreshInterval"/>.</summary>
+    public void RefreshEnforcementIfStale(DateTimeOffset now)
+    {
+        if (now - _lastEnforcementRefreshUtc < EnforcementRefreshInterval)
+        {
+            return;
+        }
+
+        _ = RefreshAsync();
+    }
 
     [RelayCommand]
     private void DismissAlertFocus()
@@ -1367,6 +1391,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         }
 
         IsBusy = true;
+        _lastEnforcementRefreshUtc = DateTimeOffset.UtcNow;
 
         try
         {
