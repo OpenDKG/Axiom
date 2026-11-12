@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Unit tests of the nftables enforcement engine (fake nft runner, fake cgroup/proc fs) plus the
+    root-only end-to-end harness: `scripts/linux/nft/e2e.sh` builds this project as the user and
+    runs the produced executable as root with the argument `e2e` (E2eHarness.Main), which applies a
+    real rule through the engine, proves curl is blocked, and cleans the table and cgroups up.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Axiom.Infrastructure.Linux.Nft.Tests</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <GenerateProgramFile>false</GenerateProgramFile>
+    <StartupObject>Axiom.Infrastructure.Linux.Nft.Tests.E2eHarness</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Axiom.Infrastructure.Linux\Nft\Axiom.Infrastructure.Linux.Nft.csproj" />
+  </ItemGroup>
+
+</Project>
