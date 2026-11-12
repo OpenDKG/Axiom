@@ -1,6 +1,9 @@
 # Axiom for macOS — port report for the maintainer
 
-Date: 2026-11-12. Branch `buba/macos-desktop` (60 commits on top of `main` e45f880 / v0.13.0, merged 2026-11-12). Not pushed; local only.
+Date: 2026-11-12 (updated after the GitHub review of PR #274). Branch `buba/macos-desktop` on top of `main` 6ff6061 / v0.13.2
+(merged 2026-11-12 as `79f4ff3`; the earlier base was v0.13.0). Review remediation commits: `b200c00` (IPC authorization,
+P0 #1), `7b2a95b` (rule lifecycle + filter status, P0 #2/#3, High #4), `5dd4532` (log permissions, Medium #5); see
+`docs/MACOS_REVIEW.md` "GitHub review 2026-11-12" and `docs/pr274-review-replies.md`.
 Scope: 248 files, +23.9k / −1.7k lines. Shared (Windows-relevant) code: 99 files, +2.6k / −2.2k, mostly
 extraction into portable projects. The WPF projects (`Axiom.UI`, `Axiom.Desktop`) are untouched except 26 lines.
 
@@ -25,11 +28,20 @@ block an app from Connections → `curl` blocked while `python3` to the same hos
 Firewall page, Privacy Shield on/off (system DNS → 127.0.0.1, `doubleclick.net` NXDOMAIN, DNS restored),
 every page rendered, menu-bar icon, quit/relaunch/single instance, upgrade in place, uninstall.
 
-Security hardening done after an independent review: daemon copied to a root-owned
-`/Library/PrivilegedHelperTools/com.axiom.service/` and verified before launch; IPC writes limited to root,
-the installing user and `admin` members (reads for any uid ≥ 501); data dir 0700 / files 0600; rules file
+Security hardening done after an independent review and the GitHub review of PR #274: daemon copied to a root-owned
+`/Library/PrivilegedHelperTools/com.axiom.service/` and verified before launch; IPC authorization in four layers
+(connect / public read / private read / write — root and the installing user get everything, `admin` members per
+`AllowAdminGroupWrites`, every other local account only a redacted `serviceHealth` + `capabilities`, unknown peer
+credentials closed); data dir 0700 / files 0600; daemon log dir 0700 / log + archives 0600 (newsyslog 600); rules file
 must be root-owned and not group/world-writable; per-uid connection cap; `axiomd --doctor` self-check;
 upstream's `axiomd --recover-network [--apply]` offline recovery (v0.11.0) wired to macOS.
+
+Enforcement is reported truthfully (upstream `docs/ENFORCEMENT.md`): a rule written to `rules.json` is `Pending` until
+the extension acknowledges that generation over a live connection (`filter.rules` without error), `Applied` only then
+(verified at the ack time), `Failed` with the filter's reason when it rejects the rule or the file; `rule.verify` has an
+`effectiveAction` only while verified; `capabilities` reports `connected`, `publishedGeneration`, `ackedGeneration`,
+`lastSeenUtc`, `lastAckUtc` and goes `degraded` the moment the extension disconnects (no "seen recently" window).
+Design: `docs/MACOS_ARCHITECTURE.md` §5.4 (authorization) and §5.7 (lifecycle state machine).
 
 Gate on Linux (after the v0.13.0 merge): `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` 0 errors / 0 warnings.
 Tests: Contracts 142, McpServer 33, Persistence 19, Presentation 90, UI.Avalonia 40, Infrastructure.MacOS 155,
@@ -175,6 +187,18 @@ Layout on an installed Mac
 Useful commands: `axiomd --install-service | --uninstall-service | --doctor [--json] | --recover-network [--apply]`,
 `axiom-sysext activate|deactivate|enable|disable|status [--force]`, `systemextensionsctl list`,
 `log stream --predicate 'subsystem == "com.axiom.firewall.filter"'`.
+
+## 3b. Linux implications (for the nft/eBPF port)
+
+- `PeerAuthorization.Decide(uid, PeerPolicy)` and `IpcCommandAccess` (PublicRead / PrivateRead / Write) are pure and
+  platform-neutral; the Linux branch moved `PeerAuthorization` to `Axiom.Infrastructure.Unix` and can take this policy
+  unchanged (`SO_PEERCRED` instead of `getpeereid`). The dispatcher-level denial is shared code already.
+- `FilterEnforcementState` (`Unavailable` / `Degraded` / `Pending` / `Verified`), the `filterEnforcement` report fields
+  and `EffectiveRuleReport.EnforcementVerified` are in `Axiom.Contracts`: an nft adapter that applies synchronously can
+  answer `Verified` from a readback of the live ruleset (`nft list ruleset`), while an adapter with a separate enforcement
+  daemon should go through the same Pending → ack → Verified path. `RuleState` was not extended; `Pending` already exists.
+- `MacLogPermissions` is only the policy (0700 dir, 0600 files); on Linux the equivalent is the journald/systemd
+  `LogsDirectoryMode=0700` or the same helper against `/var/log/axiom`.
 
 ## 4. Not done / unverified
 
