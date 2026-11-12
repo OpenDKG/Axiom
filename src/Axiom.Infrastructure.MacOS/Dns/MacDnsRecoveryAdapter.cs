@@ -250,11 +250,11 @@ public sealed class MacDnsRecoveryAdapter : INetworkRecoveryDnsAdapter
         }
     }
 
+    // Order-sensitive, like upstream's WindowsDnsRecoveryAdapter and NetworkRecoveryController (v0.12.0):
+    // resolver order is part of the saved state, and networksetup preserves the order it was given.
     private static bool SameServers(IReadOnlyList<string> left, IReadOnlyList<string> right) =>
         left.Count == right.Count &&
-        left.Select(Normalize).OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-            .SequenceEqual(right.Select(Normalize).OrderBy(value => value, StringComparer.OrdinalIgnoreCase),
-                StringComparer.OrdinalIgnoreCase);
+        left.Select(Normalize).SequenceEqual(right.Select(Normalize), StringComparer.OrdinalIgnoreCase);
 
     private static string Normalize(string server) =>
         IPAddress.TryParse(server, out var address) ? address.ToString() : server.Trim();
