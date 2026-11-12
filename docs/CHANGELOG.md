@@ -2,6 +2,23 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.12.0
+
+- **Service-owned network recovery.** DNS and Axiom-owned firewall state are captured by the
+  elevated service into a checksummed machine snapshot, restored only from that validated snapshot,
+  and verified by read-back. The service watchdog restarts a stopped resolver before any DNS-only
+  rollback and never disables an intentionally active protection because the desktop closed.
+  An explicit administrator `--recover-network --apply` path exists for a stopped service.
+- **Agent enforcement foundation.** URL paths are rejected by default in threat-share payloads
+  (B2); module endpoints must prove their owning process (B3); ambiguous reporter outcomes stay
+  unverified instead of being retried blindly (B4). Adds the E0 capability matrix, the E1
+  deterministic offline policy engine, E2 host hook-event/deny-payload mapping, and the E5
+  cooperative enforcement status surface. No autonomous enforcement or live publication is added.
+- **Avalonia UI polish.** Navigation, card surfaces, active theme/effects toggles and the session
+  context menu were tightened, with unit coverage for the active-state flags.
+- **Documentation.** Enforcement baseline/capability ADRs, the enforcement tracker, leadership
+  titles, and the network-recovery snapshot/rollback/emergency runbook.
+
 ## What's in 0.11.0
 
 - **Public release line resumes after 0.10.25.** This release rolls up the 0.2.0 provenance work
