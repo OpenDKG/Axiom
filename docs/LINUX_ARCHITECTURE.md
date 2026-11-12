@@ -1,10 +1,10 @@
 # Axiom on Linux — architecture (contract + as built)
 
-Status: phase P1 (skeleton). The daemon builds, installs and answers IPC on Linux; firewall
-enforcement is **not available** in this phase (the nftables engine lands separately under
-`src/Axiom.Infrastructure.Linux/Nft/`). Companion documents: `LINUX_PORT_PLAN.md` (plan and
-revalidation), `LINUX_TEST_REPORT.md` (evidence), `MACOS_ARCHITECTURE.md` (the sibling port
-this one mirrors).
+Status: phase P3 (daemon with nftables enforcement, proven end to end as root on this box —
+`LINUX_TEST_REPORT.md`). §7 below describes the P1 stub for history; §10 is the as-built P3 wiring.
+Companion documents: `LINUX_PORT_PLAN.md` (plan and revalidation), `LINUX_ENFORCEMENT.md` (the
+engine), `LINUX_TEST_REPORT.md` (evidence), `LINUX_PORT_REPORT.md` (maintainer summary),
+`MACOS_ARCHITECTURE.md` (the sibling port this one mirrors).
 
 ## 1. Project layout
 
@@ -166,5 +166,64 @@ only), DNS backend and per-link servers, Privacy Shield redirect/backup consiste
 
 ## 9. Not in this phase
 
-nftables enforcement and flow events, cgroup/eBPF attribution, polkit action for the desktop app,
-`.deb`/`.rpm` packaging, desktop autostart/tray, SELinux/AppArmor profiles, `/etc/axiom` config.
+eBPF attribution (the exec-time race stays, §10), polkit action for the desktop app,
+`.deb`/`.rpm` packaging, desktop app/autostart/tray, SELinux/AppArmor profiles, `/etc/axiom` config.
+
+## 10. As built in P3: the nftables engine inside axiomd
+
+`LinuxFirewallPolicyAdapter` (§7) is gone; `LinuxEnforcement.Create(paths, sink, log)` builds
+`NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRuleRecoveryAdapter` over the real
+`nft` runner and `ProcCgroupFs` (`src/Axiom.Infrastructure.Linux/Nft/`, `LINUX_ENFORCEMENT.md`).
+
+**Hosted service.** `NftEnforcementWorker` (`src/Axiom.Service/Platform/`, Linux only, in the
+Windows TFM `Compile Remove` list) runs `NftEnforcementSupervisor.RunAsync`:
+
+1. *publish at start* — `table inet axiom` from `filter/managed-rules.json` (`Published table inet
+   axiom generation N (a applied, r rejected)` in the journal); rules survive daemon restarts and
+   upgrades because the store, not the kernel, is the source of truth;
+2. *attribution loop* (1 s) — `AppCgroupManager.Attribute()` walks `/proc`, matches
+   `/proc/<pid>/exe` against the app paths of enabled rules and writes the pid into
+   `axiom.slice/a-<hash>/cgroup.procs`; only moves out of `system.slice/*.service` and failures
+   are logged (user-scope moves are routine); unused app cgroups are removed;
+3. *ruleset watcher* (10 s) — `nft -j list table inet axiom`; when the table is gone (another
+   admin's `nft flush ruleset`) it republishes (`generation` increments) and logs it;
+4. *trace monitor* — `nft monitor trace` child (restarted on exit), `NftTraceParser` joins
+   `packet:`/`rule … (verdict …)` records of the block rules (`meta nftrace set 1`) into NDJSON
+   flow events; `FilterEventPipe` feeds them to the shared `FilterEventServer`/`FlowTable`;
+5. *teardown* on stop — herded pids go back to their origin cgroups, app cgroups and the table
+   are deleted; `--uninstall-service` repeats the table + `axiom.slice` removal belt-and-braces.
+
+**Event flow.** Block verdict → trace record → `FlowObservation{verdict:"block", ruleId}` →
+`LinuxConnectionSource.BlockedFlows` lists it next to the `/proc` sockets (`state: Blocked`,
+`ruleStatus: blockedByOwnedRule`, `quality: observed`, pid 0 when the rejected SYN's socket is
+already gone — `DescribeRuleApp` falls back to the rule's app path) → `snapshot` IPC → history
+database. Allowed flows are not traced (counters only). `rules.query` reports
+`filterEnforcement {generation, appliedRuleCount, rejectedRules[]}`; a rule whose live process
+could not be moved is listed as rejected with the reason; `rule.verify` adds "table inet axiom
+generation N, 3 nft rule(s), M packet(s) matched".
+
+**Exec-time race.** A process is herded on the next loop pass (≤1 s after exec) and nftables
+matches the socket's cgroup *at socket creation*: a `curl` that connects within its first second
+is not blocked, and connections a process opened before it was herded stay open. Long-lived
+processes and every later connection are blocked with an immediate TCP reset (`curl: (7) … after
+0 ms`). Same class of caveat as the macOS UDP note; closing it needs the eBPF `cgroup/connect4`
+helper (P2b) or a proc-connector exec watcher.
+
+**Unit capabilities (as installed).** `CAP_NET_ADMIN CAP_NET_RAW` (nft, raw sockets),
+`CAP_SYS_ADMIN` (`cgroup.procs` of foreign cgroups), `CAP_SYS_PTRACE CAP_DAC_READ_SEARCH`
+(`/proc/<pid>/{exe,fd}` of other users), `CAP_DAC_OVERRIDE` (resolv.conf / resolved runtime
+files), `CAP_CHOWN CAP_FOWNER` (0700/0600 enforcement), `CAP_KILL`, `CAP_NET_BIND_SERVICE`
+(Privacy Shield resolver on 127.0.0.1:53 — missing in P1, found by the e2e run). `ProtectSystem=strict`
+with `ReadWritePaths=/var/lib/axiom /run/axiom /sys/fs/cgroup /etc/resolv.conf /run/systemd/resolve
+/run/NetworkManager`, `ProtectControlGroups=no` (the daemon writes cgroups), `NoNewPrivileges=yes`.
+Child processes get `NOTIFY_SOCKET` stripped: `resolvectl` otherwise reports `EXIT_STATUS=` to
+systemd, which logs "reception only permitted for main PID" every probe.
+
+**Write gate.** `rule.apply/remove/verify` are listed in `capabilities` and accepted only while
+`FirewallWriteGate.IsOpen` — i.e. after `protection.enable` (Axiom Shield consent persisted in
+`/var/lib/axiom/protection.json`), exactly as on Windows/macOS; before that `firewallWrites` is
+`false` and the commands are absent from the list.
+
+**Doctor.** `enforcement` is PASS when the daemon is active and `table inet axiom` is present
+(`nftables v1.0.9; table inet axiom generation N is in force`), FAIL when the daemon runs without
+the table, WARN when `nft` is missing.

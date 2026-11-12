@@ -1,6 +1,7 @@
 # Build output
 bin/
 obj/
+build/
 artifacts/
 publish/
 TestResults/

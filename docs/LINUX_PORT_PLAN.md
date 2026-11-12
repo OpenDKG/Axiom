@@ -175,3 +175,16 @@ P0 decisions fixed here: install dir `/usr/libexec/axiom`; uid floor 1000; write
 | 4 | — | `--install-service --dry-run` / `--uninstall-service --dry-run` added (no root needed; prints the plan and the unit) | Lets the installer be exercised on a workstation without registering a service |
 
 Gate numbers and the local run are in `docs/LINUX_TEST_REPORT.md`; the contract is in `docs/LINUX_ARCHITECTURE.md`.
+
+### 11.2 Status after P2 + P3 (2026-11-12)
+
+| Phase | Status |
+|---|---|
+| P0 decisions | done: `/usr/libexec/axiom`, uid floor 1000, `reject with tcp reset` for TCP / `drop` for UDP+other |
+| P1 Unix extraction + skeleton | done (`LINUX_TEST_REPORT.md` P1) |
+| P2 enforcement | done as `NftFirewallPolicyAdapter` + `AppCgroupManager` (1 s `/proc` herding, no proc-connector watcher) + `NftTraceMonitor`; `cgroupsv2` sets not used (one `socket cgroupv2` rule per app); 54 unit tests + root e2e script |
+| P2b BPF helper | not started (the exec-time race remains) |
+| P3 daemon | done: engine wired into `axiomd`, root install/upgrade/uninstall, IPC rule lifecycle, Privacy Shield with resolved, network recovery, restart persistence all proven on this box (`LINUX_TEST_REPORT.md` P3). `--restore-dns` is covered by `--uninstall-service` + `networkRecovery.restore`; no NM dispatcher script |
+| P4 desktop | not started |
+| P5 packaging | not started (publish tree only) |
+| P6 security review | not started; the e2e found and fixed three unit/daemon defects (`CAP_NET_BIND_SERVICE`, `NOTIFY_SOCKET` leak, `resolvectl domain` restore) |
