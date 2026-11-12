@@ -28,13 +28,13 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.13.0, )"
+          "Axiom.Contracts": "[0.14.0, )"
         }
       },
       "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.13.0, )",
+          "Axiom.Contracts": "[0.14.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
