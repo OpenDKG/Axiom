@@ -17,6 +17,12 @@ public interface IInodeReader
 
     /// <summary>cgroup v2 id of a cgroup-relative path (its directory inode number), or null when absent.</summary>
     ulong? CgroupId(string cgroupPath);
+
+    /// <summary>Canonical path (every symlink resolved), or null when it cannot be resolved.</summary>
+    string? RealPath(string path);
+
+    /// <summary>Text of the daemon's <c>/proc/self/mountinfo</c>, or null when unreadable.</summary>
+    string? ReadMountInfo();
 }
 
 /// <summary>GNU coreutils <c>stat</c> backed reader: <c>stat -L -c '%Hd %Ld %i'</c> (major, minor, inode).</summary>
@@ -47,6 +53,10 @@ public sealed class StatInodeReader : IInodeReader
         var result = _runner.Run("stat", ["-c", "%i", absolute], Timeout);
         return result.Succeeded && ulong.TryParse(result.StandardOutput.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var id) ? id : null;
     }
+
+    public string? RealPath(string path) => path;
+
+    public string? ReadMountInfo() => null;
 
     /// <summary>Parses "major minor inode" (pure; unit-tested).</summary>
     public static BpfInode? Parse(string statOutput)

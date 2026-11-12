@@ -25,6 +25,12 @@ public sealed record LinuxDoctorTargets(
     /// <summary>systemd <c>LogsDirectory=</c>; checked for root 0700 / 0600 files when it exists.</summary>
     public string LogDirectory { get; init; } = LinuxServicePaths.LogDirectory;
 
+    /// <summary>mountinfo read by the "bpf exe key" check (the doctor's own mount namespace).</summary>
+    public string MountInfoPath { get; init; } = "/proc/self/mountinfo";
+
+    /// <summary>Binary whose BPF exe key the "bpf exe key" check derives.</summary>
+    public string ExeKeyProbePath { get; init; } = "/usr/bin/env";
+
     public static LinuxDoctorTargets Default { get; } = new(
         LinuxServicePaths.UnitFilePath,
         LinuxServicePaths.ImageDirectory,

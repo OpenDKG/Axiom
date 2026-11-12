@@ -18,6 +18,16 @@ internal sealed class FakeInodes : IInodeReader
     public BpfInode? Stat(string path) => Files.TryGetValue(path, out var inode) ? inode : null;
 
     public ulong? CgroupId(string cgroupPath) => CgroupIds.TryGetValue(cgroupPath, out var id) ? id : null;
+
+    /// <summary>Symlink targets; anything else resolves to itself.</summary>
+    public Dictionary<string, string> RealPaths { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Default: one ext4 root on 8:2 (st_dev == s_dev), matching the 8:2 inodes the older tests use.</summary>
+    public string? MountInfo { get; set; } = "22 1 8:2 / / rw,relatime shared:1 - ext4 /dev/sda2 rw,errors=remount-ro\n";
+
+    public string? RealPath(string path) => RealPaths.TryGetValue(path, out var real) ? real : path;
+
+    public string? ReadMountInfo() => MountInfo;
 }
 
 /// <summary>
