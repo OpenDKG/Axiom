@@ -119,7 +119,11 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
 
         return Task.FromResult(new FirewallCapabilityReport
         {
-            Status = enforcement.Connected ? FirewallCapabilityStatus.Available : FirewallCapabilityStatus.Degraded,
+            // A connected filter whose latest report rejects the rules file is degraded, not
+            // available: the table in force is not the one the daemon published (review #2 MAC-1).
+            Status = enforcement.Connected && enforcement.Rules is not { IsError: true }
+                ? FirewallCapabilityStatus.Available
+                : FirewallCapabilityStatus.Degraded,
             Reason = reason,
             FirewallServiceRunning = enforcement.Connected,
             ManagedRulesReadable = true,
@@ -634,6 +638,11 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 break;
             case FilterEnforcementState.Degraded:
                 notes.Add("AxiomFilter is disconnected (last seen " + Utc(enforcement.LastSeenUtc) + "); the rule is published but not known to be enforced.");
+                break;
+            case FilterEnforcementState.Pending when enforcement.Rules is { IsError: true }:
+                // The latest report is a file rejection; the file-error note below says why. An
+                // earlier ack of the same number is history, not "acknowledged" (review #2 MAC-1).
+                notes.Add("AxiomFilter's latest report rejects the rules file; enforcement of this table is not verified.");
                 break;
             case FilterEnforcementState.Pending:
                 notes.Add(enforcement.AckedGeneration is { } acked

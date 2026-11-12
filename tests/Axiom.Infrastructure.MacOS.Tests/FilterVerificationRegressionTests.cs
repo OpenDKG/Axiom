@@ -175,6 +175,8 @@ public sealed class FilterVerificationRegressionTests
             Assert.Equal("group/world-writable (mode 664)", enforcement.FileError);
             Assert.NotNull(capabilities.Reason);
             Assert.Contains("rejected", capabilities.Reason, StringComparison.Ordinal);
+            Assert.Equal(FirewallCapabilityStatus.Degraded, capabilities.Status);
+            Assert.DoesNotContain(verify.Notes, note => note.Contains("acknowledged generation", StringComparison.Ordinal));
         }
     }
 
