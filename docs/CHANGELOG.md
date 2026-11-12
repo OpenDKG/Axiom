@@ -2,6 +2,22 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.16.0
+
+- **Agent Health page.** Protected workspaces moved out of Agent Protection into a dedicated page
+  directly below Agent Activity. It reuses `SecurityPageViewModel`, so the protected-agent probes
+  and their timers are not duplicated.
+- **Network Dashboard.** The network page is now **Network Dashboard**, matching **Agent Dashboard**.
+- **Network Events honours read-only mode.** Block outbound/Block inbound are disabled when the
+  service cannot apply firewall changes, with the reason shown next to them; the action result row
+  survives the 10-second refresh (#288).
+- **Accurate empty states.** A search with no matches no longer claims the service is stopped (#287).
+- **Read-only `rule.verify`.** The service advertises `rule.verify` even when writes are disabled;
+  only `rule.apply` and `rule.remove` depend on the write capability (#277).
+- **Version-derived milestone.** The FND-005 label now follows the product version (#278).
+- **Verification.** `Axiom.UI.Avalonia` builds with 0 warnings and 0 errors; its suite passes 37/37,
+  including headless navigation through all 14 pages.
+
 ## What's in 0.15.0
 
 - **Agent and Network dashboards are separate.** The default landing page is now **Agent
