@@ -123,10 +123,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             interaction,
             _visualEffects,
             restoreNetwork);
-        Overview.AgentActivity = Agents;
         AgentStats = new AgentStatsPageViewModel(Agents);
+        AgentDashboard = new AgentDashboardPageViewModel(Agents);
         Pages =
         [
+            AgentDashboard,
             Overview,
             Connections,
             Apps,
@@ -143,12 +144,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         // Navigation groups follow the UI terminology audit; only the first page of a group
         // carries the header so the nav list keeps one selection model.
-        Overview.GroupLabel = "MONITORING";
+        AgentDashboard.GroupLabel = "OVERVIEW";
+        Connections.GroupLabel = "MONITORING";
         Agents.GroupLabel = "PROTECTION";
         AiAnalyst.GroupLabel = "INTELLIGENCE";
         Settings.GroupLabel = "GENERAL";
-        _selectedPage = Overview;
-        _activePage = Overview;
+        _selectedPage = AgentDashboard;
+        _activePage = AgentDashboard;
         _selectedTheme = ThemeLabel(_theme.Current);
         _theme.Changed += OnThemeChanged;
         _monitor.Updated += OnMonitorUpdated;
@@ -224,6 +226,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         UiTheme.GlassLight => "Axiom Glass Light",
         _ => "Dark",
     };
+
+    public AgentDashboardPageViewModel AgentDashboard { get; }
 
     public OverviewPageViewModel Overview { get; }
 
