@@ -2,6 +2,43 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.13.1
+
+- **Fixed `"No new agent activity since ..."` false-positive warning & added live Antigravity session discovery.**
+  - `AntigravityProtection`: writes `hooks.json` and `axiom-antigravity-hook.py` without a UTF-8 BOM
+    (`new UTF8Encoding(false)`) so Antigravity's Go `language_server` (`encoding/json`) parses
+    `~/.gemini/config/hooks.json` cleanly, and formats the `PreToolUse` command without embedded
+    double quotes so Go's `exec.Command("cmd", "/c", command)` never injects `\"` into `cmd.exe`.
+    `HasOwnedHook()` detects and repairs legacy BOM or quoted hook entries automatically.
+    The hook invokes `plugins.blackbox.guard.hooks.on_pre_tool_call` in-process and records direct
+    evidence into `%LOCALAPPDATA%\Axiom\agent-evidence.jsonl`.
+  - `AgentSessionReader`: added `ReadAntigravity()` to read `~/.gemini/antigravity/conversation_summaries.db`
+    along with live transcript/WAL write timestamps (`brain/<id>/.system_generated/logs/transcript.jsonl`
+    and `conversations/<id>.db-wal`) so active Antigravity conversations appear in the `Agents`
+    sessions list alongside Claude Code, Codex and OpenCode.
+  - `ActivityFreshness` & `AgentsPageViewModel`: freshness now considers Blackbox audit events,
+    local hook evidence (`agent-evidence.jsonl`) and active agent session timestamps, and distinguishes
+    between an idle period with no running agent session (`IsStale = false`, `"Last agent activity at ... · no active agent session right now."`)
+    and an active session where hooks have stopped firing.
+  - `AgentHookProbe` & `SecurityPageViewModel`: added `"antigravity"` probe support (`TestAntigravityAsync`)
+    and included Antigravity in `Install/repair agent hooks` status output.
+- **Code & performance audit optimizations (snappy UI & zero background lag).**
+  - `AgentEvidenceStore`: replaced full-file `File.ReadLines` every 3 seconds with a 64 KB tail seek
+    and `(LastWriteTimeUtc.Ticks, Length)` cache.
+  - `AgentProcessProbe`: cached `Process.GetProcesses()` snapshot for 2 seconds and disposed all
+    `Process` handles immediately to prevent native handle leaks.
+  - `ProcessMetadataProvider`: cached `WinVerifyTrust` Authenticode checks and `FileVersionInfo` by
+    `(NormalizedPath, LastWriteTimeUtc.Ticks)` (`_imageCache`) and added `SeenProcessIds` to avoid
+    repeated WMI `Win32_Process` queries per connection poll.
+  - `IActivatablePage` & diff-based `ObservableCollection` updates: background pages (`Overview`,
+    `Connections`, `Apps`, `Events`) skip UI rebuilds while inactive, update rows in-place when keys
+    match, and `AgentsPageViewModel.Activate()` performs a 1-page incremental merge (`MergeActivity`)
+    instead of re-downloading 24 pages (11,740 audit entries) on every tab switch.
+  - `PrivacyShieldPageViewModel`, `PrivacyShieldBlockedHistoryStore`, `ProtectionSettingsStore` &
+    `ProtectionController`: throttled `NetworkInterface.GetAllNetworkInterfaces()` to 15s, added
+    in-memory write-through caching for blocked-domain history and protection settings, and disposed
+    `WindowsIdentity.GetCurrent()` cleanly.
+
 ## What's in 0.13.0
 
 - **Antigravity UI/UX overhaul & upgraded Glass themes.** Rebuilt `Dark` (Antigravity Carbon/Zinc)

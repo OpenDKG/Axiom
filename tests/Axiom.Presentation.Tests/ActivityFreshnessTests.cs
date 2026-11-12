@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.IO;
+using System.Text;
 using Axiom.Presentation;
 using Xunit;
 
@@ -31,5 +33,58 @@ public sealed class ActivityFreshnessTests
     {
         Assert.False(ActivityFreshness.IsStale(null, Now));
         Assert.Equal("No recorded agent event yet.", ActivityFreshness.Describe(null, Now));
+    }
+
+    [Fact]
+    public void Old_event_when_no_agent_is_running_is_idle_not_stale()
+    {
+        var newest = Now.AddHours(-2);
+
+        Assert.False(ActivityFreshness.IsStale(newest, Now, anyAgentRunning: false));
+        var text = ActivityFreshness.Describe(newest, Now, anyAgentRunning: false);
+        Assert.Contains("Last agent activity at", text, StringComparison.Ordinal);
+        Assert.Contains("no active agent session", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Antigravity_protection_writes_hooks_without_utf8_bom_and_repairs_existing_bom()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"axiom-agy-{Guid.NewGuid():N}");
+        var userProfile = Path.Combine(root, "user");
+        var localAppData = Path.Combine(root, "local");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(userProfile, ".gemini"));
+            var scriptsDir = Path.Combine(localAppData, "Axiom", "modules", "blackbox", "agent-blackbox", "venv", "Scripts");
+            Directory.CreateDirectory(scriptsDir);
+            File.WriteAllText(Path.Combine(scriptsDir, "python.exe"), "stub");
+
+            var protection = new AntigravityProtection(userProfile, localAppData);
+            Assert.True(protection.EnsureInstalled());
+            Assert.True(protection.IsInstalled);
+
+            var bytes = File.ReadAllBytes(protection.HooksPath);
+            Assert.True(bytes.Length > 3);
+            Assert.False(bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF);
+
+            var text = File.ReadAllText(protection.HooksPath);
+            Assert.DoesNotContain("\\\"", text, StringComparison.Ordinal);
+
+            // Simulate a legacy hooks.json written with a UTF-8 BOM.
+            File.WriteAllText(protection.HooksPath, text, Encoding.UTF8);
+            Assert.False(protection.IsInstalled);
+
+            Assert.True(protection.EnsureInstalled());
+            Assert.True(protection.IsInstalled);
+            var repaired = File.ReadAllBytes(protection.HooksPath);
+            Assert.False(repaired[0] == 0xEF && repaired[1] == 0xBB && repaired[2] == 0xBF);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 }
