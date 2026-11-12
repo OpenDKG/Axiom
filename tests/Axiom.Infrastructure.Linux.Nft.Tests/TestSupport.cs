@@ -58,6 +58,9 @@ internal sealed class FakeNftRunner : INftRunner
     /// <summary>When set, <c>-j list</c> throws (nft binary missing / not executable).</summary>
     public Exception? ListFailure { get; set; }
 
+    /// <summary>When set, <c>delete table inet axiom</c> fails with this stderr.</summary>
+    public string? DeleteError { get; set; }
+
     /// <summary>When true the synthesized readback omits the rule entries (table comment only).</summary>
     public bool ReadbackWithoutRules { get; set; }
 
@@ -96,6 +99,11 @@ internal sealed class FakeNftRunner : INftRunner
 
         if (joined == "delete table inet axiom")
         {
+            if (DeleteError is not null)
+            {
+                return Task.FromResult(new NftResult(1, string.Empty, DeleteError));
+            }
+
             TableGeneration = null;
             AppliedScript = null;
             return Task.FromResult(new NftResult(0, string.Empty, string.Empty));

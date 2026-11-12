@@ -21,14 +21,26 @@ internal sealed partial class NftEnforcementWorker(
     [LoggerMessage(EventId = 2201, Level = LogLevel.Information, Message = "{Message}")]
     private static partial void LogMessage(ILogger logger, string message);
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!OperatingSystem.IsLinux())
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var supervisor = LinuxEnforcement.CreateSupervisor(firewall, events, message => LogMessage(logger, message), bpf);
-        return supervisor.RunAsync(stoppingToken);
+        try
+        {
+            await supervisor.RunAsync(stoppingToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // The supervisor already tore its state down (LNX-2). A firewall daemon without enforcement must
+            // not keep running as if healthy: exit non-zero so Restart=on-failure restarts it and the next
+            // start reconciles. The host stops on a faulted BackgroundService (StopHost, the default).
+            Environment.ExitCode = 70; // EX_SOFTWARE
+            LogMessage(logger, $"Enforcement supervisor failed ({exception.GetType().Name}: {exception.Message}); stopping the daemon with exit code 70 for a systemd restart.");
+            throw;
+        }
     }
 }

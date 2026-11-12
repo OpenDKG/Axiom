@@ -176,6 +176,9 @@ internal sealed class RecordingLayer : IEnforcementLayer
         return Task.CompletedTask;
     }
 
+    /// <summary>StopAsync never completes (a hung bpftool); the supervisor must bound it.</summary>
+    public bool StopHangs { get; set; }
+
     public Task StopAsync()
     {
         Stopped = true;
@@ -184,7 +187,7 @@ internal sealed class RecordingLayer : IEnforcementLayer
             throw failure;
         }
 
-        return Task.CompletedTask;
+        return StopHangs ? Task.Delay(Timeout.Infinite) : Task.CompletedTask;
     }
 
     public async Task RunEventsAsync(CancellationToken ct)
