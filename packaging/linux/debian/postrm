@@ -1,0 +1,46 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# axiom postrm (docs/LINUX_PACKAGING.md §4). remove: make sure nothing of the service survives a
+# prerm that could not run (unit file, protected image, runtime directory) — every path here is
+# created by Axiom and nothing else is touched. purge: additionally delete the machine data
+# (/var/lib/axiom: rules, settings, history database, DNS backup) and the log directory. Upgrades
+# never reach the remove/purge branches. Per-user desktop state under ~/.local/state/axiom and
+# ~/.local/share/Axiom belongs to the user and is left alone.
+set -e
+
+AXIOM_UNIT=/etc/systemd/system/axiomd.service
+AXIOM_IMAGE_DIR=/usr/libexec/axiom
+AXIOM_DATA_DIR=/var/lib/axiom
+AXIOM_LOG_DIR=/var/log/axiom
+AXIOM_RUN_DIR=/run/axiom
+
+remove_service_leftovers() {
+    if [ -f "$AXIOM_UNIT" ]; then
+        if [ -d /run/systemd/system ]; then
+            systemctl disable --now axiomd.service >/dev/null 2>&1 || true
+        fi
+        rm -f "$AXIOM_UNIT"
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload >/dev/null 2>&1 || true
+        fi
+    fi
+    rm -rf "$AXIOM_IMAGE_DIR" "$AXIOM_RUN_DIR"
+}
+
+case "$1" in
+    remove)
+        remove_service_leftovers
+        ;;
+    purge)
+        remove_service_leftovers
+        rm -rf "$AXIOM_DATA_DIR" "$AXIOM_LOG_DIR"
+        ;;
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+    *)
+        echo "axiom postrm: unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

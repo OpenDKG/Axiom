@@ -1,0 +1,19 @@
+Package: axiom
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: The Axiom contributors <51213010+a-51-50@users.noreply.github.com>
+Installed-Size: @INSTALLED_SIZE@
+Section: net
+Priority: optional
+Homepage: https://github.com/a-51-50/Axiom
+Depends: @SHLIBS_DEPENDS@, nftables, polkitd | policykit-1, pkexec | policykit-1, systemd
+Recommends: linux-tools-common | bpftool, libsecret-1-0, gnome-shell-extension-appindicator | plasma-workspace
+Description: Network and AI agent security (desktop app + axiomd service)
+ Axiom is a free, open-source per-application firewall with connection
+ monitoring, history, Privacy Shield DNS filtering and AI-agent awareness.
+ .
+ This package installs the desktop application under /opt/axiom and
+ registers the privileged background service axiomd as a systemd unit
+ (root-owned image in /usr/libexec/axiom, data in /var/lib/axiom). Rules
+ are enforced with nftables (socket cgroupv2) and, when bpftool and a
+ BTF-enabled kernel are available, a connect-time eBPF layer.

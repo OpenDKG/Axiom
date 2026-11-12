@@ -1,0 +1,19 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# RPM %postun: $1 = 0 on erase, 1 on upgrade. Erase = the Debian postrm remove branch (unit
+# file, protected image and runtime directory, only if prerm could not). RPM has no purge:
+# /var/lib/axiom and /var/log/axiom are kept; delete them by hand to start from scratch.
+set -e
+[ "$1" = 0 ] || exit 0
+AXIOM_UNIT=/etc/systemd/system/axiomd.service
+if [ -f "$AXIOM_UNIT" ]; then
+    if [ -d /run/systemd/system ]; then
+        systemctl disable --now axiomd.service >/dev/null 2>&1 || true
+    fi
+    rm -f "$AXIOM_UNIT"
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload >/dev/null 2>&1 || true
+    fi
+fi
+rm -rf /usr/libexec/axiom /run/axiom
+exit 0

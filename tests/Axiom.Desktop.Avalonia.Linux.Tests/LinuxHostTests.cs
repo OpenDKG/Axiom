@@ -285,6 +285,26 @@ public sealed class ProtectionSetupTests
     }
 
     [Fact]
+    public void Startup_offer_only_for_a_hand_run_bundle_without_daemon()
+    {
+        Assert.True(LinuxProtectionSetup.ShouldOfferInstallAtStartup(DaemonState.NotInstalled, declined: false, packageManaged: false));
+        Assert.False(LinuxProtectionSetup.ShouldOfferInstallAtStartup(DaemonState.NotInstalled, declined: true, packageManaged: false));
+        Assert.False(LinuxProtectionSetup.ShouldOfferInstallAtStartup(DaemonState.NotInstalled, declined: false, packageManaged: true));
+        Assert.False(LinuxProtectionSetup.ShouldOfferInstallAtStartup(DaemonState.Running, declined: false, packageManaged: false));
+        Assert.False(LinuxProtectionSetup.ShouldOfferInstallAtStartup(DaemonState.InstalledNotResponding, declined: false, packageManaged: false));
+    }
+
+    [Fact]
+    public void Package_prefix_marks_the_layout_as_package_managed()
+    {
+        Assert.True(new LinuxDaemonLayout("/opt/axiom").IsPackageManaged);
+        Assert.True(new LinuxDaemonLayout("/opt/axiom/").IsPackageManaged);
+        Assert.False(new LinuxDaemonLayout("/opt/axiom-dev").IsPackageManaged);
+        Assert.False(new LinuxDaemonLayout("/home/user/Axiom").IsPackageManaged);
+        Assert.False(LinuxDaemonLayout.IsUnderPackagePrefix("/home/user/build/linux/Axiom"));
+    }
+
+    [Fact]
     public void Pkexec_command_line_is_the_daemon_and_install_flag()
     {
         var arguments = LinuxElevation.BuildArguments("/opt/axiom/axiomd/axiomd", "--install-service");

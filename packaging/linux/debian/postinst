@@ -1,0 +1,36 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# axiom postinst (docs/LINUX_PACKAGING.md §4). Runs `axiomd --install-service` from the shipped
+# bundle on every configure (first install and upgrade): the daemon stages a root-owned copy of
+# /opt/axiom/axiomd into /usr/libexec/axiom, audits owner and modes, writes
+# /etc/systemd/system/axiomd.service, `systemctl daemon-reload` and `enable --now`. A running
+# daemon (previous package version or a dev install) is stopped and replaced in place; its stop
+# restores Privacy Shield DNS before the new image starts. Idempotent: re-running against the same
+# image is a no-op apart from a restart.
+set -e
+
+AXIOM_BUNDLED_DAEMON=/opt/axiom/axiomd/axiomd
+
+case "$1" in
+    configure)
+        if [ ! -x "$AXIOM_BUNDLED_DAEMON" ]; then
+            echo "axiom: $AXIOM_BUNDLED_DAEMON is missing; the package is damaged." >&2
+            exit 1
+        fi
+        if [ ! -d /run/systemd/system ]; then
+            # Container or chroot without a running systemd (image builds): leave the unit for the
+            # first real boot, when `axiomd --install-service` can be run by hand or by the desktop.
+            echo "axiom: systemd is not running; skipping the service install (run '$AXIOM_BUNDLED_DAEMON --install-service' later)." >&2
+            exit 0
+        fi
+        "$AXIOM_BUNDLED_DAEMON" --install-service
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "axiom postinst: unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

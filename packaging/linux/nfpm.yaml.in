@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# nfpm (https://nfpm.goreleaser.com) configuration for the Axiom .rpm, rendered by
+# scripts/linux/package.sh from the staged package root (@STAGE@). The .deb is built with dpkg-deb
+# from the same root; this file carries the RPM mapping of packaging/linux/debian/control.in.
+name: axiom
+arch: "@ARCH@"
+platform: linux
+version: "@VERSION@"
+release: "1"
+section: net
+priority: optional
+maintainer: The Axiom contributors <51213010+a-51-50@users.noreply.github.com>
+description: |
+  Network and AI agent security (desktop app + axiomd service)
+  Axiom is a free, open-source per-application firewall with connection
+  monitoring, history, Privacy Shield DNS filtering and AI-agent awareness.
+  The desktop application lives under /opt/axiom; the privileged background
+  service axiomd is registered as a systemd unit (root-owned image in
+  /usr/libexec/axiom, data in /var/lib/axiom) and enforces rules with
+  nftables and, where available, a connect-time eBPF layer.
+vendor: Axiom
+homepage: https://github.com/a-51-50/Axiom
+license: GPL-3.0-or-later
+depends:
+  - nftables
+  - polkit
+  - systemd
+  - libicu
+  - openssl-libs
+  - fontconfig
+  - libX11
+  - libXext
+  - libXrender
+  - libXi
+  - libXcursor
+  - libXrandr
+  - libICE
+  - libSM
+recommends:
+  - bpftool
+  - libsecret
+suggests:
+  - libbpf
+contents:
+  - src: "@STAGE@/opt/axiom"
+    dst: /opt/axiom
+    type: tree
+  - src: "@STAGE@/usr/share/applications/com.axiom.firewall.desktop"
+    dst: /usr/share/applications/com.axiom.firewall.desktop
+  - src: "@STAGE@/usr/share/polkit-1/actions/com.axiom.firewall.policy"
+    dst: /usr/share/polkit-1/actions/com.axiom.firewall.policy
+  - src: "@STAGE@/usr/share/icons/hicolor"
+    dst: /usr/share/icons/hicolor
+    type: tree
+  - src: "@STAGE@/usr/share/doc/axiom"
+    dst: /usr/share/doc/axiom
+    type: tree
+scripts:
+  postinstall: "@PKG@/rpm/postinstall"
+  preremove: "@PKG@/rpm/preremove"
+  postremove: "@PKG@/rpm/postremove"
+rpm:
+  summary: Network and AI agent security (desktop app + axiomd service)
+  group: Applications/Internet
+  compression: xz

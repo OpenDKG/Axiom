@@ -1,0 +1,51 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# axiom prerm (docs/LINUX_PACKAGING.md §4). On remove: `axiomd --uninstall-service` stops and
+# disables the unit (the daemon's own shutdown detaches its BPF programs and restores DNS), deletes
+# the unit file, tears down `table inet axiom` and axiom.slice, restores the DNS backup if the
+# daemon could not, and removes the protected image /usr/libexec/axiom. /var/lib/axiom (rules,
+# settings, history) is kept for a reinstall; postrm purge deletes it.
+# On upgrade nothing happens here: the new version's postinst replaces the image in place.
+set -e
+
+AXIOM_IMAGE_DAEMON=/usr/libexec/axiom/axiomd
+AXIOM_BUNDLED_DAEMON=/opt/axiom/axiomd/axiomd
+AXIOM_PIN_DIR=/sys/fs/bpf/axiom
+
+uninstall_service() {
+    if [ -x "$AXIOM_IMAGE_DAEMON" ]; then
+        "$AXIOM_IMAGE_DAEMON" --uninstall-service || return 1
+    elif [ -x "$AXIOM_BUNDLED_DAEMON" ]; then
+        "$AXIOM_BUNDLED_DAEMON" --uninstall-service || return 1
+    fi
+    return 0
+}
+
+# Belt and braces for a daemon that was killed before it could detach: only Axiom's own pins.
+drop_stale_bpf_pins() {
+    [ -d "$AXIOM_PIN_DIR" ] || return 0
+    if command -v bpftool >/dev/null 2>&1; then
+        for hook in connect4 connect6 sendmsg4 sendmsg6; do
+            [ -e "$AXIOM_PIN_DIR/axiom_$hook" ] || continue
+            bpftool cgroup detach /sys/fs/cgroup "$hook" pinned "$AXIOM_PIN_DIR/axiom_$hook" >/dev/null 2>&1 || true
+        done
+    fi
+    rm -rf "$AXIOM_PIN_DIR"
+}
+
+case "$1" in
+    remove|deconfigure)
+        if [ -d /run/systemd/system ]; then
+            uninstall_service
+        fi
+        drop_stale_bpf_pins
+        ;;
+    upgrade|failed-upgrade)
+        ;;
+    *)
+        echo "axiom prerm: unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

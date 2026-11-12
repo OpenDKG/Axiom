@@ -23,10 +23,12 @@ public sealed class LinuxProtectionSetup(
     ServiceStatusProbe probe,
     IUserInteraction ui,
     Func<bool>? isDaemonInstalled = null,
-    Func<string>? unitState = null)
+    Func<string>? unitState = null,
+    bool? packageManaged = null)
 {
     private readonly Func<bool> _isDaemonInstalled = isDaemonInstalled ?? DefaultIsDaemonInstalled;
     private readonly Func<string> _unitState = unitState ?? ReadUnitState;
+    private readonly bool _packageManaged = packageManaged ?? LinuxDaemonLayout.Current.IsPackageManaged;
     private int _busy;
 
     public DaemonState Daemon { get; private set; } = DaemonState.Unknown;
@@ -65,13 +67,27 @@ public sealed class LinuxProtectionSetup(
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// The startup offer is made only for a bundle the user runs by hand (unpacked publish tree):
+    /// the daemon is missing and the user has not declined before. A package install
+    /// (<see cref="LinuxDaemonLayout.IsPackageManaged"/>) registered the daemon in its postinst,
+    /// so the desktop never prompts for pkexec at first launch; the Shield page still offers a
+    /// manual install/upgrade for a damaged unit.
+    /// </summary>
+    internal static bool ShouldOfferInstallAtStartup(DaemonState state, bool declined, bool packageManaged) =>
+        state == DaemonState.NotInstalled && !declined && !packageManaged;
+
     /// <summary>Startup check: offers the daemon install once (until the user declines).</summary>
     public async Task RunStartupChecksAsync(CancellationToken cancellationToken)
     {
         await RefreshAsync(cancellationToken).ConfigureAwait(true);
-        if (Daemon == DaemonState.NotInstalled && !File.Exists(DeclinedMarkerPath))
+        if (ShouldOfferInstallAtStartup(Daemon, File.Exists(DeclinedMarkerPath), _packageManaged))
         {
             await InstallDaemonAsync(fromStartup: true, cancellationToken).ConfigureAwait(true);
+        }
+        else if (_packageManaged && Daemon != DaemonState.Running)
+        {
+            StartupLog.Write("daemon", $"package-managed install ({LinuxDaemonLayout.PackagePrefix}); no startup install offer, unit={UnitState}");
         }
     }
 

@@ -83,11 +83,29 @@ public sealed class LinuxDaemonLayout
 
     public const string DaemonSubdirectory = "axiomd";
 
+    /// <summary>Where the .deb/.rpm installs the desktop bundle (docs/LINUX_PACKAGING.md §3).</summary>
+    public const string PackagePrefix = "/opt/axiom";
+
     public LinuxDaemonLayout(string executableDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(executableDirectory);
         ExecutableDirectory = executableDirectory;
         BundledDaemonPath = Path.Combine(executableDirectory, DaemonSubdirectory, "axiomd");
+        IsPackageManaged = IsUnderPackagePrefix(executableDirectory);
+    }
+
+    /// <summary>
+    /// True when the desktop runs from the package prefix: the package's postinst installed the
+    /// daemon (and its prerm removes it), so the desktop must not offer the pkexec install on its
+    /// own at startup; a missing unit then means the package is damaged or being removed.
+    /// </summary>
+    public bool IsPackageManaged { get; }
+
+    public static bool IsUnderPackagePrefix(string executableDirectory)
+    {
+        var directory = executableDirectory.TrimEnd('/');
+        return string.Equals(directory, PackagePrefix, StringComparison.Ordinal)
+            || directory.StartsWith(PackagePrefix + "/", StringComparison.Ordinal);
     }
 
     public static LinuxDaemonLayout Current { get; } = new(AppContext.BaseDirectory);

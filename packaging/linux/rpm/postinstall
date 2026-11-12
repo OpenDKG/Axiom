@@ -1,0 +1,15 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# RPM %post: $1 = 1 on install, 2 on upgrade. Same action as the Debian postinst configure branch:
+# `axiomd --install-service` stages /opt/axiom/axiomd into /usr/libexec/axiom, writes the unit,
+# `daemon-reload` and `enable --now`, replacing a running daemon in place. Untested on a live
+# RPM distribution (docs/LINUX_PACKAGING.md §7).
+set -e
+AXIOM_BUNDLED_DAEMON=/opt/axiom/axiomd/axiomd
+[ -x "$AXIOM_BUNDLED_DAEMON" ] || { echo "axiom: $AXIOM_BUNDLED_DAEMON is missing; the package is damaged." >&2; exit 1; }
+if [ ! -d /run/systemd/system ]; then
+    echo "axiom: systemd is not running; skipping the service install (run '$AXIOM_BUNDLED_DAEMON --install-service' later)." >&2
+    exit 0
+fi
+"$AXIOM_BUNDLED_DAEMON" --install-service
+exit 0

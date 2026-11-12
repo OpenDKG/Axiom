@@ -1,0 +1,27 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# RPM %preun: $1 = 0 on erase, 1 on upgrade. Erase = the Debian prerm remove branch
+# (`axiomd --uninstall-service` + stale BPF pins); upgrades do nothing, the new %post replaces
+# the image in place.
+set -e
+[ "$1" = 0 ] || exit 0
+AXIOM_IMAGE_DAEMON=/usr/libexec/axiom/axiomd
+AXIOM_BUNDLED_DAEMON=/opt/axiom/axiomd/axiomd
+AXIOM_PIN_DIR=/sys/fs/bpf/axiom
+if [ -d /run/systemd/system ]; then
+    if [ -x "$AXIOM_IMAGE_DAEMON" ]; then
+        "$AXIOM_IMAGE_DAEMON" --uninstall-service
+    elif [ -x "$AXIOM_BUNDLED_DAEMON" ]; then
+        "$AXIOM_BUNDLED_DAEMON" --uninstall-service
+    fi
+fi
+if [ -d "$AXIOM_PIN_DIR" ]; then
+    if command -v bpftool >/dev/null 2>&1; then
+        for hook in connect4 connect6 sendmsg4 sendmsg6; do
+            [ -e "$AXIOM_PIN_DIR/axiom_$hook" ] || continue
+            bpftool cgroup detach /sys/fs/cgroup "$hook" pinned "$AXIOM_PIN_DIR/axiom_$hook" >/dev/null 2>&1 || true
+        done
+    fi
+    rm -rf "$AXIOM_PIN_DIR"
+fi
+exit 0

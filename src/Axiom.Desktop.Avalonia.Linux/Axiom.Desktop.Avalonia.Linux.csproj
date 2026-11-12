@@ -49,4 +49,45 @@
     <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
   </ItemGroup>
 
+  <!--
+    Bundled daemon (docs/LINUX_PACKAGING.md §2). A Linux publish of the desktop always carries the
+    axiomd publish tree at <PublishDir>/axiomd/, which is what LinuxDaemonLayout.BundledDaemonPath
+    and the daemon's install-service command expect. Source: $(AxiomDaemonPublishDir) (default
+    build/linux/axiomd, where scripts/linux/package.sh publishes the daemon first); when that
+    directory has no axiomd yet, Axiom.Service is restored and published there for the same RID
+    and configuration. -p:AxiomBundleDaemon=false skips the step (CI jobs that only need the window).
+  -->
+  <PropertyGroup>
+    <AxiomBundleDaemon Condition="'$(AxiomBundleDaemon)' == ''">true</AxiomBundleDaemon>
+    <AxiomDaemonProject>$(MSBuildThisFileDirectory)..\Axiom.Service\Axiom.Service.csproj</AxiomDaemonProject>
+    <AxiomDaemonPublishDir Condition="'$(AxiomDaemonPublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\build\linux\axiomd\</AxiomDaemonPublishDir>
+  </PropertyGroup>
+
+  <Target Name="PublishBundledDaemon"
+          AfterTargets="Publish"
+          Condition="'$(AxiomBundleDaemon)' == 'true' And $([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('linux'))">
+    <PropertyGroup>
+      <_AxiomDaemonPublishDir>$([MSBuild]::EnsureTrailingSlash('$([System.IO.Path]::GetFullPath('$(AxiomDaemonPublishDir)'))'))</_AxiomDaemonPublishDir>
+      <_AxiomDaemonProperties>Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=true;TargetFramework=net10.0;PublishDir=$(_AxiomDaemonPublishDir);_IsPublishing=true</_AxiomDaemonProperties>
+    </PropertyGroup>
+
+    <Message Importance="high" Condition="!Exists('$(_AxiomDaemonPublishDir)axiomd')" Text="Publishing axiomd ($(RuntimeIdentifier)) into $(_AxiomDaemonPublishDir)" />
+    <MSBuild Condition="!Exists('$(_AxiomDaemonPublishDir)axiomd')"
+             Projects="$(AxiomDaemonProject)" Targets="Restore"
+             Properties="$(_AxiomDaemonProperties);MSBuildRestoreSessionId=$([System.Guid]::NewGuid())" />
+    <MSBuild Condition="!Exists('$(_AxiomDaemonPublishDir)axiomd')"
+             Projects="$(AxiomDaemonProject)" Targets="Publish"
+             Properties="$(_AxiomDaemonProperties)" />
+
+    <ItemGroup>
+      <_AxiomDaemonFile Include="$(_AxiomDaemonPublishDir)**" />
+    </ItemGroup>
+    <Error Condition="!Exists('$(_AxiomDaemonPublishDir)axiomd')"
+           Text="The daemon publish tree $(_AxiomDaemonPublishDir) has no axiomd; publish Axiom.Service first or pass -p:AxiomBundleDaemon=false." />
+    <Copy SourceFiles="@(_AxiomDaemonFile)"
+          DestinationFiles="@(_AxiomDaemonFile->'$(PublishDir)axiomd/%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Bundled axiomd: @(_AxiomDaemonFile->Count()) files copied into $(PublishDir)axiomd/" />
+  </Target>
+
 </Project>
