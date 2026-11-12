@@ -176,18 +176,21 @@ public sealed class FilterEnforcementSummaryTests
     {
         var client = new EnforcementClient(new FilterEnforcementReport { State = FilterEnforcementState.Verified, Connected = true });
         var page = new FirewallPageViewModel(client, new NullUserInteraction());
-        await Task.Delay(300);
-        var initial = client.RulesQueries;
-        Assert.True(initial >= 1);
 
-        var now = DateTimeOffset.UtcNow;
-        page.RefreshEnforcementIfStale(now);
-        await Task.Delay(100);
+        // The fake client completes synchronously, so the constructor's refresh has finished by now.
+        var initial = client.RulesQueries;
+        Assert.Equal(1, initial);
+        var lastRefresh = page.LastEnforcementRefreshUtc;
+        Assert.NotEqual(default, lastRefresh);
+
+        // "Now" is derived from the page's own last-refresh instant rather than the wall clock, so a
+        // stalled test host (or a clock step on a loaded VM) cannot make the first call look stale.
+        page.RefreshEnforcementIfStale(lastRefresh + FirewallPageViewModel.EnforcementRefreshInterval - TimeSpan.FromMilliseconds(1));
         Assert.Equal(initial, client.RulesQueries); // fresh: no extra query
 
-        page.RefreshEnforcementIfStale(now + FirewallPageViewModel.EnforcementRefreshInterval + TimeSpan.FromSeconds(1));
-        await Task.Delay(300);
+        page.RefreshEnforcementIfStale(lastRefresh + FirewallPageViewModel.EnforcementRefreshInterval);
         Assert.Equal(initial + 1, client.RulesQueries);
+        Assert.True(page.LastEnforcementRefreshUtc >= lastRefresh);
 
         page.Dispose();
     }

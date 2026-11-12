@@ -54,8 +54,12 @@ public sealed class MacBundleLayoutTests
         Assert.True(layout.IsInsideAppBundle);
         Assert.True(layout.IsInApplicationsFolder);
         Assert.Equal("/Applications/Axiom.app", layout.BundlePath);
-        Assert.Equal("/Applications/Axiom.app/Contents/Resources/service/axiomd", layout.DaemonPath);
-        Assert.Equal("/Applications/Axiom.app/Contents/MacOS/axiom-sysext", layout.SysextHelperPath);
+
+        // The layout joins with Path.Combine, so the leaf separators follow the host OS: a Windows
+        // runner sees "/Applications/Axiom.app/Contents\Resources\service\axiomd". The bundle root
+        // itself is only ever split with Path.GetDirectoryName, which keeps the '/' it was given.
+        Assert.Equal(Path.Combine("/Applications/Axiom.app/Contents", "Resources", "service", "axiomd"), layout.DaemonPath);
+        Assert.Equal(Path.Combine("/Applications/Axiom.app/Contents/MacOS", "axiom-sysext"), layout.SysextHelperPath);
     }
 
     [Fact]
@@ -68,7 +72,7 @@ public sealed class MacBundleLayoutTests
         var plain = new MacBundleLayout("/tmp/publish");
         Assert.False(plain.IsInsideAppBundle);
         Assert.Null(plain.BundlePath);
-        Assert.Equal("/tmp/publish/service/axiomd", plain.DaemonPath);
+        Assert.Equal(Path.Combine("/tmp/publish", "service", "axiomd"), plain.DaemonPath);
     }
 
     [Fact]
