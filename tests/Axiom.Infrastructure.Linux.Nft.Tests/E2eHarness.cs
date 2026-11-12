@@ -61,6 +61,13 @@ public static class E2eHarness
                 Print("rule.apply", $"success={result.Success} state={result.State} error={result.ErrorCode} {result.ErrorMessage}");
                 var rejected = await adapter.UpsertOwnedRuleAsync(spec with { ManagedRuleId = badId, RemoteAddresses = ["1.2.3"] }, CancellationToken.None).ConfigureAwait(false);
                 Print("rule.apply(bad)", $"success={rejected.Success} state={rejected.State} error={rejected.ErrorCode} {rejected.ErrorMessage}");
+                // Extra block rules (e.g. the shell binary) so an already-running shell can be herded deterministically.
+                foreach (var extra in args.Skip(3))
+                {
+                    var extraResult = await adapter.UpsertOwnedRuleAsync(spec with { ManagedRuleId = RuleIdentity.ForApp(extra, FirewallDirection.Outbound), AppPath = extra }, CancellationToken.None).ConfigureAwait(false);
+                    Print("rule.apply(extra)", $"{extra} success={extraResult.Success} state={extraResult.State} {extraResult.ErrorMessage}");
+                }
+
                 var enforcement = adapter.Enforcement!;
                 Print("enforcement", $"generation={enforcement.Generation} applied={enforcement.AppliedRuleCount} rejected={enforcement.RejectedRules.Count} fileError={enforcement.FileError}");
                 foreach (var app in cgroups.Apps)
@@ -68,22 +75,36 @@ public static class E2eHarness
                     Print("cgroup", $"{app.Key} -> /sys/fs/cgroup/{app.Value}");
                 }
 
-                return result.Success && enforcement.AppliedRuleCount == 1 && enforcement.RejectedRules.Count == 1 ? 0 : 1;
+                return result.Success && enforcement.AppliedRuleCount == 1 + args.Skip(3).Count() && enforcement.RejectedRules.Count == 1 ? 0 : 1;
             }
 
             case "attribute":
             {
-                // Called while the script's curl is sleeping: herd it into the app cgroup.
-                await adapter.PublishAsync(CancellationToken.None).ConfigureAwait(false);
-                var report = adapter.Attribute();
-                foreach (var placement in report.Placements)
+                // The daemon's attribution loop, compressed: poll every <intervalMs> for <seconds>.
+                var seconds = args.Length > 3 ? double.Parse(args[3], CultureInfo.InvariantCulture) : 0;
+                var intervalMs = args.Length > 4 ? int.Parse(args[4], CultureInfo.InvariantCulture) : 50;
+                // A fresh process: re-key the app cgroups from managed-rules.json without a new generation
+                // (a republish would reset the counters the script reads back).
+                Print("reattach", string.Join(',', adapter.ReattachCgroups()));
+                var moved = 0;
+                var failed = 0;
+                var deadline = Stopwatch.GetTimestamp() + (long)(seconds * Stopwatch.Frequency);
+                do
                 {
-                    Print("placement", AppCgroupManager.Describe(placement));
-                }
+                    var report = adapter.Attribute();
+                    foreach (var placement in report.Placements)
+                    {
+                        Print("placement", AppCgroupManager.Describe(placement));
+                    }
 
-                var curlPids = report.Placements.Where(p => p.Moved && p.ExePath == "/usr/bin/curl").Select(p => p.Pid).ToList();
-                Print("attribution", $"moved={report.Placements.Count(p => p.Moved)} failed={report.Placements.Count(p => !p.Moved)} curlPids={string.Join(',', curlPids)}");
-                return report.Placements.All(p => p.Moved) ? 0 : 1;
+                    moved += report.Placements.Count(p => p.Moved);
+                    failed += report.Placements.Count(p => !p.Moved);
+                    await Task.Delay(intervalMs).ConfigureAwait(false);
+                }
+                while (Stopwatch.GetTimestamp() < deadline);
+
+                Print("attribution", $"moved={moved} failed={failed}");
+                return failed == 0 ? 0 : 1;
             }
 
             case "trace":
@@ -94,11 +115,7 @@ public static class E2eHarness
                 var monitor = new NftTraceMonitor(
                     new NftTraceProcessSource(),
                     new ProcNetSocketLookup(),
-                    id => cgroups.Apps
-                        .Select(app => (Pids: new ProcCgroupFs().ReadProcs(app.Value), Path: (string?)app.Key))
-                        .Select(app => (Pid: app.Pids.Count > 0 ? app.Pids[0] : -1, app.Path))
-                        .Cast<(int Pid, string? Path)?>()
-                        .FirstOrDefault(),
+                    adapter.DescribeRuleApp,
                     sink,
                     TimeProvider.System);
                 try
@@ -132,12 +149,26 @@ public static class E2eHarness
             {
                 var removed = await adapter.RemoveOwnedRuleAsync(ruleId, CancellationToken.None).ConfigureAwait(false);
                 var removedBad = await adapter.RemoveOwnedRuleAsync(badId, CancellationToken.None).ConfigureAwait(false);
-                Print("rule.remove", $"success={removed.Success} {removed.ErrorMessage} bad={removedBad.Success}");
-                return removed.Success && removedBad.Success ? 0 : 1;
+                var ok = removed.Success && removedBad.Success;
+                foreach (var owned in await adapter.ListOwnedRulesAsync(CancellationToken.None).ConfigureAwait(false))
+                {
+                    ok &= (await adapter.RemoveOwnedRuleAsync(owned.ManagedRuleId, CancellationToken.None).ConfigureAwait(false)).Success;
+                }
+
+                Print("rule.remove", $"success={removed.Success} {removed.ErrorMessage} bad={removedBad.Success} all={ok}");
+                return ok ? 0 : 1;
             }
 
             case "teardown":
             {
+                foreach (var cgroup in new ProcCgroupFs().ListChildCgroups(cgroups.Slice))
+                {
+                    foreach (var pid in new ProcCgroupFs().ReadProcs(cgroup))
+                    {
+                        Print("stranded", string.Create(CultureInfo.InvariantCulture, $"pid {pid} ({new ProcCgroupFs().ReadProcessExe(pid)}) still in {cgroup}; returning it"));
+                    }
+                }
+
                 await adapter.TeardownAsync(CancellationToken.None).ConfigureAwait(false);
                 var gone = !await new NftTable(new NftProcessRunner()).ExistsAsync(CancellationToken.None).ConfigureAwait(false);
                 Print("teardown", $"tableGone={gone} sliceGone={!Directory.Exists("/sys/fs/cgroup/axiom.slice")}");
