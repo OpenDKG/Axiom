@@ -87,4 +87,46 @@ public sealed class ActivityFreshnessTests
             }
         }
     }
+
+    [Fact]
+    public void Agent_evidence_store_expands_tail_window_for_records_exceeding_512_bytes()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"axiom-evidence-{Guid.NewGuid():N}.jsonl");
+        try
+        {
+            var padding = new string('x', 520);
+            var builder = new StringBuilder();
+            for (var i = 0; i < 4000; i++)
+            {
+                var ts = Now.AddSeconds(i).ToString("O");
+                var line =
+                    "{\"timestampUtc\":\"" + ts +
+                    "\",\"framework\":\"codex\",\"eventType\":\"GUARD_ALLOWED\",\"tool\":\"tool-" +
+                    i.ToString(System.Globalization.CultureInfo.InvariantCulture) + "-" + padding +
+                    "\",\"decision\":\"allowed\",\"guardStatus\":\"allowed\",\"durationMs\":5,\"session\":\"s-" +
+                    i.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\",\"call\":\"c-" +
+                    i.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\"}";
+                builder.AppendLine(line);
+            }
+
+            File.WriteAllText(path, builder.ToString(), new UTF8Encoding(false));
+            var store = new AgentEvidenceStore(path);
+
+            var firstRead = store.ReadRecent(4000);
+            Assert.Equal(4000, firstRead.Count);
+            Assert.StartsWith("tool-0-", firstRead[0].Tool, StringComparison.Ordinal);
+            Assert.StartsWith("tool-3999-", firstRead[^1].Tool, StringComparison.Ordinal);
+
+            var cachedRead = store.ReadRecent(4000);
+            Assert.Equal(4000, cachedRead.Count);
+            Assert.StartsWith("tool-0-", cachedRead[0].Tool, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
 }

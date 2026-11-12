@@ -1,4 +1,4 @@
-<# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
     Publishes the single-file Axiom Setup executable with an embedded desktop/service payload.

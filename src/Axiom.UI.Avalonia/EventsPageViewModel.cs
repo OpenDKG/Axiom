@@ -229,11 +229,19 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
         _searchDebounce.Start();
     }
 
+    private bool _refreshPending;
+
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        if (_client is null || IsLoading)
+        if (_client is null)
         {
+            return;
+        }
+
+        if (IsLoading)
+        {
+            _refreshPending = true;
             return;
         }
 
@@ -241,20 +249,37 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
 
         try
         {
-            var page = await LoadAsync(PageLimit).ConfigureAwait(true);
-
-            Rows.Clear();
-            foreach (var row in page.Rows)
+            do
             {
-                Rows.Add(new EventRowView(row));
-            }
+                _refreshPending = false;
+                var requestedRange = SelectedRange;
+                var requestedSearch = SearchText;
+                var requestedCategory = SelectedCategory;
+                var page = await LoadAsync(PageLimit, requestedRange, requestedSearch).ConfigureAwait(true);
 
-            TotalCount = page.TotalCount;
-            DatabaseText = page.DatabasePath;
-            IsEmpty = page.TotalCount == 0;
-            CanExport = page.Rows.Count > 0;
-            RebuildGroups();
-            StatusText = $"{page.Rows.Count} of {page.TotalCount} network events · {SelectedRange}";
+                if (_refreshPending ||
+                    !string.Equals(SelectedRange, requestedRange, StringComparison.Ordinal) ||
+                    !string.Equals(SearchText, requestedSearch, StringComparison.Ordinal) ||
+                    !string.Equals(SelectedCategory, requestedCategory, StringComparison.Ordinal))
+                {
+                    _refreshPending = true;
+                    continue;
+                }
+
+                Rows.Clear();
+                foreach (var row in page.Rows)
+                {
+                    Rows.Add(new EventRowView(row));
+                }
+
+                TotalCount = page.TotalCount;
+                DatabaseText = page.DatabasePath;
+                IsEmpty = page.TotalCount == 0;
+                CanExport = page.Rows.Count > 0;
+                RebuildGroups();
+                StatusText = $"{page.Rows.Count} of {page.TotalCount} network events · {requestedRange}";
+            }
+            while (_refreshPending);
         }
         catch (ServiceUnavailableException exception)
         {
@@ -391,16 +416,18 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
         }
     }
 
-    private Task<HistoryPage> LoadAsync(int limit)
+    private Task<HistoryPage> LoadAsync(int limit, string? range = null, string? searchText = null)
     {
+        var activeRange = range ?? SelectedRange;
+        var activeSearch = searchText ?? SearchText;
         var to = DateTimeOffset.UtcNow;
-        var from = to.Subtract(RangeSpan(SelectedRange));
+        var from = to.Subtract(RangeSpan(activeRange));
 
         var query = new HistoryQuery
         {
             FromUtc = from,
             ToUtc = to,
-            Search = string.IsNullOrWhiteSpace(SearchText) ? null : SearchText.Trim(),
+            Search = string.IsNullOrWhiteSpace(activeSearch) ? null : activeSearch.Trim(),
             Limit = limit,
             Offset = 0,
         };

@@ -2,6 +2,30 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.13.2
+
+- **Fixed AI Analyst API key clearing on Save (#270).** Clearing `ApiKeyInput` in the UI after
+  `SaveSettings()` no longer triggers `OnApiKeyInputChanged` to overwrite the active in-memory
+  `_apiKey` with an empty string and mark it dirty for the next save.
+- **Fixed unchanged active connections disappearing from recent history queries (#268).**
+  `HistoryStore.UpsertAsync` now updates `last_seen_utc` whenever the snapshot capture timestamp
+  advances (while still suppressing duplicate writes for identical snapshot timestamps), so
+  long-lived active connections remain visible in 15m/1h `Network Events` filters.
+- **Fixed `Events` page dropping filter changes while a history query is in flight (#269).**
+  `EventsPageViewModel.RefreshAsync` queues a pending refresh when `SelectedRange`, `SearchText` or
+  `SelectedCategory` changes during an active query and discards stale responses before applying
+  results.
+- **Fixed `AgentEvidenceStore` tail-reader truncation for >512-byte records (#271).**
+  `ReadTailEvents` in `Axiom.Presentation` and `Axiom.UI` now expands the tail read window in chunks
+  until the requested record count is satisfied or byte 0 of `agent-evidence.jsonl` is reached.
+- **Fixed unhandled child-process / stdin error in OpenCode lifecycle bridge (#272).**
+  `OpenCodeProtection.BuildLifecycleScript` registers `error` handlers on both `child` and
+  `child.stdin` before writing the JSON payload so a missing executable (`ENOENT`) or closed pipe
+  (`EPIPE`) never raises an unhandled error in the host.
+- **Fixed SPDX header comment in `scripts/publish-setup.ps1` (#267) and added automatic PR/push
+  build & test CI workflow (`.github/workflows/ci.yml`, #273)** including parse-only validation of
+  all PowerShell scripts.
+
 ## What's in 0.13.1
 
 - **Fixed `"No new agent activity since ..."` false-positive warning & added live Antigravity session discovery.**

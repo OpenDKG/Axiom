@@ -80,15 +80,7 @@ public sealed class AgentEvidenceStore
             }
 
             var readTarget = Math.Max(max, 500);
-            var tailLines = ReadTailLines(EvidencePath, length, readTarget);
-            var events = new List<AgentEvidenceEvent>(tailLines.Count);
-            foreach (var line in tailLines)
-            {
-                if (TryParse(line) is { } item)
-                {
-                    events.Add(item);
-                }
-            }
+            var events = ReadTailEvents(EvidencePath, length, readTarget);
 
             lock (_cacheGate)
             {
@@ -108,44 +100,53 @@ public sealed class AgentEvidenceStore
         }
     }
 
-    private static List<string> ReadTailLines(string path, long fileLength, int maxLines)
+    private static List<AgentEvidenceEvent> ReadTailEvents(string path, long fileLength, int maxEvents)
     {
-        using var stream = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete);
-
-        var tailBytes = Math.Min(fileLength, Math.Max(65_536L, maxLines * 512L));
-        var startOffset = fileLength - tailBytes;
-        if (startOffset > 0)
+        var windowBytes = Math.Min(fileLength, Math.Max(65_536L, maxEvents * 512L));
+        while (true)
         {
-            stream.Seek(startOffset, SeekOrigin.Begin);
-        }
-
-        using var reader = new StreamReader(stream);
-        if (startOffset > 0)
-        {
-            _ = reader.ReadLine();
-        }
-
-        var ring = new Queue<string>(Math.Min(maxLines, 1024));
-        while (reader.ReadLine() is { } line)
-        {
-            if (string.IsNullOrWhiteSpace(line))
+            var startOffset = Math.Max(0L, fileLength - windowBytes);
+            using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            if (startOffset > 0)
             {
-                continue;
+                stream.Seek(startOffset, SeekOrigin.Begin);
             }
 
-            if (ring.Count == maxLines)
+            using var reader = new StreamReader(stream);
+            if (startOffset > 0)
             {
-                _ = ring.Dequeue();
+                _ = reader.ReadLine();
             }
 
-            ring.Enqueue(line);
-        }
+            var ring = new Queue<AgentEvidenceEvent>(Math.Min(maxEvents, 1024));
+            while (reader.ReadLine() is { } line)
+            {
+                if (string.IsNullOrWhiteSpace(line) || TryParse(line) is not { } item)
+                {
+                    continue;
+                }
 
-        return [.. ring];
+                if (ring.Count == maxEvents)
+                {
+                    _ = ring.Dequeue();
+                }
+
+                ring.Enqueue(item);
+            }
+
+            if (ring.Count >= maxEvents || startOffset == 0)
+            {
+                return [.. ring];
+            }
+
+            windowBytes = windowBytes >= fileLength / 2
+                ? fileLength
+                : windowBytes * 2;
+        }
     }
 
     public AgentEvidenceEvent? Latest(string framework, TimeSpan? maxAge = null)

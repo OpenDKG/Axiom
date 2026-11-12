@@ -129,6 +129,28 @@ public sealed class HistoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Unchanged_active_flow_updates_last_seen_without_force_refresh()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var first = new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.Zero);
+        var second = first.AddHours(2);
+        await store.UpsertAsync(Snapshot(first, ("chrome.exe", @"C:\chrome.exe", 100, "203.0.113.10:443")), forceRefresh: false);
+        await store.UpsertAsync(Snapshot(second, ("chrome.exe", @"C:\chrome.exe", 100, "203.0.113.10:443")), forceRefresh: false);
+
+        var recentWindow = await store.QueryAsync(new HistoryQuery
+        {
+            FromUtc = second.AddHours(-1),
+            ToUtc = second.AddMinutes(1),
+        });
+
+        var row = Assert.Single(recentWindow.Rows);
+        Assert.Equal(first, row.FirstSeenUtc);
+        Assert.Equal(second, row.LastSeenUtc);
+    }
+
+    [Fact]
     public async Task Search_matches_app_path_remote_and_pid()
     {
         var store = CreateStore();
