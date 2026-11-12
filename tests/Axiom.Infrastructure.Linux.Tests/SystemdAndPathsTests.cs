@@ -49,6 +49,11 @@ public sealed class SystemdAndPathsTests
         Assert.Contains("LogsDirectory=axiom", unit, StringComparison.Ordinal);
         Assert.Contains("ProtectSystem=strict", unit, StringComparison.Ordinal);
         Assert.Contains("ReadWritePaths=/var/lib/axiom /run/axiom", unit, StringComparison.Ordinal);
+        Assert.Contains(" /sys/fs/bpf ", unit, StringComparison.Ordinal); // BPF pins
+        Assert.Contains("ProtectKernelTunables=no", unit, StringComparison.Ordinal); // it would mount /sys/fs/bpf read-only
+        Assert.Contains("ReadOnlyPaths=-/proc/sys ", unit, StringComparison.Ordinal);
+        Assert.Contains(" -/sys/kernel ", unit, StringComparison.Ordinal);
+        Assert.Contains(" CAP_BPF CAP_PERFMON", unit, StringComparison.Ordinal);
         Assert.Contains("NoNewPrivileges=yes", unit, StringComparison.Ordinal);
         Assert.Contains("CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN", unit, StringComparison.Ordinal);
         Assert.Contains(" CAP_NET_BIND_SERVICE", unit, StringComparison.Ordinal); // Privacy Shield binds 127.0.0.1:53

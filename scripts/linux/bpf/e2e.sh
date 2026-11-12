@@ -106,7 +106,7 @@ if [ $DAEMON = 1 ]; then
   ls "$ROOT/../" >/dev/null
   echo "## B2 protection.enable + rule.apply block $TARGET"
   python3 -I "$AXIPC" protection.enable '{"defaultPolicy":"ask"}' | head -3 | sed 's/^/  /'
-  python3 -I "$AXIPC" rule.apply "{\"managedRuleId\":\"$RULE_ID\",\"appPath\":\"$TARGET\",\"direction\":\"outbound\",\"action\":\"block\",\"protocol\":\"any\",\"enabled\":true}" | sed 's/^/  /'
+  python3 -I "$AXIPC" rule.apply "{\"managedRuleId\":\"$RULE_ID\",\"appPath\":\"$TARGET\",\"direction\":\"outbound\",\"action\":\"block\",\"protocol\":\"any\",\"enabled\":true,\"createdBy\":\"uid:0\"}" | sed 's/^/  /'
   journalctl -u axiomd --since '-10s' --no-pager -o cat | grep 'BPF verdicts' | sed 's/^/  journal: /'
   OUT4=$(run_curl); echo "$OUT4"
   case "$OUT4" in *"rc=7"*) pass "daemon path: bare curl blocked immediately (rc=7)";; *) fail "daemon path: curl not blocked: $OUT4";; esac

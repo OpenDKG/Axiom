@@ -28,6 +28,15 @@ public static class SystemdUnit
     /// CAP_BPF, <c>bpf_get_current_task_btf</c>/CO-RE reads need CAP_PERFMON; attaching to the
     /// cgroup root also needs CAP_SYS_ADMIN, already present).
     /// </summary>
+    /// <summary>
+    /// What <c>ProtectKernelTunables=yes</c> would make read-only, minus <c>/sys/fs/bpf</c> (the BPF pin
+    /// directory must stay writable) and <c>/sys/fs/cgroup</c> (<c>ProtectControlGroups=no</c>). The
+    /// leading <c>-</c> ignores paths absent on a host.
+    /// </summary>
+    public const string ReadOnlyPaths =
+        "-/proc/sys -/proc/sysrq-trigger -/proc/latency_stats -/proc/acpi -/proc/timer_stats -/proc/fs -/proc/irq " +
+        "-/sys/kernel -/sys/devices -/sys/module -/sys/firmware -/sys/power -/sys/class -/sys/bus -/sys/block -/sys/dev -/sys/hypervisor";
+
     public const string CapabilityBoundingSet =
         "CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN CAP_FOWNER CAP_KILL CAP_NET_BIND_SERVICE CAP_BPF CAP_PERFMON";
 
@@ -87,8 +96,14 @@ public static class SystemdUnit
             ReadWritePaths={Q(machineDataDirectory)} {Q(runDirectory)} /sys/fs/cgroup /sys/fs/bpf /etc/resolv.conf /run/systemd/resolve /run/NetworkManager
             ProtectHome=read-only
             PrivateTmp=yes
-            ProtectKernelTunables=yes
+            # ProtectKernelTunables=yes mounts /sys/fs/bpf read-only and ReadWritePaths/BindPaths cannot
+            # override it (systemd 255: "failed to mkdir /sys/fs/bpf/axiom/...: -EROFS"), which keeps the
+            # connect-time BPF layer from pinning. The same protection is spelled out by hand below, minus
+            # the bpffs: the sysctl tree and the rest of /sys stay read-only.
+            ProtectKernelTunables=no
+            ReadOnlyPaths={ReadOnlyPaths}
             ProtectKernelModules=yes
+            ProtectKernelLogs=yes
             ProtectControlGroups=no
             ProtectClock=yes
             RestrictSUIDSGID=yes

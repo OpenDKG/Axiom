@@ -88,6 +88,7 @@ public sealed class NftEnforcementSupervisor
     {
         await PublishAtStartAsync(ct).ConfigureAwait(false);
         await StartLayerAsync(ct).ConfigureAwait(false);
+        LogLimitations();
 
         var loops = new List<Task>
         {
@@ -203,14 +204,19 @@ public sealed class NftEnforcementSupervisor
             _log(report.FileError is { Length: > 0 } error
                 ? string.Create(CultureInfo.InvariantCulture, $"nftables rejected table inet axiom generation {StartGeneration}: {error}")
                 : string.Create(CultureInfo.InvariantCulture, $"Published table inet axiom generation {StartGeneration} ({report.AppliedRuleCount} applied, {report.RejectedRules.Count} rejected); enforcement {report.State.ToString().ToLowerInvariant()}."));
-            foreach (var limitation in _adapter.Limitations())
-            {
-                _log("Enforcement limitation: " + limitation);
-            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             _log($"Could not publish table inet axiom: {exception.Message}");
+        }
+    }
+
+    /// <summary>Logged after the connect-time layer had its chance to attach, so the BPF line is accurate.</summary>
+    private void LogLimitations()
+    {
+        foreach (var limitation in _adapter.Limitations())
+        {
+            _log("Enforcement limitation: " + limitation);
         }
     }
 
