@@ -2,6 +2,20 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.14.0
+
+- **Dashboard hierarchy.** The full-width System status card moved out of the Dashboard into the
+  page header, between the page title and the theme selector. The Dashboard now starts with the KPI
+  row, **Agent activity** sits above the **System-wide throughput** chart, and the Active sockets,
+  Processes, Loopback and Throughput cards use tighter padding, smaller value type and shorter
+  accent bars.
+- **Protection navigation order.** The PROTECTION group now reads **Agent Protection, Agent
+  Activity, Network Control, Privacy Shield**, with the group header starting on Agent Protection.
+- **Rollup.** Includes the 0.13.2 reliability fixes (AI Analyst key handling, live-history
+  `last_seen`, Events filter races, evidence tail reads, OpenCode bridge errors), the 0.13.x
+  Antigravity UI work, and the 0.12.0 service-owned network recovery / enforcement foundation.
+  No new enforcement, DNS or firewall behavior is introduced by the 0.14.0 layout changes.
+
 ## What's in 0.13.2
 
 - **Fixed AI Analyst API key clearing on Save (#270).** Clearing `ApiKeyInput` in the UI after
