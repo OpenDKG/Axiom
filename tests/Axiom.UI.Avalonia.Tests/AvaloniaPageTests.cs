@@ -88,6 +88,19 @@ public sealed class AvaloniaPageTests
     }
 
     [Fact]
+    public void Events_page_disables_block_actions_without_firewall_writes()
+    {
+        var page = new EventsPageViewModel(null, new FakeTimerFactory(), new NullUserInteraction());
+
+        Assert.False(page.CanWrite);
+        Assert.False(page.BlockEventOutboundCommand.CanExecute(null));
+        Assert.False(page.BlockEventInboundCommand.CanExecute(null));
+        Assert.Contains("local service", page.EmptyHintText, StringComparison.OrdinalIgnoreCase);
+
+        page.Dispose();
+    }
+
+    [Fact]
     public void Privacy_shield_reports_service_required_without_changing_dns()
     {
         var page = new PrivacyShieldPageViewModel(

@@ -60,6 +60,10 @@
                     CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
             <Button Content="End task" Classes="danger" Command="{Binding EndEventTaskCommand}"
                     CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
+            <controls:AxiomSelectableTextBlock Text="{Binding WriteStatusText}" IsVisible="{Binding !CanWrite}"
+                       FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" Margin="4,0,12,0" />
+            <controls:AxiomSelectableTextBlock Text="{Binding ActionStatusText}"
+                       FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" TextWrapping="Wrap" />
             <Button Content="Copy details" Command="{Binding CopyEventDetailsCommand}"
                     CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
             <Button Content="Copy path" Command="{Binding CopyEventPathCommand}"
@@ -228,7 +232,7 @@
                          Foreground="{DynamicResource Axiom.TextPrimary}" HorizontalAlignment="Center" />
               <controls:AxiomSelectableTextBlock Text="{Binding StatusText}" FontSize="12" Foreground="{DynamicResource Axiom.TextSecondary}" TextAlignment="Center"
                          TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Text="Network events require the local service (start with --service). File, agent, system and blocked event feeds are not recorded yet."
+              <controls:AxiomSelectableTextBlock Text="{Binding EmptyHintText}"
                          FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextAlignment="Center" TextWrapping="Wrap" />
             </StackPanel>
           </Border>

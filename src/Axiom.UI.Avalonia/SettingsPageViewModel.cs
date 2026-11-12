@@ -75,7 +75,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public bool IsAutostartSupported { get; }
 
-    public string MilestoneText => "Avalonia UI migration · Windows-first";
+    public string MilestoneText => $"{Axiom.Contracts.ProductMilestone.Current} · Windows-first";
 
     public string ProtocolText { get; }
 

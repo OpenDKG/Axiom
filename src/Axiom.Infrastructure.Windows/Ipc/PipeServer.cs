@@ -1055,11 +1055,13 @@ public sealed class PipeServer
             {
                 commands.Add(IpcCommandTypes.RuleRemove);
             }
+        }
 
-            if (_ruleVerify is not null)
-            {
-                commands.Add(IpcCommandTypes.RuleVerify);
-            }
+        // rule.verify is read-only and dispatched without the write gate, so advertise it whenever
+        // the service can serve it.
+        if (_ruleVerify is not null)
+        {
+            commands.Add(IpcCommandTypes.RuleVerify);
         }
 
         return new ServiceCapabilities
