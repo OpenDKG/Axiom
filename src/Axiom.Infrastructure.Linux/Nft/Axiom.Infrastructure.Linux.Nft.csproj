@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Linux enforcement engine of the axiomd daemon: compiles Axiom rules into an nftables batch for
+    `table inet axiom` keyed on daemon-owned per-app cgroups (`/sys/fs/cgroup/axiom.slice/<app>`),
+    herds matching processes into those cgroups, polls rule counters and turns `nft monitor trace`
+    output into the macOS filter-event NDJSON contract (docs/LINUX_ENFORCEMENT.md).
+    Targets plain net10.0 so its pure logic builds and is tested anywhere; code that touches nft,
+    /proc or /sys is guarded with OperatingSystem.IsLinux().
+    Self-contained on purpose: it references Axiom.Core/Axiom.Contracts only, so the Linux daemon
+    project (owned by the P1/P3 work) can reference it without a cycle.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Axiom.Infrastructure.Linux.Nft</RootNamespace>
+    <AssemblyName>Axiom.Infrastructure.Linux.Nft</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Axiom.Contracts\Axiom.Contracts.csproj" />
+    <ProjectReference Include="..\..\Axiom.Core\Axiom.Core.csproj" />
+  </ItemGroup>
+
+</Project>
