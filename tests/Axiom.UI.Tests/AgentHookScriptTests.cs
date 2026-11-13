@@ -29,6 +29,23 @@ public sealed class AgentHookScriptTests
     }
 
     [Fact]
+    public void OpenCode_bridge_normalizes_filePath_to_path()
+    {
+        // OpenCode passes filePath; Blackbox's detectors read only "path"
+        // (action_parsing._PATH_KEYS is case-sensitive), so the bridge must translate it
+        // or every file-access rule silently misses.
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+
+        Assert.Contains("raw_args[\"filePath\"]", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"path\": raw_args[\"filePath\"]", bridge, StringComparison.Ordinal);
+        Assert.Contains("args=raw_args", bridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("args=payload.get", bridge, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Lifecycle_bridge_is_valid_python_when_python_is_available()
     {
         var python = FindPython();

@@ -612,9 +612,15 @@ public sealed class OpenCodeProtection
                         print("{}")
                         return
 
+                    raw_args = payload.get("args") or {}
+                    if isinstance(raw_args, dict) and "filePath" in raw_args and "path" not in raw_args:
+                        # OpenCode names the file argument filePath; Blackbox's detectors read
+                        # "path" (action_parsing._PATH_KEYS is case-sensitive), so a raw
+                        # pass-through misses every file-access rule.
+                        raw_args = {**raw_args, "path": raw_args["filePath"]}
                     decision = guard.on_pre_tool_call(
                         tool_name=tool,
-                        args=payload.get("args") or {},
+                        args=raw_args,
                         session_id=session,
                         tool_call_id=call,
                     )
