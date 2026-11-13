@@ -43,6 +43,7 @@ public sealed class AgentHookScriptTests
         Assert.Contains("\"path\": raw_args[\"filePath\"]", bridge, StringComparison.Ordinal);
         Assert.Contains("args=raw_args", bridge, StringComparison.Ordinal);
         Assert.Contains("_deletes_protected", bridge, StringComparison.Ordinal);
+        Assert.Contains("_tampers_with_guard", bridge, StringComparison.Ordinal);
         Assert.DoesNotContain("args=payload.get", bridge, StringComparison.Ordinal);
     }
 

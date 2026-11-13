@@ -534,6 +534,17 @@ public sealed class OpenCodeProtection
         EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "agent-evidence.jsonl"
 
 
+        def _tampers_with_guard(command: str) -> bool:
+            # An agent must not be able to delete or rewrite the local guard, its hooks or the
+            # bridge. Blackbox's own tamper detector did not catch a plain delete in the lab.
+            text = (command or "").lower()
+            markers = ("plugins\\blackbox", "plugins/blackbox", "axiom-guard-bridge", ".hermes\\blackbox", ".hermes/blackbox")
+            verbs = ("del ", "erase ", "rm ", "rmdir ", "move ", "ren ", "remove-item", "unlink ", ">", "copy ")
+            if not any(marker in text for marker in markers):
+                return False
+            return any(verb in text for verb in verbs)
+
+
         def _deletes_protected(command: str, protected) -> bool:
             # True when a shell command deletes one of the operator's protected files.
             # Blackbox's custom file-access detector covers reads and copies; a shell
@@ -643,6 +654,10 @@ public sealed class OpenCodeProtection
                     except Exception:
                         protected = ()
                     command_text = str(raw_args.get("command") or "") if isinstance(raw_args, dict) else ""
+                    if _tampers_with_guard(command_text):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it modifies the local guard."}))
+                        return
                     if _deletes_protected(command_text, protected):
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "", session, call)
                         print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it deletes a protected path."}))
