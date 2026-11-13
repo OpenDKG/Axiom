@@ -208,6 +208,23 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task OpenContactAsync()
+    {
+        try
+        {
+            await _ui.OpenExternalAsync(
+                    "https://github.com/a-51-50/Axiom/issues/new/choose",
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is
+                     InvalidOperationException or NotSupportedException or System.ComponentModel.Win32Exception)
+        {
+            // No browser handler is available; leave the shell usable.
+        }
+    }
+
+    [RelayCommand]
     private void OpenSupport() => SelectedPage = Support;
 
     private void OnThemeChanged(object? sender, EventArgs e)

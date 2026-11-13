@@ -239,6 +239,8 @@
             <Button Command="{Binding OpenSupportCommand}" Padding="9,4" FontSize="11">
               <TextBlock Text="♥ Donate" Foreground="{DynamicResource Axiom.Accent}" FontSize="12" />
             </Button>
+            <Button Content="Contact" Command="{Binding OpenContactCommand}" Padding="8,4" FontSize="10.5"
+                    ToolTip.Tip="Open the Axiom issue chooser" />
           </StackPanel>
         </StackPanel>
       </Grid>
