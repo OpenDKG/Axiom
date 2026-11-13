@@ -46,7 +46,7 @@ public sealed class MacElevationTests
 
 public sealed class MacBundleLayoutTests
 {
-    [Fact]
+    [UnixOnlyFact]
     public void Paths_inside_an_installed_bundle()
     {
         var layout = new MacBundleLayout("/Applications/Axiom.app/Contents/MacOS/");
