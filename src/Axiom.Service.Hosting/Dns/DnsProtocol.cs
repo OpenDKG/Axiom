@@ -2,7 +2,7 @@
 using System.Buffers.Binary;
 using System.Text;
 
-namespace Axiom.Infrastructure.Windows.Dns;
+namespace Axiom.Service.Hosting.Dns;
 
 internal sealed record DnsQueryInfo(string Domain, int QuestionEnd);
 

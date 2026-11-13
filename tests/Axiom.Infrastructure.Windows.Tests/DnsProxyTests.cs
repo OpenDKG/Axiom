@@ -7,6 +7,7 @@ using System.Net.Sockets;
 using System.Text;
 using Axiom.Contracts.Privacy;
 using Axiom.Infrastructure.Windows.Dns;
+using Axiom.Service.Hosting.Dns;
 using Xunit;
 
 namespace Axiom.Infrastructure.Windows.Tests;
