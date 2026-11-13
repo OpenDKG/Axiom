@@ -1,8 +1,9 @@
 # Enforcement E2-B — offline decision controller
 
-**Status:** first slice. The controller exists and is tested, but no IPC command and no host hook calls
-it yet. Enforcement stays off unless a valid policy file enables it, and no production behaviour
-changes.
+**Status:** E2-B bridge core. The controller, the authenticated `enforcement.status` /
+`enforcement.evaluate` pipe commands and a C# host adapter exist and are tested. No live host plugin
+calls the pipe yet, so installed agents keep their current behaviour. Enforcement stays off unless a
+valid policy file enables it.
 
 **Base:** `77cc50ac50ea3db04a9206e30756a68e27fdd09d`
 
@@ -21,6 +22,18 @@ changes.
   policy revision is rejected instead of inheriting the first verdict.
 - Reads no network, no DKG and no clock during evaluation; the only clock read is when a caller
   omits `UtcTime`.
+
+`Axiom.Contracts/Ipc/EnforcementDtos.cs` and `IpcProtocol` add two commands on the existing local
+named pipe, with the same SID DACL and request-size cap as every other command:
+
+- `enforcement.status` — enabled state, policy revision, agent/rule/resource counts and an error.
+- `enforcement.evaluate` — one bounded request; returns `EnforcementVerdictDto`.
+
+`Axiom.Core/Enforcement/HostEnforcementAdapter.cs` maps a real host pre-action event to the canonical
+request through `HostDecisionMapping`, sends it with `PipeEnforcementDecisionTransport` and returns a
+host-specific deny payload only when the verdict is a block with `CanEnforce = true`. An
+observation-strength block returns no deny, so an unverified host cannot be presented as blocked.
+`HostDecisionMapping` gains a decision-based overload; the existing verdict overload delegates to it.
 
 ## Policy file
 
@@ -88,8 +101,8 @@ be shown as verified blocking.
 
 ## Not in this slice
 
-- IPC command (`enforcement.evaluate` / `enforcement.status`) and service registration.
-- Host adapters that send requests and turn verdicts into deny/ask.
+- Live OpenCode/OpenChamber, Claude Code or Codex plugin that calls `enforcement.evaluate` and turns
+  a verdict into a host deny. The C# adapter is ready; the host-side bridge is the next PR.
 - `Ask` approval UX and a real pause/approve path.
 - Per-host/version capability evidence and the live status service.
 - OS boundary, managed runner or file broker.
@@ -100,13 +113,17 @@ be shown as verified blocking.
 dotnet build tests/Axiom.Service.Tests/Axiom.Service.Tests.csproj -c Release
   Build succeeded. 0 warnings, 0 errors
 
+dotnet test tests/Axiom.Core.Tests/Axiom.Core.Tests.csproj -c Release --no-build
+  134 passed, 0 failed, 0 skipped
+
 dotnet test tests/Axiom.Service.Tests/Axiom.Service.Tests.csproj -c Release --no-build
   81 passed, 0 failed, 0 skipped
 ```
 
 New tests cover disabled/missing policy, missing caller identity, allow and block rules, observation
 strength, guard override, invalid kind, oversized target, replay mismatch, idempotent repeats, status
-counts, malformed policy and `enabled: false`.
+counts, malformed policy and `enabled: false`, plus adapter mapping of allow, observation, Codex and
+Claude deny payloads and the canonical request fields.
 
 ## Rollback
 

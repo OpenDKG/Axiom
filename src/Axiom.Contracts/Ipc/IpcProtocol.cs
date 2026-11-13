@@ -62,6 +62,8 @@ public static class IpcCommandTypes
     public const string ThreatShareRecord = "threatshare.record";
     public const string NetworkRecoveryCapture = "networkRecovery.capture";
     public const string NetworkRecoveryRestore = "networkRecovery.restore";
+    public const string EnforcementStatus = "enforcement.status";
+    public const string EnforcementEvaluate = "enforcement.evaluate";
 
     public static IReadOnlyList<string> All { get; } =
     [
@@ -94,6 +96,8 @@ public static class IpcCommandTypes
         ThreatShareRecord,
         NetworkRecoveryCapture,
         NetworkRecoveryRestore,
+        EnforcementStatus,
+        EnforcementEvaluate,
     ];
 }
 

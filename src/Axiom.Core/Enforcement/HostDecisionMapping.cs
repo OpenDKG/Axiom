@@ -133,7 +133,20 @@ public static class HostDecisionMapping
     {
         ArgumentNullException.ThrowIfNull(verdict);
 
-        if (verdict.Decision != EnforcementDecision.Block)
+        return ToHostResponse(host, verdict.Decision, message);
+    }
+
+    /// <summary>
+    /// Returns the host-specific deny payload for a decision, or <c>null</c> when it is not a block.
+    /// The payload carries no strength claim; callers must only send it on hosts whose deny contract
+    /// and version have been verified.
+    /// </summary>
+    public static string? ToHostResponse(
+        HostHarness host,
+        EnforcementDecision decision,
+        string? message = null)
+    {
+        if (decision != EnforcementDecision.Block)
         {
             return null;
         }
