@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-namespace Axiom.Infrastructure.Windows.Firewall;
+namespace Axiom.Core.Firewall;
 
 /// <summary>
 /// Runtime consent for firewall writes. The service sets it from the persisted shield state; the
-/// environment-variable gate in <see cref="WindowsFirewallPolicyAdapter"/> stays as a test override.
+/// environment-variable gate in <see cref="FirewallWriteGate"/> stays as a test override.
 /// Consent alone is not enough: writes are also refused in an interactive process, because only the
-/// elevated Windows service can create machine-wide rules.
+/// privileged service (Windows service / launchd daemon) can change machine-wide rules.
 /// </summary>
 public static class ProtectionWriteConsent
 {
