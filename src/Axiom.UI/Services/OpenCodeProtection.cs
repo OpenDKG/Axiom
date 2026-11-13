@@ -534,6 +534,25 @@ public sealed class OpenCodeProtection
         EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "agent-evidence.jsonl"
 
 
+        def _deletes_protected(command: str, protected) -> bool:
+            # True when a shell command deletes one of the operator's protected files.
+            # Blackbox's custom file-access detector covers reads and copies; a shell
+            # del/rm/Remove-Item of a protected path would otherwise pass.
+            text = (command or "").lower()
+            verbs = ("del ", "erase ", "rm ", "rmdir ", "remove-item", "unlink ")
+            if not any(verb in text for verb in verbs):
+                return False
+            try:
+                for pattern in protected or ():
+                    name = str(pattern).replace("~", "").replace("/", "\\").split("\\")[-1]
+                    stem = name.replace("*", "").strip(".")
+                    if stem and stem.lower() in text:
+                        return True
+            except Exception:
+                return False
+            return False
+
+
         def record(framework, event_type, tool, decision, guard_status, duration_ms,
                    error_code="", session="", call=""):
             try:
@@ -618,6 +637,16 @@ public sealed class OpenCodeProtection
                         # "path" (action_parsing._PATH_KEYS is case-sensitive), so a raw
                         # pass-through misses every file-access rule.
                         raw_args = {**raw_args, "path": raw_args["filePath"]}
+                    try:
+                        from plugins.blackbox.kernel.config import load_blackbox_config
+                        protected = load_blackbox_config().protected_paths
+                    except Exception:
+                        protected = ()
+                    command_text = str(raw_args.get("command") or "") if isinstance(raw_args, dict) else ""
+                    if _deletes_protected(command_text, protected):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it deletes a protected path."}))
+                        return
                     decision = guard.on_pre_tool_call(
                         tool_name=tool,
                         args=raw_args,

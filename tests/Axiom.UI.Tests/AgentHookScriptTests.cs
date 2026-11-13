@@ -42,7 +42,47 @@ public sealed class AgentHookScriptTests
         Assert.Contains("raw_args[\"filePath\"]", bridge, StringComparison.Ordinal);
         Assert.Contains("\"path\": raw_args[\"filePath\"]", bridge, StringComparison.Ordinal);
         Assert.Contains("args=raw_args", bridge, StringComparison.Ordinal);
+        Assert.Contains("_deletes_protected", bridge, StringComparison.Ordinal);
         Assert.DoesNotContain("args=payload.get", bridge, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OpenCode_bridge_compiles_when_python_is_available()
+    {
+        var python = FindPython();
+        if (python is null)
+        {
+            return;
+        }
+
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+        var path = Path.Combine(Path.GetTempPath(), $"axiom-bridge-{Guid.NewGuid():N}.py");
+        try
+        {
+            File.WriteAllText(path, bridge);
+            var start = new ProcessStartInfo(python)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            start.ArgumentList.Add("-m");
+            start.ArgumentList.Add("py_compile");
+            start.ArgumentList.Add(path);
+            using var process = Process.Start(start);
+            Assert.NotNull(process);
+            process.WaitForExit(15_000);
+            Assert.True(process.HasExited, "Python syntax check did not finish.");
+            Assert.Equal(0, process.ExitCode);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]
