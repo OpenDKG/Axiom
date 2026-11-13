@@ -91,6 +91,7 @@
               <ListBox.ItemTemplate>
                 <DataTemplate>
                   <Grid ColumnDefinitions="130,100,*,80" Margin="0,2"
+                        PointerPressed="OnRowPointerPressed"
                         Tag="{Binding $parent[ListBox].DataContext}">
                     <Grid.ContextMenu>
                       <ContextMenu>
