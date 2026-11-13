@@ -1,22 +1,19 @@
 ﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
 using Axiom.Contracts.Privacy;
-using Axiom.Contracts.Threat;
-using Axiom.Infrastructure.Windows.IpHelper;
 
-namespace Axiom.Infrastructure.Windows.Dns;
+namespace Axiom.Service.Hosting.Dns;
 
 /// <summary>
 /// Small loopback DNS filter used by the opt-in Privacy Shield module. It evaluates only the
-/// question name, forwards allowed queries to the configured upstream and never changes Windows
-/// adapter settings itself.
+/// question name, forwards allowed queries to the configured upstream and never changes the
+/// system DNS configuration itself (that is the job of <see cref="IPrivacyDnsPlatform"/>).
+/// Attribution of a blocked query to the querying app goes through <see cref="IDnsAppAttributor"/>.
 /// </summary>
 public sealed class DnsProxyServer : IAsyncDisposable
 {
@@ -36,9 +33,13 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private readonly PrivacyShieldPolicy _policy;
 
-    private readonly IReadOnlyList<DnsUpstreamTarget> _targets;
+    // Swapped as a whole by UpdateTargets; forwarders read it once per query.
+    private volatile IReadOnlyList<DnsUpstreamTarget> _targets;
 
-    private readonly HttpClient? _httpClient;
+    // Created when the first DoH target appears (constructor or a later swap).
+    private volatile HttpClient? _httpClient;
+
+    private readonly HttpMessageHandler? _dohHandler;
 
     private readonly Action<PrivacyShieldBlockedEvent>? _onBlocked;
 
@@ -57,8 +58,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private readonly ConcurrentQueue<PrivacyShieldBlockedEvent> _recentBlocked = new();
 
-    private static readonly ConcurrentDictionary<int, CachedAppIdentity> AppCache = new();
-    private static readonly TimeSpan AppCacheLifetime = TimeSpan.FromSeconds(30);
+    private readonly IDnsAppAttributor? _attributor;
 
     private long _queries;
 
@@ -68,18 +68,23 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private long _errors;
 
+    private long _upstreamFailureStreak;
+
     public DnsProxyServer(
         PrivacyShieldPolicy policy,
         IReadOnlyList<IPEndPoint> upstreams,
         int port,
-        Action<PrivacyShieldBlockedEvent>? onBlocked = null)
+        Action<PrivacyShieldBlockedEvent>? onBlocked = null,
+        IDnsAppAttributor? attributor = null)
         : this(
             policy,
             (upstreams ?? throw new ArgumentNullException(nameof(upstreams)))
                 .Select(endpoint => new DnsUpstreamTarget(endpoint))
                 .ToArray(),
             port,
-            onBlocked)
+            onBlocked,
+            dohHandler: null,
+            attributor)
     {
     }
 
@@ -88,27 +93,16 @@ public sealed class DnsProxyServer : IAsyncDisposable
         IReadOnlyList<DnsUpstreamTarget> targets,
         int port,
         Action<PrivacyShieldBlockedEvent>? onBlocked = null,
-        HttpMessageHandler? dohHandler = null)
+        HttpMessageHandler? dohHandler = null,
+        IDnsAppAttributor? attributor = null)
     {
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _targets = targets ?? throw new ArgumentNullException(nameof(targets));
         _onBlocked = onBlocked;
-        if (targets.Count == 0)
-        {
-            throw new ArgumentException("At least one upstream DNS target is required.", nameof(targets));
-        }
-
-        if (targets.Any(target => target is null || (!target.IsDoh && target.PlainEndpoint is null)))
-        {
-            throw new ArgumentException("Every upstream DNS target must specify a DoH URI or IP endpoint.", nameof(targets));
-        }
-
-        if (targets.Any(target => target.IsDoh))
-        {
-            _httpClient = dohHandler is not null
-                ? new HttpClient(dohHandler, disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan }
-                : CreateDohHttpClient(targets);
-        }
+        _attributor = attributor;
+        _dohHandler = dohHandler;
+        ValidateTargets(targets);
+        EnsureDohClient(targets);
 
         _udp4 = new UdpClient(new IPEndPoint(IPAddress.Loopback, port));
         Port = ((IPEndPoint)_udp4.Client.LocalEndPoint!).Port;
@@ -160,6 +154,84 @@ public sealed class DnsProxyServer : IAsyncDisposable
     }
 
     public string Upstream => string.Join(", ", _targets.Select(target => target.DisplayText));
+
+    /// <summary>The plain endpoints of the upstreams in use right now (snapshot).</summary>
+    public IReadOnlyList<IPEndPoint> Upstreams => _targets
+        .Where(target => target.PlainEndpoint is not null)
+        .Select(target => target.PlainEndpoint!)
+        .ToArray();
+
+    /// <summary>The upstream targets in use right now (snapshot).</summary>
+    public IReadOnlyList<DnsUpstreamTarget> Targets => _targets;
+
+    /// <summary>
+    /// Consecutive allowed queries that no upstream answered; reset by the next answered query.
+    /// A growing streak means the upstreams are gone (network change), not that a domain is bad.
+    /// </summary>
+    public long UpstreamFailureStreak => Interlocked.Read(ref _upstreamFailureStreak);
+
+    /// <summary>
+    /// Replaces the upstream list with plain UDP/TCP endpoints without touching the listeners
+    /// (same meaning as the endpoint constructor: no DoH upgrade).
+    /// </summary>
+    public void UpdateUpstreams(IReadOnlyList<IPEndPoint> upstreams)
+    {
+        ArgumentNullException.ThrowIfNull(upstreams);
+        if (upstreams.Count == 0)
+        {
+            throw new ArgumentException("At least one upstream DNS endpoint is required.", nameof(upstreams));
+        }
+
+        UpdateTargets(upstreams.Select(endpoint => new DnsUpstreamTarget(endpoint)).ToArray());
+    }
+
+    /// <summary>
+    /// Replaces the upstream targets without touching the listeners (used when the system
+    /// resolvers change while Privacy Shield is on). Queries in flight finish against the old list.
+    /// </summary>
+    public void UpdateTargets(IReadOnlyList<DnsUpstreamTarget> targets)
+    {
+        ValidateTargets(targets);
+        var copy = targets.ToArray();
+        EnsureDohClient(copy);
+        _targets = copy;
+        Interlocked.Exchange(ref _upstreamFailureStreak, 0);
+    }
+
+    private static void ValidateTargets(IReadOnlyList<DnsUpstreamTarget> targets)
+    {
+        if (targets.Count == 0)
+        {
+            throw new ArgumentException("At least one upstream DNS target is required.", nameof(targets));
+        }
+
+        if (targets.Any(target => target is null || (!target.IsDoh && target.PlainEndpoint is null)))
+        {
+            throw new ArgumentException("Every upstream DNS target must specify a DoH URI or IP endpoint.", nameof(targets));
+        }
+    }
+
+    private void EnsureDohClient(IReadOnlyList<DnsUpstreamTarget> targets)
+    {
+        if (_httpClient is null && targets.Any(target => target.IsDoh))
+        {
+            _httpClient = _dohHandler is not null
+                ? new HttpClient(_dohHandler, disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan }
+                : CreateDohHttpClient(targets);
+        }
+    }
+
+    private void NoteForwardResult(bool answered)
+    {
+        if (answered)
+        {
+            Interlocked.Exchange(ref _upstreamFailureStreak, 0);
+        }
+        else
+        {
+            Interlocked.Increment(ref _upstreamFailureStreak);
+        }
+    }
 
     public PrivacyShieldStatus Snapshot(PrivacyShieldSettings settings)
     {
@@ -381,6 +453,18 @@ public sealed class DnsProxyServer : IAsyncDisposable
         bool preferTcpForPlain,
         CancellationToken cancellationToken)
     {
+        var response = await ForwardToTargetsCoreAsync(query, questionEnd, preferTcpForPlain, cancellationToken)
+            .ConfigureAwait(false);
+        NoteForwardResult(response is not null);
+        return response;
+    }
+
+    private async Task<byte[]?> ForwardToTargetsCoreAsync(
+        byte[] query,
+        int questionEnd,
+        bool preferTcpForPlain,
+        CancellationToken cancellationToken)
+    {
         var attemptTimeout = _targets.Count > 1 ? MultiTargetAttemptTimeout : UpstreamTimeout;
         foreach (var target in _targets)
         {
@@ -528,7 +612,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
             {
                 var host = context.DnsEndPoint.Host;
                 if (!bootstrapByHost.TryGetValue(host, out var bootstrapIp) &&
-                    !SystemDnsResolver.TryResolveBootstrapAddress(host, out bootstrapIp))
+                    !DnsUpstream.TryResolveBootstrapAddress(host, out bootstrapIp))
                 {
                     var addresses = await System.Net.Dns
                         .GetHostAddressesAsync(host, cancellationToken)
@@ -790,231 +874,22 @@ public sealed class DnsProxyServer : IAsyncDisposable
         }
     }
 
-    private static (string Name, string Path, string AgentName, string AgentPath) ResolveApp(
-        IPEndPoint? source,
-        bool tcp)
+    private DnsAppIdentity ResolveApp(IPEndPoint? source, bool tcp)
     {
-        if (source is null || source.Port <= 0)
+        if (_attributor is null || source is null || source.Port <= 0)
         {
-            return (string.Empty, string.Empty, string.Empty, string.Empty);
-        }
-
-        var processId = FindOwningProcess(source, tcp);
-        if (processId <= 4)
-        {
-            return (string.Empty, string.Empty, string.Empty, string.Empty);
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        if (AppCache.TryGetValue(processId, out var cached) &&
-            now - cached.ResolvedUtc < AppCacheLifetime)
-        {
-            return (cached.Name, cached.Path, cached.AgentName, cached.AgentPath);
-        }
-
-        var name = string.Empty;
-        var path = string.Empty;
-        try
-        {
-            using var process = Process.GetProcessById(processId);
-            name = process.ProcessName + ".exe";
-            try
-            {
-                path = process.MainModule?.FileName ?? string.Empty;
-            }
-            catch (Exception exception) when (exception is
-                         System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
-            {
-                // Protected or exiting process; the name is still useful.
-            }
-        }
-        catch (Exception exception) when (exception is
-                     ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-        }
-
-        // Agents usually fetch through a tool process (curl, git, nslookup), so the querying process
-        // is not the agent itself. Walk the parent chain once per process (cached) and remember the
-        // nearest agent ancestor; that is what makes "fetched by tool" provable.
-        var (agentName, agentPath) = FindAgentAncestor(processId);
-
-        AppCache[processId] = new CachedAppIdentity(name, path, agentName, agentPath, now);
-        if (AppCache.Count > 256)
-        {
-            foreach (var pair in AppCache)
-            {
-                if (now - pair.Value.ResolvedUtc > AppCacheLifetime)
-                {
-                    AppCache.TryRemove(pair.Key, out _);
-                }
-            }
-        }
-
-        return (name, path, agentName, agentPath);
-    }
-
-    private static (string Name, string Path) FindAgentAncestor(int processId)
-    {
-        var current = processId;
-        for (var depth = 0; depth < 6 && current > 4; depth++)
-        {
-            var parent = ParentProcessId(current);
-            if (parent <= 4 || parent == current)
-            {
-                return (string.Empty, string.Empty);
-            }
-
-            try
-            {
-                using var process = Process.GetProcessById(parent);
-                var name = process.ProcessName + ".exe";
-                var path = string.Empty;
-                try
-                {
-                    path = process.MainModule?.FileName ?? string.Empty;
-                }
-                catch (Exception exception) when (exception is
-                             System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
-                {
-                }
-
-                if (AgentProcessMatcher.IsAgentProcess(name, path))
-                {
-                    return (name, path);
-                }
-            }
-            catch (Exception exception) when (exception is
-                         ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
-            {
-                // Exited or protected parent; keep walking with the pid we have.
-            }
-
-            current = parent;
-        }
-
-        return (string.Empty, string.Empty);
-    }
-
-    private static int ParentProcessId(int processId)
-    {
-        var snapshot = CreateToolhelp32Snapshot(Th32CsSnapProcess, 0);
-        if (snapshot == IntPtr.Zero || snapshot == InvalidHandleValue)
-        {
-            return 0;
+            return DnsAppIdentity.Unknown;
         }
 
         try
         {
-            var entry = new ProcessEntry32 { Size = (uint)Marshal.SizeOf<ProcessEntry32>() };
-            if (!Process32First(snapshot, ref entry))
-            {
-                return 0;
-            }
-
-            do
-            {
-                if (entry.ProcessId == (uint)processId)
-                {
-                    return (int)entry.ParentProcessId;
-                }
-
-                entry.Size = (uint)Marshal.SizeOf<ProcessEntry32>();
-            }
-            while (Process32Next(snapshot, ref entry));
+            return _attributor.Resolve(source, tcp) ?? DnsAppIdentity.Unknown;
         }
-        finally
+#pragma warning disable CA1031 // Attribution is best effort and must never fail a DNS response.
+        catch (Exception)
+#pragma warning restore CA1031
         {
-            CloseHandle(snapshot);
-        }
-
-        return 0;
-    }
-
-    private const uint Th32CsSnapProcess = 0x00000002;
-
-    private static readonly IntPtr InvalidHandleValue = new(-1);
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct ProcessEntry32
-    {
-        public uint Size;
-        public uint Usage;
-        public uint ProcessId;
-        public IntPtr DefaultHeapId;
-        public uint ModuleId;
-        public uint Threads;
-        public uint ParentProcessId;
-        public int PriorityClassBase;
-        public uint Flags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-        public string ExeFile;
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool Process32First(IntPtr snapshot, ref ProcessEntry32 entry);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool Process32Next(IntPtr snapshot, ref ProcessEntry32 entry);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseHandle(IntPtr handle);
-
-    private static int FindOwningProcess(IPEndPoint source, bool tcp)
-    {
-        try
-        {
-            if (tcp)
-            {
-                if (source.AddressFamily == AddressFamily.InterNetworkV6)
-                {
-                    return NativeMethods.QueryTcpV6()
-                        .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
-                                      row.State == 5 &&
-                                      row.OwningPid > 4)
-                        .Select(row => (int)row.OwningPid)
-                        .FirstOrDefault();
-                }
-
-                return NativeMethods.QueryTcpV4()
-                    .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
-                                  row.State == 5 &&
-                                  row.OwningPid > 4)
-                    .Select(row => (int)row.OwningPid)
-                    .FirstOrDefault();
-            }
-
-            if (source.AddressFamily == AddressFamily.InterNetworkV6)
-            {
-                return NativeMethods.QueryUdpV6()
-                    .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
-                                  row.OwningPid > 4)
-                    .Select(row => (int)row.OwningPid)
-                    .FirstOrDefault();
-            }
-
-            return NativeMethods.QueryUdpV4()
-                .Where(row => EndpointFormatter.HostPort(row.LocalPort) == source.Port &&
-                              row.OwningPid > 4)
-                .Select(row => (int)row.OwningPid)
-                .FirstOrDefault();
-        }
-        catch (Exception exception) when (exception is
-                     System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            return 0;
+            return DnsAppIdentity.Unknown;
         }
     }
-
-    private sealed record CachedAppIdentity(
-        string Name,
-        string Path,
-        string AgentName,
-        string AgentPath,
-        DateTimeOffset ResolvedUtc);
 }

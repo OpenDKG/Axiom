@@ -2,13 +2,15 @@
 using System.Globalization;
 using System.Runtime;
 using Axiom.Contracts.Privacy;
-using Axiom.Infrastructure.Windows.Dns;
+using Axiom.Service.Hosting.Dns;
 
 namespace Axiom.Service;
 
 /// <summary>
-/// Owns the opt-in loopback DNS resolver. It never changes adapter DNS settings; a user who wants
-/// system-wide filtering must point Windows at the displayed loopback resolver explicitly.
+/// Owns the opt-in loopback DNS resolver. On Windows it never changes adapter DNS settings; a user
+/// who wants system-wide filtering must point Windows at the displayed loopback resolver explicitly.
+/// On macOS the root daemon redirects the network services itself through
+/// <see cref="IPrivacyDnsPlatform"/> and restores them when the resolver stops.
 /// </summary>
 public sealed class PrivacyShieldController : IAsyncDisposable
 {
@@ -22,6 +24,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     /// <summary>Writes buffered blocked history before the service stops.</summary>
     public void FlushBlockedHistory() => _blockedHistory.Flush();
+
+    private readonly IPrivacyDnsPlatform _dns;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -49,13 +53,17 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private DnsProxyServer? _server;
 
+    private CancellationTokenSource? _upstreamWatch;
+
     private string? _lastError;
 
     public PrivacyShieldController(
         PrivacyShieldSettingsStore store,
         PrivacyShieldRuleStore? ruleStore = null,
-        PrivacyShieldSourceUpdater? sourceUpdater = null)
+        PrivacyShieldSourceUpdater? sourceUpdater = null,
+        IPrivacyDnsPlatform? dnsPlatform = null)
     {
+        _dns = dnsPlatform ?? ServicePlatform.CreateDefaultPrivacyDnsPlatform();
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _ruleStore = ruleStore ?? new PrivacyShieldRuleStore();
         _sourceUpdater = sourceUpdater ?? new PrivacyShieldSourceUpdater();
@@ -153,7 +161,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
                 // The adapter may still send DNS to 127.0.0.1. With the resolver stopped that would
                 // take name resolution down, so restore the saved DNS without an extra prompt.
-                _ = Task.Run(PrivacyDnsFailSafe.RestoreIfNeeded);
+                _ = Task.Run(_dns.RestoreIfNeeded);
                 return CreateStatus();
             }
 
@@ -203,7 +211,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
             _server = candidate;
             _settings = normalized;
-            _lastError = startWarning;
+            _lastError = CombineWarnings(startWarning, NotifyResolverStarted(candidate));
             EnsureConfiguredAdapterDns();
             if (ShouldAutoUpdateSources())
             {
@@ -233,7 +241,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         }
 
         _server = server;
-        _lastError = warning;
+        _lastError = CombineWarnings(warning, NotifyResolverStarted(server));
         return Task.FromResult(true);
     }
 
@@ -286,32 +294,17 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     /// <summary>
     /// Keeps the configured or active default-route adapter pointed at the local resolver while the
     /// elevated Windows service is running Privacy Shield on port 53. No-op in non-SYSTEM processes.
+    /// The decision and the adapter work are Windows code behind the DNS seam
+    /// (<c>WindowsPrivacyDnsPlatform.EnsureConfiguredAdapterDns</c>); other platforms do nothing here.
+    /// An adapter error the platform reports is surfaced as the status error when no other error is
+    /// set (upstream v0.64.0 behaviour).
     /// </summary>
     public void EnsureConfiguredAdapterDns()
     {
-        if (!MachineStateSecurity.IsRunningAsSystem())
+        var adapterError = _dns.EnsureConfiguredAdapterDns(_server is not null, _settings);
+        if (!string.IsNullOrWhiteSpace(adapterError) && string.IsNullOrWhiteSpace(_lastError))
         {
-            return;
-        }
-
-        if (_server is not null &&
-            _settings.Enabled &&
-            _settings.Port == 53 &&
-            (_settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(_settings.PreferredAdapterAlias)))
-        {
-            PrivacyDnsFailSafe.EnsureAdapterPointed(_settings.PreferredAdapterAlias);
-            if (!string.IsNullOrWhiteSpace(PrivacyDnsFailSafe.LastError) &&
-                string.IsNullOrWhiteSpace(_lastError))
-            {
-                _lastError = PrivacyDnsFailSafe.LastError;
-            }
-
-            return;
-        }
-
-        if (!_settings.Enabled || !_settings.AutoPointAdapterDns)
-        {
-            PrivacyDnsFailSafe.RestoreIfNeeded();
+            _lastError = adapterError;
         }
     }
 
@@ -399,7 +392,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         if (TryCreateServer(_settings, out var server, out var error, out var warning))
         {
             _server = server;
-            _lastError = warning;
+            _lastError = CombineWarnings(warning, NotifyResolverStarted(server));
             return;
         }
 
@@ -407,7 +400,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         _lastError = error;
 
         // A failed start (port taken, socket error) must not leave the adapter without a resolver.
-        _ = Task.Run(PrivacyDnsFailSafe.RestoreIfNeeded);
+        _ = Task.Run(_dns.RestoreIfNeeded);
     }
 
     private bool TryCreateServer(
@@ -423,7 +416,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         IReadOnlyList<DnsUpstreamTarget> targets;
         if (!string.IsNullOrWhiteSpace(settings.UpstreamDns))
         {
-            if (!SystemDnsResolver.TryParseUpstreamTargets(settings.UpstreamDns, out targets) ||
+            if (!DnsUpstream.TryParseTargets(settings.UpstreamDns, out targets) ||
                 targets.Count == 0)
             {
                 error = "The configured upstream DNS address or DoH URL is invalid.";
@@ -432,18 +425,9 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         }
         else
         {
-            var systemTargets = SystemDnsResolver.UpgradeEndpoints(SystemDnsResolver.ResolveSystemDns());
-            if (settings.EncryptDnsViaDoh)
-            {
-                var encryptedSystem = systemTargets.Where(item => item.IsDoh).ToArray();
-                targets = encryptedSystem.Length > 0
-                    ? encryptedSystem
-                    : SystemDnsResolver.DefaultDohTargets();
-            }
-            else
-            {
-                targets = systemTargets;
-            }
+            // Upstream's selection (DoH members only, or the default DoH pair, when EncryptDnsViaDoh),
+            // shared with the rediscovery watch so a later swap makes the same choice.
+            targets = DnsUpstream.SelectSystemTargets(_dns.DiscoverUpstreams(), settings.EncryptDnsViaDoh);
         }
 
         if (targets.Count == 0)
@@ -451,9 +435,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             // If the adapter already points at this loopback resolver, system DNS discovery must
             // not leave the machine without an upstream. Keep encrypted public DoH fallbacks and
             // let the user override them explicitly.
-            targets = SystemDnsResolver.DefaultDohTargets();
-            warning = "No non-loopback Windows DNS server was found; using encrypted DoH fallback upstream DNS. " +
-                      "Set an explicit upstream address if this network requires a local resolver.";
+            targets = DnsUpstream.DefaultDohTargets();
+            warning = _dns.NoUpstreamWarning;
         }
 
         try
@@ -468,7 +451,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                     // Public-list-only detections stay local: reporting the same URLhaus domain
                     // from every install would look like independent corroboration on the graph.
                     _blockedHistory.Append(EnrichProvenance(blocked));
-                });
+                },
+                attributor: _dns.Attributor);
             return true;
         }
         catch (Exception exception) when (exception is
@@ -479,8 +463,35 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         }
     }
 
+    /// <summary>Lets the platform redirect system DNS to the running resolver (macOS).</summary>
+    private string? NotifyResolverStarted(DnsProxyServer? server)
+    {
+        if (server is null)
+        {
+            return null;
+        }
+
+        StartUpstreamWatch(server);
+        try
+        {
+            return _dns.OnResolverStarted(server.Port);
+        }
+#pragma warning disable CA1031 // A failed redirect must not take the running resolver down.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            return $"System DNS could not be pointed at the resolver: {exception.Message}";
+        }
+    }
+
+    private static string? CombineWarnings(string? first, string? second) =>
+        string.IsNullOrWhiteSpace(first) ? second
+        : string.IsNullOrWhiteSpace(second) ? first
+        : first + " " + second;
+
     private async Task StopServerLockedAsync()
     {
+        StopUpstreamWatch();
         if (_server is null)
         {
             return;
@@ -488,6 +499,45 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
         await _server.DisposeAsync().ConfigureAwait(false);
         _server = null;
+    }
+
+    /// <summary>
+    /// Review #7: with the system redirected to this resolver, the upstreams discovered at start
+    /// die on a Wi-Fi/VPN change. Only platforms that redirect (macOS) and only when no explicit
+    /// upstream is configured (<see cref="UpstreamRediscovery.ShouldWatch"/>); the swap uses the
+    /// same selection as the start, so it cannot turn a DoH upstream into a plain one. Windows
+    /// behaviour is unchanged.
+    /// </summary>
+    private void StartUpstreamWatch(DnsProxyServer server)
+    {
+        StopUpstreamWatch();
+        var settings = _settings;
+        if (!UpstreamRediscovery.ShouldWatch(_dns, settings))
+        {
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        _upstreamWatch = cancellation;
+        _ = UpstreamRediscovery.WatchAsync(
+            server,
+            _dns,
+            message => Console.Error.WriteLine("Privacy Shield DNS: " + message),
+            settings,
+            cancellation.Token);
+    }
+
+    private void StopUpstreamWatch()
+    {
+        var watch = _upstreamWatch;
+        _upstreamWatch = null;
+        if (watch is null)
+        {
+            return;
+        }
+
+        watch.Cancel();
+        watch.Dispose();
     }
 
     private Task EnsureRulesLoadedAsync()

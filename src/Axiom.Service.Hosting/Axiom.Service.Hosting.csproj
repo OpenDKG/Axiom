@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Portable (net10.0) service building blocks shared by the Windows service and the macOS
+    launchd daemon: the IPC request dispatcher, the Privacy Shield DNS proxy and the platform
+    seams they plug into. No OS-specific API is used here.
+  -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Axiom.Service.Hosting</RootNamespace>
