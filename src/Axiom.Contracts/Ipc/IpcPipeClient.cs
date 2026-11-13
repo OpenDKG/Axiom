@@ -35,7 +35,7 @@ public sealed class IpcPipeClient(
         {
             await using var pipe = new NamedPipeClientStream(
                 ".",
-                pipeName,
+                IpcPipe.Resolve(pipeName),
                 PipeDirection.InOut,
                 PipeOptions.Asynchronous);
 

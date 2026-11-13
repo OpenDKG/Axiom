@@ -171,6 +171,15 @@ public sealed record ProtectionSettings
 
     public string? AllowedSid { get; init; }
 
+    /// <summary>
+    /// macOS: uid of the account that installed the daemon; it may send IPC write commands.
+    /// Recorded by <c>axiomd --install-service</c>. Ignored on Windows (which uses <see cref="AllowedSid"/>).
+    /// </summary>
+    public uint? AllowedUid { get; init; }
+
+    /// <summary>macOS: members of the <c>admin</c> group may also send IPC write commands. Ignored on Windows.</summary>
+    public bool AllowAdminGroupWrites { get; init; } = true;
+
     public IReadOnlyList<ProtectionDecision>? Decisions { get; init; } = [];
 
     /// <summary>Durable ask queue. Entries remain until Block/Allow/Dismiss even if the socket ends.</summary>
