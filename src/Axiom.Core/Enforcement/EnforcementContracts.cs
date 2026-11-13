@@ -163,4 +163,16 @@ public static class EnforcementReasonCodes
     public const string RuleAllow = "ENF-RULE-ALLOW";
     public const string NoRuleMonitor = "ENF-NO-RULE-MONITOR";
     public const string NoRuleAsk = "ENF-NO-RULE-ASK";
+
+    /// <summary>No enforcement policy is enabled or present on this host.</summary>
+    public const string Disabled = "ENF-DISABLED";
+
+    /// <summary>The policy file exists but could not be parsed or validated.</summary>
+    public const string PolicyInvalid = "ENF-POLICY-INVALID";
+
+    /// <summary>A request id was reused for a different action or policy revision.</summary>
+    public const string ReplayMismatch = "ENF-REPLAY-MISMATCH";
+
+    /// <summary>The caller identity was missing or not the authenticated pipe user.</summary>
+    public const string Unauthenticated = "ENF-UNAUTHENTICATED";
 }
