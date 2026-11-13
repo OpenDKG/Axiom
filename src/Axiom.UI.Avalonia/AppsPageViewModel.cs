@@ -174,6 +174,29 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
         }
     }
 
+    /// <summary>
+    /// Applications-page write status off Windows (owner point 8): blocks are described as enforced
+    /// only when the filter verified the published rules; otherwise the reason is shown.
+    /// </summary>
+    public static string UnixWriteStatus(bool canWrite, FilterEnforcementSummary enforcement, string enforcer) => canWrite
+        ? $"Firewall rules are enabled (Axiom Shield is on). Blocks are {enforcement.EnforcementClause(enforcer)}."
+        : "Firewall rules are off. Turn on Axiom Shield on the Firewall page to create block rules.";
+
+    private async Task<FilterEnforcementSummary> QueryEnforcementAsync()
+    {
+        try
+        {
+            var snapshot = await _client!
+                .SendAsync<FirewallRulesSnapshot>(IpcCommandTypes.RulesQuery, null, CancellationToken.None)
+                .ConfigureAwait(true);
+            return FilterEnforcementSummary.From(snapshot.Capability.FilterEnforcement);
+        }
+        catch (ServiceUnavailableException)
+        {
+            return FilterEnforcementSummary.None;
+        }
+    }
+
     private async Task LoadWriteCapabilityAsync()
     {
         if (_client is null)
@@ -189,9 +212,7 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
 
             CanWrite = capabilities.FirewallWrites;
             WriteStatusText = OperatingSystem.IsMacOS()
-                ? (CanWrite
-                    ? "Firewall rules are enabled (Axiom Shield is on). Blocks are enforced by the AxiomFilter network extension."
-                    : "Firewall rules are off. Turn on Axiom Shield on the Firewall page to create block rules.")
+                ? UnixWriteStatus(CanWrite, CanWrite ? await QueryEnforcementAsync().ConfigureAwait(true) : FilterEnforcementSummary.None, "AxiomFilter network extension")
                 : CanWrite
                     ? "Firewall writes are enabled for this service session. Use only on an isolated test VM."
                     : "Firewall writes are disabled. Set the explicit write gate on an isolated VM.";

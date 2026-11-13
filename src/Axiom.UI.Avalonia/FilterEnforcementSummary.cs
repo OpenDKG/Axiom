@@ -48,6 +48,29 @@ public sealed record FilterEnforcementSummary
     /// <summary>True when the filter is connected and acknowledged the published generation.</summary>
     public bool IsVerified { get; init; }
 
+    /// <summary>Reason used while the service has not reported the filter's state (Windows, or before the first query).</summary>
+    public const string NotReportedReason = "the service has not reported the network filter's state";
+
+    /// <summary>
+    /// Why blocks may not be described as enforced (owner point 8): empty only when the filter is
+    /// connected, acknowledged the published generation and did not reject the rules file.
+    /// </summary>
+    public string NotVerifiedReason { get; init; } = NotReportedReason;
+
+    /// <summary>True only with runtime evidence that the published rules are enforced.</summary>
+    public bool IsEnforcementVerified => IsVerified && NotVerifiedReason.Length == 0;
+
+    /// <summary>Local time (HH:mm) of the filter's last acknowledgement; empty when unknown.</summary>
+    public string VerifiedAtText { get; init; } = string.Empty;
+
+    /// <summary>
+    /// "enforced by the {enforcer} (verified HH:mm)" with runtime evidence, otherwise
+    /// "not verified as enforced: {reason}". Never claims enforcement without a verified report.
+    /// </summary>
+    public string EnforcementClause(string enforcer) => IsEnforcementVerified
+        ? string.Create(CultureInfo.InvariantCulture, $"enforced by the {enforcer} (verified {VerifiedAtText})")
+        : $"not verified as enforced: {NotVerifiedReason}";
+
     public static FilterEnforcementSummary From(FilterEnforcementReport? report)
     {
         if (report is null)
@@ -101,6 +124,8 @@ public sealed record FilterEnforcementSummary
                 : string.Create(CultureInfo.InvariantCulture, $"{rejected.Length} rule(s) not enforced by the filter"),
             BannerText = string.Join(" ", banner),
             IsVerified = report.State == FilterEnforcementState.Verified,
+            NotVerifiedReason = NotVerifiedReasonFor(report),
+            VerifiedAtText = LocalTime(report.LastAckUtc ?? report.ReportedUtc),
             EnforcedText = report.State == FilterEnforcementState.Verified
                 ? string.Create(
                     CultureInfo.InvariantCulture,
@@ -116,6 +141,18 @@ public sealed record FilterEnforcementSummary
                 : string.Create(CultureInfo.InvariantCulture, $"Filter: disconnected (last seen {LocalTime(report.LastSeenUtc)})"),
         };
     }
+
+    private static string NotVerifiedReasonFor(FilterEnforcementReport report) => report.State switch
+    {
+        FilterEnforcementState.Unavailable => "the network filter has not connected",
+        FilterEnforcementState.Degraded => $"the network filter is disconnected (last seen {LocalTime(report.LastSeenUtc)})",
+        FilterEnforcementState.Pending => string.Create(
+            CultureInfo.InvariantCulture,
+            $"the network filter has not acknowledged rules generation {report.PublishedGeneration}"),
+        _ when report.FileError is { Length: > 0 } error => $"the network filter rejected the rules file ({error})",
+        FilterEnforcementState.Verified => string.Empty,
+        _ => NotReportedReason,
+    };
 
     private static string LocalTime(DateTimeOffset? utc) =>
         utc is { } value ? value.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture) : "never";

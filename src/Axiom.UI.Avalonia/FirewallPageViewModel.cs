@@ -302,6 +302,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [NotifyPropertyChangedFor(nameof(FilterEnforcedText))]
     [NotifyPropertyChangedFor(nameof(FilterConnectionText))]
     [NotifyPropertyChangedFor(nameof(HasFilterConnectionText))]
+    [NotifyPropertyChangedFor(nameof(NoticeText))]
     private FilterEnforcementSummary _enforcement = FilterEnforcementSummary.None;
 
     public string FilterConnectionText => Enforcement.ConnectionText;
@@ -336,7 +337,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     public string NoticeText => WritesEnabled
         ? OperatingSystem.IsWindows()
             ? "Axiom Shield is on. Rules are read and written through the elevated local service with the documented INetFwPolicy2 COM objects. Every change is confirmed and audited."
-            : "Axiom Shield is on. Rules are written by the root axiomd service and enforced by the AxiomFilter network extension. Every change is confirmed and audited."
+            : $"Axiom Shield is on. Rules are written by the root axiomd service; they are {Enforcement.EnforcementClause("AxiomFilter network extension")}. Every change is confirmed and audited."
         : $"This session is read-only for {PlatformText.Firewall} changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
 
     public string NoticeBadgeText => WritesEnabled ? "SHIELD ON" : "READ-ONLY";

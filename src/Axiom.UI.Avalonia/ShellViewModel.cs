@@ -93,7 +93,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             dnsAdapterHelper ?? new UnsupportedDnsAdapterHelper(),
             timers);
         // Review #25: the Overview line follows the same state as the "SHIELD ON" badge.
-        Overview.ProtectionActive = () => _protection is { Enabled: true } || PrivacyShield.IsResolverActive || Firewall.WritesEnabled;
+        Overview.ProtectionState = () => new OverviewProtectionState(
+            FirewallWritesEnabled: Firewall.WritesEnabled,
+            FirewallProtectionActive: _protection is { Enabled: true },
+            PrivacyShieldActive: PrivacyShield.IsResolverActive,
+            Enforcement: OperatingSystem.IsWindows() ? null : Firewall.Enforcement);
         Security = new SecurityPageViewModel(
             interaction,
             securityDialogs ?? new UnsupportedSecurityDialogs(),
@@ -518,7 +522,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         StatusSourceText = _protection is { Enabled: true }
             ? OperatingSystem.IsWindows()
                 ? "Data source: local service · traffic not filtered"
-                : "Data source: local service · Axiom Shield on"
+                : Firewall.Enforcement.IsEnforcementVerified
+                    ? $"Data source: local service · Axiom Shield on · blocks verified {Firewall.Enforcement.VerifiedAtText}"
+                    : "Data source: local service · Axiom Shield on · blocks not verified"
             : IsServiceMode
                 ? "Data source: local service (read-only)"
                 : "Data source: in-process IP Helper (read-only)";
