@@ -60,6 +60,7 @@ public sealed class PrivacyShieldSettingsStore
                 temporary,
                 JsonSerializer.Serialize(settings, JsonOptions),
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            ServiceFiles.SetOwnerOnly(temporary);
             File.Move(temporary, _path, overwrite: true);
             return true;
         }
