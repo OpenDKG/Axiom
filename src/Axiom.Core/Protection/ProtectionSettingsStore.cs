@@ -126,6 +126,12 @@ public sealed class ProtectionSettingsStore
                 try
                 {
                     File.WriteAllText(temporary, payload);
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        // Machine-wide state written by the root daemon: not readable by other local users.
+                        File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                    }
+
                     File.Move(temporary, _path, overwrite: true);
                 }
                 finally

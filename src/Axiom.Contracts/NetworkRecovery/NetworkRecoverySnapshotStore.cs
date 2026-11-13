@@ -86,6 +86,12 @@ public static class NetworkRecoverySnapshotStore
 
             temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             File.WriteAllText(temporary, Serialize(snapshot), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            if (!OperatingSystem.IsWindows())
+            {
+                // Machine-wide state written by the root daemon: not readable by other local users.
+                File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+
             File.Move(temporary, path, overwrite: true);
             temporary = null;
             return true;
