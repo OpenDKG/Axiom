@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Contracts;
+
 namespace Axiom.Core.Firewall;
 
 /// <summary>
@@ -15,6 +17,6 @@ public static class ProtectionWriteConsent
 
     public static void Set(bool granted) => _granted = granted;
 
-    /// <summary>True when this process is a non-interactive (service) host.</summary>
-    public static bool IsServiceHost => !Environment.UserInteractive;
+    /// <summary>True when this process is the background service host.</summary>
+    public static bool IsServiceHost => AxiomPaths.IsServiceProcess;
 }
