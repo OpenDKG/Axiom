@@ -106,8 +106,9 @@ public sealed class OptionalModuleInstaller
             npm rebuild better-sqlite3 --prefix $dkgRoot
             if ($LASTEXITCODE -ne 0) { throw "better-sqlite3 rebuild failed with exit code $LASTEXITCODE" }
             $env:DKG_HOME = $dkgHome
-            Write-Host 'Starting the official DKG testnet setup. Answer the prompts in this window.' -ForegroundColor Cyan
-            & $dkg init --network testnet --role edge --store oxigraph
+            Write-Host 'Running non-interactive DKG setup with defaults...' -ForegroundColor Cyan
+            $answers = 1..14 | ForEach-Object { '' }
+            $answers | & $dkg init --network testnet --role edge --store oxigraph -y
             if ($LASTEXITCODE -eq 0) {
               Write-Host 'Starting the DKG node in the background...' -ForegroundColor Cyan
               Start-Process -FilePath $dkg -WorkingDirectory $dkgRoot -WindowStyle Hidden -ArgumentList @('start')
