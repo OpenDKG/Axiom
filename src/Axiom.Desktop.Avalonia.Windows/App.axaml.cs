@@ -61,6 +61,20 @@ public partial class App : Application
                 // Hook maintenance is best-effort and must not block startup.
             }
 
+            // A complete install must end protected: persist block mode where the guard reads it
+            // and prove it with the self-test. Runs off the UI thread so startup stays responsive.
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    ProtectionProvisioner.ProvisionAtStartup();
+                }
+                catch
+                {
+                    // Protection provisioning is best-effort; the status file records the outcome.
+                }
+            });
+
             var useService = arguments.Any(argument =>
                 string.Equals(argument, "--service", StringComparison.OrdinalIgnoreCase));
 

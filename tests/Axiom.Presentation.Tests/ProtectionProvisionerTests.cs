@@ -1,0 +1,138 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+using System.IO;
+using Axiom.Presentation;
+using Xunit;
+
+namespace Axiom.Presentation.Tests;
+
+public sealed class ProtectionProvisionerTests
+{
+    private const string LocalConfig = @"C:\lab\AppData\Local\hermes\config.yaml";
+    private const string ProfileConfig = @"C:\lab\.hermes\config.yaml";
+
+    [Fact]
+    public void Provision_writes_block_mode_to_the_config_the_guard_reads()
+    {
+        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [LocalConfig] = "plugins:\r\n  entries:\r\n    blackbox:\r\n      mode: audit\r\n",
+        };
+
+        var result = ProtectionProvisioner.Provision(
+            @"C:\lab\AppData\Local",
+            @"C:\lab",
+            path => files.ContainsKey(path),
+            path => files.TryGetValue(path, out var text) ? text : null,
+            (path, text) => files[path] = text,
+            SuccessfulRunner);
+
+        Assert.True(result.BlockMode);
+        Assert.True(result.Passed);
+        Assert.Equal(LocalConfig, result.ConfigPath);
+        Assert.Contains("mode: block", files[LocalConfig], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Provision_falls_back_to_the_profile_config_when_local_app_data_is_absent()
+    {
+        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [ProfileConfig] = "plugins:\r\n  entries:\r\n    blackbox:\r\n      mode: audit\r\n",
+        };
+
+        var result = ProtectionProvisioner.Provision(
+            @"C:\lab\AppData\Local",
+            @"C:\lab",
+            path => files.ContainsKey(path),
+            path => files.TryGetValue(path, out var text) ? text : null,
+            (path, text) => files[path] = text,
+            SuccessfulRunner);
+
+        Assert.Equal(ProfileConfig, result.ConfigPath);
+        Assert.True(result.BlockMode);
+        Assert.True(result.Passed);
+    }
+
+    [Fact]
+    public void Provision_fails_when_block_mode_cannot_be_verified()
+    {
+        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [LocalConfig] = "plugins:\r\n  entries:\r\n    blackbox:\r\n      mode: audit\r\n",
+        };
+
+        var result = ProtectionProvisioner.Provision(
+            @"C:\lab\AppData\Local",
+            @"C:\lab",
+            path => files.ContainsKey(path),
+            path => files.TryGetValue(path, out var text) ? text : null,
+            (_, _) => { },
+            SuccessfulRunner);
+
+        Assert.False(result.BlockMode);
+        Assert.False(result.Passed);
+        Assert.Contains("block mode is not active", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Provision_fails_when_a_protected_check_is_allowed()
+    {
+        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [LocalConfig] = "plugins:\r\n  entries:\r\n    blackbox:\r\n      mode: block\r\n",
+        };
+
+        var result = ProtectionProvisioner.Provision(
+            @"C:\lab\AppData\Local",
+            @"C:\lab",
+            path => files.ContainsKey(path),
+            path => files.TryGetValue(path, out var text) ? text : null,
+            (path, text) => files[path] = text,
+            check => new ProtectionCheckResult(check.Name, check.ExpectBlock, false, string.Empty));
+
+        Assert.True(result.BlockMode);
+        Assert.False(result.Passed);
+        Assert.Contains("FAIL", result.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Provision_without_a_runner_cannot_claim_success()
+    {
+        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [LocalConfig] = "plugins:\r\n  entries:\r\n    blackbox:\r\n      mode: block\r\n",
+        };
+
+        var result = ProtectionProvisioner.Provision(
+            @"C:\lab\AppData\Local",
+            @"C:\lab",
+            path => files.ContainsKey(path),
+            path => files.TryGetValue(path, out var text) ? text : null,
+            (path, text) => files[path] = text,
+            runner: null);
+
+        Assert.True(result.BlockMode);
+        Assert.Empty(result.Checks);
+        Assert.False(result.Passed);
+    }
+
+    [Fact]
+    public void Startup_provisioning_skips_the_light_profile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"axiom-protect-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "Axiom"));
+            File.WriteAllText(Path.Combine(root, "Axiom", "install-profile.json"), """{"profile":"partial"}""");
+
+            Assert.Null(ProtectionProvisioner.ProvisionAtStartup(root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static ProtectionCheckResult SuccessfulRunner(ProtectionCheck check) =>
+        new(check.Name, check.ExpectBlock, check.ExpectBlock, check.ExpectBlock ? "fileaccess:read:user-protected" : string.Empty);
+}
