@@ -79,7 +79,9 @@ public sealed partial class ProtectionController(
         if (!ProtectionWriteConsent.IsServiceHost)
         {
             return await GetStatusAsync(
-                "Axiom Shield needs the Axiom Windows service. Approve the administrator prompt to install it.",
+                OperatingSystem.IsWindows()
+                    ? "Axiom Shield needs the Axiom Windows service. Approve the administrator prompt to install it."
+                    : "Axiom Shield needs the axiomd system daemon. Install it with administrator rights.",
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -531,6 +533,11 @@ public sealed partial class ProtectionController(
     {
         try
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                return Environment.UserName;
+            }
+
             using var identity = WindowsIdentity.GetCurrent();
             return identity.Name;
         }
