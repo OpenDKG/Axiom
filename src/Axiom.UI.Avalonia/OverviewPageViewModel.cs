@@ -47,14 +47,51 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     }
 
     /// <summary>
-    /// Whether protection is active (Privacy Shield resolver running or firewall writes enabled);
-    /// null keeps the plain read-only wording. Set by the shell; polled on every refresh.
+    /// Which protections are on (firewall write gate, firewall protection, Privacy Shield resolver,
+    /// filter enforcement report); null keeps upstream's read-only wording. Set by the shell; polled
+    /// on every refresh.
     /// </summary>
-    public Func<bool>? ProtectionActive { get; set; }
+    public Func<OverviewProtectionState>? ProtectionState { get; set; }
 
+    /// <summary>Upstream's original status line, kept whenever nothing is switched on.</summary>
     public const string ReadOnlyStatus = "Read-only inventory. No driver, no firewall write, no telemetry.";
 
-    public const string ProtectionActiveStatus = "Protection active: firewall writes enabled; Privacy Shield and rules apply. No telemetry.";
+    /// <summary>
+    /// Status line that claims only what is on: "firewall writes enabled" only with the write gate
+    /// open, "Axiom rules apply" only while firewall protection is active (and, where the OS filter
+    /// reports enforcement, only when it is verified), "Privacy Shield on" only with the resolver
+    /// running. With nothing on it is upstream's <see cref="ReadOnlyStatus"/>.
+    /// </summary>
+    public static string ComposeStatus(OverviewProtectionState? state)
+    {
+        if (state is null)
+        {
+            return ReadOnlyStatus;
+        }
+
+        var active = new List<string>();
+        if (state.FirewallProtectionActive)
+        {
+            active.Add(state.Enforcement is null || state.Enforcement.IsEnforcementVerified
+                ? "Axiom rules apply"
+                : $"Axiom rules {state.Enforcement.EnforcementClause("network filter")}");
+        }
+
+        if (state.PrivacyShieldActive)
+        {
+            active.Add("Privacy Shield on");
+        }
+
+        if (active.Count == 0)
+        {
+            return state.FirewallWritesEnabled
+                ? "Firewall writes enabled; no Axiom rules active. No telemetry."
+                : ReadOnlyStatus;
+        }
+
+        active.Add(state.FirewallWritesEnabled ? "firewall writes enabled" : "no firewall write");
+        return "Protection active: " + string.Join("; ", active) + ". No telemetry.";
+    }
 
     public void Activate()
     {
@@ -315,7 +352,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         BucketLabel = _traffic.BucketLabel;
         RangeNote = _traffic.RangeNote;
         StatusText = _monitor.LastError is null
-            ? ProtectionActive?.Invoke() == true ? ProtectionActiveStatus : ReadOnlyStatus
+            ? ComposeStatus(ProtectionState?.Invoke())
             : $"Monitor unavailable: {_monitor.LastError}";
 
         UpdateLiveCounters();

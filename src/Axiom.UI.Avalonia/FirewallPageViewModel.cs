@@ -305,6 +305,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [NotifyPropertyChangedFor(nameof(FilterEnforcedText))]
     [NotifyPropertyChangedFor(nameof(FilterConnectionText))]
     [NotifyPropertyChangedFor(nameof(HasFilterConnectionText))]
+    [NotifyPropertyChangedFor(nameof(NoticeText))]
     private FilterEnforcementSummary _enforcement = FilterEnforcementSummary.None;
 
     public string FilterConnectionText => Enforcement.ConnectionText;
@@ -339,7 +340,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     public string NoticeText => WritesEnabled
         ? OperatingSystem.IsWindows()
             ? "Axiom Shield is on. Rules are read and written through the elevated local service with the documented INetFwPolicy2 COM objects. Every change is confirmed and audited."
-            : $"Axiom Shield is on. Rules are written by the root axiomd service and enforced by the {PlatformText.Firewall}. Every change is confirmed and audited."
+            : $"Axiom Shield is on. Rules are written by the root axiomd service; they are {Enforcement.EnforcementClause(PlatformText.Firewall)}. Every change is confirmed and audited."
         : $"This session is read-only for {PlatformText.Firewall} changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
 
     public string NoticeBadgeText => WritesEnabled ? "SHIELD ON" : "READ-ONLY";
@@ -944,7 +945,13 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     public void UpdateProtectionStatus(ProtectionStatus status)
     {
         ApplyStatus(status);
-        RefreshEnforcementIfStale(DateTimeOffset.UtcNow);
+
+        // Windows Firewall reports no filter enforcement: keep its refresh-on-demand page (no
+        // periodic rules re-read, Recheck stays enabled). The live re-query is for OS filters.
+        if (!OperatingSystem.IsWindows())
+        {
+            RefreshEnforcementIfStale(DateTimeOffset.UtcNow);
+        }
     }
 
     /// <summary>
@@ -1381,12 +1388,11 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         NewRuleAddressesText = DefaultAddressesText;
     }
 
-    [RelayCommand]
     /// <summary>Re-reads the owned rules whenever the page is shown: rules created from Connections
     /// or Applications would otherwise only appear after Recheck.</summary>
     public void Activate()
     {
-        if (_client is not null)
+        if (_client is not null && !OperatingSystem.IsWindows())
         {
             _ = RefreshAsync();
         }
@@ -1396,6 +1402,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     {
     }
 
+    [RelayCommand]
     private async Task RefreshAsync()
     {
         if (_client is null || IsBusy)

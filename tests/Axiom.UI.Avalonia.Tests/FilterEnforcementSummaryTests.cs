@@ -195,6 +195,30 @@ public sealed class FilterEnforcementSummaryTests
         page.Dispose();
     }
 
+    /// <summary>
+    /// The Recheck button on the Network Control page binds <c>RefreshCommand</c>. The
+    /// source-generated command must exist, be executable once the page has loaded, and re-query
+    /// the rules; a missing command fails the binding and Avalonia greys the button out.
+    /// </summary>
+    [Fact]
+    public async Task Recheck_binds_an_executable_refresh_command()
+    {
+        var client = new EnforcementClient(new FilterEnforcementReport { State = FilterEnforcementState.Verified, Connected = true });
+        var page = new FirewallPageViewModel(client, new NullUserInteraction());
+
+        var property = typeof(FirewallPageViewModel).GetProperty("RefreshCommand");
+        Assert.NotNull(property);
+        var command = Assert.IsAssignableFrom<CommunityToolkit.Mvvm.Input.IAsyncRelayCommand>(property!.GetValue(page));
+        Assert.True(command.CanExecute(null));
+
+        var before = client.RulesQueries;
+        await command.ExecuteAsync(null);
+        Assert.Equal(before + 1, client.RulesQueries);
+        Assert.True(command.CanExecute(null));
+
+        page.Dispose();
+    }
+
     private sealed class EnforcementClient(FilterEnforcementReport report) : IServiceRequestClient
     {
         public int RulesQueries { get; private set; }
