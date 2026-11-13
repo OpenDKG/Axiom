@@ -42,18 +42,28 @@ public sealed class OptionalModuleInstaller
     public bool IsDkgInstalled => File.Exists(DkgCommand);
 
     /// <summary>
+    /// Why the last install request did nothing, or null when it started. The UI shows this text:
+    /// a silent return looks like a broken button.
+    /// </summary>
+    public string? LastError { get; private set; }
+
+    /// <summary>
     /// Installs the DKG CLI into a per-user folder, then opens the official interactive setup on
     /// testnet and starts the node. The user answers the official prompts; nothing is hidden.
     /// </summary>
     public void InstallDkg()
     {
+        LastError = null;
+
         if (DistributionContext.IsStorePackage)
         {
+            LastError = "This optional third-party module is not included in the Microsoft Store build.";
             return;
         }
 
         if (IsUnsafeInstallRoot(DkgRoot, DkgHome))
         {
+            LastError = "DKG install refused: its target path contains a junction or symbolic link.";
             return;
         }
 
@@ -79,8 +89,10 @@ public sealed class OptionalModuleInstaller
 
     private string BuildDkgScript()
     {
+        var pathPreamble = ModulePrerequisites.Probe().BuildPathPreamble();
         return $$"""
             $ErrorActionPreference = 'Stop'
+            {{pathPreamble}}
             $dkgRoot = '{{Escape(DkgRoot)}}'
             $dkgHome = '{{Escape(DkgHome)}}'
             $dkg = Join-Path $dkgRoot 'node_modules\.bin\dkg.cmd'
@@ -110,13 +122,17 @@ public sealed class OptionalModuleInstaller
     /// </summary>
     public void InstallBlackbox()
     {
+        LastError = null;
+
         if (DistributionContext.IsStorePackage)
         {
+            LastError = "This optional third-party module is not included in the Microsoft Store build.";
             return;
         }
 
         if (IsUnsafeInstallRoot(BlackboxRoot))
         {
+            LastError = "Blackbox install refused: its target path contains a junction or symbolic link.";
             return;
         }
 
@@ -142,8 +158,10 @@ public sealed class OptionalModuleInstaller
 
     private string BuildBlackboxScript()
     {
+        var pathPreamble = ModulePrerequisites.Probe().BuildPathPreamble();
         return $$"""
             $ErrorActionPreference = 'Stop'
+            {{pathPreamble}}
             $dir = '{{Escape(BlackboxRoot)}}'
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
             Set-Location $dir
@@ -188,6 +206,27 @@ public sealed class OptionalModuleInstaller
             }
             Write-Host 'Blackbox setup finished. Return to Axiom and click Check again.' -ForegroundColor Green
             """;
+    }
+
+    /// <summary>
+    /// Opens the visible winget script that installs the missing optional-module prerequisites.
+    /// </summary>
+    public void InstallPrerequisites(ModulePrerequisiteReport report)
+    {
+        LastError = null;
+
+        if (DistributionContext.IsStorePackage)
+        {
+            LastError = "Prerequisite installation is not available in the Microsoft Store build.";
+            return;
+        }
+
+        if (report.IsSatisfied)
+        {
+            return;
+        }
+
+        StartPowerShell(ModulePrerequisites.BuildBootstrapScript(report));
     }
 
     /// <summary>
