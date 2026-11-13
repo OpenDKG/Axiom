@@ -72,10 +72,12 @@ public sealed class PrivacyShieldRuleStore
                 temporary,
                 JsonSerializer.Serialize(rules, JsonOptions),
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            ServiceFiles.SetOwnerOnly(temporary);
 
             if (File.Exists(_path))
             {
                 File.Copy(_path, PreviousPath, overwrite: true);
+                ServiceFiles.SetOwnerOnly(PreviousPath);
             }
 
             File.Move(temporary, _path, overwrite: true);

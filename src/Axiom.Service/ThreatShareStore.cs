@@ -76,6 +76,7 @@ public sealed class ThreatShareStore
                     temp,
                     JsonSerializer.Serialize(bounded, JsonOptions),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                ServiceFiles.SetOwnerOnly(temp);
                 File.Move(temp, _path, overwrite: true);
                 return true;
             }
