@@ -1373,7 +1373,6 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         NewRuleAddressesText = DefaultAddressesText;
     }
 
-    [RelayCommand]
     /// <summary>Re-reads the owned rules whenever the page is shown: rules created from Connections
     /// or Applications would otherwise only appear after Recheck.</summary>
     public void Activate()
@@ -1388,6 +1387,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     {
     }
 
+    [RelayCommand]
     private async Task RefreshAsync()
     {
         if (_client is null || IsBusy)
