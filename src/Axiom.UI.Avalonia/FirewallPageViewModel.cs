@@ -936,7 +936,13 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     public void UpdateProtectionStatus(ProtectionStatus status)
     {
         ApplyStatus(status);
-        RefreshEnforcementIfStale(DateTimeOffset.UtcNow);
+
+        // Windows Firewall reports no filter enforcement: keep its refresh-on-demand page (no
+        // periodic rules re-read, Recheck stays enabled). The live re-query is for OS filters.
+        if (!OperatingSystem.IsWindows())
+        {
+            RefreshEnforcementIfStale(DateTimeOffset.UtcNow);
+        }
     }
 
     /// <summary>
@@ -1377,7 +1383,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     /// or Applications would otherwise only appear after Recheck.</summary>
     public void Activate()
     {
-        if (_client is not null)
+        if (_client is not null && !OperatingSystem.IsWindows())
         {
             _ = RefreshAsync();
         }
