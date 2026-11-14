@@ -614,7 +614,7 @@ public sealed class OpenCodeProtection
 
         def _exfiltrates_protected(command: str, protected) -> bool:
             # Uploading or encoding a protected file is exfiltration even when no file-access rule
-            # matched the argument (curl -F file=@â€¦ was allowed in the lab).
+            # matched the argument (curl -F file=@Ã¢â‚¬Â¦ was allowed in the lab).
             text = " ".join((command or "").lower().split())
             if not _hits_protected(text, protected):
                 return False
@@ -666,6 +666,48 @@ public sealed class OpenCodeProtection
             return ""
 
 
+
+        def _reexec_committed_interpreter() -> None:
+            # The plugin starts this bridge with the vendor venv python. Hermes' package manager
+            # commits a different dependency environment and activate_dependencies swaps sys.path
+            # to it, so a venv built for another Python minor imports compiled packages for the
+            # wrong ABI (pydantic_core, _cffi_backend). Re-exec the committed interpreter once so
+            # the guard imports cleanly and no detector is skipped.
+            if os.environ.get("AXIOM_BRIDGE_REEXEC") == "1":
+                return
+            local = os.environ.get("LOCALAPPDATA") or str(Path.home())
+            candidates = []
+            try:
+                for install in (Path(local) / "hermes" / "installs").glob("*"):
+                    facts = install / "facts.json"
+                    if facts.is_file():
+                        try:
+                            data = json.loads(facts.read_text(encoding="utf-8"))
+                            env = (data.get("packages") or {}).get("venv", {}).get("environment")
+                            if env:
+                                candidates.append(Path(env) / "Scripts" / "python.exe")
+                        except Exception:
+                            pass
+                    envs = install / "environments"
+                    if envs.is_dir():
+                        for env in sorted(envs.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True):
+                            candidates.append(env / "venv" / "Scripts" / "python.exe")
+            except Exception:
+                return
+            current = os.path.normcase(os.path.abspath(sys.executable))
+            for candidate in candidates:
+                try:
+                    if not candidate.is_file():
+                        continue
+                    target = os.path.normcase(os.path.abspath(str(candidate)))
+                    if target == current:
+                        continue
+                    os.environ["AXIOM_BRIDGE_REEXEC"] = "1"
+                    os.execv(str(candidate), [str(candidate), os.path.abspath(__file__), *sys.argv[1:]])
+                except Exception:
+                    continue
+
+
         def record(framework, event_type, tool, decision, guard_status, duration_ms,
                    error_code="", session="", call=""):
             try:
@@ -714,6 +756,7 @@ public sealed class OpenCodeProtection
 
 
         def main() -> None:
+            _reexec_committed_interpreter()
             payload = {}
             started = time.monotonic()
             framework = "opencode"
