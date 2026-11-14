@@ -580,6 +580,58 @@ public sealed class OpenCodeProtection
             return False
 
 
+        def _protected_tokens(protected) -> list:
+            # Tokens that identify a protected path inside a shell command. A trailing * uses its
+            # parent directory (~/.ssh/* -> .ssh, C:\Lab\samples\* -> samples); a file pattern keeps
+            # its leading dot (.env, .pem) so short names do not match unrelated binaries.
+            tokens = []
+            for pattern in protected or ():
+                normalized = str(pattern).replace("~", "").replace("/", "\\").strip()
+                parts = [part for part in normalized.split("\\") if part and part != "*"]
+                if not parts:
+                    continue
+                tail = parts[-1]
+                if tail == "*":
+                    if len(parts) >= 2:
+                        tokens.append(parts[-2].lower())
+                    continue
+                token = tail.rstrip("*").rstrip(".").lower()
+                if token:
+                    tokens.append(token)
+            return [token for token in tokens if token]
+
+
+        def _hits_protected(command: str, protected) -> bool:
+            text = (command or "").lower()
+            return any(token in text for token in _protected_tokens(protected))
+
+
+        def _executes_protected(command: str, protected) -> bool:
+            # An agent must not launch a file that lives in a protected path: reading and copying
+            # are covered by Blackbox, but Start-Process/&/cmd on the same file was allowed.
+            text = " ".join((command or "").lower().split())
+            if not _hits_protected(text, protected):
+                return False
+            verbs = ("start-process", "invoke-item", "cmd /c", "cmd.exe /c", "powershell", "pwsh",
+                     "rundll32", "regsvr32", "mshta", "wmic process call create", "schtasks /run",
+                     "& ", "&& ")
+            return any(verb in text for verb in verbs)
+
+
+        def _exfiltrates_protected(command: str, protected) -> bool:
+            # Uploading or encoding a protected file is exfiltration even when no file-access rule
+            # matched the argument (curl -F file=@â€¦ was allowed in the lab).
+            text = " ".join((command or "").lower().split())
+            if not _hits_protected(text, protected):
+                return False
+            if any(client in text for client in ("scp ", "sftp ", "ftp ")):
+                return True
+            clients = ("curl", "wget", "iwr", "irm", "invoke-webrequest", "invoke-restmethod", "certutil")
+            flags = (" -f", "--form", "-d @", "--data @", "-t ", "--upload-file", "-infile",
+                     "--post-file", "-encode", "upload")
+            return any(client in text for client in clients) and any(flag in text for flag in flags)
+
+
         def _escalation_risk(command: str) -> str:
             # Remote-script execution and LOLBin download/persistence shapes. The pinned
             # verified ruleset has no confirmed escalation rules yet (that needs a curator
@@ -769,6 +821,14 @@ public sealed class OpenCodeProtection
                     if _deletes_protected(command_text, protected):
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "", session, call)
                         print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it deletes a protected path."}))
+                        return
+                    if _exfiltrates_protected(command_text, protected):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "exfiltration", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it uploads a file from a protected path."}))
+                        return
+                    if _executes_protected(command_text, protected):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "execution", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it launches a file from a protected path."}))
                         return
                     escalation = _escalation_risk(command_text)
                     if escalation:

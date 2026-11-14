@@ -79,6 +79,25 @@ public sealed class AgentHookScriptTests
     }
 
     [Fact]
+    public void OpenCode_bridge_carries_launch_and_upload_protection()
+    {
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+
+        Assert.Contains("def _executes_protected(command: str, protected) -> bool:", bridge, StringComparison.Ordinal);
+        Assert.Contains("def _exfiltrates_protected(command: str, protected) -> bool:", bridge, StringComparison.Ordinal);
+        Assert.Contains("_executes_protected(command_text, protected)", bridge, StringComparison.Ordinal);
+        Assert.Contains("_exfiltrates_protected(command_text, protected)", bridge, StringComparison.Ordinal);
+        Assert.Contains("launches a file from a protected path", bridge, StringComparison.Ordinal);
+        Assert.Contains("uploads a file from a protected path", bridge, StringComparison.Ordinal);
+        Assert.True(
+            bridge.IndexOf("_executes_protected(command_text", StringComparison.Ordinal) <
+            bridge.IndexOf("guard.on_pre_tool_call", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void OpenCode_plugin_forwards_prompt_text_for_injection_scanning()
     {
         var build = typeof(OpenCodeProtection).GetMethod(
