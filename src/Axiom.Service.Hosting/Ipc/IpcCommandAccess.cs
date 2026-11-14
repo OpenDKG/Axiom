@@ -12,10 +12,10 @@ public enum IpcCommandClass
     /// <summary>Narrow health information with no machine-wide activity: <c>serviceHealth</c>, <c>capabilities</c>.</summary>
     PublicRead = 0,
 
-    /// <summary>Reads that disclose machine-wide activity (connections, history, DNS, diagnostics, settings).</summary>
+    /// <summary>Reads that disclose machine-wide activity (connections, history, DNS, diagnostics, settings, enforcement status and receipts).</summary>
     PrivateRead = 1,
 
-    /// <summary>Changes machine-wide state (rules, Axiom Shield, Privacy Shield, threat sharing, recovery).</summary>
+    /// <summary>Changes machine-wide state (rules, Axiom Shield, Privacy Shield, threat sharing, recovery, enforcement evaluation with its receipt journal).</summary>
     Write = 2,
 }
 
@@ -79,6 +79,13 @@ public static class IpcCommandAccess
         IpcCommandTypes.DiagnosticsExport,
         IpcCommandTypes.ProtectionStatus,
         IpcCommandTypes.ThreatShareStatus,
+
+        // Agent enforcement (upstream #322). Status carries the policy revision, agent/rule/
+        // protected-resource counts, receipt counters and the policy error text (an I/O message
+        // can name the policy path); receipts carry decisions, host adapter and version, action
+        // kinds, indicator references and the hash chain. Neither is public health data.
+        IpcCommandTypes.EnforcementStatus,
+        IpcCommandTypes.EnforcementReceipts,
     };
 
     /// <summary>Public and private reads together (commands that change nothing).</summary>
@@ -103,6 +110,11 @@ public static class IpcCommandAccess
         IpcCommandTypes.ThreatShareRecord,
         IpcCommandTypes.NetworkRecoveryCapture,
         IpcCommandTypes.NetworkRecoveryRestore,
+
+        // Every evaluate appends a receipt to the hash-chained journal (also for rejected
+        // requests) and can add an entry to the request-id replay cache, and its verdict
+        // discloses the matching rule: a state change, so it needs write access.
+        IpcCommandTypes.EnforcementEvaluate,
     };
 
     /// <summary>The class of a command; unknown and null commands count as writes.</summary>
