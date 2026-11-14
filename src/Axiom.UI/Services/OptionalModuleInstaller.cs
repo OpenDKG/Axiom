@@ -167,8 +167,27 @@ public sealed class OptionalModuleInstaller
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
             Set-Location $dir
             $installer = Join-Path $dir 'blackbox-install.ps1'
+
+            # The vendor installer calls 'py -3.12'. On a clean Windows without the launcher
+            # python.exe receives '-3' and the venv is never created; provide a shim for this run.
+            $pyOk = $false
+            if (Get-Command py -ErrorAction SilentlyContinue) {
+              & py -3.12 --version *> $null
+              $pyOk = ($LASTEXITCODE -eq 0)
+            }
+            if (-not $pyOk -and (Get-Command python -ErrorAction SilentlyContinue)) {
+              $shim = Join-Path $dir 'py.cmd'
+              $shimText = "@echo off`r`nsetlocal`r`nset `"ARGS=%*`"`r`nset `"ARGS=%ARGS:-3.12=%`"`r`nset `"ARGS=%ARGS:-3=%`"`r`npython %ARGS%`r`n"
+              Set-Content -Path $shim -Value $shimText -Encoding Ascii
+              $env:PATH = $dir + ';' + $env:PATH
+              Write-Host 'Provided a py launcher shim for the vendor installer.' -ForegroundColor Yellow
+            }
+
             Write-Host 'Downloading the official Umanitek Blackbox installer...' -ForegroundColor Cyan
-            Invoke-WebRequest -UseBasicParsing -Uri 'https://blackbox-w.umanitek.ai' -OutFile $installer
+            if (-not (Test-Path $installer) -or (Get-Item $installer).Length -eq 0) {
+              try { Invoke-WebRequest -UseBasicParsing -Uri 'https://blackbox-w.umanitek.ai' -OutFile $installer }
+              catch { Write-Warning "Vendor download failed: $($_.Exception.Message)" }
+            }
             $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
             Write-Host "Installer SHA256: $hash" -ForegroundColor Yellow
             if ($hash -ne '{{BlackboxInstallerSha256}}') {

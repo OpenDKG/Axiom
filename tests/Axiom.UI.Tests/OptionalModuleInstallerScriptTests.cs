@@ -33,5 +33,6 @@ public sealed class OptionalModuleInstallerScriptTests
 
         Assert.Contains("$env:PATH", script, StringComparison.Ordinal);
         Assert.Contains("blackbox-install.ps1", script, StringComparison.Ordinal);
+        Assert.Contains("ARGS:-3.12", script, StringComparison.Ordinal);
     }
 }
