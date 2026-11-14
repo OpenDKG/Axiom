@@ -16,6 +16,7 @@ evidence, not CI.
 | Machine | OSX-KVM VM, Intel x86_64, macOS 15.8.3 (24H241), **SIP disabled**, ad hoc signing |
 | Users | `dev` (uid 501, admin, installed Axiom). `axtest2` (uid 502, standard, not in `admin`) was created for (a)/(b) and deleted afterwards. |
 | Date | 2026-11-14 01:02–01:08 UTC |
+| Re-run of (b) and (d) after the fixes | Bundle built from `accef91` (`914153d` + `919dd82` + the two fixes below), same VM, same procedure, 2026-11-14 01:44–01:53 UTC. See "(b2)" and "(d2)". |
 
 Not covered: Apple silicon, SIP enabled, Developer ID signing, notarisation and Gatekeeper. These
 need the owner's hardware and Apple account (#274 item 4).
@@ -32,7 +33,7 @@ nohup python3 -u sec-e-disconnect.py > e.out 2>&1 &     # writes /tmp/axsec/e-sa
 python3 -u sec-f-offline.py
 P=$(openssl rand -base64 18); sudo sysadminctl -addUser axtest2 -fullName "Axiom test 2" -password "$P"; unset P
 python3 -u sec-a-ipc.py; sudo -u axtest2 python3 -u /tmp/axsec/sec-a-ipc.py
-bash sec-b-logs.sh
+bash sec-b-logs.sh; bash sec-b2-log-continuity.sh   # (b2): after the log-continuity fix
 sudo sysadminctl -deleteUser axtest2
 ```
 
@@ -44,9 +45,9 @@ next to `curl https://example.com` (rc 0/HTTP 200 = reached, rc 7 = blocked by t
 | # | Check | Verdict | Evidence |
 |---|---|---|---|
 | a | Second standard user cannot read private IPC | **PASS** | `sec-a-adduser.txt`, `sec-a-ipc.txt`, `sec-a-deluser.txt` |
-| b | Initial and rotated daemon logs private, forced `newsyslog` rotation | **PASS** (privacy). Finding: after rotation the daemon keeps writing to the unlinked old file until it restarts. | `sec-b-logs.txt`, `sec-b-reopen.txt` |
+| b | Initial and rotated daemon logs private, forced `newsyslog` rotation | **PASS** (privacy). The continuity finding of the first run (the daemon kept writing to the rotated file) is **fixed** in `accef91` and re-checked: after the rotation the same daemon writes to the new `axiomd.log`, modes stay 0700/0600 root:wheel, `axtest2` is denied. | `sec-b-logs.txt`, `sec-b-reopen.txt`; fix: `sec-b2-log-continuity.txt`, `sec-b2-adduser.txt`, `sec-b2-deluser.txt` |
 | c | Filter rejection never reported as applied | **PASS** | `sec-c-reject.txt` |
-| d | Stale generation stays Pending | **PASS**. Minor: `lastVerifiedUtc` stays null after the late ack. | `sec-d-stale.txt` |
+| d | Stale generation stays Pending | **PASS**. The minor gap of the first run (`lastVerifiedUtc` null after the late ack) is **fixed** in `3580595` and re-checked: the late ack stamps its time. | `sec-d-stale.txt`; fix: `sec-d2-late-ack.txt` |
 | e | Disconnect/reconnect | **PASS** | `sec-e-disconnect.txt`, `e-samples.ndjson` |
 | f | Offline recovery removal | **PASS** | `sec-f-offline.txt` |
 
@@ -87,7 +88,39 @@ for the daemon. After a rotation the running daemon writes to the renamed and la
 file, and the new `axiomd.log` stays at newsyslog's 83-byte marker (an apply/remove did not grow
 it). Those lines are lost until the daemon restarts. To fix this, either the daemon logs to its
 own file and reopens it (newsyslog pid/signal), or the rotation is size-only with a restart. This
-is not fixed in this round.
+was not fixed in that round; it is fixed now, see (b2).
+
+### (b2) Log continuity after the fix (`accef91`)
+
+Fix: red tests `a03123c`, fix `accef91`. axiomd no longer depends on launchd's
+`StandardOutPath` descriptor. As the first step of the daemon it routes `Console.Out`/`Console.Error`
+(and so the console logger) to its own writer for `axiomd.log` (`DaemonLogFile`), which reopens the
+path on SIGHUP and when it detects a rotation (path missing or size different from the held file,
+checked at most once a second), creates the file 0600, and duplicates the new descriptor onto
+fd 1/2. It writes `/var/run/axiomd.pid` (root, 0644). The newsyslog entry names that pid file
+and signal 1:
+`/Library/Logs/Axiom/axiomd.log root:wheel 600 5 5120 * J /var/run/axiomd.pid 1`.
+
+Run (`sec-b2-log-continuity.sh`, as `dev`; `axtest2` created and deleted as in (a)):
+
+| | Result |
+|---|---|
+| before | daemon pid 12950 = `/var/run/axiomd.pid`; `axiomd.log` inode 321310, fds 1w/2w/50w on it |
+| `sudo newsyslog -F -v -f /etc/newsyslog.d/com.axiom.service.conf` | `trimming log....`, **`Notified daemon pid 12950 = /var/run/axiomd.pid`**, rc 0 |
+| after | new `axiomd.log` inode 324031; fds **1w, 2w and 50w now on inode 324031** (same pid 12950, no restart) |
+| new file content | `… newsyslog[13026]: logfile turned over due to -F request` then **`2026-11-14T01:52:29.129Z axiomd[12950]: log reopened (signal), reopen #1`**, written by the daemon into the fresh file |
+| modes | `drwx------ root:wheel /Library/Logs/Axiom`; `axiomd.log`, `axiomd.log.0.bz2`, `.1.bz2`, `.2.bz2` all `-rw------- root:wheel` |
+| `dev` without sudo | `ls`/`cat` → Permission denied |
+| `axtest2` (uid 502, not admin) | `cat` of the log and of every archive, `ls -l` → Permission denied |
+
+Two details are recorded as they are. The `rule.apply`/`rule.remove` markers in the script do
+not produce a log line in this build, so the daemon line in the new file is the reopen notice
+(written through the same writer that the console logger uses). fds 7u/8u stay on the old inode
+(`/axiomd.log.0`, size unchanged apart from newsyslog's own marker line): they are the .NET
+runtime's early duplicates of launchd's descriptors, opened before managed code runs. Nothing is
+written to them after the redirect; they keep the disk blocks of at most one rotated file until
+the daemon restarts. The first run of this script (`sec-b2-log-continuity.attempt1.txt`, build
+`1891a49`, before the reopen notice) showed the same fd move.
 
 ### (c) Filter rejection (`chmod 664` on `filter/rules.json`)
 
@@ -110,8 +143,16 @@ is not fixed in this round.
   generation 1794372867 yet". `rule.verify` `enforcementVerified false`, "acknowledged
   generation 1794372866, not 1794372867; enforcement of this table is pending."
 - `kill -CONT` → ack 1794372867: `verified`, rule `applied`, `enforcementVerified true`, curl rc 7.
-- Minor: after the late ack the rule's `lastVerifiedUtc` stays null, because only the apply path
-  stamps it. That understates the evidence; it does not overclaim. Noted as open.
+- Minor (first run): after the late ack the rule's `lastVerifiedUtc` stayed null, because only
+  the apply path stamped it. Fixed: red test `9e1fea3`, fix `3580595` (a rule the projection proves
+  Applied carries the ack time).
+
+### (d2) Late ack after the fix (`accef91` bundle, `sec-d2-late-ack.txt`)
+
+Same script as (d). Frozen filter: `rule.apply` → `pending`, `verifiedUtc null`; `rules.query`
+published 1794372900 > acked 1794372899, rule `pending`, `lastVerifiedUtc null`. After
+`kill -CONT`: filter `verified` (acked 1794372900), rule `applied`,
+**`lastVerifiedUtc 2026-11-14T01:53:10.844364Z`** (the ack time), curl rc 7. `rule.remove` → 0 rules.
 
 ### (e) Disconnect / reconnect (`axiom-sysext disable` / `enable`)
 
@@ -151,5 +192,7 @@ recorded run used `nohup`.
 
 ## End state of the VM
 
-The `914153d` bundle is installed. The daemon is running, the filter is `verified`/connected
-with 0 rules, curl is 200, `axtest2` is deleted and the original recovery baseline is in place.
+The bundle built from `accef91` is installed (daemon pid 12950, upgraded in place with
+`axiomd --install-service`). The daemon is running, the filter is `verified`/connected with 0
+rules, curl is 200, `axtest2` is deleted (`sec-b2-deluser.txt`) and the original recovery baseline
+is in place.

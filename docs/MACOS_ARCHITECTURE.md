@@ -221,6 +221,9 @@ rotated archive `axiomd.log.N.bz2` 0600, newsyslog entry mode `600`. The install
 opens `StandardOutPath` (launchd would create it with the default umask, 0644) and fixes an older layout on upgrade; the
 daemon re-applies the modes at every start next to the data-directory hardening. The log carries process names, paths
 and rule ids of every user's connections, never API keys or IPC payloads.
+Rotation keeps the log continuous: axiomd writes the log itself (`DaemonLogFile`, not launchd's `StandardOutPath`
+descriptor), writes `/var/run/axiomd.pid`, and reopens `axiomd.log` on SIGHUP, which the newsyslog entry sends through
+that pid file (`… J /var/run/axiomd.pid 1`), or when it detects a rotation before a write.
 
 ### 5.7 Rule lifecycle and enforcement state (review 2026-11-12 P0 #2, P0 #3, High #4)
 
