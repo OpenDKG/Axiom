@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.Linq;
+using Avalonia.Controls;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Axiom.Presentation;
+using Axiom.UI.Avalonia.Views;
 using Xunit;
 
 namespace Axiom.UI.Avalonia.Tests;
@@ -123,5 +128,33 @@ public sealed class TraderShieldSectionViewModelTests
         Assert.StartsWith("PASS", vm.SelfTestStatusText, StringComparison.Ordinal);
         Assert.Contains("secret:seed-phrase", vm.SelfTestStatusText, StringComparison.Ordinal);
         Assert.Contains("fileaccess:read_file:crypto-wallet", vm.SelfTestStatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Trader_shield_appears_only_on_agent_protection_and_not_on_integrations()
+    {
+        TestAppBuilder.RunOnUiThread(() =>
+        {
+            var securityView = new SecurityView();
+            var securityWindow = new Window { Width = 1024, Height = 768, Content = securityView };
+            securityWindow.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var agentsView = new AgentsView();
+            var agentsWindow = new Window { Width = 1024, Height = 768, Content = agentsView };
+            agentsWindow.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            try
+            {
+                Assert.Empty(securityView.GetVisualDescendants().OfType<TraderShieldSectionView>());
+                Assert.Single(agentsView.GetVisualDescendants().OfType<TraderShieldSectionView>());
+            }
+            finally
+            {
+                securityWindow.Close();
+                agentsWindow.Close();
+            }
+        });
     }
 }
