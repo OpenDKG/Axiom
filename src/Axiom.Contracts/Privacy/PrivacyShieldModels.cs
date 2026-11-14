@@ -62,8 +62,11 @@ public sealed record PrivacyShieldSettings
     /// <summary>Loopback port for the opt-in resolver. 53 is required for normal Windows DNS use.</summary>
     public int Port { get; init; } = 53;
 
-    /// <summary>Optional upstream IP, IP:port, udp://IP, or https://.../dns-query DoH URL. Empty uses current Windows DNS servers.</summary>
+    /// <summary>Optional upstream IP, IP:port, udp://IP, or https://.../dns-query DoH URL (comma-separated for failover). Empty uses encrypted DoH or current Windows DNS.</summary>
     public string UpstreamDns { get; init; } = string.Empty;
+
+    /// <summary>Encrypts upstream DNS via RFC 8484 DoH over TLS port 443 so your ISP cannot inspect queries, even if the router/Windows adapter uses plain port 53.</summary>
+    public bool EncryptDnsViaDoh { get; init; } = true;
 
     public IReadOnlyList<string> AllowedDomains { get; init; } = [];
 

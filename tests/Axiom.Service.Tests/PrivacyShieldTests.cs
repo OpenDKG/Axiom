@@ -377,6 +377,45 @@ public sealed class PrivacyShieldTests
         }
     }
 
+    [Fact]
+    public async Task Controller_defaults_empty_upstream_to_encrypted_doh_when_isp_privacy_is_enabled()
+    {
+        var directory = CreateTemporaryDirectory();
+        var port = ReservePort();
+        await using var controller = new PrivacyShieldController(
+            new PrivacyShieldSettingsStore(Path.Combine(directory, "settings.json")),
+            new PrivacyShieldRuleStore(Path.Combine(directory, "rules.json")));
+
+        try
+        {
+            var autoDoh = await controller.ConfigureAsync(
+                EnabledSettings(port) with
+                {
+                    UpstreamDns = string.Empty,
+                    EncryptDnsViaDoh = true,
+                },
+                CancellationToken.None);
+            Assert.True(autoDoh.Running);
+            Assert.Contains("(DoH)", autoDoh.Upstream, StringComparison.Ordinal);
+            Assert.Contains("encrypted with DoH", autoDoh.Detail, StringComparison.OrdinalIgnoreCase);
+
+            var multiDoh = await controller.ConfigureAsync(
+                EnabledSettings(port) with
+                {
+                    UpstreamDns = "1.1.1.1, 9.9.9.9",
+                    EncryptDnsViaDoh = true,
+                },
+                CancellationToken.None);
+            Assert.True(multiDoh.Running);
+            Assert.Contains("https://1.1.1.1/dns-query (DoH)", multiDoh.Upstream, StringComparison.Ordinal);
+            Assert.Contains("https://9.9.9.9/dns-query (DoH)", multiDoh.Upstream, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static PrivacyShieldSettings EnabledSettings(int port) => new()
     {
         Enabled = true,

@@ -399,6 +399,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private string _upstreamText = string.Empty;
 
     [ObservableProperty]
+    private bool _encryptDnsViaDoh = true;
+
+    [ObservableProperty]
     private string _allowedDomainsText = string.Empty;
 
     [ObservableProperty]
@@ -973,6 +976,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             Categories = categories,
             Port = int.TryParse(PortText, out var port) ? port : 53,
             UpstreamDns = UpstreamText.Trim(),
+            EncryptDnsViaDoh = EncryptDnsViaDoh,
             AllowedDomains = PrivacyShieldPolicy.ParseList(
                 AllowedDomainsText,
                 PrivacyShieldPolicy.MaxSettingsDomains),
@@ -1022,6 +1026,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             Malware = (settings.Categories & PrivacyCategory.Malware) != 0;
             PortText = settings.Port.ToString(CultureInfo.InvariantCulture);
             UpstreamText = settings.UpstreamDns;
+            EncryptDnsViaDoh = settings.EncryptDnsViaDoh;
             AllowedDomainsText = string.Join(Environment.NewLine, settings.AllowedDomains);
             BlockedDomainsText = string.Join(Environment.NewLine, settings.BlockedDomains);
             AutoUpdateSources = settings.AutoUpdateSources;

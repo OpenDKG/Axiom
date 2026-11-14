@@ -2,6 +2,10 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.24.0
+
+- **Default ISP-blind encrypted DoH (`443`) for Complete install & auto-upstream mode.** Added `EncryptDnsViaDoh` (default `true`) on `PrivacyShieldSettings` and `PrivacyShieldPolicy.DefaultDohUpstream` (`"1.1.1.1, 9.9.9.9"`), added multi-target `SystemDnsResolver.TryParseUpstreamTargets` and `DefaultDohTargets()`, updated `PrivacyShieldController.TryCreateServer` so empty/automatic `UpstreamDns` never silently forwards plain UDP port `53` queries to a LAN router or ISP DNS when DoH encryption is enabled, defaulted Complete setup (`SetupDefaults` and `PrivacyShieldProvisioner`) to `"1.1.1.1, 9.9.9.9"` over HTTPS/2 TLS port `443`, and exposed the `Encrypt upstream DNS via DoH` toggle in both Avalonia and WPF Privacy Shield views.
+
 ## What's in 0.23.3
 
 - **All 8 Privacy Shield blocklists enabled without rule truncation or IPC timeouts.** Raised `PrivacyShieldPolicy.MaxRules` from `500,000` to `1,000,000` and `SourceReserve` to `25,000`, prioritized `PrivacyCategory.Malware` feeds (`hagezi-tif`, `phishing-filter`, `urlhaus-domains`) in `PrivacyShieldSourceUpdater`, and increased the UI/provisioning `PrivacySourcesUpdate` IPC timeout from 5 seconds to 3 minutes so `HaGeZi Threat Intelligence Feeds Mini` and `Phishing domains` update cleanly alongside bulk lists.

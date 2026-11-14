@@ -48,10 +48,11 @@
                 <TextBox Text="{Binding PortText}" />
               </StackPanel>
               <StackPanel Grid.Column="2" Spacing="4">
-                <controls:AxiomSelectableTextBlock Text="Upstream DNS / DoH (1.1.1.1 or https://.../dns-query)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-                <TextBox Text="{Binding UpstreamText}" />
+                <controls:AxiomSelectableTextBlock Text="Upstream DNS / DoH (comma-separated, or leave empty for automatic DoH)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+                <TextBox Text="{Binding UpstreamText}" PlaceholderText="1.1.1.1, 9.9.9.9 (encrypted DoH · ISP blind)" />
               </StackPanel>
             </Grid>
+            <CheckBox Content="Encrypt upstream DNS via DoH (port 443 — hides queries from your ISP)" IsChecked="{Binding EncryptDnsViaDoh}" Foreground="{DynamicResource Axiom.TextPrimary}" />
 
             <controls:AxiomSelectableTextBlock Text="Blocklist sources" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
             <ItemsControl ItemsSource="{Binding Sources}">

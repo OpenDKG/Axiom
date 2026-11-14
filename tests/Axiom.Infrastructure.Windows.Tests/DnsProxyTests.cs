@@ -317,6 +317,26 @@ public sealed class DnsProxyTests
             filtered);
     }
 
+    [Fact]
+    public void System_dns_parses_redundant_doh_targets_and_default_doh_pair()
+    {
+        Assert.True(SystemDnsResolver.TryParseUpstreamTargets("1.1.1.1, 9.9.9.9", out var parsed));
+        Assert.Equal(2, parsed.Count);
+        Assert.All(parsed, target =>
+        {
+            Assert.True(target.IsDoh);
+            Assert.False(target.FallbackToPlainAllowed);
+        });
+        Assert.Equal("https://1.1.1.1/dns-query", parsed[0].DohUri!.ToString());
+        Assert.Equal("https://9.9.9.9/dns-query", parsed[1].DohUri!.ToString());
+
+        Assert.False(SystemDnsResolver.TryParseUpstreamTargets("1.1.1.1, 127.0.0.1", out _));
+
+        var defaults = SystemDnsResolver.DefaultDohTargets();
+        Assert.Equal(2, defaults.Count);
+        Assert.True(defaults.All(item => item.IsDoh && !item.FallbackToPlainAllowed));
+    }
+
     private sealed class FakeDohHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
         : HttpMessageHandler
     {

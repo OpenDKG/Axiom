@@ -385,18 +385,27 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         IReadOnlyList<DnsUpstreamTarget> targets;
         if (!string.IsNullOrWhiteSpace(settings.UpstreamDns))
         {
-            if (!SystemDnsResolver.TryParseUpstreamTarget(settings.UpstreamDns, out var target) ||
-                target is null)
+            if (!SystemDnsResolver.TryParseUpstreamTargets(settings.UpstreamDns, out targets) ||
+                targets.Count == 0)
             {
                 error = "The configured upstream DNS address or DoH URL is invalid.";
                 return false;
             }
-
-            targets = [target];
         }
         else
         {
-            targets = SystemDnsResolver.UpgradeEndpoints(SystemDnsResolver.ResolveSystemDns());
+            var systemTargets = SystemDnsResolver.UpgradeEndpoints(SystemDnsResolver.ResolveSystemDns());
+            if (settings.EncryptDnsViaDoh)
+            {
+                var encryptedSystem = systemTargets.Where(item => item.IsDoh).ToArray();
+                targets = encryptedSystem.Length > 0
+                    ? encryptedSystem
+                    : SystemDnsResolver.DefaultDohTargets();
+            }
+            else
+            {
+                targets = systemTargets;
+            }
         }
 
         if (targets.Count == 0)
@@ -404,11 +413,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             // If the adapter already points at this loopback resolver, system DNS discovery must
             // not leave the machine without an upstream. Keep encrypted public DoH fallbacks and
             // let the user override them explicitly.
-            targets = SystemDnsResolver.UpgradeEndpoints(
-            [
-                new System.Net.IPEndPoint(System.Net.IPAddress.Parse("1.1.1.1"), 53),
-                new System.Net.IPEndPoint(System.Net.IPAddress.Parse("8.8.8.8"), 53),
-            ]);
+            targets = SystemDnsResolver.DefaultDohTargets();
             warning = "No non-loopback Windows DNS server was found; using encrypted DoH fallback upstream DNS. " +
                       "Set an explicit upstream address if this network requires a local resolver.";
         }
@@ -568,7 +573,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             Port = _settings.Port,
             BindAddress = "not listening",
             Upstream = string.IsNullOrWhiteSpace(_settings.UpstreamDns)
-                ? "system DNS"
+                ? (_settings.EncryptDnsViaDoh ? "encrypted DoH (1.1.1.1, 9.9.9.9)" : "system DNS")
                 : _settings.UpstreamDns,
             Queries = 0,
             Allowed = 0,
