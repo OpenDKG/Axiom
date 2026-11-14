@@ -270,3 +270,42 @@ enforcementVerified true, curl rc 7; `rule.remove` → curl HTTP 200, 0 rules. S
 Observed (upstream, not port): page-header subtitles are cut at 1280 px next to SYSTEM STATUS, and the Agent Health
 button reads `Install/repair agent hooksâ€¦` (mojibake already in `origin/main` `AgentHealthView.axaml` and
 `AgentsView.axaml`, shows on Windows too).
+
+## 6. Upstream merge v0.22.0 (`ecb6916`, merge `8941bdc`)
+
+Upstream since `16229f4`: `f11893a` (Privacy Shield forwards allowed queries over RFC 8484 DoH), `4055827` (HaGeZi
+TIF / phishing blocklists / public SHA-256 community feeds), `6838979` (Blackbox offline cached-ruleset continuity,
+5-state reporting), `5c72c17` (hooked-agent status no longer depends on dashboard port 9700), `ceaa01c` (docs),
+releases 0.18.0 to 0.22.0.
+
+Conflicts (3 files, all `f11893a` against the portable DNS move) and decisions:
+
+- `Service.Hosting/Dns/DnsProxyServer.cs` (upstream: `Infrastructure.Windows/Dns/DnsProxyServer.cs`): upstream's body
+  as is (`DnsUpstreamTarget` list, `ForwardToTargetsAsync`, `ForwardDohAsync`, `ReadBoundedAsync`,
+  `CreateDohHttpClient`, transport note in `Snapshot`). Port additions re-inserted: `IDnsAppAttributor` (last optional
+  constructor parameter), the upstream failure streak, and the live swap, now `UpdateTargets(...)`; the DoH
+  `HttpClient` is created when the first DoH target appears (constructor as upstream, or a later swap).
+- `Infrastructure.Windows/Dns/SystemDnsResolver.cs`: the record, the known-DoH and bootstrap tables and the parsing
+  members contain no Windows API, so they moved verbatim to `Service.Hosting/Dns/DnsUpstreamTarget.cs` and
+  `DnsUpstream.cs`; `SystemDnsResolver` keeps `ResolveSystemDns` and forwards `TryParseUpstream`,
+  `TryParseUpstreamTarget`, `UpgradeEndpoints`, `TryGetKnownDohUri`, `TryResolveBootstrapAddress`.
+- `Service/PrivacyShieldController.cs`: upstream's selection, through the seam: explicit value →
+  `DnsUpstream.TryParseTarget`; empty → `DnsUpstream.UpgradeEndpoints(_dns.DiscoverUpstreams())`; nothing found →
+  1.1.1.1 + 8.8.8.8 upgraded to DoH with `IPrivacyDnsPlatform.NoUpstreamWarning` (Windows: upstream's 0.22.0 text).
+  No new seam member was needed.
+
+What DoH means on macOS: the DoH client is plain .NET (`HttpClient` / `SocketsHttpHandler`), nothing in it is
+Windows-specific, so `axiomd` runs the same code. A system or configured resolver that is a known public resolver on
+port 53 (Cloudflare, Google, Quad9, AdGuard) and an explicit `https://…/dns-query` URL are queried over HTTPS/443 with
+no silent fallback to plain DNS; `udp://IP` and every other resolver (router, VPN, corporate) stay plain UDP/TCP.
+The status `Detail` states the transport actually in use ("encrypted with DoH" / "prefer DoH; non-DoH upstreams remain
+plain DNS" / "plain UDP/TCP DNS"), derived from the live target list, so nothing is claimed that is not active.
+Upstream rediscovery (macOS only) upgrades the rediscovered endpoints the same way.
+
+Found while merging: `6838979` probes the Blackbox guard at `venv\Scripts\python.exe` only, so on macOS/Linux an
+installed guard read as "not installed" (`666f62f` red test, `0aea1d8` fix through `AgentPlatform.VenvPython`).
+The version is 0.22.0 from `Directory.Build.props`; the Settings milestone still appends " · macOS port";
+`package-app.sh` reads the version from the same file.
+
+Not verified for this merge: DoH against a real resolver from `axiomd` on a Mac (covered here by the shared tests with
+an injected HTTP handler on Linux only); the Windows service differential including Privacy Shield / DoH.
