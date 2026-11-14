@@ -197,9 +197,12 @@ pure function so the Linux port can reuse it unchanged):
 unlisted command counts as a write). **PublicRead**: `serviceHealth` (for a public caller: status, version, uptime,
 contract version only — no counts, capture time, limitations or last error), `capabilities`. **PrivateRead**: `snapshot`,
 `live.events`, `rule.verify`, `rules.query`, `history.query`, `traffic.history`, `privacy.status`, `config.get`,
-`diagnostics.export`, `protection.status`, `threatshare.status`. **Write**: `rule.apply/remove`, `privacy.configure`,
+`diagnostics.export`, `protection.status`, `threatshare.status`, `enforcement.status`, `enforcement.receipts`.
+**Write**: `rule.apply/remove`, `privacy.configure`,
 `privacy.sources.update`, `privacy.history.clear`, `config.set`, `protection.*` changes, `threatshare.*` changes,
-`networkRecovery.*`. Windows is unchanged: the named pipe admits one SID with full access (`IpcCaller.FullAccess`).
+`networkRecovery.*`, `enforcement.evaluate` (it appends to the receipt journal). The macOS daemon does not register the
+agent-enforcement controller, so the three `enforcement.*` commands answer `not_supported` to an authorized caller and
+`unauthorized` to anyone else. Windows is unchanged: the named pipe admits one SID with full access (`IpcCaller.FullAccess`).
 
 Why the socket stays 0666: macOS has no `axiom` group, the installing user is a plain uid and admins are a group the
 daemon cannot own, so a 0660 socket would lock out the very users who may use it. The socket mode therefore only admits
