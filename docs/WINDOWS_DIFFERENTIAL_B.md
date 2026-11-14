@@ -1,5 +1,15 @@
 # Windows differential test: PR A vs PR B (Windows-side service seams)
 
+> **Split7: slice S1b (service seams, contracts, DNS move), branch `split7/s1b-service-seams`, stacked on S1a
+> (`split7/s1a-ipc-dispatcher`, PR #325) with main `ecb6916` (v0.22.0) merged underneath.**
+> Written for the earlier PR B (`split/b-service-seams`). Tested SHAs: `c0789b0` (A) vs `be183e2` (B,
+> `src/`/`tests/` identical to `79fa933`). Six B files changed again in the split, through the shared commits
+> that came from PR D (DNS move, owner-only modes, Pending-not-Applied); that content was run on
+> Windows as `5729104` (`docs/WINDOWS_DIFFERENTIAL_D.md`). Since then main rewrote the Privacy Shield
+> DNS proxy for DoH (`f11893a`) and the DNS move in S1b was re-cut on top of it, so the DNS files are
+> no longer the content that was run. The S1b head has not been run on Windows; a Windows service
+> differential including Privacy Shield / DoH is required before S1b opens.
+
 PR B adds the seams that the later macOS/Linux PRs plug into: `IIpcTransport` with the Windows
 `NamedPipeIpcTransport`, the transport seam in `PipeServerWorker`, the `ServicePlatform` split with
 `ServicePlatform.Windows`/`ServiceInfo.Windows`, `AxiomPaths` (data roots and service detection)

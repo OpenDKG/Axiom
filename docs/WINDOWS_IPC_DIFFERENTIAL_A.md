@@ -1,5 +1,11 @@
 # Windows differential test: `origin/main` vs this branch (shared IPC dispatcher)
 
+> **Split7: written for the earlier PR A (`split/a-shared-ipc`); its content is slice S1a
+> (`split7/s1a-ipc-dispatcher`, PR #325), whose own Windows run is `docs/WINDOWS_DIFFERENTIAL_S1A.md`.**
+> Tested SHAs here: `77cc50a` (main) vs `c0789b0` (A). S1b (`split7/s1b-service-seams`) changes two of
+> A's files again: `ProtectionWriteConsent.cs` (AxiomPaths) and `Axiom.Service.Hosting.csproj` (the DNS
+> proxy move). The S1b head has not been run on Windows (see the S1b PR text).
+
 This branch moves the firewall write gate to `Axiom.Core` and moves the request loop of the Windows
 pipe server into the portable `IpcRequestDispatcher` (new `Axiom.Service.Hosting`). On Windows
 `PipeServer` passes `IpcCaller.FullAccess(sid)`, so the read-only and redacted access classes of
