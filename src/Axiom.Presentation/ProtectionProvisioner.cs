@@ -14,8 +14,10 @@ public delegate ProtectionCheckResult ProtectionCheckRunner(ProtectionCheck chec
 public sealed record ProtectionProvisioningResult(
     string ConfigPath,
     bool BlockMode,
+    bool RulesPresent,
     IReadOnlyList<ProtectionCheckResult> Checks,
     bool Passed,
+    string State,
     string Summary);
 
 /// <summary>
@@ -35,7 +37,8 @@ public static class ProtectionProvisioner
         Func<string, bool> fileExists,
         Func<string, string?> readText,
         Action<string, string> writeText,
-        ProtectionCheckRunner? runner)
+        ProtectionCheckRunner? runner,
+        bool rulesPresent = false)
     {
         var configPath = HermesConfigLocation.Resolve(localAppData, userProfile, fileExists);
         var existing = readText(configPath) ?? string.Empty;
@@ -51,12 +54,77 @@ public static class ProtectionProvisioner
             ? []
             : AgentProtectionSelfTest.DefaultChecks().Select(check => runner(check)).ToArray();
 
-        var passed = blockMode && results.Length > 0 && AgentProtectionSelfTest.AllPassed(results);
-        var summary = blockMode
-            ? AgentProtectionSelfTest.Summary(results)
-            : "block mode is not active" + (results.Length == 0 ? string.Empty : "; " + AgentProtectionSelfTest.Summary(results));
+        var checksPassed = results.Length > 0 && AgentProtectionSelfTest.AllPassed(results);
+        var passed = blockMode && checksPassed && rulesPresent;
+        var state = passed ? "protected" : "unprotected";
 
-        return new ProtectionProvisioningResult(configPath, blockMode, results, passed, summary);
+        var reasons = new List<string>();
+        if (!blockMode)
+        {
+            reasons.Add("block mode is not active");
+        }
+
+        if (!rulesPresent)
+        {
+            reasons.Add("threat ruleset is empty — sync the verified graph or apply confirmed rules");
+        }
+
+        if (results.Length == 0)
+        {
+            reasons.Add("self-test did not run");
+        }
+        else if (!checksPassed)
+        {
+            reasons.Add(AgentProtectionSelfTest.Summary(results));
+        }
+
+        var summary = reasons.Count == 0
+            ? AgentProtectionSelfTest.Summary(results)
+            : "UNPROTECTED: " + string.Join("; ", reasons);
+
+        return new ProtectionProvisioningResult(configPath, blockMode, rulesPresent, results, passed, state, summary);
+    }
+
+    /// <summary>
+    /// True when the compiled ruleset carries at least one rule or verified-scope counts. An empty
+    /// ruleset means detection has nothing to match, so the install must show UNPROTECTED.
+    /// </summary>
+    public static bool HasVerifiedRules(string? rulesetJson)
+    {
+        if (string.IsNullOrWhiteSpace(rulesetJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            var root = JsonNode.Parse(rulesetJson);
+            if (root is not JsonObject document)
+            {
+                return false;
+            }
+
+            foreach (var key in new[] { "injection", "skill", "escalation", "fileaccess", "graph_threats" })
+            {
+                if (document[key] is JsonArray array && array.Count > 0)
+                {
+                    return true;
+                }
+            }
+
+            if (document["verified_scope"] is JsonObject scope &&
+                scope["verified_counts"] is JsonObject counts &&
+                counts.Count > 0)
+            {
+                return true;
+            }
+
+            return false;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -74,6 +142,20 @@ public static class ProtectionProvisioner
         var agentRoot = Path.Combine(root, "Axiom", "modules", "blackbox", "agent-blackbox");
         var runner = CreateBridgeRunner(agentRoot);
 
+        var rulesPresent = false;
+        try
+        {
+            var rulesetPath = Path.Combine(root, "hermes", "blackbox", "ruleset.json");
+            if (File.Exists(rulesetPath))
+            {
+                rulesPresent = HasVerifiedRules(File.ReadAllText(rulesetPath));
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            rulesPresent = false;
+        }
+
         var result = Provision(
             root,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -84,7 +166,8 @@ public static class ProtectionProvisioner
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 File.WriteAllText(path, text);
             },
-            runner);
+            runner,
+            rulesPresent);
 
         try
         {
