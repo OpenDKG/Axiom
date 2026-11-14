@@ -2,6 +2,15 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.23.0
+
+- **Complete install protected out of the box.** First start writes `mode: block`, provisions every agent hook, applies the Trader Shield for eleven wallets and `plugins.load_timeout_seconds: 120`, and runs a self-test that proves a protected read and write are blocked.
+- **Full action-chain guard for agents.** The OpenCode bridge now blocks protected-path deletes, guard tampering, remote script pipes, encoded PowerShell, LOLBin downloads, persistence shapes, launching a protected file and uploading one, and quarantines a session after a high-severity prompt injection.
+- **Reputation-safe threat sharing.** A local preflight refuses missing consent/key, non-vocabulary values, known indicators, canaries, EICAR, tracking and shared-hosting hosts; the reporter runs through the committed interpreter with two fallbacks.
+- **Upgrade data guard and installer reliability.** Findings, history, the reporter key and the DKG identity are backed up before the vendor installer and restored if lost; the setup waits for a stopping service, retries locked files and reports silent failures.
+- **BIP-39 wordlist normalized to LF.** Windows seed-phrase detection is restored by matching the vendor's pinned SHA-256.
+- **Offline continuity from 0.22.0.** Guard availability, cached rules, stale sync, DKG offline and unprotected are reported separately, and the dashboard port no longer decides whether an agent is protected.
+
 ## What's in 0.22.0
 
 - **Agent Blackbox Offline Runtime Continuity & 5-State Reporting (#324).** Added `BlackboxContinuityReport` (`GUARD_AVAILABLE`, `RULESET_AVAILABLE`, `SYNC_STALE`, `DKG_OFFLINE`, `UNPROTECTED`), preserved cached `ruleset.json` across offline periods/reboots in `TryReadSync` and `TryReadGraph`, and explicitly flagged corrupted/missing rulesets as `unavailable`.
