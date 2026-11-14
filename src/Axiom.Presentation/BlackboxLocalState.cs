@@ -323,15 +323,24 @@ public static class BlackboxLocalState
                 return false;
             }
 
-            var root = Path.Combine(local, "Axiom", "modules", "blackbox", "agent-blackbox");
-            var python = Path.Combine(root, "venv", "Scripts", "python.exe");
-            var hooks = Path.Combine(root, "plugins", "blackbox", "guard", "hooks.py");
-            return File.Exists(python) && File.Exists(hooks);
+            return IsGuardRuntimeInstalledAt(
+                Path.Combine(local, "Axiom", "modules", "blackbox", "agent-blackbox"));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Whether the Blackbox guard runtime (venv interpreter + guard hooks) exists under
+    /// <paramref name="blackboxRoot"/> (<c>.../Axiom/modules/blackbox/agent-blackbox</c>).
+    /// </summary>
+    public static bool IsGuardRuntimeInstalledAt(string blackboxRoot)
+    {
+        var python = Path.Combine(blackboxRoot, "venv", "Scripts", "python.exe");
+        var hooks = Path.Combine(blackboxRoot, "plugins", "blackbox", "guard", "hooks.py");
+        return File.Exists(python) && File.Exists(hooks);
     }
 
     private static BlackboxContinuityReport BuildReport(

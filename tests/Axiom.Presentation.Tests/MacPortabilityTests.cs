@@ -182,4 +182,28 @@ public sealed class AgentPlatformTests
             script,
             StringComparison.Ordinal);
     }
+
+    [UnixOnlyFact]
+    public void Blackbox_guard_runtime_is_found_in_the_posix_venv_layout()
+    {
+        // 6838979 probes venv\Scripts\python.exe only; on macOS/Linux the module installs
+        // venv/bin/python (AgentPlatform.VenvPython), so an installed guard read as "not installed".
+        var root = Path.Combine(Path.GetTempPath(), $"axiom-guard-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "venv", "bin"));
+            Directory.CreateDirectory(Path.Combine(root, "plugins", "blackbox", "guard"));
+            Assert.False(BlackboxLocalState.IsGuardRuntimeInstalledAt(root));
+
+            File.WriteAllText(Path.Combine(root, "venv", "bin", "python"), string.Empty);
+            Assert.False(BlackboxLocalState.IsGuardRuntimeInstalledAt(root));
+
+            File.WriteAllText(Path.Combine(root, "plugins", "blackbox", "guard", "hooks.py"), string.Empty);
+            Assert.True(BlackboxLocalState.IsGuardRuntimeInstalledAt(root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }
