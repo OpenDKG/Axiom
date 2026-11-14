@@ -108,9 +108,11 @@ internal static class SetupInstaller
 
                 var blackboxInstalled = false;
                 var dkgInstalled = false;
+                var serviceRegisteredEarly = false;
                 string? upgradeWarning = null;
                 if (options.CompleteInstallation)
                 {
+                    serviceRegisteredEarly = SetupDefaults.EnsureServiceRegistered(options.InstallDir, Report);
                     Report("Complete installation selected: Blackbox, DKG and agent hooks will be configured.");
                     var setupProtection = new UserStateProtection();
                     var setupSnapshot = await Task.Run(
@@ -318,7 +320,7 @@ internal static class SetupInstaller
                 if (options.CompleteInstallation)
                 {
                     var defaults = await SetupDefaults
-                        .ApplyCompleteAsync(options.InstallDir, Report, cancellationToken)
+                        .ApplyCompleteAsync(options.InstallDir, Report, cancellationToken, serviceRegisteredEarly)
                         .ConfigureAwait(false);
                     warning = defaults.Warning;
                     if (upgradeWarning is not null)

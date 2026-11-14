@@ -79,9 +79,9 @@
                 <TextBlock Text="Complete installation (recommended)" FontWeight="SemiBold" />
                 <TextBlock Text="Installs Axiom and asks Windows once for administrator approval to register the local service. Every protection module is then on by default:"
                            Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0" />
-                <TextBlock Text="•  Axiom Shield: firewall decisions with the safe 'ask' policy&#x0a;•  Privacy Shield: resolver on port 53, Balanced profile, all five licence-labelled sources&#x0a;•  Notifications, tray icon, background-console hiding and start with Windows&#x0a;•  Blackbox, DKG and agent hooks for the supported coding agents"
+                <TextBlock Text="•  Axiom Shield: firewall decisions with the safe 'ask' policy&#x0a;•  Privacy Shield: resolver on port 53, Strict profile, encrypted DoH (443), and all eight licence-labelled sources&#x0a;•  Notifications, tray icon, background-console hiding and start with Windows&#x0a;•  Blackbox, DKG and agent hooks for the supported coding agents"
                            Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0" />
-                <TextBlock Text="Windows-wide DNS filtering still needs the one-click 'Point adapter at resolver' step on the Privacy Shield page, because Windows asks for elevation for adapter changes."
+                <TextBlock Text="The Axiom Windows service automatically points the active network adapter's DNS at 127.0.0.1 while keeping your previous DNS server behind it as a fallback. You can still switch or restore adapters manually anytime on the Privacy Shield page."
                            Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0" FontStyle="Italic" />
               </StackPanel>
             </RadioButton>

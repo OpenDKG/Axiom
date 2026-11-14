@@ -351,11 +351,10 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         $"{PrivacyShieldPolicy.StarterRulesAll.Count} starter rules (manually reviewed, not a third-party list)";
 
     public string ManualSetupText =>
-        "The Axiom service never changes adapter DNS silently. The optional UAC helper changes " +
-        "only the selected adapter after you confirm Windows elevation; it saves the previous DNS, " +
-        "keeps it behind the resolver as a fallback, and can restore it. If you do not use the helper, " +
-        "set the adapter DNS to 127.0.0.1 (port 53) and keep the router's DNS as the second entry " +
-        "manually. Until Windows DNS points at this resolver, normal traffic bypasses it " +
+        "Complete installation enables the Axiom Windows service to point your active adapter's DNS " +
+        "at 127.0.0.1 automatically while keeping your existing DNS server behind it as a fallback. " +
+        "You can also use the UAC helper or 'Restore DNS' below to switch adapters manually or opt out. " +
+        "Until Windows DNS points at this resolver, normal traffic bypasses it " +
         "and the counters stay at zero. This is DNS filtering only: applications still connect " +
         "directly to destination IPs; traffic is not routed or proxied through Axiom.";
 

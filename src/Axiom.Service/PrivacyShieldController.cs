@@ -68,6 +68,12 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     /// <summary>Whether the loopback resolver is listening right now.</summary>
     public bool IsResolverRunning => Volatile.Read(ref _server) is not null;
 
+    /// <summary>Whether automatic adapter DNS pointing is requested for port 53.</summary>
+    public bool ShouldAutoPointAdapterDns =>
+        _settings.Enabled &&
+        _settings.Port == 53 &&
+        (_settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(_settings.PreferredAdapterAlias));
+
     public async Task<PrivacyShieldStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -85,7 +91,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_settings.Enabled)
+            if (_settings.Enabled && _server is null)
             {
                 await StartServerLockedAsync(cancellationToken).ConfigureAwait(false);
             }

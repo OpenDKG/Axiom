@@ -73,8 +73,12 @@ public partial class App : Application
                     if (protection is not null)
                     {
                         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                        PrivacyShieldProvisioner.WriteSettings(localAppData);
-                        PrivacyShieldProvisioner.ApplyAsync(CancellationToken.None).GetAwaiter().GetResult();
+                        var privacyConfigPath = Path.Combine(localAppData, "Axiom", "privacy-shield.json");
+                        if (!File.Exists(privacyConfigPath))
+                        {
+                            PrivacyShieldProvisioner.WriteSettings(localAppData);
+                            PrivacyShieldProvisioner.ApplyAsync(CancellationToken.None).GetAwaiter().GetResult();
+                        }
                         TraderShieldProvisioner.ApplyToFile(Path.Combine(localAppData, "hermes", "config.yaml"));
                         HermesPluginSettings.ApplyToFile(Path.Combine(localAppData, "hermes", "config.yaml"));
                     }

@@ -37,10 +37,17 @@ internal static class SetupDefaults
         WriteIndented = true,
     };
 
+    public static bool EnsureServiceRegistered(string installDir, Action<string> report)
+    {
+        report("Complete protection: registering the Axiom Windows service (one elevation prompt).");
+        return InstallService(installDir, report);
+    }
+
     public static async Task<CompleteDefaultsResult> ApplyCompleteAsync(
         string installDir,
         Action<string> report,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool serviceAlreadyRegistered = false)
     {
         var marker = new Dictionary<string, object?>
         {
@@ -53,8 +60,14 @@ internal static class SetupDefaults
 
         try
         {
-            report("Complete protection: registering the Axiom Windows service (one elevation prompt).");
-            if (!InstallService(installDir, report))
+            var serviceInstalled = serviceAlreadyRegistered;
+            if (!serviceInstalled)
+            {
+                report("Complete protection: registering the Axiom Windows service (one elevation prompt).");
+                serviceInstalled = InstallService(installDir, report);
+            }
+
+            if (!serviceInstalled)
             {
                 marker["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
                 WriteProfile(marker);
@@ -128,6 +141,14 @@ internal static class SetupDefaults
                 report(privacy.Running
                     ? $"Privacy Shield: resolver enabled on port 53 (Strict, all {privacySettings.EnabledSourceIds.Count} sources selected)."
                     : "Privacy Shield: enabled, but the resolver is not running yet: " + privacy.Detail);
+                if (!string.IsNullOrWhiteSpace(privacy.LastError))
+                {
+                    report("Privacy Shield adapter DNS: " + privacy.LastError);
+                }
+                else if (privacy.Running && privacy.Settings.AutoPointAdapterDns)
+                {
+                    report("Privacy Shield: active adapter DNS points at 127.0.0.1 with fallback DNS preserved.");
+                }
 
                 if (privacy.Running)
                 {
