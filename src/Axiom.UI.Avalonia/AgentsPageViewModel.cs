@@ -79,6 +79,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private bool _preservingActivitySelection;
 
+    private bool _preservingFindingSelection;
+
     private string? _selectedActivityIdentity;
 
     private bool _activityInitialized;
@@ -712,30 +714,46 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         return new BlackboxAuditPage(entries, total);
     }
 
-    [RelayCommand]
-    private void CopyActivityEvent()
+    private static T? ResolveCopyTarget<T>(T? explicitItem, T? currentSelection, Action<T?> selectItem) where T : class
     {
-        if (SelectedActivity is not { } entry)
+        var target = explicitItem ?? currentSelection;
+        if (target is null)
+        {
+            return null;
+        }
+
+        if (!ReferenceEquals(currentSelection, target))
+        {
+            selectItem(target);
+        }
+
+        return target;
+    }
+
+    [RelayCommand]
+    private void CopyActivityEvent(BlackboxAuditEntry? entry = null)
+    {
+        if (ResolveCopyTarget(entry, SelectedActivity, value => SelectedActivity = value) is not { } target)
         {
             return;
         }
 
         CopyToClipboard(string.Join(
             Environment.NewLine,
-            $"Time: {entry.DateTimeText}",
-            $"Agent: {entry.Agent}",
-            $"Event: {entry.EventLabel} ({entry.Event})",
-            $"Details: {entry.ActionSummary}",
-            $"Session: {entry.SessionFull}",
-            $"Severity: {entry.Severity}",
-            $"Decision: {entry.Decision}",
-            $"Security: {entry.SecurityOutcomeDetail}"));
+            $"Time: {target.DateTimeText}",
+            $"Agent: {target.Agent}",
+            $"Event: {target.EventLabel} ({target.Event})",
+            $"Details: {target.ActionSummary}",
+            $"Session: {target.SessionFull}",
+            $"Severity: {target.Severity}",
+            $"Decision: {target.Decision}",
+            $"Security: {target.SecurityOutcomeDetail}"));
     }
 
     [RelayCommand]
-    private void CopyActivityDetails()
+    private void CopyActivityDetails(BlackboxAuditEntry? entry = null)
     {
-        if (SelectedActivity is null)
+        if (ResolveCopyTarget(entry, SelectedActivity, value => SelectedActivity = value) is null)
         {
             return;
         }
@@ -754,49 +772,57 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     }
 
     [RelayCommand]
-    private void CopyActivityJson() => CopyToClipboard(SelectedActivityRawText);
-
-    [RelayCommand]
-    private void CopyFinding()
+    private void CopyActivityJson(BlackboxAuditEntry? entry = null)
     {
-        if (SelectedFinding is not { } finding)
+        if (ResolveCopyTarget(entry, SelectedActivity, value => SelectedActivity = value) is null)
         {
             return;
         }
 
-        CopyToClipboard(string.Join(
-            Environment.NewLine,
-            $"Time: {finding.TimeText}",
-            $"Agent: {finding.Agent}",
-            $"Category: {finding.Category}",
-            $"Severity: {finding.Severity}",
-            $"Identifier: {finding.Identifier}",
-            $"Title: {finding.Title}",
-            $"Decision: {finding.Decision}",
-            $"Session: {finding.Session}",
-            $"Security: {finding.SecurityOutcome}"));
+        CopyToClipboard(SelectedActivityRawText);
     }
 
     [RelayCommand]
-    private void CopyHookEvidence()
+    private void CopyFinding(BlackboxFinding? finding = null)
     {
-        if (SelectedHookEvidence is not { } evidence)
+        if (ResolveCopyTarget(finding, SelectedFinding, value => SelectedFinding = value) is not { } target)
         {
             return;
         }
 
         CopyToClipboard(string.Join(
             Environment.NewLine,
-            $"Time: {evidence.Timestamp:O}",
-            $"Framework: {evidence.Framework}",
-            $"Event: {evidence.EventType}",
-            $"Tool: {evidence.Tool}",
-            $"Decision: {evidence.Decision}",
-            $"Guard status: {evidence.GuardStatus}",
-            $"Duration: {evidence.DurationMs} ms",
-            $"Error: {evidence.ErrorCode}",
-            $"Session: {evidence.Session}",
-            $"Call: {evidence.Call}"));
+            $"Time: {target.TimeText}",
+            $"Agent: {target.Agent}",
+            $"Category: {target.Category}",
+            $"Severity: {target.Severity}",
+            $"Identifier: {target.Identifier}",
+            $"Title: {target.Title}",
+            $"Decision: {target.Decision}",
+            $"Session: {target.Session}",
+            $"Security: {target.SecurityOutcome}"));
+    }
+
+    [RelayCommand]
+    private void CopyHookEvidence(AgentEvidenceEvent? evidence = null)
+    {
+        if (ResolveCopyTarget(evidence, SelectedHookEvidence, value => SelectedHookEvidence = value) is not { } target)
+        {
+            return;
+        }
+
+        CopyToClipboard(string.Join(
+            Environment.NewLine,
+            $"Time: {target.Timestamp:O}",
+            $"Framework: {target.Framework}",
+            $"Event: {target.EventType}",
+            $"Tool: {target.Tool}",
+            $"Decision: {target.Decision}",
+            $"Guard status: {target.GuardStatus}",
+            $"Duration: {target.DurationMs} ms",
+            $"Error: {target.ErrorCode}",
+            $"Session: {target.Session}",
+            $"Call: {target.Call}"));
     }
 
     [RelayCommand]
@@ -1611,7 +1637,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     partial void OnSelectedSeverityFilterChanged(string value) => ApplyFilters();
 
-    private void ApplyActivity(BlackboxAuditPage page)
+    internal void ApplyActivity(BlackboxAuditPage page)
     {
         _allActivity.Clear();
         _allActivity.AddRange(NormalizeActivity(page.Entries, ReadFrameworkMap()));
@@ -1620,7 +1646,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         ApplyFilters();
     }
 
-    private void MergeActivity(BlackboxAuditPage page)
+    internal void MergeActivity(BlackboxAuditPage page)
     {
         _activityTotal = Math.Max(page.Total, _allActivity.Count);
         var incoming = NormalizeActivity(page.Entries, ReadFrameworkMap());
@@ -1750,7 +1776,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         ActivityFreshnessText = ActivityFreshness.Describe(newest, now, _hasLiveSession);
     }
 
-    private void ApplyFindings(BlackboxFindingPage page)
+    internal void ApplyFindings(BlackboxFindingPage page)
     {
         var selected = SelectedFinding;
         _allFindings.Clear();
@@ -1761,15 +1787,18 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         if (!Findings.SequenceEqual(_allFindings))
         {
             var selectedKey = selected is null ? null : FindingIdentity(selected);
+            _preservingFindingSelection = true;
             Findings.Clear();
             foreach (var finding in _allFindings)
             {
                 Findings.Add(finding);
             }
 
+            _preservingFindingSelection = false;
             SelectedFinding = selectedKey is null
                 ? null
                 : Findings.FirstOrDefault(finding => FindingIdentity(finding) == selectedKey);
+            HasSelectedFinding = SelectedFinding is not null;
         }
 
         var blocked = _allFindings.Count(finding => finding.IsBlocked);
@@ -1798,7 +1827,15 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private static string FindingIdentity(BlackboxFinding finding) =>
         $"{finding.Timestamp?.UtcTicks}|{finding.Identifier}|{finding.Agent}|{finding.Title}";
 
-    partial void OnSelectedFindingChanged(BlackboxFinding? value) => HasSelectedFinding = value is not null;
+    partial void OnSelectedFindingChanged(BlackboxFinding? value)
+    {
+        if (value is null && _preservingFindingSelection)
+        {
+            return;
+        }
+
+        HasSelectedFinding = value is not null;
+    }
 
     private async Task<BlackboxVerifiedSync?> TryGetVerifiedSyncAsync()
     {
@@ -2044,12 +2081,28 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private void ApplyHookEvidence()
     {
-        HookEvidence.Clear();
-        foreach (var item in _agentEvidence.ReadRecent(60)
-                     .OrderByDescending(entry => entry.Timestamp)
-                     .Take(30))
+        var recent = _agentEvidence.ReadRecent(60)
+            .OrderByDescending(entry => entry.Timestamp)
+            .Take(30)
+            .ToList();
+
+        if (!HookEvidence.SequenceEqual(recent))
         {
-            HookEvidence.Add(item);
+            var selected = SelectedHookEvidence;
+            HookEvidence.Clear();
+            foreach (var item in recent)
+            {
+                HookEvidence.Add(item);
+            }
+
+            SelectedHookEvidence = selected is null
+                ? null
+                : HookEvidence.FirstOrDefault(item =>
+                    item.Timestamp == selected.Timestamp &&
+                    string.Equals(item.Framework, selected.Framework, StringComparison.Ordinal) &&
+                    string.Equals(item.EventType, selected.EventType, StringComparison.Ordinal) &&
+                    string.Equals(item.Tool, selected.Tool, StringComparison.Ordinal) &&
+                    string.Equals(item.Decision, selected.Decision, StringComparison.Ordinal));
         }
 
         _latestEvidenceUtc = HookEvidence.Count == 0

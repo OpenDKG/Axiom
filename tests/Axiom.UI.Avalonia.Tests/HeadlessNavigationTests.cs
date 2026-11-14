@@ -11,24 +11,25 @@ public sealed class HeadlessNavigationTests
     [Fact]
     public void Main_window_navigates_through_every_page_without_a_render_error()
     {
-        TestAppBuilder.EnsureInitialized();
-
-        var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
-        var window = new MainWindow { DataContext = shell };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
-
-        Assert.Equal(14, shell.Pages.Count);
-        Assert.IsType<AgentDashboardPageViewModel>(shell.Pages[0]);
-        foreach (var page in shell.Pages)
+        TestAppBuilder.RunOnUiThread(() =>
         {
-            shell.SelectedPage = page;
+            var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
+            var window = new MainWindow { DataContext = shell };
+            window.Show();
             Dispatcher.UIThread.RunJobs();
-            Assert.Same(page, shell.SelectedPage);
-        }
 
-        window.Close();
-        shell.Dispose();
+            Assert.Equal(14, shell.Pages.Count);
+            Assert.IsType<AgentDashboardPageViewModel>(shell.Pages[0]);
+            foreach (var page in shell.Pages)
+            {
+                shell.SelectedPage = page;
+                Dispatcher.UIThread.RunJobs();
+                Assert.Same(page, shell.SelectedPage);
+            }
+
+            window.Close();
+            shell.Dispose();
+        });
     }
 
     private sealed class FakeSource : IConnectionSnapshotSource

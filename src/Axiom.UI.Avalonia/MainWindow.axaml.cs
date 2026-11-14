@@ -151,7 +151,9 @@ public partial class MainWindow : Window
 
         // Selectable text handles the pointer before the row does. Keep row selection working when
         // the user left-clicks or right-clicks text inside a ListBox item.
-        SelectContainingListItem(e.Source as Visual);
+        Controls.DataListSelection.SelectContainingListItem(
+            e.Source as Visual,
+            focusItem: properties.IsRightButtonPressed);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -206,19 +208,5 @@ public partial class MainWindow : Window
         ToolTip.SetTip(
             MaximizeButton,
             WindowState == WindowState.Maximized ? "Restore" : "Maximize");
-    }
-
-    private static void SelectContainingListItem(Visual? visual)
-    {
-        while (visual is not null)
-        {
-            if (visual is ListBoxItem item && item.GetVisualParent() is ListBox list)
-            {
-                list.SelectedItem = item.DataContext;
-                return;
-            }
-
-            visual = visual.GetVisualParent();
-        }
     }
 }
