@@ -73,6 +73,12 @@ public sealed class IpcRequestDispatcher
 
     private readonly Func<string, CancellationToken, Task<NetworkRecoveryRestoreResult>>? _networkRecoveryRestore;
 
+    private readonly Func<CancellationToken, Task<EnforcementStatusDto>>? _enforcementStatus;
+
+    private readonly Func<EnforcementEvaluateRequest, string, CancellationToken, Task<EnforcementVerdictDto>>? _enforcementEvaluate;
+
+    private readonly Func<CancellationToken, Task<EnforcementReceiptsSnapshotDto>>? _enforcementReceipts;
+
     private readonly Func<bool> _writeGateOpen;
 
     private readonly Action<string>? _log;
@@ -111,6 +117,9 @@ public sealed class IpcRequestDispatcher
         _threatShareRecord = handlers.ThreatShareRecord;
         _networkRecoveryCapture = handlers.NetworkRecoveryCapture;
         _networkRecoveryRestore = handlers.NetworkRecoveryRestore;
+        _enforcementStatus = handlers.EnforcementStatus;
+        _enforcementEvaluate = handlers.EnforcementEvaluate;
+        _enforcementReceipts = handlers.EnforcementReceipts;
         _writeGateOpen = writeGateOpen ?? (() => Axiom.Core.Firewall.FirewallWriteGate.IsOpen);
         _log = log;
     }
@@ -775,6 +784,67 @@ public sealed class IpcRequestDispatcher
                     var restored = await _networkRecoveryRestore(actorSid, cancellationToken)
                         .ConfigureAwait(false);
                     await WriteResultAsync(stream, envelope.Id, restored, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.EnforcementStatus:
+                    if (_enforcementStatus is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Agent enforcement is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var enforcementStatus = await _enforcementStatus(cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, enforcementStatus, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.EnforcementEvaluate:
+                    if (_enforcementEvaluate is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Agent enforcement is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var enforcementRequest = DeserializePayload<EnforcementEvaluateRequest>(envelope.Payload);
+                    if (enforcementRequest is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "An enforcement evaluate payload is required.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var enforcementVerdict = await _enforcementEvaluate(
+                        enforcementRequest, actorSid, cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, enforcementVerdict, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case IpcCommandTypes.EnforcementReceipts:
+                    if (_enforcementReceipts is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Agent enforcement receipts are not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var receipts = await _enforcementReceipts(cancellationToken).ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, receipts, cancellationToken).ConfigureAwait(false);
                     break;
 
                 case IpcCommandTypes.PrivacyStatus:

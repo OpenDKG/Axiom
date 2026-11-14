@@ -59,6 +59,9 @@ public sealed class PipeServer
         Func<ThreatShareRecordRequest, CancellationToken, Task<ThreatShareQueueStatus>>? threatShareRecord = null,
         Func<string, CancellationToken, Task<NetworkRecoveryCaptureResult>>? networkRecoveryCapture = null,
         Func<string, CancellationToken, Task<NetworkRecoveryRestoreResult>>? networkRecoveryRestore = null,
+        Func<CancellationToken, Task<EnforcementStatusDto>>? enforcementStatus = null,
+        Func<EnforcementEvaluateRequest, string, CancellationToken, Task<EnforcementVerdictDto>>? enforcementEvaluate = null,
+        Func<CancellationToken, Task<EnforcementReceiptsSnapshotDto>>? enforcementReceipts = null,
         Action<string>? log = null)
         : this(
             pipeName,
@@ -89,6 +92,9 @@ public sealed class PipeServer
                 ThreatShareRecord = threatShareRecord,
                 NetworkRecoveryCapture = networkRecoveryCapture,
                 NetworkRecoveryRestore = networkRecoveryRestore,
+                EnforcementStatus = enforcementStatus,
+                EnforcementEvaluate = enforcementEvaluate,
+                EnforcementReceipts = enforcementReceipts,
             },
             log)
     {

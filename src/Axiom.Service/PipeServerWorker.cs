@@ -24,7 +24,8 @@ public sealed partial class PipeServerWorker(
     ProtectionController protection,
     ThreatShareController threatShare,
     NetworkRecoveryController networkRecovery,
-    ILogger<PipeServerWorker> logger) : BackgroundService
+    ILogger<PipeServerWorker> logger,
+    EnforcementController? enforcement = null) : BackgroundService
 {
     // Windows logs "Pipe \\.\pipe\axiom allows SID S-1-…" (unchanged wording); macOS logs the socket
     // path and its uid policy through the same message.
@@ -103,6 +104,20 @@ public sealed partial class PipeServerWorker(
                 networkRecovery.CaptureAsync(actorSid, cancellationToken),
             NetworkRecoveryRestore = (actorSid, cancellationToken) =>
                 networkRecovery.RestoreAsync(actorSid, cancellationToken),
+
+            // Agent enforcement (#322): the controller is registered by the Windows host only
+            // (ServicePlatform.ConfigureAgentEnforcement). Where it is absent the three commands
+            // answer not_supported, exactly as the dispatcher does for any null handler.
+            EnforcementStatus = enforcement is null
+                ? null
+                : cancellationToken => Task.FromResult(enforcement.GetStatus()),
+            EnforcementEvaluate = enforcement is null
+                ? null
+                : (request, actorSid, cancellationToken) =>
+                    enforcement.EvaluateAsync(request, actorSid, cancellationToken),
+            EnforcementReceipts = enforcement is null
+                ? null
+                : cancellationToken => Task.FromResult(enforcement.GetReceipts()),
         };
 
         var dispatcher = new IpcRequestDispatcher(

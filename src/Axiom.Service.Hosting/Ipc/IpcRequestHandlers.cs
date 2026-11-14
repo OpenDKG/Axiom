@@ -64,4 +64,13 @@ public sealed class IpcRequestHandlers
     public Func<string, CancellationToken, Task<NetworkRecoveryCaptureResult>>? NetworkRecoveryCapture { get; init; }
 
     public Func<string, CancellationToken, Task<NetworkRecoveryRestoreResult>>? NetworkRecoveryRestore { get; init; }
+
+    /// <summary>Policy state and receipt counters of the offline agent-enforcement controller.</summary>
+    public Func<CancellationToken, Task<EnforcementStatusDto>>? EnforcementStatus { get; init; }
+
+    /// <summary>Evaluates one host-adapter request; appends a receipt to the journal.</summary>
+    public Func<EnforcementEvaluateRequest, string, CancellationToken, Task<EnforcementVerdictDto>>? EnforcementEvaluate { get; init; }
+
+    /// <summary>Snapshot of the redacted, hash-chained enforcement receipts.</summary>
+    public Func<CancellationToken, Task<EnforcementReceiptsSnapshotDto>>? EnforcementReceipts { get; init; }
 }

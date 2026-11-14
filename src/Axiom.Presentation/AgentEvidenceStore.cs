@@ -20,6 +20,28 @@ public sealed record AgentEvidenceEvent(
 
     public string Call { get; init; } = string.Empty;
 
+    public string Channel { get; init; } = string.Empty;
+
+    public string EffectiveChannel
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Channel))
+            {
+                return Channel.Trim().ToUpperInvariant();
+            }
+
+            if (IsFailure)
+            {
+                return "FAILED_OPEN";
+            }
+
+            return string.Equals(EventType, "GUARD_BLOCKED", StringComparison.OrdinalIgnoreCase)
+                ? "HOST_DENY_SENT"
+                : "DETECTOR_ONLY";
+        }
+    }
+
     public string TimeText => Timestamp == DateTimeOffset.MinValue
         ? "—"
         : Timestamp.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
@@ -188,6 +210,7 @@ public sealed class AgentEvidenceStore
             {
                 Session = ReadString(root, "session"),
                 Call = ReadString(root, "call"),
+                Channel = ReadString(root, "channel"),
             };
         }
         catch (JsonException)

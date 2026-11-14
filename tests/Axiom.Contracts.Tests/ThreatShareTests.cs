@@ -94,11 +94,70 @@ public sealed class ThreatShareTests
     {
         Assert.True(ThreatShareVocabulary.IsSupported("domain", "malware-delivery", "fetched-by-tool"));
         Assert.True(ThreatShareVocabulary.IsSupported("hash", "phishing", "in-tool-output"));
+        Assert.True(ThreatShareVocabulary.IsSupported("domain", "unknown", "in-tool-output"));
 
         // A DNS block alone has no honest agent context, and ads are not a threat reason.
         Assert.False(ThreatShareVocabulary.IsSupported("domain", "malware-delivery", "blocked-by-dns"));
         Assert.False(ThreatShareVocabulary.IsSupported("domain", "advertising", "fetched-by-tool"));
         Assert.False(ThreatShareVocabulary.IsSupported("wallet", "phishing", "in-tool-output"));
+    }
+
+    [Fact]
+    public void Publication_eligibility_enforces_resolvers_shared_infra_and_evidence_gates()
+    {
+        var resolver = ThreatShareVocabulary.EvaluatePublicationEligibility(
+            "ip", "8.8.8.8", "command-and-control",
+            ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+            ThreatShareProofGrade.Reproduced);
+        Assert.Equal(ThreatSharePublicationEligibility.LocalOnly, resolver.Eligibility);
+        Assert.Equal("NEVER_FLAG_RESOLVER", resolver.ReasonCode);
+
+        var sharedApex = ThreatShareVocabulary.EvaluatePublicationEligibility(
+            "domain", "github.io", "phishing",
+            ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+            ThreatShareProofGrade.Reproduced);
+        Assert.Equal(ThreatSharePublicationEligibility.NeedsEvidence, sharedApex.Eligibility);
+        Assert.Equal("SHARED_HOSTING_APEX", sharedApex.ReasonCode);
+
+        var tenantSubdomain = ThreatShareVocabulary.EvaluatePublicationEligibility(
+            "domain", "evil-drop.github.io", "phishing",
+            ThreatShareEvidenceClass.HeuristicOrAiSuspected,
+            ThreatShareProofGrade.Correlated);
+        Assert.Equal(ThreatSharePublicationEligibility.NeedsOperatorReview, tenantSubdomain.Eligibility);
+
+        var cdnIp = ThreatShareVocabulary.EvaluatePublicationEligibility(
+            "ip", "104.16.1.1", "command-and-control",
+            ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+            ThreatShareProofGrade.Reproduced);
+        Assert.Equal(ThreatSharePublicationEligibility.NeedsEvidence, cdnIp.Eligibility);
+        Assert.Equal("NEVER_PROMOTE_SHARED_IP", cdnIp.ReasonCode);
+
+        var unknownReason = ThreatShareVocabulary.EvaluatePublicationEligibility(
+            "domain", "c2.example.org", "unknown",
+            ThreatShareEvidenceClass.HeuristicOrAiSuspected,
+            ThreatShareProofGrade.Correlated);
+        Assert.Equal(ThreatSharePublicationEligibility.NeedsEvidence, unknownReason.Eligibility);
+        Assert.Equal("UNSPECIFIED_THREAT_REASON", unknownReason.ReasonCode);
+
+        var candidate = new ThreatShareCandidate
+        {
+            Id = "ioc:domain:c2.example.org",
+            IndicatorType = "domain",
+            Value = "c2.example.org",
+            Reason = "command-and-control",
+            Context = "in-tool-output",
+            Source = ThreatShareSource.AiAnalyst,
+            Severity = "high",
+            NoveltyStatus = ThreatShareNoveltyStatus.PotentiallyNewLocalOnly,
+            PublicationEligibility = ThreatSharePublicationEligibility.NeedsOperatorReview,
+        };
+        Assert.True(candidate.CanPublishToCommunity);
+        Assert.Equal("Potentially new (local graph only)", candidate.NoveltyLabel);
+        Assert.Contains("CC0 1.0 replicated statement", candidate.PublicPayloadPreview, StringComparison.Ordinal);
+
+        var retracted = new ThreatShareItem(candidate, ThreatShareState.Retracted, string.Empty, DateTimeOffset.UtcNow);
+        Assert.Equal("retracted", retracted.StateLabel);
+        Assert.Contains("CC0 replicas", retracted.StateDetail, StringComparison.Ordinal);
     }
 
     [Fact]
