@@ -85,7 +85,19 @@ public static class AgentProtectionSelfTest
     public static IReadOnlyList<ProtectionCheck> DefaultChecks() =>
     [
         new ProtectionCheck("allowed read", ExpectBlock: false, "read", @"C:\AxiomSelfTest\allowed.txt"),
-        new ProtectionCheck("protected read", ExpectBlock: true, "read", @"C:\Users\lab\.ssh\id_rsa"),
+
+        // The protected read must live in the *signed-in* user's profile. A hard-coded lab path
+        // (C:\Users\lab\...) made every other account report UNPROTECTED even though block mode
+        // and the .env write blocked.
+        new ProtectionCheck(
+            "protected read",
+            ExpectBlock: true,
+            "read",
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".ssh",
+                "id_rsa")),
+
         new ProtectionCheck("protected write", ExpectBlock: true, "write", @"C:\AxiomSelfTest\.env"),
     ];
 
