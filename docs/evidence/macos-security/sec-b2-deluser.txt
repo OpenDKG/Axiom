@@ -1,0 +1,15 @@
+2026-11-13 17:53:20.022 sysadminctl[13114:148647] ----------------------------
+2026-11-13 17:53:20.022 sysadminctl[13114:148647] No clear text password or interactive option was specified (adduser, change/reset password will not allow user to use FDE) !
+2026-11-13 17:53:20.022 sysadminctl[13114:148647] ----------------------------
+2026-11-13 17:53:20.132 sysadminctl[13114:148647] Killing all processes for UID 502
+2026-11-13 17:53:20.135 sysadminctl[13114:148647] Removing axtest2's home at /Users/axtest2
+2026-11-13 17:53:20.154 sysadminctl[13114:148647] Deleting Public share point for axtest2
+2026-11-13 17:53:20.206 sysadminctl[13114:148647] Deleting record for axtest2
+2026-11-13 17:53:20.219 sysadminctl[13114:148647] AOSKit INFO: Disabling BTMM for user, no zone found for uid=502, usersToZones: (null)
+id: axtest2: no such user
+ls: /Users/axtest2: No such file or directory
+== [01:53:20.516Z] final state: {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372901,"ackedGeneration":1794372901,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}
+	state = running
+	pid = 12950
+*	*	-	com.axiom.firewall.filter (0.17.0/10)	Axiom Firewall Filter	[activated enabled]
+0.17.0
