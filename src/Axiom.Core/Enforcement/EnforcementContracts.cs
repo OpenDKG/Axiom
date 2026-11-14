@@ -116,6 +116,12 @@ public sealed record BlackboxGuardSignal
 
     /// <summary>Guard-side identifier for audit correlation.</summary>
     public string? SignalId { get; init; }
+
+    /// <summary>
+    /// True when the signal comes solely from a community/IOC feed rather than a local rule.
+    /// Community-only signals remain advisory unless an explicit local policy rule blocks.
+    /// </summary>
+    public bool CommunityOnly { get; init; }
 }
 
 /// <summary>Deterministic verdict for one request.</summary>
@@ -163,4 +169,19 @@ public static class EnforcementReasonCodes
     public const string RuleAllow = "ENF-RULE-ALLOW";
     public const string NoRuleMonitor = "ENF-NO-RULE-MONITOR";
     public const string NoRuleAsk = "ENF-NO-RULE-ASK";
+
+    /// <summary>Community or IOC signal is advisory only without an explicit local block rule.</summary>
+    public const string CommunityAdvisoryOnly = "ENF-COMMUNITY-ADVISORY";
+
+    /// <summary>No enforcement policy is enabled or present on this host.</summary>
+    public const string Disabled = "ENF-DISABLED";
+
+    /// <summary>The policy file exists but could not be parsed or validated.</summary>
+    public const string PolicyInvalid = "ENF-POLICY-INVALID";
+
+    /// <summary>A request id was reused for a different action or policy revision.</summary>
+    public const string ReplayMismatch = "ENF-REPLAY-MISMATCH";
+
+    /// <summary>The caller identity was missing or not the authenticated pipe user.</summary>
+    public const string Unauthenticated = "ENF-UNAUTHENTICATED";
 }
