@@ -235,3 +235,29 @@ loading. The journal shows `Startup reconciliation: …` and `BPF layer: reconci
 previous daemon: …`. Limitation: the origin cgroup of a process herded by the killed instance lives only
 in memory, so on release it goes to its parent's cgroup, else the cgroup root — never left in
 `axiom.slice`, but not necessarily back in its original systemd unit.
+
+## Upstream enforcement receipts (`main` `16229f4`) and the Linux signals
+
+Upstream's receipt results (`src/Axiom.Core/Enforcement/EnforcementReceipt.cs`) are distinct states:
+`DETECTED`, `HOST_DENY_SENT`, `HOST_DENY_VERIFIED`, `DENY_REQUESTED`, `OS_DENY_VERIFIED`, `UNVERIFIED`,
+`GUARD_UNAVAILABLE`. The Windows agent firewall enforcer treats a rule read-back as presence only and needs an
+observed absent side effect (dual-destination canary) before `OS_DENY_VERIFIED`.
+
+The Linux daemon emits **no** receipts: no enforcement controller is registered
+(`ServicePlatform.ConfigureAgentEnforcement` registers nothing on Unix), no host adapter is wired and there
+are no agent-scoped rules. `enforcement.status`, `enforcement.evaluate` and `enforcement.receipts` answer
+`not_supported` to root and the install owner and `unauthorized` to any other uid. The Windows E4 firewall
+enforcer and the E3 broker prototype are not ported.
+
+How the existing per-rule signals relate to that vocabulary, for when the wiring is built:
+
+| Linux signal | Strength | Receipt state it may support |
+|---|---|---|
+| `NftRuleReadBack = true` | the rule is installed in `table inet axiom` and was read back; not race-free for fresh short-lived processes | `DENY_REQUESTED` at most; never `OS_DENY_VERIFIED` |
+| `ConnectTimeBlockingProven = true` | BPF programs attached, exe key present in the map on read-back, kernel / user-space key self-check passed | precondition for `OS_DENY_VERIFIED`, not sufficient alone (still presence) |
+| `scripts/linux/canary.sh` (disposable netns, real IPv4 and IPv6, fresh processes) | observed absent side effect, operator-run, own probe executables | the kind of evidence `OS_DENY_VERIFIED` needs; today it is not bound to a rule's generation, has no permitted control destination in the same run and writes no receipt |
+| Degraded / Pending (BPF detached or neutralised, stale map removal, unprovable exe key on overlayfs or in another namespace, executable replaced, scoped or inbound nft-only rule, table flushed) | enforcement not proven | `UNVERIFIED` (or `DENY_REQUESTED` for an nft-only rule that is read back) |
+
+Deferred: a Linux host adapter, the controller and journal on the daemon (actor and per-user policy ownership
+under a root daemon need a maintainer decision), and a daemon-run dual-destination canary that could justify
+`OS_DENY_VERIFIED`. Canary runs never read a reporter key and publish nothing.

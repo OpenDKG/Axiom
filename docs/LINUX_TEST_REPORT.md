@@ -567,3 +567,69 @@ status/reason, and a fresh `curl --connect-timeout 1 http://10.231.0.2:18080/` (
 | R5-H9 | `70c7ee8`, `nft flush ruleset` (+ iptables restore) | PASS | absent 48 samples (0–4.7 s), same missing reason, generation 67 verified; canary 0/268; iptables rules 71/116 before and after |
 | R5-H10 | `70c7ee8`, `rule.verify` around an external delete | PASS | before `nftRuleReadBack True enforcementVerified True`; right after `presentInOs False nftRuleReadBack False enforcementVerified False` (`connectTimeBlockingProven True`: the BPF layer is still attached); table back after ~4.0 s, all True |
 | R5-H11 | R4-H4 script again at `70c7ee8` | PASS | `WARN live enforcement: … table inet axiom is present (generation 70) and nftables enforces the stored rules; enforcement is degraded by the connect-time BPF layer: 1 rule removal(s) …`; no "missing"; after restart all PASS |
+
+## New `main` baseline `16229f4` through the macOS branch `c62ad14` (2026-11-14, branch `buba/linux`): merge `db876a7`, tests `740ea7c`, merge fix `a507b64`
+
+Author-run on project machines (Ubuntu 24.04 host, kernel 7.0.0-42-generic, .NET SDK 10.0.403); not GitHub CI.
+The merge brings upstream's `enforcement.status` / `enforcement.evaluate` / `enforcement.receipts` and their
+classification in the shared dispatcher (`status` and `receipts` private read, `evaluate` write, none public).
+The Linux daemon registers no enforcement controller, so an authorized caller gets upstream's `not_supported`.
+
+### Merge and unit tests
+
+| ID | Check | Result | Evidence |
+|---|---|---|---|
+| M16-U1 | `git merge --no-ff --signoff c62ad14` into `3dd31a4` | clean | no textual conflict; merge commit `db876a7` |
+| M16-U2 | first gate at `740ea7c` | **red, fixed** | `build Axiom.sln rc=1 0 Warning(s) 1 Error(s)`: `EnforcementIpcAuthorizationTests.cs(6,34): error CS0234: The type or namespace name 'Ipc' does not exist in the namespace 'Axiom.Infrastructure.MacOS'` (the merged macOS test imports the namespace that this branch extracted into `Axiom.Infrastructure.Unix.Ipc`). `a507b64` drops the stale `using`; no test change |
+| M16-U3 | `LinuxEnforcementCommandAuthorizationTests` (Unix.Tests, 15 cases) | PASS | per command: never `PublicRead`; uid 0 and the install owner permitted, another uid not, under `UnixAccountRange.Linux`; without an install record only root. Unix.Tests 32 → 47 |
+| M16-U4 | `LinuxEnforcementIpcAuthorizationTests` (Linux.Tests, 5 cases, real Unix socket, `LinuxServicePaths`) | PASS | second uid: `unauthorized` for the three commands, handler call count 0, the evaluate target path is neither echoed nor logged, `Denied 'enforcement.status' for uid:1001: private read` / `… 'enforcement.evaluate' for uid:1001: write` logged; uid 0 and owner on a daemon without enforcement handlers: `not_supported`. Linux.Tests 32 → 37 |
+| M16-U5 | opt-in test with a real second account and SO_PEERCRED: `AXIOM_TEST_SECOND_USER=axr3test dotnet test tests/Axiom.Infrastructure.Linux.Tests -c Release` | PASS | `Passed … RealSecondUidGetsUnauthorizedForEnforcementCommandsOverSoPeerCred`; whole project with the account present `Passed: 37` in 3 of 3 further runs. In the very first run with the freshly created account the older opt-in test `LinuxSocketIpcTests.SecondUidGetsPublicHealthOnlyOverSoPeerCred` failed once (message not captured); it passed in the 4 runs that followed and the failure was not reproduced |
+
+### Gate at `a507b64` (`~/vms/macos-dev/build-lock scripts/ci/run-all.sh <out>`, `-c Release`)
+
+| ID | Check | Result | Evidence |
+|---|---|---|---|
+| M16-G1 | builds | PASS | `build Axiom.sln rc=0 0 Warning(s) 0 Error(s)`, `build Axiom.Portable.slnx rc=0 0 Warning(s) 0 Error(s)` |
+| M16-G2 | test projects | PASS | Linux.Nft 153/153, Linux 37/37, Unix 47/47, Desktop.Avalonia.Linux 51/51, Infrastructure.MacOS 248/248, Desktop.Avalonia.MacOS 35/35, UI.Avalonia 57/57 in each of 3 runs, Contracts 143/143, McpServer 33/33, Persistence 21/21, Presentation 117/117 |
+| M16-G3 | Windows-only failures on Linux, by name, against pristine `main` `16229f4` on the same host | no test that passes on `main` fails here | Core 12 failed of 151: the same 12 names. Infrastructure.Windows 25 failed of 70 (`main`: 27): the same names minus `DnsProxyTests.Proxy_blocks_a_matching_domain_without_contacting_upstream` and `DnsProxyTests.Proxy_blocks_matching_domains_over_tcp`, which pass here (DNS proxy behind the platform seam). Service 15 failed of 96 (`main`: 15 of 87): `PrivacyShieldTests.Failed_reconfiguration_keeps_previous_resolver_and_persisted_settings` passes here; `FirewallRuleCoordinatorTests.Apply_pending_is_stored_as_pending_not_applied` fails here and does not exist on `main` (a test added by the macOS branch in the test class whose other cases already fail on a Linux host; it fails the same way on `c62ad14`). `Axiom.UI.Tests` (WPF) aborts on Linux on both |
+
+### Live second-user check on the installed daemon (`.deb` built at `a507b64`)
+
+`scripts/linux/package.sh deb` → `build/linux/axiom_0.17.0_amd64.deb` (sha256 `689f507d…e6b8ab66`), `sudo -n dpkg -i`;
+installed `Axiom.Service.Hosting.dll` sha256 `c6bbe6dd…` = build. Socket `/run/axiom/axiom.sock` `root:root 666`
+(authorization is per connection by peer uid, not by socket mode). Client: `scripts/linux/axipc.py`
+(`python3 -I`), one request per connection; evaluate payload
+`{"requestId":"req-live-1","agentId":"opencode","kind":"readFile","target":"/home/buba/.ssh/canary-not-a-real-file"}`.
+Second user: `sudo -n useradd -m axr3test` (uid 1001, only its own group, no password, `not allowed to run sudo`),
+client run with `sudo -n -u axr3test`, then `sudo -n userdel -r axr3test` (`getent passwd axr3test` exit 2, home gone).
+
+| ID | Caller | Command | Result | Raw reply (id removed; health result shortened) |
+|---|---|---|---|---|
+| M16-L1 | owner uid 1000 | `serviceHealth` | ok | `{"ok":true,"result":{"status":"running","connectionCount":268,"processCount":27,…` |
+| M16-L2 | owner | `snapshot` | ok | `"ok":true,"result":{"capturedUtc":"2026-11-14T14:36:26…","connections":[…` |
+| M16-L3 | owner | `enforcement.status` | `not_supported` | `{"ok":false,"result":null,"error":{"code":"not_supported","message":"Agent enforcement is not available in this build."},"currentRevision":null}` |
+| M16-L4 | owner | `enforcement.receipts` | `not_supported` | `…"code":"not_supported","message":"Agent enforcement receipts are not available in this build."…` |
+| M16-L5 | owner | `enforcement.evaluate` | `not_supported` | `…"code":"not_supported","message":"Agent enforcement is not available in this build."…` |
+| M16-L6 | root (`sudo -n`) | `serviceHealth`, `snapshot` | ok | as M16-L1 / M16-L2 |
+| M16-L7 | root | `enforcement.status`, `.receipts`, `.evaluate` | `not_supported` ×3 | the same three replies as M16-L3..L5 |
+| M16-L8 | `axr3test` uid 1001 | `serviceHealth` | ok, redacted | `{"ok":true,"result":{"status":"running","connectionCount":0,"processCount":0,"limitations":["private fields redacted: this caller may read service health but not machine-wide activity"]},"error":null,"currentRevision":null}` |
+| M16-L9 | `axr3test` | `snapshot` | `unauthorized` | `…"code":"unauthorized","message":"This command discloses machine-wide activity and is only allowed for root, the user who installed Axiom (uid 1000) and members of the axiom, sudo or wheel groups; uid 1001 may only read public service health."…` |
+| M16-L10 | `axr3test` | `enforcement.status` | `unauthorized` | the same private-read message as M16-L9, `"result":null` |
+| M16-L11 | `axr3test` | `enforcement.receipts` | `unauthorized` | the same private-read message, `"result":null` |
+| M16-L12 | `axr3test` | `enforcement.evaluate` | `unauthorized` | `…"code":"unauthorized","message":"This command changes machine-wide settings and is only allowed for root, the user who installed Axiom (uid 1000) and members of the axiom, sudo or wheel groups; uid 1001 may only read public service health."…` |
+
+As the messages say, members of the `axiom`, `sudo` or `wheel` groups are treated like the installing user by the
+existing Linux policy; that also applies to the three enforcement commands. Not covered by this run: a second
+user who is a member of one of those groups.
+
+### Live sanity of the merged build
+
+| ID | Step | Result | Evidence |
+|---|---|---|---|
+| M16-S1 | `sudo -n /usr/libexec/axiom/axiomd --doctor` | PASS | exit 0, `Result: all checks passed.`, no WARN / FAIL line; `PASS bpf layer: bpftool v7.7.0; live layer active, generation 78, maps read back verified; … 4/4 program pins at /sys/fs/bpf/axiom.` |
+| M16-S2 | `sudo -n bpftool cgroup show /sys/fs/cgroup` | 4 attached | `axiom_connect4`, `axiom_connect6`, `axiom_sendmsg4`, `axiom_sendmsg6` (ids 2545–2548, `multi`) |
+| M16-S3 | `sudo -n scripts/linux/canary.sh unscoped` | 0 slips | both rules `applied connectTimeBlockingProven=True`; `canary unscoped curl ipv4: slipped 0/50 blocked 50/50`, `curl ipv6: 0/50`, `python ipv4: 0/50`, `python ipv6: 0/50` |
+| M16-S4 | `sudo -n scripts/linux/canary.sh --cleanup`; host state | clean | `canary: topology and /opt/axiom-canary removed`; no netns, no `axc0`; `axiomd` active; `protection.status` `enabled false`, `ownedRuleCount 0`; `privacy.status` `Disabled`; `rules.query` `managedRuleCount 0`; `resolvectl status` identical to before the install (eno2 DNS 192.168.70.1) |
+
+Not verified by this round: Debian, Wayland / KDE, the rollback / upgrade / uninstall matrix, arm64, package
+signing, Fedora at this head (the last Fedora VM run is `788c709`).
