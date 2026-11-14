@@ -166,6 +166,13 @@ public sealed class LinuxDoctor
             ? new Bpf.BpfExeKeyResolution(null, $"{_targets.MountInfoPath} is unreadable", null)
             : Bpf.BpfExeKey.Resolve(real, stat, Bpf.MountInfoTable.Parse(mountInfo));
         var statDev = string.Create(CultureInfo.InvariantCulture, $"{stat.DevMajor}:{stat.DevMinor}");
+        if (resolution.Key is null && resolution.Mount is { FsType: "btrfs" })
+        {
+            // PR #276 round 3: not a fault, a documented boundary (docs/LINUX_EBPF.md §3.2).
+            checks.Add(new DoctorCheck(DoctorCheck.Skip, "bpf exe key", $"{real}: {resolution.Detail}; exe rules on btrfs are nft-only (not race-free) plus the herded-cgroup connect-time key."));
+            return;
+        }
+
         if (resolution.Key is not { } key)
         {
             checks.Add(new DoctorCheck(DoctorCheck.Warn, "bpf exe key", $"{real}: {resolution.Detail}; exe rules on such paths are left to nftables (cgroup key only)."));

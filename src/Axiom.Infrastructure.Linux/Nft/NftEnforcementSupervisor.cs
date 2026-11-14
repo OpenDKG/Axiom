@@ -216,6 +216,13 @@ public sealed class NftEnforcementSupervisor
     public async Task<bool> WatchOnceAsync(CancellationToken ct)
     {
         var republished = await WatchTableAsync(ct).ConfigureAwait(false);
+        if (_layer is { Active: true } && _adapter.StaleExeKeyRules() is { Count: > 0 } replaced)
+        {
+            // An executable was replaced at its path (package upgrade, rename(2)): the old exe key no
+            // longer matches the new binary. Re-resolve and rewrite the maps from the stored rules.
+            _log($"BPF exe key(s) re-resolved: the executable of rule(s) {string.Join(", ", replaced)} changed identity since the last sync; resyncing the maps.");
+            await _adapter.ResyncLayerAsync(ct).ConfigureAwait(false);
+        }
         if (_layer is { Neutralised: true } or { StaleProgramsAttached: true })
         {
             _log(_layer.StaleProgramsAttached

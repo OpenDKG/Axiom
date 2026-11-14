@@ -224,8 +224,8 @@ public sealed class BpfExeKeyTests
         });
 
         var check = new LinuxDoctor(runner, targets, isRoot: false).Collect().Single(check => check.Name == "bpf exe key");
-        Assert.Equal(DoctorCheck.Pass, check.Status);
-        Assert.Contains("btrfs", check.Detail, StringComparison.Ordinal);
+        Assert.Equal(DoctorCheck.Skip, check.Status); // a documented boundary, neither PASS nor a fault
+        Assert.Contains("ambiguous on btrfs subvolumes", check.Detail, StringComparison.Ordinal);
         Assert.Contains("0:33", check.Detail, StringComparison.Ordinal);
         Assert.Contains("0:35", check.Detail, StringComparison.Ordinal);
         Assert.Contains("mountinfo", check.Detail, StringComparison.Ordinal);

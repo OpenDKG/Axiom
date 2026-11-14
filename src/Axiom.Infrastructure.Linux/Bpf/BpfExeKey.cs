@@ -164,7 +164,15 @@ public static class BpfExeKey
 
         if (string.Equals(mount.FsType, "btrfs", StringComparison.Ordinal))
         {
-            return new BpfExeKeyResolution(key, $"dev {mount.Dev} from mountinfo ({where}; stat {statDev} is the btrfs subvolume device)", mount);
+            // PR #276 round 3, item 5 (proven on Fedora 45): btrfs inode numbers are unique only within a
+            // subvolume, and every subvolume shares the superblock s_dev the kernel side reads. Two unrelated
+            // executables with the same inode number in different subvolumes therefore share the key, so a
+            // block of one blocks the other at connect(). The kernel key cannot tell them apart without a
+            // BPF-side subvolume id; leave the rule to nftables (its herded cgroup key still applies).
+            return new BpfExeKeyResolution(
+                null,
+                string.Create(CultureInfo.InvariantCulture, $"exe key ambiguous on btrfs subvolumes: dev {mount.Dev} ino {stat.Ino} (superblock dev from mountinfo; {where}; stat {statDev} is the subvolume device) would also match inode {stat.Ino} of any other subvolume on this filesystem, so the connect-time exe verdict is not used"),
+                mount);
         }
 
         return new BpfExeKeyResolution(null, $"stat dev {statDev} of {realPath} does not match the superblock dev {mount.Dev} of {where}; the connect-time key cannot be proven", mount);

@@ -34,6 +34,12 @@ public interface IVerdictLayer
     bool StaleProgramsAttached => false;
 
     /// <summary>
+    /// Rules whose executable identity changed since the last sync (the file at the rule's path was
+    /// replaced, e.g. by a package upgrade's rename(2)): the written exe key no longer matches it.
+    /// </summary>
+    IReadOnlyList<Guid> StaleExeKeys(IReadOnlyList<ManagedRule> rules) => [];
+
+    /// <summary>
     /// Reconciles the layer's state with the enabled rules of this generation (bounded retries,
     /// read-back verification, neutralisation on persistent failure) and reports the outcome.
     /// Never throws for a bpftool failure.

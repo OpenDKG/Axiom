@@ -622,7 +622,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
     /// and its last sync wrote and read back a verdict for this rule; otherwise the rule is nft-only and
     /// the reason says why. Null for disabled rules.
     /// </summary>
-    public static (bool? Proven, string? Reason) Coverage(RuleSpec spec, IVerdictLayer? layer, LayerSyncResult? sync)
+    public static (bool? Proven, string? Reason) Coverage(RuleSpec spec, IVerdictLayer? layer, LayerSyncResult? sync, IReadOnlyCollection<Guid>? staleExeKeys = null)
     {
         ArgumentNullException.ThrowIfNull(spec);
         if (!spec.Enabled)
@@ -659,6 +659,10 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         {
             why = "the BPF maps hold stale entries; the layer is not trusted";
         }
+        else if (staleExeKeys?.Contains(spec.ManagedRuleId) == true)
+        {
+            why = "the executable at this path was replaced (new inode) since its connect-time key was written; the daemon re-resolves it on the next watch tick";
+        }
         else if (sync.CoveredRules.Contains(spec.ManagedRuleId))
         {
             return sync is { Attached: true, Applied: true, Verified: true }
@@ -682,6 +686,9 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
     }
 
     private (bool? Proven, string? Reason) CoverageOf(RuleSpec spec) => Coverage(spec, VerdictLayer, LayerSync);
+
+    /// <summary>Rules whose executable was replaced since the last layer sync (re-resolved by the watch tick).</summary>
+    public IReadOnlyList<Guid> StaleExeKeyRules() => VerdictLayer is { Active: true } layer ? layer.StaleExeKeys(LoadState().Rules) : [];
 
     /// <summary>Live connect-time layer state for the capability report (and <c>--doctor</c> over IPC).</summary>
     public ConnectTimeLayerReport DescribeConnectTimeLayer(IReadOnlyList<ManagedRule> rules)
@@ -1015,7 +1022,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         }
 
         var nftReadBack = report.State is FilterEnforcementState.Verified or FilterEnforcementState.Degraded && readback.Generation == _published && counters.Count > 0 && rejection is null && cgroupExists;
-        var coverage = stored is not null ? CoverageOf(stored.Spec) : (null, null);
+        var coverage = stored is not null ? Coverage(stored.Spec, VerdictLayer, LayerSync, StaleExeKeyRules()) : (null, null);
         if (coverage.Proven == false && stored is { Spec.Enabled: true })
         {
             notes.Add("Coverage: " + coverage.Reason + ".");

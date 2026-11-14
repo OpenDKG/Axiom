@@ -127,6 +127,35 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     }
 
     /// <inheritdoc />
+    public IReadOnlyList<Guid> StaleExeKeys(IReadOnlyList<ManagedRule> rules)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        if (!Active)
+        {
+            return [];
+        }
+
+        var plan = BpfVerdictPlanner.Plan(rules.Select(rule => rule.Spec), Generation, _cgroups, _inodes);
+        HashSet<string> applied;
+        lock (_stateGate)
+        {
+            applied = _applied.Values.Where(entry => entry.Map == BpfLayout.ExeMap).Select(entry => entry.KeyHex).ToHashSet(StringComparer.Ordinal);
+        }
+
+        var desired = plan.Entries.Where(entry => entry.Map == BpfLayout.ExeMap).ToList();
+        var desiredKeys = desired.Select(entry => entry.KeyHex).ToHashSet(StringComparer.Ordinal);
+        List<BpfMapEntry> stale;
+        lock (_stateGate)
+        {
+            stale = desired.Where(entry => !applied.Contains(entry.KeyHex))
+                .Concat(_applied.Values.Where(entry => entry.Map == BpfLayout.ExeMap && !desiredKeys.Contains(entry.KeyHex)))
+                .ToList();
+        }
+
+        return stale.Select(entry => BpfLayout.ParseRuleId(Convert.ToHexStringLower(entry.Value.AsSpan(8, 16)))).OfType<Guid>().Distinct().ToList();
+    }
+
+    /// <inheritdoc />
     public bool StaleProgramsAttached
     {
         get
