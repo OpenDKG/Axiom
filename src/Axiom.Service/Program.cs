@@ -75,6 +75,10 @@ builder.Services.AddHostedService<NetworkRecoveryWorker>();
 builder.Services.AddSingleton<FirewallRuleCoordinator>();
 builder.Services.AddSingleton(new ProtectionSettingsStore());
 builder.Services.AddSingleton<ProtectionController>();
+builder.Services.AddSingleton<EnforcementController>();
+builder.Services.AddSingleton(provider => new AgentFirewallEnforcer(
+    provider.GetRequiredService<FirewallRuleCoordinator>(),
+    provider.GetRequiredService<EnforcementController>().ReceiptJournal));
 builder.Services.AddHostedService<ProtectionWorker>();
 builder.Services.AddSingleton<PrivacyShieldSettingsStore>();
 builder.Services.AddSingleton<ThreatShareController>();

@@ -264,6 +264,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     /// <summary>Indicators Axiom proposes to share; nothing is sent until sharing is on.</summary>
     public ObservableCollection<ThreatShareItem> ThreatShareCandidates { get; } = [];
 
+    /// <summary>Recently shared reports that the operator may explicitly retract.</summary>
+    public ObservableCollection<ThreatShareItem> SubmittedThreatShares { get; } = [];
+
     [ObservableProperty]
     private string _threatShareQueueText = "Loading the indicator preview...";
 
@@ -272,6 +275,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     [ObservableProperty]
     private bool _hasThreatShareCandidates;
+
+    [ObservableProperty]
+    private bool _hasSubmittedThreatShares;
 
     [ObservableProperty]
     private bool _canSubmitThreatShare;
@@ -1121,6 +1127,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             .Where(item => item.State is ThreatShareState.Pending or ThreatShareState.Deferred
                 or ThreatShareState.Unverified)
             .Take(8)
+            .Select(item =>
+            {
+                var novelty = ThreatShareCli.InspectLocalGraphNovelty(item.Candidate.Id);
+                return novelty == item.Candidate.NoveltyStatus
+                    ? item
+                    : item with { Candidate = item.Candidate with { NoveltyStatus = novelty } };
+            })
             .ToList();
 
         ThreatShareCandidates.Clear();
@@ -1129,8 +1142,20 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ThreatShareCandidates.Add(item);
         }
 
+        var submittedItems = status.Items
+            .Where(item => item.State == ThreatShareState.Submitted)
+            .OrderByDescending(item => item.AttemptedUtc ?? item.Candidate.ObservedUtc)
+            .Take(5)
+            .ToList();
+        SubmittedThreatShares.Clear();
+        foreach (var item in submittedItems)
+        {
+            SubmittedThreatShares.Add(item);
+        }
+
         HasThreatShareCandidates = pending.Count > 0;
-        CanSubmitThreatShare = status.Items.Any(IsReady) &&
+        HasSubmittedThreatShares = submittedItems.Count > 0;
+        CanSubmitThreatShare = pending.Any(item => IsReady(item) && item.Candidate.CanPublishToCommunity) &&
                                ThreatSharingEnabled &&
                                status.TodaySubmitted < status.DailyLimit;
         CanShareThreatShareItem = pending.Count > 0 &&
@@ -1149,12 +1174,16 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ? $" {status.Unverified} awaiting confirmation: the reporter outcome was unknown, so retry only after you check."
             : string.Empty;
 
+        var sandboxNote = ThreatShareCli.IsSandboxModeEnabled()
+            ? "Sandbox mode is active."
+            : "Shared statements are signed under CC0 1.0 and replicated; curators exclusively decide novelty.";
+
         ThreatShareQueueText =
             $"{status.Pending} waiting for your review, {status.Submitted} shared in total, " +
             $"{status.TodaySubmitted}/{status.DailyLimit} today.{deferred}{unverified} " +
             (ThreatSharingEnabled
-                ? "Sharing is on; every share is checked locally (reporter terms, signing key, category, novelty) before anything is signed."
-                : "Sharing is off; nothing is signed or sent.") +
+                ? $"Sharing is on; every share is checked locally (reporter terms, signing key, category, novelty) before anything is signed. {sandboxNote}"
+                : $"Sharing is off; nothing is signed or sent. {sandboxNote}") +
             consent;
     }
 
@@ -1166,10 +1195,19 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             return Task.CompletedTask;
         }
 
-        var pending = status.Items
-            .Where(IsReady)
+        var pending = ThreatShareCandidates
+            .Where(item => IsReady(item) && item.Candidate.CanPublishToCommunity)
             .Take(Math.Max(0, status.DailyLimit - status.TodaySubmitted))
             .ToList();
+        if (pending.Count == 0 && ThreatShareCandidates.Any(IsReady))
+        {
+            var reason = ThreatShareCandidates.First(IsReady).Candidate.EligibilityExplanation;
+            ThreatShareActionText = string.IsNullOrWhiteSpace(reason)
+                ? "Queued candidates require stronger evidence before community publication."
+                : reason;
+            return Task.CompletedTask;
+        }
+
         return SubmitThreatShareItemsAsync(pending);
     }
 
@@ -1178,6 +1216,19 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     {
         if (item is null)
         {
+            return Task.CompletedTask;
+        }
+
+        if (item.State == ThreatShareState.Submitted)
+        {
+            return RetractThreatShareItemAsync(item);
+        }
+
+        if (!item.Candidate.CanPublishToCommunity)
+        {
+            ThreatShareActionText = string.IsNullOrWhiteSpace(item.Candidate.EligibilityExplanation)
+                ? "This indicator is kept local until stronger evidence is attached."
+                : item.Candidate.EligibilityExplanation;
             return Task.CompletedTask;
         }
 
@@ -1196,6 +1247,69 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         return SubmitThreatShareItemsAsync([item]);
+    }
+
+    [RelayCommand]
+    private Task RetractThreatShareAsync(ThreatShareItem? item) =>
+        item is null || item.State != ThreatShareState.Submitted
+            ? Task.CompletedTask
+            : RetractThreatShareItemAsync(item);
+
+    private async Task RetractThreatShareItemAsync(ThreatShareItem item)
+    {
+        if (_serviceClient is null || _threatShareSubmitting)
+        {
+            return;
+        }
+
+        var confirmed = await _ui.ConfirmAsync(
+            "Retract community report",
+            $"Send a signed retraction for {item.Candidate.Id}?\n\n" +
+            "Conforming Blackbox nodes stop counting your report, though existing CC0 replicas on the network cannot be erased.",
+            "Retract report",
+            destructive: true,
+            CancellationToken.None).ConfigureAwait(true);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        _threatShareSubmitting = true;
+        ThreatShareActionText = $"Submitting retraction for {item.Candidate.Value}...";
+        try
+        {
+            var result = await _cli.RetractAsync(item.Candidate.Id, CancellationToken.None).ConfigureAwait(true);
+            if (result.Status != ThreatShareReportStatus.Retracted)
+            {
+                ThreatShareActionText = $"Retraction status: {result.Outcome}";
+                return;
+            }
+
+            var latest = await _serviceClient
+                .SendAsync<ThreatShareQueueStatus>(
+                    IpcCommandTypes.ThreatShareRecord,
+                    new ThreatShareRecordRequest
+                    {
+                        Id = item.Candidate.Id,
+                        Submitted = false,
+                        Retracted = true,
+                        Outcome = result.Outcome,
+                    },
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyThreatShareStatus(latest);
+            ThreatShareActionText = $"Retracted {item.Candidate.Value}. {result.Outcome}";
+        }
+        catch (Exception exception) when (exception is
+                     ServiceUnavailableException or TimeoutException or
+                     System.Text.Json.JsonException or System.IO.IOException)
+        {
+            ThreatShareActionText = "Retraction failed: " + exception.Message;
+        }
+        finally
+        {
+            _threatShareSubmitting = false;
+        }
     }
 
     private static bool IsReady(ThreatShareItem item) =>
@@ -1222,9 +1336,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             return;
         }
 
-        if (items.Count == 0)
+        var publishable = items.Where(item => item.Candidate.CanPublishToCommunity).ToList();
+        var heldLocal = items.Count - publishable.Count;
+        if (publishable.Count == 0)
         {
-            ThreatShareActionText = "Nothing is waiting for review.";
+            ThreatShareActionText = heldLocal > 0
+                ? $"Kept {heldLocal} item(s) local: {items[0].Candidate.EligibilityExplanation}"
+                : "Nothing is waiting for review.";
             return;
         }
 
@@ -1243,7 +1361,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             var rejected = 0;
             var capReached = false;
             ThreatShareQueueStatus? latest = null;
-            foreach (var item in items)
+            foreach (var item in publishable)
             {
                 var preflight = ThreatSharePreflight.Evaluate(
                     item.Candidate, ThreatSharingEnabled, consent, key, ruleset);

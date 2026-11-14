@@ -123,7 +123,7 @@ public sealed class EnforcementPolicyEvaluator
             };
         }
 
-        if (guard is { IsAvailable: true, IsBlock: true })
+        if (guard is { IsAvailable: true, IsBlock: true, CommunityOnly: false })
         {
             return Verdict(
                 request,
@@ -166,6 +166,17 @@ public sealed class EnforcementPolicyEvaluator
                         boundary),
                 };
             }
+        }
+
+        if (guard is { IsAvailable: true, IsBlock: true, CommunityOnly: true })
+        {
+            return Verdict(
+                request,
+                EnforcementDecision.Audit,
+                GuardRuleId,
+                EnforcementReasonCodes.CommunityAdvisoryOnly,
+                boundary,
+                signalId: guard.SignalId);
         }
 
         return mode == EnforcementMode.Ask

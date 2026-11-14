@@ -1,7 +1,8 @@
 # Enforcement handoff tracker
 
 Status of the independent agent enforcement handoff (v2) and the #221–#231 remediation. Updated
-2026-11-11. `verified` means behaviour was observed on a real host; unit tests alone are `addressed`.
+2026-11-14. `verified` means behaviour was observed on a real host/VM; unit or mocked canary tests
+alone are `addressed` until run live against a guest VM build.
 
 ## Remediation issues
 
@@ -9,29 +10,29 @@ Status of the independent agent enforcement handoff (v2) and the #221–#231 rem
 |---|---|---|
 | #221 manual sharing | verified | 0.10.17, no timer; per-item Share/Send now |
 | #222 evidence-bound IOCs | verified | 0.10.18; prose never scanned; fails closed |
-| #223 URL/IP sanitisation | addressed | 0.10.19 strips userinfo/query/fragment; domain-only default still in Draft #249 |
-| #224 retry taxonomy | addressed | 0.10.20 deferred/backoff; ambiguous outcome in Draft #254 |
+| #223 URL/IP sanitisation | addressed | 0.10.19 strips userinfo/query/fragment; Batch 1 (`3d2b2f7`) adds shared CDN/resolver/provenance gating |
+| #224 retry taxonomy | addressed | 0.10.20 deferred/backoff; Batch 1 (`3d2b2f7`) adds explicit retract taxonomy & CC0 notice |
 | #225 pinned DKG | verified | 0.10.21, lockfile, auto-update disabled |
 | #226 node reuse | verified | 0.10.25 reuses Blackbox node |
-| #227 endpoint identity | verified | 0.10.22 schema; Draft #253 adds owning-process check, live-tested |
-| #228 provenance | verified | 0.2.0 list-only stays local |
+| #227 endpoint identity | verified | Batch 1 (`3d2b2f7`) `DnsProcessConnectionCorrelator` adds PID + TTL + resolver correlation |
+| #228 provenance | addressed | Batch 1 (`3d2b2f7`) 5-class evidence provenance (`ThreatShareEvidenceClass` / `ThreatShareProofGrade`) |
 | #229 Hermes profile | verified | 0.10.23 single resolver |
 | #230 docs | verified | 0.10.24 |
-| #231 read-only DKG | deferred | user-triggered Check graph only; automatic annotations await Umanitek per-indicator lookup |
+| #231 read-only DKG | addressed | `DkgContextAnnotator` offline cached context lookup (`Unknown != Clean`, local false-positive overrides, never enforces) |
 
 ## Enforcement stages
 
 | Stage | Status | Evidence |
 |---|---|---|
 | B0 baseline/ADR | addressed | ADR 0009, Draft #247 |
-| B1–B5 | see above | released 0.10.17–0.10.25, 0.2.0, 0.3.0 |
-| E0 capability matrix | addressed | ADR 0010, Draft #255; no host is `Host deny verified` |
-| E1 policy engine | addressed | `Axiom.Core/Enforcement`, Draft #252, offline + deterministic |
-| E2 part 1 host mapping | addressed | `HostDecisionMapping`, Draft #256; deny shapes preserved |
-| E2 part 2 hook wiring | **not started** | requires live canary and opt-in; blocked by evidence gate |
-| E3 managed runner/broker | deferred | feasibility questions in ADR 0010; not claimed |
-| E4 network policy | **not started** | requires live firewall test with disposable Axiom-owned rule |
-| E5 UI status | addressed (basic) | Agents page cooperative badge, Draft #258; decisions list and recovery pending |
+| B1–B5 | see above | released 0.10.17–0.10.25, 0.2.0, 0.3.0 + Batch 1 (`3d2b2f7`) |
+| E0 capability matrix | addressed | ADR 0010, Draft #255; no live host advertised as `OS_DENY_VERIFIED` without runtime proof |
+| E1 policy engine | addressed | `Axiom.Core/Enforcement`, offline + deterministic, community-only advisory gate (`7e38a1c`) |
+| E2 part 1 host mapping | addressed | `HostDecisionMapping`, `HostEnforcementAdapter`, `EnforcementReceiptV1` (`7e38a1c`) |
+| E2 part 2 hook wiring & controller | addressed | `EnforcementController` (`enforcement.status`, `enforcement.evaluate`, `enforcement.receipts`) & disposable sentinel canary verifier (`7e38a1c`); VM integration continuing on `fix/agents/module-prerequisite-bootstrap` |
+| E3 managed runner/broker | prototype / feasibility | `TrustedFileBroker` + `WindowsRunnerAndBrokerProbe` + ADR 0012; same-token host limits documented |
+| E4 network policy | addressed | `AgentFirewallRulePlanner` + `AgentFirewallEnforcer` (scoped rules, community advisory refusal, dual-destination canary for `OS_DENY_VERIFIED`, rollback) |
+| E5 UI status | addressed | `EnforcementSurfaceState.FromReceiptsAndStatus` distinguishes `UNAVAILABLE`, `HOST_DENY_SENT - NOT VERIFIED`, `HOST_DENY_VERIFIED (CANARY)`, `OS_BOUNDARY_VERIFIED` |
 
 ## Non-negotiable claims
 

@@ -147,6 +147,152 @@ public sealed class ThreatShareIocExtractorTests
         Assert.Empty(ThreatShareIocExtractor.Extract(finding, null));
     }
 
+    [Fact]
+    public void Omitted_reason_defaults_to_unknown_and_below_high_confidence_is_held_local()
+    {
+        var finding = Finding(
+            new AiIndicator { Type = "domain", Value = "c2.example.org", Role = "malicious" },
+            new AiIndicator { Type = "domain", Value = "drop.example.org", Role = "malicious", Reason = "exfil-endpoint" })
+            with
+            {
+                Confidence = "medium",
+            };
+
+        var candidates = ThreatShareIocExtractor.Extract(
+            finding,
+            Evidence("c2.example.org:443", "drop.example.org:443"));
+
+        var omitted = Assert.Single(candidates, c => c.Value == "c2.example.org");
+        Assert.Equal("unknown", omitted.Reason);
+        Assert.Equal(ThreatSharePublicationEligibility.NeedsEvidence, omitted.PublicationEligibility);
+        Assert.Equal("UNSPECIFIED_THREAT_REASON", omitted.EligibilityReasonCode);
+
+        var mediumConfidence = Assert.Single(candidates, c => c.Value == "drop.example.org");
+        Assert.Equal("exfil-endpoint", mediumConfidence.Reason);
+        Assert.Equal(ThreatSharePublicationEligibility.NeedsEvidence, mediumConfidence.PublicationEligibility);
+        Assert.Equal("AI_SUSPECTED_NEEDS_CORROBORATION", mediumConfidence.EligibilityReasonCode);
+    }
+
+    [Fact]
+    public void Confirmed_process_dns_correlation_adds_correlated_domain_and_high_confidence_becomes_reviewable()
+    {
+        var observedUtc = DateTimeOffset.UtcNow;
+        var finding = new AiFinding
+        {
+            Status = "SUPPORTED_ALERT",
+            Severity = "high",
+            Confidence = "high",
+            AnalysisTimestampUtc = observedUtc,
+            Indicators =
+            [
+                new AiIndicator
+                {
+                    Type = "ip",
+                    Value = "93.184.216.34",
+                    Role = "malicious",
+                    Reason = "command-and-control",
+                },
+            ],
+        };
+        var evidence = new AiEvidencePackage(
+            "2",
+            observedUtc,
+            "test",
+            "paths-redacted",
+            [],
+            [
+                new AiEvidenceConnection(
+                    "connection-1",
+                    "opencode.exe",
+                    null,
+                    4242,
+                    "Tcp",
+                    "Outbound",
+                    "Established",
+                    "10.0.0.5:50000",
+                    "93.184.216.34:443",
+                    false,
+                    true,
+                    observedUtc,
+                    "Complete"),
+            ]);
+        var dns = new[]
+        {
+            new DnsObservationRecord
+            {
+                QueryName = "c2-node.example.org",
+                AnswerAddresses = ["93.184.216.34"],
+                TtlSeconds = 300,
+                ObservedUtc = observedUtc.AddSeconds(-5),
+                ProcessId = 4242,
+                ResolverSource = "system-resolver",
+            },
+        };
+
+        var candidates = ThreatShareIocExtractor.Extract(
+            finding,
+            evidence,
+            listDerivedValues: null,
+            provenanceAvailable: true,
+            dnsObservations: dns);
+
+        var domainCandidate = Assert.Single(candidates, c => c.IndicatorType == "domain");
+        Assert.Equal("c2-node.example.org", domainCandidate.Value);
+        Assert.Equal("command-and-control", domainCandidate.Reason);
+        Assert.Equal(ThreatShareProofGrade.Correlated, domainCandidate.ProofGrade);
+        Assert.Equal(ThreatSharePublicationEligibility.NeedsOperatorReview, domainCandidate.PublicationEligibility);
+
+        var mediumCorrelated = ThreatShareIocExtractor.Extract(
+            finding with { Confidence = "medium" },
+            evidence,
+            listDerivedValues: null,
+            provenanceAvailable: true,
+            dnsObservations: dns);
+        var mediumDomain = Assert.Single(mediumCorrelated, c => c.IndicatorType == "domain");
+        Assert.Equal(ThreatSharePublicationEligibility.NeedsEvidence, mediumDomain.PublicationEligibility);
+        Assert.Equal("AI_CONFIDENCE_BELOW_HIGH", mediumDomain.EligibilityReasonCode);
+    }
+
+    [Fact]
+    public void Dns_correlator_rejects_multi_domain_shared_ip_cross_process_and_unverified_doh()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var multiDomain = DnsProcessConnectionCorrelator.Correlate(
+            "93.184.216.34",
+            100,
+            null,
+            now,
+            [
+                new DnsObservationRecord { QueryName = "a.example.org", AnswerAddresses = ["93.184.216.34"], ObservedUtc = now.AddSeconds(-3), ProcessId = 100 },
+                new DnsObservationRecord { QueryName = "b.example.org", AnswerAddresses = ["93.184.216.34"], ObservedUtc = now.AddSeconds(-2), ProcessId = 100 },
+            ]);
+        Assert.Equal(DnsCorrelationStatus.Ambiguous, multiDomain.Status);
+        Assert.Equal("SHARED_IP_MULTIPLE_DOMAINS", multiDomain.ReasonCode);
+
+        var unverifiedDoh = DnsProcessConnectionCorrelator.Correlate(
+            "93.184.216.34",
+            100,
+            null,
+            now,
+            [
+                new DnsObservationRecord { QueryName = "c.example.org", AnswerAddresses = ["93.184.216.34"], ObservedUtc = now.AddSeconds(-2), ProcessId = 100, ResolverSource = "doh-unverified" },
+            ]);
+        Assert.Equal(DnsCorrelationStatus.Ambiguous, unverifiedDoh.Status);
+
+        var crossProcess = DnsProcessConnectionCorrelator.Correlate(
+            "93.184.216.34",
+            100,
+            null,
+            now,
+            [
+                new DnsObservationRecord { QueryName = "d.example.org", AnswerAddresses = ["93.184.216.34"], ObservedUtc = now.AddSeconds(-2), ProcessId = 999 },
+            ]);
+        Assert.Equal(DnsCorrelationStatus.PossibleAssociation, crossProcess.Status);
+
+        var unavailable = DnsProcessConnectionCorrelator.Correlate("93.184.216.34", 100, null, now, []);
+        Assert.Equal(DnsCorrelationStatus.Unavailable, unavailable.Status);
+    }
+
     private const string Sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     private static AiFinding Finding(params AiIndicator[] indicators) => new()

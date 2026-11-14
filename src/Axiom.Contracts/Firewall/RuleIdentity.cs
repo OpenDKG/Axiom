@@ -17,6 +17,36 @@ public static class RuleIdentity
         var input = string.Create(
             System.Globalization.CultureInfo.InvariantCulture,
             $"{normalized}|{(int)direction}");
+        return HashToUuidV5(input);
+    }
+
+    /// <summary>
+    /// Deterministic identity for an agent executable scoped to a specific remote address/CIDR
+    /// and optional port range so scoped rules never collide with whole-app lockdown rules.
+    /// </summary>
+    public static Guid ForAgentEndpoint(
+        string executablePath,
+        FirewallDirection direction,
+        string remoteScope,
+        string? remotePorts = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(remoteScope);
+
+        var normalizedPath = NormalizePath(executablePath);
+        var normalizedRemote = remoteScope.Trim().ToLowerInvariant();
+        var normalizedPorts = string.IsNullOrWhiteSpace(remotePorts)
+            ? "*"
+            : remotePorts.Trim().ToLowerInvariant();
+
+        var input = string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"{normalizedPath}|{(int)direction}|{normalizedRemote}|{normalizedPorts}");
+        return HashToUuidV5(input);
+    }
+
+    private static Guid HashToUuidV5(string input)
+    {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
 
         Span<byte> bytes = stackalloc byte[16];

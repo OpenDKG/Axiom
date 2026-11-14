@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Contracts.Threat;
 using Axiom.Presentation;
 using Xunit;
 
@@ -47,4 +48,124 @@ public sealed class ThreatShareCliTests
         Assert.False(result.Submitted);
         Assert.Contains("exit code 3", result.Outcome, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task ReportAsync_refuses_unpublishable_candidates_before_invoking_cli()
+    {
+        var cliInvoked = false;
+        var cli = new ThreatShareCli(() =>
+        {
+            cliInvoked = true;
+            return "hermes.exe";
+        });
+
+        var unknownReason = await cli.ReportAsync(
+            Candidate(reason: "unknown", eligibility: ThreatSharePublicationEligibility.NeedsOperatorReview),
+            CancellationToken.None);
+        Assert.Equal(ThreatShareReportStatus.Rejected, unknownReason.Status);
+        Assert.False(cliInvoked);
+
+        var localOnly = await cli.ReportAsync(
+            Candidate(reason: "command-and-control", eligibility: ThreatSharePublicationEligibility.LocalOnly),
+            CancellationToken.None);
+        Assert.Equal(ThreatShareReportStatus.Rejected, localOnly.Status);
+        Assert.False(cliInvoked);
+
+        var knownVerified = await cli.ReportAsync(
+            Candidate(
+                reason: "command-and-control",
+                eligibility: ThreatSharePublicationEligibility.NeedsOperatorReview,
+                novelty: ThreatShareNoveltyStatus.KnownVerified),
+            CancellationToken.None);
+        Assert.Equal(ThreatShareReportStatus.Rejected, knownVerified.Status);
+        Assert.False(cliInvoked);
+    }
+
+    [Theory]
+    [InlineData("Retraction shared for: ioc:domain:evil.example", ThreatShareReportStatus.Retracted)]
+    [InlineData("Invalid retraction: unknown id", ThreatShareReportStatus.Rejected)]
+    [InlineData("Retraction FAILED: node offline", ThreatShareReportStatus.RetryableFailure)]
+    public void Retract_output_is_classified_accurately(string text, ThreatShareReportStatus expected)
+    {
+        var result = ThreatShareCli.ClassifyRetract(text, exitCode: 1);
+
+        Assert.Equal(expected, result.Status);
+    }
+
+    [Fact]
+    public void InspectLocalGraphNovelty_sandbox_and_reporter_key_digest_are_strictly_read_only()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "axiom-threat-cli", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var now = new DateTimeOffset(2026, 11, 14, 4, 0, 0, TimeSpan.Zero);
+            var rulesetPath = Path.Combine(dir, "ruleset.json");
+            File.WriteAllText(
+                rulesetPath,
+                $$"""
+                {
+                  "synced_at": {{now.AddMinutes(-10).ToUnixTimeSeconds()}},
+                  "graph_threats": [
+                    { "identifier": "ioc:domain:verified.example" }
+                  ],
+                  "community": {
+                    "ioc:domain:reported.example": { "stage": "reported", "disputed": "no" },
+                    "ioc:domain:disputed.example": { "stage": "disputed", "disputed": "yes" }
+                  },
+                  "curator_revoked": [ "ioc:domain:revoked.example" ]
+                }
+                """);
+
+            Assert.Equal(
+                ThreatShareNoveltyStatus.KnownVerified,
+                ThreatShareCli.InspectLocalGraphNovelty("ioc:domain:verified.example", dir, now));
+            Assert.Equal(
+                ThreatShareNoveltyStatus.PreviouslyReportedCommunity,
+                ThreatShareCli.InspectLocalGraphNovelty("ioc:domain:reported.example", dir, now));
+            Assert.Equal(
+                ThreatShareNoveltyStatus.Disputed,
+                ThreatShareCli.InspectLocalGraphNovelty("ioc:domain:disputed.example", dir, now));
+            Assert.Equal(
+                ThreatShareNoveltyStatus.Revoked,
+                ThreatShareCli.InspectLocalGraphNovelty("ioc:domain:revoked.example", dir, now));
+            Assert.Equal(
+                ThreatShareNoveltyStatus.PotentiallyNewLocalOnly,
+                ThreatShareCli.InspectLocalGraphNovelty("ioc:domain:unseen.example", dir, now));
+            Assert.Equal(
+                ThreatShareNoveltyStatus.Unknown,
+                ThreatShareCli.InspectLocalGraphNovelty("ioc:domain:unseen.example", dir, now.AddHours(48)));
+
+            File.WriteAllText(Path.Combine(dir, "config.yaml"), "plugins:\n  entries:\n    blackbox:\n      community_sandbox: true\n");
+            Assert.True(ThreatShareCli.IsSandboxModeEnabled(dir, environmentOverride: string.Empty));
+            Assert.False(ThreatShareCli.IsSandboxModeEnabled(dir, environmentOverride: "false"));
+
+            var keyPath = Path.Combine(dir, "reporter_key.pem");
+            File.WriteAllBytes(keyPath, "test-ed25519-private-material"u8.ToArray());
+            var digestBefore = ThreatShareCli.ComputeReporterKeySha256(dir);
+            var digestAfter = ThreatShareCli.ComputeReporterKeySha256(dir);
+            Assert.False(string.IsNullOrWhiteSpace(digestBefore));
+            Assert.Equal(digestBefore, digestAfter);
+            Assert.Equal("test-ed25519-private-material", File.ReadAllText(keyPath));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    private static ThreatShareCandidate Candidate(
+        string reason,
+        ThreatSharePublicationEligibility eligibility,
+        ThreatShareNoveltyStatus novelty = ThreatShareNoveltyStatus.Unknown) => new()
+        {
+            Id = "ioc:domain:c2.example.org",
+            IndicatorType = "domain",
+            Value = "c2.example.org",
+            Reason = reason,
+            Context = "in-tool-output",
+            Source = ThreatShareSource.AiAnalyst,
+            PublicationEligibility = eligibility,
+            NoveltyStatus = novelty,
+        };
 }
