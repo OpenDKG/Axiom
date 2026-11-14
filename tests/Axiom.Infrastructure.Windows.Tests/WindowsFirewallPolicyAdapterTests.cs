@@ -105,9 +105,45 @@ public sealed class WindowsFirewallPolicyAdapterTests
     [InlineData("2001:db8::/32", "2001:db8::/32")]
     [InlineData("2001:db8::/ffff:ffff::", "2001:db8::/32")]
     [InlineData("10.5.4.3", "10.5.4.3")]
+    [InlineData("10.5.4.3/255.255.255.255", "10.5.4.3")]
+    [InlineData("10.5.4.3/32", "10.5.4.3")]
+    [InlineData("2001:db8::1", "2001:db8::1")]
+    [InlineData("2001:db8::1/128", "2001:db8::1")]
     public void Address_normalisation_accepts_cidr_and_mask_notation(string input, string expected)
     {
         Assert.Equal(expected, WindowsFirewallPolicyAdapter.NormalizeAddress(input));
+    }
+
+    [Fact]
+    public void Readback_in_host_mask_notation_still_matches_bare_ipv4_spec()
+    {
+        var id = Guid.NewGuid();
+        var name = OwnedRuleName.Create(id, FirewallDirection.Outbound);
+        var spec = new RuleSpec
+        {
+            ManagedRuleId = id,
+            AppPath = @"C:\Program Files\Example\example.exe",
+            Direction = FirewallDirection.Outbound,
+            Action = FirewallAction.Block,
+            Profiles = FirewallProfile.All,
+            Protocol = NetworkProtocol.Any,
+            RemoteAddresses = ["203.0.113.42", "1.0.0.0/8"],
+            CreatedBy = "test",
+        };
+        var rule = new FakeRule
+        {
+            Name = name,
+            ApplicationName = spec.AppPath,
+            Direction = 2,
+            Action = 0,
+            Profiles = (int)FirewallProfile.All,
+            Protocol = 256,
+            RemoteAddresses = "203.0.113.42/255.255.255.255,1.0.0.0/255.0.0.0",
+            RemotePorts = string.Empty,
+            Enabled = true,
+        };
+
+        Assert.True(WindowsFirewallPolicyAdapter.MatchesSpec(rule, spec));
     }
 
     [Fact]
