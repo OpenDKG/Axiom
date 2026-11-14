@@ -279,10 +279,14 @@ public sealed class OptionalModuleInstaller
             & $installer -StoreBackend oxigraph
 
             # The vendor pins the LF SHA-256 of the BIP-39 wordlist, but a Windows git clone with
-            # core.autocrlf=true writes CRLF and seed-phrase detection disables itself. Normalize the
-            # file back to LF so the pinned hash matches (issue #324 / OFFLINE_CONTINUITY_AUDIT.md).
-            $bip39 = Join-Path $dir 'agent-blackbox\plugins\blackbox\kernel\crypto_secrets\bip39_english.txt'
-            if (Test-Path $bip39) {
+            # core.autocrlf=true writes CRLF and seed-phrase detection disables itself. Normalize every
+            # installed copy back to LF so the pinned hash matches (issue #324 / #320).
+            foreach ($bip39 in @(
+              (Join-Path $dir 'agent-blackbox\plugins\blackbox\kernel\crypto_secrets\bip39_english.txt'),
+              (Join-Path $env:LOCALAPPDATA 'hermes\plugins\blackbox\kernel\crypto_secrets\bip39_english.txt'),
+              (Join-Path $env:USERPROFILE '.hermes\plugins\blackbox\kernel\crypto_secrets\bip39_english.txt')
+            )) {
+              if (-not (Test-Path $bip39)) { continue }
               $bytes = [System.IO.File]::ReadAllBytes($bip39)
               $normalized = New-Object byte[] $bytes.Length
               $count = 0
@@ -295,9 +299,9 @@ public sealed class OptionalModuleInstaller
                 $trimmed = New-Object byte[] $count
                 [Array]::Copy($normalized, $trimmed, $count)
                 [System.IO.File]::WriteAllBytes($bip39, $trimmed)
-                Write-Host "Normalized bip39_english.txt to LF ($count bytes)." -ForegroundColor Yellow
+                Write-Host "Normalized $bip39 to LF ($count bytes)." -ForegroundColor Yellow
               }
-              Write-Host ("bip39_english.txt SHA256: " + (Get-FileHash $bip39 -Algorithm SHA256).Hash) -ForegroundColor Yellow
+              Write-Host ("$bip39 SHA256: " + (Get-FileHash $bip39 -Algorithm SHA256).Hash) -ForegroundColor Yellow
             }
             $venv = Join-Path $dir 'agent-blackbox\venv\Scripts\python.exe'
             $venvW = Join-Path $dir 'agent-blackbox\venv\Scripts\pythonw.exe'
@@ -472,6 +476,8 @@ public sealed class OptionalModuleInstaller
         {
             return false;
         }
+
+        BlackboxWordlistNormalizer.NormalizeAll();
 
         try
         {
