@@ -319,7 +319,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
                 return;
             }
 
-            var status = await _client
+            var status = await CreateConfigureClient()
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
@@ -355,7 +355,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
                 return;
             }
 
-            var status = await _client
+            var status = await CreateConfigureClient()
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
@@ -391,8 +391,8 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
                 return;
             }
 
-            var updateClient = new ServicePipeClient(requestTimeout: TimeSpan.FromMinutes(3));
-            var status = await _client
+            var updateClient = new ServicePipeClient(requestTimeout: TimeSpan.FromMinutes(5));
+            var status = await CreateConfigureClient()
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
@@ -722,4 +722,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             _updating = false;
         }
     }
+
+    private ServicePipeClient CreateConfigureClient() =>
+        new(requestTimeout: TimeSpan.FromSeconds(60));
 }

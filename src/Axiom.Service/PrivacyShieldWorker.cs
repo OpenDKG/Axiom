@@ -35,13 +35,15 @@ public sealed class PrivacyShieldWorker(PrivacyShieldController controller) : Ba
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken).ConfigureAwait(false);
-            await TryUpdateMissingOrStaleSourcesAsync(stoppingToken).ConfigureAwait(false);
-
-            using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
-            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+            await controller
+                .WaitForSourceSyncOrDelayAsync(TimeSpan.FromSeconds(10), stoppingToken)
+                .ConfigureAwait(false);
+            while (!stoppingToken.IsCancellationRequested)
             {
                 await TryUpdateMissingOrStaleSourcesAsync(stoppingToken).ConfigureAwait(false);
+                await controller
+                    .WaitForSourceSyncOrDelayAsync(TimeSpan.FromHours(1), stoppingToken)
+                    .ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

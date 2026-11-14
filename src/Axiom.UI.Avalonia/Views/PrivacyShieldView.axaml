@@ -60,7 +60,7 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
                   <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
-                    <CheckBox Grid.Column="0" IsChecked="{Binding Enabled}" Margin="0,0,8,0" />
+                    <CheckBox Grid.Column="0" IsChecked="{Binding Enabled, Mode=TwoWay}" Margin="0,0,8,0" />
                     <StackPanel Grid.Column="1" Spacing="2">
                       <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" />
                       <controls:AxiomSelectableTextBlock Text="{Binding License}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />

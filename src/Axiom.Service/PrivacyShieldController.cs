@@ -25,6 +25,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    private readonly SemaphoreSlim _sourceSyncSignal = new(0, 1);
+
     private readonly object _rulesGate = new();
 
     private readonly Dictionary<string, string> _sourceErrors =
@@ -197,6 +199,11 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             _settings = normalized;
             _lastError = startWarning;
             EnsureConfiguredAdapterDns();
+            if (ShouldAutoUpdateSources())
+            {
+                SignalSourceSync();
+            }
+
             return CreateStatus();
         }
         finally
@@ -252,6 +259,23 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
         return false;
     }
+
+    internal void SignalSourceSync()
+    {
+        if (_sourceSyncSignal.CurrentCount == 0)
+        {
+            try
+            {
+                _sourceSyncSignal.Release();
+            }
+            catch (SemaphoreFullException)
+            {
+            }
+        }
+    }
+
+    internal async Task WaitForSourceSyncOrDelayAsync(TimeSpan delay, CancellationToken cancellationToken) =>
+        await _sourceSyncSignal.WaitAsync(delay, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Keeps the configured or active default-route adapter pointed at the local resolver while the

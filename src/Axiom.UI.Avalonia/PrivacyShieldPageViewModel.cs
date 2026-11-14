@@ -552,13 +552,14 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                 return;
             }
 
-            var status = await _client
+            var status = await CreateConfigureClient()!
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
                     CancellationToken.None)
                 .ConfigureAwait(true);
             ApplyStatus(status);
+            WarnIfSourcesDropped(settings, status);
         }
         catch (ServiceUnavailableException exception)
         {
@@ -588,7 +589,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                 return;
             }
 
-            var status = await _client
+            var status = await CreateConfigureClient()!
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
@@ -624,14 +625,14 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                 return;
             }
 
-            await _client
+            await CreateConfigureClient()!
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
                     CancellationToken.None)
                 .ConfigureAwait(true);
             var updateClient = _client is ServicePipeClient
-                ? new ServicePipeClient(requestTimeout: TimeSpan.FromMinutes(3))
+                ? new ServicePipeClient(requestTimeout: TimeSpan.FromMinutes(5))
                 : _client;
             var status = await updateClient
                 .SendAsync<PrivacyShieldStatus>(
@@ -640,6 +641,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                     CancellationToken.None)
                 .ConfigureAwait(true);
             ApplyStatus(status);
+            WarnIfSourcesDropped(settings, status);
         }
         catch (ServiceUnavailableException exception)
         {
@@ -671,11 +673,11 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         _preferredAdapterAlias = adapterName;
         _autoPointAdapterDns = true;
 
-        if (_client is not null)
+        if (CreateConfigureClient() is { } configureClient)
         {
             try
             {
-                var status = await _client
+                var status = await configureClient
                     .SendAsync<PrivacyShieldStatus>(
                         IpcCommandTypes.PrivacyConfigure,
                         BuildSettings(),
@@ -748,11 +750,11 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
 
         _autoPointAdapterDns = false;
-        if (_client is not null)
+        if (CreateConfigureClient() is { } configureClient)
         {
             try
             {
-                var status = await _client
+                var status = await configureClient
                     .SendAsync<PrivacyShieldStatus>(
                         IpcCommandTypes.PrivacyConfigure,
                         BuildSettings(),
@@ -1460,5 +1462,28 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         {
             _updating = false;
         }
+    }
+
+    private IServiceRequestClient? CreateConfigureClient() =>
+        _client is ServicePipeClient
+            ? new ServicePipeClient(requestTimeout: TimeSpan.FromSeconds(60))
+            : _client;
+
+    private void WarnIfSourcesDropped(PrivacyShieldSettings requested, PrivacyShieldStatus actual)
+    {
+        var dropped = requested.EnabledSourceIds
+            .Where(id => !actual.Settings.EnabledSourceIds.Contains(id, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+        if (dropped.Length == 0)
+        {
+            return;
+        }
+
+        var note =
+            $"The running Axiom service skipped {dropped.Length} source(s) ({string.Join(", ", dropped)}). " +
+            "Update or restart Axiom Service so the latest blocklist catalog is active.";
+        LastErrorText = string.IsNullOrWhiteSpace(LastErrorText)
+            ? note
+            : $"{LastErrorText} {note}";
     }
 }
