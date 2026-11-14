@@ -614,7 +614,7 @@ public sealed class OpenCodeProtection
 
         def _exfiltrates_protected(command: str, protected) -> bool:
             # Uploading or encoding a protected file is exfiltration even when no file-access rule
-            # matched the argument (curl -F file=@Ã¢â‚¬Â¦ was allowed in the lab).
+            # matched the argument (curl -F file=@… was allowed in the lab).
             text = " ".join((command or "").lower().split())
             if not _hits_protected(text, protected):
                 return False
