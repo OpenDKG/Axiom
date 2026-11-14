@@ -21,8 +21,9 @@ For every release `0.X.0`:
 
 ## Boundaries
 
+- **One focused commit per fix:** make a separate, descriptive commit for each fix or isolated change (for example `fix(privacy): ...`, `fix(dns): ...`) instead of combining unrelated fixes into one generic commit, so every change is easy to audit on GitHub and by agents.
 - A release tag points at the merge commit on `main`, never at a feature branch.
 - The installed setup and the tag must carry the same code; rebuild the setup from the release
   commit before publishing.
-- `0.23.2` is a historical hotfix (wildcard protected-path delete) merged before this rule; it is
-  included in `0.24.0` and every later release. No new patch versions are created.
+- `0.23.2` and `0.23.3` are historical hotfixes merged before this rule; both are included in
+  `0.24.0` and every later release. No new patch versions are created.

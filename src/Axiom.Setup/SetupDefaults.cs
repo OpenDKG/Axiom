@@ -107,8 +107,13 @@ internal static class SetupDefaults
                 Categories = PrivacyShieldCategories.ForProfile(PrivacyShieldProfile.Strict)
                              | PrivacyCategory.Custom,
                 Port = 53,
+                UpstreamDns = PrivacyShieldPolicy.DefaultDohUpstream,
+                EncryptDnsViaDoh = true,
                 EnabledSourceIds = PrivacyShieldSourceCatalog.All.Select(source => source.Id).ToArray(),
                 LogQueries = false,
+                AutoPointAdapterDns = true,
+                AutoUpdateSources = true,
+                AutoUpdateIntervalHours = 24,
             };
 
             try

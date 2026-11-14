@@ -65,21 +65,33 @@ public static class SystemDnsResolver
             var addresses = NetworkInterface.GetAllNetworkInterfaces()
                 .Where(network => network.OperationalStatus == OperationalStatus.Up &&
                                   network.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                .SelectMany(network => network.GetIPProperties().DnsAddresses)
-                .Where(address => address.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
-                .Where(address => !IPAddress.IsLoopback(address))
-                .Where(address => !address.Equals(IPAddress.Any) && !address.Equals(IPAddress.IPv6Any))
-                .Distinct()
-                .Take(Math.Clamp(max, 1, 16))
-                .Select(address => new IPEndPoint(address, 53))
-                .ToArray();
+                .SelectMany(network => network.GetIPProperties().DnsAddresses);
 
-            return addresses;
+            return FilterSystemDnsAddresses(addresses, max);
         }
         catch (NetworkInformationException)
         {
             return [];
         }
+    }
+
+    /// <summary>
+    /// Filters interface DNS addresses to reachable unicast resolvers, excluding deprecated
+    /// Windows IPv6 site-local dummy servers such as fec0:0:0:ffff::1/2/3.
+    /// </summary>
+    public static IReadOnlyList<IPEndPoint> FilterSystemDnsAddresses(
+        IEnumerable<IPAddress> addresses,
+        int max = 4)
+    {
+        return addresses
+            .Where(address => address.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
+            .Where(address => !IPAddress.IsLoopback(address))
+            .Where(address => !address.Equals(IPAddress.Any) && !address.Equals(IPAddress.IPv6Any))
+            .Where(address => !address.IsIPv6SiteLocal && !address.IsIPv6Multicast)
+            .Distinct()
+            .Take(Math.Clamp(max, 1, 16))
+            .Select(address => new IPEndPoint(address, 53))
+            .ToArray();
     }
 
     public static bool TryParseUpstream(string? value, out IPEndPoint? endpoint)
@@ -215,6 +227,49 @@ public static class SystemDnsResolver
         target = new DnsUpstreamTarget(endpoint, DohUri: null);
         return true;
     }
+
+    /// <summary>
+    /// Parses one or more comma/semicolon-separated upstream entries (IP, IP:port, udp://IP, or DoH HTTPS URL).
+    /// Returns false if any non-empty token is invalid.
+    /// </summary>
+    public static bool TryParseUpstreamTargets(string? value, out IReadOnlyList<DnsUpstreamTarget> targets)
+    {
+        targets = [];
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var parts = value.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+        {
+            return false;
+        }
+
+        var parsed = new List<DnsUpstreamTarget>(parts.Length);
+        foreach (var part in parts)
+        {
+            if (!TryParseUpstreamTarget(part, out var single) || single is null)
+            {
+                return false;
+            }
+
+            parsed.Add(single);
+        }
+
+        targets = parsed;
+        return true;
+    }
+
+    /// <summary>
+    /// Redundant encrypted RFC 8484 DoH resolvers (Cloudflare + Quad9 on TLS port 443) used so
+    /// queries cannot be read by an ISP or local router over plain UDP port 53.
+    /// </summary>
+    public static IReadOnlyList<DnsUpstreamTarget> DefaultDohTargets() => UpgradeEndpoints(
+    [
+        new IPEndPoint(IPAddress.Parse("1.1.1.1"), 53),
+        new IPEndPoint(IPAddress.Parse("9.9.9.9"), 53),
+    ]);
 
     public static IReadOnlyList<DnsUpstreamTarget> UpgradeEndpoints(IReadOnlyList<IPEndPoint> endpoints)
     {

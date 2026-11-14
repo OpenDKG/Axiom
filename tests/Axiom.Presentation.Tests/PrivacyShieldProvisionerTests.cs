@@ -22,6 +22,11 @@ public sealed class PrivacyShieldProvisionerTests
         Assert.Equal(PrivacyShieldSourceCatalog.All.Count, settings.EnabledSourceIds.Count);
         Assert.Contains("urlhaus-domains", settings.EnabledSourceIds);
         Assert.Equal(53, settings.Port);
+        Assert.Equal(PrivacyShieldPolicy.DefaultDohUpstream, settings.UpstreamDns);
+        Assert.True(settings.EncryptDnsViaDoh);
+        Assert.True(settings.AutoPointAdapterDns);
+        Assert.True(settings.AutoUpdateSources);
+        Assert.Equal(24, settings.AutoUpdateIntervalHours);
     }
 
     [Fact]
