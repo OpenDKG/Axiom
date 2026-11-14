@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Win32;
+using Axiom.Contracts.Blackbox;
 using Axiom.UI.Services;
 
 namespace Axiom.Setup;
@@ -160,11 +161,20 @@ internal static class SetupInstaller
                     }
                     else
                     {
-                        Report("Configuring the official DKG node silently in the background...");
-                        var dkgExit = await Task.Run(
-                            () => moduleInstaller.InstallDkgAndWait(Report),
-                            cancellationToken).ConfigureAwait(false);
-                        Report($"DKG installer exit code: {(dkgExit ? "0" : "non-zero")}.");
+                        // If the Hermes config already names a DKG home, start that node instead of
+                        // initializing a second home the guard would never read (#307).
+                        if (moduleInstaller.StartDkg())
+                        {
+                            Report("Started the DKG node the Hermes config names; no second home was created.");
+                        }
+                        else
+                        {
+                            Report("Configuring the official DKG node silently in the background...");
+                            var dkgExit = await Task.Run(
+                                () => moduleInstaller.InstallDkgAndWait(Report),
+                                cancellationToken).ConfigureAwait(false);
+                            Report($"DKG installer exit code: {(dkgExit ? "0" : "non-zero")}.");
+                        }
                     }
 
                     var hermesLocal = Path.Combine(
@@ -212,14 +222,26 @@ internal static class SetupInstaller
 
                     blackboxInstalled = await WaitForEndpointAsync(
                         "http://127.0.0.1:9700/api/graph-status", cancellationToken).ConfigureAwait(false);
-                    if (!dkgInstalled)
-                    {
-                        dkgInstalled = await WaitForEndpointAsync(
-                            "http://127.0.0.1:9200/api/status", cancellationToken).ConfigureAwait(false);
-                    }
+
+                    // #307: the node, the guard and the CLI must agree on one DKG home. Probe the
+                    // resolved home's own port and token and prove the identity endpoint accepts it.
+                    var dkgHome = DkgHomeResolver.ResolveEffective(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        ReadConfigOrNull,
+                        Directory.Exists);
+                    var dkgIdentity = await WaitForDkgIdentityAsync(dkgHome, cancellationToken)
+                        .ConfigureAwait(false);
+                    dkgInstalled = dkgIdentity.Verified;
 
                     Report($"Blackbox endpoint: {(blackboxInstalled ? "connected" : "not verified")}; " +
                            $"DKG endpoint: {(dkgInstalled ? (blackboxProvidesDkg ? "provided by Blackbox" : "connected") : "not verified")}.");
+                    Report(dkgIdentity.Summary + ".");
+                    if (!dkgIdentity.Verified)
+                    {
+                        Report("WARNING: findings cannot be written to the local graph until the DKG " +
+                               "identity check passes; check that hermes config.yaml, the guard and the " +
+                               "node use this home.");
+                    }
 
                     Report("Installing agent hooks after the Blackbox runtime is prepared.");
                     var protection = new UserStateProtection();
@@ -523,6 +545,42 @@ internal static class SetupInstaller
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Waits for the resolved DKG home to prove its own token. A 401 does not heal while the node
+    /// runs, so it is reported immediately instead of retrying for the full window.
+    /// </summary>
+    private static async Task<DkgIdentity> WaitForDkgIdentityAsync(
+        string home,
+        CancellationToken cancellationToken)
+    {
+        DkgIdentity? last = null;
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            last = await DkgIdentityProbe.CheckAsync(home, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            if (last.Verified || last.StatusCode is 401)
+            {
+                return last;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+        }
+
+        return last!;
+    }
+
+    private static string? ReadConfigOrNull(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? File.ReadAllText(path) : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

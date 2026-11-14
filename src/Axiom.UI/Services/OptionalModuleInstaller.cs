@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using Axiom.Contracts;
+using Axiom.Contracts.Blackbox;
 
 namespace Axiom.UI.Services;
 
@@ -280,8 +281,9 @@ public sealed class OptionalModuleInstaller
     }
 
     /// <summary>
-    /// Starts an installed DKG node without reinstalling it. Returns false when the local CLI is
-    /// missing.
+    /// Starts an installed DKG node without reinstalling it. Prefers the CLI and home the Hermes
+    /// config names, so starting a node never creates a second home the guard does not read.
+    /// Returns false when no local CLI is available.
     /// </summary>
     public bool StartDkg()
     {
@@ -290,19 +292,36 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        if (!File.Exists(DkgCommand) || IsUnsafeInstallRoot(DkgRoot, DkgHome, DkgCommand))
+        var (configuredBin, configuredHome) = ResolveConfiguredDkg();
+        string? command;
+        var useOwnHome = false;
+        if (configuredBin is not null && File.Exists(configuredBin) && !IsUnsafeInstallRoot(configuredBin))
+        {
+            command = configuredBin;
+        }
+        else if (File.Exists(DkgCommand) && !IsUnsafeInstallRoot(DkgRoot, DkgHome, DkgCommand))
+        {
+            command = DkgCommand;
+            useOwnHome = true;
+        }
+        else
         {
             return false;
         }
 
-        var startInfo = new ProcessStartInfo("cmd.exe", $"/c \"\"{DkgCommand}\" start\"")
+        var startInfo = new ProcessStartInfo("cmd.exe", $"/c \"\"{command}\" start\"")
         {
             UseShellExecute = false,
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden,
-            WorkingDirectory = DkgRoot,
+            WorkingDirectory = Path.GetDirectoryName(command) ?? DkgRoot,
         };
-        startInfo.Environment["DKG_HOME"] = DkgHome;
+
+        var effectiveHome = useOwnHome ? DkgHome : configuredHome;
+        if (!string.IsNullOrWhiteSpace(effectiveHome))
+        {
+            startInfo.Environment["DKG_HOME"] = effectiveHome;
+        }
 
         try
         {
@@ -319,6 +338,27 @@ public sealed class OptionalModuleInstaller
                      Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
         {
             return false;
+        }
+    }
+
+    /// <summary>The DKG CLI and home the guard and node actually use, when the Hermes config names them.</summary>
+    private static (string? Bin, string? Home) ResolveConfiguredDkg()
+    {
+        try
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var configPath = Path.Combine(localAppData, "hermes", "config.yaml");
+            if (!File.Exists(configPath))
+            {
+                return (null, null);
+            }
+
+            var text = File.ReadAllText(configPath);
+            return (DkgHomeResolver.ReadConfiguredBin(text), DkgHomeResolver.ReadConfiguredHome(text));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return (null, null);
         }
     }
 

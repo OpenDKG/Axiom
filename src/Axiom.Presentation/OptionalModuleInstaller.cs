@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using Axiom.Contracts;
+using Axiom.Contracts.Blackbox;
 
 namespace Axiom.Presentation;
 
