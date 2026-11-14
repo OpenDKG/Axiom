@@ -116,6 +116,32 @@ public sealed class DaemonLogFileTests
     }
 
     [Fact]
+    public void DaemonModeAnnouncesEachReopenAtTheTopOfTheNewFile()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var log = Path.Combine(temp.Path, "axiomd.log");
+
+        using (var writer = new DaemonLogFile(log, TimeSpan.FromDays(1), announceReopen: true))
+        {
+            writer.WriteLine("one");
+            File.Move(log, log + ".0");
+            writer.Reopen();
+            writer.WriteLine("two");
+        }
+
+        var lines = File.ReadAllLines(log);
+        Assert.Equal(2, lines.Length);
+        Assert.Contains($"axiomd[{Environment.ProcessId}]: log reopened (signal), reopen #1", lines[0], StringComparison.Ordinal);
+        Assert.Equal("two", lines[1]);
+        Assert.Equal("one", File.ReadAllText(log + ".0").Trim());
+    }
+
+    [Fact]
     public void PidFileNamesThisProcessForNewsyslog()
     {
         if (OperatingSystem.IsWindows())

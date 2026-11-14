@@ -61,6 +61,15 @@ public sealed class LaunchdServiceInstaller
 
     public const int LogRotateKeep = 5;
 
+    /// <summary>
+    /// axiomd's pid file, named in the newsyslog entry so newsyslog sends <see cref="LogRotateSignal"/>
+    /// after a rotation and the daemon reopens its log (<see cref="DaemonLogFile"/>).
+    /// </summary>
+    public const string PidFilePath = "/var/run/axiomd.pid";
+
+    /// <summary>SIGHUP: axiomd reopens <c>axiomd.log</c>.</summary>
+    public const int LogRotateSignal = 1;
+
     private const string Launchctl = "/bin/launchctl";
 
     private const string Chown = "/usr/sbin/chown";
@@ -153,7 +162,10 @@ public sealed class LaunchdServiceInstaller
     /// The <c>/etc/newsyslog.d</c> entry: rotate <paramref name="logFilePath"/> at
     /// <see cref="LogRotateSizeKiB"/> KiB, keep <see cref="LogRotateKeep"/> archives, bzip2 them
     /// (flag <c>J</c>), mode 600 so the new log and the archives stay root-only
-    /// (<see cref="MacLogPermissions"/>). launchd reopens the file per write, so no signal is needed.
+    /// (<see cref="MacLogPermissions"/>), and send SIGHUP to the pid in <see cref="PidFilePath"/>.
+    /// launchd keeps the <c>StandardOutPath</c> descriptor it opened at spawn, so without the
+    /// signal the daemon would keep writing into the rotated archive; axiomd writes its log
+    /// itself and reopens it on the signal (<see cref="DaemonLogFile"/>).
     /// </summary>
     public static string BuildNewsyslogConf(string logFilePath)
     {
@@ -162,8 +174,8 @@ public sealed class LaunchdServiceInstaller
             CultureInfo.InvariantCulture,
             $"""
             # Axiom daemon log rotation (written by axiomd --install-service, removed by --uninstall-service).
-            # logfilename{"\t"}[owner:group]{"\t"}mode{"\t"}count{"\t"}size{"\t"}when{"\t"}flags
-            {logFilePath}{"\t"}root:wheel{"\t"}{MacLogPermissions.NewsyslogMode}{"\t"}{LogRotateKeep}{"\t"}{LogRotateSizeKiB}{"\t"}*{"\t"}J
+            # logfilename{"\t"}[owner:group]{"\t"}mode{"\t"}count{"\t"}size{"\t"}when{"\t"}flags{"\t"}[/pid_file]{"\t"}[sig_num]
+            {logFilePath}{"\t"}root:wheel{"\t"}{MacLogPermissions.NewsyslogMode}{"\t"}{LogRotateKeep}{"\t"}{LogRotateSizeKiB}{"\t"}*{"\t"}J{"\t"}{PidFilePath}{"\t"}{LogRotateSignal}
 
             """);
     }
