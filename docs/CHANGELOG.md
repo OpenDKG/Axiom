@@ -2,6 +2,11 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.18.0
+
+- **Reputation-safe Threat Share & anti-rejection pipeline (#321).** Added `ThreatShareModels`, AI process evidence provenance, DNS-to-process correlation, pre-flight novelty simulation CLI, and retract lifecycle so speculative reports never degrade reporter reputation.
+- **Curator-signed RAM snapshot endpoint & opt-in LAN cache.** Added `VerifiedGraphPeerRelay` for signed verified-graph snapshot caching on opt-in local peers.
+
 ## What's in 0.17.0
 
 - **Agent Health now carries the health surfaces.** Protected workspaces, **Blackbox health** and
