@@ -67,7 +67,13 @@ public partial class App : Application
             {
                 try
                 {
-                    ProtectionProvisioner.ProvisionAtStartup();
+                    var protection = ProtectionProvisioner.ProvisionAtStartup();
+                    if (protection is not null)
+                    {
+                        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                        PrivacyShieldProvisioner.WriteSettings(localAppData);
+                        PrivacyShieldProvisioner.ApplyAsync(CancellationToken.None).GetAwaiter().GetResult();
+                    }
                 }
                 catch
                 {
