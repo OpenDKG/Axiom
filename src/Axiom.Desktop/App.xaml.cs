@@ -39,6 +39,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        BackgroundWindowHider.HideDescendants(TimeSpan.FromMinutes(3));
 
         Axiom.Persistence.LegacyDataMigration.Migrate(stopLegacyProcesses: true);
 

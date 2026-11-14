@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.IO;
 using System.Text.Json;
+using Axiom.Contracts.Community;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Privacy;
 
@@ -8,8 +9,8 @@ namespace Axiom.Presentation;
 
 /// <summary>
 /// Applies the maximum-protection privacy preset for a complete install: Strict profile, every
-/// category, every pinned public blocklist source, and the starter community feed. The settings are
-/// written per user and pushed to the running service; community sharing stays off.
+/// category, every pinned public blocklist source, and the recommended community feed bundle. The
+/// settings are written per user and pushed to the running service; community sharing stays off.
 /// </summary>
 public static class PrivacyShieldProvisioner
 {
@@ -43,7 +44,13 @@ public static class PrivacyShieldProvisioner
         File.WriteAllText(
             Path.Combine(root, "community-feed.json"),
             JsonSerializer.Serialize(
-                new { enabled = true, url = "axiom://starter", tokenProtected = string.Empty },
+                new
+                {
+                    enabled = true,
+                    url = CommunityFeedCatalog.RecommendedBundleUrl,
+                    autoSync = true,
+                    tokenProtected = string.Empty,
+                },
                 JsonOptions));
     }
 

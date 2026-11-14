@@ -148,6 +148,9 @@ public static class BackgroundWindowHider
         "dkg",
         "opencode",
         "conhost",
+        "hermes",
+        "git",
+        "pip",
         "Axiom.Service",
     };
 
