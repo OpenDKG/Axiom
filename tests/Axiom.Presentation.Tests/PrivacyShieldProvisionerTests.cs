@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.IO;
+using Axiom.Contracts.Community;
 using Axiom.Contracts.Privacy;
 using Axiom.Presentation;
 using Xunit;
@@ -36,6 +37,7 @@ public sealed class PrivacyShieldProvisionerTests
 
             Assert.True(PrivacyShieldProvisioner.IsCompleteProfile(shield));
             Assert.Contains("axiom://starter", feed, StringComparison.Ordinal);
+            Assert.Contains(CommunityFeedCatalog.RecommendedBundleUrl, feed, StringComparison.Ordinal);
             Assert.Contains("\"enabled\": true", feed, StringComparison.Ordinal);
         }
         finally

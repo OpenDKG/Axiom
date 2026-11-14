@@ -128,7 +128,7 @@ internal static class SetupInstaller
                     }
 
                     Report("Auditing official installer scope: Axiom modules, Hermes plugin config/mode and scheduled task only.");
-                    Report("Starting the official Blackbox installer. Follow its prompts and terms.");
+                    Report("Configuring the official Blackbox runtime silently in the background...");
                     var blackboxExit = await Task.Run(
                         () => moduleInstaller.InstallBlackboxAndWait(Report),
                         cancellationToken).ConfigureAwait(false);
@@ -158,7 +158,7 @@ internal static class SetupInstaller
                     }
                     else
                     {
-                        Report("Starting the official DKG installer. Follow its prompts and terms.");
+                        Report("Configuring the official DKG node silently in the background...");
                         var dkgExit = await Task.Run(
                             () => moduleInstaller.InstallDkgAndWait(Report),
                             cancellationToken).ConfigureAwait(false);
@@ -227,19 +227,25 @@ internal static class SetupInstaller
                     var openCodeProtection = new OpenCodeProtection();
                     var codexProtection = new CodexProtection();
                     var claudeProtection = new ClaudeProtection();
+                    var antigravityProtection = new AntigravityProtection();
                     var cursorProtection = new CursorProtection();
                     var copilotProtection = new CopilotProtection();
                     var geminiProtection = new GeminiProtection();
                     var windsurfProtection = new WindsurfProtection();
                     var clineProtection = new ClineProtection();
+                    var zCodeProtection = new ZCodeProtection();
+                    var deepSeekProtection = new DeepSeekProtection();
                     var openCode = openCodeProtection.EnsureInstalled();
                     var codex = codexProtection.EnsureInstalled();
                     var claude = claudeProtection.EnsureInstalled();
+                    var antigravity = antigravityProtection.EnsureInstalled();
                     var cursor = cursorProtection.EnsureInstalled();
                     var copilot = copilotProtection.EnsureInstalled();
                     var gemini = geminiProtection.EnsureInstalled();
                     var windsurf = windsurfProtection.EnsureInstalled();
                     var cline = clineProtection.EnsureInstalled();
+                    var zCode = zCodeProtection.EnsureInstalled();
+                    var deepSeek = deepSeekProtection.EnsureInstalled();
                     var unexpectedChanges = await Task.Run(
                         () => protection.Verify(
                             protectedBefore,
@@ -256,6 +262,8 @@ internal static class SetupInstaller
                                 codexProtection.HookScriptPath,
                                 claudeProtection.SettingsPath,
                                 claudeProtection.HookScriptPath,
+                                antigravityProtection.HooksPath,
+                                antigravityProtection.HookScriptPath,
                                 cursorProtection.HooksPath,
                                 cursorProtection.HookScriptPath,
                                 copilotProtection.HooksPath,
@@ -266,6 +274,11 @@ internal static class SetupInstaller
                                 windsurfProtection.HooksPath,
                                 windsurfProtection.HookScriptPath,
                                 clineProtection.HookPath,
+                                zCodeProtection.ConfigPath,
+                                zCodeProtection.HookScriptPath,
+                                deepSeekProtection.HooksPath,
+                                deepSeekProtection.PatchPath,
+                                deepSeekProtection.HookScriptPath,
                             ]),
                         cancellationToken).ConfigureAwait(false);
                     if (unexpectedChanges.Count > 0)
@@ -290,9 +303,11 @@ internal static class SetupInstaller
 
                     Report($"Agent hooks: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
                            $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}, " +
+                           $"Antigravity {(antigravity ? "installed" : "skipped")}, " +
                            $"Cursor {(cursor ? "installed" : "skipped")}, " +
                            $"GitHub Copilot CLI {(copilot ? "installed" : "skipped")}, Gemini CLI {(gemini ? "installed" : "skipped")}, " +
-                           $"Windsurf Cascade {(windsurf ? "installed" : "skipped")}, Cline {(cline ? "installed" : "skipped")}.");
+                           $"Windsurf Cascade {(windsurf ? "installed" : "skipped")}, Cline {(cline ? "installed" : "skipped")}, " +
+                           $"ZCode {(zCode ? "installed" : "skipped")}, DeepSeek Harness {(deepSeek ? "installed" : "skipped")}.");
                 }
                 else
                 {

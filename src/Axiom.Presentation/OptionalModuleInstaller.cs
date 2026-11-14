@@ -274,6 +274,8 @@ public sealed class OptionalModuleInstaller
             }
             Write-Host 'Installer hash matches the pinned Axiom digest.' -ForegroundColor Green
             Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
+            $env:BLACKBOX_MODE = 'block'
+            $env:BLACKBOX_ATTACH_ALL = '1'
             & $installer -StoreBackend oxigraph
 
             # The vendor pins the LF SHA-256 of the BIP-39 wordlist, but a Windows git clone with
@@ -298,6 +300,7 @@ public sealed class OptionalModuleInstaller
               Write-Host ("bip39_english.txt SHA256: " + (Get-FileHash $bip39 -Algorithm SHA256).Hash) -ForegroundColor Yellow
             }
             $venv = Join-Path $dir 'agent-blackbox\venv\Scripts\python.exe'
+            $venvW = Join-Path $dir 'agent-blackbox\venv\Scripts\pythonw.exe'
             if (Test-Path $venv) {
               Write-Host 'Repairing missing Blackbox Python dependencies...' -ForegroundColor Cyan
               & $venv -m pip install ruamel.yaml python-dotenv rich pyyaml aiohttp cryptography psutil fastapi uvicorn
@@ -315,7 +318,8 @@ public sealed class OptionalModuleInstaller
               try { Invoke-WebRequest $dashboard -UseBasicParsing -TimeoutSec 2 | Out-Null; $running = $true } catch { }
               if (-not $running) {
                 Write-Host 'Starting the Blackbox dashboard...' -ForegroundColor Cyan
-                Start-Process -FilePath $venv -ArgumentList @($launcher) -WorkingDirectory $agent -WindowStyle Hidden
+                $dashExe = if (Test-Path $venvW) { $venvW } else { $venv }
+                Start-Process -FilePath $dashExe -ArgumentList @($launcher) -WorkingDirectory $agent -WindowStyle Hidden
                 Start-Sleep -Seconds 8
               }
               try {
@@ -461,7 +465,9 @@ public sealed class OptionalModuleInstaller
         }
 
         var agent = Path.Combine(BlackboxRoot, "agent-blackbox");
-        var venv = Path.Combine(agent, "venv", "Scripts", "python.exe");
+        var venvPythonW = Path.Combine(agent, "venv", "Scripts", "pythonw.exe");
+        var venvPython = Path.Combine(agent, "venv", "Scripts", "python.exe");
+        var venv = File.Exists(venvPythonW) ? venvPythonW : venvPython;
         if (!File.Exists(venv) || IsUnsafeInstallRoot(BlackboxRoot, agent, venv))
         {
             return false;
@@ -509,14 +515,19 @@ public sealed class OptionalModuleInstaller
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
             "powershell.exe",
-            $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}")
+            $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}")
         {
-            UseShellExecute = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
             WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            WindowStyle = ProcessWindowStyle.Normal,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
         };
 
-        log?.Invoke("A third-party installer window is opening. Follow its prompts and terms.");
+        log?.Invoke("Running third-party installer silently in the background...");
+        BackgroundWindowHider.HideDescendants(TimeSpan.FromMinutes(10));
         using var process = Process.Start(startInfo);
         if (process is null)
         {
@@ -524,8 +535,37 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        var logGate = new object();
+        process.OutputDataReceived += (_, args) =>
+        {
+            if (string.IsNullOrWhiteSpace(args.Data) || log is null)
+            {
+                return;
+            }
+
+            lock (logGate)
+            {
+                log(args.Data);
+            }
+        };
+        process.ErrorDataReceived += (_, args) =>
+        {
+            if (string.IsNullOrWhiteSpace(args.Data) || log is null)
+            {
+                return;
+            }
+
+            lock (logGate)
+            {
+                log(args.Data);
+            }
+        };
+
+        process.StandardInput.Close();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
         process.WaitForExit();
-        log?.Invoke($"Installer window finished with exit code {process.ExitCode}.");
+        log?.Invoke($"Installer finished with exit code {process.ExitCode}.");
         return process.ExitCode == 0;
     }
 

@@ -2,6 +2,11 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.23.1
+
+- **Silent module & background execution for DKG / Blackbox.** Added `AxiomModuleProcessMatcher`, expanded `ModuleWindowHider` (WMI + `EnumWindows` fallback and `BackgroundWindowSettingsStore.Enabled` gating), added `"hermes"`, `"git"`, and `"pip"` to `BackgroundWindowHider.Names` across Presentation/UI/Desktop startup, switched `OptionalModuleInstaller.RunPowerShellScript` to `UseShellExecute = false` / `CreateNoWindow = true` with `pythonw.exe` dashboard preference and `$env:BLACKBOX_MODE = 'block'` / `$env:BLACKBOX_ATTACH_ALL = '1'`, added clean Antigravity/dashboard teardown in `OptionalModuleUninstaller`, and added automatic Blackbox launch & polling on `SecurityPageViewModel.RefreshAsync`.
+- **Complete (`Full`) setup provisioning.** Added `Axiom.UI.Services.AntigravityProtection`, wired `AntigravityProtection`, `ZCodeProtection`, and `DeepSeekProtection` into `SetupInstaller` and `Axiom.UI.Services.AgentHookMaintenance` so all 11 supported AI agent harnesses are hooked automatically, and updated `SetupDefaults` and `PrivacyShieldProvisioner` to provision `PrivacyShieldProfile.Strict` (all 6 categories plus `Custom`, all 8 `PrivacyShieldSourceCatalog.All` blocklist sources) and `CommunityFeedCatalog.RecommendedBundleUrl` with `autoSync = true`.
+
 ## What's in 0.23.0
 
 - **Complete install protected out of the box.** First start writes `mode: block`, provisions every agent hook, applies the Trader Shield for eleven wallets and `plugins.load_timeout_seconds: 120`, and runs a self-test that proves a protected read and write are blocked.
