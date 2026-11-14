@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
+             xmlns:views="using:Axiom.UI.Avalonia.Views"
              x:Class="Axiom.UI.Avalonia.Views.AgentsView">
   <UserControl.Styles>
     <Style Selector="Ellipse.tone-ok">
@@ -216,6 +217,9 @@
           <controls:AxiomSelectableTextBlock Text="{Binding Security.InstallStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
+
+      <views:TraderShieldSectionView DataContext="{Binding Security.TraderShield}"
+                                     IsVisible="{Binding IsAvailable}" />
 
       <Border Classes="card" Padding="0">
         <ItemsControl ItemsSource="{Binding Security.Modules}">

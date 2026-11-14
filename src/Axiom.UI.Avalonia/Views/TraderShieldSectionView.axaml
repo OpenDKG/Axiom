@@ -1,0 +1,115 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Axiom.UI.Avalonia.Controls"
+             x:Class="Axiom.UI.Avalonia.Views.TraderShieldSectionView">
+  <Border Classes="card" Padding="16">
+    <StackPanel Spacing="10">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <StackPanel Grid.Column="0" Spacing="2">
+          <controls:AxiomSelectableTextBlock Text="Trader Shield" Classes="section-title" />
+          <controls:AxiomSelectableTextBlock
+            Text="Blocks agent access to wallet keystores and labelled seed phrases or private keys. Settings and public addresses stay local in your Hermes config and are never shared."
+            FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <CheckBox Content="Enabled"
+                    IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                    Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <Button Content="Save"
+                  Classes="primary"
+                  Command="{Binding SaveSettingsCommand}"
+                  Padding="12,5" />
+          <Button Content="Run self-test"
+                  Command="{Binding RunSelfTestCommand}"
+                  IsEnabled="{Binding !IsTesting}"
+                  Padding="12,5" />
+        </StackPanel>
+      </Grid>
+
+      <controls:AxiomSelectableTextBlock Text="{Binding StatusText}"
+                                         FontSize="10.5"
+                                         Foreground="{DynamicResource Axiom.TextSecondary}"
+                                         TextWrapping="Wrap" />
+
+      <StackPanel Spacing="4">
+        <controls:AxiomSelectableTextBlock Text="Protected wallets"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Axiom.TextPrimary}" />
+        <ItemsControl ItemsSource="{Binding Wallets}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <CheckBox Content="{Binding DisplayName}"
+                        IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                        Margin="0,2,16,2"
+                        FontSize="11.5"
+                        Foreground="{DynamicResource Axiom.TextPrimary}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+      <StackPanel Spacing="6">
+        <controls:AxiomSelectableTextBlock Text="Your own public EVM addresses (local-only private-key guard)"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Axiom.TextPrimary}" />
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+          <TextBox Grid.Column="0"
+                   Text="{Binding NewAddressInput, Mode=TwoWay}"
+                   PlaceholderText="0x... (40 hex characters)" />
+          <Button Grid.Column="1"
+                  Content="Add address"
+                  Command="{Binding AddAddressCommand}"
+                  Padding="12,5" />
+        </Grid>
+        <controls:AxiomSelectableTextBlock Text="No custom addresses added."
+                                           IsVisible="{Binding HasNoAddresses}"
+                                           FontSize="10"
+                                           Foreground="{DynamicResource Axiom.TextMuted}" />
+        <ItemsControl ItemsSource="{Binding Addresses}" IsVisible="{Binding HasAddresses}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                <controls:AxiomSelectableTextBlock Grid.Column="0"
+                                                   Text="{Binding .}"
+                                                   Classes="mono"
+                                                   FontSize="10.5"
+                                                   Foreground="{DynamicResource Axiom.TextSecondary}"
+                                                   VerticalAlignment="Center" />
+                <Button Grid.Column="1"
+                        Content="Remove"
+                        Padding="8,2"
+                        FontSize="10"
+                        Command="{Binding $parent[ItemsControl].DataContext.RemoveAddressCommand}"
+                        CommandParameter="{Binding .}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+      <Border Background="{DynamicResource Axiom.SurfaceAlt}"
+              BorderBrush="{DynamicResource Axiom.Border}"
+              BorderThickness="1"
+              CornerRadius="6"
+              Padding="10,7">
+        <StackPanel Spacing="2">
+          <controls:AxiomSelectableTextBlock Text="SELF-TEST (SYNTHETIC SEED WRITE + KEYSTORE READ)"
+                                             FontSize="9.5"
+                                             FontWeight="SemiBold"
+                                             Foreground="{DynamicResource Axiom.TextMuted}" />
+          <controls:AxiomSelectableTextBlock Text="{Binding SelfTestStatusText}"
+                                             FontSize="10.5"
+                                             Foreground="{DynamicResource Axiom.TextPrimary}"
+                                             TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </Border>
+</UserControl>

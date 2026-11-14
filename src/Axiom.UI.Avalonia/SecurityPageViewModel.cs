@@ -337,6 +337,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     public ObservableCollection<ProtectedAgent> ProtectedAgents { get; } = [];
 
+    public TraderShieldSectionViewModel TraderShield { get; } = new();
+
     public bool IsAgentProtectionAvailable => !DistributionContext.IsStorePackage;
 
     [ObservableProperty]
