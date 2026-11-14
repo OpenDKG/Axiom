@@ -114,6 +114,136 @@ public sealed class FilterConnectionIdentityTests
         Assert.Equal(currentSeen, status.LastSeenUtc);
     }
 
+    [Fact]
+    public void StaleFlowEventsCannotChangeTheCurrentFlowTable()
+    {
+        using var temp = new TempDirectory();
+        var status = new FilterStatus();
+        var flows = new FlowTable();
+        var server = new FilterEventServer(
+            MacServicePaths.ForRoot(temp.Path), flows, status, _ => true, new ManualTimeProvider(Start));
+        var stale = status.ClientConnected();
+        var current = status.ClientConnected();
+
+        server.Accept(new FlowEvent { Type = FlowEventType.Open, Id = "current-flow", Verdict = "allow" }, current);
+        server.Accept(new FlowEvent { Type = FlowEventType.Close, Id = "current-flow" }, stale);
+
+        var afterStaleClose = Assert.Single(flows.Capture(Start));
+        Assert.Equal("Established", afterStaleClose.State);
+        Assert.All(flows.Capture(Start), flow => Assert.Equal("Established", flow.State));
+
+        server.Accept(new FlowEvent { Type = FlowEventType.Stats, Id = "current-flow", BytesIn = 100 }, stale);
+        Assert.Equal(0, Assert.Single(flows.Capture(Start)).BytesIn);
+
+        server.Accept(new FlowEvent { Type = FlowEventType.Open, Id = "stale-flow", Verdict = "block" }, stale);
+        Assert.Equal(1, flows.Count);
+
+        server.Accept(new FlowEvent { Type = FlowEventType.Stats, Id = "current-flow", BytesIn = 500 }, current);
+        Assert.Equal(500, Assert.Single(flows.Capture(Start)).BytesIn);
+    }
+
+    [Fact]
+    public async Task NewSessionDoesNotInheritOldReportForWaitOrOutcome()
+    {
+        var status = new FilterStatus();
+        var stale = status.ClientConnected();
+        status.Published(42, ["rule-1"]);
+        status.Hello(stale, "old", 41, Start);
+        status.RulesReported(stale, Rules(41, "old file error"), Start);
+
+        var current = status.ClientConnected();
+        var snapshot = status.Snapshot(42);
+
+        Assert.Equal(FilterEnforcementState.Pending, snapshot.State);
+        Assert.Null(snapshot.Rules);
+        Assert.Null(snapshot.FileRejectionSince(Start));
+
+        var wait = status.WaitForAcknowledgementAsync(42, Start, TimeSpan.FromSeconds(5), CancellationToken.None);
+        Assert.False(wait.IsCompleted);
+
+        var outcome = MacFirewallPolicyAdapter.Outcome(
+            Guid.NewGuid(), null, "rule-1", 42, Start, snapshot);
+        Assert.Equal(RuleState.Pending, outcome.State);
+        Assert.Null(outcome.ErrorCode);
+
+        status.RulesReported(current, Rules(42, null, "rule-1"), Start.AddSeconds(1));
+        await wait.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(42));
+    }
+
+    /// <summary>
+    /// Registration follows acceptance order even when the first worker is delayed: B, accepted
+    /// later, stays current and a delayed A ack cannot replace it.
+    /// </summary>
+    [Fact]
+    public async Task DelayedFirstAuthorizationCannotReplaceTheCurrentSession()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var paths = MacServicePaths.ForRoot(temp.Path);
+        var status = new FilterStatus();
+        using var firstAuthorization = new ManualResetEventSlim();
+        using var releaseFirst = new ManualResetEventSlim();
+        var authorizations = 0;
+        var connected = 0;
+        var server = new FilterEventServer(
+            paths,
+            new FlowTable(),
+            status,
+            _ =>
+            {
+                if (Interlocked.Increment(ref authorizations) == 1)
+                {
+                    firstAuthorization.Set();
+                    return releaseFirst.Wait(TimeSpan.FromSeconds(10));
+                }
+
+                return true;
+            },
+            new ManualTimeProvider(Start));
+        server.ClientConnectedAsync = _ =>
+        {
+            Interlocked.Increment(ref connected);
+            return Task.CompletedTask;
+        };
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var run = server.RunAsync(_ => { }, cts.Token);
+        try
+        {
+            await WaitUntil(() => File.Exists(paths.FilterSocketPath), cts.Token);
+
+            using var earlier = await ConnectAsync(paths.FilterSocketPath, cts.Token);
+            await WaitUntil(() => firstAuthorization.IsSet, cts.Token);
+            var laterConnect = ConnectAsync(paths.FilterSocketPath, cts.Token);
+            await Task.Delay(100, cts.Token);
+            releaseFirst.Set();
+            using var later = await laterConnect;
+
+            await WaitUntil(() => Volatile.Read(ref connected) == 2, cts.Token);
+            status.Published(42, ["rule-1"]);
+
+            await SendAsync(later, RulesJson(42), cts.Token);
+            await WaitUntil(() => status.Evaluate(42) == FilterEnforcementState.Verified, cts.Token);
+
+            await SendAsync(earlier, RulesJson(42), cts.Token);
+            await WaitUntil(() => server.AcceptedEvents == 2, cts.Token);
+
+            Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(42));
+            Assert.Equal(2, status.Rules!.ConnectionId);
+        }
+        finally
+        {
+            releaseFirst.Set();
+            await cts.CancelAsync();
+            await run;
+        }
+    }
+
     /// <summary>
     /// The deterministic cases above through the real Unix-socket server: two overlapping accepted
     /// clients, a stale ack/error from A, the current B ack, then B disconnecting while A is open.
@@ -129,7 +259,8 @@ public sealed class FilterConnectionIdentityTests
         using var temp = new TempDirectory();
         var paths = MacServicePaths.ForRoot(temp.Path);
         var status = new FilterStatus();
-        var server = new FilterEventServer(paths, new FlowTable(), status, _ => true, new ManualTimeProvider(Start));
+        var flows = new FlowTable();
+        var server = new FilterEventServer(paths, flows, status, _ => true, new ManualTimeProvider(Start));
         var accepted = 0;
         server.ClientConnectedAsync = _ =>
         {
@@ -160,6 +291,15 @@ public sealed class FilterConnectionIdentityTests
             await WaitUntil(() => server.AcceptedEvents == 3, cts.Token);
             Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(42));
 
+            await SendAsync(current, OpenJson("current-flow"), cts.Token);
+            await WaitUntil(() => flows.Count == 1, cts.Token);
+            await SendAsync(stale, "{\"type\":\"flow.close\",\"id\":\"current-flow\"}", cts.Token);
+            await WaitUntil(() => server.AcceptedEvents == 5, cts.Token);
+            Assert.Equal("Established", Assert.Single(flows.Capture(Start)).State);
+            await SendAsync(stale, "{\"type\":\"flow.open\",\"id\":\"stale-flow\",\"verdict\":\"block\"}", cts.Token);
+            await WaitUntil(() => server.AcceptedEvents == 6, cts.Token);
+            Assert.Equal(1, flows.Count);
+
             current.Shutdown(SocketShutdown.Both);
             current.Close();
             await WaitUntil(() => status.Evaluate(42) == FilterEnforcementState.Degraded, cts.Token);
@@ -184,6 +324,9 @@ public sealed class FilterConnectionIdentityTests
     private static string ErrorJson(long generation) =>
         $"{{\"type\":\"filter.rules\",\"generation\":{generation},\"applied\":1," +
         "\"rejected\":[],\"error\":\"stale A error\",\"dropped\":0}";
+
+    private static string OpenJson(string id) =>
+        $"{{\"type\":\"flow.open\",\"id\":\"{id}\",\"verdict\":\"allow\"}}";
 
     private static async Task<Socket> ConnectAsync(string path, CancellationToken cancellationToken)
     {

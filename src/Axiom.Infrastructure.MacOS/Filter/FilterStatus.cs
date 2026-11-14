@@ -64,7 +64,8 @@ public sealed record FilterEnforcementSnapshot(
     DateTimeOffset? LastSeenUtc,
     DateTimeOffset? LastAckUtc,
     FilterRulesReport? Rules,
-    IReadOnlyList<string>? ExpectedRuleIds = null)
+    IReadOnlyList<string>? ExpectedRuleIds = null,
+    long CurrentConnectionId = -1)
 {
     public bool IsVerified => State == FilterEnforcementState.Verified;
 
@@ -98,17 +99,26 @@ public sealed record FilterEnforcementSnapshot(
         !Expected(ruleId) &&
         !(Rules?.Enforces(ruleId) ?? false);
 
-    /// <summary>A file-level rejection reported after <paramref name="publishedUtc"/> (so it concerns the published table).</summary>
+    /// <summary>
+    /// A file-level rejection from the current connection, reported after
+    /// <paramref name="publishedUtc"/> (so it concerns the published table). A report retained as
+    /// history from another or disconnected session never answers for the current one.
+    /// </summary>
     public string? FileRejectionSince(DateTimeOffset publishedUtc) =>
-        Rules is { Error: { Length: > 0 } error } report && report.ReceivedUtc >= publishedUtc ? error : null;
+        CurrentConnectionId >= 0 &&
+        Rules is { Error: { Length: > 0 } error } report &&
+        report.ConnectionId == CurrentConnectionId &&
+        report.ReceivedUtc >= publishedUtc
+            ? error
+            : null;
 }
 
 /// <summary>
 /// Liveness and enforcement state of the AxiomFilter system extension as seen on the flow-event
 /// socket. Four things are kept apart on purpose (High #4): when the extension was last seen
-/// (<see cref="LastSeenUtc"/>, from the current connection, diagnostic only), whether a current
-/// connection is open now (<see cref="IsConnected"/>), which rules generation that connection last
-/// acknowledged (<see cref="AckedGeneration"/>, from <c>filter.rules</c> without an error) and the derived
+/// (<see cref="LastSeenUtc"/>, historical diagnostic only), whether a current connection is open
+/// now (<see cref="IsConnected"/>), which rules generation the current session last acknowledged
+/// (<see cref="AckedGeneration"/>, from <c>filter.rules</c> without an error) and the derived
 /// <see cref="Evaluate"/> enforcement state for a published generation. A disconnect degrades
 /// enforcement immediately: a hello that was recent a minute ago proves nothing now. After a
 /// reconnect the acknowledgement must be fresh (sent on the new connection), which is why the
@@ -184,7 +194,7 @@ public sealed class FilterStatus
         }
     }
 
-    /// <summary>Last time the current connection sent a hello, rules report or flow event. Diagnostic only.</summary>
+    /// <summary>Last time an accepted connection sent a hello, rules report or flow event. Historical diagnostic only.</summary>
     public DateTimeOffset? LastSeenUtc
     {
         get
@@ -278,6 +288,18 @@ public sealed class FilterStatus
             var connectionId = ++_nextConnectionId;
             _openConnections.Add(connectionId);
             _currentConnectionId = connectionId;
+
+            // Decision evidence belongs to one session only. Keep the last-seen timestamp and
+            // monotonically reported drop counter as history, but never let an old report, ack or
+            // hello answer for the new current session.
+            _rules = null;
+            _ackedGeneration = null;
+            _lastAckUtc = null;
+            _version = null;
+            _generation = null;
+            _lastHelloUtc = null;
+            _lastEventUtc = null;
+
             Signal();
             return connectionId;
         }
@@ -398,17 +420,24 @@ public sealed class FilterStatus
         }
     }
 
-    public void EventSeen(long connectionId, DateTimeOffset now)
+    /// <summary>
+    /// Records that the current connection was seen. The optional <paramref name="apply"/> runs
+    /// under the same lock, so a flow event is applied only while its connection is still current
+    /// and cannot race a session switch between the check and the mutation.
+    /// </summary>
+    public bool EventSeen(long connectionId, DateTimeOffset now, Action? apply = null)
     {
         lock (_gate)
         {
             if (_currentConnectionId != connectionId)
             {
-                return;
+                return false;
             }
 
             _lastEventUtc = now;
             _lastSeenUtc = now;
+            apply?.Invoke();
+            return true;
         }
     }
 
@@ -441,7 +470,8 @@ public sealed class FilterStatus
                 _lastSeenUtc,
                 _lastAckUtc,
                 _rules,
-                _published is { } published && published.Generation == publishedGeneration ? published.RuleIds : null);
+                _published is { } published && published.Generation == publishedGeneration ? published.RuleIds : null,
+                _currentConnectionId ?? -1);
         }
     }
 
@@ -465,7 +495,10 @@ public sealed class FilterStatus
             {
                 var state = EvaluateLocked(publishedGeneration);
                 if (state != FilterEnforcementState.Pending ||
-                    (_rules is { Error.Length: > 0 } report && report.ReceivedUtc >= publishedUtc))
+                    (_currentConnectionId is { } current &&
+                     _rules is { Error.Length: > 0 } report &&
+                     report.ConnectionId == current &&
+                     report.ReceivedUtc >= publishedUtc))
                 {
                     return;
                 }

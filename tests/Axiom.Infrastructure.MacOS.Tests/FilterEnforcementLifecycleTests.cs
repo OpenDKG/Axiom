@@ -523,14 +523,23 @@ public sealed class FilterEnforcementLifecycleTests
 
         var fileRejected = MacFirewallPolicyAdapter.Outcome(id, null, ruleId, 3, Start,
             new FilterEnforcementSnapshot(FilterEnforcementState.Pending, true, 3, 2, Start, Start,
-                report with { Generation = 2, Error = "invalid JSON", ReceivedUtc = Start.AddSeconds(1) }));
+                report with { Generation = 2, Error = "invalid JSON", ReceivedUtc = Start.AddSeconds(1), ConnectionId = 7 },
+                CurrentConnectionId: 7));
         Assert.True(fileRejected is { Success: false, State: RuleState.Failed, ErrorCode: "filter.file_rejected" });
 
         // A file rejection from before this publish does not fail the new generation.
         var stale = MacFirewallPolicyAdapter.Outcome(id, null, ruleId, 3, Start.AddSeconds(2),
             new FilterEnforcementSnapshot(FilterEnforcementState.Pending, true, 3, 2, Start, Start,
-                report with { Generation = 2, Error = "invalid JSON", ReceivedUtc = Start.AddSeconds(1) }));
+                report with { Generation = 2, Error = "invalid JSON", ReceivedUtc = Start.AddSeconds(1), ConnectionId = 7 },
+                CurrentConnectionId: 7));
         Assert.Equal(RuleState.Pending, stale.State);
+
+        // A rejection retained from another session never answers for the current one.
+        var historical = MacFirewallPolicyAdapter.Outcome(id, null, ruleId, 3, Start,
+            new FilterEnforcementSnapshot(FilterEnforcementState.Pending, true, 3, 2, Start, Start,
+                report with { Generation = 2, Error = "invalid JSON", ReceivedUtc = Start.AddSeconds(1), ConnectionId = 6 },
+                CurrentConnectionId: 7));
+        Assert.Equal(RuleState.Pending, historical.State);
     }
 
     /// <summary>The daemon republishes on every filter connection so the ack is for this connection.</summary>

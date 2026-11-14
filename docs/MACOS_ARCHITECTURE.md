@@ -280,15 +280,20 @@ An earlier clean ack is not a standing licence. `FilterStatus` now keeps, explic
 | `Rules` (`FilterRulesReport`) | the **latest** `filter.rules` report, whatever its outcome: `Generation`, `ConnectionId` (accepted connection it arrived on), `Error` (file-level rejection, `IsError`), `Rejected` (rule ids + reasons), `AppliedRuleIds` (optional `ruleIds` echo, null = unknown), `ReceivedUtc` |
 | `_published` → `Snapshot(N).ExpectedRuleIds` | the ids the daemon wrote into rules.json for generation N (expected-rules snapshot; null when N was not published by this daemon process) |
 
-`FilterEventServer` captures the id returned by `ClientConnected` at acceptance and passes it through the consume loop
-to every hello, `filter.rules` and flow event. Only that current accepted connection may change the current generation,
-acknowledgement, rules report, liveness or diagnostics; a line from an older connection that has not seen EOF yet is
-ignored. `Evaluate(N)` is `Verified` only when the **current** connection is open **and** the latest report has
-`ConnectionId == current`, no error and `Generation == N`. Consequences: a later error report for the same generation
-revokes `Verified` (it was kept before, MAC-1); an N-1 ack never verifies N; a reconnect makes the new connection
-current so the previous instance's report stops counting until the new instance reports (the daemon republishes on
-connect); a new clean report for N restores `Verified`; disconnecting the current connection degrades even while an
-older one is still open, while disconnecting an older one leaves the current verification alone.
+`FilterEventServer` authorizes and registers (`ClientConnected`) in the serialized accept path, before the worker is
+dispatched, and passes the returned id through the consume loop to every hello, `filter.rules` and flow event. Only
+that current accepted connection may change the current generation, acknowledgement, rules report, liveness,
+diagnostics or `FlowTable` state; the flow apply runs under the same status lock as the session check, so a line from
+an older connection cannot race a session switch. Selecting a new session clears the previous session's report, ack
+and hello diagnostics; the last-seen timestamp and drop counter stay only as history. `Evaluate(N)` is `Verified`
+only when the **current** connection is open **and** the latest report has `ConnectionId == current`, no error and
+`Generation == N`. Consequences: a later error report for the same generation revokes `Verified` (it was kept before,
+MAC-1); an N-1 ack never verifies N; a reconnect makes the new connection current so the previous instance's report
+stops counting until the new instance reports (the daemon republishes on connect); a new clean report for N restores
+`Verified`; disconnecting the current connection degrades even while an older one is still open, while disconnecting
+an older one leaves the current verification alone. `FilterEnforcementSnapshot.CurrentConnectionId` qualifies the
+adapter-facing file rejection: a retained report from another or disconnected session never fails the current wait
+or outcome.
 
 Per-rule proof `RuleVerified(id, enabled)`: generation `Verified` ∧ `id` in `ExpectedRuleIds` ∧ not in `Rejected` ∧ (when
 the filter echoes `ruleIds`) listed — or, for a disabled rule, not listed. `ProjectState`, the apply outcome and

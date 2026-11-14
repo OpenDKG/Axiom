@@ -62,6 +62,7 @@ public sealed class FilterEventServer
 
     public long RejectedLines => Interlocked.Read(ref _rejectedLines);
 
+    /// <summary>Parsed lines from any connection; aggregate parser counter, not a status signal.</summary>
     public long AcceptedEvents => Interlocked.Read(ref _acceptedEvents);
 
     public string SocketPath => _paths.FilterSocketPath;
@@ -100,12 +101,31 @@ public sealed class FilterEventServer
                         continue;
                     }
 
+                    long connectionId;
+                    try
+                    {
+                        if (!TryRegisterAuthorized(client, log, out connectionId))
+                        {
+                            Interlocked.Decrement(ref active);
+                            client.Dispose();
+                            continue;
+                        }
+                    }
+                    catch (Exception exception) when (exception is
+                                 SocketException or IOException or ObjectDisposedException)
+                    {
+                        log($"Filter socket client registration failed: {exception.Message}");
+                        Interlocked.Decrement(ref active);
+                        client.Dispose();
+                        continue;
+                    }
+
                     _ = Task.Run(
                         async () =>
                         {
                             try
                             {
-                                await ServeAsync(client, log, cancellationToken).ConfigureAwait(false);
+                                await ServeAsync(client, connectionId, log, cancellationToken).ConfigureAwait(false);
                             }
                             finally
                             {
@@ -177,36 +197,47 @@ public sealed class FilterEventServer
         ArgumentNullException.ThrowIfNull(flowEvent);
 
         var now = _time.GetUtcNow();
-        Interlocked.Increment(ref _acceptedEvents);
         if (flowEvent.Type == FlowEventType.Hello)
         {
             _status.Hello(connectionId, flowEvent.Version, flowEvent.Generation, flowEvent.Dropped, now);
-            return;
         }
-
-        if (flowEvent.Type == FlowEventType.Rules)
+        else if (flowEvent.Type == FlowEventType.Rules)
         {
             _status.RulesReported(connectionId, flowEvent, now);
-            return;
+        }
+        else
+        {
+            _status.EventSeen(connectionId, now, () => _flows.Apply(flowEvent, now));
         }
 
-        _status.EventSeen(connectionId, now);
-        _flows.Apply(flowEvent, now);
+        // Aggregate parser counter, incremented after the status/flow mutation so tests never
+        // treat it as evidence that a current-session mutation completed.
+        Interlocked.Increment(ref _acceptedEvents);
     }
 
-    private async Task ServeAsync(Socket client, Action<string> log, CancellationToken cancellationToken)
+    /// <summary>
+    /// Authorizes and registers in the serialized accept path, so registration follows actual
+    /// acceptance order even when a worker is delayed. Refused clients are never registered.
+    /// </summary>
+    private bool TryRegisterAuthorized(Socket client, Action<string> log, out long connectionId)
+    {
+        connectionId = 0;
+        uint? uid = UnixPeerCredentials.TryGetPeerUid(client, out var peerUid) ? peerUid : null;
+        if (!_authorizePeer(uid))
+        {
+            log($"Rejected filter socket client uid {uid?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}.");
+            return false;
+        }
+
+        connectionId = _status.ClientConnected();
+        log("AxiomFilter connected to the flow-event socket.");
+        return true;
+    }
+
+    private async Task ServeAsync(Socket client, long connectionId, Action<string> log, CancellationToken cancellationToken)
     {
         using (client)
         {
-            uint? uid = UnixPeerCredentials.TryGetPeerUid(client, out var peerUid) ? peerUid : null;
-            if (!_authorizePeer(uid))
-            {
-                log($"Rejected filter socket client uid {uid?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}.");
-                return;
-            }
-
-            var connectionId = _status.ClientConnected();
-            log("AxiomFilter connected to the flow-event socket.");
             try
             {
                 if (ClientConnectedAsync is { } onConnected)
