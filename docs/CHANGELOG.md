@@ -2,6 +2,11 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.21.0
+
+- **Encrypted RFC 8484 DNS-over-HTTPS (DoH) Upstream.** Privacy Shield now upgrades public upstream resolvers (`1.1.1.1`, `8.8.8.8`, `9.9.9.9`, `94.140.14.14`, etc.) and explicit `https://.../dns-query` URLs to encrypted HTTP/2 DoH on port `443` with no silent plaintext downgrade.
+- **Expanded Malware/Phishing Blocklists & Public SHA-256 Community Feeds.** Expanded `PrivacyShieldSourceCatalog` from 6 to 8 sources (`hagezi-tif`, `phishing-filter`) and upgraded `CommunityFeedClient` with plain-text SHA-256 parsing, multi-URL deduplication, and `CommunityFeedCatalog.Presets`.
+
 ## What's in 0.20.0
 
 - **Stage E4 Scoped Agent Firewall Enforcer & Stage E3 Trusted File Broker (#323).** Added scoped per-agent Windows Firewall enforcement with rollback and dual-destination canary checks, plus the `TrustedFileBroker` prototype and ADR 0012.
