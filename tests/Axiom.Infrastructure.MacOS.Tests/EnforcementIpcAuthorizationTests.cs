@@ -3,7 +3,6 @@ using System.Net.Sockets;
 using System.Text.Json;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
-using Axiom.Infrastructure.MacOS.Ipc;
 using Axiom.Service.Hosting.Ipc;
 
 namespace Axiom.Infrastructure.MacOS.Tests;
