@@ -106,15 +106,27 @@ time), but `LayerSyncResult.CoveredRules` excludes every uncovered rule, so `rul
 reported the same way (previously their cgroup entry made them look "BPF-backed").
 
 Rejected alternative: keying the kernel side on something else (`f_path.mnt`, the btrfs root objectid).
-A mount pointer is per mount, not per file, and the btrfs root id needs non-CO-RE-stable internals;
-the mountinfo route needs no kernel change and is provable from user space.
+A mount pointer is per mount, not per file, and the btrfs root id needs btrfs-internal structures
+(CO-RE relocatable, but only when btrfs BTF is present); the mountinfo route needs no kernel change and is
+provable from user space. It is correct on single-subvolume filesystems, not on btrfs (next paragraph).
 
-Known limitation (btrfs): inode numbers are unique per *subvolume*, not per superblock, so
-`{0:33, 3056}` also matches inode 3056 of another subvolume of the same filesystem (e.g. `/home`).
-The effect is over-blocking of that one unrelated file's connections, never under-blocking; the ino space
-is large and the collision needs a block rule on exactly that number. Containers: a process inside an
-overlay rootfs has an overlay exe inode, so host-path rules do not exe-match it (the cgroup key does if it
-is herded); this is the same behaviour nftables' cgroup rules have.
+**btrfs: exe keys are not used (since `c60fc36`).** Inode numbers are unique per *subvolume*, not per
+superblock, and every subvolume shares the superblock `s_dev`, so `{0:33, ino}` matches that inode number
+in **every** subvolume of the filesystem. This was proven on the Fedora 45 VM (§11.1): two fresh
+subvolumes give their first file the same inode 257, and the key written for one blocked a *different*
+executable in the other subvolume at connect time. `BpfExeKey.Resolve` therefore returns no key on btrfs
+(`exe key ambiguous on btrfs subvolumes`); the rule is reported nft-only (`connectTimeBlockingProven=false`,
+`coverageReason` says why), the herded-cgroup BPF key still applies, and the doctor's `bpf exe key` check
+is `SKIP` there. Trade-off: on Fedora's default root (btrfs) exe rules lose the connect-time layer and
+keep the ~1 s exec window (measured ~50/50 fresh-process slips, §11.2) — the safe direction is to
+under-claim rather than block unrelated binaries. **Proposed follow-up (not done):** add the btrfs
+subvolume id to the kernel-side key (CO-RE read of `BTRFS_I(inode)->root->root_key.objectid`, guarded by
+`bpf_core_type_exists(struct btrfs_inode)`), with user space taking the subvolume id from
+`btrfs inspect-internal rootid` / `BTRFS_IOC_INO_LOOKUP`; only then can btrfs exe rules be proven again.
+
+Containers: a process inside an overlay rootfs has an overlay exe inode, so host-path rules do not
+exe-match it (the cgroup key does if it is herded); this is the same behaviour nftables' cgroup rules
+have. Overlay paths are nft-only and reported so (§11.1).
 
 The journal prints every key it writes and every rule it leaves to nftables:
 `BPF exe key: exe /usr/bin/curl dev 0:33 ino 3056 proto 0x7 (dev 0:33 from mountinfo (btrfs at / [root /root]; stat 0:35 is the btrfs subvolume device)).`
@@ -270,7 +282,8 @@ process killed except the helper the script started; every object the script cre
 - Allowed flows produce no BPF events (by design, §3); flow visibility of allowed traffic stays with
   `/proc/net` polling.
 - Kernels without BTF (some distro kernels, older LTS) and non-root test runs: nft-only, reported.
-- btrfs: exe keys derived from mountinfo since the F-8 fix (§2.1); overlayfs exe paths stay nft-only (+ cgroup key).
+- btrfs: exe keys are ambiguous across subvolumes and not used since `c60fc36` (§2.1, §11); overlayfs exe
+  paths stay nft-only (+ cgroup key).
 - `bpftool` must exist on the target; the probe and the doctor print a distribution-aware hint from
   `/etc/os-release` `ID`/`ID_LIKE` (`BpftoolHint`): Ubuntu & derivatives `apt install linux-tools-common
   linux-tools-$(uname -r)`, Debian `apt install bpftool`, Fedora/RHEL family `dnf install bpftool`, SUSE
@@ -357,3 +370,92 @@ removed rule republishes and resyncs without it.
 Tests: `BpfEffectiveStateTests` (red tests of the review, green now), `LinuxFaultMatrixTests` (16), over
 `FakeBpftool`, which models map contents, attachments, transient (`FailTimes`) and persistent
 (`FailPrefixes`) faults, EPERM text and a missing binary.
+
+## 11. Coverage labelling, identity boundary and live canary (PR #276 round 3)
+
+Commits on `buba/linux`: red `9dc4ec4` → fix `1c71a01` (#290, restart-while-pending, coverage fields);
+UI red `4599e8b` → `5a3f3ad`; red `794e226` → `c60fc36` (btrfs, executable replacement); `4d14f80`
+`scripts/linux/canary.sh`; red `0c65629` → `b06adb8` (externally detached programs). Evidence rows:
+`LINUX_TEST_REPORT.md` "PR #276 round 3".
+
+**Two claims, kept apart.** `EnforcementVerified` keeps its meaning (the OS rule is installed and read
+back). New, additive and `null` on Windows/macOS:
+
+| Field | Meaning |
+|---|---|
+| `EffectiveRuleReport.NftRuleReadBack` | the nft rule of this managed rule was listed back from `table inet axiom` |
+| `EffectiveRuleReport.ConnectTimeBlockingProven` (+ `ManagedRule`, `RuleApplyResult`) | the BPF layer is attached, not neutralised, maps read back, and this rule's exe key is written and provable: a *new* process is refused at `connect()` |
+| `EffectiveRuleReport.CoverageReason` | why not, verbatim: scoped/inbound rule, layer inactive/neutralised, `exe key ambiguous on btrfs subvolumes`, overlay, executable replaced, … always ending with `nft rule installed/read back, not race-free: a newly launched process can connect during the ~1 s cgroup attribution window before it is herded` |
+| `FirewallCapabilityReport.ConnectTimeLayer` | `state`, `healthy`, `attached`, `generation`, `mapsVerified`, `connectTimeProvenRules[]`, `nftOnlyRules[]`, `pendingRemovals[]`, `failedDeletes[]` |
+
+The Avalonia UI (Firewall/Apps clause, header connection line, status bar, owned-rule state, apply
+result) reads "installed/read back, not race-free" for nft-only rules on Linux; Windows/macOS strings are
+byte-identical because the fields are null there (`ConnectTimeCoverageWordingTests`).
+
+**#290 doctor.** While `axiomd` is active, the `bpf layer` and the new `live enforcement` checks query the
+daemon over IPC (`rules.query` → capability + `ConnectTimeLayer`); pin files alone never give PASS; IPC
+unavailable is `WARN cannot confirm live state`. A neutralised/degraded layer or a non-empty
+`pendingRemovals` is WARN and `Result: 1 problem(s)` (live: §11.3).
+
+**Restart while a removal is pending.** Not present in the pushed `97d2719`: there was no pending-removal
+concept, and `BpfEngine.StartAsync` ignored a failed detach of the previous instance's programs, unlinked
+its pins and loaded a second program set, so the old stale verdicts kept blocking while the new instance
+reported clean. Since `1c71a01`: `managed-rules.json` persists `pendingRemovals` (cleared only by an
+attached, written and read-back sync); `StartAsync` refuses to load a second set while a previous daemon's
+programs are still attached and keeps the pins; the enforcement report is Degraded while anything is
+pending; the watch tick retries. Unit-tested (`LiveStateAndCoverageTests`); the guest wrapper repro of
+#290 (failing `bpftool map delete`/`cgroup detach` + restart) was not re-run live.
+
+**Externally detached programs (`b06adb8`).** `IVerdictLayer.CheckAttached` runs on every supervisor
+watch tick and on every `rule.verify`: fewer than 4 `axiom_*` programs at the cgroup root marks the layer
+neutralised immediately (`only 0 of 4 Axiom BPF programs are attached (detached by another tool)`), every
+rule drops to `connectTimeBlockingProven=false`, and the same tick re-attaches and resyncs. Before the
+fix the canary measured 99/100 fresh-process slips while the daemon still claimed connect-time coverage.
+
+### 11.1 Executable identity boundary (validation matrix)
+
+| Case | Where | Result | Decision |
+|---|---|---|---|
+| two btrfs subvolumes, same ino 257, **identical** copies; rule on `subA/tool` | Fedora 45 VM | `connectTimeBlockingProven=False`, reason `exe key ambiguous on btrfs subvolumes`; fresh connects slipped subA 20/20, subB 20/20 (nft-only window) | no exe key on btrfs (`c60fc36`) |
+| same, the pre-fix key `{0:33, 257}` written by hand | Fedora 45 VM | subA 0/10 slipped, **unrelated** subB 0/10 slipped (over-block proven); deleted → subB 5/5 | collision is real in the kernel |
+| subvolumes subC/subD, ino 257, **different** executables (sha256 `8f9b3657…` vs `13d0b4f7…`) with the key `{0:33, 257}` | Fedora 45 VM | subC 0/10, different exe subD **0/10** slipped; deleted → subD 5/5 | unrelated binaries can be blocked → downgrade, never claim |
+| overlayfs (`lowerdir/upperdir` mount) | Fedora 45 VM | nft-only, reason `… is on overlay …`; fresh connects slipped 20/20 (19/20 at `c60fc36`) | nft-only + cgroup key |
+| mount namespace: `unshare -m` + bind mount of the blocked exe | Ubuntu host, ext4 | same ino 30933725 in the new ns; 0/20 slipped | inode-keyed: the path does not matter |
+| hard link at another path | Ubuntu host, ext4 | 0/20 slipped | same |
+| executable replaced by `rename(2)` (new inode) | Ubuntu host, ext4 | `rule.verify` immediately `connectTimeBlockingProven=False` (`the executable at this path was replaced (new inode)…`); fresh connects slipped 3/3 per probe round for ~7 s wall clock (05:25:53 → 05:26:00), then 0/3 after the watch tick re-resolved (`BPF exe key(s) re-resolved`) | re-resolve on the watch tick; window documented |
+| tmpfs copy (provable key) | Fedora VM and host | `connectTimeBlockingProven=True`, 0/20 slipped | proven |
+
+### 11.2 Live negative canary (`scripts/linux/canary.sh`)
+
+```
+host netns                                   netns axcanary
+axc0  10.231.0.1/30   fd00:a51:a51::1/64 <-veth-> axc1  10.231.0.2/30  fd00:a51:a51::2/64
+                                                  listener [::]:18080 (dual stack, HTTP 204)
+```
+
+Loopback is exempt in the nft chains and the BPF programs, so a loopback target would prove nothing; the
+veth peer forces the normal output path and gives real IPv6 traffic without an IPv6 default route.
+Probes are copies under `/opt/axiom-canary` (`curl -g --connect-timeout 2`, `python3 -I` with
+`socket.create_connection`), each run = 50 fresh processes per probe and family, connecting right after
+exec. `sudo scripts/linux/canary.sh --cleanup` removes the netns, the veth and the copies.
+
+| Run | curl v4 | curl v6 | python v4 | python v6 | Claimed |
+|---|---|---|---|---|---|
+| Ubuntu ext4, BPF attached, unscoped rules (`c60fc36` and again `b06adb8`) | 0/50 | 0/50 | 0/50 | 0/50 | proven=True |
+| Ubuntu, scoped to port 18080 (nft-only by design) | 50/50 | 50/50 | 50/50 | 49/50 | proven=False |
+| Ubuntu, unscoped, Axiom's programs detached (nft only) | 50/50 | 50/50 | 49/50 | 49/50 | before `b06adb8`: still proven=True (bug); now False |
+| Fedora 45 btrfs, unscoped (`b06adb8`) | 49/50 | 50/50 | 49/50 | 49/50 | proven=False (btrfs) |
+| Fedora 45 btrfs, scoped (`b06adb8`) | 50/50 | 49/50 | 49/50 | 50/50 | proven=False |
+
+Numbers are slipped/attempts (a connect that completed although the rule blocks the executable). The
+nft-only window lets almost every immediate connect through; only the connect-time layer closes it, and
+every surface now says which of the two a rule has.
+
+### 11.3 Externally detached programs, live (`b06adb8`)
+
+Fedora VM and Ubuntu host, rule on a tmpfs copy of python3: proven, 0/20 slipped → `bpftool cgroup
+detach` of the 4 programs → `rule.verify` at once `connectTimeBlockingProven=False` (`the BPF layer is
+neutralised …`), doctor `WARN bpf layer: … live layer neutralised …`, `Result: 1 problem(s)`; 10/10 slipped
+→ re-attached by the watch tick after 2.8 s (VM) / 7.2 s (host), 4 programs, proven again, 0/20 slipped.
+Note: the doctor's `live enforcement` line stays PASS in that state (nft is verified) and carries the
+degraded BPF text; the WARN comes from `bpf layer`.

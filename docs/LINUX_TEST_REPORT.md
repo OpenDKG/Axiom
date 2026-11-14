@@ -397,3 +397,81 @@ axiomd.service`, doctor `all checks passed`, protection off, 0 owned rules, Priv
 
 Not run on Fedora: the desktop app (Cloud image has no session), Wayland/GNOME, a real version-to-version upgrade
 (only `--replacepkgs`), NetworkManager-managed DNS / Privacy Shield, IPv6, RHEL/openSUSE.
+
+## PR #276 round 3 (2026-11-14, branch `buba/linux`, tested head `b06adb8`; merge `6c52ee9` + `89c53b4`)
+
+Author-run on project machines, **not GitHub-hosted CI**. Commits: red `9dc4ec4` (10 failing) → `1c71a01`
+(#290 doctor live state, restart-while-pending, per-rule coverage); UI red `4599e8b` (does not compile
+without the API) → `5a3f3ad`; red `794e226` (3 failing) → `c60fc36` (btrfs → nft-only, re-resolve
+replaced executables); `4d14f80` `scripts/linux/canary.sh` (apply result read from `result`, in
+`0c65629`); red `0c65629` (`LiveStateAndCoverageTests.Externally_detached_programs_are_noticed_by_verify_and_re_attached_by_the_watch_tick`,
+`Failed! - Failed: 1, Passed: 134, Total: 135`) → `b06adb8`. Design and tables: `LINUX_EBPF.md` §2.1, §11.
+
+### Gate at `b06adb8` (Ubuntu 24.04.5, kernel 7.0.0-42-generic, .NET SDK 10.0.403)
+
+`scripts/ci/run-all.sh` (from `buba/macos` `79ac636`) through `~/vms/macos-dev/build-lock`, `-c Release -m:2
+-nr:false -p:UseSharedCompilation=false -p:EnableWindowsTargeting=true`:
+
+| Suite | Result |
+|---|---|
+| `dotnet build Axiom.sln` / `Axiom.Portable.slnx` | 0 Warning(s) 0 Error(s) / 0 Warning(s) 0 Error(s) |
+| Infrastructure.Linux.Nft | 135/135 |
+| Infrastructure.Linux | 32/32 |
+| Infrastructure.Unix | 32/32 |
+| Desktop.Avalonia.Linux | 51/51 |
+| UI.Avalonia (incl. `ConnectTimeCoverageWordingTests`) | 57/57 |
+| Infrastructure.MacOS / Desktop.Avalonia.MacOS | 214/214 / 35/35 |
+| Contracts / McpServer / Persistence / Presentation | 142/142 / 33/33 / 21/21 / 93/93 |
+| Core | 117/128, 11 failed (Windows paths: `ProtectionPathFamilyTests.Detector_applies_a_decision_to_the_next_versioned_path`, `ProtectionTests.{Agent_executable_detection_is_name_and_path_based, Every_non_loopback_range_passes_rule_validation, Pending_detector_marks_agents_and_respects_the_limit}`, `RuleSpecValidatorTests.{A_complete_spec_is_valid, Parent_segment_is_rejected, Unc_and_extended_paths_are_rejected_for_now ×2, Valid_cidr_and_port_scope_is_accepted, Valid_udp_port_range_is_accepted, Wildcard_address_alone_is_accepted}`) |
+| Service | 67/79, 12 failed (`FirewallRuleCoordinatorTests` ×7, `NetworkRecoveryCommandTests` ×4, `PrivacyShieldTests.Settings_write_failure_restores_the_previous_resolver`) |
+| Infrastructure.Windows | 45/68, 23 failed (`IpHelperConnectionSourceTests` ×4, `PipeSecurityTests` ×1, `PipeServerTests` ×13, `WindowsFirewallPolicyAdapterTests` ×5) |
+| UI.Tests (WPF) | not runnable on Linux: test host aborted, `Microsoft.WindowsDesktop.App` framework absent |
+
+Core/Service/Infrastructure.Windows failing sets compared **by name** with the base `9241bd6` run the
+same way in a detached worktree: 46 names each, `diff` empty (identical). Skipped tests: none.
+
+### Gate after merging `buba/macos` `accef91` → `6c52ee9`, `89c53b4`
+
+`git merge --no-ff accef91` had no textual conflicts, but the build failed at `6c52ee9`:
+`DaemonLogFile.cs(80,40): error CS0103: The name 'MacDataDirectoryPermissions' does not exist` (the macOS
+commit used the pre-extraction name; this branch has `UnixDataDirectoryPermissions`, same 0644 constant).
+Fixed in `89c53b4` (source + `DaemonLogFileTests`). Gate at `89c53b4`, same flags: `Axiom.sln` 0/0,
+`Axiom.Portable.slnx` 0/0; Linux.Nft 135/135, Linux 32/32, Unix 32/32, Desktop.Avalonia.Linux 51/51,
+Infrastructure.MacOS 221/221 (214 + 7 new macOS tests), Desktop.Avalonia.MacOS 35/35, UI.Avalonia 57/57;
+Service 67/79 with the same 12 failing names as `b06adb8`/`9241bd6`. (A first merge of the then-head
+`1891a49` was discarded unpublished when `buba/macos` was amended to `accef91`.)
+
+### Fedora 45 VM, `b06adb8` RPM (`clean` snapshot, btrfs root, SELinux Enforcing, kernel 7.2.11-300.fc45)
+
+`scripts/linux/package.sh all` at `b06adb8` → `axiom-0.16.0-1.x86_64.rpm` (sha256 `1f22d9f5…34dd`),
+`axiom_0.16.0_amd64.deb` (`b394d3ee…da1d`). Author scratch scripts `vm-boundary.sh`, `vm-b3.sh`,
+`vm-detach.sh` (outputs quoted below) + `scripts/linux/canary.sh`.
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| R3-F1 | `sudo dnf install -y ./axiom-0.16.0-1.x86_64.rpm bpftool` | PASS | `Complete!`, dnf rc 0, `active`, `axiom-0.16.0-1.x86_64`, `bpftool-7.7.0-3.fc45` |
+| R3-F2 | `sudo /usr/libexec/axiom/axiomd --doctor` | PASS | `PASS live enforcement: capability available, enforcement verified`; `PASS bpf layer: bpftool v7.7.0; live layer active, generation 1, maps read back verified; 0 rule(s) connect-time proven, 0 rule(s) nft-only (not race-free); 4/4 program pins`; `SKIP bpf exe key: /usr/bin/env: exe key ambiguous on btrfs subvolumes: dev 0:33 ino 3102 …`; `Result: all checks passed.` |
+| R3-F3 | btrfs subvolumes subA/subB (ino 257 both, `st_dev` 0:68/0:69, superblock 0:33), rule on `subA/tool` | PASS (downgraded) | `state=applied`, `connectTimeBlockingProven=False`, `coverageReason=exe key not provable … exe key ambiguous on btrfs subvolumes …`; `rule.verify` `enforcementVerified=True nftRuleReadBack=True connectTimeBlockingProven=False`; journal `BPF exe key: rule … left to nftables`; fresh connects slipped subA 20/20, subB 20/20 |
+| R3-F4 | hand-written pre-fix key `{0:33, 257}` | collision proven | subA 0/10, **unrelated subB 0/10** slipped, system python3 5/5; deleted → subB 5/5 |
+| R3-F5 | subC/subD, ino 257, different executables (sha256 `8f9b3657…` / `13d0b4f7…`) | collision proven | with key: subC 0/10, **different exe subD 0/10**; deleted → subD 5/5 |
+| R3-F6 | overlayfs merged dir | PASS (nft-only) | `connectTimeBlockingProven=False`, `… is on overlay at /srv/axov/merged …`; 20/20 slipped |
+| R3-F7 | `canary.sh unscoped --count 50` | as designed (btrfs → nft-only) | `connectTimeBlockingProven=False` for both; curl v4 49/50, v6 50/50, python v4 49/50, v6 49/50 slipped |
+| R3-F8 | `canary.sh scoped --count 50` | as designed | curl v4 50/50, v6 49/50, python v4 49/50, v6 50/50 slipped |
+| R3-F9 | externally detached programs (tmpfs copy, `st_dev` = mountinfo 0:73) | PASS | proven=True, 0/20 slipped → `bpftool cgroup detach` ×4 → attached 0, `rule.verify` immediately `connectTimeBlockingProven=False coverageReason=the BPF layer is neutralised (degraded: only 0 of 4 Axiom BPF programs are attached (detached by another tool) …)`; doctor `WARN bpf layer: … live layer neutralised …`, `Result: 1 problem(s).`; 10/10 slipped; **re-attached after 2.8 s** (4 programs, proven=True, `ConnectTimeLayer.state=active`, `pendingRemovals: []`), 0/20 slipped; journal `BPF layer is neutralised; re-attaching …` / `BPF layer re-attached; enforcement verified.` |
+| R3-F10 | SELinux / end state | PASS | `ausearch -m avc,user_avc,selinux_err -ts boot` → `<no matches>`; `canary.sh --cleanup` → `topology and /opt/axiom-canary removed`, `ip netns list` empty; doctor `Result: all checks passed.`; VM shut down from inside, qemu exited |
+
+### Ubuntu host, `b06adb8` .deb
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| R3-H1 | `sudo -n dpkg -i build/linux/axiom_0.16.0_amd64.deb` | PASS | `active`; `/usr/libexec/axiom/Axiom.Infrastructure.Linux.dll` sha256 `8bf2a4ae3a91f3b0…` = build |
+| R3-H2 | `sudo scripts/linux/canary.sh unscoped --count 50 --keep-topology` (ext4, BPF attached) | PASS | both rules `applied connectTimeBlockingProven=True`; curl v4 0/50, v6 0/50, python v4 0/50, v6 0/50 slipped (50/50 blocked each) |
+| R3-H3 | earlier runs at `c60fc36` (same host) | — | scoped: curl 50/50 v4, 50/50 v6, python 50/50 v4, 49/50 v6 slipped; programs detached (nft only): curl 50/50, 50/50, python 49/50, 49/50 (the pre-`b06adb8` daemon still claimed coverage); mount-ns bind mount 0/20, hard link 0/20; `rename(2)` replacement: proven=False at once, ~7 s slip window until the watch tick re-resolved |
+| R3-H4 | externally detached programs (tmpfs copy) | PASS | same sequence as R3-F9: proven=False at once, doctor WARN + `1 problem(s)`, 10/10 slipped, re-attached after 7.2 s, 0/20 |
+| R3-H5 | `axiomd --doctor` | PASS | `PASS live enforcement …`, `PASS bpf layer: … live layer active, generation 37, maps read back verified …`, `PASS bpf exe key: /usr/bin/env: key dev 8:2 ino 51660111 …`, `Result: all checks passed.` |
+| R3-H6 | `sudo scripts/linux/canary.sh --cleanup`; final state | PASS | netns none, `axc0` does not exist, `/opt/axiom-canary` gone; `axiomd` active, 0 owned rules, protection off, Privacy Shield `Disabled`, `Link 2 (eno2): 192.168.70.1`, 4 `axiom_*` programs attached |
+
+Not covered by this round: live repro of #290 with a failing-bpftool wrapper + restart (unit-tested only),
+the desktop UI wording on a live session (unit-tested), Debian, Wayland/KDE, NetworkManager-only DNS,
+`resolv.conf` rollback, offline install, upgrade/uninstall with active rules, interrupted install, arm64,
+package signing.
