@@ -14,9 +14,10 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )"
+          "Axiom.Contracts": "[0.24.0, )"
         }
       }
-    }
+    },
+    "net10.0/win-x64": {}
   }
 }
