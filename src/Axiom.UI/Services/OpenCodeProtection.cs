@@ -564,20 +564,14 @@ public sealed class OpenCodeProtection
         def _deletes_protected(command: str, protected) -> bool:
             # True when a shell command deletes one of the operator's protected files.
             # Blackbox's custom file-access detector covers reads and copies; a shell
-            # del/rm/Remove-Item of a protected path would otherwise pass.
+            # del/rm/Remove-Item of a protected path would otherwise pass. Use the same
+            # path tokens as the launch/upload checks so wildcard directories such as
+            # ~/.ssh/* are covered (the old stem match skipped them).
             text = (command or "").lower()
-            verbs = ("del ", "erase ", "rm ", "rmdir ", "remove-item", "unlink ")
+            verbs = ("del ", "erase ", "rm ", "rmdir", "remove-item", "unlink ")
             if not any(verb in text for verb in verbs):
                 return False
-            try:
-                for pattern in protected or ():
-                    name = str(pattern).replace("~", "").replace("/", "\\").split("\\")[-1]
-                    stem = name.replace("*", "").strip(".")
-                    if stem and stem.lower() in text:
-                        return True
-            except Exception:
-                return False
-            return False
+            return _hits_protected(text, protected)
 
 
         def _protected_tokens(protected) -> list:

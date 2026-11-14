@@ -92,6 +92,7 @@ public sealed class AgentHookScriptTests
         Assert.Contains("_exfiltrates_protected(command_text, protected)", bridge, StringComparison.Ordinal);
         Assert.Contains("launches a file from a protected path", bridge, StringComparison.Ordinal);
         Assert.Contains("uploads a file from a protected path", bridge, StringComparison.Ordinal);
+        Assert.Contains("return _hits_protected(text, protected)", bridge, StringComparison.Ordinal);
         Assert.True(
             bridge.IndexOf("_executes_protected(command_text", StringComparison.Ordinal) <
             bridge.IndexOf("guard.on_pre_tool_call", StringComparison.Ordinal));
