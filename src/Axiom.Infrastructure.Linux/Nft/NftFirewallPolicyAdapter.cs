@@ -152,6 +152,18 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         };
 
         var layerSync = LayerSync;
+        if (VerdictLayer is { StaleProgramsAttached: true } staleLayer)
+        {
+            var note = $"BPF programs of a previous daemon are still attached and could not be detached ({staleLayer.Status}); removed rules may still block at connect time. The daemon retries every watch tick.";
+            reason = reason is null ? note : reason + " " + note;
+        }
+
+        if (state.PendingRemovals.Count > 0)
+        {
+            var note = string.Create(CultureInfo.InvariantCulture, $"{state.PendingRemovals.Count} rule removal(s) whose BPF verdict cleanup is not confirmed ({string.Join(", ", state.PendingRemovals.Select(removal => $"{removal.RuleId:D} {removal.AppPath}: {removal.Reason}"))}).");
+            reason = reason is null ? note : reason + " " + note;
+        }
+
         if (layerSync is { StaleEntriesCanBlock: true })
         {
             var note = string.Create(CultureInfo.InvariantCulture, $"BPF verdict maps hold {layerSync.FailedDeletes.Count} stale entr{(layerSync.FailedDeletes.Count == 1 ? "y" : "ies")} that could not be deleted and the programs could not be detached: removed rules may still block at connect time ({string.Join("; ", layerSync.FailedDeletes)}).");
@@ -187,6 +199,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             ProbedUtc = now,
             FilterEnforcement = enforcement,
             Limitations = Limitations(),
+            ConnectTimeLayer = DescribeConnectTimeLayer(state.Rules),
         };
     }
 
@@ -229,6 +242,12 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         {
             lines.Add(ExecRaceLimitation);
             lines.Add(BpfLayerInactiveLimitation);
+        }
+
+        var nftOnly = LoadState().Rules.Count(rule => rule.Spec.Enabled && CoverageOf(rule.Spec).Proven != true);
+        if (nftOnly > 0)
+        {
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"{nftOnly} rule(s) are nft-only: {NftOnlyStatement}. Only rules marked connect-time proven refuse a new process at connect()."));
         }
 
         if (sync is { StaleEntriesCanBlock: true })
@@ -340,6 +359,12 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             var previous = _enforcement;
             var fileRejected = previous?.FileError is { Length: > 0 };
             var state = Evaluate(_published, readback.Generation, readback.NftError is null, fileRejected, _layerSync);
+            if (state is FilterEnforcementState.Verified or FilterEnforcementState.Pending
+                && (VerdictLayer is { StaleProgramsAttached: true } || LoadState().PendingRemovals.Count > 0))
+            {
+                // A stale program set or an unconfirmed BPF removal can still block what nft no longer does.
+                state = FilterEnforcementState.Degraded;
+            }
             var report = new FilterEnforcementReport
             {
                 State = state,
@@ -373,7 +398,16 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         var compilation = _lastCompilation;
         var layerFailed = LayerSync is { Attached: true } sync ? sync.FailedRuleIds.ToHashSet() : [];
         return Task.FromResult<IReadOnlyList<ManagedRule>>(
-            LoadState().Rules.Select(rule => rule with { State = layerFailed.Contains(rule.ManagedRuleId) && rule.State != RuleState.Failed ? RuleState.Pending : ProjectState(rule, report, compilation) }).ToList());
+            LoadState().Rules.Select(rule =>
+            {
+                var coverage = CoverageOf(rule.Spec);
+                return rule with
+                {
+                    State = layerFailed.Contains(rule.ManagedRuleId) && rule.State != RuleState.Failed ? RuleState.Pending : ProjectState(rule, report, compilation),
+                    ConnectTimeBlockingProven = coverage.Proven,
+                    CoverageReason = coverage.Reason,
+                };
+            }).ToList());
     }
 
     /// <summary>Pure projection of one stored rule under the current report (see <see cref="ListOwnedRulesAsync"/>).</summary>
@@ -424,7 +458,13 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             var readback = await ReadbackAsync(ct).ConfigureAwait(false);
             var report = Rebuild(readback);
             var result = Outcome(spec, rule.OsRuleName, outcome.Compilation, readback.Generation, readback.Counters, report, CgroupPresent(outcome.Compilation, spec.ManagedRuleId), _attributionFailures, LayerSync);
-            SaveState(new ManagedRuleState
+            if (result.Success)
+            {
+                var coverage = CoverageOf(spec);
+                result = result with { ConnectTimeBlockingProven = coverage.Proven, CoverageReason = coverage.Reason };
+            }
+
+            SaveState(LoadState() with
             {
                 Generation = outcome.Compilation.Generation,
                 Rules = rules.Select(candidate => candidate.ManagedRuleId == spec.ManagedRuleId
@@ -544,6 +584,141 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         };
     }
 
+    /// <summary>Persists a removal whose BPF cleanup is unconfirmed (survives a daemon restart).</summary>
+    private void RecordPendingRemoval(ManagedRule? existing, Guid ruleId, long generation, string reason)
+    {
+        var state = LoadState();
+        var pending = state.PendingRemovals.Where(removal => removal.RuleId != ruleId).Append(new PendingRemoval(ruleId, existing?.Spec.AppPath ?? string.Empty, generation, reason, _time.GetUtcNow())).ToList();
+        SaveState(state with { PendingRemovals = pending });
+    }
+
+    /// <summary>
+    /// Pending removals are confirmed only by an attached layer whose maps were written and read
+    /// back equal to the plan (which no longer holds them) with no stale program set left.
+    /// </summary>
+    private void ClearPendingRemovalsIfConfirmed(LayerSyncResult sync)
+    {
+        if (sync is not { Attached: true, Applied: true, Verified: true } || VerdictLayer is { StaleProgramsAttached: true })
+        {
+            return;
+        }
+
+        var state = LoadState();
+        if (state.PendingRemovals.Count > 0)
+        {
+            SaveState(state with { PendingRemovals = [] });
+        }
+    }
+
+    /// <summary>Removed rules whose BPF cleanup is not confirmed (from managed-rules.json).</summary>
+    public IReadOnlyList<PendingRemoval> PendingRemovals => LoadState().PendingRemovals;
+
+    /// <summary>Statement attached to every nft-only rule (PR #276 round 3).</summary>
+    public const string NftOnlyStatement =
+        "nft rule installed/read back, not race-free: a newly launched process can connect during the ~1 s cgroup attribution window before it is herded";
+
+    /// <summary>
+    /// Per-rule coverage (PR #276 round 3): true only when the connect-time layer is attached, healthy,
+    /// and its last sync wrote and read back a verdict for this rule; otherwise the rule is nft-only and
+    /// the reason says why. Null for disabled rules.
+    /// </summary>
+    public static (bool? Proven, string? Reason) Coverage(RuleSpec spec, IVerdictLayer? layer, LayerSyncResult? sync)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        if (!spec.Enabled)
+        {
+            return (null, null);
+        }
+
+        string why;
+        if (layer is null)
+        {
+            why = "no connect-time layer is configured";
+        }
+        else if (layer.StaleProgramsAttached)
+        {
+            why = "the BPF layer is not loaded: a previous daemon's programs could not be detached";
+        }
+        else if (layer.Neutralised)
+        {
+            why = $"the BPF layer is neutralised ({layer.Status})";
+        }
+        else if (!layer.Active)
+        {
+            why = $"the BPF layer is inactive ({layer.Status})";
+        }
+        else if (sync is null)
+        {
+            why = "the BPF maps have not been synced yet";
+        }
+        else if (sync.FailedUpdates.Any(failure => failure.RuleId == spec.ManagedRuleId))
+        {
+            why = "the BPF map update for this rule failed";
+        }
+        else if (sync.StaleEntriesCanBlock)
+        {
+            why = "the BPF maps hold stale entries; the layer is not trusted";
+        }
+        else if (sync.CoveredRules.Contains(spec.ManagedRuleId))
+        {
+            return sync is { Attached: true, Applied: true, Verified: true }
+                ? (true, string.Create(CultureInfo.InvariantCulture, $"connect-time verdict attached and read back (BPF generation {sync.Generation}); a new process is refused at connect()"))
+                : (false, $"BPF verdict written but not read back; {NftOnlyStatement}");
+        }
+        else if (sync.Uncovered.FirstOrDefault(rule => rule.RuleId == spec.ManagedRuleId) is { } uncovered)
+        {
+            why = uncovered.Reason;
+        }
+        else if (spec.Direction != FirewallDirection.Outbound || spec.Action != FirewallAction.Block || (spec.RemoteAddresses?.Count ?? 0) > 0 || !string.IsNullOrWhiteSpace(spec.RemotePorts))
+        {
+            why = "scoped (address/port/protocol), inbound and allow rules are not expressed by the BPF layer";
+        }
+        else
+        {
+            why = "the BPF layer does not express this rule";
+        }
+
+        return (false, $"{why}; {NftOnlyStatement}");
+    }
+
+    private (bool? Proven, string? Reason) CoverageOf(RuleSpec spec) => Coverage(spec, VerdictLayer, LayerSync);
+
+    /// <summary>Live connect-time layer state for the capability report (and <c>--doctor</c> over IPC).</summary>
+    public ConnectTimeLayerReport DescribeConnectTimeLayer(IReadOnlyList<ManagedRule> rules)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        var sync = LayerSync;
+        var pending = PendingRemovals.Select(removal => removal.RuleId).ToList();
+        var enabled = rules.Where(rule => rule.Spec.Enabled).ToList();
+        var proven = enabled.Where(rule => CoverageOf(rule.Spec).Proven == true).Select(rule => rule.ManagedRuleId).ToList();
+        var nftOnly = enabled.Where(rule => CoverageOf(rule.Spec).Proven != true).Select(rule => rule.ManagedRuleId).ToList();
+        if (VerdictLayer is not { } layer)
+        {
+            return new ConnectTimeLayerReport { State = "not_configured", Healthy = false, Status = "no connect-time layer configured", NftOnlyRules = nftOnly, PendingRemovals = pending };
+        }
+
+        var state = layer.StaleProgramsAttached ? "stale_programs"
+            : sync is { StaleEntriesCanBlock: true } ? "degraded"
+            : layer.Neutralised ? "neutralised"
+            : layer.Active ? "active"
+            : "inactive";
+        var healthy = state == "active" && pending.Count == 0 && (sync is null || (sync.Applied && sync.Verified && sync.FailedDeletes.Count == 0 && sync.FailedUpdates.Count == 0));
+        return new ConnectTimeLayerReport
+        {
+            State = state,
+            Healthy = healthy,
+            Attached = layer.Active || layer.StaleProgramsAttached || sync is { StaleEntriesCanBlock: true },
+            Status = layer.Status,
+            Generation = sync?.Generation,
+            MapsVerified = sync is { Verified: true },
+            ConnectTimeProvenRules = proven,
+            NftOnlyRules = nftOnly,
+            PendingRemovals = pending,
+            FailedDeletes = sync?.FailedDeletes.Select(failure => failure.ToString()).ToList() ?? [],
+            FailedUpdates = sync?.FailedUpdates.Select(failure => failure.ToString()).ToList() ?? [],
+        };
+    }
+
     private bool CgroupPresent(NftCompilation compilation, Guid ruleId)
     {
         var compiled = compilation.Applied.FirstOrDefault(applied => applied.RuleId == ruleId);
@@ -580,6 +755,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             {
                 var stale = layer.FailedDeletes.Count > 0 ? string.Join("; ", layer.FailedDeletes) : "(no detail)";
                 var neutralised = layer.Neutralised;
+                RecordPendingRemoval(existing, managedRuleId, outcome.Compilation.Generation, neutralised ? "bpf.delete_failed" : "bpf.stale_entry: " + stale);
                 return new RuleApplyResult
                 {
                     Success = false,
@@ -596,6 +772,19 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             // An attached layer must have written AND read back the plan; a layer that is detached (never
             // attached, or detached by another tool) cannot enforce the removed rule.
             var verified = nftVerified && (layer is null || !layer.Attached || (layer.Applied && layer.Verified));
+            if (VerdictLayer is { StaleProgramsAttached: true })
+            {
+                RecordPendingRemoval(existing, managedRuleId, outcome.Compilation.Generation, "a previous daemon's BPF programs are still attached");
+                return new RuleApplyResult
+                {
+                    Success = false,
+                    ManagedRuleId = managedRuleId,
+                    State = RuleState.Pending,
+                    OsRuleName = existing?.OsRuleName,
+                    ErrorCode = "bpf.stale_programs",
+                    ErrorMessage = string.Create(CultureInfo.InvariantCulture, $"removed from nftables (generation {outcome.Compilation.Generation}), but BPF programs of a previous daemon are still attached and could not be detached ({VerdictLayer.Status}); a stale connect-time verdict may still block the app. The daemon retries the detach on every watch tick."),
+                };
+            }
             return new RuleApplyResult
             {
                 Success = true,
@@ -825,6 +1014,17 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             notes.Add($"Enforcement not verified: state {report.State.ToString().ToLowerInvariant()}.");
         }
 
+        var nftReadBack = report.State is FilterEnforcementState.Verified or FilterEnforcementState.Degraded && readback.Generation == _published && counters.Count > 0 && rejection is null && cgroupExists;
+        var coverage = stored is not null ? CoverageOf(stored.Spec) : (null, null);
+        if (coverage.Proven == false && stored is { Spec.Enabled: true })
+        {
+            notes.Add("Coverage: " + coverage.Reason + ".");
+        }
+        else if (coverage.Proven == true)
+        {
+            notes.Add("Coverage: connect-time blocking proven: " + coverage.Reason + ".");
+        }
+
         return new EffectiveRuleReport
         {
             ManagedRuleId = spec.ManagedRuleId,
@@ -835,6 +1035,9 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             Notes = notes,
             FilterRejectionReason = rejection,
             EnforcementVerified = verified,
+            NftRuleReadBack = stored is { Spec.Enabled: true } ? nftReadBack : null,
+            ConnectTimeBlockingProven = coverage.Proven,
+            CoverageReason = coverage.Reason,
         };
     }
 
@@ -920,6 +1123,8 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 {
                     _layerSync = sync;
                 }
+
+                ClearPendingRemovalsIfConfirmed(sync);
 
                 // The report folds the layer in (Evaluate): refresh it so a re-attached layer clears Degraded.
                 Rebuild(await ReadbackAsync(ct).ConfigureAwait(false));
@@ -1011,7 +1216,8 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         var generation = Math.Max(stateGeneration, tableGeneration) + 1;
         // Persist ownership first: a crash between the two steps leaves the next start able to
         // republish the complete table, never a table with rules the daemon no longer knows.
-        SaveState(new ManagedRuleState { Generation = generation, Rules = rules });
+        var pending = LoadState().PendingRemovals;
+        SaveState(new ManagedRuleState { Generation = generation, Rules = rules, PendingRemovals = pending });
         _cgroups.Retain(rules.Where(rule => rule.Spec.Enabled).Select(rule => rule.Spec.AppPath.Trim()));
         var compilation = NftRuleCompiler.Compile(rules.Select(rule => rule.Spec), generation, _cgroups);
         AtomicFile.Write(_paths.RulesFile, compilation.Script, AtomicFile.PublishedMode);
@@ -1035,6 +1241,8 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             {
                 _layerSync = sync;
             }
+
+            ClearPendingRemovalsIfConfirmed(sync);
         }
 
         return (compilation, applied.Success ? null : applied.Error);
@@ -1174,8 +1382,18 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         public long Generation { get; init; }
 
         public IReadOnlyList<ManagedRule> Rules { get; init; } = [];
+
+        /// <summary>
+        /// Removed rules whose connect-time (BPF) cleanup is not confirmed yet. Persisted so a daemon
+        /// restart cannot forget them (restart-while-pending false clear); cleared only by a layer sync
+        /// that wrote and read back maps without them.
+        /// </summary>
+        public IReadOnlyList<PendingRemoval> PendingRemovals { get; init; } = [];
     }
 }
+
+/// <summary>A removed rule whose BPF verdict cleanup is not confirmed (persisted in managed-rules.json).</summary>
+public sealed record PendingRemoval(Guid RuleId, string AppPath, long Generation, string Reason, DateTimeOffset SinceUtc);
 
 /// <summary>Write-temp-then-rename with a fixed mode (0600 private, 0644 published), as the macOS daemon does.</summary>
 public static class AtomicFile

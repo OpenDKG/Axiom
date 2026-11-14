@@ -216,9 +216,11 @@ public sealed class NftEnforcementSupervisor
     public async Task<bool> WatchOnceAsync(CancellationToken ct)
     {
         var republished = await WatchTableAsync(ct).ConfigureAwait(false);
-        if (_layer is { Neutralised: true })
+        if (_layer is { Neutralised: true } or { StaleProgramsAttached: true })
         {
-            _log("BPF layer is neutralised; re-attaching and resyncing from managed-rules.json.");
+            _log(_layer.StaleProgramsAttached
+                ? "BPF layer: a previous daemon's programs are still attached; retrying detach, then re-attaching and resyncing from managed-rules.json."
+                : "BPF layer is neutralised; re-attaching and resyncing from managed-rules.json.");
             await StartLayerAsync(ct).ConfigureAwait(false);
             if (_layer.Active)
             {

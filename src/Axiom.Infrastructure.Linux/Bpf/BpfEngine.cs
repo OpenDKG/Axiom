@@ -50,6 +50,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     private string _status = "not started";
     private bool _active;
     private bool _neutralised;
+    private bool _staleProgramsAttached;
     private long _generation = -1;
     private IReadOnlyList<BpfUncoveredRule> _uncovered = [];
     private LayerSyncResult? _lastSync;
@@ -126,7 +127,16 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     }
 
     /// <inheritdoc />
-    public bool StaleProgramsAttached => false;
+    public bool StaleProgramsAttached
+    {
+        get
+        {
+            lock (_stateGate)
+            {
+                return _staleProgramsAttached;
+            }
+        }
+    }
 
     /// <summary>Generation of the last fully applied map sync, -1 before the first (and after a failed one that was neutralised).</summary>
     public long Generation
@@ -202,6 +212,32 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             if (orphans.Count > 0)
             {
                 Log($"BPF layer: reconciled orphaned state from a previous daemon: {string.Join(", ", orphans)}.");
+            }
+
+            // Restart while a removal was pending (PR #276 round 3): if the previous programs are still
+            // attached, their (now possibly unpinned) maps can hold verdicts of removed rules. Loading a
+            // second set on top would report a clean layer while the stale one keeps blocking. Refuse,
+            // keep the pins so a later pass can still detach/delete through them, and say so.
+            var stale = ListAttachedAxiomPrograms();
+            if (stale.Count > 0)
+            {
+                lock (_stateGate)
+                {
+                    _staleProgramsAttached = true;
+                    _neutralised = false;
+                    _applied.Clear();
+                    _generation = -1;
+                }
+
+                var reason = string.Create(CultureInfo.InvariantCulture, $"degraded: {stale.Count} Axiom BPF program(s) of a previous daemon are still attached at {_paths.CgroupRoot} and could not be detached ({string.Join(", ", stale.Select(program => $"{program.Name} id {program.Id}"))}); their maps may still hold verdicts of removed rules, so no new set was loaded");
+                SetState(false, reason);
+                Log("BPF layer " + reason + ". Retrying on the next watch tick.");
+                return;
+            }
+
+            lock (_stateGate)
+            {
+                _staleProgramsAttached = false;
             }
 
             var load = Run("prog", "loadall", _paths.ObjectFile, _paths.PinDirectory, "pinmaps", _paths.MapDirectory);
@@ -624,6 +660,15 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             {
                 found.Add($"attached {name} id {id}");
             }
+        }
+
+        var remaining = ListAttachedAxiomPrograms();
+        if (remaining.Count > 0)
+        {
+            // Unlinking the pins would not detach anything; it would only take away the handles a
+            // later delete/detach needs. Keep them while any Axiom program is still attached.
+            Log($"BPF layer: {remaining.Count} Axiom program(s) still attached after detach; keeping {_paths.PinDirectory}.");
+            return found;
         }
 
         try

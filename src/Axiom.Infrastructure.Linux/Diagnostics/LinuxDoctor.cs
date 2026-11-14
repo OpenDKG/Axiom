@@ -131,6 +131,7 @@ public sealed class LinuxDoctor
         CheckDns(checks);
         CheckOwner(checks);
         CheckEnforcement(checks);
+        CheckLiveEnforcement(checks);
         CheckBpfLayer(checks);
         CheckBpfExeKey(checks);
         return checks;
@@ -227,15 +228,119 @@ public sealed class LinuxDoctor
         var pinned = Bpf.BpfLayout.Programs.Count(program => File.Exists(Path.Combine(pinDirectory, program.Program)));
         if (active)
         {
-            checks.Add(pinned == Bpf.BpfLayout.Programs.Count
-                ? new DoctorCheck(DoctorCheck.Pass, "bpf layer", string.Create(CultureInfo.InvariantCulture, $"{version}; {pinned} programs pinned at {pinDirectory} (connect4/connect6/sendmsg4/sendmsg6 at the cgroup root)."))
-                : new DoctorCheck(DoctorCheck.Warn, "bpf layer", string.Create(CultureInfo.InvariantCulture, $"{version}; {SystemdServiceInstaller.ServiceTarget} is active but {pinned}/{Bpf.BpfLayout.Programs.Count} programs are pinned at {pinDirectory}; nftables only — `journalctl -u axiomd | grep 'BPF layer'` has the reason.")));
+            // #290: pin files prove nothing about the running layer (a previous daemon's stale pins look
+            // identical). The verdict comes from the daemon's own live state over IPC.
+            checks.Add(BpfLayerFromLiveState(version, pinned, pinDirectory));
             return;
         }
 
         checks.Add(pinned > 0 || Directory.Exists(pinDirectory)
             ? new DoctorCheck(DoctorCheck.Warn, "bpf layer", $"{version}; {SystemdServiceInstaller.ServiceTarget} is not active but {pinDirectory} remains; run `sudo axiomd --uninstall-service` or `sudo bpftool cgroup detach / … && sudo rm -r {pinDirectory}`.")
             : new DoctorCheck(DoctorCheck.Pass, "bpf layer", $"{version}; daemon not active, nothing pinned."));
+    }
+
+    private DoctorLiveState? _live;
+
+    /// <summary>The daemon's live enforcement state (<c>rules.query</c>), queried once per run.</summary>
+    private DoctorLiveState LiveState() => _live ??= (_liveState ?? QueryLiveState)();
+
+    private DoctorLiveState QueryLiveState()
+    {
+        try
+        {
+            var client = new Axiom.Contracts.Ipc.IpcPipeClient(_targets.IpcSocketPath, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10));
+            var snapshot = Task.Run(() => client.SendAsync<Axiom.Contracts.Ipc.FirewallRulesSnapshot>(Axiom.Contracts.Ipc.IpcCommandTypes.RulesQuery, null, CancellationToken.None)).GetAwaiter().GetResult();
+            return snapshot?.Capability is { } capability
+                ? new DoctorLiveState(capability, null)
+                : new DoctorLiveState(null, "rules.query returned no capability report");
+        }
+        catch (Exception exception) when (exception is Axiom.Contracts.Ipc.IpcClientException or IOException or TimeoutException or OperationCanceledException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+        {
+            return new DoctorLiveState(null, exception.Message);
+        }
+    }
+
+    private DoctorCheck BpfLayerFromLiveState(string version, int pinned, string pinDirectory)
+    {
+        var pins = string.Create(CultureInfo.InvariantCulture, $"{pinned}/{Bpf.BpfLayout.Programs.Count} program pins at {pinDirectory}");
+        var live = LiveState();
+        if (live.Capability is not { } capability)
+        {
+            return new DoctorCheck(DoctorCheck.Warn, "bpf layer", $"{version}; cannot confirm live state: the daemon's rules.query over {_targets.IpcSocketPath} failed ({live.Error ?? "no reply"}); {pins} (pin files alone do not prove the layer is attached or healthy).");
+        }
+
+        if (capability.ConnectTimeLayer is not { } layer)
+        {
+            return new DoctorCheck(DoctorCheck.Warn, "bpf layer", $"{version}; cannot confirm live state: the daemon did not report its connect-time layer (older axiomd?); {pins}.");
+        }
+
+        var problems = new List<string>();
+        if (!string.Equals(layer.State, "active", StringComparison.Ordinal))
+        {
+            problems.Add($"live layer {layer.State} ({layer.Status})");
+        }
+
+        if (layer.PendingRemovals.Count > 0)
+        {
+            problems.Add(string.Create(CultureInfo.InvariantCulture, $"{layer.PendingRemovals.Count} rule removal(s) with unconfirmed BPF cleanup: {string.Join(", ", layer.PendingRemovals.Select(id => id.ToString("D", CultureInfo.InvariantCulture)))}"));
+        }
+
+        if (layer.FailedDeletes.Count > 0)
+        {
+            problems.Add($"failed map deletes: {string.Join("; ", layer.FailedDeletes)}");
+        }
+
+        if (layer.FailedUpdates.Count > 0)
+        {
+            problems.Add($"failed map updates: {string.Join("; ", layer.FailedUpdates)}");
+        }
+
+        if (string.Equals(layer.State, "active", StringComparison.Ordinal) && pinned != Bpf.BpfLayout.Programs.Count)
+        {
+            problems.Add("the daemon reports an active layer but " + pins);
+        }
+
+        if (problems.Count > 0 || !layer.Healthy)
+        {
+            return new DoctorCheck(DoctorCheck.Warn, "bpf layer", $"{version}; {(problems.Count > 0 ? string.Join("; ", problems) : $"live layer {layer.State} not healthy ({layer.Status})")}; {pins}. `journalctl -u axiomd | grep 'BPF layer'` has the detail.");
+        }
+
+        return new DoctorCheck(DoctorCheck.Pass, "bpf layer", string.Create(CultureInfo.InvariantCulture, $"{version}; live layer active, generation {layer.Generation?.ToString(CultureInfo.InvariantCulture) ?? "none"}, maps {(layer.MapsVerified ? "read back verified" : "not synced yet")}; {layer.ConnectTimeProvenRules.Count} rule(s) connect-time proven, {layer.NftOnlyRules.Count} rule(s) nft-only (not race-free); {pins}."));
+    }
+
+    /// <summary>
+    /// "live enforcement": the daemon's own capability status (rules.query) while it is active, so a
+    /// degraded table/layer or an unconfirmed removal is never summarised as "all checks passed".
+    /// </summary>
+    private void CheckLiveEnforcement(List<DoctorCheck> checks)
+    {
+        if (!OperatingSystem.IsLinux() || !_isRoot)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Skip, "live enforcement", "queried over IPC as root."));
+            return;
+        }
+
+        var active = string.Equals(
+            _runner.Run(SystemdServiceInstaller.Systemctl, ["is-active", SystemdServiceInstaller.ServiceTarget], ToolTimeout).StandardOutput.Trim(),
+            "active",
+            StringComparison.Ordinal);
+        if (!active)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Skip, "live enforcement", $"{SystemdServiceInstaller.ServiceTarget} is not active."));
+            return;
+        }
+
+        var live = LiveState();
+        if (live.Capability is not { } capability)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "live enforcement", $"cannot confirm live state: rules.query failed ({live.Error ?? "no reply"})."));
+            return;
+        }
+
+        var state = capability.FilterEnforcement?.State.ToString().ToLowerInvariant() ?? "unreported";
+        checks.Add(capability.Status == Axiom.Contracts.Firewall.FirewallCapabilityStatus.Available && capability.FilterEnforcement?.State is not (Axiom.Contracts.Firewall.FilterEnforcementState.Degraded or Axiom.Contracts.Firewall.FilterEnforcementState.Unavailable)
+            ? new DoctorCheck(DoctorCheck.Pass, "live enforcement", $"capability available, enforcement {state}{(capability.Reason is { Length: > 0 } note ? "; " + note : string.Empty)}")
+            : new DoctorCheck(DoctorCheck.Warn, "live enforcement", $"capability {capability.Status.ToString().ToLowerInvariant()}, enforcement {state}: {capability.Reason ?? "no reason given"}"));
     }
 
     private void CheckUnit(List<DoctorCheck> checks)
