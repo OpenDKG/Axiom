@@ -214,6 +214,63 @@ public sealed class ThreatShareTests
         }
     }
 
+    [Fact]
+    public async Task RetractAsync_records_retracted_state_and_persists_eligibility_fields()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "axiom-threat-share", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "queue.json");
+
+        try
+        {
+            var store = new ThreatShareStore(path);
+            await using var controller = new ThreatShareController(store);
+            controller.Enqueue(new ThreatShareEnqueueRequest
+            {
+                IndicatorType = "domain",
+                Value = "github.io",
+                Reason = "phishing",
+                Context = "in-tool-output",
+                Source = ThreatShareSource.AiAnalyst,
+                Severity = "medium",
+                EvidenceClass = ThreatShareEvidenceClass.HeuristicOrAiSuspected,
+                ProofGrade = ThreatShareProofGrade.Observed,
+            });
+            await controller.FlushAsync(CancellationToken.None);
+
+            var initial = Assert.Single(store.Load());
+            Assert.Equal("medium", initial.Candidate.Severity);
+            Assert.Equal(ThreatSharePublicationEligibility.NeedsEvidence, initial.Candidate.PublicationEligibility);
+            Assert.Equal("SHARED_HOSTING_APEX", initial.Candidate.EligibilityReasonCode);
+            Assert.False(initial.Candidate.CanPublishToCommunity);
+
+            var submitted = await controller.RecordAsync(
+                new ThreatShareRecordRequest
+                {
+                    Id = "ioc:domain:github.io",
+                    Submitted = true,
+                    Outcome = "shared",
+                },
+                CancellationToken.None);
+            Assert.Equal(ThreatShareState.Submitted, Assert.Single(submitted.Items).State);
+
+            var retracted = await controller.RetractAsync(
+                "ioc:domain:github.io",
+                string.Empty,
+                CancellationToken.None);
+            var retractedItem = Assert.Single(retracted.Items);
+            Assert.Equal(ThreatShareState.Retracted, retractedItem.State);
+            Assert.Contains("CC0 replicas", retractedItem.StateDetail, StringComparison.Ordinal);
+
+            var reloaded = Assert.Single(new ThreatShareStore(path).Load());
+            Assert.Equal(ThreatShareState.Retracted, reloaded.State);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static ThreatShareEnqueueRequest Candidate() => new()
     {
         IndicatorType = "domain",

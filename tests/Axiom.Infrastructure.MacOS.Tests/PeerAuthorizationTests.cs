@@ -28,6 +28,8 @@ public sealed class PeerAuthorizationTests
         IpcCommandTypes.ConfigGet,
         IpcCommandTypes.RulesQuery,
         IpcCommandTypes.RuleVerify,
+        IpcCommandTypes.EnforcementStatus,
+        IpcCommandTypes.EnforcementReceipts,
     ];
 
     [Theory]

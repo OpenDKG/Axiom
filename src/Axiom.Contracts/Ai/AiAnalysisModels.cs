@@ -98,6 +98,13 @@ public sealed record AiIndicator
     public string Value { get; init; } = string.Empty;
 
     public string Role { get; init; } = "unknown";
+
+    /// <summary>
+    /// Optional closed Blackbox reason code (for example "malware-delivery", "phishing",
+    /// "command-and-control", "credential-harvest", "exfil-endpoint", "scam", "injection-host"),
+    /// or "unknown" when evidence does not establish a specific threat reason.
+    /// </summary>
+    public string Reason { get; init; } = string.Empty;
 }
 
 public sealed record AiEvidencePackage(

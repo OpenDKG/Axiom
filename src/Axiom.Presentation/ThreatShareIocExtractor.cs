@@ -19,7 +19,8 @@ public static class ThreatShareIocExtractor
         AiFinding finding,
         AiEvidencePackage? evidence,
         IReadOnlySet<string>? listDerivedValues = null,
-        bool provenanceAvailable = true)
+        bool provenanceAvailable = true,
+        IReadOnlyList<DnsObservationRecord>? dnsObservations = null)
     {
         ArgumentNullException.ThrowIfNull(finding);
 
@@ -55,30 +56,153 @@ public static class ThreatShareIocExtractor
 
             if (ThreatShareVocabulary.Normalize(indicator.Type, indicator.Value) is not { } normalized ||
                 WasListDerived(indicator.Type, normalized, listDerivedValues) ||
-                !WasObserved(indicator.Type, normalized, observed) ||
-                !seen.Add(indicator.Type.Trim() + ":" + normalized))
+                !WasObserved(indicator.Type, normalized, observed))
             {
                 continue;
             }
 
-            results.Add(new ThreatShareEnqueueRequest
-            {
-                IndicatorType = indicator.Type.Trim().ToLowerInvariant(),
-                Value = normalized,
-                Reason = "malware-delivery",
-                Context = "in-tool-output",
-                Source = ThreatShareSource.AiAnalyst,
-                Detail = "AI Analyst labelled this value malicious; Axiom observed it as a remote endpoint in the evidence it supplied.",
-                ObservedUtc = finding.AnalysisTimestampUtc,
-            });
+            var type = indicator.Type.Trim().ToLowerInvariant();
+            var reason = ResolveReason(indicator);
+            var normalizedSeverity = ThreatShareVocabulary.NormalizeSeverity(finding.Severity);
 
-            if (results.Count >= MaxCandidates)
+            if (seen.Add(type + ":" + normalized))
             {
-                break;
+                var baseProofGrade = finding.HumanReviewed
+                    ? ThreatShareProofGrade.Reproduced
+                    : ThreatShareProofGrade.Observed;
+                results.Add(BuildRequest(
+                    type,
+                    normalized,
+                    reason,
+                    normalizedSeverity,
+                    finding,
+                    ThreatShareEvidenceClass.HeuristicOrAiSuspected,
+                    baseProofGrade,
+                    "AI Analyst labelled this value malicious; Axiom observed it as a remote endpoint in the evidence it supplied."));
+
+                if (results.Count >= MaxCandidates)
+                {
+                    break;
+                }
+            }
+
+            if (type == "ip" && dnsObservations is { Count: > 0 } && results.Count < MaxCandidates)
+            {
+                var correlatedDomain = TryCorrelateDomain(normalized, evidence, dnsObservations);
+                if (correlatedDomain is not null &&
+                    ThreatShareVocabulary.Normalize("domain", correlatedDomain) is { } canonicalDomain &&
+                    !WasListDerived("domain", canonicalDomain, listDerivedValues) &&
+                    seen.Add("domain:" + canonicalDomain))
+                {
+                    results.Add(BuildRequest(
+                        "domain",
+                        canonicalDomain,
+                        reason,
+                        normalizedSeverity,
+                        finding,
+                        ThreatShareEvidenceClass.HeuristicOrAiSuspected,
+                        ThreatShareProofGrade.Correlated,
+                        $"AI Analyst labelled {normalized} malicious; Axiom observed it and correlated the process DNS query to {canonicalDomain}."));
+
+                    if (results.Count >= MaxCandidates)
+                    {
+                        break;
+                    }
+                }
             }
         }
 
         return results;
+    }
+
+    private static ThreatShareEnqueueRequest BuildRequest(
+        string type,
+        string value,
+        string reason,
+        string severity,
+        AiFinding finding,
+        ThreatShareEvidenceClass evidenceClass,
+        ThreatShareProofGrade proofGrade,
+        string detail)
+    {
+        var assessment = ThreatShareVocabulary.EvaluatePublicationEligibility(
+            type,
+            value,
+            reason,
+            evidenceClass,
+            proofGrade,
+            listDerived: false);
+
+        if (assessment.Eligibility == ThreatSharePublicationEligibility.NeedsOperatorReview &&
+            !string.Equals((finding.Confidence ?? string.Empty).Trim(), "high", StringComparison.OrdinalIgnoreCase) &&
+            !finding.HumanReviewed)
+        {
+            assessment = new(
+                ThreatSharePublicationEligibility.NeedsEvidence,
+                "AI_CONFIDENCE_BELOW_HIGH",
+                "AI finding confidence is below 'high' and has not been human-reviewed; kept local until verified.");
+        }
+
+        return new ThreatShareEnqueueRequest
+        {
+            IndicatorType = type,
+            Value = value,
+            Reason = reason,
+            Context = "in-tool-output",
+            Source = ThreatShareSource.AiAnalyst,
+            Detail = detail,
+            ObservedUtc = finding.AnalysisTimestampUtc,
+            Severity = severity,
+            EvidenceClass = evidenceClass,
+            ProofGrade = proofGrade,
+            PublicationEligibility = assessment.Eligibility,
+            EligibilityReasonCode = assessment.ReasonCode,
+            EligibilityExplanation = assessment.Explanation,
+        };
+    }
+
+    private static string ResolveReason(AiIndicator indicator)
+    {
+        var candidate = (indicator.Reason ?? string.Empty).Trim().ToLowerInvariant();
+        return ThreatShareVocabulary.IsPublishableReason(candidate) ? candidate : "unknown";
+    }
+
+    private static string? TryCorrelateDomain(
+        string normalizedIp,
+        AiEvidencePackage evidence,
+        IReadOnlyList<DnsObservationRecord> dnsObservations)
+    {
+        foreach (var connection in evidence.Connections)
+        {
+            var host = ExtractHost(connection.RemoteEndpoint);
+            if (!IPAddress.TryParse(host, out var address))
+            {
+                continue;
+            }
+
+            var canonical = (address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address)
+                .ToString()
+                .ToLowerInvariant();
+            if (!string.Equals(canonical, normalizedIp, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var correlation = DnsProcessConnectionCorrelator.Correlate(
+                canonical,
+                connection.ProcessId,
+                connection.ParentProcessId,
+                connection.FirstObservedUtc,
+                dnsObservations);
+
+            if (correlation.Status == DnsCorrelationStatus.ConfirmedAssociation &&
+                !string.IsNullOrWhiteSpace(correlation.CanonicalDomain))
+            {
+                return correlation.CanonicalDomain;
+            }
+        }
+
+        return null;
     }
 
     private sealed record ObservedHosts(
@@ -110,10 +234,32 @@ public static class ThreatShareIocExtractor
 
     private static void AddEndpoint(ObservedHosts observed, string endpoint)
     {
+        var host = ExtractHost(endpoint);
+        if (host.Length == 0)
+        {
+            return;
+        }
+
+        if (IPAddress.TryParse(host, out var address))
+        {
+            observed.Addresses.Add(address.ToString());
+            if (address.IsIPv4MappedToIPv6)
+            {
+                observed.Addresses.Add(address.MapToIPv4().ToString());
+            }
+
+            return;
+        }
+
+        observed.Names.Add(host);
+    }
+
+    private static string ExtractHost(string endpoint)
+    {
         if (string.IsNullOrWhiteSpace(endpoint) ||
             string.Equals(endpoint, "unknown", StringComparison.OrdinalIgnoreCase))
         {
-            return;
+            return string.Empty;
         }
 
         var host = endpoint.Trim();
@@ -135,24 +281,7 @@ public static class ThreatShareIocExtractor
             }
         }
 
-        host = host.Trim().TrimEnd('.').ToLowerInvariant();
-        if (host.Length == 0)
-        {
-            return;
-        }
-
-        if (IPAddress.TryParse(host, out var address))
-        {
-            observed.Addresses.Add(address.ToString());
-            if (address.IsIPv4MappedToIPv6)
-            {
-                observed.Addresses.Add(address.MapToIPv4().ToString());
-            }
-
-            return;
-        }
-
-        observed.Names.Add(host);
+        return host.Trim().TrimEnd('.').ToLowerInvariant();
     }
 
     private static bool WasObserved(string type, string value, ObservedHosts observed) =>

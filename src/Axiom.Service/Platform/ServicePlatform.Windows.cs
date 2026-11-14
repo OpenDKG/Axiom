@@ -89,6 +89,19 @@ internal static class ServicePlatform
         builder.Services.AddSingleton<IIpcTransport>(_ => new NamedPipeIpcTransport(IpcPipe.Name, ServiceInfo.ResolveAllowedSid));
     }
 
+    /// <summary>
+    /// Agent enforcement (#322 controller and receipts, #323 E4 scoped agent firewall enforcer):
+    /// the registrations upstream makes in Program.cs, unchanged. They sit behind the platform
+    /// seam because the macOS/Linux daemon does not register them (see ServicePlatform.Unix).
+    /// </summary>
+    public static void ConfigureAgentEnforcement(HostApplicationBuilder builder)
+    {
+        builder.Services.AddSingleton<EnforcementController>();
+        builder.Services.AddSingleton(provider => new AgentFirewallEnforcer(
+            provider.GetRequiredService<FirewallRuleCoordinator>(),
+            provider.GetRequiredService<EnforcementController>().ReceiptJournal));
+    }
+
     // --- NetworkRecoveryCommand platform hooks (offline administrator recovery) ---
 
     private const uint AttachParentProcess = 0xFFFFFFFF;

@@ -124,6 +124,29 @@ internal static class ServicePlatform
                 ? LinuxServicePlatform.CreateDefaultPrivacyDnsPlatform()
                 : NullPrivacyDnsPlatform.Instance;
 
+    /// <summary>
+    /// Agent enforcement is not offered by the Unix daemon yet, so nothing is registered and
+    /// <c>enforcement.status</c>, <c>enforcement.evaluate</c> and <c>enforcement.receipts</c> answer
+    /// <c>not_supported</c> (the dispatcher's reply for a null handler, same text as upstream).
+    /// Reasons, per command:
+    /// <list type="bullet">
+    /// <item><c>enforcement.evaluate</c>: no macOS host-hook adapter calls it, and the request
+    /// contract authenticates "the same Windows user"; under a root daemon serving several uids the
+    /// actor, the per-user policy and the receipt journal ownership need a decision first.</item>
+    /// <item><c>enforcement.status</c> / <c>enforcement.receipts</c>: the controller resolves its
+    /// policy under the service account's LocalApplicationData (root's home here, not the user's),
+    /// so a status would describe a policy file no user owns; with no evaluate there is nothing to
+    /// report. Answering "disabled" would look like a working feature that is switched off.</item>
+    /// </list>
+    /// The Windows-only E4 scoped agent firewall enforcer (AgentFirewallEnforcer) is not compiled
+    /// into this target at all. A macOS filter acknowledgement is never mapped to
+    /// <c>OS_DENY_VERIFIED</c>; that state needs an observed absent side effect (a canary).
+    /// </summary>
+    public static void ConfigureAgentEnforcement(HostApplicationBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+    }
+
     public static void ConfigureServices(HostApplicationBuilder builder)
     {
         if (OperatingSystem.IsLinux())

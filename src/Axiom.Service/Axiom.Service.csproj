@@ -41,7 +41,7 @@
     <ProjectReference Include="..\Axiom.Infrastructure.MacOS\Axiom.Infrastructure.MacOS.csproj" />
     <ProjectReference Include="..\Axiom.Infrastructure.Linux\Axiom.Infrastructure.Linux.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
-    <Compile Remove="Platform\ServicePlatform.Windows.cs;Platform\ServiceInfo.Windows.cs;ServiceInstaller.cs;ServiceImageProtection.cs;MachineStateSecurity.cs;PrivacyDnsFailSafe.cs" />
+    <Compile Remove="Platform\ServicePlatform.Windows.cs;Platform\ServiceInfo.Windows.cs;ServiceInstaller.cs;ServiceImageProtection.cs;MachineStateSecurity.cs;PrivacyDnsFailSafe.cs;AgentFirewallEnforcer.cs" />
   </ItemGroup>
 
   <ItemGroup>

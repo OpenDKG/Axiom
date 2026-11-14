@@ -74,6 +74,23 @@ public sealed class ThreatShareController : IAsyncDisposable
         return await SnapshotAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Marks a previously submitted report as retracted locally after CLI confirmation.</summary>
+    public Task<ThreatShareQueueStatus> RetractAsync(
+        string id,
+        string outcome,
+        CancellationToken cancellationToken) =>
+        RecordAsync(
+            new ThreatShareRecordRequest
+            {
+                Id = id,
+                Submitted = false,
+                Retracted = true,
+                Outcome = string.IsNullOrWhiteSpace(outcome)
+                    ? "retraction submitted; existing CC0 replicas may persist"
+                    : outcome,
+            },
+            cancellationToken);
+
     /// <summary>Records the outcome the desktop got from the Blackbox reporter.</summary>
     public async Task<ThreatShareQueueStatus> RecordAsync(
         ThreatShareRecordRequest request,
@@ -95,45 +112,57 @@ public sealed class ThreatShareController : IAsyncDisposable
                 var submissionKey = string.IsNullOrWhiteSpace(current.SubmissionKey)
                     ? Guid.NewGuid().ToString("N")
                     : current.SubmissionKey;
-                _items[index] = request.Submitted
+                _items[index] = request.Retracted
                     ? current with
                     {
-                        State = ThreatShareState.Submitted,
-                        Outcome = Trim(request.Outcome, 200),
+                        State = ThreatShareState.Retracted,
+                        Outcome = string.IsNullOrWhiteSpace(request.Outcome)
+                            ? "retraction submitted; existing CC0 replicas may persist"
+                            : Trim(request.Outcome, 200),
                         AttemptedUtc = now,
                         Attempts = attempts,
                         NextAttemptUtc = null,
                         SubmissionKey = submissionKey,
                     }
-                    : request.Ambiguous
+                    : request.Submitted
                         ? current with
                         {
-                            State = ThreatShareState.Unverified,
+                            State = ThreatShareState.Submitted,
                             Outcome = Trim(request.Outcome, 200),
                             AttemptedUtc = now,
                             Attempts = attempts,
                             NextAttemptUtc = null,
                             SubmissionKey = submissionKey,
                         }
-                        : request.Deferred
+                        : request.Ambiguous
                             ? current with
                             {
-                                State = ThreatShareState.Deferred,
-                                Outcome = Trim(request.Outcome, 200),
-                                AttemptedUtc = now,
-                                Attempts = attempts,
-                                NextAttemptUtc = now.AddMinutes(BackoffMinutes(attempts)),
-                                SubmissionKey = submissionKey,
-                            }
-                            : current with
-                            {
-                                State = ThreatShareState.Rejected,
+                                State = ThreatShareState.Unverified,
                                 Outcome = Trim(request.Outcome, 200),
                                 AttemptedUtc = now,
                                 Attempts = attempts,
                                 NextAttemptUtc = null,
                                 SubmissionKey = submissionKey,
-                            };
+                            }
+                            : request.Deferred
+                                ? current with
+                                {
+                                    State = ThreatShareState.Deferred,
+                                    Outcome = Trim(request.Outcome, 200),
+                                    AttemptedUtc = now,
+                                    Attempts = attempts,
+                                    NextAttemptUtc = now.AddMinutes(BackoffMinutes(attempts)),
+                                    SubmissionKey = submissionKey,
+                                }
+                                : current with
+                                {
+                                    State = ThreatShareState.Rejected,
+                                    Outcome = Trim(request.Outcome, 200),
+                                    AttemptedUtc = now,
+                                    Attempts = attempts,
+                                    NextAttemptUtc = null,
+                                    SubmissionKey = submissionKey,
+                                };
                 _store.Save(_items);
             }
         }
@@ -191,6 +220,9 @@ public sealed class ThreatShareController : IAsyncDisposable
                     continue;
                 }
 
+                var severity = ThreatShareVocabulary.NormalizeSeverity(request.Severity);
+                var assessment = ResolveAssessment(request, type, value, reason);
+
                 _items.Add(new ThreatShareItem(
                     new ThreatShareCandidate
                     {
@@ -202,6 +234,13 @@ public sealed class ThreatShareController : IAsyncDisposable
                         Source = request.Source,
                         Detail = Trim(request.Detail, 200),
                         ObservedUtc = request.ObservedUtc,
+                        Severity = severity,
+                        EvidenceClass = request.EvidenceClass,
+                        ProofGrade = request.ProofGrade,
+                        PublicationEligibility = assessment.Eligibility,
+                        NoveltyStatus = request.NoveltyStatus,
+                        EligibilityReasonCode = assessment.ReasonCode,
+                        EligibilityExplanation = assessment.Explanation,
                     },
                     ThreatShareState.Pending,
                     string.Empty,
@@ -266,6 +305,32 @@ public sealed class ThreatShareController : IAsyncDisposable
         {
             _gate.Release();
         }
+    }
+
+    private static ThreatShareEligibilityAssessment ResolveAssessment(
+        ThreatShareEnqueueRequest request,
+        string type,
+        string value,
+        string reason)
+    {
+        var evaluated = ThreatShareVocabulary.EvaluatePublicationEligibility(
+            type,
+            value,
+            reason,
+            request.EvidenceClass,
+            request.ProofGrade,
+            listDerived: request.EvidenceClass == ThreatShareEvidenceClass.PublicFeedMatch);
+
+        if (!string.IsNullOrWhiteSpace(request.EligibilityReasonCode) &&
+            request.PublicationEligibility < evaluated.Eligibility)
+        {
+            return new(
+                request.PublicationEligibility,
+                Trim(request.EligibilityReasonCode, 64),
+                Trim(request.EligibilityExplanation, 200));
+        }
+
+        return evaluated;
     }
 
     private static double BackoffMinutes(int attempts) =>

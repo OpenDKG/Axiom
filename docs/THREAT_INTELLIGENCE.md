@@ -93,6 +93,18 @@ When a dashboard read is slow, Axiom may display locally persisted authoritative
 
 **Important distinction:** Axiom currently displays the synchronized verified graph through the Blackbox integration; it does **not** yet use general verified/community reputation lookups as per-connection enforcement decisions. Reputation annotations do not currently change firewall rules or block connections automatically.
 
+### RAM-Only Curator-Signed Snapshot Endpoint & LAN Peer Cache
+
+To accelerate initial Verified Graph loading without trusting arbitrary peers or touching disk, [`VerifiedGraphPeerRelay`](../src/Axiom.Presentation/VerifiedGraphPeerRelay.cs) implements a fail-closed, two-tier RAM-only bootstrap with automatic fallback to the local Blackbox/DKG node (off by default unless `AXIOM_GRAPH_TRUST_KEY` or `AXIOM_GRAPH_CURATOR_PUBKEY` is configured alongside an opt-in source):
+
+1. **Tier (a) — Curator-signed snapshot endpoint (`AXIOM_GRAPH_SNAPSHOT_URL`):** Fetches a signed manifest snapshot strictly in RAM over `https://` (or loopback `http://127.0.0.1` / `localhost` DKG snapshot gateways; remote plain `http://` is rejected) with `AllowAutoRedirect = false`, `2 s` timeout, and a `4 MiB` bound.
+2. **Tier (b) — Opt-in LAN peer cache (`AXIOM_GRAPH_LAN=1`, `AXIOM_GRAPH_LAN_CACHE=1`, or `AXIOM_GRAPH_PEERS`):** Shares only already-verified, curator-signed manifest snapshots in RAM across the user's trusted machines so secondary hosts skip slow per-asset DKG downloads while verifying the exact same curator signature.
+3. **Zero-trust verification & automatic DKG fallback:**
+   - **Pinned curator trust key (fail-closed):** Self-signed or unpinned payloads are never accepted (`"never trust because a peer claimed it"`). Every snapshot must verify against the configured pinned SPKI public key, automatically falling back to DKG if missing or invalid.
+   - **Strictly RAM-only & zero reflection:** Serialization and parsing run exclusively in RAM using `Utf8JsonWriter` and `Utf8JsonReader` (`MaxDepth = 8`, max `4 MiB` per payload, `2 s` I/O timeout) with no reflection, no temporary files, and immediate rejection of any unknown JSON field.
+   - **Anti-rollback & manifest integrity:** Each manifest enforces `Version`, monotonic `SequenceNumber`, `CreatedUtcTicks` (`±15 minutes`), `MinClientVersion`, canonical `PayloadSha256Hex`, binary SHA-256 `MerkleRootHex`, and ECDSA P-256 signature verification.
+   - **Passive-data whitelist (no malware / code injection vector):** Every threat record (`Identifier`, `Name`, `Category`, `Severity`, `Ecosystems`, `Source`) must match strict domain/IP/64-hex/safe-token formats; control characters, path traversal (`..`, `\`), shell metacharacters, or unrecognized categories reject the entire envelope. Only public Verified Graph entries are shared; local DNS history, connections, sessions, and host files never enter the buffer.
+
 Other offline limits:
 
 - If the local DNS resolver fails, saved adapter DNS may be restored or a previously configured fallback resolver may answer. **Connectivity can continue while Axiom DNS filtering is bypassed**. This is an availability trade-off, not an assurance of uninterrupted filtering.

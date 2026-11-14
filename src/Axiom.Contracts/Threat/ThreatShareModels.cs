@@ -11,6 +11,50 @@ public enum ThreatShareSource
     AiAnalyst = 1,
 }
 
+/// <summary>Local evidence provenance class; never silently upgraded in storage.</summary>
+public enum ThreatShareEvidenceClass
+{
+    LocalObservation = 0,
+    PublicFeedMatch = 1,
+    HeuristicOrAiSuspected = 2,
+    ReproducibleAttackArtifact = 3,
+    CuratorConfirmed = 4,
+}
+
+/// <summary>Validation strength recorded alongside a candidate.</summary>
+public enum ThreatShareProofGrade
+{
+    Observed = 0,
+    Correlated = 1,
+    Reproduced = 2,
+    IndependentlyConfirmed = 3,
+}
+
+/// <summary>Conservative local publication gate before any Blackbox submission.</summary>
+public enum ThreatSharePublicationEligibility
+{
+    LocalOnly = 0,
+    NeedsEvidence = 1,
+    NeedsOperatorReview = 2,
+    EligibleToSubmit = 3,
+}
+
+/// <summary>Read-only local graph novelty status; curators exclusively award novelty.</summary>
+public enum ThreatShareNoveltyStatus
+{
+    Unknown = 0,
+    PotentiallyNewLocalOnly = 1,
+    PreviouslyReportedCommunity = 2,
+    KnownVerified = 3,
+    Disputed = 4,
+    Revoked = 5,
+}
+
+public sealed record ThreatShareEligibilityAssessment(
+    ThreatSharePublicationEligibility Eligibility,
+    string ReasonCode,
+    string Explanation);
+
 /// <summary>One indicator Axiom proposes to share, before it is signed by Blackbox.</summary>
 public sealed record ThreatShareEnqueueRequest
 {
@@ -31,6 +75,20 @@ public sealed record ThreatShareEnqueueRequest
     public string Detail { get; init; } = string.Empty;
 
     public DateTimeOffset ObservedUtc { get; init; } = DateTimeOffset.UtcNow;
+
+    public string Severity { get; init; } = "high";
+
+    public ThreatShareEvidenceClass EvidenceClass { get; init; } = ThreatShareEvidenceClass.HeuristicOrAiSuspected;
+
+    public ThreatShareProofGrade ProofGrade { get; init; } = ThreatShareProofGrade.Observed;
+
+    public ThreatSharePublicationEligibility PublicationEligibility { get; init; } = ThreatSharePublicationEligibility.NeedsOperatorReview;
+
+    public ThreatShareNoveltyStatus NoveltyStatus { get; init; } = ThreatShareNoveltyStatus.Unknown;
+
+    public string EligibilityReasonCode { get; init; } = string.Empty;
+
+    public string EligibilityExplanation { get; init; } = string.Empty;
 }
 
 /// <summary>A validated, deduplicated candidate held in the local share queue.</summary>
@@ -53,6 +111,20 @@ public sealed record ThreatShareCandidate
 
     public DateTimeOffset ObservedUtc { get; init; }
 
+    public string Severity { get; init; } = "high";
+
+    public ThreatShareEvidenceClass EvidenceClass { get; init; } = ThreatShareEvidenceClass.HeuristicOrAiSuspected;
+
+    public ThreatShareProofGrade ProofGrade { get; init; } = ThreatShareProofGrade.Observed;
+
+    public ThreatSharePublicationEligibility PublicationEligibility { get; init; } = ThreatSharePublicationEligibility.NeedsOperatorReview;
+
+    public ThreatShareNoveltyStatus NoveltyStatus { get; init; } = ThreatShareNoveltyStatus.Unknown;
+
+    public string EligibilityReasonCode { get; init; } = string.Empty;
+
+    public string EligibilityExplanation { get; init; } = string.Empty;
+
     public string TypeLabel => IndicatorType;
 
     public string SourceLabel => Source switch
@@ -61,6 +133,26 @@ public sealed record ThreatShareCandidate
         ThreatShareSource.AiAnalyst => "AI Analyst",
         _ => "Axiom",
     };
+
+    public bool CanPublishToCommunity =>
+        PublicationEligibility is ThreatSharePublicationEligibility.NeedsOperatorReview or
+            ThreatSharePublicationEligibility.EligibleToSubmit &&
+        ThreatShareVocabulary.IsPublishableReason(Reason) &&
+        NoveltyStatus != ThreatShareNoveltyStatus.KnownVerified;
+
+    public string NoveltyLabel => NoveltyStatus switch
+    {
+        ThreatShareNoveltyStatus.PotentiallyNewLocalOnly => "Potentially new (local graph only)",
+        ThreatShareNoveltyStatus.PreviouslyReportedCommunity => "Previously reported (community)",
+        ThreatShareNoveltyStatus.KnownVerified => "Known (verified)",
+        ThreatShareNoveltyStatus.Disputed => "Disputed",
+        ThreatShareNoveltyStatus.Revoked => "Revoked",
+        _ => "Unknown",
+    };
+
+    public string PublicPayloadPreview =>
+        $"type=ioc · ioc_type={IndicatorType} · value={Value} · context={Context} · severity={ThreatShareVocabulary.NormalizeSeverity(Severity)} " +
+        $"(local reason: {Reason}; CC0 1.0 replicated statement)";
 }
 
 /// <summary>Queue state of one candidate.</summary>
@@ -79,6 +171,9 @@ public enum ThreatShareState
     /// may already be published, so it is never retried automatically.
     /// </summary>
     Unverified = 5,
+
+    /// <summary>Operator requested retraction of their own report; replicas may persist.</summary>
+    Retracted = 6,
 }
 
 public sealed record ThreatShareItem(
@@ -99,8 +194,13 @@ public sealed record ThreatShareItem(
     /// </summary>
     public string SubmissionKey { get; init; } = string.Empty;
 
-    /// <summary>Button label: an ambiguous item needs a deliberate retry, not another "Share".</summary>
-    public string ActionLabel => State == ThreatShareState.Unverified ? "Retry" : "Share";
+    /// <summary>Button label: an ambiguous item needs a deliberate retry; submitted items can be retracted.</summary>
+    public string ActionLabel => State switch
+    {
+        ThreatShareState.Unverified => "Retry",
+        ThreatShareState.Submitted => "Retract",
+        _ => "Share",
+    };
 
     public string StateLabel => State switch
     {
@@ -109,6 +209,7 @@ public sealed record ThreatShareItem(
         ThreatShareState.Dismissed => "dismissed",
         ThreatShareState.Deferred => "deferred",
         ThreatShareState.Unverified => "awaiting confirmation",
+        ThreatShareState.Retracted => "retracted",
         _ => "pending review",
     };
 
@@ -121,6 +222,13 @@ public sealed record ThreatShareItem(
         ThreatShareState.Unverified =>
             "the previous attempt may have published; confirm before retrying" +
             (string.IsNullOrWhiteSpace(Outcome) ? string.Empty : " - " + Outcome),
+        ThreatShareState.Retracted =>
+            string.IsNullOrWhiteSpace(Outcome)
+                ? "retraction submitted; existing CC0 replicas may persist"
+                : Outcome,
+        ThreatShareState.Pending when !Candidate.CanPublishToCommunity &&
+                                      !string.IsNullOrWhiteSpace(Candidate.EligibilityExplanation) =>
+            Candidate.EligibilityExplanation,
         _ => string.Empty,
     };
 
@@ -167,6 +275,9 @@ public sealed record ThreatShareRecordRequest
     /// <summary>True when the reporter ran but the outcome is unknown; never auto-retried.</summary>
     public bool Ambiguous { get; init; }
 
+    /// <summary>True when the operator requested retraction of their own previously shared report.</summary>
+    public bool Retracted { get; init; }
+
     public string Outcome { get; init; } = string.Empty;
 }
 
@@ -191,8 +302,8 @@ public static class ThreatShareVocabulary
 
     public static IReadOnlyList<string> IndicatorTypes { get; } = ["domain", "url", "ip", "hash"];
 
-    /// <summary>Closed reason codes from the Blackbox report schema.</summary>
-    public static IReadOnlyList<string> Reasons { get; } =
+    /// <summary>Closed publishable Blackbox IOC reason codes.</summary>
+    public static IReadOnlyList<string> PublishableReasons { get; } =
     [
         "phishing",
         "malware-delivery",
@@ -202,6 +313,21 @@ public static class ThreatShareVocabulary
         "scam",
         "injection-host",
     ];
+
+    /// <summary>Closed reason codes accepted in Axiom's local queue (including local-only "unknown").</summary>
+    public static IReadOnlyList<string> Reasons { get; } =
+    [
+        "phishing",
+        "malware-delivery",
+        "command-and-control",
+        "credential-harvest",
+        "exfil-endpoint",
+        "scam",
+        "injection-host",
+        "unknown",
+    ];
+
+    public static IReadOnlyList<string> Severities { get; } = ["low", "medium", "high", "critical"];
 
     /// <summary>
     /// Only contexts Axiom can state truthfully: an agent tool fetched the indicator, or an agent
@@ -217,10 +343,133 @@ public static class ThreatShareVocabulary
         "pdf", "docx", "xlsx", "png", "jpg", "html", "lnk",
     };
 
+    private static readonly HashSet<string> KnownPublicResolvers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9", "149.112.112.112",
+        "208.67.222.222", "208.67.220.220",
+        "2606:4700:4700::1111", "2606:4700:4700::1001",
+        "2001:4860:4860::8888", "2001:4860:4860::8844", "2620:fe::fe",
+        "dns.google", "one.one.one.one", "dns.quad9.net",
+    };
+
+    private static readonly HashSet<string> SharedHostingApexes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "github.io", "raw.githubusercontent.com", "githubusercontent.com",
+        "amazonaws.com", "pages.dev", "vercel.app", "netlify.app",
+        "workers.dev", "herokuapp.com", "firebaseapp.com", "web.app",
+        "blogspot.com", "wordpress.com", "azurewebsites.net", "cloudfront.net",
+    };
+
+    private static readonly (string Network, int PrefixBits)[] SharedInfraIpv4Cidrs =
+    [
+        ("104.16.0.0", 12),
+        ("172.64.0.0", 13),
+        ("162.158.0.0", 15),
+        ("103.21.244.0", 22),
+        ("198.41.128.0", 17),
+        ("151.101.0.0", 16),
+        ("185.199.108.0", 22),
+        ("13.32.0.0", 15),
+    ];
+
     public static bool IsSupported(string indicatorType, string reason, string context) =>
         IndicatorTypes.Contains(indicatorType, StringComparer.OrdinalIgnoreCase) &&
         Reasons.Contains(reason, StringComparer.OrdinalIgnoreCase) &&
         Contexts.Contains(context, StringComparer.OrdinalIgnoreCase);
+
+    public static bool IsPublishableReason(string? reason) =>
+        !string.IsNullOrWhiteSpace(reason) &&
+        PublishableReasons.Contains(reason.Trim(), StringComparer.OrdinalIgnoreCase);
+
+    public static string NormalizeSeverity(string? severity)
+    {
+        var normalized = (severity ?? string.Empty).Trim().ToLowerInvariant();
+        return Severities.Contains(normalized, StringComparer.Ordinal) ? normalized : "high";
+    }
+
+    public static ThreatShareEligibilityAssessment EvaluatePublicationEligibility(
+        string indicatorType,
+        string normalizedValue,
+        string reason,
+        ThreatShareEvidenceClass evidenceClass,
+        ThreatShareProofGrade proofGrade,
+        bool listDerived = false)
+    {
+        if (listDerived || evidenceClass is ThreatShareEvidenceClass.LocalObservation or ThreatShareEvidenceClass.PublicFeedMatch)
+        {
+            return new(
+                ThreatSharePublicationEligibility.LocalOnly,
+                "PUBLIC_FEED_OR_LOCAL_ONLY",
+                "Local observation or public-list match stays on this machine and is never proposed as independent corroboration.");
+        }
+
+        var type = (indicatorType ?? string.Empty).Trim().ToLowerInvariant();
+        var targetHost = type == "url" && Uri.TryCreate(normalizedValue, UriKind.Absolute, out var uri)
+            ? uri.IdnHost.Trim('[', ']')
+            : normalizedValue.Trim('[', ']');
+
+        if (KnownPublicResolvers.Contains(normalizedValue) || KnownPublicResolvers.Contains(targetHost))
+        {
+            return new(
+                ThreatSharePublicationEligibility.LocalOnly,
+                "NEVER_FLAG_RESOLVER",
+                "Known public DNS resolver kept local-only to avoid curator never-flag rejection.");
+        }
+
+        if ((type is "domain" or "url") && SharedHostingApexes.Contains(targetHost))
+        {
+            return new(
+                ThreatSharePublicationEligibility.NeedsEvidence,
+                "SHARED_HOSTING_APEX",
+                "Shared-hosting apex affects multiple tenants; submit only a specific malicious subdomain or URL with evidence.");
+        }
+
+        if (type == "ip" && System.Net.IPAddress.TryParse(targetHost, out var address) && IsSharedCloudOrCdnIp(address))
+        {
+            return new(
+                ThreatSharePublicationEligibility.NeedsEvidence,
+                "NEVER_PROMOTE_SHARED_IP",
+                "Bare multi-tenant CDN/Cloud IP is kept local; correlate to a specific malicious domain before sharing.");
+        }
+
+        if (!IsPublishableReason(reason))
+        {
+            return new(
+                ThreatSharePublicationEligibility.NeedsEvidence,
+                "UNSPECIFIED_THREAT_REASON",
+                "Threat reason is 'unknown'; classify with evidence-backed behavior before publishing.");
+        }
+
+        if (evidenceClass == ThreatShareEvidenceClass.HeuristicOrAiSuspected &&
+            proofGrade < ThreatShareProofGrade.Correlated)
+        {
+            return new(
+                ThreatSharePublicationEligibility.NeedsEvidence,
+                "AI_SUSPECTED_NEEDS_CORROBORATION",
+                "AI-suspected endpoint needs correlated or reproducible evidence before production submission.");
+        }
+
+        return new(
+            ThreatSharePublicationEligibility.NeedsOperatorReview,
+            "READY_FOR_OPERATOR_REVIEW",
+            "Ready for explicit operator review; Blackbox curators exclusively determine acceptance and novelty.");
+    }
+
+    private static bool IsSharedCloudOrCdnIp(System.Net.IPAddress address)
+    {
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 &&
+            address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            return false;
+        }
+
+        return SharedInfraIpv4Cidrs.Any(cidr => InNetwork(address, cidr.Network, cidr.PrefixBits));
+    }
 
     /// <summary>Builds the stable queue id and the value Blackbox hashes, or null when invalid.</summary>
     public static string? Normalize(string indicatorType, string value, bool allowUrlPath = false)

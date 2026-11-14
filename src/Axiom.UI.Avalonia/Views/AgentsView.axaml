@@ -148,8 +148,14 @@
               <DataTemplate>
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" Margin="0,2">
                   <StackPanel Grid.Column="0" Spacing="1">
-                    <controls:AxiomSelectableTextBlock Text="{Binding Candidate.Value}" FontSize="11"
-                               Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <controls:AxiomSelectableTextBlock Text="{Binding Candidate.Value}" FontSize="11"
+                                 Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                      <controls:AxiomSelectableTextBlock Text="{Binding Candidate.NoveltyLabel}" FontSize="9"
+                                 Foreground="{DynamicResource Axiom.Accent}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <controls:AxiomSelectableTextBlock Text="{Binding Candidate.PublicPayloadPreview}" FontSize="9"
+                               Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
                     <controls:AxiomSelectableTextBlock Text="{Binding Candidate.Detail}" FontSize="9"
                                Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
                     <controls:AxiomSelectableTextBlock Text="{Binding StateDetail}" IsVisible="{Binding HasStateDetail}"
@@ -166,6 +172,23 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
+          <StackPanel Spacing="4" IsVisible="{Binding HasSubmittedThreatShares}" Margin="0,4,0,0">
+            <controls:AxiomSelectableTextBlock Text="Recently shared (retraction sends a withdrawal statement; CC0 replicas may persist)"
+                       FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding SubmittedThreatShares}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,1">
+                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding Candidate.Id}" FontSize="10"
+                               Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Content="Retract" Padding="9,3" FontSize="10"
+                            Command="{Binding $parent[UserControl].DataContext.RetractThreatShareCommand}"
+                            CommandParameter="{Binding}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
           <controls:AxiomSelectableTextBlock Text="{Binding ThreatShareActionText}" FontSize="10"
                      Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
         </StackPanel>
