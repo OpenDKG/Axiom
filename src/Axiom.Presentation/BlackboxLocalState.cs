@@ -338,7 +338,8 @@ public static class BlackboxLocalState
     /// </summary>
     public static bool IsGuardRuntimeInstalledAt(string blackboxRoot)
     {
-        var python = Path.Combine(blackboxRoot, "venv", "Scripts", "python.exe");
+        // Windows: venv\Scripts\python.exe (as upstream); macOS/Linux: venv/bin/python.
+        var python = AgentPlatform.VenvPython(blackboxRoot);
         var hooks = Path.Combine(blackboxRoot, "plugins", "blackbox", "guard", "hooks.py");
         return File.Exists(python) && File.Exists(hooks);
     }
