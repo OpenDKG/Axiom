@@ -50,7 +50,13 @@ public sealed class FirewallRuleRow(ManagedRule rule)
 
     public string EnabledText => rule.Spec.Enabled ? "yes" : "no";
 
-    public string StateText => rule.State.ToString();
+    /// <summary>State, plus the Linux coverage split (null on Windows/macOS, so their text is unchanged).</summary>
+    public string StateText => rule.ConnectTimeBlockingProven switch
+    {
+        true => $"{rule.State} · connect-time proven",
+        false => $"{rule.State} · nft-only (not race-free)",
+        null => rule.State.ToString(),
+    };
 
     public string Tooltip =>
         $"{rule.Spec.AppPath}\nRule: {rule.OsRuleName}\nCreated by: {rule.Spec.CreatedBy}";
@@ -1439,7 +1445,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             WritesEnabled = snapshot.WritesEnabled;
             WritePathText = snapshot.WritesEnabled ? "enabled (test VM only)" : "disabled";
             HasError = snapshot.Capability.Status == FirewallCapabilityStatus.Unavailable;
-            Enforcement = FilterEnforcementSummary.From(snapshot.Capability.FilterEnforcement);
+            Enforcement = FilterEnforcementSummary.From(snapshot.Capability.FilterEnforcement, snapshot.Capability.ConnectTimeLayer);
             StatusText = snapshot.Rules.Count == 0
                 ? $"0 owned rules. Axiom has not created any {PlatformText.Firewall} rule on this host."
                 : $"{snapshot.Rules.Count} owned rules read at {DateTimeOffset.Now:HH:mm:ss}.";

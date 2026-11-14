@@ -523,7 +523,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             ? OperatingSystem.IsWindows()
                 ? "Data source: local service · traffic not filtered"
                 : Firewall.Enforcement.IsEnforcementVerified
-                    ? $"Data source: local service · Axiom Shield on · blocks verified {Firewall.Enforcement.VerifiedAtText}"
+                    ? $"Data source: local service · Axiom Shield on · {Firewall.Enforcement.VerifiedStatusText}"
                     : "Data source: local service · Axiom Shield on · blocks not verified"
             : IsServiceMode
                 ? "Data source: local service (read-only)"

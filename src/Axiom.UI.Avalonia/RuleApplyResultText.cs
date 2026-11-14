@@ -29,6 +29,14 @@ public static class RuleApplyResultText
                    $"{(string.IsNullOrWhiteSpace(result.ErrorMessage) ? string.Empty : ": " + result.ErrorMessage)}).";
         }
 
-        return $"{subject} applied; verified at {result.VerifiedUtc?.ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "unknown"}.";
+        var at = result.VerifiedUtc?.ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "unknown";
+        return result.ConnectTimeBlockingProven switch
+        {
+            // Linux only: the nft rule is in the live table, but a fresh process can still connect during
+            // the attribution window. Never word that as plain "applied and verified".
+            false => $"{subject} installed in {PlatformText.FilterName} and read back at {at}; not race-free: {result.CoverageReason ?? "a newly launched process can connect during the ~1 s cgroup attribution window"}.",
+            true => $"{subject} applied; verified at {at}; connect-time blocking proven (a new process is refused at connect()).",
+            null => $"{subject} applied; verified at {at}.",
+        };
     }
 }

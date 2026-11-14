@@ -69,8 +69,63 @@ public sealed record FilterEnforcementSummary
     /// "not verified as enforced: {reason}". Never claims enforcement without a verified report.
     /// </summary>
     public string EnforcementClause(string enforcer) => IsEnforcementVerified
-        ? string.Create(CultureInfo.InvariantCulture, $"enforced by the {enforcer} (verified {VerifiedAtText})")
+        ? CoverageText.Length > 0
+            ? string.Create(CultureInfo.InvariantCulture, $"installed in the {enforcer} and read back (verified {VerifiedAtText}); {CoverageText}")
+            : string.Create(CultureInfo.InvariantCulture, $"enforced by the {enforcer} (verified {VerifiedAtText})")
         : $"not verified as enforced: {NotVerifiedReason}";
+
+    /// <summary>
+    /// Linux only (the daemon reports <see cref="FirewallCapabilityReport.ConnectTimeLayer"/>): how many
+    /// rules refuse a new process at connect() vs. are nft-only (not race-free). Empty elsewhere.
+    /// </summary>
+    public string CoverageText { get; init; } = string.Empty;
+
+    /// <summary>Status-bar clause for verified blocks; Linux names the coverage split.</summary>
+    public string VerifiedStatusText => CoverageText.Length > 0
+        ? $"nft rules read back {VerifiedAtText} · {ShortCoverage}"
+        : $"blocks verified {VerifiedAtText}";
+
+    /// <summary>"N connect-time proven · M nft-only (not race-free)" (Linux), empty elsewhere.</summary>
+    public string ShortCoverage { get; init; } = string.Empty;
+
+    /// <summary>Coverage sentence for a Linux connect-time layer report; empty when there is none.</summary>
+    public static (string Text, string Short) CoverageFor(ConnectTimeLayerReport? layer)
+    {
+        if (layer is null)
+        {
+            return (string.Empty, string.Empty);
+        }
+
+        var proven = layer.ConnectTimeProvenRules.Count;
+        var nftOnly = layer.NftOnlyRules.Count;
+        var text = nftOnly == 0
+            ? string.Create(CultureInfo.InvariantCulture, $"{proven} rule(s) connect-time proven by the BPF layer (a new process is refused at connect())")
+            : string.Create(CultureInfo.InvariantCulture, $"{proven} rule(s) connect-time proven, {nftOnly} nft-only: installed and read back but not race-free — a newly launched process can connect during the ~1 s cgroup attribution window");
+        if (!layer.Healthy && !string.Equals(layer.State, "not_configured", StringComparison.Ordinal))
+        {
+            text += $"; BPF layer {layer.State}";
+        }
+
+        var brief = string.Create(CultureInfo.InvariantCulture, $"{proven} connect-time proven · {nftOnly} nft-only (not race-free)");
+        return (text, brief);
+    }
+
+    public static FilterEnforcementSummary From(FilterEnforcementReport? report, ConnectTimeLayerReport? layer)
+    {
+        var summary = From(report);
+        if (report is null || layer is null)
+        {
+            return summary;
+        }
+
+        var (text, brief) = CoverageFor(layer);
+        return summary with
+        {
+            CoverageText = text,
+            ShortCoverage = brief,
+            ConnectionText = summary.ConnectionText.Length > 0 ? summary.ConnectionText + " · " + brief : brief,
+        };
+    }
 
     public static FilterEnforcementSummary From(FilterEnforcementReport? report)
     {

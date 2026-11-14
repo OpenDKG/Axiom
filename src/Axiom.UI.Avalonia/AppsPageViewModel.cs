@@ -189,7 +189,7 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
             var snapshot = await _client!
                 .SendAsync<FirewallRulesSnapshot>(IpcCommandTypes.RulesQuery, null, CancellationToken.None)
                 .ConfigureAwait(true);
-            return FilterEnforcementSummary.From(snapshot.Capability.FilterEnforcement);
+            return FilterEnforcementSummary.From(snapshot.Capability.FilterEnforcement, snapshot.Capability.ConnectTimeLayer);
         }
         catch (ServiceUnavailableException)
         {
