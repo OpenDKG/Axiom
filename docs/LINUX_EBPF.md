@@ -508,3 +508,20 @@ neutralised …`), doctor `WARN bpf layer: … live layer neutralised …`, `Res
 → re-attached by the watch tick after 2.8 s (VM) / 7.2 s (host), 4 programs, proven again, 0/20 slipped.
 Note: the doctor's `live enforcement` line stays PASS in that state (nft is verified) and carries the
 degraded BPF text; the WARN comes from `bpf layer`.
+
+### 11.4 "table inet axiom is missing" during neutralisation (`70c7ee8`)
+
+The R4-H4 doctor run showed `table inet axiom is missing` while the layer was neutralised. Polling
+every ~110 ms (nft, `rules.query`, a fresh canary curl) through `bpftool cgroup detach` of the 4
+programs and through the map-fault neutralisation found **0 samples without the table** (≥ 7 rules
+throughout); the text came from the capability reason, whose `Degraded` fallback named the table for
+every degradation, including the BPF-only ones folded in by LNX-1. nft enforcement was never lost; what
+was lost while the layer was detached is the connect-time layer (fresh-process slips until the watch
+tick re-attaches, 18/18 → 0 after ~2 s at `fb8f04f`). Since `70c7ee8` the reason says the table is
+present and that the BPF layer degrades enforcement. Neutralisation and re-attach never write nft (unit
+test: no `delete table inet axiom` call). The same run found a real gap: `nft flush table inet axiom`
+keeps the table and its generation comment, so the watcher reported `verified` with 0 rules for as
+long as it lasted; the watcher now compares the owned rule comments and republishes. External
+`nft delete table inet axiom` / `nft flush ruleset`: degraded at once with `nft table inet axiom
+missing (removed externally …)`, restored by the next watch tick; the BPF layer stays attached
+meanwhile, so unscoped block rules kept blocking (0 slips). Evidence: `LINUX_TEST_REPORT.md` R5-*.

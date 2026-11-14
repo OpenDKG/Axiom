@@ -205,7 +205,10 @@ Windows TFM `Compile Remove` list) runs `NftEnforcementSupervisor.RunAsync`:
    `axiom.slice/a-<hash>/cgroup.procs`; only moves out of `system.slice/*.service` and failures
    are logged (user-scope moves are routine); unused app cgroups are removed;
 3. *ruleset watcher* (10 s) — `nft -j list table inet axiom`; when the table is gone (another
-   admin's `nft flush ruleset`) it republishes (`generation` increments) and logs it;
+   admin's `nft flush ruleset` / `nft delete table inet axiom`) or still carries the published
+   generation but has lost owned rules (`nft flush table inet axiom` keeps the table and its comment)
+   it republishes (`generation` increments) and logs it; it only ever rewrites `table inet axiom`
+   and never touches the BPF layer (its re-attach is a separate step of the same tick);
 4. *trace monitor* — `nft monitor trace` child (restarted on exit), `NftTraceParser` joins
    `packet:`/`rule … (verdict …)` records of the block rules (`meta nftrace set 1`) into NDJSON
    flow events; `FilterEventPipe` feeds them to the shared `FilterEventServer`/`FlowTable`;
@@ -226,7 +229,13 @@ store. `rules.query → capabilities.filterEnforcement` is the honest boundary r
 appliedRuleCount, rejectedRules, fileError}` with `state` **verified** (readback matches the
 published generation), **pending** (published, readback not yet seen), **degraded** (the table
 vanished — `nft flush ruleset` by another admin — or `nft` cannot be read; `connected:false`,
-`ackedGeneration:null`) or **unavailable** (`nft` missing / torn down). `firewallServiceRunning`
+`ackedGeneration:null`; or the table carries the generation but owned rule comments are missing,
+`connected:true`) or **unavailable** (`nft` missing / torn down). The capability reason names the
+actual cause: `nft table inet axiom missing (removed externally …)` only when the table is absent,
+`nft table inet axiom modified externally: … k of M owned rule(s) are missing …` for a flushed
+table, and `table inet axiom is present (generation N) and nftables enforces the stored rules;
+enforcement is degraded by the connect-time BPF layer: …` when only the BPF layer degrades the
+state (neutralised layer, stale verdict, unconfirmed BPF removal). `firewallServiceRunning`
 is live. The watcher degrades the report *immediately* when the table disappears, logs
 `table inet axiom disappeared (generation N was published); enforcement degraded; republishing.`,
 republishes and returns to verified (`Republished table inet axiom generation N+1; enforcement

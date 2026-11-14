@@ -522,6 +522,48 @@ Author-run evidence on project machines (not GitHub-hosted CI). `scripts/linux/p
 | R4-H1 | `sudo -n dpkg -i build/linux/axiom_0.17.0_amd64.deb` | PASS | `active`; journal `BPF exe key self-check verified: … axiomd: dev 8:2 ino 4194354 subvol 0; no btrfs BTF at load: btrfs subvolume ids are not read.` |
 | R4-H2 | `axiomd --doctor` | PASS | `PASS bpf exe key: /usr/bin/env: key dev 8:2 ino 51660111 subvol 0, source mountinfo superblock dev (ext4 at /, /dev/sda2) (subvol 0: not btrfs). Kernel self-check verified: …`; `Result: all checks passed.` |
 | R4-H3 | `sudo scripts/linux/canary.sh unscoped --count 50 --keep-topology` | PASS | proven=True ×2; curl v4 0/50, v6 0/50, python v4 0/50, v6 0/50 slipped |
-| R4-H4 | neutralised layer (`mv …/axiom_exe_verdicts held_…`, rule removed → delete fails) → doctor | PASS | `WARN live enforcement: … but the connect-time BPF layer is neutralised (degraded: detached after 1 stale map entry could not be deleted (generation 44); …)`, `WARN bpf layer: … neutralised …`, `Result: 2 problem(s).`; the same report also said `table inet axiom is missing (another tool may have flushed the ruleset)` — not investigated; after `systemctl restart axiomd`: all PASS |
+| R4-H4 | neutralised layer (`mv …/axiom_exe_verdicts held_…`, rule removed → delete fails) → doctor | PASS | `WARN live enforcement: … but the connect-time BPF layer is neutralised (degraded: detached after 1 stale map entry could not be deleted (generation 44); …)`, `WARN bpf layer: … neutralised …`, `Result: 2 problem(s).`; the same report also said `table inet axiom is missing (another tool may have flushed the ruleset)` — a wrong reason, the table was present (see R5-*); after `systemctl restart axiomd`: all PASS |
 | R4-H5 | `sudo scripts/linux/canary.sh --cleanup`; final state | PASS | `topology and /opt/axiom-canary removed`, no netns; `axiomd` active, 0 owned rules, protection off, Privacy Shield `Disabled`, `Link 2 (eno2): 192.168.70.1`, 4 `axiom_*` programs attached |
 
+## "table inet axiom is missing" while the BPF layer is neutralised (2026-11-14, branch `buba/linux`): red `d2de9c0`, fix `70c7ee8`
+
+Question from R4-H4: can `table inet axiom` disappear (or be reported missing) while axiomd runs, and was
+enforcement lost? Answer: no table was lost; the capability reason named the table for every Degraded
+state, including the BPF-only degradations (neutralised layer, pending BPF removal). The same probe found
+a real gap: `nft flush table inet axiom` left the table and its generation comment, and the daemon
+reported `verified` with 0 rules. Ubuntu 24.04 host, kernel 7.0.0-42, nft 1.0.9, ufw + Docker active
+(iptables-nft tables only; neither touched `table inet axiom` in any sample). Repro script (root):
+`tablerepro/repro.py` in the session scratch: rule on `/opt/axiom-canary/curl` (canary topology kept),
+then every ~110 ms for 30 s `nft -j list table inet axiom` (rc, rule count), `rules.query` capability
+status/reason, and a fresh `curl --connect-timeout 1 http://10.231.0.2:18080/` (rc 0 = slip).
+
+### Unit tests (red → green)
+
+| ID | Command | Result | Evidence |
+|---|---|---|---|
+| R5-U1 | `dotnet test tests/Axiom.Infrastructure.Linux.Nft.Tests` at `d2de9c0` | red as intended | `Failed: 4, Passed: 149` — `Neutralised_layer_with_the_table_present_never_reports_the_table_missing` (reason contained "missing"), `One_watch_tick_restores_a_deleted_table_and_reattaches_a_neutralised_layer_without_touching_other_tables`, `External_table_delete_is_degraded_with_the_reason_never_read_back_and_restored_within_one_tick` (wording), `Flushed_table_that_keeps_its_generation_comment_is_detected_as_modified_and_republished` (`Expected: Degraded, Actual: Available`) |
+| R5-U2 | same at `70c7ee8` | PASS | `Passed: 153` (Nft); `Table_without_owned_rules_is_not_reported_modified_and_never_republished_in_a_loop` guards the comment check; the re-attach path issues no `delete table inet axiom` |
+
+### Gate at `70c7ee8` (`flock …/.build.lock`-serialised `scripts/ci/run-all.sh`, `-c Release`)
+
+| ID | Check | Result | Evidence |
+|---|---|---|---|
+| R5-G1 | builds | PASS | `build Axiom.sln rc=0 0 Warning(s) 0 Error(s)`, `build Axiom.Portable.slnx rc=0 0 Warning(s) 0 Error(s)` |
+| R5-G2 | test projects | PASS | Linux.Nft 153/153, Linux 32/32, Unix 32/32, Desktop.Avalonia.Linux 51/51, Infrastructure.MacOS 221/221, Desktop.Avalonia.MacOS 35/35, UI.Avalonia 57/57, Contracts 142/142, McpServer 33/33, Persistence 21/21, Presentation 93/93 |
+| R5-G3 | Windows-only failures vs `788c709` | identical | Core 11, Service 12, Infrastructure.Windows 23 = 46 names; `diff` of the sorted names is empty |
+
+### Live, Ubuntu host
+
+| ID | Step | Result | Evidence |
+|---|---|---|---|
+| R5-H1 | `.deb` at `fb8f04f` (installed `Axiom.Infrastructure.Linux.dll` = build), `bpftool cgroup detach /sys/fs/cgroup <hook> id <n>` ×4 | table never absent | 267 samples / 30 s: table absent **0**, ≥ 7 rules every sample, reason never "missing", `available/verified` with `Connect-time BPF layer degraded: only 0 of 4 …`; canary slips 25/267, last at 2.8 s (re-attached by the watch tick) |
+| R5-H2 | `fb8f04f`, R4-H4 neutralisation (`mv …/axiom_exe_verdicts held_…`, remove a second rule → delete fails) | **reproduced the wrong reason** | 257 samples: table absent **0**, ≥ 7 rules; 18 samples `degraded/degraded` with `table inet axiom is missing (another tool may have flushed the ruleset) …` (0.0–1.9 s); canary 18/18 slipped in that window (nft-only), 0 after the re-attach |
+| R5-H3 | `fb8f04f`, `nft delete table inet axiom` / `nft flush ruleset` (iptables-nft tables restored at once with `iptables-restore`) | detected, restored | absent 96 samples (0–9.5 s) / 98 (0–9.7 s), Degraded throughout, journal `table inet axiom disappeared … republishing.` → `Republished … verified`; canary 0 slips (BPF attached) |
+| R5-H4 | `fb8f04f`, `nft flush table inet axiom` | **gap** | 300 samples: 0 nft rules, `available/verified` for the whole 30 s; nothing logged |
+| R5-H5 | `.deb` at `70c7ee8` (`dpkg -i`, installed dll sha256 `8c5cc6dc…` = build) — detach ×4 | PASS | 227 samples, table absent 0, reason never "missing"; slips 38/227, last at 5.0 s; journal `only 0 of 4 Axiom programs are attached …` → `BPF layer re-attached; enforcement verified.` |
+| R5-H6 | `70c7ee8`, map-fault neutralisation | PASS | 254 samples, table absent 0, ≥ 7 rules; 33 `degraded` samples with `table inet axiom is present (generation 64) and nftables enforces the stored rules; enforcement is degraded by the connect-time BPF layer: 1 rule removal(s) …`; slips 32/254 until the re-attach (last 4.1 s) |
+| R5-H7 | `70c7ee8`, `nft delete table inet axiom` | PASS | absent 45 samples (0–4.4 s), reason `nft table inet axiom missing (removed externally: another tool deleted it or flushed the ruleset); …`; journal `table inet axiom disappeared (generation 64 was published; removed externally); enforcement degraded; republishing.` → `Republished table inet axiom generation 65; enforcement verified.`; canary 0/258 |
+| R5-H8 | `70c7ee8`, `nft flush table inet axiom` | PASS | 0 rules for 4.6 s, `degraded` with `nft table inet axiom modified externally: generation 65 is present but 3 of 3 owned rule(s) are missing …`; journal `… was modified externally (3 of 3 owned rule(s) missing); … republishing.` → generation 66 verified; canary 0/268 |
+| R5-H9 | `70c7ee8`, `nft flush ruleset` (+ iptables restore) | PASS | absent 48 samples (0–4.7 s), same missing reason, generation 67 verified; canary 0/268; iptables rules 71/116 before and after |
+| R5-H10 | `70c7ee8`, `rule.verify` around an external delete | PASS | before `nftRuleReadBack True enforcementVerified True`; right after `presentInOs False nftRuleReadBack False enforcementVerified False` (`connectTimeBlockingProven True`: the BPF layer is still attached); table back after ~4.0 s, all True |
+| R5-H11 | R4-H4 script again at `70c7ee8` | PASS | `WARN live enforcement: … table inet axiom is present (generation 70) and nftables enforces the stored rules; enforcement is degraded by the connect-time BPF layer: 1 rule removal(s) …`; no "missing"; after restart all PASS |
