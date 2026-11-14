@@ -225,3 +225,133 @@ check found no copy afterwards.
 - The installer (`Axiom.Setup`); the service was installed with `--install-service`.
 - A service differential of the full S1 head `f574e0e`.
 - GitHub CI: none of this ran there.
+
+
+---
+
+# Round 3 (2026-11-15): `main` `1cd0b79` vs S1a `7ee1527`, lock files regenerated on Windows
+
+**Author-run on the project's Windows 11 test VM. This is not CI.** Same VM, SDK 10.0.403, scripts and
+method as in sections 1 to 6. Every tree is a `git archive` of its commit expanded into an empty directory,
+each with its own empty `NUGET_PACKAGES` folder.
+
+| | Commit |
+|---|---|
+| main | `1cd0b79a82bf9469cea804a91ac029b8b369e631` (after `419e9e9`: the self-test fix `a57ebbe`, the 0.25.0 release commit and its revert, merges #328 / #329) |
+| S1a before the lock-file fix | `8e087b2` = published `6a5073a` + merge of `main` `419e9e9` + the reviewer nit (`7880c55`) + `Merge main (1cd0b79) into S1a` (clean) |
+| S1a tested | **`7ee1527d2003399761495fb0c1d79eec8285e093`** = `8e087b2` + the lock-file commit. Later commits on the branch change docs only. |
+
+## R3.1 Locked restore and the lock-file fix
+
+A reviewer found that `dotnet restore --locked-mode` fails with `NU1004` on S1a. The cause: S1a adds the
+project `Axiom.Service.Hosting` and references it from `Axiom.Infrastructure.Windows` and
+`Axiom.Service`, but the lock files were not regenerated.
+
+Upstream's lock files have two shapes. 13 lock files have a `<tfm>/win-x64` section: the projects in the
+closure of the win-x64 published apps. The other 9 have no RID section. A plain `--locked-mode` restore
+(without `-r`) fails with `NU1004` ("runtime identifiers have changed") for **every** project of pristine
+`main` on Windows. So each project was restored in the mode that matches its own lock file: `-r win-x64`
+for the RID-shaped ones and plain for the others. An error counts for a project only when the NuGet error
+line names that project's `.csproj`.
+
+**Fix (`7ee1527`).** Run on the VM: `dotnet restore <project> --force-evaluate` per project, in the shape
+of its lock file (plain projects first, RID projects last). The new `Axiom.Service.Hosting` lock file gets
+the `win-x64` shape, like `Axiom.Contracts` and `Axiom.Core`. Review of the regenerated files against the
+committed ones:
+
+- **No NuGet package entry changed in any of the 22 files.** So there is no package version drift.
+- Every regenerated file refreshes the in-repo project reference ranges, for example
+  `"Axiom.Contracts": "[0.13.0, )"` becomes `"[0.24.0, )"`. NuGet records the current project versions
+  when it regenerates a file. `Axiom.UI.Avalonia` would also gain a `win-x64` section, through the
+  `-r win-x64` graph of `Axiom.Desktop.Avalonia.Windows`.
+- **Only the 7 files whose graph contains `Axiom.Service.Hosting` are taken:** `Axiom.Desktop`,
+  `Axiom.Desktop.Avalonia.Windows`, `Axiom.Infrastructure.Windows`, `Axiom.Service`,
+  `Axiom.Service.Hosting` (adds an empty `net10.0/win-x64` section), `Axiom.Infrastructure.Windows.Tests`
+  and `Axiom.Service.Tests`. The diff adds the `axiom.service.hosting` project entry and refreshes the
+  project ranges. The other 15 files are as on `main`. Line endings are LF, as in the repository.
+
+Proof on a **fresh** copy of each committed tree (`--locked-mode` per project, in its matching mode):
+
+| Project | Lock shape | main `1cd0b79` | S1a before (`8e087b2`) | S1a `7ee1527` |
+|---|---|---|---|---|
+| Axiom.Contracts, Core, Persistence, Presentation, Setup, UI | win-x64 | pass | pass | pass |
+| Axiom.Desktop, Axiom.Infrastructure.Windows, Axiom.Service | win-x64 | pass | **fail** `NU1004` "A new project reference to Axiom.Service.Hosting was found" | pass |
+| Axiom.Service.Hosting (new) | win-x64 | — | fail | pass |
+| Axiom.Desktop.Avalonia.Windows | win-x64 | fail | fail | fail |
+| Axiom.McpServer, Axiom.UI.Avalonia, the 10 test projects | plain | fail | fail | fail |
+
+**No project that passes locked restore on `main` fails on S1a.** The rows that fail on S1a also fail on
+pristine `main`, with the same `NU1004` runtime-identifier message. The plain-shape projects reference
+projects whose lock files carry `win-x64`, so neither mode matches them. The slice does not change those
+files.
+
+## R3.2 Clean restore, build and suites
+
+| Step | main `1cd0b79` | S1a `7ee1527` |
+|---|---|---|
+| `dotnet restore Axiom.sln --no-http-cache` (empty package folder) | exit 0, 88 packages, `System.CodeDom` 10.0.14 | same |
+| `dotnet build Axiom.sln -c Release --no-restore` | 0 warnings, 0 errors | 0 warnings, 0 errors |
+| Axiom.Contracts.Tests | 148 / 148 | 148 / 148 |
+| Axiom.Core.Tests | 151 / 151 | 151 / 151 |
+| Axiom.Infrastructure.Windows.Tests | 75 / 75 | 125 / 126 (COM flake, see below) |
+| Axiom.McpServer.Tests | 33 / 33 | 33 / 33 |
+| Axiom.Persistence.Tests | 21 / 21 | 21 / 21 |
+| Axiom.Presentation.Tests | 196 / 196 | 196 / 196 |
+| Axiom.Service.Tests | 91 / 91 | 91 / 91 |
+| Axiom.UI.Avalonia.Tests | 37 / 37 | 37 / 37 |
+| Axiom.UI.Tests | 171 / 174 | 171 / 174 |
+
+Failing test names compared per suite from the trx files (`failset.py`, plus a check that every test that
+passes on `main` exists and passes on S1a):
+
+- **No test that passes on `main` is missing on S1a.** The 51 new results are `IpcCommandAccessTests` and
+  its theory rows, plus the 3 **`IpcCallerEntryPointTests`** for the reviewer nit. All 3 **pass on
+  Windows**.
+- **Axiom.UI.Tests**: the same 3 `AgentHookScriptTests` fail on both trees. The VM has no Python, only the
+  Store alias (exit 9009). Environment, not code.
+- **Axiom.Infrastructure.Windows.Tests**: `WindowsFirewallPolicyAdapterTests.Owned_rules_all_follow_the_naming_contract`
+  failed in S1a's full-suite run with `InvalidComObjectException` (COM object separated from its RCW).
+  This is the known flake. Neither the adapter nor its tests are changed by the slice. 8 more runs of the
+  suite per tree: `main` failed in 2 of 9 runs in total (`Capabilities_are_available` twice), S1a in 3 of 9
+  (`Owned_rules_all_follow_the_naming_contract` each time). The tests and the exception are the same on
+  both trees.
+
+## R3.3 Service differential
+
+Same scripts and order as section 4, with the state reset between builds. A Privacy Shield phase was
+added; the S1b document has the detail. The installed `Axiom.Service.exe` has the same SHA-256 as the
+published one: `main` `1696CC17…`, S1a `DD127DC5…`.
+
+**175 checks per build: 171 identical after normalisation, 3 with the same JSON shape and different live
+traffic (`snapshot`; the `pending` ask list in `protection.enable` and in `protection.status` after the
+restart), 1 different: `publish_files`** (S1a adds `Axiom.Service.Hosting.pdb`, as before). That covers:
+
+- core commands;
+- `enforcement.status` / `.receipts` / `.evaluate` with the gate closed and open. The receipt hash chains
+  are equal without normalisation;
+- malformed, oversized and invalid-UTF-8 payloads, unknown command, invalid rule payloads;
+- the connection matrix;
+- access probes. The NETWORK logon and the second local user `tester` are denied at connect; `axiom` in a
+  limited S4U task is answered;
+- uninstall leftovers.
+
+Block and unblock, identical on both builds:
+
+1. `curl https://example.com` before: exit 0, HTTP 200.
+2. `protection.enable`, then `rule.apply` (block `curl.exe` outbound): 1 firewall rule (enabled /
+   Outbound / Block / `curl.exe`); curl exit 7.
+3. `rule.verify`: `presentInOs:true`, `effectiveAction:"block"`.
+4. After a service restart: the rule is still present and still verified; curl exit 7.
+5. `rule.remove`: 0 rules; curl exit 0, HTTP 200.
+
+A second, privacy-only pass with a fresh install per build gave **61 / 61 identical checks**, `main` vs
+S1a.
+
+## R3.4 Known flakes and limits
+
+- `WindowsFirewallPolicyAdapterTests`: COM / RCW flake, see R3.2. Small sample; the rates are recorded,
+  not explained.
+- Python is absent on the VM, so 3 `AgentHookScriptTests` fail on every tree.
+- The probe credential for `tester` was copied to the guest only for the access probes, removed right
+  after each use, and checked absent (`TP_AFTER_AUTH=False`, `tp_present False` after each reset).
+- Not covered: an enabled enforcement policy, the desktop UI, the installer, GitHub CI.
