@@ -4,7 +4,6 @@ using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Protection;
 using Axiom.Core.Firewall;
 using Axiom.Core.Protection;
-using Axiom.Infrastructure.Windows.Firewall;
 using Microsoft.Extensions.Logging;
 
 namespace Axiom.Service;
@@ -58,7 +57,7 @@ public sealed partial class ProtectionController(
         {
             Enabled = settings.Enabled,
             ServiceElevated = ProtectionWriteConsent.IsServiceHost,
-            WriteGateOpen = WindowsFirewallPolicyAdapter.IsWriteGateOpen,
+            WriteGateOpen = FirewallWriteGate.IsOpen,
             AccountName = CurrentAccount(),
             DefaultPolicy = settings.DefaultPolicy,
             Pending = queue.Pending,

@@ -1,47 +1,58 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Ipc;
-using Axiom.Infrastructure.Windows.Firewall;
-using Axiom.Infrastructure.Windows.Ipc;
+using Axiom.Core.Firewall;
 using Axiom.Persistence;
+using Axiom.Service.Hosting.Ipc;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Axiom.Service;
 
-/// <summary>Hosts the local Named Pipe endpoint. No HTTP port, no remote clients, no exec command.</summary>
+/// <summary>
+/// Hosts the local service endpoint (Windows named pipe, macOS Unix socket). No HTTP port, no
+/// remote clients, no exec command. Transport and caller authentication come from
+/// <see cref="IIpcTransport"/>; the command set is identical on every platform.
+/// </summary>
 public sealed partial class PipeServerWorker(
+    IIpcTransport transport,
     ConnectionSnapshotCache cache,
     HistoryStore history,
-    WindowsFirewallPolicyAdapter firewall,
+    IFirewallPolicyAdapter firewall,
     FirewallRuleCoordinator coordinator,
     PrivacyShieldController privacyShield,
     ProtectionController protection,
     ThreatShareController threatShare,
     NetworkRecoveryController networkRecovery,
-    EnforcementController enforcement,
-    ILogger<PipeServerWorker> logger) : BackgroundService
+    ILogger<PipeServerWorker> logger,
+    EnforcementController? enforcement = null) : BackgroundService
 {
-    [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "Pipe {Pipe} allows SID {Sid}")]
-    private static partial void LogPipe(ILogger logger, string pipe, string sid);
+    // Windows logs "Pipe \\.\pipe\axiom allows SID S-1-…" (unchanged wording); macOS logs the socket
+    // path and its uid policy through the same message.
+    [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "{Kind} {Endpoint} {Verb} {Callers}")]
+    private static partial void LogEndpoint(ILogger logger, string kind, string endpoint, string verb, string callers);
 
     [LoggerMessage(EventId = 2002, Level = LogLevel.Information, Message = "{Message}")]
     private static partial void LogMessage(ILogger logger, string message);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var allowedSid = ServiceInfo.ResolveAllowedSid();
-        LogPipe(logger, IpcPipe.Name, allowedSid);
+        var allowedCallers = transport.Prepare();
+        LogEndpoint(
+            logger,
+            OperatingSystem.IsWindows() ? "Pipe" : "IPC endpoint",
+            transport.Endpoint,
+            OperatingSystem.IsWindows() ? "allows SID" : "accepts callers",
+            allowedCallers);
 
-        var server = new PipeServer(
-            IpcPipe.Name,
-            allowedSid,
-            () => cache.Latest,
-            () => CreateHealth(cache),
-            historyQuery: (query, cancellationToken) => history.QueryAsync(query, cancellationToken),
-            throughputHistory: (query, cancellationToken) =>
+        var handlers = new IpcRequestHandlers
+        {
+            SnapshotProvider = () => cache.Latest,
+            HealthProvider = () => CreateHealth(cache),
+            HistoryQuery = (query, cancellationToken) => history.QueryAsync(query, cancellationToken),
+            ThroughputHistory = (query, cancellationToken) =>
                 history.QueryThroughputAsync(query, cancellationToken),
-            rulesQuery: async cancellationToken =>
+            RulesQuery = async cancellationToken =>
             {
                 var capability = await firewall.GetCapabilitiesAsync(cancellationToken).ConfigureAwait(false);
                 IReadOnlyList<ManagedRule> rules = capability.Status == FirewallCapabilityStatus.Available
@@ -52,54 +63,68 @@ public sealed partial class PipeServerWorker(
                 {
                     Capability = capability,
                     Rules = rules,
-                    WritesEnabled = WindowsFirewallPolicyAdapter.IsWriteGateOpen,
+                    WritesEnabled = FirewallWriteGate.IsOpen,
                 };
             },
-            ruleApply: (spec, actorSid, cancellationToken) =>
+            RuleApply = (spec, actorSid, cancellationToken) =>
                 coordinator.ApplyAsync(spec, actorSid, cancellationToken),
-            ruleRemove: (managedRuleId, actorSid, cancellationToken) =>
+            RuleRemove = (managedRuleId, actorSid, cancellationToken) =>
                 coordinator.RemoveAsync(managedRuleId, actorSid, cancellationToken),
-            ruleVerify: (managedRuleId, cancellationToken) =>
+            RuleVerify = (managedRuleId, cancellationToken) =>
                 coordinator.VerifyAsync(managedRuleId, cancellationToken),
-            privacyStatus: cancellationToken => privacyShield.GetStatusAsync(cancellationToken),
-            privacyConfigure: (settings, cancellationToken) =>
+            PrivacyStatus = cancellationToken => privacyShield.GetStatusAsync(cancellationToken),
+            PrivacyConfigure = (settings, cancellationToken) =>
                 privacyShield.ConfigureAsync(settings, cancellationToken),
-            privacySourcesUpdate: cancellationToken => privacyShield.UpdateSourcesAsync(cancellationToken),
-            privacyHistoryClear: cancellationToken => privacyShield.ClearHistoryAsync(cancellationToken),
-            protectionStatus: cancellationToken => protection.GetStatusAsync(null, cancellationToken),
-            protectionEnable: (request, actorSid, cancellationToken) =>
+            PrivacySourcesUpdate = cancellationToken => privacyShield.UpdateSourcesAsync(cancellationToken),
+            PrivacyHistoryClear = cancellationToken => privacyShield.ClearHistoryAsync(cancellationToken),
+            ProtectionStatus = cancellationToken => protection.GetStatusAsync(null, cancellationToken),
+            ProtectionEnable = (request, actorSid, cancellationToken) =>
                 protection.EnableAsync(request.DefaultPolicy, actorSid, cancellationToken),
-            protectionDisable: (actorSid, cancellationToken) =>
+            ProtectionDisable = (actorSid, cancellationToken) =>
                 protection.DisableAsync(actorSid, cancellationToken),
-            protectionDecide: (request, actorSid, cancellationToken) =>
+            ProtectionDecide = (request, actorSid, cancellationToken) =>
                 protection.DecideAsync(request, actorSid, cancellationToken),
-            protectionDismiss: (request, cancellationToken) =>
+            ProtectionDismiss = (request, cancellationToken) =>
                 protection.DismissAsync(request, cancellationToken),
-            protectionLockdown: (request, actorSid, cancellationToken) =>
+            ProtectionLockdown = (request, actorSid, cancellationToken) =>
                 protection.SetAgentLockdownAsync(request.Enabled, actorSid, cancellationToken),
-            threatShareStatus: cancellationToken => threatShare.GetStatusAsync(cancellationToken),
-            threatShareEnqueue: async (request, cancellationToken) =>
+            ThreatShareStatus = cancellationToken => threatShare.GetStatusAsync(cancellationToken),
+            ThreatShareEnqueue = async (request, cancellationToken) =>
             {
                 threatShare.Enqueue(request);
                 return await threatShare.GetStatusAsync(cancellationToken).ConfigureAwait(false);
             },
-            threatShareDismiss: (request, cancellationToken) =>
+            ThreatShareDismiss = (request, cancellationToken) =>
                 threatShare.DismissAsync(request.Id, cancellationToken),
-            threatShareRecord: (request, cancellationToken) =>
+            ThreatShareRecord = (request, cancellationToken) =>
                 threatShare.RecordAsync(request, cancellationToken),
-            networkRecoveryCapture: (actorSid, cancellationToken) =>
+            NetworkRecoveryCapture = (actorSid, cancellationToken) =>
                 networkRecovery.CaptureAsync(actorSid, cancellationToken),
-            networkRecoveryRestore: (actorSid, cancellationToken) =>
+            NetworkRecoveryRestore = (actorSid, cancellationToken) =>
                 networkRecovery.RestoreAsync(actorSid, cancellationToken),
-            enforcementStatus: cancellationToken =>
-                Task.FromResult(enforcement.GetStatus()),
-            enforcementEvaluate: (request, actorSid, cancellationToken) =>
-                enforcement.EvaluateAsync(request, actorSid, cancellationToken),
-            enforcementReceipts: cancellationToken =>
-                Task.FromResult(enforcement.GetReceipts()),
-            log: message => LogMessage(logger, message));
 
-        await server.RunAsync(stoppingToken).ConfigureAwait(false);
+            // Agent enforcement (#322): the controller is registered by the Windows host only
+            // (ServicePlatform.ConfigureAgentEnforcement). Where it is absent the three commands
+            // answer not_supported, exactly as the dispatcher does for any null handler.
+            EnforcementStatus = enforcement is null
+                ? null
+                : cancellationToken => Task.FromResult(enforcement.GetStatus()),
+            EnforcementEvaluate = enforcement is null
+                ? null
+                : (request, actorSid, cancellationToken) =>
+                    enforcement.EvaluateAsync(request, actorSid, cancellationToken),
+            EnforcementReceipts = enforcement is null
+                ? null
+                : cancellationToken => Task.FromResult(enforcement.GetReceipts()),
+        };
+
+        var dispatcher = new IpcRequestDispatcher(
+            handlers,
+            () => FirewallWriteGate.IsOpen,
+            message => LogMessage(logger, message));
+
+        await transport.RunAsync(dispatcher, message => LogMessage(logger, message), stoppingToken)
+            .ConfigureAwait(false);
     }
 
     private static ServiceHealth CreateHealth(ConnectionSnapshotCache cache) => new()
