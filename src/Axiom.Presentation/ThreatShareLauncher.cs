@@ -65,7 +65,21 @@ public static class ThreatShareLauncher
         string hermesHome)
     {
         ArgumentNullException.ThrowIfNull(candidate);
-        var arguments = ReportArguments(candidate);
+        return BuildPlans(
+            ReportArguments(candidate), blackboxRoot, runtimePython, hermesExe, venvPython, hermesHome);
+    }
+
+    /// <summary>Plans for any reporter command; the leading <c>blackbox</c> token is dropped for the module.</summary>
+    public static IReadOnlyList<ThreatShareLaunchPlan> BuildPlans(
+        IReadOnlyList<string> commandArguments,
+        string blackboxRoot,
+        string? runtimePython,
+        string? hermesExe,
+        string? venvPython,
+        string hermesHome)
+    {
+        ArgumentNullException.ThrowIfNull(commandArguments);
+        var arguments = commandArguments;
         var environment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             [BlackboxPaths.HermesHomeVariable] = hermesHome,
@@ -96,9 +110,13 @@ public static class ThreatShareLauncher
 
         if (!string.IsNullOrWhiteSpace(venvPython))
         {
+            var moduleArguments = arguments.Count > 0 &&
+                                  string.Equals(arguments[0], "blackbox", StringComparison.Ordinal)
+                ? arguments.Skip(1).ToArray()
+                : arguments;
             plans.Add(new(
                 venvPython,
-                ["-c", ReportBootstrap, .. arguments.Skip(1)],
+                ["-c", ReportBootstrap, .. moduleArguments],
                 blackboxRoot,
                 environment,
                 "the Blackbox reporter module"));
