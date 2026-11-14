@@ -307,6 +307,27 @@ public sealed class OptionalModuleInstaller
             """;
     }
 
+    /// <summary>The DKG CLI and home the guard and node actually use, when the Hermes config names them.</summary>
+    private (string? Bin, string? Home) ResolveConfiguredDkg()
+    {
+        try
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var configPath = Path.Combine(localAppData, "hermes", "config.yaml");
+            if (!File.Exists(configPath))
+            {
+                return (null, null);
+            }
+
+            var text = File.ReadAllText(configPath);
+            return (DkgHomeResolver.ReadConfiguredBin(text), DkgHomeResolver.ReadConfiguredHome(text));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return (null, null);
+        }
+    }
+
     /// <summary>
     /// Starts an installed DKG node without reinstalling it. Returns false when the local CLI is
     /// missing.
@@ -318,7 +339,18 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        var (command, useOwnHome) = ResolveDkgCommand();
+        var (configuredBin, configuredHome) = ResolveConfiguredDkg();
+        string? command;
+        var useOwnHome = false;
+        if (configuredBin is not null && File.Exists(configuredBin) && !IsUnsafeInstallRoot(configuredBin))
+        {
+            command = configuredBin;
+        }
+        else
+        {
+            (command, useOwnHome) = ResolveDkgCommand();
+        }
+
         if (command is null)
         {
             return false;
@@ -332,9 +364,10 @@ public sealed class OptionalModuleInstaller
             WorkingDirectory = Path.GetDirectoryName(command) ?? DkgRoot,
         };
 
-        if (useOwnHome)
+        var effectiveHome = useOwnHome ? DkgHome : configuredHome;
+        if (!string.IsNullOrWhiteSpace(effectiveHome))
         {
-            startInfo.Environment["DKG_HOME"] = DkgHome;
+            startInfo.Environment["DKG_HOME"] = effectiveHome;
         }
 
         try

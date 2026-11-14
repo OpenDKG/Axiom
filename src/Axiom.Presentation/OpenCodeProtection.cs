@@ -589,6 +589,28 @@ public sealed class OpenCodeProtection
                 pass
 
 
+        def _quarantine_session(session: str, identifiers) -> None:
+            # A confirmed (or high-severity) prompt-injection finding blocks the session's tools
+            # until the window expires; the vendor prompt hook is observer-only.
+            try:
+                marker = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "injection-quarantine.json"
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                marker.write_text(json.dumps({"session": session, "at": time.time(), "ids": list(identifiers)}))
+            except Exception:
+                pass
+
+
+        def _is_quarantined(session: str) -> bool:
+            try:
+                marker = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "injection-quarantine.json"
+                data = json.loads(marker.read_text())
+                if str(data.get("session") or "") != session:
+                    return False
+                return (time.time() - float(data.get("at") or 0)) < 900
+            except Exception:
+                return False
+
+
         def main() -> None:
             payload = {}
             started = time.monotonic()
@@ -615,16 +637,42 @@ public sealed class OpenCodeProtection
                         return
 
                     if event == "pre_api_request":
+                        user_text = str(payload.get("user_message") or "")
+                        request_messages = payload.get("request_messages") or []
                         if hasattr(guard, "on_pre_api_request"):
                             guard.on_pre_api_request(
-                                user_message="",
-                                request_messages=[],
+                                user_message=user_text,
+                                request_messages=request_messages,
                                 session_id=session,
                                 model=payload.get("model"),
                                 provider=framework,
                                 framework=framework,
                                 workspace=workspace,
                             )
+                        if user_text:
+                            # The vendor prompt hook is observer-only. Axiom applies its own
+                            # policy: a high/critical injection finding quarantines the session,
+                            # so the agent cannot act on the injected instruction.
+                            try:
+                                from plugins.blackbox.guard import api_request as _api_request
+                                from plugins.blackbox.guard import graph_rules as _graph_rules
+                                from plugins.blackbox.kernel.config import load_blackbox_config
+                                cfg = load_blackbox_config()
+                                rs, _ = _graph_rules.detection_rules(cfg, "", {})
+                                sources = _api_request._untrusted_request_sources(user_text, request_messages)
+                                findings = _api_request._injection_by_source(sources, rs, cfg.discover)
+                                blocking = [
+                                    f for f in findings
+                                    if str(getattr(f, "category", "")) == "injection"
+                                    and str(getattr(f, "severity", "")).lower() in ("high", "critical")
+                                ]
+                                if blocking:
+                                    _quarantine_session(session, [getattr(f, "identifier", "") for f in blocking])
+                                    record(framework, "GUARD_BLOCKED", "", "block", "blocked", 0, "", session)
+                                    print(json.dumps({"action": "block", "message": "Prompt injection detected; the session is quarantined."}))
+                                    return
+                            except Exception:
+                                pass
                         record(framework, "PROMPT_SCANNED", "", "ok", "ok", 0, session=session)
                         print("{}")
                         return
@@ -654,6 +702,10 @@ public sealed class OpenCodeProtection
                     except Exception:
                         protected = ()
                     command_text = str(raw_args.get("command") or "") if isinstance(raw_args, dict) else ""
+                    if _is_quarantined(session):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "", session, call)
+                        print(json.dumps({"action": "block", "message": "Session quarantined after a prompt-injection finding."}))
+                        return
                     if _tampers_with_guard(command_text):
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "", session, call)
                         print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it modifies the local guard."}))

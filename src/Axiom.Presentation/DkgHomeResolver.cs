@@ -34,6 +34,26 @@ public static class DkgHomeResolver
     }
 
     /// <summary>
+    /// Extracts <c>dkg_bin</c> from a Hermes config, if present.
+    /// </summary>
+    public static string? ReadConfiguredBin(string configYaml)
+    {
+        if (string.IsNullOrWhiteSpace(configYaml))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(configYaml, @"(?m)^\s*dkg_bin:\s*(?<value>.+?)\s*$");
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var value = match.Groups["value"].Value.Trim().Trim('"', '\'');
+        return value.Length == 0 ? null : value;
+    }
+
+    /// <summary>
     /// The effective home: the configured value when the Hermes config exists, otherwise Axiom's
     /// managed path. The directory itself is not required to exist yet.
     /// </summary>
