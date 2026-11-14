@@ -86,6 +86,76 @@ public sealed class NftEnforcementSupervisorTests
     }
 
     [Fact]
+    public async Task External_table_delete_is_degraded_with_the_reason_never_read_back_and_restored_within_one_tick()
+    {
+        using var h = new Harness();
+        var spec = Specs.Block("/usr/bin/curl");
+        await h.Adapter.UpsertOwnedRuleAsync(spec, CancellationToken.None);
+        var supervisor = h.Supervisor();
+
+        h.Nft.TableGeneration = null; // sudo nft delete table inet axiom
+
+        var capabilities = await h.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.Equal(FirewallCapabilityStatus.Degraded, capabilities.Status);
+        Assert.False(capabilities.FilterEnforcement!.Connected);
+        Assert.Contains("nft table inet axiom missing (removed externally", capabilities.Reason, StringComparison.Ordinal);
+        var verify = await h.Adapter.VerifyAsync(spec, CancellationToken.None);
+        Assert.False(verify.NftRuleReadBack);
+        Assert.False(verify.EnforcementVerified);
+        Assert.NotEqual(RuleState.Applied, Assert.Single(await h.Adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
+
+        Assert.True(await supervisor.WatchOnceAsync(CancellationToken.None));
+
+        var back = await h.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.Equal(FirewallCapabilityStatus.Available, back.Status);
+        Assert.Null(back.Reason);
+        Assert.True((await h.Adapter.VerifyAsync(spec, CancellationToken.None)).NftRuleReadBack);
+        Assert.Equal(RuleState.Applied, Assert.Single(await h.Adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
+    }
+
+    [Fact]
+    public async Task Flushed_table_that_keeps_its_generation_comment_is_detected_as_modified_and_republished()
+    {
+        using var h = new Harness();
+        var spec = Specs.Block("/usr/bin/curl");
+        await h.Adapter.UpsertOwnedRuleAsync(spec, CancellationToken.None);
+        var supervisor = h.Supervisor();
+        Assert.False(await supervisor.WatchOnceAsync(CancellationToken.None));
+
+        h.Nft.RulesFlushed = true; // sudo nft flush table inet axiom: generation comment stays, rules are gone
+
+        var capabilities = await h.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.Equal(FirewallCapabilityStatus.Degraded, capabilities.Status);
+        Assert.Equal(FilterEnforcementState.Degraded, capabilities.FilterEnforcement!.State);
+        Assert.Contains("modified externally", capabilities.Reason, StringComparison.Ordinal);
+        Assert.False((await h.Adapter.VerifyAsync(spec, CancellationToken.None)).NftRuleReadBack);
+
+        Assert.True(await supervisor.WatchOnceAsync(CancellationToken.None));
+        Assert.Equal(1, supervisor.Republishes);
+        Assert.Contains(h.Log, line => line.Contains("modified externally", StringComparison.Ordinal) && line.Contains("republishing", StringComparison.Ordinal));
+        Assert.False(h.Nft.RulesFlushed);
+        var back = await h.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.Equal(FirewallCapabilityStatus.Available, back.Status);
+        Assert.Equal(FilterEnforcementState.Verified, back.FilterEnforcement!.State);
+        Assert.False(await supervisor.WatchOnceAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Table_without_owned_rules_is_not_reported_modified_and_never_republished_in_a_loop()
+    {
+        using var h = new Harness();
+        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl"), CancellationToken.None);
+        await h.Adapter.RemoveOwnedRuleAsync(Specs.Block("/usr/bin/curl").ManagedRuleId, CancellationToken.None);
+        var supervisor = h.Supervisor();
+
+        h.Nft.RulesFlushed = true;
+
+        Assert.False(await supervisor.WatchOnceAsync(CancellationToken.None));
+        Assert.Equal(0, supervisor.Republishes);
+        Assert.Equal(FilterEnforcementState.Verified, (await h.Adapter.RefreshAsync(CancellationToken.None)).State);
+    }
+
+    [Fact]
     public async Task Run_publishes_at_start_runs_the_trace_monitor_and_tears_down_on_stop()
     {
         using var h = new Harness();

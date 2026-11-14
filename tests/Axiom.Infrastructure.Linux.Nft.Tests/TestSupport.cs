@@ -64,6 +64,9 @@ internal sealed class FakeNftRunner : INftRunner
     /// <summary>When true the synthesized readback omits the rule entries (table comment only).</summary>
     public bool ReadbackWithoutRules { get; set; }
 
+    /// <summary>Another tool ran <c>nft flush table inet axiom</c>: the table and its generation comment stay, the rules are gone until the next apply.</summary>
+    public bool RulesFlushed { get; set; }
+
     public Task<NftResult> RunAsync(IReadOnlyList<string> args, string? standardInput, CancellationToken ct)
     {
         Calls.Add((args, standardInput));
@@ -76,6 +79,7 @@ internal sealed class FakeNftRunner : INftRunner
             }
 
             AppliedScript = standardInput;
+            RulesFlushed = false;
             var marker = "comment \"axiom generation ";
             var at = standardInput!.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
             TableGeneration = long.Parse(standardInput[at..standardInput.IndexOf('"', at)], CultureInfo.InvariantCulture);
@@ -119,7 +123,7 @@ internal sealed class FakeNftRunner : INftRunner
         {
             "{\"table\":{\"family\":\"inet\",\"name\":\"axiom\",\"handle\":1,\"comment\":\"axiom generation " + TableGeneration!.Value.ToString(CultureInfo.InvariantCulture) + "\"}}",
         };
-        if (!ReadbackWithoutRules && AppliedScript is not null)
+        if (!ReadbackWithoutRules && !RulesFlushed && AppliedScript is not null)
         {
             var handle = 2;
             foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(AppliedScript, "comment \"(axiom:[0-9a-f-]+:[0-9]+)\""))

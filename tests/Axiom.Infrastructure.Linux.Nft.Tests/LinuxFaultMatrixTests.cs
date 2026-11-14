@@ -102,6 +102,65 @@ public sealed class LinuxFaultMatrixTests
     }
 
     [Fact]
+    public async Task Neutralised_layer_with_the_table_present_never_reports_the_table_missing()
+    {
+        // Live finding (docs/LINUX_TEST_REPORT.md R4-H4/R5-T): the neutralisation degraded the report and the
+        // capability reason fell through to "table inet axiom is missing" although nft held the table.
+        using var h = NewHarness();
+        await h.AttachAsync();
+        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl", RuleA), CancellationToken.None);
+        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/wget", RuleB), CancellationToken.None);
+        h.Bpftool.FailPrefixes.Add("bpftool map delete");
+        await h.Adapter.RemoveOwnedRuleAsync(RuleB, CancellationToken.None);
+        Assert.True(h.Engine.Neutralised);
+        Assert.NotNull(h.Nft.TableGeneration);
+
+        var capabilities = await h.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+
+        Assert.Equal(FirewallCapabilityStatus.Degraded, capabilities.Status);
+        Assert.True(capabilities.FilterEnforcement!.Connected);
+        Assert.DoesNotContain("missing", capabilities.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("flushed", capabilities.Reason, StringComparison.Ordinal);
+        Assert.Contains("table inet axiom is present", capabilities.Reason, StringComparison.Ordinal);
+        Assert.Contains("neutralised", capabilities.Reason, StringComparison.Ordinal);
+        var verify = await h.Adapter.VerifyAsync(Specs.Block("/usr/bin/curl", RuleA), CancellationToken.None);
+        Assert.True(verify.NftRuleReadBack);
+        Assert.False(verify.EnforcementVerified);
+        AssertThirdPartyUntouched(h);
+    }
+
+    [Fact]
+    public async Task One_watch_tick_restores_a_deleted_table_and_reattaches_a_neutralised_layer_without_touching_other_tables()
+    {
+        using var h = NewHarness();
+        await h.AttachAsync();
+        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl", RuleA), CancellationToken.None);
+        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/wget", RuleB), CancellationToken.None);
+        h.Bpftool.FailPrefixes.Add("bpftool map delete");
+        await h.Adapter.RemoveOwnedRuleAsync(RuleB, CancellationToken.None);
+        h.Bpftool.FailPrefixes.Clear();
+        h.Nft.TableGeneration = null; // and then someone deleted the table too
+
+        var missing = await h.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.Equal(FirewallCapabilityStatus.Degraded, missing.Status);
+        Assert.Contains("nft table inet axiom missing (removed externally", missing.Reason, StringComparison.Ordinal);
+
+        var supervisor = new NftEnforcementSupervisor(h.Adapter, new NftTable(h.Nft), null, h.Engine, h.Log.Add, h.Time);
+        Assert.True(await supervisor.WatchOnceAsync(CancellationToken.None));
+
+        Assert.NotNull(h.Nft.TableGeneration);
+        Assert.True(h.Engine.Active);
+        Assert.Equal(4, AxiomAttachments(h.Bpftool));
+        var back = await h.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.Equal(FirewallCapabilityStatus.Available, back.Status);
+        Assert.Equal(FilterEnforcementState.Verified, back.FilterEnforcement!.State);
+        Assert.DoesNotContain(h.Bpftool.Calls, call => call.Contains("bpftool cgroup detach", StringComparison.Ordinal) && call.Contains($" id {ThirdPartyProgram}", StringComparison.Ordinal));
+        // The layer's re-attach never deletes the nft table: only the republish wrote it.
+        Assert.DoesNotContain(h.Nft.Calls, call => string.Join(' ', call.Args) == "delete table inet axiom");
+        AssertThirdPartyUntouched(h);
+    }
+
+    [Fact]
     public async Task Delete_and_detach_both_failing_reports_that_the_stale_entry_can_still_block()
     {
         using var h = NewHarness();
