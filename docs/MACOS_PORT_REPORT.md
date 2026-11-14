@@ -302,6 +302,10 @@ The status `Detail` states the transport actually in use ("encrypted with DoH" /
 plain DNS" / "plain UDP/TCP DNS"), derived from the live target list, so nothing is claimed that is not active.
 Upstream rediscovery (macOS only) upgrades the rediscovered endpoints the same way.
 
+Known limit (upstream behaviour, same on Windows when the adapter points at the shield): a DoH URL whose host is
+neither an IP literal nor in the built-in bootstrap table is resolved through the system resolver; while the shield
+redirects system DNS to itself that lookup comes back to the proxy. Not changed here.
+
 Found while merging: `6838979` probes the Blackbox guard at `venv\Scripts\python.exe` only, so on macOS/Linux an
 installed guard read as "not installed" (`666f62f` red test, `0aea1d8` fix through `AgentPlatform.VenvPython`).
 The version is 0.22.0 from `Directory.Build.props`; the Settings milestone still appends " · macOS port";
