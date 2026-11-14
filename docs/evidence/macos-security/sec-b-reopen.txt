@@ -1,0 +1,22 @@
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/Axiom/axiomd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/Axiom/axiomd.log</string>
+== [01:07:54.503Z] apply: {"success":true,"state":"applied","errorCode":null,"verifiedUtc":"2026-11-14T01:07:54.491531+00:00","message":null}
+== [01:07:55.570Z] remove: {"success":true,"state":"desired","errorCode":null,"verifiedUtc":"2026-11-14T01:07:55.568948+00:00","message":null}
+-rw------- root:wheel 83 /Library/Logs/Axiom/axiomd.log
+-rw------- root:wheel 3247 /Library/Logs/Axiom/axiomd.log.0.bz2
+Nov 13 17:07:31 Axioms-iMac newsyslog[8669]: logfile turned over due to -F request
+daemon pid 8539
+COMMAND  PID USER   FD     TYPE             DEVICE SIZE/OFF                NODE NAME
+$ sudo -n launchctl kickstart -k system/com.axiom.service
+drwx------ root:wheel 128 /Library/Logs/Axiom
+-rw------- root:wheel 1890 /Library/Logs/Axiom/axiomd.log
+-rw------- root:wheel 3247 /Library/Logs/Axiom/axiomd.log.0.bz2
+axiomd  8754 root    1u     REG                1,7     1890              318172 /Library/Logs/Axiom/axiomd.log
+axiomd  8754 root    2u     REG                1,7     1890              318172 /Library/Logs/Axiom/axiomd.log
+axiomd  8754 root    7u     REG                1,7     1890              318172 /Library/Logs/Axiom/axiomd.log
+axiomd  8754 root    8u     REG                1,7     1890              318172 /Library/Logs/Axiom/axiomd.log
+axiomd  8754 root  142u     REG                1,7     1890              318172 /Library/Logs/Axiom/axiomd.log
+axiomd  8754 root  143u     REG                1,7     1890              318172 /Library/Logs/Axiom/axiomd.log
+== [01:08:21.410Z] after daemon restart: {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372887,"ackedGeneration":1794372887,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}

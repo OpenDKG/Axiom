@@ -1,0 +1,37 @@
+# (b) daemon log privacy
+Sat Nov 14 01:07:31 UTC 2026
+$ cat /etc/newsyslog.d/com.axiom.service.conf
+# Axiom daemon log rotation (written by axiomd --install-service, removed by --uninstall-service).
+# logfilename	[owner:group]	mode	count	size	when	flags
+/Library/Logs/Axiom/axiomd.log	root:wheel	600	5	5120	*	J
+$ sudo -n stat -f "%Sp %Su:%Sg %z %N" /Library/Logs/Axiom /Library/Logs/Axiom/*
+drwx------ root:wheel 96 /Library/Logs/Axiom
+-rw------- root:wheel 114804 /Library/Logs/Axiom/axiomd.log
+$ sudo -n newsyslog -F -v -f /etc/newsyslog.d/com.axiom.service.conf
+/Library/Logs/Axiom/axiomd.log <5J>: size (Kb): 160 [5120] --> trimming log....
+Signal all daemon process(es)...
+Notified daemon pid 123 = /var/run/syslog.pid
+Pause 10 seconds to allow daemon(s) to close log file(s)
+Compress all rotated log file(s)...
+rc=0
+$ sudo -n launchctl kickstart system/com.axiom.service is NOT run; the daemon reopens on its own write
+$ sudo -n stat (after forced rotation)
+drwx------ root:wheel 128 /Library/Logs/Axiom
+-rw------- root:wheel 83 /Library/Logs/Axiom/axiomd.log
+-rw------- root:wheel 3247 /Library/Logs/Axiom/axiomd.log.0.bz2
+$ non-root admin dev: ls / cat
+ls: /Library/Logs/Axiom: Permission denied
+total 0
+cat: /Library/Logs/Axiom/axiomd.log: Permission denied
+$ sudo -n -u axtest2 cat /Library/Logs/Axiom/axiomd.log
+cat: /Library/Logs/Axiom/axiomd.log: Permission denied
+$ sudo -n -u axtest2 cat /Library/Logs/Axiom/axiomd.log.0.bz2
+cat: /Library/Logs/Axiom/axiomd.log.0.bz2: Permission denied
+$ sudo -n -u axtest2 ls -l /Library/Logs/Axiom
+ls: /Library/Logs/Axiom: Permission denied
+total 0
+$ trigger a daemon log line (serviceHealth over IPC) and re-check the live file
+True
+drwx------ root:wheel 128 /Library/Logs/Axiom
+-rw------- root:wheel 83 /Library/Logs/Axiom/axiomd.log
+-rw------- root:wheel 3247 /Library/Logs/Axiom/axiomd.log.0.bz2

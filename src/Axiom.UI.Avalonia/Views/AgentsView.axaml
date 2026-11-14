@@ -125,7 +125,7 @@
             </StackPanel>
           </Grid>
           <controls:AxiomSelectableTextBlock
-                     Text="Axiom only proposes evidence-bound AI Analyst indicators: a malicious-role value must match a remote endpoint Axiom observed. Public blocklist matches stay local and are never reported â€” they would echo the same list from every install. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
+                     Text="Axiom only proposes evidence-bound AI Analyst indicators: a malicious-role value must match a remote endpoint Axiom observed. Public blocklist matches stay local and are never reported Ã¢â‚¬â€ they would echo the same list from every install. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
                      FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <Border Background="{DynamicResource Axiom.SurfaceAlt}"
                   BorderBrush="{DynamicResource Axiom.Border}"
@@ -240,82 +240,6 @@
         </ItemsControl>
       </Border>
 
-
-      <Border Classes="card" Padding="16">
-        <StackPanel Spacing="8">
-          <Grid ColumnDefinitions="*,Auto">
-            <controls:AxiomSelectableTextBlock Text="Blackbox health" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <Button Grid.Column="1" Content="View DKG log" Command="{Binding ViewDkgLogCommand}" Padding="10,4" />
-          </Grid>
-          <controls:AxiomSelectableTextBlock Text="{Binding HealthStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
-          <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnSpacing="12">
-            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="{Binding BlackboxHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DkgHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="{Binding AxiomDkgHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GraphHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-          </Grid>
-          <controls:AxiomSelectableTextBlock Text="{Binding ProtectionTestText}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
-        </StackPanel>
-      </Border>
-
-      <Border Classes="card" Padding="16">
-        <StackPanel Spacing="8">
-          <Grid ColumnDefinitions="*,Auto">
-            <StackPanel Grid.Column="0" Spacing="2">
-              <controls:AxiomSelectableTextBlock Text="Module health" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <controls:AxiomSelectableTextBlock Text="One square per 5 s loopback check, last 30 kept. Green = connected, muted = not running, outlined = waiting for a sample."
-                         FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-            </StackPanel>
-            <Border Grid.Column="1" Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2" VerticalAlignment="Top">
-              <controls:AxiomSelectableTextBlock Text="{Binding Security.ModuleActivitySummary}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-            </Border>
-          </Grid>
-          <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto" RowSpacing="6">
-            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="DKG" FontSize="10"
-                       Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
-            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
-              <ItemsControl ItemsSource="{Binding Security.ModuleHealthSlots}">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" />
-                  </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Border Width="7" Height="12" CornerRadius="1" Margin="1,0"
-                            Classes.sq-on="{Binding DkgOn}"
-                            Classes.sq-off="{Binding DkgOff}"
-                            Classes.sq-empty="{Binding IsPlaceholder}"
-                            ToolTip.Tip="{Binding IsPlaceholder, StringFormat=Waiting for sample}" />
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </StackPanel>
-            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Blackbox" FontSize="10"
-                       Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
-            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
-              <ItemsControl ItemsSource="{Binding Security.ModuleHealthSlots}">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" />
-                  </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Border Width="7" Height="12" CornerRadius="1" Margin="1,0"
-                            Classes.sq-on="{Binding BlackboxOn}"
-                            Classes.sq-off="{Binding BlackboxOff}"
-                            Classes.sq-empty="{Binding IsPlaceholder}"
-                            ToolTip.Tip="{Binding IsPlaceholder, StringFormat=Waiting for sample}" />
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </StackPanel>
-          </Grid>
-          <controls:AxiomSelectableTextBlock Text="{Binding HealthStatusText}" FontSize="10"
-                     Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
-        </StackPanel>
-      </Border>
 
       <Border Classes="card" Padding="16">
         <StackPanel Spacing="8">

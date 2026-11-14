@@ -1,0 +1,27 @@
+# (c) filter rejection
+$ sw_vers; csrutil status; defaults read /Applications/Axiom.app/Contents/Info.plist CFBundleShortVersionString; defaults read /Applications/Axiom.app/Contents/Info.plist CFBundleVersion; systemextensionsctl list | grep -i 'axiom.*activated'; id -un
+ProductName:		macOS
+ProductVersion:		15.8.3
+BuildVersion:		24H241
+System Integrity Protection status: disabled.
+0.17.0
+10
+*	*	-	com.axiom.firewall.filter (0.17.0/10)	Axiom Firewall Filter	[activated enabled]
+dev
+== [01:03:08.116Z] versions: {"rc":0}
+== [01:03:08.183Z] baseline: {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372864,"ackedGeneration":1794372864,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}
+== [01:03:08.266Z] rule.apply block /usr/bin/curl: {"success":true,"state":"applied","errorCode":null,"verifiedUtc":"2026-11-14T01:03:08.246221+00:00","message":null}
+== [01:03:10.301Z] after apply (expect verified + curl blocked): {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372865,"ackedGeneration":1794372865,"appliedRuleCount":1,"rejectedRules":[],"fileError":null},"rules":[{"managedRuleId":"5ec0a000-0000-4000-8000-00000000000c","state":"applied","lastVerifiedUtc":"2026-11-14T01:03:08.246221+00:00","lastError":null}]},"curl":{"rc":7,"http":"000","blocked":true}}
+== [01:03:10.309Z] rule.verify: {"presentInOs":true,"matchesSpec":true,"effectiveAction":"block","enforcementVerified":true,"filterRejectionReason":null,"notes":["rules.json generation 1794372865.","AxiomFilter acknowledged generation 1794372865 at 2026-11-14 01:03:08Z."]}
+$ sudo -n chmod 664 '/Library/Application Support/Axiom/filter/rules.json' && sudo -n stat -f '%Sp %Su:%Sg' '/Library/Application Support/Axiom/filter/rules.json'
+-rw-rw-r-- root:admin
+== [01:03:10.396Z] chmod 664: {"rc":0}
+== [01:03:11.936Z] rules file rejected (expect degraded, rule not verified; curl may still be blocked by the filter's previous table, which is not claimed): {"rulesQuery":{"status":"degraded","reason":"AxiomFilter rejected the rules file (unreadable: group/world-writable (mode 664)); generation 1794372865 stays in force and rules generation 1794372865 is not verified.","filter":{"state":"pending","connected":true,"publishedGeneration":1794372865,"ackedGeneration":1794372865,"appliedRuleCount":1,"rejectedRules":[],"fileError":"unreadable: group/world-writable (mode 664)"},"rules":[{"managedRuleId":"5ec0a000-0000-4000-8000-00000000000c","state":"pending","lastVerifiedUtc":"2026-11-14T01:03:08.246221+00:00","lastError":null}]},"curl":{"rc":7,"http":"000","blocked":true}}
+== [01:03:11.938Z] rule.verify (rejected): {"presentInOs":true,"matchesSpec":true,"effectiveAction":null,"enforcementVerified":false,"filterRejectionReason":null,"notes":["rules.json generation 1794372865.","AxiomFilter's latest report rejects the rules file; enforcement of this table is not verified.","AxiomFilter rejected the rules file (unreadable: group/world-writable (mode 664)); generation 1794372865 stays in force."]}
+$ sudo -n chmod 644 '/Library/Application Support/Axiom/filter/rules.json' && sudo -n stat -f '%Sp %Su:%Sg' '/Library/Application Support/Axiom/filter/rules.json'
+-rw-r--r-- root:admin
+== [01:03:11.999Z] chmod 644: {"rc":0}
+== [01:03:12.543Z] after restore (expect verified after a fresh ack): {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372865,"ackedGeneration":1794372865,"appliedRuleCount":1,"rejectedRules":[],"fileError":null},"rules":[{"managedRuleId":"5ec0a000-0000-4000-8000-00000000000c","state":"applied","lastVerifiedUtc":"2026-11-14T01:03:08.246221+00:00","lastError":null}]},"curl":{"rc":7,"http":"000","blocked":true}}
+== [01:03:12.545Z] rule.verify (restored): {"presentInOs":true,"matchesSpec":true,"effectiveAction":"block","enforcementVerified":true,"filterRejectionReason":null,"notes":["rules.json generation 1794372865.","AxiomFilter acknowledged generation 1794372865 at 2026-11-14 01:03:12Z."]}
+== [01:03:16.318Z] rule.remove: {"success":true,"state":"desired","errorCode":null,"verifiedUtc":"2026-11-14T01:03:16.317737+00:00","message":null}
+== [01:03:18.373Z] after remove (expect 0 rules, curl 200): {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372866,"ackedGeneration":1794372866,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}

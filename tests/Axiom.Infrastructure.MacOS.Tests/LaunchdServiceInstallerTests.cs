@@ -37,7 +37,9 @@ public sealed class LaunchdServiceInstallerTests
 
         var entry = text.Split('\n').Single(line => line.StartsWith("/Library", StringComparison.Ordinal));
         // Review 2026-11-12 Medium #5: the rotated log must not be world-readable.
-        Assert.Equal(["/Library/Logs/Axiom/axiomd.log", "root:wheel", "600", "5", "5120", "*", "J"], entry.Split('\t'));
+        // Log continuity (security validation check b): newsyslog signals axiomd (SIGHUP = 1) through
+        // its pid file so the daemon reopens the new file instead of writing into the archive.
+        Assert.Equal(["/Library/Logs/Axiom/axiomd.log", "root:wheel", "600", "5", "5120", "*", "J", "/var/run/axiomd.pid", "1"], entry.Split('\t'));
         Assert.Equal("/etc/newsyslog.d/com.axiom.service.conf", LaunchdServiceInstaller.NewsyslogConfPath);
     }
 
