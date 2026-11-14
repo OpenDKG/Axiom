@@ -385,13 +385,14 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
                 return;
             }
 
+            var updateClient = new ServicePipeClient(requestTimeout: TimeSpan.FromMinutes(3));
             var status = await _client
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
                     CancellationToken.None)
                 .ConfigureAwait(true);
-            status = await _client
+            status = await updateClient
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacySourcesUpdate,
                     null,

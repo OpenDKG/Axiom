@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.23.3
+
+- **All 8 Privacy Shield blocklists enabled without rule truncation or IPC timeouts.** Raised `PrivacyShieldPolicy.MaxRules` from `500,000` to `1,000,000` and `SourceReserve` to `25,000`, prioritized `PrivacyCategory.Malware` feeds (`hagezi-tif`, `phishing-filter`, `urlhaus-domains`) in `PrivacyShieldSourceUpdater`, and increased the UI/provisioning `PrivacySourcesUpdate` IPC timeout from 5 seconds to 3 minutes so `HaGeZi Threat Intelligence Feeds Mini` and `Phishing domains` update cleanly alongside bulk lists.
+- **24-hour automatic Privacy Shield blocklist updates.** Added `AutoUpdateSources` (default `true`, toggleable in the Privacy Shield view) and `AutoUpdateIntervalHours` (`24`) to `PrivacyShieldSettings`, plus background startup catch-up and hourly checks in `PrivacyShieldWorker` via `PrivacyShieldController.ShouldAutoUpdateSources`.
+- **Seamless persistent adapter DNS across restarts and version upgrades.** Added `PreferredAdapterAlias` and `AutoPointAdapterDns` to `PrivacyShieldSettings`, `PrivacyDnsFailSafe.EnsureAdapterPointed` (LocalSystem, zero UAC), `PrivacyShieldController.EnsureConfiguredAdapterDns`, and automatic Complete-setup activation (`AutoPointAdapterDns = true`).
+- **Cleaner DNS resolver statistics & faster upstream failover.** Excluded deprecated Windows IPv6 site-local dummy addresses (`fec0:0:0:ffff::1/2/3`) in `SystemDnsResolver.FilterSystemDnsAddresses`, tuned multi-target failover timeout to `1,500 ms` in `DnsProxyServer`, and avoided counting benign pre-query TCP disconnects as resolver errors.
+
 ## What's in 0.23.2
 
 - **Wildcard protected directories in shell deletes.** The delete check no longer derives an empty stem from ~/.ssh/*; it uses the same path tokens as launch and upload, so del ~/.ssh/id_rsa blocks.

@@ -29,6 +29,9 @@ public static class PrivacyShieldProvisioner
         Port = 53,
         EnabledSourceIds = PrivacyShieldSourceCatalog.All.Select(source => source.Id).ToArray(),
         LogQueries = false,
+        AutoPointAdapterDns = true,
+        AutoUpdateSources = true,
+        AutoUpdateIntervalHours = 24,
     };
 
     /// <summary>Writes <c>privacy-shield.json</c> and <c>community-feed.json</c>.</summary>
@@ -67,7 +70,8 @@ public static class PrivacyShieldProvisioner
                 IpcCommandTypes.PrivacyConfigure,
                 CompleteProfileSettings(),
                 cancellationToken).ConfigureAwait(false);
-            await client.SendAsync<PrivacyShieldStatus>(
+            var updateClient = new IpcPipeClient(requestTimeout: TimeSpan.FromMinutes(3));
+            await updateClient.SendAsync<PrivacyShieldStatus>(
                 IpcCommandTypes.PrivacySourcesUpdate,
                 new { },
                 cancellationToken).ConfigureAwait(false);

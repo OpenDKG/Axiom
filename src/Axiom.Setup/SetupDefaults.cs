@@ -109,6 +109,9 @@ internal static class SetupDefaults
                 Port = 53,
                 EnabledSourceIds = PrivacyShieldSourceCatalog.All.Select(source => source.Id).ToArray(),
                 LogQueries = false,
+                AutoPointAdapterDns = true,
+                AutoUpdateSources = true,
+                AutoUpdateIntervalHours = 24,
             };
 
             try

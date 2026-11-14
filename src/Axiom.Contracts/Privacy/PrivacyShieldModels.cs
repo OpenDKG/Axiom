@@ -73,6 +73,18 @@ public sealed record PrivacyShieldSettings
 
     /// <summary>Reserved for a future bounded query log; the initial implementation keeps counts only.</summary>
     public bool LogQueries { get; init; }
+
+    /// <summary>Preferred Windows network adapter alias to keep pointed at Axiom DNS across restarts and updates.</summary>
+    public string PreferredAdapterAlias { get; init; } = string.Empty;
+
+    /// <summary>When enabled, Axiom Service automatically points the active/preferred adapter to loopback DNS while Privacy Shield runs.</summary>
+    public bool AutoPointAdapterDns { get; init; }
+
+    /// <summary>Automatically fetches missing or stale blocklist sources on startup and on the configured interval.</summary>
+    public bool AutoUpdateSources { get; init; } = true;
+
+    /// <summary>Interval in hours between automatic background source updates (default 24 hours).</summary>
+    public int AutoUpdateIntervalHours { get; init; } = 24;
 }
 
 public sealed record PrivacyShieldTopDomain(string Domain, long Count);

@@ -71,7 +71,10 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <Button Content="Update sources now" Command="{Binding UpdateSourcesCommand}" Padding="12,6" HorizontalAlignment="Left" />
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+              <Button Content="Update sources now" Command="{Binding UpdateSourcesCommand}" Padding="12,6" HorizontalAlignment="Left" />
+              <CheckBox Content="Auto-update every 24h" IsChecked="{Binding AutoUpdateSources}" VerticalAlignment="Center" />
+            </StackPanel>
 
             <controls:AxiomSelectableTextBlock Text="Custom allowlist (one domain per line)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,6,0,0" />
             <TextBox Text="{Binding AllowedDomainsText}" AcceptsReturn="True" MinHeight="64" MaxHeight="120" />

@@ -65,21 +65,33 @@ public static class SystemDnsResolver
             var addresses = NetworkInterface.GetAllNetworkInterfaces()
                 .Where(network => network.OperationalStatus == OperationalStatus.Up &&
                                   network.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                .SelectMany(network => network.GetIPProperties().DnsAddresses)
-                .Where(address => address.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
-                .Where(address => !IPAddress.IsLoopback(address))
-                .Where(address => !address.Equals(IPAddress.Any) && !address.Equals(IPAddress.IPv6Any))
-                .Distinct()
-                .Take(Math.Clamp(max, 1, 16))
-                .Select(address => new IPEndPoint(address, 53))
-                .ToArray();
+                .SelectMany(network => network.GetIPProperties().DnsAddresses);
 
-            return addresses;
+            return FilterSystemDnsAddresses(addresses, max);
         }
         catch (NetworkInformationException)
         {
             return [];
         }
+    }
+
+    /// <summary>
+    /// Filters interface DNS addresses to reachable unicast resolvers, excluding deprecated
+    /// Windows IPv6 site-local dummy servers such as fec0:0:0:ffff::1/2/3.
+    /// </summary>
+    public static IReadOnlyList<IPEndPoint> FilterSystemDnsAddresses(
+        IEnumerable<IPAddress> addresses,
+        int max = 4)
+    {
+        return addresses
+            .Where(address => address.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
+            .Where(address => !IPAddress.IsLoopback(address))
+            .Where(address => !address.Equals(IPAddress.Any) && !address.Equals(IPAddress.IPv6Any))
+            .Where(address => !address.IsIPv6SiteLocal && !address.IsIPv6Multicast)
+            .Distinct()
+            .Take(Math.Clamp(max, 1, 16))
+            .Select(address => new IPEndPoint(address, 53))
+            .ToArray();
     }
 
     public static bool TryParseUpstream(string? value, out IPEndPoint? endpoint)

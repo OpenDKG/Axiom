@@ -196,6 +196,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             _server = candidate;
             _settings = normalized;
             _lastError = startWarning;
+            EnsureConfiguredAdapterDns();
             return CreateStatus();
         }
         finally
@@ -221,6 +222,61 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         _server = server;
         _lastError = warning;
         return Task.FromResult(true);
+    }
+
+    /// <summary>
+    /// True when background auto-update is enabled and at least one enabled source has never been
+    /// fetched or has aged past <see cref="PrivacyShieldSettings.AutoUpdateIntervalHours"/>.
+    /// </summary>
+    public bool ShouldAutoUpdateSources(DateTimeOffset? nowUtc = null)
+    {
+        if (!_settings.Enabled ||
+            !_settings.AutoUpdateSources ||
+            _settings.EnabledSourceIds.Count == 0)
+        {
+            return false;
+        }
+
+        var utcNow = nowUtc ?? DateTimeOffset.UtcNow;
+        var maxAge = TimeSpan.FromHours(Math.Clamp(_settings.AutoUpdateIntervalHours, 1, 168));
+        var totals = _sourceTotals;
+        foreach (var sourceId in _settings.EnabledSourceIds)
+        {
+            if (!totals.TryGetValue(sourceId, out var total) ||
+                total.Updated is not { } updated ||
+                utcNow - updated >= maxAge)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Keeps the configured or active default-route adapter pointed at the local resolver while the
+    /// elevated Windows service is running Privacy Shield on port 53. No-op in non-SYSTEM processes.
+    /// </summary>
+    public void EnsureConfiguredAdapterDns()
+    {
+        if (!MachineStateSecurity.IsRunningAsSystem())
+        {
+            return;
+        }
+
+        if (_server is not null &&
+            _settings.Enabled &&
+            _settings.Port == 53 &&
+            (_settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(_settings.PreferredAdapterAlias)))
+        {
+            PrivacyDnsFailSafe.EnsureAdapterPointed(_settings.PreferredAdapterAlias);
+            return;
+        }
+
+        if (!_settings.Enabled || !_settings.AutoPointAdapterDns)
+        {
+            PrivacyDnsFailSafe.RestoreIfNeeded();
+        }
     }
 
     public async Task<PrivacyShieldStatus> ClearHistoryAsync(CancellationToken cancellationToken)
@@ -569,6 +625,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                     string.Equals(source.Id, id, StringComparison.OrdinalIgnoreCase)))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
+            PreferredAdapterAlias = settings.PreferredAdapterAlias?.Trim() ?? string.Empty,
+            AutoUpdateIntervalHours = Math.Clamp(settings.AutoUpdateIntervalHours, 1, 168),
         };
     }
 

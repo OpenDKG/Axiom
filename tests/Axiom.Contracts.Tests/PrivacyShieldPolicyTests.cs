@@ -151,4 +151,17 @@ public sealed class PrivacyShieldPolicyTests
         Assert.Contains(("hagezi-tif", PrivacyCategory.Malware), malware);
         Assert.Contains(("phishing-filter", PrivacyCategory.Malware), malware);
     }
+
+    [Fact]
+    public void Rule_capacity_supports_all_catalogued_lists_and_auto_update_defaults()
+    {
+        Assert.True(PrivacyShieldPolicy.MaxRules >= 1_000_000);
+
+        var defaults = new PrivacyShieldSettings();
+        Assert.Equal(53, defaults.Port);
+        Assert.True(defaults.AutoUpdateSources);
+        Assert.Equal(24, defaults.AutoUpdateIntervalHours);
+        Assert.Equal(string.Empty, defaults.PreferredAdapterAlias);
+        Assert.False(defaults.AutoPointAdapterDns);
+    }
 }

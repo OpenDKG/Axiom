@@ -16,6 +16,11 @@ public sealed class PrivacyShieldWorker(PrivacyShieldController controller) : Ba
         }
 
         await controller.StartAsync(stoppingToken).ConfigureAwait(false);
+        controller.EnsureConfiguredAdapterDns();
+
+        // Catch up any newly added or stale blocklist sources right after startup, then check hourly
+        // against each source's 24h (or configured) age without blocking pipe responsiveness.
+        _ = RunAutoSourceUpdaterAsync(stoppingToken);
 
         try
         {
@@ -23,6 +28,45 @@ public sealed class PrivacyShieldWorker(PrivacyShieldController controller) : Ba
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
+        }
+    }
+
+    private async Task RunAutoSourceUpdaterAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken).ConfigureAwait(false);
+            await TryUpdateMissingOrStaleSourcesAsync(stoppingToken).ConfigureAwait(false);
+
+            using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
+            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+            {
+                await TryUpdateMissingOrStaleSourcesAsync(stoppingToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task TryUpdateMissingOrStaleSourcesAsync(CancellationToken stoppingToken)
+    {
+        if (!controller.ShouldAutoUpdateSources())
+        {
+            return;
+        }
+
+        try
+        {
+            await controller.UpdateSourcesAsync(stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Keep running on cached rules; the controller status retains the per-source error.
         }
     }
 

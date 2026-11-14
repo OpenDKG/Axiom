@@ -303,6 +303,80 @@ public sealed class PrivacyShieldTests
         }
     }
 
+    [Fact]
+    public async Task Settings_persist_adapter_preferences_and_detect_missing_or_stale_sources()
+    {
+        var directory = CreateTemporaryDirectory();
+        var port = ReservePort();
+        var rulesPath = Path.Combine(directory, "privacy-shield-rules.json");
+        var settingsPath = Path.Combine(directory, "privacy-shield.json");
+        var staleTime = DateTimeOffset.UtcNow.AddHours(-30);
+        var freshTime = DateTimeOffset.UtcNow.AddHours(-2);
+
+        try
+        {
+            var store = new PrivacyShieldRuleStore(rulesPath);
+            Assert.True(store.Save(
+            [
+                new PrivacyShieldStoredRule("ad.example", "hagezi-pro", PrivacyCategory.Ads, freshTime),
+                new PrivacyShieldStoredRule("old.example", "oisd-big", PrivacyCategory.Ads, staleTime),
+            ]));
+
+            await using var first = new PrivacyShieldController(
+                new PrivacyShieldSettingsStore(settingsPath),
+                store);
+            await first.StartAsync(CancellationToken.None);
+
+            var status = await first.ConfigureAsync(
+                EnabledSettings(port) with
+                {
+                    PreferredAdapterAlias = "Ethernet 2",
+                    AutoPointAdapterDns = true,
+                    AutoUpdateSources = true,
+                    AutoUpdateIntervalHours = 24,
+                    EnabledSourceIds = ["hagezi-pro", "hagezi-tif"],
+                },
+                CancellationToken.None);
+
+            Assert.Equal("Ethernet 2", status.Settings.PreferredAdapterAlias);
+            Assert.True(status.Settings.AutoPointAdapterDns);
+            Assert.True(status.Settings.AutoUpdateSources);
+            Assert.Equal(24, status.Settings.AutoUpdateIntervalHours);
+            // hagezi-tif has never been downloaded yet, so auto-update must trigger immediately.
+            Assert.True(first.ShouldAutoUpdateSources());
+
+            // Fresh single source: no auto-update required.
+            await first.ConfigureAsync(
+                status.Settings with
+                {
+                    EnabledSourceIds = ["hagezi-pro"],
+                },
+                CancellationToken.None);
+            Assert.False(first.ShouldAutoUpdateSources());
+
+            // Stale source (> 24h old): auto-update triggers again.
+            await first.ConfigureAsync(
+                status.Settings with
+                {
+                    EnabledSourceIds = ["hagezi-pro", "oisd-big"],
+                },
+                CancellationToken.None);
+            Assert.True(first.ShouldAutoUpdateSources());
+
+            await using var restarted = new PrivacyShieldController(
+                new PrivacyShieldSettingsStore(settingsPath),
+                store);
+            await restarted.StartAsync(CancellationToken.None);
+            var reloaded = await restarted.GetStatusAsync(CancellationToken.None);
+            Assert.Equal("Ethernet 2", reloaded.Settings.PreferredAdapterAlias);
+            Assert.True(reloaded.Settings.AutoPointAdapterDns);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static PrivacyShieldSettings EnabledSettings(int port) => new()
     {
         Enabled = true,
