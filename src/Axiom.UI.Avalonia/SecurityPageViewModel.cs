@@ -1580,6 +1580,21 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     private async Task RefreshAgentsAsync(bool blackboxConnected)
     {
+        await RefreshAgentsCoreAsync(blackboxConnected).ConfigureAwait(true);
+
+        // Windows: unchanged. macOS/Linux: the shared status models are shown, with the sentence
+        // that the guard runtime and its provisioning are unsupported and unverified there.
+        if (IsAgentProtectionAvailable)
+        {
+            AgentsStatusText = BlackboxPlatformSupport.WithUnsupportedNote(
+                AgentsStatusText,
+                AgentPlatform.IsWindows,
+                BlackboxPlatformSupport.CurrentOsName);
+        }
+    }
+
+    private async Task RefreshAgentsCoreAsync(bool blackboxConnected)
+    {
         ProtectedAgents.Clear();
 
         if (!IsAgentProtectionAvailable)
@@ -1655,11 +1670,13 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                                 availableElement.ValueKind != JsonValueKind.False;
                 var reason = ReadString(target, "disabled_reason");
 
+                // "protected" from the dashboard means "workspace attached". Where the guard runtime
+                // is not verified (macOS, Linux) that is the installed-not-proven state, not PROTECTED.
                 var status = isProtected
-                    ? "PROTECTED"
+                    ? BlackboxPlatformSupport.AttachedWorkspaceStatus(AgentPlatform.IsWindows)
                     : available ? "DETECTED" : "NOT DETECTED";
                 var detail = reason ?? (isProtected
-                    ? "Workspace attached"
+                    ? BlackboxPlatformSupport.AttachedWorkspaceDetail(AgentPlatform.IsWindows, BlackboxPlatformSupport.CurrentOsName)
                     : available ? "Workspace detected; not attached" : "Not detected on this machine");
 
                 ProtectedAgents.Add(new ProtectedAgent(kind, path, status, detail));
