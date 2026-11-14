@@ -55,7 +55,7 @@ public sealed class DaemonLogFileTests
             File.Move(log, rotated);
             // newsyslog creates the replacement itself (mode from the conf); here deliberately 0644.
             File.WriteAllText(log, "logfile turned over\n");
-            File.SetUnixFileMode(log, MacDataDirectoryPermissions.SharedFileMode);
+            File.SetUnixFileMode(log, UnixDataDirectoryPermissions.SharedFileMode);
 
             writer.WriteLine("second");
         }
@@ -155,6 +155,6 @@ public sealed class DaemonLogFileTests
         DaemonLogFile.WritePidFile(pidFile);
 
         Assert.Equal(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture), File.ReadAllText(pidFile).Trim());
-        Assert.Equal(MacDataDirectoryPermissions.SharedFileMode, File.GetUnixFileMode(pidFile));
+        Assert.Equal(UnixDataDirectoryPermissions.SharedFileMode, File.GetUnixFileMode(pidFile));
     }
 }

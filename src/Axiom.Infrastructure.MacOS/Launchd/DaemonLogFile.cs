@@ -77,7 +77,7 @@ public sealed class DaemonLogFile : TextWriter
         File.WriteAllText(temp, Environment.ProcessId.ToString(CultureInfo.InvariantCulture) + "\n");
         if (!OperatingSystem.IsWindows())
         {
-            File.SetUnixFileMode(temp, MacDataDirectoryPermissions.SharedFileMode);
+            File.SetUnixFileMode(temp, UnixDataDirectoryPermissions.SharedFileMode);
         }
 
         File.Move(temp, path, overwrite: true);
