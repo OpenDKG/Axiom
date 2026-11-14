@@ -44,7 +44,38 @@ public sealed class AgentHookScriptTests
         Assert.Contains("args=raw_args", bridge, StringComparison.Ordinal);
         Assert.Contains("_deletes_protected", bridge, StringComparison.Ordinal);
         Assert.Contains("_tampers_with_guard", bridge, StringComparison.Ordinal);
+        Assert.Contains("_escalation_risk", bridge, StringComparison.Ordinal);
         Assert.DoesNotContain("args=payload.get", bridge, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OpenCode_bridge_carries_remote_script_and_persistence_detection()
+    {
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+
+        Assert.Contains("def _escalation_risk(command: str) -> str:", bridge, StringComparison.Ordinal);
+        Assert.Contains("escalation = _escalation_risk(command_text)", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"escalation\"", bridge, StringComparison.Ordinal);
+
+        string[] shapes =
+        [
+            "|sh", "|bash", "|pwsh", "|iex", "certutil", "-urlcache", "bitsadmin",
+            "/transfer", "mshta", "reg add", "\\\\currentversion\\\\run", "schtasks",
+            "/create", "vssadmin", "shadows", "bcdedit", "recoveryenabled no",
+        ];
+        foreach (var shape in shapes)
+        {
+            Assert.Contains(shape, bridge, StringComparison.Ordinal);
+        }
+
+        // The detector runs before the vendor guard so a missing verified rule cannot let a
+        // remote pipe, encoded shell or persistence shape through.
+        Assert.True(
+            bridge.IndexOf("escalation = _escalation_risk", StringComparison.Ordinal) <
+            bridge.IndexOf("guard.on_pre_tool_call", StringComparison.Ordinal));
     }
 
     [Fact]

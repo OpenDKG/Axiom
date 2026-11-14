@@ -580,6 +580,46 @@ public sealed class OpenCodeProtection
             return False
 
 
+        def _escalation_risk(command: str) -> str:
+            # Remote-script execution and LOLBin download/persistence shapes. The pinned
+            # verified ruleset has no confirmed escalation rules yet (that needs a curator
+            # identity), so these high-risk agent actions would otherwise pass. Returns a
+            # short label for a block, or "" when the command is not one of these shapes.
+            text = " ".join((command or "").lower().split())
+            if not text:
+                return ""
+            text = text.replace(" |", "|").replace("| ", "|")
+            download = ("curl ", "wget ", "iwr ", "irm ", "invoke-webrequest",
+                        "invoke-restmethod", "bitsadmin")
+            pipe = ("|sh", "|bash", "|zsh", "|pwsh", "|powershell", "|python",
+                    "|node", "|iex", "invoke-expression")
+            if any(token in text for token in download) and any(token in text for token in pipe):
+                return "remote script piped into a shell"
+            if "base64" in text and any(token in text for token in pipe):
+                return "base64 payload piped into a shell"
+            if "certutil" in text and ("-urlcache" in text or "-verifyctl" in text or "-decode" in text):
+                return "certutil download or decode"
+            if "bitsadmin" in text and "/transfer" in text:
+                return "bitsadmin transfer"
+            if "mshta" in text and "http" in text:
+                return "mshta remote script"
+            if ("rundll32" in text or "regsvr32" in text) and "http" in text:
+                return "LOLBin remote script"
+            if ("powershell" in text or "pwsh" in text) and ("-enc " in text or "-encodedcommand" in text):
+                return "encoded PowerShell"
+            if "reg add" in text and "\\currentversion\\run" in text:
+                return "registry run-key persistence"
+            if "schtasks" in text and "/create" in text:
+                return "scheduled-task persistence"
+            if "vssadmin" in text and "delete" in text and "shadows" in text:
+                return "shadow-copy deletion"
+            if "wbadmin" in text and "delete catalog" in text:
+                return "backup catalog deletion"
+            if "bcdedit" in text and "recoveryenabled no" in text:
+                return "recovery disable"
+            return ""
+
+
         def record(framework, event_type, tool, decision, guard_status, duration_ms,
                    error_code="", session="", call=""):
             try:
@@ -729,6 +769,11 @@ public sealed class OpenCodeProtection
                     if _deletes_protected(command_text, protected):
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "", session, call)
                         print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it deletes a protected path."}))
+                        return
+                    escalation = _escalation_risk(command_text)
+                    if escalation:
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "escalation", session, call)
+                        print(json.dumps({"action": "block", "message": f"Blackbox blocked this call: {escalation}."}))
                         return
                     decision = guard.on_pre_tool_call(
                         tool_name=tool,
