@@ -1,10 +1,6 @@
-# Axiom Ã¢â‚¬â€ historical change log
+# Axiom â€” historical change log
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
-
-## What's in 0.25.0
-
-- **Portable post-install self-test.** The protected-read check now uses the signed-in user's .ssh\\id_rsa instead of a hard-coded C:\\Users\\lab path, so a normal account no longer reports UNPROTECTED while block mode and the protected write are active. Test: AgentProtectionSelfTestTests.
 
 ## What's in 0.24.0
 
@@ -163,7 +159,7 @@ This is the original feature-by-feature release history extracted from the long 
     sessions list alongside Claude Code, Codex and OpenCode.
   - `ActivityFreshness` & `AgentsPageViewModel`: freshness now considers Blackbox audit events,
     local hook evidence (`agent-evidence.jsonl`) and active agent session timestamps, and distinguishes
-    between an idle period with no running agent session (`IsStale = false`, `"Last agent activity at ... Ã‚Â· no active agent session right now."`)
+    between an idle period with no running agent session (`IsStale = false`, `"Last agent activity at ... Â· no active agent session right now."`)
     and an active session where hooks have stopped firing.
   - `AgentHookProbe` & `SecurityPageViewModel`: added `"antigravity"` probe support (`TestAntigravityAsync`)
     and included Antigravity in `Install/repair agent hooks` status output.
@@ -193,7 +189,7 @@ This is the original feature-by-feature release history extracted from the long 
   `Classes="table-header"` for structured column headers; `Button.danger` for destructive actions).
 - **Full right-click context menus & interactive actions across all pages.** Right-clicking any row
   automatically selects it and opens context actions across `Events`, `Overview`, `Connections`,
-  `Apps`, `Firewall`, `Privacy Shield`, `Security` and `AI Analyst` Ã¢â‚¬â€ including inspecting event
+  `Apps`, `Firewall`, `Privacy Shield`, `Security` and `AI Analyst` â€” including inspecting event
   details, copying rows/paths/endpoints/hashes/domains, blocking outbound/inbound traffic, and
   ending tasks (`End task`).
 - **Network recovery hardening.** `WindowsDnsRecoveryAdapter.Run` now reads `stdout`/`stderr`
@@ -281,7 +277,7 @@ This is the original feature-by-feature release history extracted from the long 
 ## What's in 0.10.22
 
 - **A module is connected only when it identifies itself.** DKG requires `/api/status` with
-  `version`, `peerId` (`12D3KooÃ¢â‚¬Â¦`), `nodeRole` and a known testnet/mainnet `networkId`; Blackbox
+  `version`, `peerId` (`12D3Kooâ€¦`), `nodeRole` and a known testnet/mainnet `networkId`; Blackbox
   requires `/api/graph-status` with `mode`, `node_reachable`, `dkg_url` and `sync_progress`.
   Anything else on 9200/9700 is reported as `UNKNOWN` instead of a green module.
 
@@ -334,10 +330,10 @@ This is the original feature-by-feature release history extracted from the long 
 
 ## What's in 0.10.16
 
-- **Broken punctuation is repaired.** An earlier encoding conversion had replaced `Ã¢â‚¬â€`, `Ã‚Â·`, `Ã¢â‚¬Â¦`
-  and `Ãƒâ€”` with the Unicode replacement character in the Privacy Shield and Agents pages, which the
-  UI rendered as `?`. The adapter list now reads `Ethernet 2 Ã¢â‚¬â€ default route Ã‚Â· DNS 127.0.0.1`,
-  profile names and counters use `Ã‚Â·` again, and the same repair restores arrows, box drawing and
+- **Broken punctuation is repaired.** An earlier encoding conversion had replaced `â€”`, `Â·`, `â€¦`
+  and `Ã—` with the Unicode replacement character in the Privacy Shield and Agents pages, which the
+  UI rendered as `?`. The adapter list now reads `Ethernet 2 â€” default route Â· DNS 127.0.0.1`,
+  profile names and counters use `Â·` again, and the same repair restores arrows, box drawing and
   multiplication signs in the README and the Avalonia migration baseline.
 
 ## What's in 0.10.15
@@ -465,7 +461,7 @@ This is the original feature-by-feature release history extracted from the long 
   domain fetched that way is still a truthful etched-by-tool sighting.
 - **Verified live.** With the adapter pointed at the resolver, a malware-list domain fetched by an agent
   tool produced a candidate, was submitted by the desktop, and the DKG accepted it: the report is in
-  the community's shared memory (ioc:domain:win.down.55kantu.com, stage eported Ã‚Â· monitor).
+  the community's shared memory (ioc:domain:win.down.55kantu.com, stage eported Â· monitor).
 
 ## What's in 0.10.2
 
@@ -578,7 +574,7 @@ reputation feed, and Axiom reports only its own firewall rules.
 - **Alerts that lead somewhere.** A Shield alert navigates to Firewall, highlights the exact
   application and scrolls to it. Alerts are kept in the bell history even when notifications are off.
 - **Window and lifecycle polish.** Native resize cursors, drag resize, Win+arrow snap, edge snap,
-  double-click maximize/restore, working caption buttons, a 900Ãƒâ€”600 minimum, responsive status/Firewall
+  double-click maximize/restore, working caption buttons, a 900Ã—600 minimum, responsive status/Firewall
   layouts, close-to-tray, start-minimized and clean `ShutdownRequested` handling.
 - **DKG startup and evidence.** When the local DKG node is installed, Axiom starts it on launch if it
   is not already answering, verifies the supervisor/worker and `/api/status`, and never starts it in
@@ -589,17 +585,17 @@ reputation feed, and Axiom reports only its own firewall rules.
   application through the Windows UDP/TCP owner tables and shown in a 2-second list with app
   name/path, category and time. Each row offers **Allow** and **Block**: Allow adds a custom
   allowlist entry and turns the row into Block, Block reverses it. The catalog has five
-  licence-labelled sources Ã¢â‚¬â€ HaGeZi Multi PRO and OISD Big (GPL-3.0), WindowsSpyBlocker (MIT), and
-  The Block List Project Ads/Tracking (Unlicense) Ã¢â‚¬â€ downloaded from upstream at runtime, never
+  licence-labelled sources â€” HaGeZi Multi PRO and OISD Big (GPL-3.0), WindowsSpyBlocker (MIT), and
+  The Block List Project Ads/Tracking (Unlicense) â€” downloaded from upstream at runtime, never
   bundled.
 - **Privacy Shield survives upgrades and explains zero statistics.** Installed-service settings and
   compiled rules live in `%ProgramData%\Axiom\` with a one-time copy from the old service profile;
   the blocked-query history stays in the service profile. When the resolver runs but no adapter
   points at `127.0.0.1`, the statistics panel says so and points to the UAC helper; the adapter row
-  shows `127.0.0.1 Ã‚Â· Privacy Shield`, including after an app restart.
+  shows `127.0.0.1 Â· Privacy Shield`, including after an app restart.
 - **Connections grouped by application with real traffic totals.** The page opens grouped and shows
   cumulative TCP megabytes sent/received plus the realtime rate from the latest poll
-  (`now Ã¢â€ â€˜ Ã¢â‚¬Â¦ Ã‚Â· Ã¢â€ â€œ Ã¢â‚¬Â¦` or `now idle`). Sort by total, sent, received, sockets or name in either
+  (`now â†‘ â€¦ Â· â†“ â€¦` or `now idle`). Sort by total, sent, received, sockets or name in either
   direction from the action toolbar. Expanded groups and their rows survive the one-second refresh;
   UDP-only apps say `traffic not measured`.
 - **Agent sessions now include OpenCode/OpenChamber.** The Agents and Agent Stats session cards read
@@ -607,7 +603,7 @@ reputation feed, and Axiom reports only its own firewall rules.
   host process runs or its data changed in the last five minutes, so the active OpenCode session no
   longer appears as historical; raw session ids stay hashed.
 - **Threat sharing is visible on the Agents page.** A card mirrors the Blackbox dashboard state
-  (`off Ã‚Â· opt in` or `on Ã‚Â· signed, redacted`) and offers **Enable/Disable threat sharing** with a
+  (`off Â· opt in` or `on Â· signed, redacted`) and offers **Enable/Disable threat sharing** with a
   confirmation when enabling. It reads and writes the dashboard's signed, redacted `report` setting;
   prompts, commands, file paths, credentials, model content and raw session ids are never sent.
 - **Buttons follow the active theme.** The Fluent grey default is replaced by Axiom palette
@@ -730,7 +726,7 @@ policy.
 
 ## What's in 0.6.1
 
-- Restored the sidebar product footer: Axiom icon, version, description, GitHub and Ã¢â„¢Â¥ Donate.
+- Restored the sidebar product footer: Axiom icon, version, description, GitHub and â™¥ Donate.
 - Added the top-bar theme selector and status-bar mode/firewall badges.
 - Includes the 0.6.0 Avalonia cutover.
 
@@ -744,7 +740,7 @@ policy.
   applications, native verified threat graph, selectable threat details, protected workspaces and
   agent module cards.
 - Four real palettes (Dark, Light, Dark Midnight, Light Warm), custom Axiom title bar, tray icon,
-  single-instance handling and 1080Ãƒâ€”720 shell fit.
+  single-instance handling and 1080Ã—720 shell fit.
 - Ported context menus for applications, connections, overview sockets and agent evidence.
 - Installer, MSIX and release scripts now publish the Avalonia host as `Axiom.Desktop.exe`.
 - Includes the 0.5.3 verified threat graph and Privacy Shield source-fit work.
