@@ -73,6 +73,7 @@ public partial class App : Application
                         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                         PrivacyShieldProvisioner.WriteSettings(localAppData);
                         PrivacyShieldProvisioner.ApplyAsync(CancellationToken.None).GetAwaiter().GetResult();
+                        TraderShieldProvisioner.ApplyToFile(Path.Combine(localAppData, "hermes", "config.yaml"));
                     }
                 }
                 catch
