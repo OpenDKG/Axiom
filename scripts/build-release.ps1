@@ -88,7 +88,10 @@ Write-Host "Publishing Axiom service $Version (win-x64, self-contained)..." -For
 $serviceOutput = Join-Path $root "artifacts\publish\service"
 Remove-Item $serviceOutput -Recurse -Force -ErrorAction SilentlyContinue
 & $dotnet publish $serviceProject -c Release -r win-x64 --self-contained true `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:EnableCompressionInSingleFile=true `
+    -p:DebugType=None -p:DebugSymbols=false `
+    -p:AllowedReferenceRelatedFileExtensions=none `
     -o $serviceOutput
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish (service) failed with exit code $LASTEXITCODE." }
 
@@ -101,7 +104,7 @@ if (-not (Test-Path $serviceExe)) { throw "Published service not found: $service
 Write-Host "Publishing single-file Axiom Setup..." -ForegroundColor Cyan
 $setupScript = Join-Path $PSScriptRoot "publish-setup.ps1"
 $setupOutput = Join-Path $root "artifacts\publish\setup"
-& powershell -NoProfile -ExecutionPolicy Bypass -File $setupScript -OutputDir $setupOutput
+& powershell -NoProfile -ExecutionPolicy Bypass -File $setupScript -OutputDir $setupOutput -ReusePayload
 if ($LASTEXITCODE -ne 0) { throw "Setup publish failed with exit code $LASTEXITCODE." }
 
 $setupExe = Join-Path $setupOutput "Axiom.Setup.exe"
@@ -117,8 +120,9 @@ $zipPath = Join-Path $OutputDir $zipName
 $publicSetupExe = Join-Path $OutputDir "Axiom-Setup.exe"
 Copy-Item $setupExe $publicSetupExe -Force
 
+# Keep the portable ZIP separate from Axiom-Setup.exe so the archive does not duplicate the
+# embedded Desktop and Service executables.
 $files = @(
-    $publicSetupExe,
     $exe,
     $serviceExe,
     $communityDir,
