@@ -1,0 +1,10 @@
+$ sudo -n sysadminctl -deleteUser axtest2
+2026-11-13 17:08:30.345 sysadminctl[8808:126658] Deleting Public share point for axtest2
+2026-11-13 17:08:30.408 sysadminctl[8808:126658] Deleting record for axtest2
+2026-11-13 17:08:30.447 sysadminctl[8808:126658] AOSKit INFO: Disabling BTMM for user, no zone found for uid=502, usersToZones: (null)
+id: axtest2: no such user
+ls: /Users/axtest2: No such file or directory
+daemon
+dev
+nobody
+root

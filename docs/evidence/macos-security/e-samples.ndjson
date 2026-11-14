@@ -1,0 +1,11 @@
+{"t": "01:04:01.265Z", "state": "verified", "connected": true, "pub": 1794372871, "ack": 1794372871, "rules": ["applied"]}
+{"t": "01:04:01.476Z", "state": "degraded", "connected": false, "pub": 1794372871, "ack": 1794372871, "rules": ["pending"]}
+{"t": "01:04:01.688Z", "state": "degraded", "connected": false, "pub": 1794372871, "ack": 1794372871, "rules": ["pending"]}
+{"t": "01:04:01.890Z", "state": "degraded", "connected": false, "pub": 1794372871, "ack": 1794372871, "rules": ["pending"]}
+{"t": "01:04:02.093Z", "state": "degraded", "connected": false, "pub": 1794372871, "ack": 1794372871, "rules": ["pending"]}
+{"t": "01:04:02.294Z", "state": "degraded", "connected": false, "pub": 1794372871, "ack": 1794372871, "rules": ["pending"]}
+{"t": "01:04:02.500Z", "state": "degraded", "connected": false, "pub": 1794372871, "ack": 1794372871, "rules": ["pending"]}
+{"t": "01:04:02.703Z", "state": "degraded", "connected": false, "pub": 1794372871, "ack": 1794372871, "rules": ["pending"]}
+{"t": "01:04:02.907Z", "state": "degraded", "connected": false, "pub": 1794372871, "ack": 1794372871, "rules": ["pending"]}
+{"t": "01:04:03.109Z", "state": "verified", "connected": true, "pub": 1794372872, "ack": 1794372872, "rules": ["applied"]}
+{"t": "01:04:03.321Z", "state": "verified", "connected": true, "pub": 1794372872, "ack": 1794372872, "rules": ["applied"]}

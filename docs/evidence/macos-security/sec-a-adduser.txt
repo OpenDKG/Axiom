@@ -1,0 +1,7 @@
+2026-11-13 17:06:46.147 sysadminctl[8613:125112] ----------------------------
+2026-11-13 17:06:46.148 sysadminctl[8613:125112] ----------------------------
+2026-11-13 17:06:47.056 sysadminctl[8613:125112] Creating user record…
+2026-11-13 17:06:48.836 sysadminctl[8613:125112] Assigning UID: 502 GID: 20
+2026-11-13 17:06:50.678 sysadminctl[8613:125112] Creating home directory at /Users/axtest2
+uid=502(axtest2) gid=20(staff) groups=20(staff),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),702(com.apple.sharepoint.group.2),100(_lpoperator),703(com.apple.sharepoint.group.3)
+no axtest2 is NOT a member of admin
