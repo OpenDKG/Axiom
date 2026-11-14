@@ -198,6 +198,23 @@ public static class PrivacyShieldSourceCatalog
             "Malware-only domains from the abuse.ch URLhaus feed, compiled by malware-filter (MIT, " +
             "updated every 12 hours). Matches stay local with source/version provenance and are not " +
             "proposed to the community; they would only echo the same public list."),
+        new(
+            "hagezi-tif",
+            "HaGeZi Threat Intelligence Feeds (Mini)",
+            "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@924bb2a8306e609ae8b0113c2b676f5fde072d16/wildcard/tif.mini-onlydomains.txt",
+            "GPL-3.0",
+            PrivacyCategory.Malware,
+            "Malware, C2, phishing and scam domains curated by HaGeZi (pinned commit and checked by SHA-256 digest). " +
+            "Matches stay local with source/version provenance and are not proposed to the community.",
+            "D21FCEA658825CD93FE44E325D9CB23170EEA657D0D7A031107AA7264E31B08F"),
+        new(
+            "phishing-filter",
+            "Phishing domains (OpenPhish / PhishTank)",
+            "https://malware-filter.gitlab.io/malware-filter/phishing-filter-domains.txt",
+            "MIT",
+            PrivacyCategory.Malware,
+            "Active phishing domains compiled by malware-filter from OpenPhish, PhishTank and ipthreat (MIT, " +
+            "updated every 12 hours). Matches stay local with source/version provenance."),
     ];
 }
 
