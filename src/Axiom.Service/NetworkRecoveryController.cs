@@ -192,13 +192,12 @@ public sealed partial class NetworkRecoveryController : IDisposable
                     error ?? "The recovery snapshot could not be written.");
             }
 
-            if (OperatingSystem.IsWindows() &&
-                string.Equals(
+            if (string.Equals(
                     Path.GetFullPath(_snapshotPath),
-                    Path.GetFullPath(NetworkRecoverySnapshotStore.DefaultPath),
+                    Path.GetFullPath(ServicePlatform.RecoverySnapshotPath),
                     StringComparison.OrdinalIgnoreCase))
             {
-                MachineStateSecurity.HardenProgramData();
+                ServicePlatform.HardenRecoverySnapshotLocation();
             }
 
             LogCaptured(_logger, actor, adapters.Count, rules.Count, snapshot.ProtectionWasActive);
