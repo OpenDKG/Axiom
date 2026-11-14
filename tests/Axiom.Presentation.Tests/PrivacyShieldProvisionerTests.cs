@@ -18,6 +18,7 @@ public sealed class PrivacyShieldProvisionerTests
         Assert.Equal(PrivacyShieldProfile.Strict, settings.Profile);
         Assert.True(settings.Categories.HasFlag(PrivacyCategory.Telemetry));
         Assert.True(settings.Categories.HasFlag(PrivacyCategory.Malware));
+        Assert.True(settings.Categories.HasFlag(PrivacyCategory.Phishing));
         Assert.True(settings.Categories.HasFlag(PrivacyCategory.Custom));
         Assert.Equal(PrivacyShieldSourceCatalog.All.Count, settings.EnabledSourceIds.Count);
         Assert.Contains("urlhaus-domains", settings.EnabledSourceIds);

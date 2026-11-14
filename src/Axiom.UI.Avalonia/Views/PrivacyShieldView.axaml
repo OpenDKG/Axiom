@@ -40,7 +40,8 @@
               <CheckBox Content="Ads" IsChecked="{Binding Ads}" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,0,14,0" />
               <CheckBox Content="Tracking" IsChecked="{Binding Tracking}" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,0,14,0" />
               <CheckBox Content="Analytics" IsChecked="{Binding Analytics}" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,0,14,0" />
-              <CheckBox Content="Malware" IsChecked="{Binding Malware}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <CheckBox Content="Malware" IsChecked="{Binding Malware}" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,0,14,0" />
+              <CheckBox Content="Phishing" IsChecked="{Binding Phishing}" Foreground="{DynamicResource Axiom.TextPrimary}" />
             </WrapPanel>
             <Grid ColumnDefinitions="*,10,*">
               <StackPanel Grid.Column="0" Spacing="4">

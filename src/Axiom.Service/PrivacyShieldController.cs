@@ -616,6 +616,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                                                 PrivacyCategory.Tracking |
                                                 PrivacyCategory.Analytics |
                                                 PrivacyCategory.Malware |
+                                                PrivacyCategory.Phishing |
                                                 PrivacyCategory.Custom);
 
         return settings with

@@ -190,6 +190,9 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
     private bool _malware;
 
     [ObservableProperty]
+    private bool _phishing;
+
+    [ObservableProperty]
     private string _portText = "53";
 
     [ObservableProperty]
@@ -552,6 +555,11 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             categories |= PrivacyCategory.Malware;
         }
 
+        if (Phishing)
+        {
+            categories |= PrivacyCategory.Phishing;
+        }
+
         return new PrivacyShieldSettings
         {
             Enabled = Enabled,
@@ -603,6 +611,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             Tracking = (settings.Categories & PrivacyCategory.Tracking) != 0;
             Analytics = (settings.Categories & PrivacyCategory.Analytics) != 0;
             Malware = (settings.Categories & PrivacyCategory.Malware) != 0;
+            Phishing = (settings.Categories & PrivacyCategory.Phishing) != 0;
             PortText = settings.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
             UpstreamText = settings.UpstreamDns;
             EncryptDnsViaDoh = settings.EncryptDnsViaDoh;
@@ -706,6 +715,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             Tracking = (categories & PrivacyCategory.Tracking) != 0;
             Analytics = (categories & PrivacyCategory.Analytics) != 0;
             Malware = (categories & PrivacyCategory.Malware) != 0;
+            Phishing = (categories & PrivacyCategory.Phishing) != 0;
         }
         finally
         {

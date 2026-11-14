@@ -78,6 +78,7 @@
               <CheckBox Style="{StaticResource AppCheckBox}" Content="Tracking" IsChecked="{Binding Tracking, Mode=TwoWay}" IsEnabled="{Binding IsSupported}" Margin="0,0,16,6" />
               <CheckBox Style="{StaticResource AppCheckBox}" Content="Analytics" IsChecked="{Binding Analytics, Mode=TwoWay}" IsEnabled="{Binding IsSupported}" Margin="0,0,16,6" />
               <CheckBox Style="{StaticResource AppCheckBox}" Content="Malware" IsChecked="{Binding Malware, Mode=TwoWay}" IsEnabled="{Binding IsSupported}" Margin="0,0,16,6" />
+              <CheckBox Style="{StaticResource AppCheckBox}" Content="Phishing" IsChecked="{Binding Phishing, Mode=TwoWay}" IsEnabled="{Binding IsSupported}" Margin="0,0,16,6" />
             </WrapPanel>
           </Grid>
 
