@@ -1,8 +1,8 @@
-﻿# Axiom
+# Axiom
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.17.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.24.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -12,6 +12,11 @@
 > changes can break name resolution, and agent hooks can block tools or files. Do not rely on it as
 > your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
 > and keep a recovery path.
+
+> **What Axiom is.** An agent-first endpoint security application: it protects the computer from the
+> agents that run on it and protects those agents from the world they read, using Agent Blackbox
+> hooks, an honest enforcement receipt, an OS network boundary and a verifiable DKG memory. See
+> [docs/AXIOM_OVERVIEW.md](docs/AXIOM_OVERVIEW.md).
 
 ## Project Leadership & Founding Team
 
@@ -58,7 +63,7 @@ network peers when deliberately enabled.
 Axiom brings together four surfaces:
 
 - **Network visibility and history** for TCP/UDP IPv4/IPv6 sockets and applications.
-- **Axiom Shield** — one switch that installs the elevated local service and turns the ask policy
+- **Axiom Shield** â€” one switch that installs the elevated local service and turns the ask policy
   on: every new outbound application waits for Block or Allow, and blocks are Axiom-owned Windows
   Firewall rules with read-back verification and recovery.
 - **Local privacy controls** including Privacy Shield DNS filtering and a read-only AI analyst.
@@ -70,16 +75,16 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 ## Current release and quick links
 
-**Current development release:** [0.17.0](docs/RELEASES/0.17.0.md), 12 November 2026. Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
+**Current development release:** [0.22.0](docs/RELEASES/0.22.0.md), 14 November 2026. Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
 
-> **Version numbering:** development builds were previously numbered `0.10.x`. A short reset produced `0.2.0` and `0.3.0`, but GitHub orders releases by semantic version, which hid them below `0.10.25`. The public release line resumed at `0.11.0` and continues with `0.17.0`; `0.2.0`/`0.3.0` remain historical snapshots. `scripts/build-release.ps1` refuses a version that is not greater than the highest existing `v*` tag.
+> **Version numbering:** development builds were previously numbered `0.10.x`. A short reset produced `0.2.0` and `0.3.0`, but GitHub orders releases by semantic version, which hid them below `0.10.25`. The public release line resumed at `0.11.0` and continues with `0.22.0`; `0.2.0`/`0.3.0` remain historical snapshots. `scripts/build-release.ps1` refuses a version that is not greater than the highest existing `v*` tag.
 
-- [Install and first-run modes](docs/INSTALL.md) — core vs Complete setup and required privileges.
-- [Architecture](docs/ARCHITECTURE.md) — Avalonia UI, local service, Windows Firewall and optional components.
-- [Security model](docs/SECURITY_MODEL.md) — what stays on-device, what can leave and where protection can fail open.
+- [Install and first-run modes](docs/INSTALL.md) â€” core vs Complete setup and required privileges.
+- [Architecture](docs/ARCHITECTURE.md) â€” Avalonia UI, local service, Windows Firewall and optional components.
+- [Security model](docs/SECURITY_MODEL.md) â€” what stays on-device, what can leave and where protection can fail open.
 - [Threat intelligence lifecycle](docs/THREAT_INTELLIGENCE.md) - Axiom sightings, Blackbox reports, community sharing, verified graph and SWM/VM provenance.
 - [Appearance and Axiom Glass](docs/APPEARANCE.md) - themes, current glass styling and what is not yet implemented.
-- [Full historical changelog](docs/CHANGELOG.md) — release-by-release detail from earlier README versions.
+- [Full historical changelog](docs/CHANGELOG.md) â€” release-by-release detail from earlier README versions.
 
 > **Do not equate a locally connected module with fresh DKG synchronization, or a signed community report with a verified threat.** Agent hooks can fail open when their local guard is unavailable. A DNS fallback can preserve connectivity while bypassing Privacy Shield filtering.
 
@@ -277,12 +282,12 @@ The optional community feed can display reputation evidence from a chosen HTTPS 
 
 ```text
 Unprivileged Avalonia UI (WPF fallback retained in source)
-   │  local Named Pipe (explicit ACL, client SID check)
-   ▼
+   â”‚  local Named Pipe (explicit ACL, client SID check)
+   â–¼
 Windows Service
-   ├─ IP Helper inventory and process attribution
-   ├─ bounded aggregation and local SQLite history
-   └─ owned-rule coordinator → Windows Firewall
+   â”œâ”€ IP Helper inventory and process attribution
+   â”œâ”€ bounded aggregation and local SQLite history
+   â””â”€ owned-rule coordinator â†’ Windows Firewall
 ```
 
 - The UI never runs as administrator and never receives a generic shell or "execute" command.
@@ -358,7 +363,7 @@ copyright and grant. Third-party components and their licenses are listed in
 [`TRADEMARKS.md`](TRADEMARKS.md). The roles of creators, copyright holders, maintainers and
 contributors are described in [`AUTHORS.md`](AUTHORS.md).
 
-The installed application shows the same information under **Settings → About Axiom**, including the
+The installed application shows the same information under **Settings â†’ About Axiom**, including the
 full GPL text, the notice, the third-party list and the source repository. Those documents are
 embedded in the application, so they remain readable offline.
 

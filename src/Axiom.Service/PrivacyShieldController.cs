@@ -196,6 +196,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             _server = candidate;
             _settings = normalized;
             _lastError = startWarning;
+            EnsureConfiguredAdapterDns();
             return CreateStatus();
         }
         finally
@@ -221,6 +222,61 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         _server = server;
         _lastError = warning;
         return Task.FromResult(true);
+    }
+
+    /// <summary>
+    /// True when background auto-update is enabled and at least one enabled source has never been
+    /// fetched or has aged past <see cref="PrivacyShieldSettings.AutoUpdateIntervalHours"/>.
+    /// </summary>
+    public bool ShouldAutoUpdateSources(DateTimeOffset? nowUtc = null)
+    {
+        if (!_settings.Enabled ||
+            !_settings.AutoUpdateSources ||
+            _settings.EnabledSourceIds.Count == 0)
+        {
+            return false;
+        }
+
+        var utcNow = nowUtc ?? DateTimeOffset.UtcNow;
+        var maxAge = TimeSpan.FromHours(Math.Clamp(_settings.AutoUpdateIntervalHours, 1, 168));
+        var totals = _sourceTotals;
+        foreach (var sourceId in _settings.EnabledSourceIds)
+        {
+            if (!totals.TryGetValue(sourceId, out var total) ||
+                total.Updated is not { } updated ||
+                utcNow - updated >= maxAge)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Keeps the configured or active default-route adapter pointed at the local resolver while the
+    /// elevated Windows service is running Privacy Shield on port 53. No-op in non-SYSTEM processes.
+    /// </summary>
+    public void EnsureConfiguredAdapterDns()
+    {
+        if (!MachineStateSecurity.IsRunningAsSystem())
+        {
+            return;
+        }
+
+        if (_server is not null &&
+            _settings.Enabled &&
+            _settings.Port == 53 &&
+            (_settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(_settings.PreferredAdapterAlias)))
+        {
+            PrivacyDnsFailSafe.EnsureAdapterPointed(_settings.PreferredAdapterAlias);
+            return;
+        }
+
+        if (!_settings.Enabled || !_settings.AutoPointAdapterDns)
+        {
+            PrivacyDnsFailSafe.RestoreIfNeeded();
+        }
     }
 
     public async Task<PrivacyShieldStatus> ClearHistoryAsync(CancellationToken cancellationToken)
@@ -326,34 +382,39 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         error = null;
         warning = null;
 
-        IReadOnlyList<System.Net.IPEndPoint> upstreams;
+        IReadOnlyList<DnsUpstreamTarget> targets;
         if (!string.IsNullOrWhiteSpace(settings.UpstreamDns))
         {
-            if (!SystemDnsResolver.TryParseUpstream(settings.UpstreamDns, out var endpoint) ||
-                endpoint is null)
+            if (!SystemDnsResolver.TryParseUpstreamTargets(settings.UpstreamDns, out targets) ||
+                targets.Count == 0)
             {
-                error = "The configured upstream DNS address is invalid.";
+                error = "The configured upstream DNS address or DoH URL is invalid.";
                 return false;
             }
-
-            upstreams = [endpoint];
         }
         else
         {
-            upstreams = SystemDnsResolver.ResolveSystemDns();
+            var systemTargets = SystemDnsResolver.UpgradeEndpoints(SystemDnsResolver.ResolveSystemDns());
+            if (settings.EncryptDnsViaDoh)
+            {
+                var encryptedSystem = systemTargets.Where(item => item.IsDoh).ToArray();
+                targets = encryptedSystem.Length > 0
+                    ? encryptedSystem
+                    : SystemDnsResolver.DefaultDohTargets();
+            }
+            else
+            {
+                targets = systemTargets;
+            }
         }
 
-        if (upstreams.Count == 0)
+        if (targets.Count == 0)
         {
             // If the adapter already points at this loopback resolver, system DNS discovery must
-            // not leave the machine without an upstream. Keep a conservative public fallback and
-            // let the user override it explicitly.
-            upstreams =
-            [
-                new System.Net.IPEndPoint(System.Net.IPAddress.Parse("1.1.1.1"), 53),
-                new System.Net.IPEndPoint(System.Net.IPAddress.Parse("9.9.9.9"), 53),
-            ];
-            warning = "No non-loopback Windows DNS server was found; using fallback upstream DNS. " +
+            // not leave the machine without an upstream. Keep encrypted public DoH fallbacks and
+            // let the user override them explicitly.
+            targets = SystemDnsResolver.DefaultDohTargets();
+            warning = "No non-loopback Windows DNS server was found; using encrypted DoH fallback upstream DNS. " +
                       "Set an explicit upstream address if this network requires a local resolver.";
         }
 
@@ -362,7 +423,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             var policy = GetPolicy(settings);
             server = new DnsProxyServer(
                 policy,
-                upstreams,
+                targets,
                 settings.Port,
                 blocked =>
                 {
@@ -512,7 +573,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             Port = _settings.Port,
             BindAddress = "not listening",
             Upstream = string.IsNullOrWhiteSpace(_settings.UpstreamDns)
-                ? "system DNS"
+                ? (_settings.EncryptDnsViaDoh ? "encrypted DoH (1.1.1.1, 9.9.9.9)" : "system DNS")
                 : _settings.UpstreamDns,
             Queries = 0,
             Allowed = 0,
@@ -569,6 +630,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                     string.Equals(source.Id, id, StringComparison.OrdinalIgnoreCase)))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
+            PreferredAdapterAlias = settings.PreferredAdapterAlias?.Trim() ?? string.Empty,
+            AutoUpdateIntervalHours = Math.Clamp(settings.AutoUpdateIntervalHours, 1, 168),
         };
     }
 

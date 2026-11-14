@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Axiom.Contracts.Community;
 using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
@@ -77,7 +78,27 @@ public sealed class AvaloniaSecurityDialogs(Func<Window?> ownerProvider) : ISecu
             IsChecked = current.Enabled,
             Foreground = Foreground,
         };
-        var url = new TextBox { Text = current.Url, PlaceholderText = "https://… feed URL" };
+        var url = new TextBox
+        {
+            Text = current.Url,
+            PlaceholderText = "https://… or semicolon-separated SHA-256 feed URLs",
+        };
+        var presets = new ComboBox
+        {
+            ItemsSource = CommunityFeedCatalog.Presets,
+            SelectedItem = CommunityFeedCatalog.Presets.FirstOrDefault(p =>
+                string.Equals(p.Url, current.Url, StringComparison.OrdinalIgnoreCase)),
+            PlaceholderText = "Choose a built-in malware SHA-256 preset…",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        presets.SelectionChanged += (_, _) =>
+        {
+            if (presets.SelectedItem is CommunityFeedPreset preset)
+            {
+                url.Text = preset.Url;
+                enabled.IsChecked = true;
+            }
+        };
         var token = new TextBox
         {
             Text = current.Token,
@@ -100,8 +121,8 @@ public sealed class AvaloniaSecurityDialogs(Func<Window?> ownerProvider) : ISecu
         };
 
         window.Content = Form(
-            "Entries are community evidence, never an automatic verdict. Axiom does not upload reports.",
-            [enabled, Label("Feed URL"), url, Label("Token (optional)"), token],
+            "Entries are community evidence, never an automatic verdict. Axiom supports JSON feeds, plain-text SHA-256 lists, or semicolon-separated URLs without uploading local data.",
+            [enabled, Label("Preset feed bundle"), presets, Label("Feed URL(s)"), url, Label("Token (optional)"), token],
             [cancel, save]);
 
         await window.ShowDialog(owner).ConfigureAwait(true);

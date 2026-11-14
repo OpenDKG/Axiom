@@ -48,10 +48,11 @@
                 <TextBox Text="{Binding PortText}" />
               </StackPanel>
               <StackPanel Grid.Column="2" Spacing="4">
-                <controls:AxiomSelectableTextBlock Text="Upstream DNS (blank = system)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-                <TextBox Text="{Binding UpstreamText}" />
+                <controls:AxiomSelectableTextBlock Text="Upstream DNS / DoH (comma-separated, or leave empty for automatic DoH)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+                <TextBox Text="{Binding UpstreamText}" PlaceholderText="1.1.1.1, 9.9.9.9 (encrypted DoH · ISP blind)" />
               </StackPanel>
             </Grid>
+            <CheckBox Content="Encrypt upstream DNS via DoH (port 443 — hides queries from your ISP)" IsChecked="{Binding EncryptDnsViaDoh}" Foreground="{DynamicResource Axiom.TextPrimary}" />
 
             <controls:AxiomSelectableTextBlock Text="Blocklist sources" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
             <ItemsControl ItemsSource="{Binding Sources}">
@@ -71,7 +72,10 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <Button Content="Update sources now" Command="{Binding UpdateSourcesCommand}" Padding="12,6" HorizontalAlignment="Left" />
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+              <Button Content="Update sources now" Command="{Binding UpdateSourcesCommand}" Padding="12,6" HorizontalAlignment="Left" />
+              <CheckBox Content="Auto-update every 24h" IsChecked="{Binding AutoUpdateSources}" VerticalAlignment="Center" />
+            </StackPanel>
 
             <controls:AxiomSelectableTextBlock Text="Custom allowlist (one domain per line)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,6,0,0" />
             <TextBox Text="{Binding AllowedDomainsText}" AcceptsReturn="True" MinHeight="64" MaxHeight="120" />

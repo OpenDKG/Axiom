@@ -108,6 +108,7 @@ internal static class SetupInstaller
 
                 var blackboxInstalled = false;
                 var dkgInstalled = false;
+                string? upgradeWarning = null;
                 if (options.CompleteInstallation)
                 {
                     Report("Complete installation selected: Blackbox, DKG and agent hooks will be configured.");
@@ -117,12 +118,35 @@ internal static class SetupInstaller
                         cancellationToken).ConfigureAwait(false);
                     var moduleInstaller = new OptionalModuleInstaller();
 
+                    // The vendor installer owns the Blackbox tree. Back up the findings, history and
+                    // identity first so an update can never silently drop them.
+                    var upgradeBackup = UpgradeDataGuard.Capture();
+                    if (upgradeBackup is not null)
+                    {
+                        Report($"Protected data backup: {upgradeBackup.Entries.Count} file(s), " +
+                               $"{upgradeBackup.TotalBytes / 1_048_576.0:F1} MB at {upgradeBackup.Directory}.");
+                    }
+
                     Report("Auditing official installer scope: Axiom modules, Hermes plugin config/mode and scheduled task only.");
-                    Report("Starting the official Blackbox installer. Follow its prompts and terms.");
+                    Report("Configuring the official Blackbox runtime silently in the background...");
                     var blackboxExit = await Task.Run(
                         () => moduleInstaller.InstallBlackboxAndWait(Report),
                         cancellationToken).ConfigureAwait(false);
                     Report($"Blackbox installer exit code: {(blackboxExit ? "0" : "non-zero")}.");
+
+                    if (upgradeBackup is not null)
+                    {
+                        var dataCheck = UpgradeDataGuard.VerifyAndRestore(upgradeBackup.Directory);
+                        var intact = upgradeBackup.Entries.Count - dataCheck.Restored.Count - dataCheck.Shrunk.Count;
+                        Report($"Upgrade data check: {intact} intact, {dataCheck.Restored.Count} restored, " +
+                               $"{dataCheck.Shrunk.Count} smaller than the backup, {dataCheck.Failed.Count} failed.");
+                        if (!dataCheck.Ok)
+                        {
+                            upgradeWarning =
+                                $"{dataCheck.Failed.Count} protected file(s) could not be restored. " +
+                                $"The pre-upgrade copy is kept at {upgradeBackup.Directory}.";
+                        }
+                    }
 
                     var blackboxProvidesDkg = blackboxExit &&
                                               await TryWaitForBlackboxDkgAsync(cancellationToken).ConfigureAwait(false);
@@ -134,7 +158,7 @@ internal static class SetupInstaller
                     }
                     else
                     {
-                        Report("Starting the official DKG installer. Follow its prompts and terms.");
+                        Report("Configuring the official DKG node silently in the background...");
                         var dkgExit = await Task.Run(
                             () => moduleInstaller.InstallDkgAndWait(Report),
                             cancellationToken).ConfigureAwait(false);
@@ -203,19 +227,25 @@ internal static class SetupInstaller
                     var openCodeProtection = new OpenCodeProtection();
                     var codexProtection = new CodexProtection();
                     var claudeProtection = new ClaudeProtection();
+                    var antigravityProtection = new AntigravityProtection();
                     var cursorProtection = new CursorProtection();
                     var copilotProtection = new CopilotProtection();
                     var geminiProtection = new GeminiProtection();
                     var windsurfProtection = new WindsurfProtection();
                     var clineProtection = new ClineProtection();
+                    var zCodeProtection = new ZCodeProtection();
+                    var deepSeekProtection = new DeepSeekProtection();
                     var openCode = openCodeProtection.EnsureInstalled();
                     var codex = codexProtection.EnsureInstalled();
                     var claude = claudeProtection.EnsureInstalled();
+                    var antigravity = antigravityProtection.EnsureInstalled();
                     var cursor = cursorProtection.EnsureInstalled();
                     var copilot = copilotProtection.EnsureInstalled();
                     var gemini = geminiProtection.EnsureInstalled();
                     var windsurf = windsurfProtection.EnsureInstalled();
                     var cline = clineProtection.EnsureInstalled();
+                    var zCode = zCodeProtection.EnsureInstalled();
+                    var deepSeek = deepSeekProtection.EnsureInstalled();
                     var unexpectedChanges = await Task.Run(
                         () => protection.Verify(
                             protectedBefore,
@@ -232,6 +262,8 @@ internal static class SetupInstaller
                                 codexProtection.HookScriptPath,
                                 claudeProtection.SettingsPath,
                                 claudeProtection.HookScriptPath,
+                                antigravityProtection.HooksPath,
+                                antigravityProtection.HookScriptPath,
                                 cursorProtection.HooksPath,
                                 cursorProtection.HookScriptPath,
                                 copilotProtection.HooksPath,
@@ -242,6 +274,11 @@ internal static class SetupInstaller
                                 windsurfProtection.HooksPath,
                                 windsurfProtection.HookScriptPath,
                                 clineProtection.HookPath,
+                                zCodeProtection.ConfigPath,
+                                zCodeProtection.HookScriptPath,
+                                deepSeekProtection.HooksPath,
+                                deepSeekProtection.PatchPath,
+                                deepSeekProtection.HookScriptPath,
                             ]),
                         cancellationToken).ConfigureAwait(false);
                     if (unexpectedChanges.Count > 0)
@@ -266,9 +303,11 @@ internal static class SetupInstaller
 
                     Report($"Agent hooks: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
                            $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}, " +
+                           $"Antigravity {(antigravity ? "installed" : "skipped")}, " +
                            $"Cursor {(cursor ? "installed" : "skipped")}, " +
                            $"GitHub Copilot CLI {(copilot ? "installed" : "skipped")}, Gemini CLI {(gemini ? "installed" : "skipped")}, " +
-                           $"Windsurf Cascade {(windsurf ? "installed" : "skipped")}, Cline {(cline ? "installed" : "skipped")}.");
+                           $"Windsurf Cascade {(windsurf ? "installed" : "skipped")}, Cline {(cline ? "installed" : "skipped")}, " +
+                           $"ZCode {(zCode ? "installed" : "skipped")}, DeepSeek Harness {(deepSeek ? "installed" : "skipped")}.");
                 }
                 else
                 {
@@ -282,6 +321,12 @@ internal static class SetupInstaller
                         .ApplyCompleteAsync(options.InstallDir, Report, cancellationToken)
                         .ConfigureAwait(false);
                     warning = defaults.Warning;
+                    if (upgradeWarning is not null)
+                    {
+                        warning = string.IsNullOrWhiteSpace(warning)
+                            ? upgradeWarning
+                            : warning + " " + upgradeWarning;
+                    }
                 }
                 else
                 {
@@ -432,8 +477,23 @@ internal static class SetupInstaller
         }
     }
 
-    private static void CopyFile(string source, string destination, bool overwrite) =>
-        File.Copy(source, destination, overwrite);
+    private static void CopyFile(string source, string destination, bool overwrite)
+    {
+        // The service may still be releasing its image after a stop request; retry briefly instead
+        // of failing the whole upgrade on a sharing violation.
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.Copy(source, destination, overwrite);
+                return;
+            }
+            catch (IOException) when (attempt < 10)
+            {
+                Thread.Sleep(1000);
+            }
+        }
+    }
 
     private static string HashFile(string path)
     {

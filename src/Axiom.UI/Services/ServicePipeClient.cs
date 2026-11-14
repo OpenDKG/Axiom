@@ -10,9 +10,11 @@ public sealed class ServiceUnavailableException(string code, string message, Exc
 /// UI-facing adapter over the shared pipe client. It preserves the UI's existing exception contract
 /// while the wire implementation lives in Contracts for reuse by the MCP process.
 /// </summary>
-public sealed class ServicePipeClient(string pipeName = IpcPipe.Name)
+public sealed class ServicePipeClient(
+    string pipeName = IpcPipe.Name,
+    TimeSpan? requestTimeout = null)
 {
-    private readonly IpcPipeClient _client = new(pipeName);
+    private readonly IpcPipeClient _client = new(pipeName, requestTimeout: requestTimeout);
 
     public async Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
     {

@@ -430,6 +430,39 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
         }
     }
 
+    /// <summary>
+    /// Checks the tools the third-party installers need and offers the one-click winget bootstrap.
+    /// Returns false when the caller must stop and wait for the user to finish installing.
+    /// </summary>
+    private bool EnsureModulePrerequisites()
+    {
+        var report = ModulePrerequisites.Probe();
+        if (report.IsSatisfied)
+        {
+            return true;
+        }
+
+        InstallStatusText = $"Missing prerequisites: {report.MissingSummary}.";
+
+        var answer = MessageBox.Show(
+            $"The optional module installers need: {report.MissingSummary}.\n\n" +
+            "Install them now? A PowerShell window shows every winget command.",
+            "Install prerequisites",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (answer != MessageBoxResult.Yes)
+        {
+            InstallStatusText = $"Install {report.MissingSummary} manually, then click Check again.";
+            return false;
+        }
+
+        _installer.InstallPrerequisites(report);
+        InstallStatusText = _installer.LastError
+            ?? $"Prerequisite installer opened in PowerShell for {report.MissingSummary}. Complete it, then click Check again.";
+        return false;
+    }
+
     private void SetModuleActionLabel(string moduleName, string label)
     {
         for (var index = 0; index < Modules.Count; index++)
@@ -521,6 +554,11 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 return;
             }
 
+            if (!EnsureModulePrerequisites())
+            {
+                return;
+            }
+
             var confirmation = MessageBox.Show(
                 "This downloads and runs Umanitek's official Windows installer with the Oxigraph " +
                 "backend (no Docker).\n\nIt installs Python packages, clones the repository and may " +
@@ -535,6 +573,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             }
 
             _installer.InstallBlackbox();
+            if (_installer.LastError is { } blackboxError)
+            {
+                SetModuleActionLabel(module, "Install");
+                InstallStatusText = blackboxError;
+                return;
+            }
+
             InstallStatusText = "Blackbox installer opened in PowerShell. Complete it, then click Check again.";
             return;
         }
@@ -562,6 +607,11 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 return;
             }
 
+            if (!EnsureModulePrerequisites())
+            {
+                return;
+            }
+
             var confirmation = MessageBox.Show(
                 "This installs @origintrail-official/dkg into %LOCALAPPDATA%\\Axiom\\modules, " +
                 "opens the official testnet setup and starts the node.\n\nIt needs Node.js/npm. Continue?",
@@ -575,6 +625,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             }
 
             _installer.InstallDkg();
+            if (_installer.LastError is { } dkgError)
+            {
+                SetModuleActionLabel(module, "Install");
+                InstallStatusText = dkgError;
+                return;
+            }
+
             InstallStatusText = "DKG installer opened in PowerShell. Complete the prompts, then click Check again.";
         }
     }
@@ -1100,23 +1157,38 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             return;
         }
 
+        var continuity = BlackboxLocalState.EvaluateContinuity();
+        var guardAndRulesetAvailable = blackboxConnected ||
+                                       (continuity.GuardAvailable && continuity.RulesetAvailable);
+
         // Status refresh is read-only. Startup provisioning handles Axiom-managed hooks separately.
-        AddCodexAgents(blackboxConnected);
-        AddClaudeAgents(blackboxConnected);
-        AddCursorAgents(blackboxConnected);
-        AddCopilotAgents(blackboxConnected);
-        AddGeminiAgents(blackboxConnected);
-        AddWindsurfAgents(blackboxConnected);
-        AddClineAgents(blackboxConnected);
-        AddZCodeAgents(blackboxConnected);
-        AddDeepSeekAgents(blackboxConnected);
-        AddOpenCodeAgents(blackboxConnected);
+        AddCodexAgents(guardAndRulesetAvailable);
+        AddClaudeAgents(guardAndRulesetAvailable);
+        AddCursorAgents(guardAndRulesetAvailable);
+        AddCopilotAgents(guardAndRulesetAvailable);
+        AddGeminiAgents(guardAndRulesetAvailable);
+        AddWindsurfAgents(guardAndRulesetAvailable);
+        AddClineAgents(guardAndRulesetAvailable);
+        AddZCodeAgents(guardAndRulesetAvailable);
+        AddDeepSeekAgents(guardAndRulesetAvailable);
+        AddOpenCodeAgents(guardAndRulesetAvailable);
 
         if (!blackboxConnected)
         {
-            AgentsStatusText = ProtectedAgents.Count == 0
-                ? "Blackbox is not connected; no agent protection status is available."
-                : "Blackbox is not connected; detected agents are not protected.";
+            if (guardAndRulesetAvailable)
+            {
+                AgentsStatusText = ProtectedAgents.Count == 0
+                    ? $"Blackbox dashboard is offline; {continuity.Summary} No agent workspaces were detected."
+                    : $"Blackbox dashboard is offline; local guard and cached ruleset remain active for hooked agents. " +
+                      $"{continuity.Summary} Installed hooks alone are not proof of runtime blocking.";
+            }
+            else
+            {
+                AgentsStatusText = ProtectedAgents.Count == 0
+                    ? $"Blackbox is not connected; no agent protection status is available. {continuity.Summary}"
+                    : $"Blackbox local guard or ruleset is unavailable; detected agents are not protected by graph rules. {continuity.Summary}";
+            }
+
             return;
         }
 

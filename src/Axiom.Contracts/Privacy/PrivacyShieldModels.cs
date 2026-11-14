@@ -62,8 +62,11 @@ public sealed record PrivacyShieldSettings
     /// <summary>Loopback port for the opt-in resolver. 53 is required for normal Windows DNS use.</summary>
     public int Port { get; init; } = 53;
 
-    /// <summary>Optional upstream IP or IP:port. Empty uses the current Windows DNS servers.</summary>
+    /// <summary>Optional upstream IP, IP:port, udp://IP, or https://.../dns-query DoH URL (comma-separated for failover). Empty uses encrypted DoH or current Windows DNS.</summary>
     public string UpstreamDns { get; init; } = string.Empty;
+
+    /// <summary>Encrypts upstream DNS via RFC 8484 DoH over TLS port 443 so your ISP cannot inspect queries, even if the router/Windows adapter uses plain port 53.</summary>
+    public bool EncryptDnsViaDoh { get; init; } = true;
 
     public IReadOnlyList<string> AllowedDomains { get; init; } = [];
 
@@ -73,6 +76,18 @@ public sealed record PrivacyShieldSettings
 
     /// <summary>Reserved for a future bounded query log; the initial implementation keeps counts only.</summary>
     public bool LogQueries { get; init; }
+
+    /// <summary>Preferred Windows network adapter alias to keep pointed at Axiom DNS across restarts and updates.</summary>
+    public string PreferredAdapterAlias { get; init; } = string.Empty;
+
+    /// <summary>When enabled, Axiom Service automatically points the active/preferred adapter to loopback DNS while Privacy Shield runs.</summary>
+    public bool AutoPointAdapterDns { get; init; }
+
+    /// <summary>Automatically fetches missing or stale blocklist sources on startup and on the configured interval.</summary>
+    public bool AutoUpdateSources { get; init; } = true;
+
+    /// <summary>Interval in hours between automatic background source updates (default 24 hours).</summary>
+    public int AutoUpdateIntervalHours { get; init; } = 24;
 }
 
 public sealed record PrivacyShieldTopDomain(string Domain, long Count);
@@ -198,6 +213,23 @@ public static class PrivacyShieldSourceCatalog
             "Malware-only domains from the abuse.ch URLhaus feed, compiled by malware-filter (MIT, " +
             "updated every 12 hours). Matches stay local with source/version provenance and are not " +
             "proposed to the community; they would only echo the same public list."),
+        new(
+            "hagezi-tif",
+            "HaGeZi Threat Intelligence Feeds (Mini)",
+            "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@924bb2a8306e609ae8b0113c2b676f5fde072d16/wildcard/tif.mini-onlydomains.txt",
+            "GPL-3.0",
+            PrivacyCategory.Malware,
+            "Malware, C2, phishing and scam domains curated by HaGeZi (pinned commit and checked by SHA-256 digest). " +
+            "Matches stay local with source/version provenance and are not proposed to the community.",
+            "D21FCEA658825CD93FE44E325D9CB23170EEA657D0D7A031107AA7264E31B08F"),
+        new(
+            "phishing-filter",
+            "Phishing domains (OpenPhish / PhishTank)",
+            "https://malware-filter.gitlab.io/malware-filter/phishing-filter-domains.txt",
+            "MIT",
+            PrivacyCategory.Malware,
+            "Active phishing domains compiled by malware-filter from OpenPhish, PhishTank and ipthreat (MIT, " +
+            "updated every 12 hours). Matches stay local with source/version provenance."),
     ];
 }
 

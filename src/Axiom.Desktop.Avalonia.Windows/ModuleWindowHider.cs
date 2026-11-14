@@ -39,7 +39,7 @@ internal sealed class ModuleWindowHider : IDisposable
         {
             HideModuleWindows();
             var delay = DateTimeOffset.UtcNow < deadline
-                ? TimeSpan.FromSeconds(2)
+                ? TimeSpan.FromMilliseconds(500)
                 : TimeSpan.FromSeconds(30);
             try
             {
@@ -54,11 +54,17 @@ internal sealed class ModuleWindowHider : IDisposable
 
     private static void HideModuleWindows()
     {
+        if (!Axiom.Presentation.BackgroundWindowSettingsStore.Enabled)
+        {
+            return;
+        }
+
         try
         {
             using var searcher = new ManagementObjectSearcher(
                 "SELECT ProcessId, CommandLine FROM Win32_Process " +
-                "WHERE Name = 'node.exe' OR Name = 'python.exe' OR Name = 'hermes.exe'");
+                "WHERE Name = 'node.exe' OR Name = 'python.exe' OR Name = 'pythonw.exe' " +
+                "OR Name = 'hermes.exe' OR Name = 'cmd.exe' OR Name = 'powershell.exe' OR Name = 'pwsh.exe'");
             using var results = searcher.Get();
             foreach (ManagementObject item in results)
             {
@@ -80,27 +86,8 @@ internal sealed class ModuleWindowHider : IDisposable
         }
     }
 
-    internal static bool IsAxiomModule(string commandLine)
-    {
-        if (string.IsNullOrWhiteSpace(commandLine))
-        {
-            return false;
-        }
-
-        if (commandLine.Contains(@"\Axiom\modules\dkg\", StringComparison.OrdinalIgnoreCase) ||
-            commandLine.Contains(@"\Axiom\modules\blackbox\", StringComparison.OrdinalIgnoreCase) ||
-            commandLine.Contains(@"\Axiom\modules\dkg/", StringComparison.OrdinalIgnoreCase) ||
-            commandLine.Contains(@"\Axiom\modules\blackbox/", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // Blackbox's official installer keeps its own DKG/Hermes copy under %LOCALAPPDATA%\hermes.
-        return commandLine.Contains(@"\hermes\blackbox\", StringComparison.OrdinalIgnoreCase) &&
-               (commandLine.Contains("dkg", StringComparison.OrdinalIgnoreCase) ||
-                commandLine.Contains("dashboard", StringComparison.OrdinalIgnoreCase) ||
-                commandLine.Contains("blackbox", StringComparison.OrdinalIgnoreCase));
-    }
+    internal static bool IsAxiomModule(string commandLine) =>
+        Axiom.Presentation.AxiomModuleProcessMatcher.IsAxiomModuleCommandLine(commandLine);
 
     private static void HideProcessWindow(int processId)
     {
@@ -122,7 +109,32 @@ internal sealed class ModuleWindowHider : IDisposable
                      ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
         }
+
+        var targetPid = (uint)processId;
+        _ = EnumWindows((hwnd, _) =>
+        {
+            HideWindowIfOwned(hwnd, targetPid);
+            return true;
+        }, IntPtr.Zero);
     }
+
+    private static void HideWindowIfOwned(IntPtr hwnd, uint targetPid)
+    {
+        _ = GetWindowThreadProcessId(hwnd, out var windowPid);
+        if (windowPid == targetPid && IsWindowVisible(hwnd))
+        {
+            _ = ShowWindow(hwnd, SwHide);
+        }
+    }
+
+    private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
