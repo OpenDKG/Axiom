@@ -162,6 +162,9 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
     /// published generation is verified and the filter did not reject the rule,
     /// <see cref="RuleState.Failed"/> for a rule the filter rejected, otherwise
     /// <see cref="RuleState.Pending"/>. The stored record keeps the outcome of the last write.
+    /// A rule projected <see cref="RuleState.Applied"/> carries the time of the acknowledgement
+    /// that verified it as <see cref="ManagedRule.LastVerifiedUtc"/>, also when that ack arrived
+    /// after the apply call's bounded wait (it answered Pending and stored no time).
     /// </summary>
     public Task<IReadOnlyList<ManagedRule>> ListOwnedRulesAsync(CancellationToken ct)
     {
@@ -169,7 +172,19 @@ public sealed class MacFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         var state = LoadState();
         var enforcement = _status.Snapshot(state.Generation);
         return Task.FromResult<IReadOnlyList<ManagedRule>>(
-            state.Rules.Select(rule => rule with { State = ProjectState(rule, enforcement) }).ToList());
+            state.Rules.Select(rule => Project(rule, enforcement)).ToList());
+    }
+
+    private static ManagedRule Project(ManagedRule rule, FilterEnforcementSnapshot enforcement)
+    {
+        var projected = ProjectState(rule, enforcement);
+        return rule with
+        {
+            State = projected,
+            LastVerifiedUtc = projected == RuleState.Applied
+                ? enforcement.LastAckUtc ?? rule.LastVerifiedUtc
+                : rule.LastVerifiedUtc,
+        };
     }
 
     /// <summary>Pure state projection of one stored rule under the current enforcement snapshot.</summary>
