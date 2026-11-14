@@ -131,7 +131,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             restoreNetwork);
         AgentStats = new AgentStatsPageViewModel(Agents);
         AgentDashboard = new AgentDashboardPageViewModel(Agents);
-        AgentHealth = new AgentHealthPageViewModel(Security);
+        AgentHealth = new AgentHealthPageViewModel(Agents, Security);
         Pages =
         [
             AgentDashboard,
