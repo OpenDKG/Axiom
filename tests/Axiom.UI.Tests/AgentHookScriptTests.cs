@@ -99,6 +99,25 @@ public sealed class AgentHookScriptTests
     }
 
     [Fact]
+    public void OpenCode_bridge_reexecs_the_committed_interpreter_before_reading_stdin()
+    {
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+
+        Assert.Contains("def _reexec_committed_interpreter() -> None:", bridge, StringComparison.Ordinal);
+        Assert.Contains("_reexec_committed_interpreter()", bridge, StringComparison.Ordinal);
+        Assert.Contains("AXIOM_BRIDGE_REEXEC", bridge, StringComparison.Ordinal);
+        Assert.Contains("os.execv(", bridge, StringComparison.Ordinal);
+
+        // The helper is defined and invoked before the guard imports and before stdin is read.
+        Assert.True(
+            bridge.IndexOf("os.execv(", StringComparison.Ordinal) <
+            bridge.IndexOf("json.load(sys.stdin)", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void OpenCode_plugin_forwards_prompt_text_for_injection_scanning()
     {
         var build = typeof(OpenCodeProtection).GetMethod(
