@@ -191,6 +191,102 @@ public sealed class UpstreamRediscoveryTests
         Assert.Throws<ArgumentException>(() => server.UpdateTargets([new DnsUpstreamTarget(null)]));
     }
 
+    /// <summary>
+    /// v0.24.0 default (EncryptDnsViaDoh, no explicit upstream) on a network whose resolver is a
+    /// plain router: the start path forwards to the default DoH pair. A rediscovery must make the
+    /// same selection and must not swap the router in as a plain upstream.
+    /// </summary>
+    [Fact]
+    public async Task Rediscover_keeps_the_default_doh_pair_when_the_system_resolver_is_plain()
+    {
+        var settings = new PrivacyShieldSettings { Categories = PrivacyCategory.None };
+        Assert.True(settings.EncryptDnsViaDoh);
+        var policy = PrivacyShieldPolicy.Create(settings);
+        var start = DnsUpstream.SelectSystemTargets([Dns("192.168.1.1")], settings.EncryptDnsViaDoh);
+        Assert.Equal(DnsUpstream.DefaultDohTargets(), start);
+        await using var server = new DnsProxyServer(policy, start, port: 0);
+        var platform = new ScriptedPlatform { Upstreams = [Dns("192.168.1.1")] };
+        var log = new List<string>();
+
+        Assert.False(UpstreamRediscovery.Rediscover(server, platform, log.Add, settings));
+        platform.Upstreams = [Dns("10.0.0.1"), Dns("192.168.1.1")];
+        Assert.False(UpstreamRediscovery.Rediscover(server, platform, log.Add, settings));
+
+        Assert.Equal("https://1.1.1.1/dns-query (DoH), https://9.9.9.9/dns-query (DoH)", server.Upstream);
+        Assert.All(server.Targets, target => Assert.True(target.IsDoh && !target.FallbackToPlainAllowed));
+        Assert.Empty(log);
+
+        // A network whose own resolver is a known public one: that DoH endpoint only, never the plain router next to it.
+        platform.Upstreams = [Dns("192.168.1.1"), Dns("8.8.8.8")];
+        Assert.True(UpstreamRediscovery.Rediscover(server, platform, log.Add, settings));
+        Assert.Equal("https://8.8.8.8/dns-query (DoH)", server.Upstream);
+    }
+
+    /// <summary>With EncryptDnsViaDoh off the system resolvers are followed as before (plain where not a known public one).</summary>
+    [Fact]
+    public async Task Rediscover_follows_plain_system_resolvers_only_when_encryption_is_switched_off()
+    {
+        var settings = new PrivacyShieldSettings { Categories = PrivacyCategory.None, EncryptDnsViaDoh = false };
+        var policy = PrivacyShieldPolicy.Create(settings);
+        await using var server = new DnsProxyServer(
+            policy, DnsUpstream.SelectSystemTargets([Dns("10.0.2.3")], encryptDnsViaDoh: false), port: 0);
+        var platform = new ScriptedPlatform { Upstreams = [Dns("192.168.1.1")] };
+
+        Assert.True(UpstreamRediscovery.Rediscover(server, platform, _ => { }, settings));
+        Assert.Equal("192.168.1.1:53", server.Upstream);
+    }
+
+    /// <summary>An explicit upstream (IP, list or DoH URL) is the user's choice: discovery never replaces it.</summary>
+    [Theory]
+    [InlineData("https://dns.quad9.net/dns-query")]
+    [InlineData("9.9.9.9, 1.1.1.1")]
+    [InlineData("udp://192.168.50.1")]
+    public async Task An_explicit_upstream_is_never_replaced_by_discovery(string upstream)
+    {
+        var settings = new PrivacyShieldSettings { Categories = PrivacyCategory.None, UpstreamDns = upstream };
+        var policy = PrivacyShieldPolicy.Create(settings);
+        Assert.True(DnsUpstream.TryParseTargets(upstream, out var targets));
+        await using var server = new DnsProxyServer(policy, targets, port: 0);
+        var before = server.Upstream;
+        var platform = new ScriptedPlatform { Upstreams = [Dns("192.168.1.1")] };
+
+        Assert.False(UpstreamRediscovery.ShouldWatch(platform, settings));
+        Assert.False(UpstreamRediscovery.Rediscover(server, platform, _ => { }, settings));
+        Assert.Equal(before, server.Upstream);
+        Assert.Equal(0, platform.Calls);
+    }
+
+    [Fact]
+    public void Watch_runs_only_for_a_redirecting_platform_without_an_explicit_upstream()
+    {
+        var redirecting = new ScriptedPlatform();
+        Assert.True(redirecting.RediscoversUpstreams);
+        Assert.True(UpstreamRediscovery.ShouldWatch(redirecting, new PrivacyShieldSettings()));
+        Assert.False(UpstreamRediscovery.ShouldWatch(NullPrivacyDnsPlatform.Instance, new PrivacyShieldSettings()));
+    }
+
+    /// <summary>The shared selection is upstream's v0.24.0 block (PrivacyShieldController.TryCreateServer).</summary>
+    [Fact]
+    public void System_target_selection_matches_upstream()
+    {
+        // Encrypt on: only the DoH members of the upgraded system list, or the default pair.
+        Assert.Equal(DnsUpstream.DefaultDohTargets(), DnsUpstream.SelectSystemTargets([], true));
+        Assert.Equal(DnsUpstream.DefaultDohTargets(), DnsUpstream.SelectSystemTargets([Dns("192.168.1.1")], true));
+        Assert.Equal(
+            DnsUpstream.UpgradeEndpoints([Dns("8.8.8.8")]),
+            DnsUpstream.SelectSystemTargets([Dns("192.168.1.1"), Dns("8.8.8.8")], true));
+
+        // Encrypt off: the upgraded system list as it is; empty stays empty (the caller then falls back with a warning).
+        Assert.Empty(DnsUpstream.SelectSystemTargets([], false));
+        Assert.Equal(
+            DnsUpstream.UpgradeEndpoints([Dns("192.168.1.1"), Dns("8.8.8.8")]),
+            DnsUpstream.SelectSystemTargets([Dns("192.168.1.1"), Dns("8.8.8.8")], false));
+
+        Assert.Equal(
+            ["https://1.1.1.1/dns-query (DoH)", "https://9.9.9.9/dns-query (DoH)"],
+            DnsUpstream.DefaultDohTargets().Select(target => target.DisplayText));
+    }
+
     [Fact]
     public void Null_platform_warning_names_the_doh_fallback()
     {
