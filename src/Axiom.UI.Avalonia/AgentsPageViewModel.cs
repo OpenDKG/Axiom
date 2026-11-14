@@ -57,6 +57,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private readonly AgentEvidenceStore _agentEvidence = new();
 
+    private readonly VerifiedGraphPeerRelay _peerRelay = new();
+
     private readonly IAgentSessionSource? _agentSessions;
 
     private DateTimeOffset _lastSessionRefresh = DateTimeOffset.MinValue;
@@ -406,6 +408,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _timer.StopTimer();
         _timer.Dispose();
         _client.Dispose();
+        _peerRelay.Dispose();
     }
 
     [RelayCommand]
@@ -437,8 +440,26 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
             // These two are optional dashboard reads. Apply them independently so a slow audit
             // history or a missing endpoint cannot hide the verified-graph state.
-            ApplyVerifiedSync(await verifiedSyncTask.ConfigureAwait(true));
-            if (await verifiedGraphTask.ConfigureAwait(true) is { } graphPage)
+            var verifiedSync = await verifiedSyncTask.ConfigureAwait(true);
+            var graphPage = await verifiedGraphTask.ConfigureAwait(true);
+            var localRules = verifiedSync?.VerifiedRules ?? 0;
+            if (localRules > 0 && graphPage is { Threats.Count: > 0 })
+            {
+                _peerRelay.PublishInMemory(verifiedSync!, graphPage);
+            }
+
+            if (localRules == 0 ||
+                (shouldRefreshVerifiedGraph && (verifiedSync?.IsSyncing == true || graphPage?.Threats.Count == 0)))
+            {
+                if (await _peerRelay.TryFetchFromPeersAsync(localRules, CancellationToken.None).ConfigureAwait(true) is { } peerSnapshot)
+                {
+                    verifiedSync = peerSnapshot.Sync;
+                    graphPage = peerSnapshot.Graph;
+                }
+            }
+
+            ApplyVerifiedSync(verifiedSync);
+            if (graphPage is not null)
             {
                 ApplyVerifiedGraph(graphPage);
                 _lastVerifiedGraphRefresh = now;
@@ -1732,7 +1753,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                     ? "The local dashboard is syncing the verified graph."
                     : sync.PhaseText)
                 : string.Equals(state, "synced", StringComparison.Ordinal)
-                    ? $"The local graph holds {CountText(sync.VerifiedRules)} compiled verified rule(s)."
+                    ? (string.Equals(sync.Phase, "peer-ram", StringComparison.OrdinalIgnoreCase) &&
+                       !string.IsNullOrWhiteSpace(sync.PhaseText)
+                        ? sync.PhaseText
+                        : $"The local graph holds {CountText(sync.VerifiedRules)} compiled verified rule(s).")
                     : string.IsNullOrWhiteSpace(sync.PhaseText)
                         ? $"The dashboard reports verified-graph state '{sync.State}'."
                         : sync.PhaseText;
