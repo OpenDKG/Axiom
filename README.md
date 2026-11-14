@@ -13,6 +13,11 @@
 > your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
 > and keep a recovery path.
 
+> **What Axiom is.** An agent-first endpoint security application: it protects the computer from the
+> agents that run on it and protects those agents from the world they read, using Agent Blackbox
+> hooks, an honest enforcement receipt, an OS network boundary and a verifiable DKG memory. See
+> [docs/AXIOM_OVERVIEW.md](docs/AXIOM_OVERVIEW.md).
+
 ## Project Leadership & Founding Team
 
 **Axiom** is an independent, open-source network and AI-agent security project developed by its
