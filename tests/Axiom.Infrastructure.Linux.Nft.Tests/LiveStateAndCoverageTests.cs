@@ -331,4 +331,34 @@ public sealed class LiveStateAndCoverageTests
         Assert.False(verify.ConnectTimeBlockingProven);
         Assert.Contains("not race-free", verify.CoverageReason, StringComparison.Ordinal);
     }
+
+    // ---------------- executable replacement (rename(2) over the blocked path) ----------------
+
+    [Fact]
+    public async Task Replaced_executable_is_not_reported_connect_time_proven_and_the_watch_tick_rekeys_it()
+    {
+        using var h = new BpfEffectiveStateTests.Harness();
+        await h.AttachAsync();
+        var spec = Specs.Block("/usr/bin/curl", RuleA);
+        await h.Adapter.UpsertOwnedRuleAsync(spec, CancellationToken.None);
+        var exeMap = h.BpfPaths.MapPin(BpfLayout.ExeMap);
+        var oldKey = BpfLayout.HexString(BpfLayout.ExeKey(8, 2, 51643045));
+        Assert.Contains(oldKey, h.Bpftool.Map(exeMap).Keys);
+
+        // dnf/apt upgrade: the new binary is written elsewhere and renamed over the path (new inode).
+        h.Inodes.Files["/usr/bin/curl"] = new BpfInode(8, 2, 60000001);
+
+        var verify = await h.Adapter.VerifyAsync(spec, CancellationToken.None);
+        Assert.False(verify.ConnectTimeBlockingProven);
+        Assert.Contains("replaced", verify.CoverageReason, StringComparison.Ordinal);
+
+        var supervisor = new NftEnforcementSupervisor(h.Adapter, new NftTable(h.Nft), null, h.Engine, h.Log.Add, h.Time);
+        await supervisor.WatchOnceAsync(CancellationToken.None);
+
+        var newKey = BpfLayout.HexString(BpfLayout.ExeKey(8, 2, 60000001));
+        Assert.Contains(newKey, h.Bpftool.Map(exeMap).Keys);
+        Assert.DoesNotContain(oldKey, h.Bpftool.Map(exeMap).Keys);
+        Assert.True((await h.Adapter.VerifyAsync(spec, CancellationToken.None)).ConnectTimeBlockingProven);
+        Assert.Contains(h.Log, line => line.Contains("re-resolved", StringComparison.Ordinal));
+    }
 }

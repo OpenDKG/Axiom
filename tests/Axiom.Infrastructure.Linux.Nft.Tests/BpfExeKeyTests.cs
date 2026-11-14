@@ -37,18 +37,18 @@ public sealed class BpfExeKeyTests
         "52 22 8:8 / /srv rw - ext4 /dev/sda8 rw\n";
 
     [Fact]
-    public void Planner_keys_a_btrfs_exe_by_the_superblock_dev_from_mountinfo_not_the_subvolume_st_dev()
+    public void Planner_leaves_a_btrfs_exe_to_nftables_because_the_key_is_ambiguous_across_subvolumes()
     {
+        // PR #276 round 3 (item 5), proven on Fedora 45: two different executables with the same inode
+        // number in two subvolumes share {s_dev, ino}; blocking one blocked the other at connect().
         var inodes = new FakeInodes { MountInfo = FedoraBtrfs };
         inodes.Files["/usr/bin/curl"] = new BpfInode(0, 35, 3056); // stat -L -c '%Hd %Ld %i' on Fedora 45
         var plan = BpfVerdictPlanner.Plan([Specs.Block("/usr/bin/curl", RuleA)], 3, new AppCgroupManager(new FakeCgroupFs()), inodes);
 
-        var exe = Assert.Single(plan.Entries, entry => entry.Map == BpfLayout.ExeMap);
-        Assert.Equal(BpfLayout.HexString(BpfLayout.ExeKey(0, 33, 3056)), exe.KeyHex);
-        Assert.Contains("dev 0:33", exe.Describe, StringComparison.Ordinal);
-        Assert.Contains("btrfs", exe.Describe, StringComparison.Ordinal);
-        Assert.Contains("stat 0:35", exe.Describe, StringComparison.Ordinal);
-        Assert.Empty(plan.Uncovered);
+        Assert.DoesNotContain(plan.Entries, entry => entry.Map == BpfLayout.ExeMap);
+        var uncovered = Assert.Single(plan.Uncovered);
+        Assert.Contains("exe key ambiguous on btrfs subvolumes", uncovered.Reason, StringComparison.Ordinal);
+        Assert.Contains("dev 0:33 ino 3056", uncovered.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -168,12 +168,12 @@ public sealed class BpfExeKeyTests
     {
         var fedora = MountInfoTable.Parse(FedoraBtrfs);
         var btrfs = BpfExeKey.Resolve("/usr/bin/curl", new BpfInode(0, 35, 3056), fedora);
-        Assert.Equal(new BpfInode(0, 33, 3056), btrfs.Key);
-        Assert.Contains("btrfs", btrfs.Detail, StringComparison.Ordinal);
-        Assert.Contains("subvolume", btrfs.Detail, StringComparison.Ordinal);
+        Assert.Null(btrfs.Key);
+        Assert.Contains("exe key ambiguous on btrfs subvolumes", btrfs.Detail, StringComparison.Ordinal);
+        Assert.Contains("stat 0:35", btrfs.Detail, StringComparison.Ordinal);
 
         var home = BpfExeKey.Resolve("/home/u/bin/tool", new BpfInode(0, 36, 900), fedora);
-        Assert.Equal(new BpfInode(0, 33, 900), home.Key);
+        Assert.Null(home.Key);
 
         var ext4 = BpfExeKey.Resolve("/usr/bin/curl", new BpfInode(8, 2, 5), MountInfoTable.Parse("22 1 8:2 / / rw - ext4 /dev/sda2 rw\n"));
         Assert.Equal(new BpfInode(8, 2, 5), ext4.Key);
