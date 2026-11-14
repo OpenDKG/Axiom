@@ -19,7 +19,12 @@ public enum IpcCommandClass
     Write = 2,
 }
 
-/// <summary>Identity of an authenticated IPC client as seen by the dispatcher.</summary>
+/// <summary>
+/// Identity of an authenticated IPC client as seen by the dispatcher. Built by the transport that
+/// authenticated the peer; this assembly offers no shortcut from an actor string, and
+/// <paramref name="CanWrite"/> has no default, so the grant is always written out at the call site
+/// (Windows: <c>WindowsPipeCaller.Authenticated</c> in Axiom.Infrastructure.Windows).
+/// </summary>
 /// <param name="Actor">Audit-trail identity (Windows SID or <c>uid:N</c>).</param>
 /// <param name="CanWrite">Whether <see cref="IpcCommandClass.Write"/> commands are allowed.</param>
 /// <param name="WriteDenialReason">Message returned to the client for a denied write.</param>
@@ -32,9 +37,6 @@ public sealed record IpcCaller(
     bool CanReadPrivate = true,
     string? ReadDenialReason = null)
 {
-    /// <summary>The single Windows pipe SID: every command.</summary>
-    public static IpcCaller FullAccess(string actor) => new(actor, true);
-
     /// <summary>Pure per-command decision: public reads always, the other classes by the flags.</summary>
     public bool Permits(IpcCommandClass commandClass) => commandClass switch
     {
