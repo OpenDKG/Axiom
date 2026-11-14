@@ -69,14 +69,41 @@ public static class TraderShieldProvisioner
         }
 
         var normalized = configYaml.Replace("\r\n", "\n");
-        if (Regex.IsMatch(normalized, @"(?m)^\s+shields:\s*$"))
+        var lines = normalized.Split('\n').ToList();
+        var shieldsIndex = lines.FindIndex(line => Regex.IsMatch(line, @"^([ \t]+)shields:[ \t]*$"));
+        if (shieldsIndex >= 0)
         {
-            // Replace the existing shields block up to the next key at the same or lower indent.
-            normalized = Regex.Replace(
-                normalized,
-                @"(?ms)^\s+shields:\s*\n(?:[ \t]+.*\n|\s*\n)*",
-                section + "\n");
-            return normalized;
+            // Replace only the shields block: it ends at the first non-blank line whose indentation
+            // is not deeper than the shields key. A regex over indented lines used to swallow every
+            // key after the block (mode, protected paths, enabled), which silently disabled
+            // protection on the next start.
+            var indent = Regex.Match(lines[shieldsIndex], @"^([ \t]+)").Groups[1].Value;
+            var end = shieldsIndex + 1;
+            while (end < lines.Count)
+            {
+                var line = lines[end];
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    break;
+                }
+
+                var lineIndent = Regex.Match(line, @"^([ \t]*)").Groups[1].Value;
+                if (lineIndent.Length <= indent.Length)
+                {
+                    break;
+                }
+
+                end++;
+            }
+
+            const int sectionIndent = 6;
+            var replacement = section
+                .Split('\n')
+                .Select(line => line.Length <= sectionIndent ? line : indent + line[sectionIndent..])
+                .ToArray();
+            lines.RemoveRange(shieldsIndex, end - shieldsIndex);
+            lines.InsertRange(shieldsIndex, replacement);
+            return string.Join("\n", lines);
         }
 
         var anchor = Regex.Match(normalized, @"(?m)^(?<indent>\s*)blackbox:\s*$");

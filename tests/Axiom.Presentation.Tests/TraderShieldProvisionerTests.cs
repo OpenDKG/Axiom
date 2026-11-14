@@ -64,6 +64,39 @@ public sealed class TraderShieldProvisionerTests
     }
 
     [Fact]
+    public void Replacing_shields_keeps_every_key_after_the_block()
+    {
+        // The real config has a trailing newline and keys after shields. The old regex consumed
+        // them, which dropped block mode and the protected paths on the next start.
+        const string yaml = """
+            plugins:
+              entries:
+                blackbox:
+                  mode: block
+                  protected_paths:
+                    - ~/.ssh/*
+                  shields:
+                    trader:
+                      enabled: false
+                      wallets: [metamask]
+                  report: false
+                  enabled: true
+              enabled:
+                - blackbox
+              disabled: []
+            """;
+
+        var updated = TraderShieldProvisioner.Apply(yaml + "\n");
+
+        Assert.Contains("mode: block", updated, StringComparison.Ordinal);
+        Assert.Contains("protected_paths:", updated, StringComparison.Ordinal);
+        Assert.Contains("report: false", updated, StringComparison.Ordinal);
+        Assert.Contains("enabled:", updated, StringComparison.Ordinal);
+        Assert.Contains("- blackbox", updated, StringComparison.Ordinal);
+        Assert.True(TraderShieldProvisioner.IsEnabled(updated));
+    }
+
+    [Fact]
     public void Apply_keeps_only_valid_wallet_addresses()
     {
         var updated = TraderShieldProvisioner.Apply(

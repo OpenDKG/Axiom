@@ -231,6 +231,12 @@ public static class UpgradeDataGuard
             files.AddRange(Enumerate(blackbox, "*", SearchOption.AllDirectories));
         }
 
+        var hermesConfig = Path.Combine(local, "hermes", "config.yaml");
+        if (File.Exists(hermesConfig))
+        {
+            files.Add(hermesConfig);
+        }
+
         var axiom = Path.Combine(local, "Axiom");
         if (Directory.Exists(axiom))
         {
