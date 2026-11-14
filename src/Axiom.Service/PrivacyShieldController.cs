@@ -385,18 +385,9 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         }
         else
         {
-            var systemTargets = DnsUpstream.UpgradeEndpoints(_dns.DiscoverUpstreams());
-            if (settings.EncryptDnsViaDoh)
-            {
-                var encryptedSystem = systemTargets.Where(item => item.IsDoh).ToArray();
-                targets = encryptedSystem.Length > 0
-                    ? encryptedSystem
-                    : DnsUpstream.DefaultDohTargets();
-            }
-            else
-            {
-                targets = systemTargets;
-            }
+            // Upstream's selection (DoH members only, or the default DoH pair, when EncryptDnsViaDoh),
+            // shared with the rediscovery watch so a later swap makes the same choice.
+            targets = DnsUpstream.SelectSystemTargets(_dns.DiscoverUpstreams(), settings.EncryptDnsViaDoh);
         }
 
         if (targets.Count == 0)
@@ -473,12 +464,15 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     /// <summary>
     /// Review #7: with the system redirected to this resolver, the upstreams discovered at start
     /// die on a Wi-Fi/VPN change. Only platforms that redirect (macOS) and only when no explicit
-    /// upstream is configured; Windows behaviour is unchanged.
+    /// upstream is configured (<see cref="UpstreamRediscovery.ShouldWatch"/>); the swap uses the
+    /// same selection as the start, so it cannot turn a DoH upstream into a plain one. Windows
+    /// behaviour is unchanged.
     /// </summary>
     private void StartUpstreamWatch(DnsProxyServer server)
     {
         StopUpstreamWatch();
-        if (!_dns.RediscoversUpstreams)
+        var settings = _settings;
+        if (!UpstreamRediscovery.ShouldWatch(_dns, settings))
         {
             return;
         }
@@ -489,6 +483,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             server,
             _dns,
             message => Console.Error.WriteLine("Privacy Shield DNS: " + message),
+            settings,
             cancellation.Token);
     }
 

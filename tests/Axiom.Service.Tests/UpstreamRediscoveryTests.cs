@@ -14,6 +14,9 @@ public sealed class UpstreamRediscoveryTests
 {
     private static IPEndPoint Dns(string address) => new(IPAddress.Parse(address), 53);
 
+    /// <summary>Pre-0.24.0 selection: follow the system resolvers, plain where they are not known public ones.</summary>
+    private static readonly PrivacyShieldSettings FollowSystem = new() { EncryptDnsViaDoh = false };
+
     [Fact]
     public void Same_set_in_same_order_is_not_a_change()
     {
@@ -84,23 +87,23 @@ public sealed class UpstreamRediscoveryTests
         var log = new List<string>();
 
         // Unchanged network: nothing to do, nothing logged.
-        Assert.False(UpstreamRediscovery.Rediscover(server, platform, log.Add));
+        Assert.False(UpstreamRediscovery.Rediscover(server, platform, log.Add, FollowSystem));
         Assert.Empty(log);
 
         // Network changed: the new resolver is swapped in and the change is traceable in the log.
         platform.Upstreams = [Dns("192.168.1.1")];
-        Assert.True(UpstreamRediscovery.Rediscover(server, platform, log.Add));
+        Assert.True(UpstreamRediscovery.Rediscover(server, platform, log.Add, FollowSystem));
         Assert.Equal("192.168.1.1:53", server.Upstream);
         Assert.Contains("upstreams changed: 10.0.2.3:53 -> 192.168.1.1:53", log);
 
         // The system now points at us (127.0.0.1) and no backup is known: keep what works.
         platform.Upstreams = [Dns("127.0.0.1")];
-        Assert.False(UpstreamRediscovery.Rediscover(server, platform, log.Add));
+        Assert.False(UpstreamRediscovery.Rediscover(server, platform, log.Add, FollowSystem));
         Assert.Equal("192.168.1.1:53", server.Upstream);
 
         // A failing discovery is logged and leaves the server untouched.
         platform.Throw = true;
-        Assert.False(UpstreamRediscovery.Rediscover(server, platform, log.Add));
+        Assert.False(UpstreamRediscovery.Rediscover(server, platform, log.Add, FollowSystem));
         Assert.Contains(log, line => line.StartsWith("upstream rediscovery failed", StringComparison.Ordinal));
         Assert.Equal(4, platform.Calls);
     }
@@ -113,7 +116,7 @@ public sealed class UpstreamRediscoveryTests
         var log = new List<string>();
         using var cancellation = new CancellationTokenSource();
 
-        var watch = UpstreamRediscovery.WatchAsync(server, new ScriptedPlatform(), log.Add, cancellation.Token);
+        var watch = UpstreamRediscovery.WatchAsync(server, new ScriptedPlatform(), log.Add, FollowSystem, cancellation.Token);
         await cancellation.CancelAsync();
         await watch.WaitAsync(TimeSpan.FromSeconds(5));
 
@@ -128,7 +131,7 @@ public sealed class UpstreamRediscoveryTests
         var platform = new ScriptedPlatform { Upstreams = [Dns("1.1.1.1"), Dns("192.168.1.1")] };
         var log = new List<string>();
 
-        Assert.True(UpstreamRediscovery.Rediscover(server, platform, log.Add));
+        Assert.True(UpstreamRediscovery.Rediscover(server, platform, log.Add, FollowSystem));
 
         // Same selection as PrivacyShieldController at start: DnsUpstream.UpgradeEndpoints.
         Assert.Equal("https://1.1.1.1/dns-query (DoH), 192.168.1.1:53", server.Upstream);
@@ -139,7 +142,7 @@ public sealed class UpstreamRediscoveryTests
         Assert.Contains("prefer DoH", server.Snapshot(new PrivacyShieldSettings()).Detail, StringComparison.Ordinal);
 
         // The same discovery again is not a change (compared on the plain endpoints).
-        Assert.False(UpstreamRediscovery.Rediscover(server, platform, log.Add));
+        Assert.False(UpstreamRediscovery.Rediscover(server, platform, log.Add, FollowSystem));
     }
 
     [Fact]

@@ -218,6 +218,30 @@ public static class DnsUpstream
         new IPEndPoint(IPAddress.Parse("9.9.9.9"), 53),
     ]);
 
+    /// <summary>
+    /// Upstream targets for "no explicit upstream configured", from the platform's system
+    /// resolvers: upstream's v0.24.0 selection, used at start and by every later rediscovery so the
+    /// two can never disagree. With <paramref name="encryptDnsViaDoh"/> only the DoH members of the
+    /// upgraded list are used, or <see cref="DefaultDohTargets"/> when there is none (a plain
+    /// router or VPN resolver is not used); without it the upgraded list is returned as it is,
+    /// possibly empty.
+    /// </summary>
+    public static IReadOnlyList<DnsUpstreamTarget> SelectSystemTargets(
+        IReadOnlyList<IPEndPoint> systemEndpoints,
+        bool encryptDnsViaDoh)
+    {
+        var systemTargets = UpgradeEndpoints(systemEndpoints);
+        if (encryptDnsViaDoh)
+        {
+            var encryptedSystem = systemTargets.Where(item => item.IsDoh).ToArray();
+            return encryptedSystem.Length > 0
+                ? encryptedSystem
+                : DefaultDohTargets();
+        }
+
+        return systemTargets;
+    }
+
     public static IReadOnlyList<DnsUpstreamTarget> UpgradeEndpoints(IReadOnlyList<IPEndPoint> endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
