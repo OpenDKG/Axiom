@@ -108,6 +108,7 @@ internal static class SetupInstaller
 
                 var blackboxInstalled = false;
                 var dkgInstalled = false;
+                string? upgradeWarning = null;
                 if (options.CompleteInstallation)
                 {
                     Report("Complete installation selected: Blackbox, DKG and agent hooks will be configured.");
@@ -117,12 +118,35 @@ internal static class SetupInstaller
                         cancellationToken).ConfigureAwait(false);
                     var moduleInstaller = new OptionalModuleInstaller();
 
+                    // The vendor installer owns the Blackbox tree. Back up the findings, history and
+                    // identity first so an update can never silently drop them.
+                    var upgradeBackup = UpgradeDataGuard.Capture();
+                    if (upgradeBackup is not null)
+                    {
+                        Report($"Protected data backup: {upgradeBackup.Entries.Count} file(s), " +
+                               $"{upgradeBackup.TotalBytes / 1_048_576.0:F1} MB at {upgradeBackup.Directory}.");
+                    }
+
                     Report("Auditing official installer scope: Axiom modules, Hermes plugin config/mode and scheduled task only.");
                     Report("Starting the official Blackbox installer. Follow its prompts and terms.");
                     var blackboxExit = await Task.Run(
                         () => moduleInstaller.InstallBlackboxAndWait(Report),
                         cancellationToken).ConfigureAwait(false);
                     Report($"Blackbox installer exit code: {(blackboxExit ? "0" : "non-zero")}.");
+
+                    if (upgradeBackup is not null)
+                    {
+                        var dataCheck = UpgradeDataGuard.VerifyAndRestore(upgradeBackup.Directory);
+                        var intact = upgradeBackup.Entries.Count - dataCheck.Restored.Count - dataCheck.Shrunk.Count;
+                        Report($"Upgrade data check: {intact} intact, {dataCheck.Restored.Count} restored, " +
+                               $"{dataCheck.Shrunk.Count} smaller than the backup, {dataCheck.Failed.Count} failed.");
+                        if (!dataCheck.Ok)
+                        {
+                            upgradeWarning =
+                                $"{dataCheck.Failed.Count} protected file(s) could not be restored. " +
+                                $"The pre-upgrade copy is kept at {upgradeBackup.Directory}.";
+                        }
+                    }
 
                     var blackboxProvidesDkg = blackboxExit &&
                                               await TryWaitForBlackboxDkgAsync(cancellationToken).ConfigureAwait(false);
@@ -282,6 +306,12 @@ internal static class SetupInstaller
                         .ApplyCompleteAsync(options.InstallDir, Report, cancellationToken)
                         .ConfigureAwait(false);
                     warning = defaults.Warning;
+                    if (upgradeWarning is not null)
+                    {
+                        warning = string.IsNullOrWhiteSpace(warning)
+                            ? upgradeWarning
+                            : warning + " " + upgradeWarning;
+                    }
                 }
                 else
                 {
