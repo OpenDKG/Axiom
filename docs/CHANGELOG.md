@@ -2,6 +2,15 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.29.0
+
+- **Single Trader Shield location in UI.**
+  - Removed the duplicate `TraderShieldSectionView` from the Integrations view (`SecurityView.axaml`), keeping Trader Shield exclusively under Agent Protection (`AgentsView.axaml`).
+  - Added headless Avalonia regression test `Trader_shield_appears_only_on_agent_protection_and_not_on_integrations` in `TraderShieldSectionViewModelTests`.
+- **Smaller single-file service binary and portable release archive.**
+  - Enabled `EnableCompressionInSingleFile=true`, `DebugSymbols=false`, and `AllowedReferenceRelatedFileExtensions=none` when publishing `Axiom.Service.exe` in `scripts/publish-setup.ps1` and `scripts/build-release.ps1` (`76.74 MB` -> `38.59 MB`).
+  - Removed the redundant embedded `Axiom-Setup.exe` from `Axiom-<version>-win-x64.zip` and added `-ReusePayload` to avoid double-publishing Desktop and Service (`210.52 MB` -> `78.22 MB` portable ZIP).
+
 ## What's in 0.28.0
 
 - **Firewall host-mask normalization on WFP/firewall readback (#282).**
