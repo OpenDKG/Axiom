@@ -361,4 +361,28 @@ public sealed class LiveStateAndCoverageTests
         Assert.True((await h.Adapter.VerifyAsync(spec, CancellationToken.None)).ConnectTimeBlockingProven);
         Assert.Contains(h.Log, line => line.Contains("re-resolved", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task Externally_detached_programs_are_noticed_by_verify_and_re_attached_by_the_watch_tick()
+    {
+        using var h = new BpfEffectiveStateTests.Harness();
+        await h.AttachAsync();
+        var spec = Specs.Block("/usr/bin/curl", RuleA);
+        Assert.True((await h.Adapter.UpsertOwnedRuleAsync(spec, CancellationToken.None)).ConnectTimeBlockingProven);
+
+        // `bpftool cgroup detach` by another tool (measured live: the canary then slips 99/100 fresh processes).
+        foreach (var id in h.Bpftool.Attached.Where(pair => pair.Value.Name.StartsWith("axiom_", StringComparison.Ordinal)).Select(pair => pair.Key).ToList())
+        {
+            h.Bpftool.Attached.Remove(id);
+        }
+
+        var verify = await h.Adapter.VerifyAsync(spec, CancellationToken.None);
+        Assert.False(verify.ConnectTimeBlockingProven);
+        Assert.Contains("detached", verify.CoverageReason, StringComparison.Ordinal);
+
+        var supervisor = new NftEnforcementSupervisor(h.Adapter, new NftTable(h.Nft), null, h.Engine, h.Log.Add, h.Time);
+        await supervisor.WatchOnceAsync(CancellationToken.None);
+        Assert.Equal(4, AxiomAttachments(h.Bpftool));
+        Assert.True((await h.Adapter.VerifyAsync(spec, CancellationToken.None)).ConnectTimeBlockingProven);
+    }
 }

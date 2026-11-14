@@ -162,7 +162,7 @@ apply_rule() {
   fi
   python3 -I "$AXIPC" rule.apply "{\"managedRuleId\":\"$id\",\"appPath\":\"$exe\",\"direction\":\"outbound\",\"action\":\"block\",\"enabled\":true,\"createdBy\":\"canary\"$scope}" > "/run/axcanary-apply-$id.json"
   RULE_IDS+=("$id")
-  echo "canary: rule $id ($MODE) for $exe: $(python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); r=r.get("payload",r); print(r.get("state"), "connectTimeBlockingProven=%s" % r.get("connectTimeBlockingProven"), r.get("errorCode") or "")' "/run/axcanary-apply-$id.json")"
+  echo "canary: rule $id ($MODE) for $exe: $(python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); r=r.get("result",r); print(r.get("state"), "connectTimeBlockingProven=%s" % r.get("connectTimeBlockingProven"), r.get("errorCode") or "")' "/run/axcanary-apply-$id.json")"
   rm -f "/run/axcanary-apply-$id.json"
 }
 
