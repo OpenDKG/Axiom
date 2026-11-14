@@ -238,6 +238,36 @@ public sealed class FilterEnforcementLifecycleTests
     }
 
     [Fact]
+    public async Task LateAckAfterTheWait_ListsTheRuleAppliedWithTheAckTime()
+    {
+        // Security validation check (d): a rule published while the filter is frozen is Pending
+        // with no verification time; the late ack verifies it, and rules.query must then carry
+        // the ack time as lastVerifiedUtc instead of null.
+        using var temp = new TempDirectory();
+        var (paths, _, status, adapter) = Harness(temp);
+        using (adapter)
+        {
+            status.ClientConnected();
+            var result = await adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl"), CancellationToken.None);
+            Assert.Equal(RuleState.Pending, result.State);
+            var pending = Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None));
+            Assert.Equal(RuleState.Pending, pending.State);
+            Assert.Null(pending.LastVerifiedUtc);
+
+            var ackTime = Start.AddSeconds(30);
+            status.RulesReported(RulesEvent(PublishedGeneration(paths), applied: 1), ackTime);
+
+            var applied = Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None));
+            Assert.Equal(RuleState.Applied, applied.State);
+            Assert.Equal(ackTime, applied.LastVerifiedUtc);
+
+            // Withdrawn on disconnect: the time stamp never turns a disconnected filter into Applied.
+            status.ClientDisconnected();
+            Assert.Equal(RuleState.Pending, Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
+        }
+    }
+
+    [Fact]
     public async Task CorrectAckWithinTheWait_IsAppliedAtTheAckTime()
     {
         using var temp = new TempDirectory();
