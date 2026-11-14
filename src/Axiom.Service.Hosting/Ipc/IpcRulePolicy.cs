@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Firewall;
 
-namespace Axiom.Infrastructure.Windows.Ipc;
+namespace Axiom.Service.Hosting.Ipc;
 
 /// <summary>
 /// Rule shapes the local pipe refuses even when the calling SID is the allowed user. Inbound

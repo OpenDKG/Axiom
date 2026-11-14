@@ -49,6 +49,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Desktop.Avalonia.Wind
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.UI.Avalonia.Tests", "tests\Axiom.UI.Avalonia.Tests\Axiom.UI.Avalonia.Tests.csproj", "{44D72BB6-17C1-44A2-B9A3-D3607980C649}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Service.Hosting", "src\Axiom.Service.Hosting\Axiom.Service.Hosting.csproj", "{73221A09-7547-46BD-9415-1238D5653DE7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -311,6 +313,18 @@ Global
 		{44D72BB6-17C1-44A2-B9A3-D3607980C649}.Release|x64.Build.0 = Release|Any CPU
 		{44D72BB6-17C1-44A2-B9A3-D3607980C649}.Release|x86.ActiveCfg = Release|Any CPU
 		{44D72BB6-17C1-44A2-B9A3-D3607980C649}.Release|x86.Build.0 = Release|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Debug|x64.Build.0 = Debug|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Debug|x86.Build.0 = Debug|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Release|x64.ActiveCfg = Release|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Release|x64.Build.0 = Release|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Release|x86.ActiveCfg = Release|Any CPU
+		{73221A09-7547-46BD-9415-1238D5653DE7}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -5,6 +5,7 @@
     <Project Path="src/Axiom.McpServer/Axiom.McpServer.csproj" />
     <Project Path="src/Axiom.Persistence/Axiom.Persistence.csproj" />
     <Project Path="src/Axiom.Presentation/Axiom.Presentation.csproj" />
+    <Project Path="src/Axiom.Service.Hosting/Axiom.Service.Hosting.csproj" />
     <Project Path="src/Axiom.UI.Avalonia/Axiom.UI.Avalonia.csproj" />
   </Folder>
   <Folder Name="/tests/">
