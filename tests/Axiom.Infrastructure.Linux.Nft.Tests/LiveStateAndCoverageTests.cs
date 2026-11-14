@@ -123,7 +123,7 @@ public sealed class LiveStateAndCoverageTests
 
     // ---------------- #290: axiomd --doctor ----------------
 
-    private sealed class ActiveUnitRunner(FakeBpftool bpftool) : IProcessRunner
+    internal sealed class ActiveUnitRunner(FakeBpftool bpftool) : IProcessRunner
     {
         public ProcessResult Run(string fileName, IReadOnlyList<string> arguments, TimeSpan timeout) =>
             Path.GetFileName(fileName) == "systemctl" && arguments.Count > 0 && arguments[0] == "is-active"

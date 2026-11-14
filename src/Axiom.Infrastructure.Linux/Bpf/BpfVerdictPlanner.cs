@@ -7,7 +7,10 @@ using Axiom.Infrastructure.Unix.Interop;
 namespace Axiom.Infrastructure.Linux.Bpf;
 
 /// <summary>Inode identity of a file as the kernel sees it: MAJOR/MINOR of the superblock device and the inode number.</summary>
-public sealed record BpfInode(uint DevMajor, uint DevMinor, ulong Ino);
+public sealed record BpfInode(uint DevMajor, uint DevMinor, ulong Ino, ulong Subvolume = 0);
+
+/// <summary>btrfs subvolume (root objectid) of a file and where it came from (<c>statx</c> or <c>ioctl</c>).</summary>
+public sealed record BpfSubvolumeId(ulong Id, string Source);
 
 /// <summary>Reads inode identities; faked in tests.</summary>
 public interface IInodeReader
@@ -23,6 +26,9 @@ public interface IInodeReader
 
     /// <summary>Text of the daemon's <c>/proc/self/mountinfo</c>, or null when unreadable.</summary>
     string? ReadMountInfo();
+
+    /// <summary>btrfs subvolume id of <paramref name="path"/>, or null when it cannot be proven.</summary>
+    BpfSubvolumeId? SubvolumeId(string path);
 }
 
 /// <summary>
@@ -70,6 +76,8 @@ public sealed class StatInodeReader : IInodeReader
         var real = result.StandardOutput.TrimEnd('\n');
         return result.Succeeded && real.StartsWith('/') && !real.Contains('\n', StringComparison.Ordinal) ? real : null;
     }
+
+    public BpfSubvolumeId? SubvolumeId(string path) => null;
 
     public string? ReadMountInfo()
     {
@@ -127,7 +135,7 @@ public sealed record BpfVerdictPlan(IReadOnlyList<BpfMapEntry> Entries, IReadOnl
 /// </summary>
 public static class BpfVerdictPlanner
 {
-    public static BpfVerdictPlan Plan(IEnumerable<RuleSpec> specs, long generation, IAppCgroupResolver cgroups, IInodeReader inodes)
+    public static BpfVerdictPlan Plan(IEnumerable<RuleSpec> specs, long generation, IAppCgroupResolver cgroups, IInodeReader inodes, BpfKernelKeyCheck? kernel = null)
     {
         ArgumentNullException.ThrowIfNull(specs);
         ArgumentNullException.ThrowIfNull(cgroups);

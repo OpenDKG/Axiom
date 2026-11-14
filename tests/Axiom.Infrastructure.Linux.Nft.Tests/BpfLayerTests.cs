@@ -28,6 +28,17 @@ internal sealed class FakeInodes : IInodeReader
     public string? RealPath(string path) => RealPaths.TryGetValue(path, out var real) ? real : path;
 
     public string? ReadMountInfo() => MountInfo;
+
+    /// <summary>btrfs subvolume ids by path (statx STATX_SUBVOL / BTRFS_IOC_INO_LOOKUP in production).</summary>
+    public Dictionary<string, BpfSubvolumeId> Subvolumes { get; } = new(StringComparer.Ordinal);
+
+    public List<string> SubvolumeCalls { get; } = [];
+
+    public BpfSubvolumeId? SubvolumeId(string path)
+    {
+        SubvolumeCalls.Add(path);
+        return Subvolumes.TryGetValue(path, out var id) ? id : null;
+    }
 }
 
 /// <summary>
@@ -54,6 +65,9 @@ internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
 
     /// <summary>Programs attached at the cgroup root: id → (name, attach type).</summary>
     public Dictionary<long, (string Name, string Hook)> Attached { get; } = [];
+
+    /// <summary>Key size `map show` reports for axiom_exe_verdicts (24 = ABI 2; 16 = an old ABI 1 object).</summary>
+    public int ExeKeyBytes { get; set; } = BpfLayout.ExeKeySize;
 
     /// <summary>bpftool missing from PATH: every call throws like the real runner.</summary>
     public bool Missing { get; set; }
@@ -100,7 +114,7 @@ internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
                 File.WriteAllText(Path.Combine(pinDirectory, program), string.Empty);
             }
 
-            foreach (var map in new[] { BpfLayout.ExeMap, BpfLayout.CgroupMap, BpfLayout.EventsMap, BpfLayout.StatsMap })
+            foreach (var map in new[] { BpfLayout.ExeMap, BpfLayout.CgroupMap, BpfLayout.EventsMap, BpfLayout.StatsMap, BpfLayout.SelfCheckMap })
             {
                 var pin = Path.Combine(pinDirectory, "maps", map);
                 File.WriteAllText(pin, string.Empty);
@@ -148,6 +162,10 @@ internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
                     return Ok();
                 case "delete":
                     return contents.Remove(key) ? Ok() : new ProcessResult(255, string.Empty, "Error: delete failed: No such file or directory\n");
+                case "show":
+                    return Ok(Path.GetFileName(args[3]) == BpfLayout.ExeMap
+                        ? $"{{\"id\":7,\"type\":\"hash\",\"name\":\"axiom_exe_verdi\",\"bytes_key\":{ExeKeyBytes},\"bytes_value\":{BpfLayout.VerdictSize},\"max_entries\":4096}}"
+                        : "{\"id\":8,\"type\":\"hash\",\"bytes_key\":8,\"bytes_value\":24}");
                 case "dump":
                     return Ok("[" + string.Join(',', contents.Select(pair => $"{{\"key\":[{Bytes(pair.Key)}],\"value\":[{Bytes(pair.Value)}]}}")) + "]");
             }
@@ -415,7 +433,7 @@ public sealed class BpfLayerTests
         var rules = new List<ManagedRule> { Managed(Specs.Block("/usr/bin/curl", RuleA)) };
         await engine.SyncAsync(rules, 5, CancellationToken.None);
 
-        var update = Assert.Single(runner.Calls, call => call.StartsWith($"bpftool map update pinned {paths.MapPin(BpfLayout.ExeMap)} key hex 08 00 00 00 02 00 00 00 a5 02 14 03 00 00 00 00 value hex 02 07 00 00 05 00 00 00", StringComparison.Ordinal));
+        var update = Assert.Single(runner.Calls, call => call.StartsWith($"bpftool map update pinned {paths.MapPin(BpfLayout.ExeMap)} key hex 08 00 00 00 02 00 00 00 a5 02 14 03 00 00 00 00 00 00 00 00 00 00 00 00 value hex 02 07 00 00 05 00 00 00", StringComparison.Ordinal));
         Assert.EndsWith(" any", update, StringComparison.Ordinal);
         Assert.Contains(runner.Calls, call => call.StartsWith($"bpftool map update pinned {paths.MapPin(BpfLayout.CgroupMap)} key hex", StringComparison.Ordinal));
         Assert.Equal(2, engine.AppliedEntries.Count);
@@ -598,7 +616,7 @@ public sealed class BpfLayerTests
         Assert.NotEqual(DoctorCheck.Fail, noTool.Status);
     }
 
-    private static ManagedRule Managed(RuleSpec spec) => new()
+    internal static ManagedRule Managed(RuleSpec spec) => new()
     {
         ManagedRuleId = spec.ManagedRuleId,
         OsRuleName = "Axiom-" + spec.ManagedRuleId.ToString("N"),
@@ -607,7 +625,7 @@ public sealed class BpfLayerTests
         State = RuleState.Applied,
     };
 
-    private static BpfEnginePaths Paths(TempDirectory temp, bool createObjects)
+    internal static BpfEnginePaths Paths(TempDirectory temp, bool createObjects)
     {
         var bpf = Path.Combine(temp.Path, "image", "bpf");
         var bpffs = Path.Combine(temp.Path, "bpffs");

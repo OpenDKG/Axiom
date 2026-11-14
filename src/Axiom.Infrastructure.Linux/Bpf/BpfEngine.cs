@@ -82,6 +82,20 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     /// <summary>Journal sink; set by the hosted service.</summary>
     public Action<string> Log { get; set; } = _ => { };
 
+    /// <summary>Path whose exe key the self-check compares (the daemon's own image via /proc/&lt;pid&gt;/exe).</summary>
+    public string SelfExePath { get; init; } = "/proc/" + Environment.ProcessId.ToString(CultureInfo.InvariantCulture) + "/exe";
+
+    /// <summary>Process id the program records the self-check for.</summary>
+    public int SelfPid { get; init; } = Environment.ProcessId;
+
+    /// <summary>Makes one connect() from this process so the program records its key (UDP to 127.0.0.1:9; no packet).</summary>
+    public Action SelfCheckConnect { get; init; } = () => { };
+
+    /// <summary>Result of the kernel/user-space exe key self-check of the loaded program.</summary>
+    public BpfKernelKeyCheck KernelKeyCheck => _kernelKey;
+
+    private BpfKernelKeyCheck _kernelKey = BpfKernelKeyCheck.Unverified("stub");
+
     public void Dispose() => _gate.Dispose();
 
     public TimeSpan EventsRestartDelay { get; init; } = DefaultEventsRestartDelay;

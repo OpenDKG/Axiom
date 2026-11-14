@@ -17,6 +17,12 @@ public static class BpfLayout
     public const string CgroupMap = "axiom_cgroup_verdicts";
     public const string EventsMap = "axiom_events";
     public const string StatsMap = "axiom_stats";
+    public const string SelfCheckMap = "axiom_selfcheck";
+    public const int SelfCheckSize = 40;
+
+    public static byte[] SelfCheckRequest(int tgid) => new byte[SelfCheckSize];
+
+    public static BpfSelfCheckRecord? ParseSelfCheck(string? hex) => null;
 
     public const byte ActionAllow = 1;
     public const byte ActionBlock = 2;
@@ -39,7 +45,7 @@ public static class BpfLayout
         ("sendmsg6", "axiom_sendmsg6"),
     ];
 
-    public static byte[] ExeKey(uint devMajor, uint devMinor, ulong ino)
+    public static byte[] ExeKey(uint devMajor, uint devMinor, ulong ino, ulong subvolume = 0)
     {
         var bytes = new byte[ExeKeySize];
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(0, 4), devMajor);

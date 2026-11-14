@@ -138,7 +138,7 @@ public static class BpfExeKey
 {
     private static readonly HashSet<string> OverlayTypes = new(StringComparer.Ordinal) { "overlay", "fuse.fuse-overlayfs", "aufs" };
 
-    public static BpfExeKeyResolution Resolve(string realPath, BpfInode stat, MountInfoTable mounts)
+    public static BpfExeKeyResolution Resolve(string realPath, BpfInode stat, MountInfoTable mounts, BpfKernelKeyCheck? kernel = null, Func<string, BpfSubvolumeId?>? subvolume = null)
     {
         ArgumentNullException.ThrowIfNull(realPath);
         ArgumentNullException.ThrowIfNull(stat);
