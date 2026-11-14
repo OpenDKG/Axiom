@@ -2,6 +2,12 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.22.0
+
+- **Agent Blackbox Offline Runtime Continuity & 5-State Reporting (#324).** Added `BlackboxContinuityReport` (`GUARD_AVAILABLE`, `RULESET_AVAILABLE`, `SYNC_STALE`, `DKG_OFFLINE`, `UNPROTECTED`), preserved cached `ruleset.json` across offline periods/reboots in `TryReadSync` and `TryReadGraph`, and explicitly flagged corrupted/missing rulesets as `unavailable`.
+- **Dashboard Port `9700` Decoupled from Hook Status.** Updated `SecurityPageViewModel` and `SecurityViewModel` to check local guard + `ruleset.json` continuity when the Blackbox dashboard port (`9700`) is stopped.
+- **Offline Continuity Audit & Upstream RFC.** Added `docs/OFFLINE_CONTINUITY_AUDIT.md` covering upstream detector dependencies, offline test matrix results, and proposals for `verified_lookup_fallback: "index"` and Windows `bip39_english.txt` LF hashing.
+
 ## What's in 0.21.0
 
 - **Encrypted RFC 8484 DNS-over-HTTPS (DoH) Upstream.** Privacy Shield now upgrades public upstream resolvers (`1.1.1.1`, `8.8.8.8`, `9.9.9.9`, `94.140.14.14`, etc.) and explicit `https://.../dns-query` URLs to encrypted HTTP/2 DoH on port `443` with no silent plaintext downgrade.
