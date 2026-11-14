@@ -216,6 +216,7 @@ public sealed class NftEnforcementSupervisor
     public async Task<bool> WatchOnceAsync(CancellationToken ct)
     {
         var republished = await WatchTableAsync(ct).ConfigureAwait(false);
+        _layer?.CheckAttached();
         if (_layer is { Active: true } && _adapter.StaleExeKeyRules() is { Count: > 0 } replaced)
         {
             // An executable was replaced at its path (package upgrade, rename(2)): the old exe key no

@@ -1022,6 +1022,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         }
 
         var nftReadBack = report.State is FilterEnforcementState.Verified or FilterEnforcementState.Degraded && readback.Generation == _published && counters.Count > 0 && rejection is null && cgroupExists;
+        VerdictLayer?.CheckAttached();
         var coverage = stored is not null ? Coverage(stored.Spec, VerdictLayer, LayerSync, StaleExeKeyRules()) : (null, null);
         if (coverage.Proven == false && stored is { Spec.Enabled: true })
         {

@@ -40,6 +40,12 @@ public interface IVerdictLayer
     IReadOnlyList<Guid> StaleExeKeys(IReadOnlyList<ManagedRule> rules) => [];
 
     /// <summary>
+    /// Live check that the layer's programs are still attached (another tool may have detached them
+    /// between syncs). Marks the layer neutralised when they are not; returns whether it is attached.
+    /// </summary>
+    bool CheckAttached() => Active;
+
+    /// <summary>
     /// Reconciles the layer's state with the enabled rules of this generation (bounded retries,
     /// read-back verification, neutralisation on persistent failure) and reports the outcome.
     /// Never throws for a bpftool failure.

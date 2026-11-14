@@ -127,6 +127,30 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     }
 
     /// <inheritdoc />
+    public bool CheckAttached()
+    {
+        if (!Active)
+        {
+            return false;
+        }
+
+        if (ProgramsAttached() is { } attached && attached < BpfLayout.Programs.Count)
+        {
+            lock (_stateGate)
+            {
+                _active = false;
+                _neutralised = true;
+                _status = string.Create(CultureInfo.InvariantCulture, $"degraded: only {attached} of {BpfLayout.Programs.Count} Axiom BPF programs are attached (detached by another tool); nftables only until re-attached");
+            }
+
+            Log(string.Create(CultureInfo.InvariantCulture, $"BPF layer: only {attached} of {BpfLayout.Programs.Count} Axiom programs are attached at {_paths.CgroupRoot} (detached by another tool); connect-time verdicts are not enforced until re-attached."));
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <inheritdoc />
     public IReadOnlyList<Guid> StaleExeKeys(IReadOnlyList<ManagedRule> rules)
     {
         ArgumentNullException.ThrowIfNull(rules);
