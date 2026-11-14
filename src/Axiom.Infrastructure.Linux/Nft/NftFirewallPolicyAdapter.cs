@@ -143,8 +143,13 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 $"nftables rejected the last Axiom table ({error}); the previous generation stays in force.",
             FilterEnforcementState.Degraded when !enforcement.Connected && _nftError is { } nftError =>
                 $"nftables is unavailable ({nftError}); rules are stored but not known to be enforced.",
-            FilterEnforcementState.Degraded =>
-                "table inet axiom is missing (another tool may have flushed the ruleset); rules are stored but not enforced until republished.",
+            FilterEnforcementState.Degraded when !enforcement.Connected => MissingTableReason(),
+            FilterEnforcementState.Degraded when _tableIntegrity is { Modified: true } integrity => string.Create(
+                CultureInfo.InvariantCulture,
+                $"nft table inet axiom modified externally: generation {enforcement.AckedGeneration} is present but {integrity.Missing} of {integrity.Expected} owned rule(s) are missing (another tool flushed the table or deleted rules); those rules are not enforced by nftables until the daemon republishes the table (next watch tick)."),
+            FilterEnforcementState.Degraded => string.Create(
+                CultureInfo.InvariantCulture,
+                $"table inet axiom is present (generation {enforcement.AckedGeneration}) and nftables enforces the stored rules; enforcement is degraded by the connect-time BPF layer:"),
             FilterEnforcementState.Pending => string.Create(
                 CultureInfo.InvariantCulture,
                 $"nftables holds generation {enforcement.AckedGeneration?.ToString(CultureInfo.InvariantCulture) ?? "none"}; generation {enforcement.PublishedGeneration} is pending."),
@@ -281,6 +286,89 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
 
     private sealed record Readback(long? Generation, IReadOnlyList<NftRuleCounter> Counters, string? NftError, DateTimeOffset At);
 
+    /// <summary>
+    /// Owned-rule integrity of the published generation: <see cref="Expected"/> rule comments were applied,
+    /// <see cref="Missing"/> of them are absent now. <see cref="Modified"/> only when the first readback after
+    /// the publish held all of them (an nft that never prints comments must not cause a republish loop).
+    /// </summary>
+    private sealed record TableIntegrity(long Generation, int Expected, int Missing, bool BaselineComplete)
+    {
+        public bool Modified => BaselineComplete && Missing > 0;
+    }
+
+    private HashSet<(Guid RuleId, int Part)> _publishedRuleKeys = [];
+    private TableIntegrity? _tableIntegrity;
+
+    private static readonly System.Text.RegularExpressions.Regex RuleCommentPattern =
+        new("comment \"(axiom:[0-9a-fA-F-]+:[0-9]+)\"", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static HashSet<(Guid RuleId, int Part)> RuleKeys(string script)
+    {
+        var keys = new HashSet<(Guid, int)>();
+        foreach (System.Text.RegularExpressions.Match match in RuleCommentPattern.Matches(script))
+        {
+            if (NftTable.TryParseComment(match.Groups[1].Value, out var ruleId, out var part))
+            {
+                keys.Add((ruleId, part));
+            }
+        }
+
+        return keys;
+    }
+
+    /// <summary>
+    /// True when <c>table inet axiom</c> carries the published generation but owned rules are missing
+    /// (<c>nft flush table inet axiom</c>, a deleted rule): the watcher republishes it. Pure over <paramref name="json"/>.
+    /// </summary>
+    public bool OwnedRulesMissing(string? json)
+    {
+        var generation = NftTable.ParseGeneration(json);
+        TrackIntegrity(generation, generation is null ? [] : NftTable.ParseCounters(json));
+        lock (_reportGate)
+        {
+            return generation is not null && _tableIntegrity is { Modified: true } integrity && integrity.Generation == generation;
+        }
+    }
+
+    /// <summary>Owned rules the published generation carries vs. how many are missing now (for the watcher's log).</summary>
+    public (int Expected, int Missing) OwnedRuleIntegrity
+    {
+        get
+        {
+            lock (_reportGate)
+            {
+                return _tableIntegrity is { } integrity ? (integrity.Expected, integrity.Missing) : (_publishedRuleKeys.Count, 0);
+            }
+        }
+    }
+
+    /// <summary>Missing-table reason (the table is gone or foreign while nft itself is readable).</summary>
+    private string MissingTableReason()
+    {
+        var reason = "nft table inet axiom missing (removed externally: another tool deleted it or flushed the ruleset); the stored rules are not enforced by nftables until the daemon restores the table (next watch tick).";
+        return VerdictLayer is { Active: true }
+            ? reason + " The connect-time BPF layer is still attached and keeps refusing its connect-time proven rules meanwhile."
+            : reason;
+    }
+
+    private void TrackIntegrity(long? generation, IReadOnlyList<NftRuleCounter> counters)
+    {
+        lock (_reportGate)
+        {
+            if (generation is null || generation != _published)
+            {
+                return;
+            }
+
+            var present = counters.Select(counter => (counter.RuleId, counter.Part)).ToHashSet();
+            var missing = _publishedRuleKeys.Count(key => !present.Contains(key));
+            var baseline = _tableIntegrity is { } previous && previous.Generation == generation
+                ? previous.BaselineComplete
+                : missing == 0;
+            _tableIntegrity = new TableIntegrity(generation.Value, _publishedRuleKeys.Count, missing, baseline);
+        }
+    }
+
     private async Task<Readback> ReadbackAsync(CancellationToken ct)
     {
         var now = _time.GetUtcNow();
@@ -298,7 +386,9 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 }
             }
 
-            return new Readback(generation, generation is null ? [] : NftTable.ParseCounters(json), null, now);
+            var counters = generation is null ? [] : NftTable.ParseCounters(json);
+            TrackIntegrity(generation, counters);
+            return new Readback(generation, counters, null, now);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
@@ -365,6 +455,14 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
                 // A stale program set or an unconfirmed BPF removal can still block what nft no longer does.
                 state = FilterEnforcementState.Degraded;
             }
+
+            if (state is FilterEnforcementState.Verified or FilterEnforcementState.Pending
+                && _tableIntegrity is { Modified: true } integrity && integrity.Generation == readback.Generation)
+            {
+                // The generation comment survived but owned rules did not (nft flush table inet axiom).
+                state = FilterEnforcementState.Degraded;
+            }
+
             var report = new FilterEnforcementReport
             {
                 State = state,
@@ -1235,6 +1333,12 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         _lastCompilation = compilation;
         if (applied.Success)
         {
+            lock (_reportGate)
+            {
+                _publishedRuleKeys = RuleKeys(compilation.Script);
+                _tableIntegrity = null;
+            }
+
             _published = generation;
             _attributionFailures = placements;
         }

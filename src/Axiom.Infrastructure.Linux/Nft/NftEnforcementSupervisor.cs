@@ -249,9 +249,11 @@ public sealed class NftEnforcementSupervisor
         }
 
         long? live;
+        string? json;
         try
         {
-            live = await _table.ReadGenerationAsync(ct).ConfigureAwait(false);
+            json = await _table.ListJsonAsync(ct).ConfigureAwait(false);
+            live = NftTable.ParseGeneration(json);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
@@ -261,17 +263,22 @@ public sealed class NftEnforcementSupervisor
             return false;
         }
 
-        if (live == expected)
+        var modified = live == expected && _adapter.OwnedRulesMissing(json);
+        if (live == expected && !modified)
         {
             return false;
         }
 
         // The Linux counterpart of the macOS filter disconnect: degrade the report immediately,
         // then republish; the fresh readback is what makes the new generation verified again.
+        // Only table inet axiom is ever rewritten here; the BPF layer is not touched by this path.
         var lost = await _adapter.MarkTableLostAsync(ct).ConfigureAwait(false);
         Interlocked.Increment(ref _degradations);
-        _log(live is null
-            ? string.Create(CultureInfo.InvariantCulture, $"table inet axiom disappeared (generation {expected} was published); enforcement {lost.State.ToString().ToLowerInvariant()}; republishing.")
+        var integrity = _adapter.OwnedRuleIntegrity;
+        _log(modified
+            ? string.Create(CultureInfo.InvariantCulture, $"table inet axiom generation {live} was modified externally ({integrity.Missing} of {integrity.Expected} owned rule(s) missing); enforcement {lost.State.ToString().ToLowerInvariant()}; republishing.")
+            : live is null
+            ? string.Create(CultureInfo.InvariantCulture, $"table inet axiom disappeared (generation {expected} was published; removed externally); enforcement {lost.State.ToString().ToLowerInvariant()}; republishing.")
             : string.Create(CultureInfo.InvariantCulture, $"table inet axiom holds generation {live}, expected {expected}; enforcement {lost.State.ToString().ToLowerInvariant()}; republishing."));
         try
         {

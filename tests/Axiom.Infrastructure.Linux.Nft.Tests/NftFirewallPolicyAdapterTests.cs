@@ -143,10 +143,16 @@ public sealed class NftFirewallPolicyAdapterTests
         using var h = new Harness();
         var spec = Specs.Block("/usr/bin/curl", Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e"));
         await h.Adapter.UpsertOwnedRuleAsync(spec, CancellationToken.None);
-        h.Nft.ListJson = """
-            {"nftables":[{"table":{"family":"inet","name":"axiom","handle":1,"comment":"axiom generation 1"}},
-            {"rule":{"family":"inet","table":"axiom","chain":"axiom_out","handle":5,"comment":"axiom:0f8fad5b-d9cb-469f-a165-70867728950e:1","expr":[{"counter":{"packets":2,"bytes":120}},{"reject":{"type":"tcp reset"}}]}}]}
-            """;
+        // Every owned rule part stays listed (a table missing parts is reported modified, see
+        // NftEnforcementSupervisorTests); part 1 carries the counters.
+        var parts = System.Text.RegularExpressions.Regex.Matches(h.Nft.AppliedScript!, "comment \"axiom:0f8fad5b-d9cb-469f-a165-70867728950e:([0-9]+)\"")
+            .Select(match => match.Groups[1].Value).ToList();
+        Assert.Contains("1", parts);
+        h.Nft.ListJson = """{"nftables":[{"table":{"family":"inet","name":"axiom","handle":1,"comment":"axiom generation 1"}}""" +
+            string.Concat(parts.Select(part =>
+                "," + "{\"rule\":{\"family\":\"inet\",\"table\":\"axiom\",\"chain\":\"axiom_out\",\"handle\":" + (4 + int.Parse(part, System.Globalization.CultureInfo.InvariantCulture)).ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                ",\"comment\":\"axiom:0f8fad5b-d9cb-469f-a165-70867728950e:" + part + "\",\"expr\":[{\"counter\":{\"packets\":" + (part == "1" ? "2,\"bytes\":120" : "0,\"bytes\":0") + "}},{\"reject\":{\"type\":\"tcp reset\"}}]}}")) +
+            "]}";
 
         var verify = await h.Adapter.VerifyAsync(spec, CancellationToken.None);
 
@@ -155,7 +161,7 @@ public sealed class NftFirewallPolicyAdapterTests
         Assert.Equal(FirewallAction.Block, verify.EffectiveAction);
         Assert.True(verify.EnforcementVerified);
         Assert.Null(verify.FilterRejectionReason);
-        Assert.Contains(verify.Notes, note => note.Contains("1 nft rule(s), 2 packet(s) matched", StringComparison.Ordinal));
+        Assert.Contains(verify.Notes, note => note.Contains(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{parts.Count} nft rule(s), 2 packet(s) matched"), StringComparison.Ordinal));
 
         h.Nft.ListJson = null;
         var removed = await h.Adapter.RemoveOwnedRuleAsync(spec.ManagedRuleId, CancellationToken.None);
@@ -209,7 +215,7 @@ public sealed class NftFirewallPolicyAdapterTests
 
         var capabilities = await h.Adapter.GetCapabilitiesAsync(CancellationToken.None);
         Assert.Equal(FirewallCapabilityStatus.Degraded, capabilities.Status);
-        Assert.Contains("table inet axiom is missing", capabilities.Reason, StringComparison.Ordinal);
+        Assert.Contains("nft table inet axiom missing (removed externally", capabilities.Reason, StringComparison.Ordinal);
         Assert.False(capabilities.FirewallServiceRunning);
         Assert.Equal(FilterEnforcementState.Degraded, capabilities.FilterEnforcement!.State);
         Assert.False(capabilities.FilterEnforcement.Connected);

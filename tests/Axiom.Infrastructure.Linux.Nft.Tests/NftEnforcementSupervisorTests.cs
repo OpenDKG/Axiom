@@ -144,8 +144,9 @@ public sealed class NftEnforcementSupervisorTests
     public async Task Table_without_owned_rules_is_not_reported_modified_and_never_republished_in_a_loop()
     {
         using var h = new Harness();
-        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl"), CancellationToken.None);
-        await h.Adapter.RemoveOwnedRuleAsync(Specs.Block("/usr/bin/curl").ManagedRuleId, CancellationToken.None);
+        var spec = Specs.Block("/usr/bin/curl");
+        await h.Adapter.UpsertOwnedRuleAsync(spec, CancellationToken.None);
+        await h.Adapter.RemoveOwnedRuleAsync(spec.ManagedRuleId, CancellationToken.None);
         var supervisor = h.Supervisor();
 
         h.Nft.RulesFlushed = true;
