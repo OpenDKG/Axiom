@@ -459,10 +459,26 @@ public sealed class OpenCodeProtection
             }
 
             if (type === "session.step.started") {
+              // Forward the user text so the guard can scan it for injection. Event shapes vary
+              // by harness version; anything missing simply yields an empty string.
+              let promptText = ""
+              try {
+                const parts = data.message?.parts || data.info?.parts || data.parts || []
+                if (Array.isArray(parts)) {
+                  promptText = parts
+                    .filter((part) => part && part.type === "text" && typeof part.text === "string")
+                    .map((part) => part.text)
+                    .join("\n")
+                }
+                if (!promptText && typeof data.message?.text === "string") promptText = data.message.text
+              } catch {
+                promptText = ""
+              }
               runLifecycleBridge({
                 framework: "opencode",
                 event: "pre_api_request",
                 session,
+                user_message: promptText,
                 model: data.model,
                 workspace: data.info?.directory || "",
               })

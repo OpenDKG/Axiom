@@ -48,6 +48,18 @@ public sealed class AgentHookScriptTests
     }
 
     [Fact]
+    public void OpenCode_plugin_forwards_prompt_text_for_injection_scanning()
+    {
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildV2Plugin",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var plugin = (string)build.Invoke(new OpenCodeProtection(), null)!;
+
+        Assert.Contains("user_message: promptText", plugin, StringComparison.Ordinal);
+        Assert.Contains("part.type === \"text\"", plugin, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OpenCode_bridge_compiles_when_python_is_available()
     {
         var python = FindPython();
