@@ -2,6 +2,11 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.20.0
+
+- **Stage E4 Scoped Agent Firewall Enforcer & Stage E3 Trusted File Broker (#323).** Added scoped per-agent Windows Firewall enforcement with rollback and dual-destination canary checks, plus the `TrustedFileBroker` prototype and ADR 0012.
+- **Offline `DkgContextAnnotator`, Umanitek Upstream RFC & Enforcement Tracker (#231, #324).** Added read-only cached DKG indicator context annotations, upstream collaboration RFC, and roadmap tracking.
+
 ## What's in 0.19.0
 
 - **Stage E1-to-E2 Host Enforcement Bridge & `EnforcementReceiptV1` (#322).** Added hash-chained enforcement receipts, strict `CommunityOnly` advisory gating, `HostEnforcementAdapter`, `EnforcementController` IPC endpoints, E2B bridge spec, and honest UI labels distinguishing guard flags from verified blocking.
