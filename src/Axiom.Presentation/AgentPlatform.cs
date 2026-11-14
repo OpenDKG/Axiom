@@ -18,6 +18,26 @@ public static class AgentPlatform
             ? Path.Combine(root, "venv", "Scripts", "python.exe")
             : Path.Combine(root, "venv", "bin", "python");
 
+    /// <summary>
+    /// Interpreter used to start a background module without a console window. Windows: upstream's
+    /// choice, <c>venv\\Scripts\\pythonw.exe</c> when it exists, otherwise <c>python.exe</c>. POSIX has
+    /// no console-window variant: <c>venv/bin/python</c>.
+    /// </summary>
+    public static string VenvPythonNoConsole(string root) => VenvPythonNoConsole(root, IsWindows, File.Exists);
+
+    public static string VenvPythonNoConsole(string root, bool windows, Func<string, bool> fileExists)
+    {
+        ArgumentNullException.ThrowIfNull(fileExists);
+        if (!windows)
+        {
+            return VenvPython(root, windows: false);
+        }
+
+        var venvPythonW = Path.Combine(root, "venv", "Scripts", "pythonw.exe");
+        var venvPython = Path.Combine(root, "venv", "Scripts", "python.exe");
+        return fileExists(venvPythonW) ? venvPythonW : venvPython;
+    }
+
     /// <summary>A console tool installed in a virtual environment (for example <c>hermes</c>).</summary>
     public static string VenvTool(string root, string name) => VenvTool(root, name, IsWindows);
 

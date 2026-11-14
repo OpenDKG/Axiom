@@ -62,8 +62,11 @@ public sealed record PrivacyShieldSettings
     /// <summary>Loopback port for the opt-in resolver. 53 is required for normal Windows DNS use.</summary>
     public int Port { get; init; } = 53;
 
-    /// <summary>Optional upstream IP, IP:port, udp://IP, or https://.../dns-query DoH URL. Empty uses current Windows DNS servers.</summary>
+    /// <summary>Optional upstream IP, IP:port, udp://IP, or https://.../dns-query DoH URL (comma-separated for failover). Empty uses encrypted DoH or current Windows DNS.</summary>
     public string UpstreamDns { get; init; } = string.Empty;
+
+    /// <summary>Encrypts upstream DNS via RFC 8484 DoH over TLS port 443 so your ISP cannot inspect queries, even if the router/Windows adapter uses plain port 53.</summary>
+    public bool EncryptDnsViaDoh { get; init; } = true;
 
     public IReadOnlyList<string> AllowedDomains { get; init; } = [];
 
@@ -73,6 +76,18 @@ public sealed record PrivacyShieldSettings
 
     /// <summary>Reserved for a future bounded query log; the initial implementation keeps counts only.</summary>
     public bool LogQueries { get; init; }
+
+    /// <summary>Preferred Windows network adapter alias to keep pointed at Axiom DNS across restarts and updates.</summary>
+    public string PreferredAdapterAlias { get; init; } = string.Empty;
+
+    /// <summary>When enabled, Axiom Service automatically points the active/preferred adapter to loopback DNS while Privacy Shield runs.</summary>
+    public bool AutoPointAdapterDns { get; init; }
+
+    /// <summary>Automatically fetches missing or stale blocklist sources on startup and on the configured interval.</summary>
+    public bool AutoUpdateSources { get; init; } = true;
+
+    /// <summary>Interval in hours between automatic background source updates (default 24 hours).</summary>
+    public int AutoUpdateIntervalHours { get; init; } = 24;
 }
 
 public sealed record PrivacyShieldTopDomain(string Domain, long Count);

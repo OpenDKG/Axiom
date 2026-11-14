@@ -175,6 +175,49 @@ public static class DnsUpstream
         return true;
     }
 
+    /// <summary>
+    /// Parses one or more comma/semicolon-separated upstream entries (IP, IP:port, udp://IP, or DoH HTTPS URL).
+    /// Returns false if any non-empty token is invalid.
+    /// </summary>
+    public static bool TryParseTargets(string? value, out IReadOnlyList<DnsUpstreamTarget> targets)
+    {
+        targets = [];
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var parts = value.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+        {
+            return false;
+        }
+
+        var parsed = new List<DnsUpstreamTarget>(parts.Length);
+        foreach (var part in parts)
+        {
+            if (!TryParseTarget(part, out var single) || single is null)
+            {
+                return false;
+            }
+
+            parsed.Add(single);
+        }
+
+        targets = parsed;
+        return true;
+    }
+
+    /// <summary>
+    /// Redundant encrypted RFC 8484 DoH resolvers (Cloudflare + Quad9 on TLS port 443) used so
+    /// queries cannot be read by an ISP or local router over plain UDP port 53.
+    /// </summary>
+    public static IReadOnlyList<DnsUpstreamTarget> DefaultDohTargets() => UpgradeEndpoints(
+    [
+        new IPEndPoint(IPAddress.Parse("1.1.1.1"), 53),
+        new IPEndPoint(IPAddress.Parse("9.9.9.9"), 53),
+    ]);
+
     public static IReadOnlyList<DnsUpstreamTarget> UpgradeEndpoints(IReadOnlyList<IPEndPoint> endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);

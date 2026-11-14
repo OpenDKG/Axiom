@@ -142,6 +142,7 @@ public sealed class OptionalModuleUninstaller
     {
         new CodexProtection().Remove();
         new ClaudeProtection().Remove();
+        new AntigravityProtection().Remove();
         new CursorProtection().Remove();
         new CopilotProtection().Remove();
         new GeminiProtection().Remove();
@@ -190,17 +191,24 @@ public sealed class OptionalModuleUninstaller
               Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
             }
             Write-Host 'Stopping Blackbox/DKG processes owned by this installation...' -ForegroundColor Cyan
+            $blackboxHome = Join-Path $hermes 'blackbox'
             Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-              Where-Object { $_.CommandLine -and $_.CommandLine.Contains($root) } |
+              Where-Object {
+                $_.CommandLine -and (
+                  $_.CommandLine.Contains($root, [System.StringComparison]::OrdinalIgnoreCase) -or
+                  $_.CommandLine.Contains($blackboxHome, [System.StringComparison]::OrdinalIgnoreCase) -or
+                  $_.CommandLine.Contains('start-dashboard.py', [System.StringComparison]::OrdinalIgnoreCase))
+              } |
               ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-            $task = Get-ScheduledTask -TaskName 'Agent Blackbox DKG node' -ErrorAction SilentlyContinue
-            if ($task) {
-              Unregister-ScheduledTask -TaskName 'Agent Blackbox DKG node' -Confirm:$false -ErrorAction SilentlyContinue
-              Write-Host 'Removed scheduled task: Agent Blackbox DKG node'
+            foreach ($taskName in @('Agent Blackbox DKG node', 'Agent Blackbox dashboard')) {
+              $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+              if ($task) {
+                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+                Write-Host "Removed scheduled task: $taskName"
+              }
             }
             Remove-SafeDirectory $root
             Remove-SafeFile $command
-            $blackboxHome = Join-Path $hermes 'blackbox'
             Remove-SafeDirectory $blackboxHome
             $logs = Join-Path $hermes 'logs'
             if ((Test-Path -LiteralPath $logs) -and -not (Test-ReparsePath $logs)) {

@@ -29,6 +29,127 @@ public sealed class AgentHookScriptTests
     }
 
     [Fact]
+    public void OpenCode_bridge_normalizes_filePath_to_path()
+    {
+        // OpenCode passes filePath; Blackbox's detectors read only "path"
+        // (action_parsing._PATH_KEYS is case-sensitive), so the bridge must translate it
+        // or every file-access rule silently misses.
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+
+        Assert.Contains("raw_args[\"filePath\"]", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"path\": raw_args[\"filePath\"]", bridge, StringComparison.Ordinal);
+        Assert.Contains("args=raw_args", bridge, StringComparison.Ordinal);
+        Assert.Contains("_deletes_protected", bridge, StringComparison.Ordinal);
+        Assert.Contains("_tampers_with_guard", bridge, StringComparison.Ordinal);
+        Assert.Contains("_escalation_risk", bridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("args=payload.get", bridge, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OpenCode_bridge_carries_remote_script_and_persistence_detection()
+    {
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+
+        Assert.Contains("def _escalation_risk(command: str) -> str:", bridge, StringComparison.Ordinal);
+        Assert.Contains("escalation = _escalation_risk(command_text)", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"escalation\"", bridge, StringComparison.Ordinal);
+
+        string[] shapes =
+        [
+            "|sh", "|bash", "|pwsh", "|iex", "certutil", "-urlcache", "bitsadmin",
+            "/transfer", "mshta", "reg add", "\\\\currentversion\\\\run", "schtasks",
+            "/create", "vssadmin", "shadows", "bcdedit", "recoveryenabled no",
+        ];
+        foreach (var shape in shapes)
+        {
+            Assert.Contains(shape, bridge, StringComparison.Ordinal);
+        }
+
+        // The detector runs before the vendor guard so a missing verified rule cannot let a
+        // remote pipe, encoded shell or persistence shape through.
+        Assert.True(
+            bridge.IndexOf("escalation = _escalation_risk", StringComparison.Ordinal) <
+            bridge.IndexOf("guard.on_pre_tool_call", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void OpenCode_bridge_carries_launch_and_upload_protection()
+    {
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+
+        Assert.Contains("def _executes_protected(command: str, protected) -> bool:", bridge, StringComparison.Ordinal);
+        Assert.Contains("def _exfiltrates_protected(command: str, protected) -> bool:", bridge, StringComparison.Ordinal);
+        Assert.Contains("_executes_protected(command_text, protected)", bridge, StringComparison.Ordinal);
+        Assert.Contains("_exfiltrates_protected(command_text, protected)", bridge, StringComparison.Ordinal);
+        Assert.Contains("launches a file from a protected path", bridge, StringComparison.Ordinal);
+        Assert.Contains("uploads a file from a protected path", bridge, StringComparison.Ordinal);
+        Assert.Contains("return _hits_protected(text, protected)", bridge, StringComparison.Ordinal);
+        Assert.True(
+            bridge.IndexOf("_executes_protected(command_text", StringComparison.Ordinal) <
+            bridge.IndexOf("guard.on_pre_tool_call", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void OpenCode_plugin_forwards_prompt_text_for_injection_scanning()
+    {
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildV2Plugin",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var plugin = (string)build.Invoke(new OpenCodeProtection(), null)!;
+
+        Assert.Contains("user_message: promptText", plugin, StringComparison.Ordinal);
+        Assert.Contains("part.type === \"text\"", plugin, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OpenCode_bridge_compiles_when_python_is_available()
+    {
+        var python = FindPython();
+        if (python is null)
+        {
+            return;
+        }
+
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+        var path = Path.Combine(Path.GetTempPath(), $"axiom-bridge-{Guid.NewGuid():N}.py");
+        try
+        {
+            File.WriteAllText(path, bridge);
+            var start = new ProcessStartInfo(python)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            start.ArgumentList.Add("-m");
+            start.ArgumentList.Add("py_compile");
+            start.ArgumentList.Add(path);
+            using var process = Process.Start(start);
+            Assert.NotNull(process);
+            process.WaitForExit(15_000);
+            Assert.True(process.HasExited, "Python syntax check did not finish.");
+            Assert.Equal(0, process.ExitCode);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Lifecycle_bridge_is_valid_python_when_python_is_available()
     {
         var python = FindPython();

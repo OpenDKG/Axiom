@@ -21,6 +21,8 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private static readonly TimeSpan UpstreamTimeout = TimeSpan.FromSeconds(3);
 
+    private static readonly TimeSpan MultiTargetAttemptTimeout = TimeSpan.FromMilliseconds(1500);
+
     private readonly UdpClient _udp4;
 
     private readonly UdpClient? _udp6;
@@ -363,6 +365,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private async Task HandleTcpClientAsync(TcpClient client, CancellationToken cancellationToken)
     {
+        var queryReceived = false;
         using (client)
         using (var stream = client.GetStream())
         {
@@ -387,6 +390,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
                     return;
                 }
 
+                queryReceived = true;
                 Interlocked.Increment(ref _queries);
                 if (!DnsProtocol.TryParseQuery(query, out var parsed) || parsed is null)
                 {
@@ -429,10 +433,16 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
                 await WriteTcpAsync(stream, response, cancellationToken).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
             catch (Exception exception) when (exception is
                          IOException or SocketException or OperationCanceledException or ObjectDisposedException)
             {
-                Interlocked.Increment(ref _errors);
+                if (queryReceived)
+                {
+                    Interlocked.Increment(ref _errors);
+                }
             }
         }
     }
@@ -455,6 +465,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
         bool preferTcpForPlain,
         CancellationToken cancellationToken)
     {
+        var attemptTimeout = _targets.Count > 1 ? MultiTargetAttemptTimeout : UpstreamTimeout;
         foreach (var target in _targets)
         {
             if (target.IsDoh && target.DohUri is not null)
@@ -463,6 +474,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
                     target.DohUri,
                     query,
                     questionEnd,
+                    attemptTimeout,
                     cancellationToken).ConfigureAwait(false);
                 if (dohResponse is not null)
                 {
@@ -478,9 +490,9 @@ public sealed class DnsProxyServer : IAsyncDisposable
             if (target.PlainEndpoint is not null)
             {
                 var plainResponse = preferTcpForPlain
-                    ? await ForwardTcpEndpointAsync(target.PlainEndpoint, query, questionEnd, cancellationToken)
+                    ? await ForwardTcpEndpointAsync(target.PlainEndpoint, query, questionEnd, attemptTimeout, cancellationToken)
                         .ConfigureAwait(false)
-                    : await ForwardUdpEndpointAsync(target.PlainEndpoint, query, questionEnd, cancellationToken)
+                    : await ForwardUdpEndpointAsync(target.PlainEndpoint, query, questionEnd, attemptTimeout, cancellationToken)
                         .ConfigureAwait(false);
                 if (plainResponse is not null)
                 {
@@ -496,6 +508,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
         Uri dohUri,
         byte[] query,
         int questionEnd,
+        TimeSpan attemptTimeout,
         CancellationToken cancellationToken)
     {
         if (_httpClient is null)
@@ -520,7 +533,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/dns-message"));
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(UpstreamTimeout);
+            timeout.CancelAfter(attemptTimeout);
 
             using var response = await _httpClient
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
@@ -641,13 +654,14 @@ public sealed class DnsProxyServer : IAsyncDisposable
         IPEndPoint upstream,
         byte[] query,
         int questionEnd,
+        TimeSpan attemptTimeout,
         CancellationToken cancellationToken)
     {
         try
         {
             using var client = new TcpClient(upstream.AddressFamily);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(UpstreamTimeout);
+            timeout.CancelAfter(attemptTimeout);
             await client.ConnectAsync(upstream, timeout.Token).ConfigureAwait(false);
 
             using var stream = client.GetStream();
@@ -770,6 +784,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
         IPEndPoint upstream,
         byte[] query,
         int questionEnd,
+        TimeSpan attemptTimeout,
         CancellationToken cancellationToken)
     {
         try
@@ -782,7 +797,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
             await socket.SendAsync(query, SocketFlags.None, cancellationToken).ConfigureAwait(false);
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(UpstreamTimeout);
+            timeout.CancelAfter(attemptTimeout);
             var response = new byte[MaxUpstreamResponseBytes];
             var received = await socket
                 .ReceiveAsync(response.AsMemory(), SocketFlags.None, timeout.Token)

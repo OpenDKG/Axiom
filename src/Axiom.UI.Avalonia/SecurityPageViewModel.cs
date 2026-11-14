@@ -255,6 +255,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     private bool _communityConnected;
     private readonly HashSet<string> _notifiedCommunityHashes = new(StringComparer.OrdinalIgnoreCase);
     private bool _dkgAutoStartAttempted;
+    private bool _blackboxAutoStartAttempted;
 
     private readonly IUiTimer _activityTimer;
 
@@ -540,6 +541,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
             Rebuild(dkgTask.Result, blackboxTask.Result);
             TryStartInstalledDkgOnLaunch(dkgTask.Result);
+            TryStartInstalledBlackboxOnLaunch(blackboxTask.Result);
             LastCheckedText = $"Checked {DateTimeOffset.Now:HH:mm:ss}";
             await RefreshAgentsAsync(blackboxTask.Result.IsConnected).ConfigureAwait(true);
             ApplyHookTestStates();
@@ -574,6 +576,66 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         {
             InstallStatusText = "Starting the installed DKG node...";
             DkgBrandLabel = "OriginTrail DKG – starting";
+        }
+    }
+
+    /// <summary>
+    /// Starts an installed local Blackbox dashboard silently once per session so agent graph
+    /// status does not stay offline after Axiom restarts. A dashboard that already answers is
+    /// left untouched.
+    /// </summary>
+    private void TryStartInstalledBlackboxOnLaunch(OptionalModuleStatus blackbox)
+    {
+        if (_blackboxAutoStartAttempted || blackbox.IsConnected)
+        {
+            return;
+        }
+
+        _blackboxAutoStartAttempted = true;
+        if (DistributionContext.IsStorePackage || !_uninstaller.IsBlackboxInstalled)
+        {
+            return;
+        }
+
+        if (_installer.StartBlackboxDashboard())
+        {
+            InstallStatusText = "Starting the installed Blackbox dashboard...";
+            BlackboxBrandLabel = "Umanitek Blackbox – starting";
+            _ = PollBlackboxAutoStartAsync();
+        }
+    }
+
+    private async Task PollBlackboxAutoStartAsync()
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            await Task.Delay(1500).ConfigureAwait(true);
+
+            OptionalModuleStatus blackbox;
+            OptionalModuleStatus dkg;
+            try
+            {
+                blackbox = await _probe.ProbeBlackboxAsync(CancellationToken.None).ConfigureAwait(true);
+                if (!blackbox.IsConnected)
+                {
+                    continue;
+                }
+
+                dkg = await _probe.ProbeDkgAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+            {
+                continue;
+            }
+
+            Rebuild(dkg, blackbox);
+            InstallStatusText = string.Empty;
+            NotifyStatusProperties();
+            return;
         }
     }
 

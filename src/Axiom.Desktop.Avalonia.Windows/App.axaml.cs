@@ -61,6 +61,28 @@ public partial class App : Application
                 // Hook maintenance is best-effort and must not block startup.
             }
 
+            // A complete install must end protected: persist block mode where the guard reads it
+            // and prove it with the self-test. Runs off the UI thread so startup stays responsive.
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    var protection = ProtectionProvisioner.ProvisionAtStartup();
+                    if (protection is not null)
+                    {
+                        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                        PrivacyShieldProvisioner.WriteSettings(localAppData);
+                        PrivacyShieldProvisioner.ApplyAsync(CancellationToken.None).GetAwaiter().GetResult();
+                        TraderShieldProvisioner.ApplyToFile(Path.Combine(localAppData, "hermes", "config.yaml"));
+                        HermesPluginSettings.ApplyToFile(Path.Combine(localAppData, "hermes", "config.yaml"));
+                    }
+                }
+                catch
+                {
+                    // Protection provisioning is best-effort; the status file records the outcome.
+                }
+            });
+
             var useService = arguments.Any(argument =>
                 string.Equals(argument, "--service", StringComparison.OrdinalIgnoreCase));
 

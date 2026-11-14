@@ -74,7 +74,10 @@ internal static class ServicePlatform
     public static void HardenRecoverySnapshotLocation() => MachineStateSecurity.HardenProgramData();
 
     public static IPrivacyDnsPlatform CreateDefaultPrivacyDnsPlatform() =>
-        new WindowsPrivacyDnsPlatform(PrivacyDnsFailSafe.RestoreIfNeeded);
+        new WindowsPrivacyDnsPlatform(
+            PrivacyDnsFailSafe.RestoreIfNeeded,
+            MachineStateSecurity.IsRunningAsSystem,
+            alias => PrivacyDnsFailSafe.EnsureAdapterPointed(alias));
 
     public static void ConfigureServices(HostApplicationBuilder builder)
     {

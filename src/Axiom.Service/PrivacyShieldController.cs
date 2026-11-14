@@ -204,6 +204,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             _server = candidate;
             _settings = normalized;
             _lastError = CombineWarnings(startWarning, NotifyResolverStarted(candidate));
+            EnsureConfiguredAdapterDns();
             return CreateStatus();
         }
         finally
@@ -230,6 +231,44 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         _lastError = CombineWarnings(warning, NotifyResolverStarted(server));
         return Task.FromResult(true);
     }
+
+    /// <summary>
+    /// True when background auto-update is enabled and at least one enabled source has never been
+    /// fetched or has aged past <see cref="PrivacyShieldSettings.AutoUpdateIntervalHours"/>.
+    /// </summary>
+    public bool ShouldAutoUpdateSources(DateTimeOffset? nowUtc = null)
+    {
+        if (!_settings.Enabled ||
+            !_settings.AutoUpdateSources ||
+            _settings.EnabledSourceIds.Count == 0)
+        {
+            return false;
+        }
+
+        var utcNow = nowUtc ?? DateTimeOffset.UtcNow;
+        var maxAge = TimeSpan.FromHours(Math.Clamp(_settings.AutoUpdateIntervalHours, 1, 168));
+        var totals = _sourceTotals;
+        foreach (var sourceId in _settings.EnabledSourceIds)
+        {
+            if (!totals.TryGetValue(sourceId, out var total) ||
+                total.Updated is not { } updated ||
+                utcNow - updated >= maxAge)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Keeps the configured or active default-route adapter pointed at the local resolver while the
+    /// elevated Windows service is running Privacy Shield on port 53. No-op in non-SYSTEM processes.
+    /// The decision and the adapter work are Windows code behind the DNS seam
+    /// (<c>WindowsPrivacyDnsPlatform.EnsureConfiguredAdapterDns</c>); other platforms do nothing here.
+    /// </summary>
+    public void EnsureConfiguredAdapterDns() =>
+        _dns.EnsureConfiguredAdapterDns(_server is not null, _settings);
 
     public async Task<PrivacyShieldStatus> ClearHistoryAsync(CancellationToken cancellationToken)
     {
@@ -337,18 +376,27 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         IReadOnlyList<DnsUpstreamTarget> targets;
         if (!string.IsNullOrWhiteSpace(settings.UpstreamDns))
         {
-            if (!DnsUpstream.TryParseTarget(settings.UpstreamDns, out var target) ||
-                target is null)
+            if (!DnsUpstream.TryParseTargets(settings.UpstreamDns, out targets) ||
+                targets.Count == 0)
             {
                 error = "The configured upstream DNS address or DoH URL is invalid.";
                 return false;
             }
-
-            targets = [target];
         }
         else
         {
-            targets = DnsUpstream.UpgradeEndpoints(_dns.DiscoverUpstreams());
+            var systemTargets = DnsUpstream.UpgradeEndpoints(_dns.DiscoverUpstreams());
+            if (settings.EncryptDnsViaDoh)
+            {
+                var encryptedSystem = systemTargets.Where(item => item.IsDoh).ToArray();
+                targets = encryptedSystem.Length > 0
+                    ? encryptedSystem
+                    : DnsUpstream.DefaultDohTargets();
+            }
+            else
+            {
+                targets = systemTargets;
+            }
         }
 
         if (targets.Count == 0)
@@ -356,11 +404,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             // If the adapter already points at this loopback resolver, system DNS discovery must
             // not leave the machine without an upstream. Keep encrypted public DoH fallbacks and
             // let the user override them explicitly.
-            targets = DnsUpstream.UpgradeEndpoints(
-            [
-                new System.Net.IPEndPoint(System.Net.IPAddress.Parse("1.1.1.1"), 53),
-                new System.Net.IPEndPoint(System.Net.IPAddress.Parse("8.8.8.8"), 53),
-            ]);
+            targets = DnsUpstream.DefaultDohTargets();
             warning = _dns.NoUpstreamWarning;
         }
 
@@ -582,7 +626,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             Port = _settings.Port,
             BindAddress = "not listening",
             Upstream = string.IsNullOrWhiteSpace(_settings.UpstreamDns)
-                ? "system DNS"
+                ? (_settings.EncryptDnsViaDoh ? "encrypted DoH (1.1.1.1, 9.9.9.9)" : "system DNS")
                 : _settings.UpstreamDns,
             Queries = 0,
             Allowed = 0,
@@ -639,6 +683,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                     string.Equals(source.Id, id, StringComparison.OrdinalIgnoreCase)))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
+            PreferredAdapterAlias = settings.PreferredAdapterAlias?.Trim() ?? string.Empty,
+            AutoUpdateIntervalHours = Math.Clamp(settings.AutoUpdateIntervalHours, 1, 168),
         };
     }
 

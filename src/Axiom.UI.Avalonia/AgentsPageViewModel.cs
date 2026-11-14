@@ -1182,7 +1182,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             $"{status.Pending} waiting for your review, {status.Submitted} shared in total, " +
             $"{status.TodaySubmitted}/{status.DailyLimit} today.{deferred}{unverified} " +
             (ThreatSharingEnabled
-                ? $"Sharing is on; nothing is sent until you press Share or Send now. {sandboxNote}"
+                ? $"Sharing is on; every share is checked locally (reporter terms, signing key, category, novelty) before anything is signed. {sandboxNote}"
                 : $"Sharing is off; nothing is signed or sent. {sandboxNote}") +
             consent;
     }
@@ -1349,6 +1349,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _threatShareSubmitting = true;
         CanSubmitThreatShare = false;
         ThreatShareActionText = "Submitting through the Blackbox reporter...";
+        var ruleset = ThreatShareCli.ReadRuleset();
+        var consent = ThreatShareCli.ConsentPresent();
+        var key = ThreatShareCli.ReporterKeyPresent();
+        var blocked = new List<string>();
         try
         {
             var shared = 0;
@@ -1359,6 +1363,14 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ThreatShareQueueStatus? latest = null;
             foreach (var item in publishable)
             {
+                var preflight = ThreatSharePreflight.Evaluate(
+                    item.Candidate, ThreatSharingEnabled, consent, key, ruleset);
+                if (!preflight.Ready)
+                {
+                    blocked.Add($"{item.Candidate.Value} ({preflight.FailureText})");
+                    continue;
+                }
+
                 var result = await _cli
                     .ReportAsync(item.Candidate, CancellationToken.None)
                     .ConfigureAwait(true);
@@ -1411,6 +1423,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 $"Submitted {shared}, deferred {deferred}, awaiting confirmation {unverified}, rejected {rejected}." +
                 (capReached
                     ? " The daily cap is reached; the remaining indicators stay queued."
+                    : string.Empty) +
+                (blocked.Count > 0
+                    ? $" {blocked.Count} not sent: {string.Join("; ", blocked.Take(3))}."
                     : string.Empty);
         }
         catch (Exception exception) when (exception is
