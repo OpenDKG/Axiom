@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using Axiom.Contracts.Privacy;
@@ -32,7 +34,9 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private readonly PrivacyShieldPolicy _policy;
 
-    private readonly IReadOnlyList<IPEndPoint> _upstreams;
+    private readonly IReadOnlyList<DnsUpstreamTarget> _targets;
+
+    private readonly HttpClient? _httpClient;
 
     private readonly Action<PrivacyShieldBlockedEvent>? _onBlocked;
 
@@ -67,13 +71,41 @@ public sealed class DnsProxyServer : IAsyncDisposable
         IReadOnlyList<IPEndPoint> upstreams,
         int port,
         Action<PrivacyShieldBlockedEvent>? onBlocked = null)
+        : this(
+            policy,
+            (upstreams ?? throw new ArgumentNullException(nameof(upstreams)))
+                .Select(endpoint => new DnsUpstreamTarget(endpoint))
+                .ToArray(),
+            port,
+            onBlocked)
+    {
+    }
+
+    public DnsProxyServer(
+        PrivacyShieldPolicy policy,
+        IReadOnlyList<DnsUpstreamTarget> targets,
+        int port,
+        Action<PrivacyShieldBlockedEvent>? onBlocked = null,
+        HttpMessageHandler? dohHandler = null)
     {
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
-        _upstreams = upstreams ?? throw new ArgumentNullException(nameof(upstreams));
+        _targets = targets ?? throw new ArgumentNullException(nameof(targets));
         _onBlocked = onBlocked;
-        if (upstreams.Count == 0)
+        if (targets.Count == 0)
         {
-            throw new ArgumentException("At least one upstream DNS endpoint is required.", nameof(upstreams));
+            throw new ArgumentException("At least one upstream DNS target is required.", nameof(targets));
+        }
+
+        if (targets.Any(target => target is null || (!target.IsDoh && target.PlainEndpoint is null)))
+        {
+            throw new ArgumentException("Every upstream DNS target must specify a DoH URI or IP endpoint.", nameof(targets));
+        }
+
+        if (targets.Any(target => target.IsDoh))
+        {
+            _httpClient = dohHandler is not null
+                ? new HttpClient(dohHandler, disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan }
+                : CreateDohHttpClient(targets);
         }
 
         _udp4 = new UdpClient(new IPEndPoint(IPAddress.Loopback, port));
@@ -125,7 +157,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
         }
     }
 
-    public string Upstream => string.Join(", ", _upstreams.Select(endpoint => endpoint.ToString()));
+    public string Upstream => string.Join(", ", _targets.Select(target => target.DisplayText));
 
     public PrivacyShieldStatus Snapshot(PrivacyShieldSettings settings)
     {
@@ -135,6 +167,14 @@ public sealed class DnsProxyServer : IAsyncDisposable
             .Take(10)
             .Select(pair => new PrivacyShieldTopDomain(pair.Key, pair.Value))
             .ToArray();
+
+        var allDoh = _targets.All(target => target.IsDoh);
+        var anyDoh = _targets.Any(target => target.IsDoh);
+        var transportNote = allDoh
+            ? "Outbound queries are encrypted with DoH (HTTPS/443)."
+            : anyDoh
+                ? "Outbound queries prefer DoH (HTTPS/443); non-DoH upstreams remain plain DNS."
+                : "Outbound queries use plain UDP/TCP DNS.";
 
         return new PrivacyShieldStatus
         {
@@ -156,7 +196,8 @@ public sealed class DnsProxyServer : IAsyncDisposable
                 .Take(50)
                 .ToArray(),
             Detail = $"Resolved {Interlocked.Read(ref _allowed)} and blocked {Interlocked.Read(ref _blocked)} queries. " +
-                     "DNS filtering is not complete traffic filtering; DoH/DoT/DoQ and hardcoded IPs bypass it.",
+                     $"{transportNote} " +
+                     "DNS filtering is not complete traffic filtering; DoH/DoT/DoQ and hardcoded IPs bypass local filtering.",
         };
     }
 
@@ -167,6 +208,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
         _udp6?.Dispose();
         _tcp4?.Stop();
         _tcp6?.Stop();
+        _httpClient?.Dispose();
 
         try
         {
@@ -296,7 +338,11 @@ public sealed class DnsProxyServer : IAsyncDisposable
                 }
                 else
                 {
-                    var forwarded = await ForwardTcpAsync(query, cancellationToken).ConfigureAwait(false);
+                    var forwarded = await ForwardToTargetsAsync(
+                        query,
+                        parsed.QuestionEnd,
+                        preferTcpForPlain: true,
+                        cancellationToken).ConfigureAwait(false);
                     if (forwarded is null)
                     {
                         Interlocked.Increment(ref _errors);
@@ -319,45 +365,230 @@ public sealed class DnsProxyServer : IAsyncDisposable
         }
     }
 
-    private async Task<byte[]?> ForwardTcpAsync(byte[] query, CancellationToken cancellationToken)
+    private async Task<byte[]?> ForwardToTargetsAsync(
+        byte[] query,
+        int questionEnd,
+        bool preferTcpForPlain,
+        CancellationToken cancellationToken)
     {
-        foreach (var upstream in _upstreams)
+        foreach (var target in _targets)
         {
-            try
+            if (target.IsDoh && target.DohUri is not null)
             {
-                using var client = new TcpClient(upstream.AddressFamily);
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(UpstreamTimeout);
-                await client.ConnectAsync(upstream, timeout.Token).ConfigureAwait(false);
+                var dohResponse = await ForwardDohAsync(
+                    target.DohUri,
+                    query,
+                    questionEnd,
+                    cancellationToken).ConfigureAwait(false);
+                if (dohResponse is not null)
+                {
+                    return dohResponse;
+                }
 
-                using var stream = client.GetStream();
-                await WriteTcpAsync(stream, query, timeout.Token).ConfigureAwait(false);
-                var lengthBytes = await ReadExactAsync(stream, 2, timeout.Token).ConfigureAwait(false);
-                if (lengthBytes is null)
+                if (!target.FallbackToPlainAllowed || target.PlainEndpoint is null)
                 {
                     continue;
                 }
-
-                var length = (lengthBytes[0] << 8) | lengthBytes[1];
-                if (length is <= 0 or > MaxUpstreamResponseBytes)
-                {
-                    continue;
-                }
-
-                var response = await ReadExactAsync(stream, length, timeout.Token).ConfigureAwait(false);
-                if (response is not null &&
-                    DnsProtocol.TryParseQuery(query, out var parsedTcp) &&
-                    parsedTcp is not null &&
-                    DnsProtocol.IsMatchingResponse(query, parsedTcp.QuestionEnd, response))
-                {
-                    return response;
-                }
             }
-            catch (Exception exception) when (exception is
-                         IOException or SocketException or OperationCanceledException or ObjectDisposedException)
+
+            if (target.PlainEndpoint is not null)
             {
-                // Try the next upstream.
+                var plainResponse = preferTcpForPlain
+                    ? await ForwardTcpEndpointAsync(target.PlainEndpoint, query, questionEnd, cancellationToken)
+                        .ConfigureAwait(false)
+                    : await ForwardUdpEndpointAsync(target.PlainEndpoint, query, questionEnd, cancellationToken)
+                        .ConfigureAwait(false);
+                if (plainResponse is not null)
+                {
+                    return plainResponse;
+                }
             }
+        }
+
+        return null;
+    }
+
+    private async Task<byte[]?> ForwardDohAsync(
+        Uri dohUri,
+        byte[] query,
+        int questionEnd,
+        CancellationToken cancellationToken)
+    {
+        if (_httpClient is null)
+        {
+            return null;
+        }
+
+        var wireQuery = (byte[])query.Clone();
+        // RFC 8484 §4.1: DoH wire messages use ID = 0; restore the client's original ID on return.
+        wireQuery[0] = 0;
+        wireQuery[1] = 0;
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, dohUri)
+            {
+                Version = HttpVersion.Version20,
+                VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
+                Content = new ByteArrayContent(wireQuery),
+            };
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/dns-message");
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/dns-message"));
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(UpstreamTimeout);
+
+            using var response = await _httpClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
+                .ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            await using var body = await response.Content
+                .ReadAsStreamAsync(timeout.Token)
+                .ConfigureAwait(false);
+            var buffer = await ReadBoundedAsync(body, MaxUpstreamResponseBytes, timeout.Token)
+                .ConfigureAwait(false);
+            if (buffer is null || buffer.Length < questionEnd)
+            {
+                return null;
+            }
+
+            buffer[0] = query[0];
+            buffer[1] = query[1];
+            return DnsProtocol.IsMatchingResponse(query, questionEnd, buffer)
+                ? buffer
+                : null;
+        }
+        catch (Exception exception) when (exception is
+                     HttpRequestException or IOException or SocketException or OperationCanceledException or ObjectDisposedException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<byte[]?> ReadBoundedAsync(
+        Stream stream,
+        int maxBytes,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new byte[maxBytes + 1];
+        var total = 0;
+        while (total < buffer.Length)
+        {
+            var read = await stream
+                .ReadAsync(buffer.AsMemory(total, buffer.Length - total), cancellationToken)
+                .ConfigureAwait(false);
+            if (read == 0)
+            {
+                return buffer[..total];
+            }
+
+            total += read;
+        }
+
+        // Response exceeded MaxUpstreamResponseBytes.
+        return null;
+    }
+
+    private static HttpClient CreateDohHttpClient(IReadOnlyList<DnsUpstreamTarget> targets)
+    {
+        var bootstrapByHost = new Dictionary<string, IPAddress>(StringComparer.OrdinalIgnoreCase);
+        foreach (var target in targets)
+        {
+            if (target.DohUri is not null && target.BootstrapAddress is not null)
+            {
+                bootstrapByHost.TryAdd(target.DohUri.DnsSafeHost, target.BootstrapAddress);
+            }
+        }
+
+        var handler = new SocketsHttpHandler
+        {
+            UseProxy = false,
+            UseCookies = false,
+            AllowAutoRedirect = false,
+            ConnectTimeout = UpstreamTimeout,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+            ConnectCallback = async (context, cancellationToken) =>
+            {
+                var host = context.DnsEndPoint.Host;
+                if (!bootstrapByHost.TryGetValue(host, out var bootstrapIp) &&
+                    !SystemDnsResolver.TryResolveBootstrapAddress(host, out bootstrapIp))
+                {
+                    var addresses = await System.Net.Dns
+                        .GetHostAddressesAsync(host, cancellationToken)
+                        .ConfigureAwait(false);
+                    bootstrapIp = addresses.FirstOrDefault(address => !IPAddress.IsLoopback(address));
+                }
+
+                if (bootstrapIp is null)
+                {
+                    throw new SocketException((int)SocketError.HostNotFound);
+                }
+
+                var socket = new Socket(bootstrapIp.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+                {
+                    NoDelay = true,
+                };
+                try
+                {
+                    await socket
+                        .ConnectAsync(new IPEndPoint(bootstrapIp, context.DnsEndPoint.Port), cancellationToken)
+                        .ConfigureAwait(false);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+            },
+        };
+
+        return new HttpClient(handler, disposeHandler: true)
+        {
+            Timeout = Timeout.InfiniteTimeSpan,
+        };
+    }
+
+    private static async Task<byte[]?> ForwardTcpEndpointAsync(
+        IPEndPoint upstream,
+        byte[] query,
+        int questionEnd,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = new TcpClient(upstream.AddressFamily);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(UpstreamTimeout);
+            await client.ConnectAsync(upstream, timeout.Token).ConfigureAwait(false);
+
+            using var stream = client.GetStream();
+            await WriteTcpAsync(stream, query, timeout.Token).ConfigureAwait(false);
+            var lengthBytes = await ReadExactAsync(stream, 2, timeout.Token).ConfigureAwait(false);
+            if (lengthBytes is null)
+            {
+                return null;
+            }
+
+            var length = (lengthBytes[0] << 8) | lengthBytes[1];
+            if (length is <= 0 or > MaxUpstreamResponseBytes)
+            {
+                return null;
+            }
+
+            var response = await ReadExactAsync(stream, length, timeout.Token).ConfigureAwait(false);
+            if (response is not null && DnsProtocol.IsMatchingResponse(query, questionEnd, response))
+            {
+                return response;
+            }
+        }
+        catch (Exception exception) when (exception is
+                     IOException or SocketException or OperationCanceledException or ObjectDisposedException)
+        {
         }
 
         return null;
@@ -432,7 +663,11 @@ public sealed class DnsProxyServer : IAsyncDisposable
             return;
         }
 
-        var upstreamResponse = await ForwardAsync(query, cancellationToken).ConfigureAwait(false);
+        var upstreamResponse = await ForwardToTargetsAsync(
+            query,
+            parsed.QuestionEnd,
+            preferTcpForPlain: false,
+            cancellationToken).ConfigureAwait(false);
         if (upstreamResponse is null)
         {
             Interlocked.Increment(ref _errors);
@@ -447,38 +682,35 @@ public sealed class DnsProxyServer : IAsyncDisposable
         await SendAsync(client, upstreamResponse, request.RemoteEndPoint).ConfigureAwait(false);
     }
 
-    private async Task<byte[]?> ForwardAsync(byte[] query, CancellationToken cancellationToken)
+    private static async Task<byte[]?> ForwardUdpEndpointAsync(
+        IPEndPoint upstream,
+        byte[] query,
+        int questionEnd,
+        CancellationToken cancellationToken)
     {
-        foreach (var upstream in _upstreams)
+        try
         {
-            try
-            {
-                using var socket = new Socket(
-                    upstream.AddressFamily,
-                    SocketType.Dgram,
-                    ProtocolType.Udp);
-                await socket.ConnectAsync(upstream, cancellationToken).ConfigureAwait(false);
-                await socket.SendAsync(query, SocketFlags.None, cancellationToken).ConfigureAwait(false);
+            using var socket = new Socket(
+                upstream.AddressFamily,
+                SocketType.Dgram,
+                ProtocolType.Udp);
+            await socket.ConnectAsync(upstream, cancellationToken).ConfigureAwait(false);
+            await socket.SendAsync(query, SocketFlags.None, cancellationToken).ConfigureAwait(false);
 
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(UpstreamTimeout);
-                var response = new byte[MaxUpstreamResponseBytes];
-                var received = await socket
-                    .ReceiveAsync(response.AsMemory(), SocketFlags.None, timeout.Token)
-                    .ConfigureAwait(false);
-                if (received > 0 &&
-                    DnsProtocol.TryParseQuery(query, out var parsedUdp) &&
-                    parsedUdp is not null &&
-                    DnsProtocol.IsMatchingResponse(query, parsedUdp.QuestionEnd, response.AsSpan(0, received)))
-                {
-                    return response[..received];
-                }
-            }
-            catch (Exception exception) when (exception is
-                         SocketException or OperationCanceledException or ObjectDisposedException)
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(UpstreamTimeout);
+            var response = new byte[MaxUpstreamResponseBytes];
+            var received = await socket
+                .ReceiveAsync(response.AsMemory(), SocketFlags.None, timeout.Token)
+                .ConfigureAwait(false);
+            if (received > 0 && DnsProtocol.IsMatchingResponse(query, questionEnd, response.AsSpan(0, received)))
             {
-                // Try the next configured upstream.
+                return response[..received];
             }
+        }
+        catch (Exception exception) when (exception is
+                     SocketException or OperationCanceledException or ObjectDisposedException)
+        {
         }
 
         return null;

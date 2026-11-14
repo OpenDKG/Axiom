@@ -1503,24 +1503,39 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             return;
         }
 
+        var continuity = BlackboxLocalState.EvaluateContinuity();
+        var guardAndRulesetAvailable = blackboxConnected ||
+                                       (continuity.GuardAvailable && continuity.RulesetAvailable);
+
         // Status refresh is read-only. Startup provisioning handles Axiom-managed hooks separately.
-        AddCodexAgents(blackboxConnected);
-        AddClaudeAgents(blackboxConnected);
-        AddAntigravityAgents(blackboxConnected);
-        AddCursorAgents(blackboxConnected);
-        AddCopilotAgents(blackboxConnected);
-        AddGeminiAgents(blackboxConnected);
-        AddWindsurfAgents(blackboxConnected);
-        AddClineAgents(blackboxConnected);
-        AddZCodeAgents(blackboxConnected);
-        AddDeepSeekAgents(blackboxConnected);
-        AddOpenCodeAgents(blackboxConnected);
+        AddCodexAgents(guardAndRulesetAvailable);
+        AddClaudeAgents(guardAndRulesetAvailable);
+        AddAntigravityAgents(guardAndRulesetAvailable);
+        AddCursorAgents(guardAndRulesetAvailable);
+        AddCopilotAgents(guardAndRulesetAvailable);
+        AddGeminiAgents(guardAndRulesetAvailable);
+        AddWindsurfAgents(guardAndRulesetAvailable);
+        AddClineAgents(guardAndRulesetAvailable);
+        AddZCodeAgents(guardAndRulesetAvailable);
+        AddDeepSeekAgents(guardAndRulesetAvailable);
+        AddOpenCodeAgents(guardAndRulesetAvailable);
 
         if (!blackboxConnected)
         {
-            AgentsStatusText = ProtectedAgents.Count == 0
-                ? "Blackbox is not connected; no agent protection status is available."
-                : "Blackbox is not connected; detected agents are not protected.";
+            if (guardAndRulesetAvailable)
+            {
+                AgentsStatusText = ProtectedAgents.Count == 0
+                    ? $"Blackbox dashboard is offline; {continuity.Summary} No agent workspaces were detected."
+                    : $"Blackbox dashboard is offline; local guard and cached ruleset remain active for hooked agents. " +
+                      $"{continuity.Summary} Installed hooks alone are not proof of runtime blocking.";
+            }
+            else
+            {
+                AgentsStatusText = ProtectedAgents.Count == 0
+                    ? $"Blackbox is not connected; no agent protection status is available. {continuity.Summary}"
+                    : $"Blackbox local guard or ruleset is unavailable; detected agents are not protected by graph rules. {continuity.Summary}";
+            }
+
             return;
         }
 
