@@ -2,6 +2,18 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.28.0
+
+- **Firewall host-mask normalization on WFP/firewall readback (#282).**
+  - Normalized IPv4 `/32` and IPv6 `/128` CIDR suffixes in `FirewallPolicy` / `NetshFirewallRuleManager` readback verification so bare host scopes verify and apply reliably without `rule.verify_failed`.
+- **Single-instance mutex enforcement before Avalonia dispatcher startup (#283).**
+  - Enforced the single-instance check in `Program.cs` before `BuildAvaloniaApp().StartWithClassicDesktopLifetime` so launching a second `Axiom.Desktop` instance exits cleanly with a user-friendly dialog instead of throwing an unhandled Avalonia Dispatcher exception.
+- **Privacy Shield `Phishing` category, 8-source toggles, and Setup/service auto-DNS reliability.**
+  - Added `PrivacyCategory.Phishing`, included it in `Strict`, reclassified `phishing-filter` (`Phishing`) and `hagezi-tif` (`Malware | Phishing`), prioritized `Malware | Phishing` downloads in `PrivacyShieldSourceUpdater`, and added `Phishing` category checkboxes to both Avalonia and WPF Privacy Shield views.
+  - Optimized `PrivacyShieldPolicy.NormalizeDomain` with thread-static `IdnMapping` and ASCII fast-path scanning for ~700k+ rule rebuilds.
+  - Increased `PrivacyConfigure` IPC timeout (`5s -> 60s`) and `PrivacySourcesUpdate` timeout (`3m -> 5m`), added `Mode=TwoWay` binding for source toggles, surfaced a warning if an older running service drops unknown source IDs, and woke `PrivacyShieldWorker` immediately after `ConfigureAsync`.
+  - Updated `PrivacyDnsFailSafe.BuildFallbackCandidates` and `SelectTargetAdapter` (filtering loopback/site-local entries, falling back through saved -> current -> gateway/DHCP IPv4, preferring physical adapters over virtual ones, 45s PS timeout with kill), added a 30s reconciliation loop in `PrivacyShieldWorker`, registered `Axiom.Service.exe` early during Complete setup, and preserved existing user `privacy-shield.json` across desktop restarts.
+
 ## What's in 0.27.0
 
 - **Reliable row selection, right-click copy, and refresh preservation in Agent Activity, Findings & Hook Evidence (#296).**
