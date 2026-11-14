@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using Axiom.Contracts.Blackbox;
 
 namespace Axiom.UI.Services;
 
@@ -246,10 +247,15 @@ public static class UpgradeDataGuard
             }
         }
 
-        var dkg = Path.Combine(axiom, "modules", "blackbox", "agent-blackbox", ".dkg");
-        if (Directory.Exists(dkg))
+        // Every DKG home an install can leave behind: the bundled Blackbox home, Axiom's optional
+        // standalone home, and the managed path. Backing up only one of them loses the node
+        // identity and the local graph as soon as the install layout changes.
+        foreach (var dkg in DkgHomeResolver.CandidateHomes(local))
         {
-            files.AddRange(Enumerate(dkg, "*", SearchOption.AllDirectories));
+            if (Directory.Exists(dkg))
+            {
+                files.AddRange(Enumerate(dkg, "*", SearchOption.AllDirectories));
+            }
         }
 
         return files
