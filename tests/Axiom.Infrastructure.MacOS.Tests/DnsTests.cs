@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net;
+using Axiom.Contracts.Privacy;
 using Axiom.Infrastructure.MacOS.Dns;
 using Axiom.Infrastructure.MacOS.Interop;
+using Axiom.Service.Hosting.Dns;
 
 namespace Axiom.Infrastructure.MacOS.Tests;
 
@@ -257,5 +259,28 @@ public sealed class DnsTests
 
         Assert.Contains("port 5353", platform.OnResolverStarted(5353), StringComparison.Ordinal);
         Assert.Empty(runner.Calls);
+    }
+
+    /// <summary>
+    /// Upstream v0.23.3 adapter persistence (PreferredAdapterAlias / AutoPointAdapterDns) is Windows
+    /// only. On macOS the seam member is the default no-op: no networksetup/scutil call is made for
+    /// these settings, whatever their value, and the platform does not claim the feature.
+    /// </summary>
+    [Fact]
+    public void AdapterDnsPersistenceSettingsNeverTouchSystemDns()
+    {
+        using var temp = new TempDirectory();
+        var runner = new FakeRunner();
+        IPrivacyDnsPlatform platform = new MacPrivacyDnsPlatform(
+            new MacDnsConfigurator(runner, Path.Combine(temp.Path, "b.json")), null);
+
+        platform.EnsureConfiguredAdapterDns(
+            true,
+            new PrivacyShieldSettings { Enabled = true, Port = 53, AutoPointAdapterDns = true, PreferredAdapterAlias = "Wi-Fi" });
+        platform.EnsureConfiguredAdapterDns(false, new PrivacyShieldSettings { AutoPointAdapterDns = true, AutoUpdateSources = true });
+
+        Assert.False(platform.SupportsAdapterDnsPersistence);
+        Assert.Empty(runner.Calls);
+        Assert.False(File.Exists(Path.Combine(temp.Path, "b.json")));
     }
 }
