@@ -14,7 +14,7 @@ public sealed class WindowsPrivacyDnsPlatform(Func<bool> restoreIfNeeded) : IPri
     public IDnsAppAttributor? Attributor { get; } = new ProcessDnsAppAttributor(new WindowsDnsProcessLookup());
 
     public string NoUpstreamWarning =>
-        "No non-loopback Windows DNS server was found; using fallback upstream DNS. " +
+        "No non-loopback Windows DNS server was found; using encrypted DoH fallback upstream DNS. " +
         "Set an explicit upstream address if this network requires a local resolver.";
 
     public IReadOnlyList<IPEndPoint> DiscoverUpstreams() => SystemDnsResolver.ResolveSystemDns();

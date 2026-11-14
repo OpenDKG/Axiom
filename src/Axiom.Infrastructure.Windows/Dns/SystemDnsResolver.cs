@@ -2,10 +2,15 @@
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using Axiom.Service.Hosting.Dns;
 
 namespace Axiom.Infrastructure.Windows.Dns;
 
-/// <summary>Read-only discovery of the current Windows DNS servers for upstream forwarding.</summary>
+/// <summary>
+/// Read-only discovery of the current Windows DNS servers for Privacy Shield forwarding. Parsing
+/// of upstream DNS/DoH targets is platform-neutral and lives in <see cref="DnsUpstream"/> (with
+/// <see cref="DnsUpstreamTarget"/>); the members below forward to it unchanged.
+/// </summary>
 public static class SystemDnsResolver
 {
     public static IReadOnlyList<IPEndPoint> ResolveSystemDns(int max = 4)
@@ -33,5 +38,17 @@ public static class SystemDnsResolver
     }
 
     public static bool TryParseUpstream(string? value, out IPEndPoint? endpoint) =>
-        Axiom.Service.Hosting.Dns.DnsUpstream.TryParse(value, out endpoint);
+        DnsUpstream.TryParse(value, out endpoint);
+
+    public static bool TryParseUpstreamTarget(string? value, out DnsUpstreamTarget? target) =>
+        DnsUpstream.TryParseTarget(value, out target);
+
+    public static IReadOnlyList<DnsUpstreamTarget> UpgradeEndpoints(IReadOnlyList<IPEndPoint> endpoints) =>
+        DnsUpstream.UpgradeEndpoints(endpoints);
+
+    public static bool TryGetKnownDohUri(IPAddress address, out Uri? dohUri) =>
+        DnsUpstream.TryGetKnownDohUri(address, out dohUri);
+
+    public static bool TryResolveBootstrapAddress(string? host, out IPAddress? bootstrapIp) =>
+        DnsUpstream.TryResolveBootstrapAddress(host, out bootstrapIp);
 }

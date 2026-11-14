@@ -334,33 +334,33 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         error = null;
         warning = null;
 
-        IReadOnlyList<System.Net.IPEndPoint> upstreams;
+        IReadOnlyList<DnsUpstreamTarget> targets;
         if (!string.IsNullOrWhiteSpace(settings.UpstreamDns))
         {
-            if (!DnsUpstream.TryParse(settings.UpstreamDns, out var endpoint) ||
-                endpoint is null)
+            if (!DnsUpstream.TryParseTarget(settings.UpstreamDns, out var target) ||
+                target is null)
             {
-                error = "The configured upstream DNS address is invalid.";
+                error = "The configured upstream DNS address or DoH URL is invalid.";
                 return false;
             }
 
-            upstreams = [endpoint];
+            targets = [target];
         }
         else
         {
-            upstreams = _dns.DiscoverUpstreams();
+            targets = DnsUpstream.UpgradeEndpoints(_dns.DiscoverUpstreams());
         }
 
-        if (upstreams.Count == 0)
+        if (targets.Count == 0)
         {
             // If the adapter already points at this loopback resolver, system DNS discovery must
-            // not leave the machine without an upstream. Keep a conservative public fallback and
-            // let the user override it explicitly.
-            upstreams =
+            // not leave the machine without an upstream. Keep encrypted public DoH fallbacks and
+            // let the user override them explicitly.
+            targets = DnsUpstream.UpgradeEndpoints(
             [
                 new System.Net.IPEndPoint(System.Net.IPAddress.Parse("1.1.1.1"), 53),
-                new System.Net.IPEndPoint(System.Net.IPAddress.Parse("9.9.9.9"), 53),
-            ];
+                new System.Net.IPEndPoint(System.Net.IPAddress.Parse("8.8.8.8"), 53),
+            ]);
             warning = _dns.NoUpstreamWarning;
         }
 
@@ -369,7 +369,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             var policy = GetPolicy(settings);
             server = new DnsProxyServer(
                 policy,
-                upstreams,
+                targets,
                 settings.Port,
                 blocked =>
                 {
@@ -377,7 +377,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                     // from every install would look like independent corroboration on the graph.
                     _blockedHistory.Append(EnrichProvenance(blocked));
                 },
-                _dns.Attributor);
+                attributor: _dns.Attributor);
             return true;
         }
         catch (Exception exception) when (exception is

@@ -94,7 +94,8 @@ public static class UpstreamRediscovery
         }
 
         var previous = server.Upstream;
-        server.UpdateUpstreams(replacement);
+        // Same selection as at start: known public resolvers are upgraded to DoH.
+        server.UpdateTargets(DnsUpstream.UpgradeEndpoints(replacement));
         log($"upstreams changed: {previous} -> {server.Upstream}" +
             (streak > 0 ? $" (after {streak} consecutive failures)" : string.Empty));
         return true;

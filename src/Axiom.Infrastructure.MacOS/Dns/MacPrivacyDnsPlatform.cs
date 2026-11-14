@@ -35,7 +35,7 @@ public sealed class MacPrivacyDnsPlatform : IPrivacyDnsPlatform
 
     public string NoUpstreamWarning =>
         "No non-loopback DNS server was found in scutil --dns or the saved network settings; using " +
-        "fallback upstream DNS. Set an explicit upstream address if this network requires a local resolver.";
+        "encrypted DoH fallback upstream DNS. Set an explicit upstream address if this network requires a local resolver.";
 
     public IReadOnlyList<IPEndPoint> DiscoverUpstreams() => _configurator.DiscoverUpstreams();
 

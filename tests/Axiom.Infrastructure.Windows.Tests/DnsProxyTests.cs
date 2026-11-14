@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Buffers.Binary;
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
 using Axiom.Contracts.Privacy;
+using Axiom.Infrastructure.Windows.Dns;
 using Axiom.Service.Hosting.Dns;
 using Xunit;
 
@@ -169,6 +172,133 @@ public sealed class DnsProxyTests
 
         var truncated = response.AsSpan(0, parsed.QuestionEnd - 1);
         Assert.False(DnsProtocol.IsMatchingResponse(query, parsed.QuestionEnd, truncated));
+    }
+
+    [Fact]
+    public void SystemDnsResolver_upgrades_known_public_ips_and_parses_doh_urls()
+    {
+        Assert.True(SystemDnsResolver.TryParseUpstreamTarget("1.1.1.1", out var cf));
+        Assert.NotNull(cf);
+        Assert.True(cf!.IsDoh);
+        Assert.Equal("https://1.1.1.1/dns-query", cf.DohUri!.ToString());
+        Assert.Equal(IPAddress.Parse("1.1.1.1"), cf.BootstrapAddress);
+        Assert.False(cf.FallbackToPlainAllowed);
+
+        Assert.True(SystemDnsResolver.TryParseUpstreamTarget("https://cloudflare-dns.com/dns-query", out var named));
+        Assert.NotNull(named);
+        Assert.True(named!.IsDoh);
+        Assert.Equal(IPAddress.Parse("1.1.1.1"), named.BootstrapAddress);
+
+        Assert.True(SystemDnsResolver.TryParseUpstreamTarget("192.168.0.1", out var lan));
+        Assert.NotNull(lan);
+        Assert.False(lan!.IsDoh);
+        Assert.Equal(new IPEndPoint(IPAddress.Parse("192.168.0.1"), 53), lan.PlainEndpoint);
+
+        Assert.True(SystemDnsResolver.TryParseUpstreamTarget("udp://1.1.1.1", out var forcedPlain));
+        Assert.NotNull(forcedPlain);
+        Assert.False(forcedPlain!.IsDoh);
+        Assert.Equal(new IPEndPoint(IPAddress.Parse("1.1.1.1"), 53), forcedPlain.PlainEndpoint);
+
+        Assert.False(SystemDnsResolver.TryParseUpstreamTarget("https://127.0.0.1/dns-query", out _));
+        Assert.False(SystemDnsResolver.TryParseUpstreamTarget("https://localhost/dns-query", out _));
+    }
+
+    [Fact]
+    public async Task Proxy_forwards_allowed_queries_over_doh_rfc8484()
+    {
+        byte[]? capturedWire = null;
+        HttpMethod? capturedMethod = null;
+        string? capturedContentType = null;
+        using var dohHandler = new FakeDohHandler(req =>
+        {
+            capturedMethod = req.Method;
+            capturedContentType = req.Content?.Headers.ContentType?.MediaType;
+            capturedWire = req.Content!.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+            var reply = DnsProtocol.BuildResponse(capturedWire, capturedWire.Length, 0);
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(reply),
+            };
+            response.Content.Headers.ContentType = new MediaTypeHeaderValue("application/dns-message");
+            return response;
+        });
+
+        var target = new DnsUpstreamTarget(
+            PlainEndpoint: null,
+            DohUri: new Uri("https://1.1.1.1/dns-query"),
+            BootstrapAddress: IPAddress.Parse("1.1.1.1"),
+            FallbackToPlainAllowed: false);
+        var settings = new PrivacyShieldSettings { Categories = PrivacyCategory.None };
+        var policy = PrivacyShieldPolicy.Create(settings);
+        await using var server = new DnsProxyServer(
+            policy,
+            [target],
+            port: 0,
+            dohHandler: dohHandler);
+
+        var query = BuildQuery("allowed.example");
+        using var client = new UdpClient(AddressFamily.InterNetwork);
+        client.Connect(IPAddress.Loopback, server.Port);
+        await client.SendAsync(query, query.Length);
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var forwarded = await client.ReceiveAsync(timeout.Token);
+
+        Assert.Equal(HttpMethod.Post, capturedMethod);
+        Assert.Equal("application/dns-message", capturedContentType);
+        Assert.NotNull(capturedWire);
+        Assert.Equal(0, capturedWire![0]);
+        Assert.Equal(0, capturedWire[1]);
+        Assert.Equal(query[0], forwarded.Buffer[0]);
+        Assert.Equal(query[1], forwarded.Buffer[1]);
+        Assert.Equal(0, forwarded.Buffer[3] & 0x0F);
+
+        var snapshot = server.Snapshot(settings);
+        Assert.Equal(1, snapshot.Allowed);
+        Assert.Contains("(DoH)", snapshot.Upstream, StringComparison.Ordinal);
+        Assert.Contains("encrypted with DoH", snapshot.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Proxy_does_not_downgrade_doh_failure_to_plaintext()
+    {
+        using var plainSink = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var plainPort = ((IPEndPoint)plainSink.Client.LocalEndPoint!).Port;
+        using var failingDoh = new FakeDohHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
+        var target = new DnsUpstreamTarget(
+            PlainEndpoint: new IPEndPoint(IPAddress.Loopback, plainPort),
+            DohUri: new Uri("https://1.1.1.1/dns-query"),
+            BootstrapAddress: IPAddress.Parse("1.1.1.1"),
+            FallbackToPlainAllowed: false);
+        var settings = new PrivacyShieldSettings { Categories = PrivacyCategory.None };
+        var policy = PrivacyShieldPolicy.Create(settings);
+        await using var server = new DnsProxyServer(
+            policy,
+            [target],
+            port: 0,
+            dohHandler: failingDoh);
+
+        var query = BuildQuery("allowed.example");
+        using var client = new UdpClient(AddressFamily.InterNetwork);
+        client.Connect(IPAddress.Loopback, server.Port);
+        await client.SendAsync(query, query.Length);
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var reply = await client.ReceiveAsync(timeout.Token);
+
+        Assert.Equal(2, reply.Buffer[3] & 0x0F);
+        Assert.Equal(0, plainSink.Available);
+        Assert.Equal(1, server.Snapshot(settings).Errors);
+    }
+
+    private sealed class FakeDohHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
+        : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(responder(request));
     }
 
     private static byte[] BuildQuery(string domain)

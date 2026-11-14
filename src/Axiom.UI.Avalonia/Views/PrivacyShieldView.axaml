@@ -49,7 +49,7 @@
                 <TextBox Text="{Binding PortText}" />
               </StackPanel>
               <StackPanel Grid.Column="2" Spacing="4">
-                <controls:AxiomSelectableTextBlock Text="Upstream DNS (blank = system)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+                <controls:AxiomSelectableTextBlock Text="Upstream DNS / DoH (1.1.1.1 or https://.../dns-query)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
                 <TextBox Text="{Binding UpstreamText}" />
               </StackPanel>
             </Grid>

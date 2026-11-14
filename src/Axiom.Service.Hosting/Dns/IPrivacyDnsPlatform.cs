@@ -12,7 +12,11 @@ namespace Axiom.Service.Hosting.Dns;
 /// </summary>
 public interface IPrivacyDnsPlatform
 {
-    /// <summary>Non-loopback system resolvers to forward allowed queries to.</summary>
+    /// <summary>
+    /// Non-loopback system resolvers to forward allowed queries to. The shared controller passes
+    /// them through <see cref="DnsUpstream.UpgradeEndpoints"/>, so a known public resolver on port
+    /// 53 is queried over RFC 8484 DoH on every platform; anything else stays plain UDP/TCP.
+    /// </summary>
     IReadOnlyList<IPEndPoint> DiscoverUpstreams();
 
     /// <summary>
@@ -51,7 +55,7 @@ public sealed class NullPrivacyDnsPlatform : IPrivacyDnsPlatform
     public IDnsAppAttributor? Attributor => null;
 
     public string NoUpstreamWarning =>
-        "No non-loopback system DNS server was found; using fallback upstream DNS. " +
+        "No non-loopback system DNS server was found; using encrypted DoH fallback upstream DNS. " +
         "Set an explicit upstream address if this network requires a local resolver.";
 
     public IReadOnlyList<IPEndPoint> DiscoverUpstreams() => [];

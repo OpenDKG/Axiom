@@ -267,6 +267,42 @@ public sealed class PrivacyShieldTests
         }
     }
 
+    [Fact]
+    public async Task Controller_accepts_doh_urls_and_upgrades_public_resolver_ips()
+    {
+        var directory = CreateTemporaryDirectory();
+        var settingsPath = Path.Combine(directory, "settings.json");
+        var rulesPath = Path.Combine(directory, "rules.json");
+        var port = ReservePort();
+        await using var controller = new PrivacyShieldController(
+            new PrivacyShieldSettingsStore(settingsPath),
+            new PrivacyShieldRuleStore(rulesPath));
+
+        try
+        {
+            var byIp = await controller.ConfigureAsync(
+                EnabledSettings(port) with { UpstreamDns = "1.1.1.1" },
+                CancellationToken.None);
+            Assert.True(byIp.Running);
+            Assert.Contains("https://1.1.1.1/dns-query (DoH)", byIp.Upstream, StringComparison.Ordinal);
+
+            var byUrl = await controller.ConfigureAsync(
+                EnabledSettings(port) with { UpstreamDns = "https://dns.google/dns-query" },
+                CancellationToken.None);
+            Assert.True(byUrl.Running);
+            Assert.Contains("https://dns.google/dns-query (DoH)", byUrl.Upstream, StringComparison.Ordinal);
+
+            var rejected = await controller.ConfigureAsync(
+                EnabledSettings(port) with { UpstreamDns = "https://localhost/dns-query" },
+                CancellationToken.None);
+            Assert.Contains("invalid", rejected.LastError, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static PrivacyShieldSettings EnabledSettings(int port) => new()
     {
         Enabled = true,
