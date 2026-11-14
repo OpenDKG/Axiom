@@ -49,7 +49,7 @@ def main(argv):
     key_only = bool(argv) and argv[0] == "--key"
     paths = argv[1:] if key_only else argv
     if not paths:
-        print(__doc__.strip(), file=sys.stderr)
+        print((__doc__ or "").strip(), file=sys.stderr)
         return 2
     for path in paths:
         sx, io = from_statx(path), from_ioctl(path)

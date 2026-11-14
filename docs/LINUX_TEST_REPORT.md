@@ -475,3 +475,53 @@ Not covered by this round: live repro of #290 with a failing-bpftool wrapper + r
 the desktop UI wording on a live session (unit-tested), Debian, Wayland/KDE, NetworkManager-only DNS,
 `resolv.conf` rollback, offline install, upgrade/uninstall with active rules, interrupted install, arm64,
 package signing.
+
+## btrfs subvolume id in the BPF exe key (2026-11-14, branch `buba/linux`): red `7a75471`, fix `788c709`
+
+Author-run evidence on project machines (not GitHub-hosted CI). `scripts/linux/package.sh all` at
+`788c709` → `axiom-0.17.0-1.x86_64.rpm` (sha256 `acf439bd4c6a8a6c…`), `axiom_0.17.0_amd64.deb`
+(`710d78b0f9b09685…`). BPF object built with clang 18 / libbpf 1.3 (`make -C …/Bpf/native` via
+`package.sh`). Scratch scripts: `vm-btrfs.sh`, `host-neutralise.sh` (outputs quoted below).
+
+### Unit tests (red → green)
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| R4-U1 | `dotnet test tests/Axiom.Infrastructure.Linux.Nft.Tests` at `7a75471` (stubs only) | red as intended | `Failed: 13, Passed: 134` — layout ABI 2, subvolume-keyed plan, same ino in two subvolumes, non-btrfs subvol 0, unprovable subvolume, unconfirmed kernel, mismatch, self-check record, engine self-check pass/mismatch, ABI 1 object refused, doctor `live enforcement` on a neutralised layer, plus the 24-byte hex of an existing engine test |
+| R4-U2 | same at `788c709` | PASS | `Passed: 148` (Nft), `Passed: 32` (Linux) |
+| R4-U3 | host `sudo bpftool -d prog loadall out/axiom_connect.bpf.o /sys/fs/bpf/axiomtest …` (ext4, kernel 7.0) | PASS | `relo #7: <type_exists> struct btrfs_inode___axiom … no matching targets found … patched insn #117 imm 1 -> 0`; verifier accepted; `map show` `bytes_key 24`; scratch pins removed |
+
+### Gate at `788c709` (`~/vms/macos-dev/build-lock`-serialised `scripts/ci/run-all.sh`, `-c Release`)
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| R4-G1 | builds | PASS | `build Axiom.sln rc=0 0 Warning(s) 0 Error(s)`, `build Axiom.Portable.slnx rc=0 0 Warning(s) 0 Error(s)` |
+| R4-G2 | test projects | PASS | Linux.Nft 148/148, Linux 32/32, Unix 32/32, Desktop.Avalonia.Linux 51/51, Infrastructure.MacOS 221/221, Desktop.Avalonia.MacOS 35/35, UI.Avalonia 57/57, Contracts 142/142, McpServer 33/33, Persistence 21/21, Presentation 93/93; UI.Tests (WPF) 0 results on Linux |
+| R4-G3 | Windows-only failures vs base `0fc7822` (detached worktree, same host) | identical | Core 11, Service 12, Infrastructure.Windows 23 = 46 names each; `diff` of the sorted names is empty |
+
+### Fedora 45 VM (`clean` snapshot, btrfs root, SELinux Enforcing, kernel 7.2.11-300.fc45), RPM `788c709`
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| R4-F1 | `sudo dnf install -y ./axiom-0.17.0-1.x86_64.rpm bpftool` | PASS | `Complete!`, `active`, `axiom-0.17.0-1.x86_64`, `bpftool-7.7.0-3.fc45` |
+| R4-F2 | journal | PASS | `BPF exe key self-check verified: kernel and user space agree for /usr/libexec/axiom/axiomd: dev 0:33 ino 34192 subvol 256 (btrfs); btrfs subvolume read relocated (CO-RE).`; `axiom_selfcheck` dump `tgid 0 hits 1 dev 0:33 ino 34192 subvol 256 flags 3` |
+| R4-F3 | `sudo /usr/libexec/axiom/axiomd --doctor` | PASS | `PASS bpf exe key: /usr/bin/env: key dev 0:33 ino 3102 subvol 256, source mountinfo superblock dev (btrfs at /, /dev/vda3) + btrfs subvolume id 256 (statx STATX_SUBVOL (BTRFS_IOC_INO_LOOKUP agrees)); stat st_dev 0:35 is a btrfs subvolume device and is NOT used. Kernel self-check verified: …`; `Result: all checks passed.` |
+| R4-F4 | `python3 -I btrfs-subvol.py …` (statx vs ioctl) | PASS | curl 256/256, axiomd 256/256, `/home/axiom` 258/258, `subA/tool` 260/260, `subB/tool` 261/261, `/boot/loader` 257/257 — all `agree` |
+| R4-F5 | subA/subB: `subA/tool` = python3 copy, `subB/tool` = copy + marker (sha256 `8f9b3657…` / `b23fe00f…`), both ino 257, `st_dev` 0:68 / 0:69, superblock 0:33; rule on `subA/tool` | PASS | `connectTimeBlockingProven=True`, map key `dev 0:33 ino 257 subvol 260`; fresh connects slipped: A **0/10**, unrelated B **10/10**, system python3 5/5 |
+| R4-F6 | reverse: rule on `subB/tool` | PASS | key `dev 0:33 ino 257 subvol 261`; B **0/10**, A **10/10** |
+| R4-F7 | `unshare -m` + `mount --bind subA/tool /tmp/axns-tool` | PASS | `bind-mounted A in a new mount ns: slipped 0/10` |
+| R4-F8 | `subA/tool` replaced via `rename(2)` | PASS (window reported) | `rule.verify` at once `connectTimeBlockingProven=False`, `the executable at this path was replaced (new inode) …`; 9 s later proven=True, key `ino 258 subvol 260`, 0/10 |
+| R4-F9 | overlayfs merged dir | PASS (nft-only) | `connectTimeBlockingProven=False`, `… is on overlay at /srv/axov/merged …` |
+| R4-F10 | `canary.sh unscoped --count 50` (btrfs root) | PASS | both rules `connectTimeBlockingProven=True`; curl v4 **0/50**, v6 **0/50**, python v4 **0/50**, v6 **0/50** slipped (`b06adb8`: 49/50, 50/50, 49/50, 49/50) |
+| R4-F11 | verifier / SELinux / end state | PASS | 4 `axiom_*` programs attached; 0 verifier/loadall errors in the journal; `ausearch -m avc,user_avc,selinux_err -ts boot` → `<no matches>`; `canary.sh --cleanup` → `topology and /opt/axiom-canary removed`; owned rules 0; VM powered off (qemu exited) |
+
+### Ubuntu host (24.04.5, ext4, kernel 7.0.0-42-generic), `.deb` `788c709`
+
+| # | Step | Result | Evidence |
+|---|---|---|---|
+| R4-H1 | `sudo -n dpkg -i build/linux/axiom_0.17.0_amd64.deb` | PASS | `active`; journal `BPF exe key self-check verified: … axiomd: dev 8:2 ino 4194354 subvol 0; no btrfs BTF at load: btrfs subvolume ids are not read.` |
+| R4-H2 | `axiomd --doctor` | PASS | `PASS bpf exe key: /usr/bin/env: key dev 8:2 ino 51660111 subvol 0, source mountinfo superblock dev (ext4 at /, /dev/sda2) (subvol 0: not btrfs). Kernel self-check verified: …`; `Result: all checks passed.` |
+| R4-H3 | `sudo scripts/linux/canary.sh unscoped --count 50 --keep-topology` | PASS | proven=True ×2; curl v4 0/50, v6 0/50, python v4 0/50, v6 0/50 slipped |
+| R4-H4 | neutralised layer (`mv …/axiom_exe_verdicts held_…`, rule removed → delete fails) → doctor | PASS | `WARN live enforcement: … but the connect-time BPF layer is neutralised (degraded: detached after 1 stale map entry could not be deleted (generation 44); …)`, `WARN bpf layer: … neutralised …`, `Result: 2 problem(s).`; the same report also said `table inet axiom is missing (another tool may have flushed the ruleset)` — not investigated; after `systemctl restart axiomd`: all PASS |
+| R4-H5 | `sudo scripts/linux/canary.sh --cleanup`; final state | PASS | `topology and /opt/axiom-canary removed`, no netns; `axiomd` active, 0 owned rules, protection off, Privacy Shield `Disabled`, `Link 2 (eno2): 192.168.70.1`, 4 `axiom_*` programs attached |
+

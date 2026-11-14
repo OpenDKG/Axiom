@@ -48,8 +48,11 @@ Decision (`decide()` in the C file), per call:
    (`axiom_stats[3]`). Parity with the nft chains' loopback exemption.
 2. `cgroup_id = bpf_get_current_cgroup_id()` → `axiom_cgroup_verdicts[cgroup_id]`.
 3. `exe = task->mm->exe_file->f_inode` via `bpf_get_current_task_btf()` + `BPF_CORE_READ`
-   (CO-RE against the running kernel's BTF): key `{MAJOR(i_sb->s_dev), MINOR(i_sb->s_dev), i_ino}`
-   → `axiom_exe_verdicts[key]`. Kernel threads (no `mm`) skip this.
+   (CO-RE against the running kernel's BTF): key `{MAJOR(i_sb->s_dev), MINOR(i_sb->s_dev), i_ino,
+   subvol}` → `axiom_exe_verdicts[key]`; `subvol` is the btrfs subvolume id
+   (`BTRFS_I(inode)->root->root_key.objectid`) when `i_sb->s_magic == BTRFS_SUPER_MAGIC`, else 0 (ABI 2,
+   §2.1). Kernel threads (no `mm`) skip this. Before step 1 the programs record the key of the daemon's
+   own exe in `axiom_selfcheck` while the daemon has armed it (§2.1, self-check).
 4. A hit whose `proto_mask` contains the socket's protocol bit (TCP/UDP/other) is the verdict;
    **block wins over allow** when both maps hit (nft chain order: block rules first).
 5. Hit → ring-buffer event; `action == BLOCK` → `return 0` (the kernel fails the syscall with
@@ -61,7 +64,8 @@ Maps (pinned under `/sys/fs/bpf/axiom/maps/`):
 
 | Map | Type | Key | Value | Filled from |
 |---|---|---|---|---|
-| `axiom_exe_verdicts` | hash, 4096 | `struct axiom_exe_key {u32 dev_major; u32 dev_minor; u64 ino}` (16 B) | `struct axiom_verdict` | dev: `/proc/self/mountinfo` field 3 of the mount holding `realpath(appPath)`; ino: `stat -L -c %i` (§2.1) |
+| `axiom_exe_verdicts` | hash, 4096 | `struct axiom_exe_key {u32 dev_major; u32 dev_minor; u64 ino; u64 subvol}` (24 B, ABI 2) | `struct axiom_verdict` | dev: `/proc/self/mountinfo` field 3 of the mount holding `realpath(appPath)`; ino: `stat -L -c %i`; subvol: `statx(STATX_SUBVOL)` / `BTRFS_IOC_INO_LOOKUP` on btrfs, 0 elsewhere (§2.1) |
+| `axiom_selfcheck` | array, 1 | `u32 0` | `struct axiom_selfcheck {u32 target_tgid; u32 hits; axiom_exe_key key; u32 flags; u32 reserved}` (40 B) | the daemon arms it with its tgid; the programs record its exe key and flags (1 btrfs CO-RE relocated, 2 exe on btrfs) |
 | `axiom_cgroup_verdicts` | hash, 4096 | `u64 cgroup_id` | `struct axiom_verdict` | inode number of `/sys/fs/cgroup/axiom.slice/a-<hash>` (cgroup v2 id == directory inode) |
 | `axiom_events` | ringbuf, 256 KiB | — | `struct axiom_event` (72 B) | the programs |
 | `axiom_stats` | array, 4 | index | `u64` | lookups, blocked, events dropped, loopback allowed |
@@ -70,20 +74,24 @@ Maps (pinned under `/sys/fs/bpf/axiom/maps/`):
 2 UDP, 4 other), `u16 reserved`, `u32 rule_generation`, `u8 rule_id[16]` (the .NET `Guid` byte order,
 carried opaquely so events name the rule without a second lookup). `BpfLayout.cs` mirrors every
 offset; `BpfLayerTests.Layout_encodes_keys_and_verdicts_little_endian_and_round_trips_rule_ids` pins
-the encoding; `AXIOM_BPF_ABI`/`BpfLayout.Abi` (1) is printed by the helper and checked by the parser.
+the encoding; `AXIOM_BPF_ABI`/`BpfLayout.Abi` (2 since the subvolume field; 1 had the 16-byte key) is
+printed by the helper and checked by the parser. After `prog loadall` the engine reads
+`bpftool -j map show pinned …/axiom_exe_verdicts` and refuses (detach + unpin, layer `inactive: object key
+layout mismatch: … key is 16 bytes, this daemon writes 24 (ABI 2)`) an object built for another layout;
+pins are never reused across daemon starts anyway (startup always detaches and unpins, then loads fresh).
 
 Why dev **major/minor** and not raw `s_dev`: the kernel's `dev_t` is `MKDEV(ma, mi) = ma<<20 | mi`,
 glibc's `st_dev` packs differently; splitting removes the ambiguity (`stat` prints `%Hd %Ld`).
 
-### 2.1 Exe key derivation (`BpfExeKey`, `MountInfoTable`)
+### 2.1 Exe key derivation (`BpfExeKey`, `MountInfoTable`, `BtrfsSubvolumeReader`, self-check)
 
-The kernel side is fixed: `MAJOR/MINOR(exe_file->f_inode->i_sb->s_dev)` and `i_ino`. User space must
-produce the same numbers, and `stat`'s `st_dev` is **not** always the superblock device: btrfs reports a
-per-subvolume anonymous device (Fedora 45: `/usr/bin/curl` → `stat` `0 35 3056`, `findmnt -T` → `0:33`).
-The first implementation keyed on `st_dev`, so on btrfs the exe map never matched while `rule.verify`
-claimed "BPF-backed … read back verified" (LINUX_TEST_REPORT.md F-8).
+The kernel side reads `MAJOR/MINOR(exe_file->f_inode->i_sb->s_dev)`, `i_ino` and, on btrfs, the
+subvolume id. User space must produce the same numbers, and `stat`'s `st_dev` is **not** always the
+superblock device: btrfs reports a per-subvolume anonymous device (Fedora 45: `/usr/bin/curl` → `stat`
+`0 35 3056`, `findmnt -T` → `0:33`). The first implementation keyed on `st_dev`, so on btrfs the exe map
+never matched while `rule.verify` claimed "BPF-backed … read back verified" (LINUX_TEST_REPORT.md F-8).
 
-Chosen design (kernel side unchanged): the planner derives
+User-space derivation (`BpfExeKey.Resolve`):
 
 - **dev** = `MAJ:MIN` (field 3) of the `/proc/self/mountinfo` entry whose mount point is the longest
   whole-component prefix of `realpath -e <appPath>`; among identical mount points the *last* line wins
@@ -93,53 +101,87 @@ Chosen design (kernel side unchanged): the planner derives
   The daemon runs as a system service in the host mount namespace; systemd's `ProtectSystem=`
   sandboxing only adds read-only re-mounts of the same superblocks.
 - **ino** = `stat -L -c %i` (equals `i_ino` on ext4, xfs, btrfs, tmpfs, squashfs, NFS/FUSE on 64-bit).
+- **subvol** = 0 unless the mount is btrfs. On btrfs: `statx(path, STATX_SUBVOL)` → `stx_subvol`
+  (Linux 6.10+, mask `0x8000`, offset 160) and `BTRFS_IOC_INO_LOOKUP` (`0xD0009412`, `treeid=0`,
+  `objectid=256`) → `treeid`, which the kernel answers for the fd's own subvolume without
+  `CAP_SYS_ADMIN`. statx is preferred, the ioctl is the fallback, and when both answer they must agree
+  (`BtrfsSubvolumeReader.Combine`); disagreement or no answer → not provable.
+  `scripts/linux/btrfs-subvol.py` prints both for any path (used by `e2e.sh` and the VM proof).
 - **cross-check**: `st_dev` must equal the mountinfo dev; the only accepted difference is btrfs (subvolume
   device by design). Anything else is "not provable".
+
+Kernel side (`axiom_connect.bpf.c`, `btrfs_subvol()`): when `inode->i_sb->s_magic == 0x9123683E`, the
+program does `container_of(inode, struct btrfs_inode, vfs_inode)->root->root_key.objectid` with local
+CO-RE flavours (`struct btrfs_inode___axiom { struct btrfs_root___axiom *root; struct inode vfs_inode; }`,
+`btrfs_root___axiom { btrfs_key___axiom root_key; }`, `btrfs_key___axiom { u64 objectid; }`, all
+`preserve_access_index`). The `vfs_inode` offset comes from `bpf_core_field_offset`, so the layout is
+the running kernel's, not the build host's. Every access is behind `bpf_core_type_exists` /
+`bpf_core_field_exists`: libbpf resolves them against vmlinux BTF (Fedora builds btrfs in) or
+`/sys/kernel/btf/btrfs` (module, when loaded); without btrfs BTF (Ubuntu ext4 host: btrfs is an unloaded
+module) the guards relocate to 0, the branch is dead code the verifier never walks, and subvol stays 0.
+Checked against Fedora 45 / 7.2.11 BTF: `struct btrfs_inode { struct btrfs_root *root; … struct inode
+vfs_inode; }`, `struct btrfs_root { … struct btrfs_key root_key; … }`, `btrfs_key` packed
+`{u64 objectid; u8 type; u64 offset}`.
+
+**Self-check (kernel vs user space, every attach).** After attaching, `BpfEngine` writes its tgid into
+`axiom_selfcheck[0]`, makes one UDP `connect()` to `127.0.0.1:9` (runs `connect4`, sends nothing; the
+record is taken before the loopback exemption), reads the record back and disarms it (target 0, record
+kept for the doctor). The recorded key of `/proc/<pid>/exe` (= `/usr/libexec/axiom/axiomd`) is compared
+with the user-space key of the same file (`BpfKernelKeyCheck.Compare`):
+
+| Result | Effect |
+|---|---|
+| `verified`, flag 1 (btrfs CO-RE relocated) | btrfs exe rules get `{s_dev, ino, subvol}` keys → connect-time proven again; ext4/xfs as before |
+| `verified`, no flag 1 | ext4/xfs keys as before; btrfs exe rules stay nft-only (`… the loaded BPF program's btrfs subvolume id is not confirmed (no btrfs BTF at load …)`) |
+| `unverified` (old object without the map, no record, own key not provable) | ext4/xfs keys as before; btrfs exe rules nft-only with the reason |
+| `mismatch` | **no** exe key at all (`kernel/userspace exe key mismatch for …: kernel dev … ino … subvol …, user space …`); cgroup keys stay; this also hardens ext4/xfs |
+
+The journal logs `BPF exe key self-check verified: kernel and user space agree for /usr/libexec/axiom/axiomd:
+dev 0:33 ino 34192 subvol 256 (btrfs); btrfs subvolume read relocated (CO-RE).` (Fedora) or `… dev 8:2 ino
+4194354 subvol 0; no btrfs BTF at load …` (Ubuntu host).
+
+**btrfs (history and current state).** Inode numbers are unique per *subvolume*, not per superblock, and
+every subvolume shares the superblock `s_dev`, so the ABI 1 key `{0:33, ino}` matched that inode number in
+**every** subvolume (proven on the Fedora 45 VM, §11.1: two fresh subvolumes give their first file inode
+257, and the key written for one blocked a *different* executable in the other). From `c60fc36` to ABI 2
+btrfs exe rules were therefore nft-only (`exe key ambiguous on btrfs subvolumes`, ~50/50 fresh-process
+slips on Fedora). With ABI 2 the subvolume id separates them: on the VM a rule on `subA/tool` (ino 257,
+subvol 260) blocks it 0/10 while `subB/tool` (ino 257, subvol 261) connects 10/10, and the reverse; the
+canary is 0/50 on Fedora's btrfs root (§11.1, §11.2). The old reason is kept, extended with *why* the
+subvolume id is not usable, whenever the self-check did not confirm the kernel side or user space cannot
+read the id; the safe direction is still to under-claim rather than block unrelated binaries.
 
 When the key is not provable the rule is reported **uncovered** (`exe key not provable for <app>: …`),
 never "BPF-backed": no mountinfo entry / unreadable mountinfo, `realpath` failure, overlayfs (and
 `fuse-overlayfs`/aufs) — there `exe_file->f_inode` is the overlay inode, whose device and inode number
-user-space `stat` does not report reliably (`xino`, samefs vs. multi-layer) — and an unexplained
-`st_dev` ≠ `s_dev`. The app's cgroup key is still written (herded processes stay blocked at connect
-time), but `LayerSyncResult.CoveredRules` excludes every uncovered rule, so `rule.verify` says
-`nft-only: … the ~1 s exec window applies` instead of claiming a connect-time verdict. Directory rules are
-reported the same way (previously their cgroup entry made them look "BPF-backed").
-
-Rejected alternative: keying the kernel side on something else (`f_path.mnt`, the btrfs root objectid).
-A mount pointer is per mount, not per file, and the btrfs root id needs btrfs-internal structures
-(CO-RE relocatable, but only when btrfs BTF is present); the mountinfo route needs no kernel change and is
-provable from user space. It is correct on single-subvolume filesystems, not on btrfs (next paragraph).
-
-**btrfs: exe keys are not used (since `c60fc36`).** Inode numbers are unique per *subvolume*, not per
-superblock, and every subvolume shares the superblock `s_dev`, so `{0:33, ino}` matches that inode number
-in **every** subvolume of the filesystem. This was proven on the Fedora 45 VM (§11.1): two fresh
-subvolumes give their first file the same inode 257, and the key written for one blocked a *different*
-executable in the other subvolume at connect time. `BpfExeKey.Resolve` therefore returns no key on btrfs
-(`exe key ambiguous on btrfs subvolumes`); the rule is reported nft-only (`connectTimeBlockingProven=false`,
-`coverageReason` says why), the herded-cgroup BPF key still applies, and the doctor's `bpf exe key` check
-is `SKIP` there. Trade-off: on Fedora's default root (btrfs) exe rules lose the connect-time layer and
-keep the ~1 s exec window (measured ~50/50 fresh-process slips, §11.2) — the safe direction is to
-under-claim rather than block unrelated binaries. **Proposed follow-up (not done):** add the btrfs
-subvolume id to the kernel-side key (CO-RE read of `BTRFS_I(inode)->root->root_key.objectid`, guarded by
-`bpf_core_type_exists(struct btrfs_inode)`), with user space taking the subvolume id from
-`btrfs inspect-internal rootid` / `BTRFS_IOC_INO_LOOKUP`; only then can btrfs exe rules be proven again.
+user-space `stat` does not report reliably (`xino`, samefs vs. multi-layer) — an unexplained
+`st_dev` ≠ `s_dev`, an unconfirmed/unreadable btrfs subvolume id, or a self-check mismatch. The app's
+cgroup key is still written (herded processes stay blocked at connect time), but
+`LayerSyncResult.CoveredRules` excludes every uncovered rule, so `rule.verify` says `nft-only: … the ~1 s
+exec window applies` instead of claiming a connect-time verdict. Directory rules are reported the same way.
 
 Containers: a process inside an overlay rootfs has an overlay exe inode, so host-path rules do not
 exe-match it (the cgroup key does if it is herded); this is the same behaviour nftables' cgroup rules
 have. Overlay paths are nft-only and reported so (§11.1).
 
-The journal prints every key it writes and every rule it leaves to nftables:
-`BPF exe key: exe /usr/bin/curl dev 0:33 ino 3056 proto 0x7 (dev 0:33 from mountinfo (btrfs at / [root /root]; stat 0:35 is the btrfs subvolume device)).`
+Every planned exe entry carries its derivation (format from `BpfVerdictPlanner`; the subA example is
+assembled from the VM values, not a captured journal line):
+`exe /srv/axbt/subA/tool dev 0:33 ino 257 subvol 260 proto 0x7 (dev 0:33 from mountinfo (btrfs at / [root /root]; stat 0:68 is the subvolume device), subvol 260 from statx STATX_SUBVOL (BTRFS_IOC_INO_LOOKUP agrees))`.
 
-`axiomd --doctor` has a **`bpf exe key`** check: it derives the key of `/usr/bin/env` the same way and
-prints the source, the filesystem and — on btrfs — that `st_dev` is a subvolume device and unused
-(`PASS bpf exe key: /usr/bin/env: key dev 0:33 ino … , source mountinfo superblock dev (btrfs at /, /dev/vda3). stat st_dev 0:35 is a btrfs subvolume device and is NOT used.`);
-WARN with the reason when the key is not provable (exe rules then stay nft-only).
+`axiomd --doctor` has a **`bpf exe key`** check: it derives the key of `/usr/bin/env` the same way, prints
+the source, the filesystem, the subvolume id and its source, and re-checks the running daemon's
+`axiom_selfcheck` record against the user-space key of the installed image (root):
+`PASS bpf exe key: /usr/bin/env: key dev 0:33 ino 3102 subvol 256, source mountinfo superblock dev (btrfs at /, /dev/vda3) + btrfs subvolume id 256 (statx STATX_SUBVOL (BTRFS_IOC_INO_LOOKUP agrees)); stat st_dev 0:35 is a btrfs subvolume device and is NOT used. Kernel self-check verified: …`.
+`SKIP` on btrfs when the subvolume id is not confirmed (documented boundary), `WARN` on a self-check
+mismatch or an unprovable key.
 
 Tests: `BpfExeKeyTests` (mountinfo parser: btrfs subvolumes, ext4, xfs, overlay, bind mounts, escapes,
-longest component prefix, overmounts, garbage lines; planner with a Fedora btrfs fixture expecting
-`0:33`; symlink resolution; not-provable cases → uncovered; engine: cgroup-only ≠ covered; doctor; bpftool
-hint per distribution).
+longest component prefix, overmounts, garbage lines; planner with a Fedora btrfs fixture; symlink
+resolution; not-provable cases → uncovered; doctor; bpftool hint per distribution) and
+`BtrfsSubvolumeKeyTests` (ABI 2 layout, subvolume-keyed btrfs plan, same ino in two subvolumes → two keys,
+non-btrfs subvol 0 without asking, unprovable subvolume, unconfirmed kernel side, mismatch drops every exe
+key, self-check record round trip/compare, engine self-check pass and mismatch over the fake bpftool,
+ABI 1 object refused and unpinned, statx/ioctl combination, doctor `live enforcement` WARN when neutralised).
 
 ## 3. What the daemon writes into the maps (`BpfVerdictPlanner`)
 
@@ -282,7 +324,7 @@ process killed except the helper the script started; every object the script cre
 - Allowed flows produce no BPF events (by design, §3); flow visibility of allowed traffic stays with
   `/proc/net` polling.
 - Kernels without BTF (some distro kernels, older LTS) and non-root test runs: nft-only, reported.
-- btrfs: exe keys are ambiguous across subvolumes and not used since `c60fc36` (§2.1, §11); overlayfs exe
+- btrfs: exe keys carry the subvolume id since ABI 2 and are used once the self-check confirms the kernel side (§2.1); before that (from `c60fc36`) they were nft-only; overlayfs exe
   paths stay nft-only (+ cgroup key).
 - `bpftool` must exist on the target; the probe and the doctor print a distribution-aware hint from
   `/etc/os-release` `ID`/`ID_LIKE` (`BpftoolHint`): Ubuntu & derivatives `apt install linux-tools-common
@@ -424,6 +466,11 @@ fix the canary measured 99/100 fresh-process slips while the daemon still claime
 | hard link at another path | Ubuntu host, ext4 | 0/20 slipped | same |
 | executable replaced by `rename(2)` (new inode) | Ubuntu host, ext4 | `rule.verify` immediately `connectTimeBlockingProven=False` (`the executable at this path was replaced (new inode)…`); fresh connects slipped 3/3 per probe round for ~7 s wall clock (05:25:53 → 05:26:00), then 0/3 after the watch tick re-resolved (`BPF exe key(s) re-resolved`) | re-resolve on the watch tick; window documented |
 | tmpfs copy (provable key) | Fedora VM and host | `connectTimeBlockingProven=True`, 0/20 slipped | proven |
+| **ABI 2** (`788c709`): subA/subB, ino 257 both, **different** executables (sha256 `8f9b3657…` / `b23fe00f…`, subvol 260 / 261, statx = ioctl); rule on `subA/tool` | Fedora 45 VM | `connectTimeBlockingProven=True`, map key `dev 0:33 ino 257 subvol 260`; slipped subA **0/10**, unrelated subB **10/10**, system python3 5/5 | subvolume id separates the keys |
+| ABI 2, reverse: rule on `subB/tool` | Fedora 45 VM | key `… ino 257 subvol 261`; subB **0/10**, subA **10/10** | same |
+| ABI 2, `unshare -m` + bind mount of `subA/tool` (btrfs) | Fedora 45 VM | 0/10 slipped | inode + subvolume keyed: the path does not matter |
+| ABI 2, `subA/tool` replaced by `rename(2)` | Fedora 45 VM | `rule.verify` at once `connectTimeBlockingProven=False` (`the executable at this path was replaced (new inode)…`); after the watch tick key `ino 258 subvol 260`, proven=True, 0/10 | window reported, then re-keyed |
+| ABI 2, overlayfs | Fedora 45 VM | still nft-only, `… is on overlay at /srv/axov/merged …` | unchanged |
 
 ### 11.2 Live negative canary (`scripts/linux/canary.sh`)
 
@@ -446,6 +493,8 @@ exec. `sudo scripts/linux/canary.sh --cleanup` removes the netns, the veth and t
 | Ubuntu, unscoped, Axiom's programs detached (nft only) | 50/50 | 50/50 | 49/50 | 49/50 | before `b06adb8`: still proven=True (bug); now False |
 | Fedora 45 btrfs, unscoped (`b06adb8`) | 49/50 | 50/50 | 49/50 | 49/50 | proven=False (btrfs) |
 | Fedora 45 btrfs, scoped (`b06adb8`) | 50/50 | 49/50 | 49/50 | 50/50 | proven=False |
+| **Fedora 45 btrfs, unscoped, ABI 2 (`788c709`)** | **0/50** | **0/50** | **0/50** | **0/50** | proven=True (subvol 256) |
+| Ubuntu ext4, unscoped, ABI 2 (`788c709`) | 0/50 | 0/50 | 0/50 | 0/50 | proven=True (subvol 0) |
 
 Numbers are slipped/attempts (a connect that completed although the rule blocks the executable). The
 nft-only window lets almost every immediate connect through; only the connect-time layer closes it, and
