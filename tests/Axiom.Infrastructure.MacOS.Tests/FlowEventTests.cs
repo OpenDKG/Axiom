@@ -92,7 +92,9 @@ public sealed class FlowEventTests
             "",
             "\u0000\u0001binary");
 
-        await server.ConsumeAsync(new MemoryStream(Encoding.UTF8.GetBytes(stream)), CancellationToken.None);
+        var connection = status.ClientConnected();
+        await server.ConsumeAsync(new MemoryStream(Encoding.UTF8.GetBytes(stream)), connection, CancellationToken.None);
+        status.ClientDisconnected(connection);
 
         Assert.Equal(1, flows.Count);
         Assert.Equal(3, server.AcceptedEvents);
@@ -109,11 +111,12 @@ public sealed class FlowEventTests
         var flows = new FlowTable();
         var status = new FilterStatus();
         var source = new MacConnectionSource(flows, status, PathOnlyIdentitySource.Instance, () => [], time);
+        var connection = status.ClientConnected();
 
         void Feed(string json)
         {
             var parsed = FlowEventParser.TryParse(json)!;
-            status.EventSeen(time.GetUtcNow());
+            status.EventSeen(connection, time.GetUtcNow());
             flows.Apply(parsed, time.GetUtcNow());
         }
 
@@ -193,7 +196,7 @@ public sealed class FlowEventTests
 
         // Filter events take over as soon as they stream.
         var status = new FilterStatus();
-        status.ClientConnected();
+        _ = status.ClientConnected();
         var streaming = new MacConnectionSource(new FlowTable(), status, PathOnlyIdentitySource.Instance, () => sockets, time);
         Assert.Equal(MacConnectionSource.FlowSourceName, streaming.Capture(CancellationToken.None).SourceName);
     }

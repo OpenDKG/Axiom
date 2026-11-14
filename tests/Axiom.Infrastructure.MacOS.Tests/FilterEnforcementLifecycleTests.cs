@@ -48,8 +48,8 @@ public sealed class FilterEnforcementLifecycleTests
         Assert.Equal(FilterEnforcementState.Unavailable, status.Evaluate(1));
         Assert.Null(status.LastSeenUtc);
 
-        status.ClientConnected();
-        status.Hello("1.0", 1, Start);
+        var connection = status.ClientConnected();
+        status.Hello(connection, "1.0", 1, Start);
         // A hello naming the generation is not an acknowledgement.
         Assert.Equal(FilterEnforcementState.Pending, status.Evaluate(1));
         Assert.Null(status.AckedGeneration);
@@ -60,16 +60,16 @@ public sealed class FilterEnforcementLifecycleTests
     public void ConnectAndAckVerifiesThenDisconnectWithdrawsImmediately()
     {
         var status = new FilterStatus();
-        status.ClientConnected();
-        status.Hello("1.0", 5, Start);
-        status.RulesReported(RulesEvent(5, applied: 1), Start.AddMilliseconds(40));
+        var connection = status.ClientConnected();
+        status.Hello(connection, "1.0", 5, Start);
+        status.RulesReported(connection, RulesEvent(5, applied: 1), Start.AddMilliseconds(40));
 
         Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(5));
         Assert.Equal(5, status.AckedGeneration);
         Assert.Equal(Start.AddMilliseconds(40), status.LastAckUtc);
         Assert.Equal(FilterEnforcementState.Pending, status.Evaluate(6));
 
-        status.ClientDisconnected();
+        status.ClientDisconnected(connection);
 
         // No grace window: a hello 40 ms old proves nothing once the connection is gone.
         Assert.Equal(FilterEnforcementState.Degraded, status.Evaluate(5));
@@ -85,20 +85,20 @@ public sealed class FilterEnforcementLifecycleTests
     public void ReconnectNeedsAFreshAckEvenForTheSameGeneration()
     {
         var status = new FilterStatus();
-        status.ClientConnected();
-        status.RulesReported(RulesEvent(5), Start);
-        status.ClientDisconnected();
-        status.ClientConnected();
-        status.Hello("1.0", 5, Start.AddSeconds(1));
+        var first = status.ClientConnected();
+        status.RulesReported(first, RulesEvent(5), Start);
+        status.ClientDisconnected(first);
+        var second = status.ClientConnected();
+        status.Hello(second, "1.0", 5, Start.AddSeconds(1));
 
         // Same generation in the hello, no filter.rules on this connection: pending, not verified.
         Assert.Equal(FilterEnforcementState.Pending, status.Evaluate(5));
 
         // A stale generation on the new connection stays pending.
-        status.RulesReported(RulesEvent(4), Start.AddSeconds(2));
+        status.RulesReported(second, RulesEvent(4), Start.AddSeconds(2));
         Assert.Equal(FilterEnforcementState.Pending, status.Evaluate(5));
 
-        status.RulesReported(RulesEvent(5), Start.AddSeconds(3));
+        status.RulesReported(second, RulesEvent(5), Start.AddSeconds(3));
         Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(5));
     }
 
@@ -106,22 +106,22 @@ public sealed class FilterEnforcementLifecycleTests
     public void FileRejectionIsNotAnAckAndRecoveryNeedsAValidAck()
     {
         var status = new FilterStatus();
-        status.ClientConnected();
-        status.RulesReported(RulesEvent(5), Start);
+        var connection = status.ClientConnected();
+        status.RulesReported(connection, RulesEvent(5), Start);
         Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(5));
 
         // Generation 6 published, the filter rejects the file and keeps 5.
-        status.RulesReported(RulesEvent(5, error: "invalid JSON"), Start.AddSeconds(1));
+        status.RulesReported(connection, RulesEvent(5, error: "invalid JSON"), Start.AddSeconds(1));
         Assert.Equal(FilterEnforcementState.Pending, status.Evaluate(6));
         Assert.Equal(5, status.AckedGeneration);
         Assert.Equal("invalid JSON", status.Snapshot(6).FileRejectionSince(Start.AddMilliseconds(500)));
         Assert.Null(status.Snapshot(6).FileRejectionSince(Start.AddSeconds(2)));
 
         // Filter restart after invalid rules: recovery only once generation 7 is acknowledged.
-        status.ClientDisconnected();
-        status.ClientConnected();
+        status.ClientDisconnected(connection);
+        var restarted = status.ClientConnected();
         Assert.Equal(FilterEnforcementState.Pending, status.Evaluate(7));
-        status.RulesReported(RulesEvent(7), Start.AddSeconds(3));
+        status.RulesReported(restarted, RulesEvent(7), Start.AddSeconds(3));
         Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(7));
     }
 
@@ -132,16 +132,16 @@ public sealed class FilterEnforcementLifecycleTests
         var absent = Task.Run(() => status.WaitForAcknowledgementAsync(1, Start, TimeSpan.FromSeconds(30), CancellationToken.None));
         Assert.True(await Task.WhenAny(absent, Task.Delay(2000)) == absent, "not connected must not wait");
 
-        status.ClientConnected();
+        var connection = status.ClientConnected();
         var timedOut = status.WaitForAcknowledgementAsync(1, Start, TimeSpan.FromMilliseconds(50), CancellationToken.None);
         Assert.True(await Task.WhenAny(timedOut, Task.Delay(2000)) == timedOut, "bounded wait must time out");
 
         var acked = status.WaitForAcknowledgementAsync(1, Start, TimeSpan.FromSeconds(30), CancellationToken.None);
-        status.RulesReported(RulesEvent(1), Start.AddMilliseconds(5));
+        status.RulesReported(connection, RulesEvent(1), Start.AddMilliseconds(5));
         Assert.True(await Task.WhenAny(acked, Task.Delay(2000)) == acked, "ack must release the wait");
 
         var dropped = status.WaitForAcknowledgementAsync(2, Start, TimeSpan.FromSeconds(30), CancellationToken.None);
-        status.ClientDisconnected();
+        status.ClientDisconnected(connection);
         Assert.True(await Task.WhenAny(dropped, Task.Delay(2000)) == dropped, "disconnect must release the wait");
     }
 
@@ -193,8 +193,8 @@ public sealed class FilterEnforcementLifecycleTests
         var (_, time, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
-            status.Hello("1.0", -1, time.GetUtcNow());
+            var connection = status.ClientConnected();
+            status.Hello(connection, "1.0", -1, time.GetUtcNow());
 
             var result = await adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl"), CancellationToken.None);
             Assert.Equal(RuleState.Pending, result.State);
@@ -215,10 +215,10 @@ public sealed class FilterEnforcementLifecycleTests
         var (_, time, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var first = await adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/nc"), CancellationToken.None);
             Assert.Equal(RuleState.Pending, first.State);
-            status.RulesReported(RulesEvent(1, applied: 1), time.GetUtcNow());
+            status.RulesReported(connection, RulesEvent(1, applied: 1), time.GetUtcNow());
 
             var curl = Specs.Block("/usr/bin/curl");
             var second = await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
@@ -247,7 +247,7 @@ public sealed class FilterEnforcementLifecycleTests
         var (paths, _, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var result = await adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl"), CancellationToken.None);
             Assert.Equal(RuleState.Pending, result.State);
             var pending = Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None));
@@ -255,14 +255,14 @@ public sealed class FilterEnforcementLifecycleTests
             Assert.Null(pending.LastVerifiedUtc);
 
             var ackTime = Start.AddSeconds(30);
-            status.RulesReported(RulesEvent(PublishedGeneration(paths), applied: 1), ackTime);
+            status.RulesReported(connection, RulesEvent(PublishedGeneration(paths), applied: 1), ackTime);
 
             var applied = Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None));
             Assert.Equal(RuleState.Applied, applied.State);
             Assert.Equal(ackTime, applied.LastVerifiedUtc);
 
             // Withdrawn on disconnect: the time stamp never turns a disconnected filter into Applied.
-            status.ClientDisconnected();
+            status.ClientDisconnected(connection);
             Assert.Equal(RuleState.Pending, Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
         }
     }
@@ -274,7 +274,7 @@ public sealed class FilterEnforcementLifecycleTests
         var (paths, time, status, adapter) = Harness(temp, TimeSpan.FromSeconds(5));
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var curl = Specs.Block("/usr/bin/curl");
             var ackTime = Start.AddMilliseconds(70);
 
@@ -287,7 +287,7 @@ public sealed class FilterEnforcementLifecycleTests
                 }
 
                 await Task.Delay(50);
-                status.RulesReported(RulesEvent(PublishedGeneration(paths), applied: 1), ackTime);
+                status.RulesReported(connection, RulesEvent(PublishedGeneration(paths), applied: 1), ackTime);
             });
 
             var result = await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
@@ -315,7 +315,7 @@ public sealed class FilterEnforcementLifecycleTests
             Assert.Equal(RuleState.Applied, Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
 
             // Disconnect after successful enforcement: the claim is withdrawn at once.
-            status.ClientDisconnected();
+            status.ClientDisconnected(connection);
             var degraded = await adapter.VerifyAsync(curl, CancellationToken.None);
             Assert.Null(degraded.EffectiveAction);
             Assert.False(degraded.EnforcementVerified);
@@ -344,12 +344,12 @@ public sealed class FilterEnforcementLifecycleTests
         var (paths, time, status, adapter) = Harness(temp, TimeSpan.FromMilliseconds(30));
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var curl = Specs.Block("/usr/bin/curl");
             var result = await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
             Assert.Equal(RuleState.Pending, result.State);
 
-            status.RulesReported(RulesEvent(PublishedGeneration(paths), applied: 1), time.GetUtcNow());
+            status.RulesReported(connection, RulesEvent(PublishedGeneration(paths), applied: 1), time.GetUtcNow());
 
             Assert.Equal(RuleState.Applied, Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
             Assert.Equal(FirewallAction.Block, (await adapter.VerifyAsync(curl, CancellationToken.None)).EffectiveAction);
@@ -363,7 +363,7 @@ public sealed class FilterEnforcementLifecycleTests
         var (paths, time, status, adapter) = Harness(temp, TimeSpan.FromSeconds(5));
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var bad = Specs.Block("/usr/bin/curl") with { RemoteAddresses = ["1.2.3"] };
             var id = bad.ManagedRuleId.ToString("D");
             var filter = Task.Run(async () =>
@@ -373,7 +373,7 @@ public sealed class FilterEnforcementLifecycleTests
                     await Task.Delay(5);
                 }
 
-                status.RulesReported(RulesEvent(PublishedGeneration(paths), applied: 0, null, (id, "no valid remoteAddresses in [1.2.3]")), time.GetUtcNow());
+                status.RulesReported(connection, RulesEvent(PublishedGeneration(paths), applied: 0, null, (id, "no valid remoteAddresses in [1.2.3]")), time.GetUtcNow());
             });
 
             var result = await adapter.UpsertOwnedRuleAsync(bad, CancellationToken.None);
@@ -401,8 +401,8 @@ public sealed class FilterEnforcementLifecycleTests
         var (paths, time, status, adapter) = Harness(temp, TimeSpan.FromSeconds(5));
         using (adapter)
         {
-            status.ClientConnected();
-            status.RulesReported(RulesEvent(0), Start.AddSeconds(-1));
+            var connection = status.ClientConnected();
+            status.RulesReported(connection, RulesEvent(0), Start.AddSeconds(-1));
             var curl = Specs.Block("/usr/bin/curl");
             var filter = Task.Run(async () =>
             {
@@ -411,7 +411,7 @@ public sealed class FilterEnforcementLifecycleTests
                     await Task.Delay(5);
                 }
 
-                status.RulesReported(RulesEvent(0, error: "owned by uid 501, expected uid 0"), Start.AddSeconds(1));
+                status.RulesReported(connection, RulesEvent(0, error: "owned by uid 501, expected uid 0"), Start.AddSeconds(1));
             });
 
             var result = await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
@@ -442,9 +442,9 @@ public sealed class FilterEnforcementLifecycleTests
         var first = new FilterStatus();
         using (var adapter = new MacFirewallPolicyAdapter(paths, first, () => true, time, TimeSpan.Zero))
         {
-            first.ClientConnected();
+            var firstConnection = first.ClientConnected();
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
-            first.RulesReported(RulesEvent(1, applied: 1), time.GetUtcNow());
+            first.RulesReported(firstConnection, RulesEvent(1, applied: 1), time.GetUtcNow());
             Assert.Equal(RuleState.Applied, Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
         }
 
@@ -456,11 +456,11 @@ public sealed class FilterEnforcementLifecycleTests
 
         var republished = await again.PublishAsync(CancellationToken.None);
         Assert.Equal(2, republished);
-        restarted.ClientConnected();
-        restarted.Hello("1.0", 1, time.GetUtcNow()); // the filter still runs generation 1
+        var restartedConnection = restarted.ClientConnected();
+        restarted.Hello(restartedConnection, "1.0", 1, time.GetUtcNow()); // the filter still runs generation 1
         Assert.Equal(RuleState.Pending, Assert.Single(await again.ListOwnedRulesAsync(CancellationToken.None)).State);
 
-        restarted.RulesReported(RulesEvent(2, applied: 1), time.GetUtcNow());
+        restarted.RulesReported(restartedConnection, RulesEvent(2, applied: 1), time.GetUtcNow());
         Assert.Equal(RuleState.Applied, Assert.Single(await again.ListOwnedRulesAsync(CancellationToken.None)).State);
         Assert.Equal(FirewallAction.Block, (await again.VerifyAsync(curl, CancellationToken.None)).EffectiveAction);
     }
@@ -472,25 +472,25 @@ public sealed class FilterEnforcementLifecycleTests
         var (_, time, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
+            var first = status.ClientConnected();
             var curl = Specs.Block("/usr/bin/curl");
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
-            status.RulesReported(RulesEvent(1, applied: 1), time.GetUtcNow());
+            status.RulesReported(first, RulesEvent(1, applied: 1), time.GetUtcNow());
             Assert.True((await adapter.VerifyAsync(curl, CancellationToken.None)).EnforcementVerified);
 
             // Filter restarts: disconnect, reconnect; the daemon republishes on connect (FilterEventWorker).
-            status.ClientDisconnected();
-            status.ClientConnected();
-            status.Hello("1.0", 1, time.GetUtcNow());
+            status.ClientDisconnected(first);
+            var second = status.ClientConnected();
+            status.Hello(second, "1.0", 1, time.GetUtcNow());
             var republished = await adapter.PublishAsync(CancellationToken.None);
             Assert.Equal(2, republished);
             Assert.Null((await adapter.VerifyAsync(curl, CancellationToken.None)).EffectiveAction);
 
             // A stale ack (the old generation) on the new connection does not verify generation 2.
-            status.RulesReported(RulesEvent(1, applied: 1), time.GetUtcNow());
+            status.RulesReported(second, RulesEvent(1, applied: 1), time.GetUtcNow());
             Assert.Null((await adapter.VerifyAsync(curl, CancellationToken.None)).EffectiveAction);
 
-            status.RulesReported(RulesEvent(2, applied: 1), time.GetUtcNow());
+            status.RulesReported(second, RulesEvent(2, applied: 1), time.GetUtcNow());
             Assert.Equal(FirewallAction.Block, (await adapter.VerifyAsync(curl, CancellationToken.None)).EffectiveAction);
         }
     }

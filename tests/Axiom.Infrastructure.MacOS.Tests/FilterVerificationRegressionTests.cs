@@ -53,13 +53,13 @@ public sealed class FilterVerificationRegressionTests
     public void SameGenerationErrorReportAfterAck_RevokesVerified()
     {
         var status = new FilterStatus();
-        status.ClientConnected();
-        status.RulesReported(RulesEvent(5, applied: 1), Start);
+        var connection = status.ClientConnected();
+        status.RulesReported(connection, RulesEvent(5, applied: 1), Start);
         Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(5));
 
         // The file in place is rejected on re-evaluation (chmod g+w, truncated write, …): the
         // extension reports the generation still in force (5) together with the error.
-        status.RulesReported(RulesEvent(5, applied: 1, error: "group/world-writable (mode 664)"), Start.AddSeconds(1));
+        status.RulesReported(connection, RulesEvent(5, applied: 1, error: "group/world-writable (mode 664)"), Start.AddSeconds(1));
 
         Assert.NotEqual(FilterEnforcementState.Verified, status.Evaluate(5));
         var snapshot = status.Snapshot(5);
@@ -71,13 +71,13 @@ public sealed class FilterVerificationRegressionTests
     public void CleanCurrentAckAfterError_RestoresVerified()
     {
         var status = new FilterStatus();
-        status.ClientConnected();
-        status.RulesReported(RulesEvent(5, applied: 1), Start);
-        status.RulesReported(RulesEvent(5, applied: 1, error: "invalid JSON"), Start.AddSeconds(1));
+        var connection = status.ClientConnected();
+        status.RulesReported(connection, RulesEvent(5, applied: 1), Start);
+        status.RulesReported(connection, RulesEvent(5, applied: 1, error: "invalid JSON"), Start.AddSeconds(1));
         Assert.NotEqual(FilterEnforcementState.Verified, status.Evaluate(5));
 
         // Only a newer, error-free report for the published generation on this connection restores it.
-        status.RulesReported(RulesEvent(5, applied: 1), Start.AddSeconds(2));
+        status.RulesReported(connection, RulesEvent(5, applied: 1), Start.AddSeconds(2));
         Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(5));
         Assert.Equal(Start.AddSeconds(2), status.LastAckUtc);
     }
@@ -86,8 +86,8 @@ public sealed class FilterVerificationRegressionTests
     public void PreviousGenerationAck_DoesNotVerifyThePublishedOne()
     {
         var status = new FilterStatus();
-        status.ClientConnected();
-        status.RulesReported(RulesEvent(6, applied: 1), Start);
+        var connection = status.ClientConnected();
+        status.RulesReported(connection, RulesEvent(6, applied: 1), Start);
         Assert.Equal(FilterEnforcementState.Pending, status.Evaluate(7));
         Assert.False(status.Snapshot(7).IsVerified);
     }
@@ -96,18 +96,18 @@ public sealed class FilterVerificationRegressionTests
     public void PreviousConnectionAck_DoesNotSurviveReconnect()
     {
         var status = new FilterStatus();
-        status.ClientConnected();
-        status.RulesReported(RulesEvent(5, applied: 1), Start);
+        var first = status.ClientConnected();
+        status.RulesReported(first, RulesEvent(5, applied: 1), Start);
         Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(5));
 
-        status.ClientDisconnected();
+        status.ClientDisconnected(first);
         Assert.Equal(FilterEnforcementState.Degraded, status.Evaluate(5));
-        status.ClientConnected();
-        status.Hello("1.0", 5, Start.AddSeconds(1));
+        var second = status.ClientConnected();
+        status.Hello(second, "1.0", 5, Start.AddSeconds(1));
         Assert.Equal(FilterEnforcementState.Pending, status.Evaluate(5));
         Assert.False(status.Snapshot(5).IsVerified);
 
-        status.RulesReported(RulesEvent(5, applied: 1), Start.AddSeconds(2));
+        status.RulesReported(second, RulesEvent(5, applied: 1), Start.AddSeconds(2));
         Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(5));
     }
 
@@ -120,11 +120,11 @@ public sealed class FilterVerificationRegressionTests
         var (paths, time, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var curl = Specs.Block("/usr/bin/curl");
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
             var generation = PublishedGeneration(paths);
-            status.RulesReported(RulesEvent(generation, applied: 1), time.GetUtcNow());
+            status.RulesReported(connection, RulesEvent(generation, applied: 1), time.GetUtcNow());
             Assert.True((await adapter.VerifyAsync(curl, CancellationToken.None)).EnforcementVerified);
 
             // Same generation on disk, but the expected rule is not in the table the filter runs.
@@ -151,16 +151,16 @@ public sealed class FilterVerificationRegressionTests
         var (paths, time, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var curl = Specs.Block("/usr/bin/curl");
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
             var generation = PublishedGeneration(paths);
-            status.RulesReported(RulesEvent(generation, applied: 1), time.GetUtcNow());
+            status.RulesReported(connection, RulesEvent(generation, applied: 1), time.GetUtcNow());
             Assert.Equal(RuleState.Applied, Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
 
             // The extension re-evaluates the file in place and rejects it (same generation + error).
             time.Advance(TimeSpan.FromSeconds(1));
-            status.RulesReported(RulesEvent(generation, applied: 1, error: "group/world-writable (mode 664)"), time.GetUtcNow());
+            status.RulesReported(connection, RulesEvent(generation, applied: 1, error: "group/world-writable (mode 664)"), time.GetUtcNow());
 
             Assert.NotEqual(RuleState.Applied, Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
 
@@ -202,8 +202,8 @@ public sealed class FilterVerificationRegressionTests
         {
             var curl = Specs.Block("/usr/bin/curl");
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
-            status.ClientConnected();
-            status.ClientDisconnected();
+            var connection = status.ClientConnected();
+            status.ClientDisconnected(connection);
 
             var removal = await adapter.RemoveCapturedOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None);
 
@@ -225,10 +225,10 @@ public sealed class FilterVerificationRegressionTests
         var (paths, time, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var curl = Specs.Block("/usr/bin/curl");
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
-            status.RulesReported(RulesEvent(PublishedGeneration(paths), applied: 1), time.GetUtcNow());
+            status.RulesReported(connection, RulesEvent(PublishedGeneration(paths), applied: 1), time.GetUtcNow());
 
             // The removal publishes the next generation; the filter never acknowledges it (ack for N-1 only).
             var removal = await adapter.RemoveCapturedOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None);
@@ -249,14 +249,14 @@ public sealed class FilterVerificationRegressionTests
         var (paths, time, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var curl = Specs.Block("/usr/bin/curl");
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
             var generation = PublishedGeneration(paths);
-            status.RulesReported(RulesEvent(generation, applied: 1), time.GetUtcNow());
+            status.RulesReported(connection, RulesEvent(generation, applied: 1), time.GetUtcNow());
 
             // The filter rejects the republished file and keeps the old generation (report at the publish time).
-            status.RulesReported(RulesEvent(generation, applied: 1, error: "owned by uid 501, expected uid 0"), time.GetUtcNow());
+            status.RulesReported(connection, RulesEvent(generation, applied: 1, error: "owned by uid 501, expected uid 0"), time.GetUtcNow());
             var removal = await adapter.RemoveCapturedOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None);
 
             Assert.Null(removal.VerifiedUtc);
@@ -274,15 +274,15 @@ public sealed class FilterVerificationRegressionTests
         var (paths, time, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var curl = Specs.Block("/usr/bin/curl");
             var nc = Specs.Block("/usr/bin/nc");
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
             await adapter.UpsertOwnedRuleAsync(nc, CancellationToken.None);
-            status.RulesReported(RulesEvent(PublishedGeneration(paths), applied: 2), time.GetUtcNow());
+            status.RulesReported(connection, RulesEvent(PublishedGeneration(paths), applied: 2), time.GetUtcNow());
 
             // Extension goes away (timeout / crash): the first attempt publishes but cannot verify.
-            status.ClientDisconnected();
+            status.ClientDisconnected(connection);
             var first = await adapter.RemoveCapturedOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None);
             Assert.False(first.Success);
             Assert.Null(first.VerifiedUtc);
@@ -294,11 +294,11 @@ public sealed class FilterVerificationRegressionTests
             Assert.NotEqual(OwnedRulePresence.Absent, await adapter.InspectOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None));
 
             // Reconnect: the daemon republishes on connect, the new instance acknowledges.
-            status.ClientConnected();
+            var reconnected = status.ClientConnected();
             var republished = await adapter.PublishAsync(CancellationToken.None);
             time.Advance(TimeSpan.FromSeconds(3));
             var ackTime = time.GetUtcNow();
-            status.RulesReported(RulesEvent(republished, applied: 1), ackTime);
+            status.RulesReported(reconnected, RulesEvent(republished, applied: 1), ackTime);
 
             // Retry is idempotent: nothing is rewritten, the acknowledged table proves the absence.
             var generationBefore = PublishedGeneration(paths);
@@ -323,8 +323,8 @@ public sealed class FilterVerificationRegressionTests
         {
             var curl = Specs.Block("/usr/bin/curl");
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
-            status.ClientConnected();
-            status.Hello("1.0", 1, time.GetUtcNow());
+            var connection = status.ClientConnected();
+            status.Hello(connection, "1.0", 1, time.GetUtcNow());
 
             // Connected, nothing acknowledged: a VerifiedUtc equal to "now" would be a file-write timestamp.
             var removal = await adapter.RemoveCapturedOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None);
@@ -355,20 +355,20 @@ public sealed class FilterVerificationRegressionTests
         var (paths, time, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var curl = Specs.Block("/usr/bin/curl");
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
             var generation = PublishedGeneration(paths);
             var id = FilterRuleTable.ToFilterRule(curl).Id;
 
             // Clean ack of the right generation, but the filter's effective table lacks the rule.
-            status.RulesReported(RulesEventWithIds(generation, null), time.GetUtcNow());
+            status.RulesReported(connection, RulesEventWithIds(generation, null), time.GetUtcNow());
             Assert.Equal(FilterEnforcementState.Verified, status.Evaluate(generation));
             Assert.False((await adapter.VerifyAsync(curl, CancellationToken.None)).EnforcementVerified);
             Assert.Equal(RuleState.Failed, Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
 
             // The filter lists it: verified.
-            status.RulesReported(RulesEventWithIds(generation, null, id), time.GetUtcNow());
+            status.RulesReported(connection, RulesEventWithIds(generation, null, id), time.GetUtcNow());
             var verify = await adapter.VerifyAsync(curl, CancellationToken.None);
             Assert.True(verify.EnforcementVerified);
             Assert.Equal(FirewallAction.Block, verify.EffectiveAction);
@@ -382,11 +382,11 @@ public sealed class FilterVerificationRegressionTests
         var (paths, time, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var curl = Specs.Block("/usr/bin/curl") with { Enabled = false };
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
             var generation = PublishedGeneration(paths);
-            status.RulesReported(RulesEventWithIds(generation, null), time.GetUtcNow());
+            status.RulesReported(connection, RulesEventWithIds(generation, null), time.GetUtcNow());
             Assert.Equal(RuleState.Applied, Assert.Single(await adapter.ListOwnedRulesAsync(CancellationToken.None)).State);
             var verify = await adapter.VerifyAsync(curl, CancellationToken.None);
             Assert.True(verify.EnforcementVerified);
@@ -402,17 +402,17 @@ public sealed class FilterVerificationRegressionTests
         var (paths, time, status, adapter) = Harness(temp);
         using (adapter)
         {
-            status.ClientConnected();
+            var connection = status.ClientConnected();
             var curl = Specs.Block("/usr/bin/curl");
             await adapter.UpsertOwnedRuleAsync(curl, CancellationToken.None);
             var id = FilterRuleTable.ToFilterRule(curl).Id;
-            status.RulesReported(RulesEventWithIds(PublishedGeneration(paths), null, id), time.GetUtcNow());
+            status.RulesReported(connection, RulesEventWithIds(PublishedGeneration(paths), null, id), time.GetUtcNow());
 
             // The removal publishes N+1; an ack of N+1 that still lists the rule is not a removal.
             var removalTask = adapter.RemoveCapturedOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None);
             var removal = await removalTask;
             Assert.False(removal.Success);
-            status.RulesReported(RulesEventWithIds(PublishedGeneration(paths), null, id), time.GetUtcNow());
+            status.RulesReported(connection, RulesEventWithIds(PublishedGeneration(paths), null, id), time.GetUtcNow());
             var retry = await adapter.RemoveCapturedOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None);
             Assert.False(retry.Success);
             Assert.Null(retry.VerifiedUtc);
@@ -420,7 +420,7 @@ public sealed class FilterVerificationRegressionTests
             Assert.NotEqual(OwnedRulePresence.Absent, await adapter.InspectOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None));
 
             // A clean ack without it proves the removal.
-            status.RulesReported(RulesEventWithIds(PublishedGeneration(paths), null), time.GetUtcNow());
+            status.RulesReported(connection, RulesEventWithIds(PublishedGeneration(paths), null), time.GetUtcNow());
             var done = await adapter.RemoveCapturedOwnedRuleAsync(curl.ManagedRuleId, FirewallDirection.Outbound, CancellationToken.None);
             Assert.True(done.Success);
             Assert.NotNull(done.VerifiedUtc);

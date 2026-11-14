@@ -54,8 +54,8 @@ public sealed class MacConnectionSourceAndIdentityTests
         var time = new ManualTimeProvider(Start);
         var flows = new FlowTable();
         var status = new FilterStatus();
-        status.ClientConnected();
-        status.EventSeen(Start);
+        var connection = status.ClientConnected();
+        status.EventSeen(connection, Start);
         flows.Apply(Flow("f1", 100, "/usr/bin/curl", "outbound", "tcp", "93.184.216.34", 443, "allow", null), Start);
         flows.Apply(Flow("f2", 100, "/usr/bin/curl", "outbound", "udp", "1.1.1.1", 53, "block", "rule-1"), Start);
         flows.Apply(Flow("f3", 200, "/usr/sbin/sshd", "inbound", "tcp", "10.0.2.2", 22, "block", null), Start);

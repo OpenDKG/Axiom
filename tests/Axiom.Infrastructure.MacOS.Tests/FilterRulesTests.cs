@@ -224,20 +224,22 @@ public sealed class FilterRulesTests
         Assert.Contains("has not connected", noFilter.Reason, StringComparison.Ordinal);
 
         // A hello without a live connection (High #4) must not count as running.
-        status.Hello("1.0", 0, time.GetUtcNow());
+        var previous = status.ClientConnected();
+        status.Hello(previous, "1.0", 0, time.GetUtcNow());
+        status.ClientDisconnected(previous);
         var helloOnly = await adapter.GetCapabilitiesAsync(CancellationToken.None);
         Assert.False(helloOnly.FirewallServiceRunning);
         Assert.Equal(FirewallCapabilityStatus.Degraded, helloOnly.Status);
         Assert.Equal(FilterEnforcementState.Degraded, helloOnly.FilterEnforcement!.State);
         Assert.Equal(time.GetUtcNow(), helloOnly.FilterEnforcement.LastSeenUtc);
 
-        status.ClientConnected();
+        var current = status.ClientConnected();
         var connected = await adapter.GetCapabilitiesAsync(CancellationToken.None);
         Assert.True(connected.FirewallServiceRunning);
         Assert.Equal(FirewallCapabilityStatus.Available, connected.Status);
         Assert.True(connected.FilterEnforcement!.Connected);
 
-        status.ClientDisconnected();
+        status.ClientDisconnected(current);
         var dropped = await adapter.GetCapabilitiesAsync(CancellationToken.None);
         Assert.False(dropped.FirewallServiceRunning);
         Assert.Equal(FirewallCapabilityStatus.Degraded, dropped.Status);

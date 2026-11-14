@@ -94,7 +94,9 @@ public sealed class FilterRulesEventTests
             "{\"type\":\"filter.hello\",\"version\":\"1.0.0\",\"generation\":42,\"dropped\":3}",
             RulesLine);
 
-        await server.ConsumeAsync(new MemoryStream(Encoding.UTF8.GetBytes(stream)), CancellationToken.None);
+        var connection = status.ClientConnected();
+        await server.ConsumeAsync(new MemoryStream(Encoding.UTF8.GetBytes(stream)), connection, CancellationToken.None);
+        status.ClientDisconnected(connection);
 
         Assert.Equal(4, server.AcceptedEvents);
         Assert.Equal(0, server.RejectedLines);
@@ -115,12 +117,15 @@ public sealed class FilterRulesEventTests
     public void FileRejectionKeepsTheEnforcedGenerationAndIsExposedThroughCapabilities()
     {
         var status = new FilterStatus();
-        status.Hello("1.0.0", 42, 0, Start);
+        var connection = status.ClientConnected();
+        status.Hello(connection, "1.0.0", 42, 0, Start);
         status.RulesReported(
+            connection,
             FlowEventParser.TryParse(
                 "{\"type\":\"filter.rules\",\"generation\":42,\"applied\":7,\"rejected\":[]," +
                 "\"error\":\"invalid JSON\",\"dropped\":0}")!,
             Start.AddSeconds(5));
+        status.ClientDisconnected(connection);
 
         Assert.Equal(42, status.LoadedGeneration);
 
@@ -160,9 +165,10 @@ public sealed class FilterRulesEventTests
         Assert.Equal(-1, before.FilterEnforcement.Generation);
         Assert.Null((await adapter.VerifyAsync(bad, CancellationToken.None)).FilterRejectionReason);
 
-        status.ClientConnected();
-        status.Hello("1.0.0", 2, 0, time.GetUtcNow());
+        var connection = status.ClientConnected();
+        status.Hello(connection, "1.0.0", 2, 0, time.GetUtcNow());
         status.RulesReported(
+            connection,
             FlowEventParser.TryParse(
                 "{\"type\":\"filter.rules\",\"generation\":2,\"applied\":1,\"rejected\":[{\"id\":\"" + bad.ManagedRuleId.ToString("D") +
                 "\",\"reason\":\"no valid remoteAddresses in [1.2.3]\"}],\"error\":null,\"dropped\":0}")!,

@@ -26,10 +26,11 @@ public sealed record FilterRulesReport
     public DateTimeOffset ReceivedUtc { get; init; }
 
     /// <summary>
-    /// The connection the report arrived on (<see cref="FilterStatus"/> epoch). A report from a
-    /// previous connection is history, never an acknowledgement for the current extension instance.
+    /// The accepted connection the report arrived on (<see cref="FilterStatus"/> connection id).
+    /// A report from a previous connection is history, never an acknowledgement for the current
+    /// extension instance.
     /// </summary>
-    public long ConnectionEpoch { get; init; } = -1;
+    public long ConnectionId { get; init; } = -1;
 
     /// <summary>
     /// Ids the filter says it enforces (additive <c>ruleIds</c> field of <c>filter.rules</c>);
@@ -105,9 +106,9 @@ public sealed record FilterEnforcementSnapshot(
 /// <summary>
 /// Liveness and enforcement state of the AxiomFilter system extension as seen on the flow-event
 /// socket. Four things are kept apart on purpose (High #4): when the extension was last seen
-/// (<see cref="LastSeenUtc"/>, diagnostic only), whether it is connected now
-/// (<see cref="IsConnected"/>, live connection count), which rules generation it last acknowledged
-/// (<see cref="AckedGeneration"/>, from <c>filter.rules</c> without an error) and the derived
+/// (<see cref="LastSeenUtc"/>, from the current connection, diagnostic only), whether a current
+/// connection is open now (<see cref="IsConnected"/>), which rules generation that connection last
+/// acknowledged (<see cref="AckedGeneration"/>, from <c>filter.rules</c> without an error) and the derived
 /// <see cref="Evaluate"/> enforcement state for a published generation. A disconnect degrades
 /// enforcement immediately: a hello that was recent a minute ago proves nothing now. After a
 /// reconnect the acknowledgement must be fresh (sent on the new connection), which is why the
@@ -119,10 +120,14 @@ public sealed class FilterStatus
 
     private TaskCompletionSource _changed = NewSignal();
 
-    private int _connections;
+    /// <summary>Accepted connections that have not disconnected yet (up to four in the server).</summary>
+    private readonly HashSet<long> _openConnections = [];
 
-    /// <summary>Incremented per accepted connection; an ack counts only for the connection it arrived on.</summary>
-    private long _connectionEpoch;
+    /// <summary>Incremented per accepted connection; the newest one is the current session.</summary>
+    private long _nextConnectionId;
+
+    /// <summary>The only connection allowed to change current enforcement, liveness and diagnostics.</summary>
+    private long? _currentConnectionId;
 
     private DateTimeOffset? _lastHelloUtc;
 
@@ -140,7 +145,7 @@ public sealed class FilterStatus
 
     private long _dropped;
 
-    /// <summary>Latest <c>filter.rules</c> report (ok or error), tagged with its connection epoch.</summary>
+    /// <summary>Latest <c>filter.rules</c> report (ok or error) from the current connection.</summary>
     private FilterRulesReport? _rules;
 
     /// <summary>What this daemon process last published: generation and the rule ids in that table.</summary>
@@ -152,7 +157,7 @@ public sealed class FilterStatus
         {
             lock (_gate)
             {
-                return _connections > 0;
+                return _currentConnectionId is not null;
             }
         }
     }
@@ -179,7 +184,7 @@ public sealed class FilterStatus
         }
     }
 
-    /// <summary>Last time any byte arrived from the extension (hello, rules or flow event). Diagnostic only.</summary>
+    /// <summary>Last time the current connection sent a hello, rules report or flow event. Diagnostic only.</summary>
     public DateTimeOffset? LastSeenUtc
     {
         get
@@ -214,7 +219,7 @@ public sealed class FilterStatus
         }
     }
 
-    /// <summary>Generation of the last <c>filter.rules</c> event without a file error, on any connection.</summary>
+    /// <summary>Generation of the last <c>filter.rules</c> event without a file error on the current connection.</summary>
     public long? AckedGeneration
     {
         get
@@ -261,32 +266,57 @@ public sealed class FilterStatus
         }
     }
 
-    public void ClientConnected()
+    /// <summary>
+    /// Registers an accepted connection and makes it the current session. Returns the token every
+    /// later event from that connection must carry; only the newest accepted connection can update
+    /// the current generation, acknowledgement, rules report, liveness or diagnostics.
+    /// </summary>
+    public long ClientConnected()
     {
         lock (_gate)
         {
-            _connections++;
-            _connectionEpoch++;
+            var connectionId = ++_nextConnectionId;
+            _openConnections.Add(connectionId);
+            _currentConnectionId = connectionId;
+            Signal();
+            return connectionId;
+        }
+    }
+
+    /// <summary>
+    /// Removes one connection. Disconnecting the current session revokes its verification even when
+    /// an older connection is still open; disconnecting a stale connection changes nothing current.
+    /// </summary>
+    public void ClientDisconnected(long connectionId)
+    {
+        lock (_gate)
+        {
+            if (!_openConnections.Remove(connectionId))
+            {
+                return;
+            }
+
+            if (_currentConnectionId == connectionId)
+            {
+                _currentConnectionId = null;
+            }
+
             Signal();
         }
     }
 
-    public void ClientDisconnected()
+    public void Hello(long connectionId, string? version, long? generation, DateTimeOffset now) =>
+        Hello(connectionId, version, generation, null, now);
+
+    public void Hello(long connectionId, string? version, long? generation, long? dropped, DateTimeOffset now)
     {
         lock (_gate)
         {
-            _connections = Math.Max(0, _connections - 1);
-            Signal();
-        }
-    }
+            if (_currentConnectionId != connectionId)
+            {
+                return;
+            }
 
-    public void Hello(string? version, long? generation, DateTimeOffset now) =>
-        Hello(version, generation, null, now);
-
-    public void Hello(string? version, long? generation, long? dropped, DateTimeOffset now)
-    {
-        lock (_gate)
-        {
             _lastHelloUtc = now;
             _lastEventUtc = now;
             _lastSeenUtc = now;
@@ -320,7 +350,7 @@ public sealed class FilterStatus
     /// generation; a report <b>with</b> an error revokes any earlier acknowledgement of the same
     /// generation (review #2 MAC-1): the file in force is no longer the one the daemon published.
     /// </summary>
-    public void RulesReported(FlowEvent rulesEvent, DateTimeOffset now)
+    public void RulesReported(long connectionId, FlowEvent rulesEvent, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(rulesEvent);
         if (rulesEvent.Type != FlowEventType.Rules)
@@ -330,6 +360,11 @@ public sealed class FilterStatus
 
         lock (_gate)
         {
+            if (_currentConnectionId != connectionId)
+            {
+                return;
+            }
+
             _lastEventUtc = now;
             _lastSeenUtc = now;
             if (rulesEvent.Dropped is { } count)
@@ -356,17 +391,22 @@ public sealed class FilterStatus
                 Error = rulesEvent.Error,
                 Dropped = _dropped,
                 ReceivedUtc = now,
-                ConnectionEpoch = _connectionEpoch,
+                ConnectionId = connectionId,
                 AppliedRuleIds = rulesEvent.RuleIds,
             };
             Signal();
         }
     }
 
-    public void EventSeen(DateTimeOffset now)
+    public void EventSeen(long connectionId, DateTimeOffset now)
     {
         lock (_gate)
         {
+            if (_currentConnectionId != connectionId)
+            {
+                return;
+            }
+
             _lastEventUtc = now;
             _lastSeenUtc = now;
         }
@@ -395,7 +435,7 @@ public sealed class FilterStatus
         {
             return new FilterEnforcementSnapshot(
                 EvaluateLocked(publishedGeneration),
-                _connections > 0,
+                _currentConnectionId is not null,
                 publishedGeneration,
                 _ackedGeneration,
                 _lastSeenUtc,
@@ -453,22 +493,24 @@ public sealed class FilterStatus
     {
         lock (_gate)
         {
-            return _connections > 0 || (_lastEventUtc is { } last && now - last <= window);
+            return _currentConnectionId is not null || (_lastEventUtc is { } last && now - last <= window);
         }
     }
 
     private FilterEnforcementState EvaluateLocked(long publishedGeneration)
     {
-        if (_connections == 0)
+        // No current session: a stale connection that has not seen EOF yet proves nothing.
+        if (_currentConnectionId is not { } currentConnectionId)
         {
             return _lastSeenUtc is null ? FilterEnforcementState.Unavailable : FilterEnforcementState.Degraded;
         }
 
-        // Verified needs the LATEST report, on THIS connection, error-free, for THIS generation.
-        // An earlier successful ack with the same number does not count once a later report said
-        // the file is rejected (MAC-1), nor does any report from a previous connection.
+        // Verified needs the LATEST report, on THIS accepted connection, error-free, for THIS
+        // generation. An earlier successful ack with the same number does not count once a later
+        // report said the file is rejected (MAC-1), nor does a report from another connection,
+        // even when that connection is still open.
         return _rules is { } latest &&
-               latest.ConnectionEpoch == _connectionEpoch &&
+               latest.ConnectionId == currentConnectionId &&
                !latest.IsError &&
                latest.Generation == publishedGeneration
             ? FilterEnforcementState.Verified

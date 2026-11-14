@@ -131,8 +131,11 @@ public sealed class FilterEventServer
         }
     }
 
-    /// <summary>Consumes one filter connection (also used directly by tests with any stream).</summary>
-    public async Task ConsumeAsync(Stream stream, CancellationToken cancellationToken)
+    /// <summary>
+    /// Consumes one accepted filter connection (also used directly by tests with any stream). The
+    /// connection token is the one returned by <see cref="FilterStatus.ClientConnected"/>.
+    /// </summary>
+    public async Task ConsumeAsync(Stream stream, long connectionId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(stream);
 
@@ -164,12 +167,12 @@ public sealed class FilterEventServer
                 continue;
             }
 
-            Accept(flowEvent);
+            Accept(flowEvent, connectionId);
         }
     }
 
-    /// <summary>Applies one parsed event.</summary>
-    public void Accept(FlowEvent flowEvent)
+    /// <summary>Applies one parsed event from the accepted connection that carried it.</summary>
+    public void Accept(FlowEvent flowEvent, long connectionId)
     {
         ArgumentNullException.ThrowIfNull(flowEvent);
 
@@ -177,17 +180,17 @@ public sealed class FilterEventServer
         Interlocked.Increment(ref _acceptedEvents);
         if (flowEvent.Type == FlowEventType.Hello)
         {
-            _status.Hello(flowEvent.Version, flowEvent.Generation, flowEvent.Dropped, now);
+            _status.Hello(connectionId, flowEvent.Version, flowEvent.Generation, flowEvent.Dropped, now);
             return;
         }
 
         if (flowEvent.Type == FlowEventType.Rules)
         {
-            _status.RulesReported(flowEvent, now);
+            _status.RulesReported(connectionId, flowEvent, now);
             return;
         }
 
-        _status.EventSeen(now);
+        _status.EventSeen(connectionId, now);
         _flows.Apply(flowEvent, now);
     }
 
@@ -202,7 +205,7 @@ public sealed class FilterEventServer
                 return;
             }
 
-            _status.ClientConnected();
+            var connectionId = _status.ClientConnected();
             log("AxiomFilter connected to the flow-event socket.");
             try
             {
@@ -221,7 +224,7 @@ public sealed class FilterEventServer
                 var stream = new NetworkStream(client, ownsSocket: false);
                 await using (stream.ConfigureAwait(false))
                 {
-                    await ConsumeAsync(stream, cancellationToken).ConfigureAwait(false);
+                    await ConsumeAsync(stream, connectionId, cancellationToken).ConfigureAwait(false);
                 }
             }
             catch (Exception exception) when (exception is
@@ -231,7 +234,7 @@ public sealed class FilterEventServer
             }
             finally
             {
-                _status.ClientDisconnected();
+                _status.ClientDisconnected(connectionId);
                 log("AxiomFilter disconnected from the flow-event socket.");
             }
         }
