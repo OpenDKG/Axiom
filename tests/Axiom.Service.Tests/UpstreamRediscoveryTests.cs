@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using Axiom.Contracts.Privacy;
 using Axiom.Service.Hosting.Dns;
@@ -116,6 +118,95 @@ public sealed class UpstreamRediscoveryTests
         await watch.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Contains(log, line => line.StartsWith("upstream rediscovery active", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Rediscover_upgrades_a_known_public_resolver_to_doh_like_the_start_path()
+    {
+        var policy = PrivacyShieldPolicy.Create(new PrivacyShieldSettings { Categories = PrivacyCategory.None });
+        await using var server = new DnsProxyServer(policy, [Dns("10.0.2.3")], port: 0);
+        var platform = new ScriptedPlatform { Upstreams = [Dns("1.1.1.1"), Dns("192.168.1.1")] };
+        var log = new List<string>();
+
+        Assert.True(UpstreamRediscovery.Rediscover(server, platform, log.Add));
+
+        // Same selection as PrivacyShieldController at start: DnsUpstream.UpgradeEndpoints.
+        Assert.Equal("https://1.1.1.1/dns-query (DoH), 192.168.1.1:53", server.Upstream);
+        Assert.Equal([Dns("1.1.1.1"), Dns("192.168.1.1")], server.Upstreams);
+        Assert.True(server.Targets[0].IsDoh);
+        Assert.False(server.Targets[0].FallbackToPlainAllowed);
+        Assert.False(server.Targets[1].IsDoh);
+        Assert.Contains("prefer DoH", server.Snapshot(new PrivacyShieldSettings()).Detail, StringComparison.Ordinal);
+
+        // The same discovery again is not a change (compared on the plain endpoints).
+        Assert.False(UpstreamRediscovery.Rediscover(server, platform, log.Add));
+    }
+
+    [Fact]
+    public async Task A_swap_to_a_doh_target_after_a_plain_start_is_served_over_doh()
+    {
+        var requests = 0;
+        using var doh = new FakeDohHandler(request =>
+        {
+            Interlocked.Increment(ref requests);
+            var wire = request.Content!.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+            wire[2] |= 0x80; // QR: the query echoed back as a NOERROR response
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(wire),
+            };
+            response.Content.Headers.ContentType = new MediaTypeHeaderValue("application/dns-message");
+            return response;
+        });
+        var settings = new PrivacyShieldSettings { Categories = PrivacyCategory.None };
+        await using var server = new DnsProxyServer(
+            PrivacyShieldPolicy.Create(settings),
+            [new DnsUpstreamTarget(Dns("192.0.2.1"))],
+            port: 0,
+            dohHandler: doh);
+        Assert.Contains("plain UDP/TCP DNS", server.Snapshot(settings).Detail, StringComparison.Ordinal);
+
+        server.UpdateTargets(DnsUpstream.UpgradeEndpoints([Dns("9.9.9.9")]));
+
+        byte[] query =
+        [
+            0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x07, (byte)'a', (byte)'l', (byte)'l', (byte)'o', (byte)'w', (byte)'e', (byte)'d',
+            0x07, (byte)'e', (byte)'x', (byte)'a', (byte)'m', (byte)'p', (byte)'l', (byte)'e', 0x00,
+            0x00, 0x01, 0x00, 0x01,
+        ];
+        using var client = new UdpClient(AddressFamily.InterNetwork);
+        client.Connect(IPAddress.Loopback, server.Port);
+        await client.SendAsync(query, query.Length);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var reply = await client.ReceiveAsync(timeout.Token);
+
+        Assert.Equal(1, requests);
+        Assert.Equal(0x12, reply.Buffer[0]);
+        Assert.Equal(0x34, reply.Buffer[1]);
+        Assert.Equal(0, reply.Buffer[3] & 0x0F);
+        Assert.Equal("https://9.9.9.9/dns-query (DoH)", server.Upstream);
+        Assert.Contains("encrypted with DoH", server.Snapshot(settings).Detail, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => server.UpdateTargets([]));
+        Assert.Throws<ArgumentException>(() => server.UpdateTargets([new DnsUpstreamTarget(null)]));
+    }
+
+    [Fact]
+    public void Null_platform_warning_names_the_doh_fallback()
+    {
+        Assert.Contains(
+            "using encrypted DoH fallback upstream DNS",
+            NullPrivacyDnsPlatform.Instance.NoUpstreamWarning,
+            StringComparison.Ordinal);
+    }
+
+    private sealed class FakeDohHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
+        : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(responder(request));
     }
 
     private sealed class ScriptedPlatform : IPrivacyDnsPlatform
