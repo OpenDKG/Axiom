@@ -462,8 +462,23 @@ internal static class SetupInstaller
         }
     }
 
-    private static void CopyFile(string source, string destination, bool overwrite) =>
-        File.Copy(source, destination, overwrite);
+    private static void CopyFile(string source, string destination, bool overwrite)
+    {
+        // The service may still be releasing its image after a stop request; retry briefly instead
+        // of failing the whole upgrade on a sharing violation.
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.Copy(source, destination, overwrite);
+                return;
+            }
+            catch (IOException) when (attempt < 10)
+            {
+                Thread.Sleep(1000);
+            }
+        }
+    }
 
     private static string HashFile(string path)
     {
