@@ -131,8 +131,22 @@ public static class ProtectionProvisioner
     /// Runs at desktop start for the complete profile: write block mode, prove it, persist the
     /// outcome. Returns null for the light profile or when Axiom is not installed in this profile.
     /// </summary>
-    public static ProtectionProvisioningResult? ProvisionAtStartup(string? localAppData = null)
+    public static ProtectionProvisioningResult? ProvisionAtStartup(string? localAppData = null) =>
+        ProvisionAtStartup(localAppData, AgentPlatform.IsWindows);
+
+    /// <summary>
+    /// <paramref name="windows"/> false: nothing is read, written or started and the result is null.
+    /// The provisioning below is the Windows guard runtime (block mode in the Hermes config, the
+    /// bridge under <c>venv\Scripts\python.exe</c>); there is no macOS/Linux counterpart yet, so those
+    /// hosts stay unprovisioned and report no state (<see cref="BlackboxPlatformSupport"/>).
+    /// </summary>
+    public static ProtectionProvisioningResult? ProvisionAtStartup(string? localAppData, bool windows)
     {
+        if (!windows)
+        {
+            return null;
+        }
+
         var root = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (!IsCompleteProfile(root))
         {
