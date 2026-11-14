@@ -74,6 +74,7 @@ public partial class App : Application
                         PrivacyShieldProvisioner.WriteSettings(localAppData);
                         PrivacyShieldProvisioner.ApplyAsync(CancellationToken.None).GetAwaiter().GetResult();
                         TraderShieldProvisioner.ApplyToFile(Path.Combine(localAppData, "hermes", "config.yaml"));
+                        HermesPluginSettings.ApplyToFile(Path.Combine(localAppData, "hermes", "config.yaml"));
                     }
                 }
                 catch
