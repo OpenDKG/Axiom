@@ -23,4 +23,14 @@ public sealed record ManagedRule
 
     /// <summary>OS rule description read during capture; part of the ownership evidence.</summary>
     public string? OwnershipDescription { get; init; }
+
+    /// <summary>
+    /// Linux: a new process of the app is refused at <c>connect()</c> (BPF verdict attached and read
+    /// back). False = nft-only, installed/read back but not race-free (~1 s attribution window).
+    /// Null on Windows and macOS, and for disabled rules.
+    /// </summary>
+    public bool? ConnectTimeBlockingProven { get; init; }
+
+    /// <summary>Why <see cref="ConnectTimeBlockingProven"/> is what it is (Linux only).</summary>
+    public string? CoverageReason { get; init; }
 }

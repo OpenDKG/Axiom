@@ -125,6 +125,9 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         }
     }
 
+    /// <inheritdoc />
+    public bool StaleProgramsAttached => false;
+
     /// <summary>Generation of the last fully applied map sync, -1 before the first (and after a failed one that was neutralised).</summary>
     public long Generation
     {

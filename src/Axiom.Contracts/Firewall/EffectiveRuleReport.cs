@@ -33,4 +33,22 @@ public sealed record EffectiveRuleReport
     /// Null on Windows, where the firewall applies rules synchronously and presence is enforcement.
     /// </summary>
     public bool? EnforcementVerified { get; init; }
+
+    /// <summary>
+    /// Linux: the rule's nftables lines were installed and read back from the live table (the
+    /// <c>socket cgroupv2</c> boundary). Says nothing about processes that connect before the
+    /// attribution loop herds them. Null on Windows and macOS.
+    /// </summary>
+    public bool? NftRuleReadBack { get; init; }
+
+    /// <summary>
+    /// Linux: a freshly launched process of the app is refused at <c>connect()</c> itself (the
+    /// connect-time BPF verdict for this rule is attached and its map entry read back), so there is
+    /// no exec-to-attribution window. False = nft-only: installed/read back but not race-free.
+    /// Null on Windows and macOS, and for disabled rules.
+    /// </summary>
+    public bool? ConnectTimeBlockingProven { get; init; }
+
+    /// <summary>Why <see cref="ConnectTimeBlockingProven"/> is what it is (Linux only).</summary>
+    public string? CoverageReason { get; init; }
 }

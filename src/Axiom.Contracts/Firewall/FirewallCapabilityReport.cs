@@ -31,6 +31,52 @@ public sealed record FirewallCapabilityReport
     /// exec race, an inactive connect-time BPF layer). Empty on Windows and macOS.
     /// </summary>
     public IReadOnlyList<string> Limitations { get; init; } = [];
+
+    /// <summary>
+    /// Linux only: live state of the connect-time (BPF) layer as the running daemon holds it, so
+    /// <c>axiomd --doctor</c> and the UI never infer health from pin files. Null on Windows and macOS.
+    /// </summary>
+    public ConnectTimeLayerReport? ConnectTimeLayer { get; init; }
+}
+
+/// <summary>
+/// Live state of the Linux connect-time verdict layer (docs/LINUX_EBPF.md). <see cref="Healthy"/> is
+/// true only while the layer is attached, its last map sync was written and read back, no stale
+/// entry/program is left and no rule removal is waiting for its BPF cleanup.
+/// </summary>
+public sealed record ConnectTimeLayerReport
+{
+    /// <summary>
+    /// <c>active</c>, <c>inactive</c> (probe said no: nft-only), <c>neutralised</c> (detached itself),
+    /// <c>degraded</c> (stale verdicts attached), <c>stale_programs</c> (a previous daemon's programs
+    /// could not be detached), or <c>not_configured</c>.
+    /// </summary>
+    public required string State { get; init; }
+
+    public required bool Healthy { get; init; }
+
+    public bool Attached { get; init; }
+
+    public string Status { get; init; } = string.Empty;
+
+    /// <summary>Generation of the last map sync (null before the first).</summary>
+    public long? Generation { get; init; }
+
+    /// <summary>The last sync's map contents were read back and equal the plan.</summary>
+    public bool MapsVerified { get; init; }
+
+    /// <summary>Rules whose new processes are refused at connect() (BPF verdict read back).</summary>
+    public IReadOnlyList<Guid> ConnectTimeProvenRules { get; init; } = [];
+
+    /// <summary>Enabled rules enforced by nftables alone (installed/read back, not race-free).</summary>
+    public IReadOnlyList<Guid> NftOnlyRules { get; init; } = [];
+
+    /// <summary>Removed rules whose BPF verdict cleanup is not confirmed (persisted across restarts).</summary>
+    public IReadOnlyList<Guid> PendingRemovals { get; init; } = [];
+
+    public IReadOnlyList<string> FailedDeletes { get; init; } = [];
+
+    public IReadOnlyList<string> FailedUpdates { get; init; } = [];
 }
 
 /// <summary>One rule the OS filter refused to enforce, with its reason.</summary>

@@ -27,6 +27,13 @@ public interface IVerdictLayer
     bool Neutralised => false;
 
     /// <summary>
+    /// True when Axiom programs of a previous daemon are still attached and could not be detached
+    /// at start: their unpinned maps may still hold verdicts of removed rules, so the layer refused
+    /// to load a second set and nothing about the connect-time state can be trusted.
+    /// </summary>
+    bool StaleProgramsAttached => false;
+
+    /// <summary>
     /// Reconciles the layer's state with the enabled rules of this generation (bounded retries,
     /// read-back verification, neutralisation on persistent failure) and reports the outcome.
     /// Never throws for a bpftool failure.

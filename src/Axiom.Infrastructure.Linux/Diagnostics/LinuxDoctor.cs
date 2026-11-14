@@ -43,6 +43,12 @@ public sealed record LinuxDoctorTargets(
 }
 
 /// <summary>
+/// What the running daemon reports about its own enforcement (<c>rules.query</c> over the IPC
+/// socket): the capability report, or the error that prevented reading it.
+/// </summary>
+public sealed record DoctorLiveState(Axiom.Contracts.Firewall.FirewallCapabilityReport? Capability, string? Error);
+
+/// <summary>
 /// <c>axiomd --doctor [--json]</c> on Linux: unit state and target, image ownership, socket and
 /// data-directory modes, resolver backend and per-link DNS, Privacy Shield backup, IPC owner, and
 /// the nftables engine (table inet axiom present while the daemon runs). Exit code 0 when nothing is WARN/FAIL;
@@ -64,8 +70,11 @@ public sealed class LinuxDoctor
 
     private readonly bool _isRoot;
 
-    public LinuxDoctor(IProcessRunner runner, LinuxDoctorTargets targets, bool isRoot)
+    private readonly Func<DoctorLiveState>? _liveState;
+
+    public LinuxDoctor(IProcessRunner runner, LinuxDoctorTargets targets, bool isRoot, Func<DoctorLiveState>? liveState = null)
     {
+        _liveState = liveState;
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _targets = targets ?? throw new ArgumentNullException(nameof(targets));
         _isRoot = isRoot;
