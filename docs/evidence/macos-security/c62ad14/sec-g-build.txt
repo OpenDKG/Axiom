@@ -1,0 +1,28 @@
+# build under test
+Sat Nov 14 14:27:30 UTC 2026
+ProductName:		macOS ProductVersion:		15.8.3 BuildVersion:		24H241 
+System Integrity Protection status: disabled.
+CFBundleShortVersionString 0.17.0 CFBundleVersion 10
+*	*	-	com.axiom.firewall.filter (0.17.0/10)	Axiom Firewall Filter	[activated enabled]
+	state = running
+	program = /Library/PrivilegedHelperTools/com.axiom.service/axiomd
+	pid = 22221
+  PID USER STARTED                      COMMAND
+22221 root Sat Nov 14 06:27:03 2026     /Library/PrivilegedHelperTools/com.axiom.service/axiomd
+$ shasum -a 256 (installed helper dir and app bundle)
+5421c12fa60cee1d9b6d3191a60684ab8e65cb57ce5f0ee87df0a802b6cb36de  /Library/PrivilegedHelperTools/com.axiom.service/axiomd.dll
+5421c12fa60cee1d9b6d3191a60684ab8e65cb57ce5f0ee87df0a802b6cb36de  /Applications/Axiom.app/Contents/Resources/service/axiomd.dll
+e78032a0feb6ab9821f711f7487a5d81edb7b6d22cf2bde260f2dfccac55a065  /Library/PrivilegedHelperTools/com.axiom.service/Axiom.Service.Hosting.dll
+e78032a0feb6ab9821f711f7487a5d81edb7b6d22cf2bde260f2dfccac55a065  /Applications/Axiom.app/Contents/Resources/service/Axiom.Service.Hosting.dll
+212366e3ab8eb6587322a0e8bad0ef6840f3b2f85dd47eafd5fba82c7f016053  /Library/PrivilegedHelperTools/com.axiom.service/Axiom.Contracts.dll
+212366e3ab8eb6587322a0e8bad0ef6840f3b2f85dd47eafd5fba82c7f016053  /Applications/Axiom.app/Contents/Resources/service/Axiom.Contracts.dll
+2359c6f60c476fe363b8d7b6804b130237197eae3892b3e11f7f62105081bcde  /Library/PrivilegedHelperTools/com.axiom.service/Axiom.Infrastructure.MacOS.dll
+2359c6f60c476fe363b8d7b6804b130237197eae3892b3e11f7f62105081bcde  /Applications/Axiom.app/Contents/Resources/service/Axiom.Infrastructure.MacOS.dll
+8e05232e31b9555dbe349eb09abc8f0a136db9b1eb0dec32c0aa3d1aef9bd5f7  /Library/PrivilegedHelperTools/com.axiom.service/Axiom.Core.dll
+8e05232e31b9555dbe349eb09abc8f0a136db9b1eb0dec32c0aa3d1aef9bd5f7  /Applications/Axiom.app/Contents/Resources/service/Axiom.Core.dll
+total 0
+drwxr-xr-x   4 root  daemon  128 Nov 14 06:27 .
+drwxrwxr-x  31 root  daemon  992 Nov 14 06:27 ..
+srw-rw-rw-   1 root  daemon    0 Nov 14 06:27 axiom.sock
+srw-------   1 root  daemon    0 Nov 14 06:27 filter.sock
+== [14:27:33.181Z] state: {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372903,"ackedGeneration":1794372903,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}

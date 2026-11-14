@@ -1,0 +1,8 @@
+$ sudo -n sysadminctl -addUser axtest2 -fullName "Axiom test 2" -password <random, not recorded>
+2026-11-14 06:27:33.731 sysadminctl[22299:352344] ----------------------------
+2026-11-14 06:27:33.731 sysadminctl[22299:352344] ----------------------------
+2026-11-14 06:27:34.418 sysadminctl[22299:352344] Creating user record…
+2026-11-14 06:27:35.508 sysadminctl[22299:352344] Assigning UID: 502 GID: 20
+2026-11-14 06:27:36.830 sysadminctl[22299:352344] Creating home directory at /Users/axtest2
+uid=502(axtest2) gid=20(staff) groups=20(staff),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),702(com.apple.sharepoint.group.2),704(com.apple.sharepoint.group.4),100(_lpoperator),705(com.apple.sharepoint.group.5),703(com.apple.sharepoint.group.3)
+no axtest2 is NOT a member of admin

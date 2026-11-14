@@ -1,0 +1,38 @@
+$ python3 sec-g-enforcement.py   # install owner (dev, admin)
+# (g) enforcement.* access as dev (uid 501, groups [12, 20, 33, 61, 79, 80, 81, 98, 100, 204, 250, 395, 398, 399, 400, 701, 702, 703, 704, 705])
+>> {"version":1,"id":"f73c7035-8db0-497d-b0ad-f65394679217","type":"enforcement.status","requestedAtUtc":"2026-11-14T14:27:37.650335+00:00"}
+<< {"id":"f73c7035-8db0-497d-b0ad-f65394679217","ok":false,"result":null,"error":{"code":"not_supported","message":"Agent enforcement is not available in this build."},"currentRevision":null}
+>> {"version":1,"id":"d2524ab0-2d98-42ef-ad8e-c2cba71d1a32","type":"enforcement.receipts","requestedAtUtc":"2026-11-14T14:27:37.653790+00:00"}
+<< {"id":"d2524ab0-2d98-42ef-ad8e-c2cba71d1a32","ok":false,"result":null,"error":{"code":"not_supported","message":"Agent enforcement receipts are not available in this build."},"currentRevision":null}
+>> {"version":1,"id":"647a2fc7-5b61-449f-aa41-449b36cc112b","type":"enforcement.evaluate","requestedAtUtc":"2026-11-14T14:27:37.656669+00:00","payload":{"reason":"sec-g access-class probe"}}
+<< {"id":"647a2fc7-5b61-449f-aa41-449b36cc112b","ok":false,"result":null,"error":{"code":"not_supported","message":"Agent enforcement is not available in this build."},"currentRevision":null}
+>> {"version":1,"id":"0b1c6c74-6c47-493b-89b9-dc2853b27688","type":"snapshot","requestedAtUtc":"2026-11-14T14:27:37.658492+00:00"}
+<< [private reply redacted] {"id":"0b1c6c74-6c47-493b-89b9-dc2853b27688","ok":true,"resultKeys":["appTraffic","capturedUtc","connections","limitations","processCount","sourceName"],"replyBytes":1925}
+>> {"version":1,"id":"6d8f5a37-5224-4918-a618-63b5aef81d10","type":"serviceHealth","requestedAtUtc":"2026-11-14T14:27:37.721452+00:00"}
+<< {"id":"6d8f5a37-5224-4918-a618-63b5aef81d10","ok":true,"result":{"status":"running","uptimeSeconds":34,"sourceName":"AxiomFilter flow events (fallback: libproc socket table)","pollIntervalSeconds":1,"lastCaptureUtc":"2026-11-14T14:27:37.534859\u002B00:00","connectionCount":1,"processCount":1,"limitations":["Flows and byte counters come from the AxiomFilter network extension; flows that ended while it was not running are not reconstructed.","Byte counters are cumulative per flow as reported by the extension; per-app totals are the sum of observed flow deltas.","Only TCP and UDP flows are listed; other protocols are filtered but not shown."],"lastError":null},"error":null,"currentRevision":null}
+
+$ sudo -n -u axtest2 python3 sec-g-enforcement.py   # second standard user
+# (g) enforcement.* access as axtest2 (uid 502, groups [12, 20, 61, 100, 701, 702, 703, 704, 705])
+>> {"version":1,"id":"d9bb4e48-95f3-47d1-96f8-47c8a19576c9","type":"enforcement.status","requestedAtUtc":"2026-11-14T14:27:38.264350+00:00"}
+<< {"id":"d9bb4e48-95f3-47d1-96f8-47c8a19576c9","ok":false,"result":null,"error":{"code":"unauthorized","message":"This command discloses machine-wide activity and is only allowed for root, the user who installed Axiom (uid 501) and members of the admin group; uid 502 may only read public service health."},"currentRevision":null}
+>> {"version":1,"id":"048efe00-fcc3-4bc7-91e5-6170bbfea799","type":"enforcement.receipts","requestedAtUtc":"2026-11-14T14:27:38.275241+00:00"}
+<< {"id":"048efe00-fcc3-4bc7-91e5-6170bbfea799","ok":false,"result":null,"error":{"code":"unauthorized","message":"This command discloses machine-wide activity and is only allowed for root, the user who installed Axiom (uid 501) and members of the admin group; uid 502 may only read public service health."},"currentRevision":null}
+>> {"version":1,"id":"165df32f-5e79-4ffd-8f57-0ccc6c947371","type":"enforcement.evaluate","requestedAtUtc":"2026-11-14T14:27:38.276671+00:00","payload":{"reason":"sec-g access-class probe"}}
+<< {"id":"165df32f-5e79-4ffd-8f57-0ccc6c947371","ok":false,"result":null,"error":{"code":"unauthorized","message":"This command changes machine-wide settings and is only allowed for root, the user who installed Axiom (uid 501) and members of the admin group; uid 502 may only read public service health."},"currentRevision":null}
+>> {"version":1,"id":"f7460ba6-fa5f-4c75-919a-7c22a894a928","type":"snapshot","requestedAtUtc":"2026-11-14T14:27:38.278517+00:00"}
+<< {"id":"f7460ba6-fa5f-4c75-919a-7c22a894a928","ok":false,"result":null,"error":{"code":"unauthorized","message":"This command discloses machine-wide activity and is only allowed for root, the user who installed Axiom (uid 501) and members of the admin group; uid 502 may only read public service health."},"currentRevision":null}
+>> {"version":1,"id":"a67e0612-bcb0-400d-a71b-0d1b8e63114c","type":"serviceHealth","requestedAtUtc":"2026-11-14T14:27:38.280211+00:00"}
+<< {"id":"a67e0612-bcb0-400d-a71b-0d1b8e63114c","ok":true,"result":{"status":"running","uptimeSeconds":34,"sourceName":"AxiomFilter flow events (fallback: libproc socket table)","pollIntervalSeconds":1,"lastCaptureUtc":null,"connectionCount":0,"processCount":0,"limitations":["private fields redacted: this caller may read service health but not machine-wide activity"],"lastError":null},"error":null,"currentRevision":null}
+
+$ sudo -n python3 sec-g-enforcement.py   # root
+# (g) enforcement.* access as root (uid 0, groups [0, 1, 2, 3, 4, 5, 8, 9, 12, 20, 29, 33, 61, 80, 98, 100, 204, 250, 395, 398, 399, 400, 701, 702, 703, 704, 705])
+>> {"version":1,"id":"4e136858-6896-42c7-b30d-d02eaf23ef0a","type":"enforcement.status","requestedAtUtc":"2026-11-14T14:27:38.555799+00:00"}
+<< {"id":"4e136858-6896-42c7-b30d-d02eaf23ef0a","ok":false,"result":null,"error":{"code":"not_supported","message":"Agent enforcement is not available in this build."},"currentRevision":null}
+>> {"version":1,"id":"b465bef9-5c98-48fa-89e9-979e6d526970","type":"enforcement.receipts","requestedAtUtc":"2026-11-14T14:27:38.563325+00:00"}
+<< {"id":"b465bef9-5c98-48fa-89e9-979e6d526970","ok":false,"result":null,"error":{"code":"not_supported","message":"Agent enforcement receipts are not available in this build."},"currentRevision":null}
+>> {"version":1,"id":"b880fd6f-f12a-4096-89b7-8ecb4df46e78","type":"enforcement.evaluate","requestedAtUtc":"2026-11-14T14:27:38.566097+00:00","payload":{"reason":"sec-g access-class probe"}}
+<< {"id":"b880fd6f-f12a-4096-89b7-8ecb4df46e78","ok":false,"result":null,"error":{"code":"not_supported","message":"Agent enforcement is not available in this build."},"currentRevision":null}
+>> {"version":1,"id":"63fe684c-4b98-46a8-8323-16686b7c3a84","type":"snapshot","requestedAtUtc":"2026-11-14T14:27:38.568195+00:00"}
+<< [private reply redacted] {"id":"63fe684c-4b98-46a8-8323-16686b7c3a84","ok":true,"resultKeys":["appTraffic","capturedUtc","connections","limitations","processCount","sourceName"],"replyBytes":1158}
+>> {"version":1,"id":"0efa6e21-9693-4ed2-9309-10b96ea04c7b","type":"serviceHealth","requestedAtUtc":"2026-11-14T14:27:38.569701+00:00"}
+<< {"id":"0efa6e21-9693-4ed2-9309-10b96ea04c7b","ok":true,"result":{"status":"running","uptimeSeconds":34,"sourceName":"AxiomFilter flow events (fallback: libproc socket table)","pollIntervalSeconds":1,"lastCaptureUtc":"2026-11-14T14:27:38.537357\u002B00:00","connectionCount":0,"processCount":0,"limitations":["Flows and byte counters come from the AxiomFilter network extension; flows that ended while it was not running are not reconstructed.","Byte counters are cumulative per flow as reported by the extension; per-app totals are the sum of observed flow deltas.","Only TCP and UDP flows are listed; other protocols are filtered but not shown."],"lastError":null},"error":null,"currentRevision":null}

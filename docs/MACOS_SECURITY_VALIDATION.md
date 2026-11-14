@@ -33,6 +33,7 @@ nohup python3 -u sec-e-disconnect.py > e.out 2>&1 &     # writes /tmp/axsec/e-sa
 python3 -u sec-f-offline.py
 P=$(openssl rand -base64 18); sudo sysadminctl -addUser axtest2 -fullName "Axiom test 2" -password "$P"; unset P
 python3 -u sec-a-ipc.py; sudo -u axtest2 python3 -u /tmp/axsec/sec-a-ipc.py
+python3 -u sec-g-enforcement.py; sudo -u axtest2 python3 -u /tmp/axsec/sec-g-enforcement.py; sudo python3 -u sec-g-enforcement.py   # (g)
 bash sec-b-logs.sh; bash sec-b2-log-continuity.sh   # (b2): after the log-continuity fix
 sudo sysadminctl -deleteUser axtest2
 ```
@@ -196,3 +197,83 @@ The bundle built from `accef91` is installed (daemon pid 12950, upgraded in plac
 `axiomd --install-service`). The daemon is running, the filter is `verified`/connected with 0
 rules, curl is 200, `axtest2` is deleted (`sec-b2-deluser.txt`) and the original recovery baseline
 is in place.
+
+## Re-run on `c62ad14` (`main` `16229f4` merged): `enforcement.*` access classes (g)
+
+`main` `16229f4` added three IPC commands (`enforcement.status`, `enforcement.receipts`,
+`enforcement.evaluate`). The port classifies them (`e670b41`): status and receipts are private
+reads, evaluate is a write, none is public. The macOS daemon registers no `EnforcementController`,
+so an authorized caller gets upstream's `not_supported`. This run checks that on the daemon's real
+socket with a real second account. Author-run on the project's macOS VM; it is not GitHub CI.
+
+| | |
+|---|---|
+| Tested SHA | `c62ad14` (buba/macos: merge `7ec763a` of `main` `16229f4`, red tests `6699f2f`, classification `e670b41`) |
+| Bundle | `Axiom.app` 0.17.0 (build 10), `scripts/macos/package-app.sh osx-x64 --no-sign` on Linux, then `scripts/macos/deploy-to-vm.sh` (`INSTALLED`, `DAEMON-UPGRADED`); logs `package-app.txt`, `deploy-to-vm.txt` |
+| Proof that the daemon runs this build | The assemblies carry no commit id, so the proof is by hash: SHA-256 of `axiomd.dll`, `Axiom.Service.Hosting.dll`, `Axiom.Contracts.dll`, `Axiom.Infrastructure.MacOS.dll` and `Axiom.Core.dll` in `/Library/PrivilegedHelperTools/com.axiom.service/` and in the app bundle equal the Linux publish output of `c62ad14` (`sec-g-build.txt` against `publish-hashes-linux.txt`). Daemon pid 22221, started by the upgrade, `state = running`. |
+| Filter | `com.axiom.firewall.filter (0.17.0/10) [activated enabled]`; `rules.query`: `state verified`, connected, published = acknowledged generation, 0 rules; curl 200. The running extension is the one activated earlier (same version/build; `git diff accef91 c62ad14 -- macos/` is empty). |
+| Machine | same VM as above: Intel x86_64, macOS 15.8.3 (24H241), **SIP disabled**, ad hoc signing |
+| Users | `dev` (uid 501, admin, install owner); `axtest2` (uid 502, standard, "NOT a member of admin"), created for this run and deleted afterwards; root via `sudo -n` |
+| Date | 2026-11-14 14:27–14:29 UTC |
+
+All evidence files of this run are in `docs/evidence/macos-security/c62ad14/`.
+
+### (g) Result per caller (`sec-g-enforcement.py`, raw lines in `sec-g-enforcement.txt`)
+
+| Command | `axtest2` (uid 502) | `dev` (uid 501, owner) | root (uid 0) |
+|---|---|---|---|
+| `enforcement.status` | `unauthorized` | `not_supported` | `not_supported` |
+| `enforcement.receipts` | `unauthorized` | `not_supported` | `not_supported` |
+| `enforcement.evaluate` | `unauthorized` | `not_supported` | `not_supported` |
+| `snapshot` (private) | `unauthorized` | ok | ok |
+| `serviceHealth` (public) | ok, redacted | ok | ok |
+
+Verdict: **PASS**, as expected for every cell.
+
+- `axtest2`, status / receipts / snapshot: `{"code":"unauthorized","message":"This command discloses
+  machine-wide activity and is only allowed for root, the user who installed Axiom (uid 501) and
+  members of the admin group; uid 502 may only read public service health."}`
+- `axtest2`, evaluate: `unauthorized`, "This command changes machine-wide settings and is only
+  allowed for root, the user who installed Axiom (uid 501) and members of the admin group; …".
+- `dev` and root, status and evaluate: `{"code":"not_supported","message":"Agent enforcement is not
+  available in this build."}`; receipts: `"Agent enforcement receipts are not available in this
+  build."` These are upstream's texts.
+- `serviceHealth` for `axtest2`: `connectionCount 0`, `processCount 0`, `lastCaptureUtc null`,
+  `limitations ["private fields redacted: …"]`.
+
+The script prints each request line as sent and each reply line as received. The one exception is
+a successful `snapshot` reply (owner, root), which is printed as id, ok, result keys and byte count
+so that no machine activity is stored in the repository.
+
+`axtest2` was removed with `sudo sysadminctl -deleteUser axtest2` ("Removing axtest2's home at
+/Users/axtest2", "Deleting record for axtest2"); afterwards `id axtest2` → "no such user",
+`/Users/axtest2` does not exist, `dscl . -list /Users` lists only `daemon dev nobody root`
+(`sec-g-adduser.txt`, `sec-g-deluser.txt`).
+
+### Checks (a) to (f) repeated on this build
+
+All of them were run again in the same session with the unchanged scripts, in this order:
+(a), (b), (b2), (c), (d), (e), (f).
+
+| # | Verdict on `c62ad14` | Observed | Evidence (`c62ad14/`) |
+|---|---|---|---|
+| a | **PASS** | `axtest2`: `snapshot`, `history.query`, `diagnostics.export`, `rules.query`, `rule.verify`, `live.events`, `config.get`, `rule.apply` → `unauthorized`; `serviceHealth` redacted; `capabilities` ok. `dev`: as in the first run; the contrast rule was removed (0 rules, curl 200). | `sec-a-ipc.txt` |
+| b | **PASS** | directory `drwx------ root:wheel`, log and every archive `-rw------- root:wheel` before and after `newsyslog -F`; `dev` without sudo and `axtest2` get Permission denied | `sec-b-logs.txt` |
+| b2 | **PASS** | `Notified daemon pid 22221 = /var/run/axiomd.pid`; fds 1w/2w/50w move from inode 343227 to 343247, same pid; `log reopened (signal), reopen #2` in the new file; `axtest2` denied. The two recorded details of (b2) above (no log line for the markers, fds 7u/8u on the launchd-opened file) are unchanged. | `sec-b2-log-continuity.txt` |
+| c | **PASS** | applied + verified, curl rc 7; after `chmod 664`: `degraded`, filter `pending`, `enforcementVerified false`; after `chmod 644`: verified by a fresh ack; after remove: 0 rules, curl 200 | `sec-c-reject.txt` |
+| d | **PASS** | filter frozen: `rule.apply` returns `pending` after 2.1 s, `verifiedUtc null`, published 1794372912 > acknowledged 1794372911, `enforcementVerified false`; after thaw: applied, `lastVerifiedUtc` = ack time, curl rc 7; after remove: curl 200 | `sec-d-stale.txt` |
+| e | **PASS** | `axiom-sysext disable`: `degraded`, `connected false`, rule `pending` in the next 0.2 s sample (14:28:33.022Z; the previous one, 14:28:32.813Z, was still verified), `enforcementVerified false`; `enable`: verified again with a new generation, curl rc 7; after remove: curl 200 | `sec-e-disconnect.txt`, `e-samples.ndjson` |
+| f | **PASS** | offline `--recover-network --apply`: `Result: PartialFailure; verified: no`, exit 5, `filter.disconnected` (no claim of removal); daemon back: `networkRecovery.restore` → `succeeded, verified true, rulesVerifiedAbsent 1`; original 2026-11-12 baseline back in place (`alreadyCaptured`) | `sec-f-offline.txt` |
+
+### End state after this run
+
+Bundle built from `c62ad14` installed; daemon running (pid 22639 after the bootout/bootstrap of
+check (f)); filter `[activated enabled]`, `verified`, connected, 0 rules; curl 200; `axtest2`
+deleted; original recovery baseline in place (`sec-g-endstate.txt`).
+
+One thing happened outside the checks and is recorded here: before the deploy, a version probe
+(`axiomd --version`, an option the daemon does not have) started a second, unprivileged `axiomd` as
+`dev`. It could not write the rules directory (`Access to the path … is denied`), did not own the
+socket, and was terminated by pid before the deploy. The root daemon was not affected.
+
+Not covered, as before: Apple silicon, SIP enabled, Developer ID signing, notarisation, Gatekeeper.
