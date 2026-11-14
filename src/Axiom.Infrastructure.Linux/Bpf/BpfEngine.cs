@@ -89,12 +89,28 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     public int SelfPid { get; init; } = Environment.ProcessId;
 
     /// <summary>Makes one connect() from this process so the program records its key (UDP to 127.0.0.1:9; no packet).</summary>
-    public Action SelfCheckConnect { get; init; } = () => { };
+    public Action SelfCheckConnect { get; init; } = ConnectLoopbackUdp;
 
-    /// <summary>Result of the kernel/user-space exe key self-check of the loaded program.</summary>
-    public BpfKernelKeyCheck KernelKeyCheck => _kernelKey;
+    /// <summary>Result of the kernel/user-space exe key self-check of the loaded program (docs/LINUX_EBPF.md §2.1).</summary>
+    public BpfKernelKeyCheck KernelKeyCheck
+    {
+        get
+        {
+            lock (_stateGate)
+            {
+                return _kernelKey;
+            }
+        }
+    }
 
-    private BpfKernelKeyCheck _kernelKey = BpfKernelKeyCheck.Unverified("stub");
+    private BpfKernelKeyCheck _kernelKey = BpfKernelKeyCheck.Unverified("layer not attached");
+
+    /// <summary>One UDP connect() to 127.0.0.1:9: runs the connect4 hook, sends no packet.</summary>
+    private static void ConnectLoopbackUdp()
+    {
+        using var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Dgram, System.Net.Sockets.ProtocolType.Udp);
+        socket.Connect(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 9));
+    }
 
     public void Dispose() => _gate.Dispose();
 
@@ -173,7 +189,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             return [];
         }
 
-        var plan = BpfVerdictPlanner.Plan(rules.Select(rule => rule.Spec), Generation, _cgroups, _inodes);
+        var plan = BpfVerdictPlanner.Plan(rules.Select(rule => rule.Spec), Generation, _cgroups, _inodes, KernelKeyCheck);
         HashSet<string> applied;
         lock (_stateGate)
         {
@@ -317,6 +333,17 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 return;
             }
 
+            // ABI 2 (24-byte exe key with the btrfs subvolume): an object built for another layout would
+            // silently never match (or reject every update); refuse it and leave no pins behind.
+            if (LayoutProblem() is { } layout)
+            {
+                DetachAndUnpin();
+                var reason = "inactive: " + layout;
+                SetState(false, reason);
+                Log("BPF layer " + reason);
+                return;
+            }
+
             foreach (var (hook, program) in BpfLayout.Programs)
             {
                 var attach = Run("cgroup", "attach", _paths.CgroupRoot, hook, "pinned", _paths.ProgramPin(program), "multi");
@@ -330,13 +357,16 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 }
             }
 
+            var kernelKey = RunSelfCheck();
             lock (_stateGate)
             {
                 _applied.Clear();
                 _generation = -1;
                 _neutralised = false;
+                _kernelKey = kernelKey;
             }
 
+            Log($"BPF exe key self-check {kernelKey.State.ToString().ToLowerInvariant()}: {kernelKey.Detail}.");
             SetState(true, $"active ({probe.BpftoolVersion}; programs pinned at {_paths.PinDirectory})");
             Log($"BPF layer attached: connect4/connect6/sendmsg4/sendmsg6 at {_paths.CgroupRoot} (multi), pinned at {_paths.PinDirectory}.");
         }
@@ -363,7 +393,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 return inactive;
             }
 
-            var plan = BpfVerdictPlanner.Plan(rules.Select(rule => rule.Spec), generation, _cgroups, _inodes);
+            var plan = BpfVerdictPlanner.Plan(rules.Select(rule => rule.Spec), generation, _cgroups, _inodes, KernelKeyCheck);
             var desired = plan.Entries.ToDictionary(entry => entry.Map + ":" + entry.KeyHex, StringComparer.Ordinal);
             Dictionary<string, BpfMapEntry> applied;
             lock (_stateGate)
@@ -520,6 +550,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 _applied.Clear();
                 _generation = -1;
                 _neutralised = false;
+                _kernelKey = BpfKernelKeyCheck.Unverified("layer not attached");
             }
 
             SetState(false, "stopped");
@@ -765,6 +796,84 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
 
         var names = BpfLayout.Programs.Select(program => program.Program).ToHashSet(StringComparer.Ordinal);
         return BpfMapDump.ParseAttached(show.StandardOutput).Select(program => program.Name).Where(names.Contains).Distinct(StringComparer.Ordinal).Count();
+    }
+
+    /// <summary>Null when the loaded exe map has this daemon's key size (ABI <see cref="BpfLayout.Abi"/>), else why not.</summary>
+    private string? LayoutProblem()
+    {
+        var show = Run("-j", "map", "show", "pinned", _paths.MapPin(BpfLayout.ExeMap));
+        int? bytes = null;
+        if (show.Succeeded)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(show.StandardOutput);
+                if (document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty("bytes_key", out var key) && key.TryGetInt32(out var value))
+                {
+                    bytes = value;
+                }
+            }
+            catch (JsonException)
+            {
+            }
+        }
+
+        return bytes == BpfLayout.ExeKeySize
+            ? null
+            : string.Create(CultureInfo.InvariantCulture, $"object key layout mismatch: {BpfLayout.ExeMap} key is {(bytes is { } size ? size + " bytes" : "unreadable (" + Trim(show.StandardError) + ")")}, this daemon writes {BpfLayout.ExeKeySize} (ABI {BpfLayout.Abi}); install the matching {BpfEnginePaths.ObjectFileName}");
+    }
+
+    /// <summary>
+    /// Arms axiom_selfcheck with this process's tgid, makes one connect(), reads back the key the
+    /// program computed for the daemon's own exe and compares it with the user-space key; disarms after.
+    /// </summary>
+    private BpfKernelKeyCheck RunSelfCheck()
+    {
+        var pin = _paths.MapPin(BpfLayout.SelfCheckMap);
+        string[] zero = ["00", "00", "00", "00"];
+        var arm = Run(["map", "update", "pinned", pin, "key", "hex", .. zero, "value", "hex", .. BpfLayout.HexTokens(BpfLayout.SelfCheckRequest(SelfPid)), "any"]);
+        if (!arm.Succeeded)
+        {
+            return BpfKernelKeyCheck.Unverified("could not arm " + BpfLayout.SelfCheckMap + ": " + Trim(arm.StandardError));
+        }
+
+        string? connectError = null;
+        try
+        {
+            SelfCheckConnect();
+        }
+        catch (Exception exception) when (exception is System.Net.Sockets.SocketException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            connectError = exception.Message;
+        }
+
+        var dump = Run("-j", "map", "dump", "pinned", pin);
+        var values = dump.Succeeded ? BpfMapDump.Parse(dump.StandardOutput) : null;
+        var hex = values is not null && values.TryGetValue("00000000", out var dumped) ? dumped : null;
+        var record = BpfLayout.ParseSelfCheck(hex);
+
+        // Disarm (target 0) but keep the recorded key and flags so `axiomd --doctor` can re-check them.
+        var disarm = record is null || hex is null ? BpfLayout.SelfCheckRequest(0) : Convert.FromHexString(hex);
+        disarm.AsSpan(0, 4).Clear();
+        Run(["map", "update", "pinned", pin, "key", "hex", .. zero, "value", "hex", .. BpfLayout.HexTokens(disarm), "any"]);
+        if (connectError is not null)
+        {
+            return BpfKernelKeyCheck.Unverified("the self-check connect() failed: " + connectError);
+        }
+        var real = _inodes.RealPath(SelfExePath);
+        var stat = real is null ? null : _inodes.Stat(real);
+        return BpfKernelKeyCheck.Compare(record, SelfPid, real ?? SelfExePath, btrfs =>
+        {
+            if (real is null || stat is null)
+            {
+                return new BpfExeKeyResolution(null, $"{SelfExePath} could not be resolved/stat'ed", null);
+            }
+
+            var mountInfo = _inodes.ReadMountInfo();
+            return mountInfo is null
+                ? new BpfExeKeyResolution(null, "mountinfo is unreadable", null)
+                : BpfExeKey.Resolve(real, stat, MountInfoTable.Parse(mountInfo), new BpfKernelKeyCheck(BpfKernelKeyState.Verified, btrfs, "self-check candidate"), _inodes.SubvolumeId);
+        });
     }
 
     /// <summary>Axiom's programs still attached at the cgroup root (name prefix <c>axiom_</c> as in <see cref="BpfLayout.Programs"/>).</summary>

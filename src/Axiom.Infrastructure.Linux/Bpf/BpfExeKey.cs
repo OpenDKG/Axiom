@@ -130,7 +130,8 @@ public sealed record BpfExeKeyResolution(BpfInode? Key, string Detail, MountInfo
 /// Derives the exe-verdict key the kernel side will compute (docs/LINUX_EBPF.md §3.1): device =
 /// superblock <c>s_dev</c> from mountinfo field 3 of the mount the canonical path lives on, inode =
 /// <c>stat</c>'s <c>st_ino</c>. The stat device is a cross-check: it must equal the superblock dev,
-/// except on btrfs where <c>st_dev</c> is the subvolume's anonymous device by design. Overlayfs
+/// except on btrfs where <c>st_dev</c> is the subvolume's anonymous device by design; there the key adds
+/// the subvolume id (ABI 2) once the kernel side is self-checked. Overlayfs
 /// (container roots) and any other unexplained mismatch return no key — the rule is then left to
 /// nftables and reported uncovered instead of claiming a connect-time verdict that cannot match.
 /// </summary>
@@ -156,29 +157,37 @@ public static class BpfExeKey
             return new BpfExeKeyResolution(null, $"{realPath} is on {where}: exe_file->f_inode is the overlay inode, whose device/inode stat does not report reliably", mount);
         }
 
-        var key = new BpfInode(mount.DevMajor, mount.DevMinor, stat.Ino);
-        if (stat.DevMajor == mount.DevMajor && stat.DevMinor == mount.DevMinor)
+        if (!string.Equals(mount.FsType, "btrfs", StringComparison.Ordinal))
         {
-            return new BpfExeKeyResolution(key, $"dev {mount.Dev} from mountinfo ({where}; stat agrees)", mount);
+            if (stat.DevMajor == mount.DevMajor && stat.DevMinor == mount.DevMinor)
+            {
+                return new BpfExeKeyResolution(new BpfInode(mount.DevMajor, mount.DevMinor, stat.Ino), $"dev {mount.Dev} from mountinfo ({where}; stat agrees), subvol 0 (not btrfs)", mount);
+            }
+
+            return new BpfExeKeyResolution(null, $"stat dev {statDev} of {realPath} does not match the superblock dev {mount.Dev} of {where}; the connect-time key cannot be proven", mount);
         }
 
-        if (string.Equals(mount.FsType, "btrfs", StringComparison.Ordinal))
+        // btrfs (PR #276 round 3, item 5, proven on Fedora 45): inode numbers are unique only within a
+        // subvolume and every subvolume shares the superblock s_dev, so {s_dev, ino} alone would also match
+        // inode N of any other subvolume. ABI 2 adds the subvolume id on both sides; it is used only when
+        // the loaded program reads it (self-check passed, CO-RE relocated) and user space can read it too.
+        var ambiguous = string.Create(CultureInfo.InvariantCulture, $"exe key ambiguous on btrfs subvolumes: dev {mount.Dev} ino {stat.Ino} (superblock dev from mountinfo; {where}; stat {statDev} is the subvolume device) would also match inode {stat.Ino} of any other subvolume on this filesystem");
+        if (kernel is not { State: BpfKernelKeyState.Verified, BtrfsSubvolume: true })
         {
-            // PR #276 round 3, item 5 (proven on Fedora 45): btrfs inode numbers are unique only within a
-            // subvolume, and every subvolume shares the superblock s_dev the kernel side reads. Two unrelated
-            // executables with the same inode number in different subvolumes therefore share the key, so a
-            // block of one blocks the other at connect(). The kernel key cannot tell them apart without a
-            // BPF-side subvolume id; leave the rule to nftables (its herded cgroup key still applies).
-            return new BpfExeKeyResolution(
-                null,
-                string.Create(CultureInfo.InvariantCulture, $"exe key ambiguous on btrfs subvolumes: dev {mount.Dev} ino {stat.Ino} (superblock dev from mountinfo; {where}; stat {statDev} is the subvolume device) would also match inode {stat.Ino} of any other subvolume on this filesystem, so the connect-time exe verdict is not used"),
-                mount);
+            return new BpfExeKeyResolution(null, $"{ambiguous}, and the loaded BPF program's btrfs subvolume id is not confirmed ({kernel?.Detail ?? "kernel exe key not self-checked"}), so the connect-time exe verdict is not used", mount);
         }
 
-        return new BpfExeKeyResolution(null, $"stat dev {statDev} of {realPath} does not match the superblock dev {mount.Dev} of {where}; the connect-time key cannot be proven", mount);
+        if (subvolume?.Invoke(realPath) is not { } subvol)
+        {
+            return new BpfExeKeyResolution(null, $"btrfs subvolume id of {realPath} could not be read (statx STATX_SUBVOL / BTRFS_IOC_INO_LOOKUP); {ambiguous}", mount);
+        }
+
+        return new BpfExeKeyResolution(
+            new BpfInode(mount.DevMajor, mount.DevMinor, stat.Ino, subvol.Id),
+            string.Create(CultureInfo.InvariantCulture, $"dev {mount.Dev} from mountinfo ({where}; stat {statDev} is the subvolume device), subvol {subvol.Id} from {subvol.Source}"),
+            mount);
     }
 }
-
 /// <summary>Distribution-aware install hint for bpftool, from <c>/etc/os-release</c> ID / ID_LIKE.</summary>
 public static class BpftoolHint
 {

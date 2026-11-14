@@ -162,27 +162,64 @@ public sealed class LinuxDoctor
         }
 
         var mountInfo = reader.ReadMountInfo();
+        var mounts = Bpf.MountInfoTable.Parse(mountInfo);
+        var kernel = KernelSelfCheck(reader, mounts);
         var resolution = mountInfo is null
             ? new Bpf.BpfExeKeyResolution(null, $"{_targets.MountInfoPath} is unreadable", null)
-            : Bpf.BpfExeKey.Resolve(real, stat, Bpf.MountInfoTable.Parse(mountInfo));
+            : Bpf.BpfExeKey.Resolve(real, stat, mounts, kernel, reader.SubvolumeId);
         var statDev = string.Create(CultureInfo.InvariantCulture, $"{stat.DevMajor}:{stat.DevMinor}");
+        var selfCheck = $" Kernel self-check {kernel.State.ToString().ToLowerInvariant()}: {kernel.Detail}.";
+        if (kernel.State == Bpf.BpfKernelKeyState.Mismatch)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "bpf exe key", $"{real}: {kernel.Detail}.{(resolution.Key is { } shown ? " User-space key " + Bpf.BpfKernelKeyCheck.Describe(shown) + "." : string.Empty)}"));
+            return;
+        }
+
         if (resolution.Key is null && resolution.Mount is { FsType: "btrfs" })
         {
-            // PR #276 round 3: not a fault, a documented boundary (docs/LINUX_EBPF.md §3.2).
-            checks.Add(new DoctorCheck(DoctorCheck.Skip, "bpf exe key", $"{real}: {resolution.Detail}; exe rules on btrfs are nft-only (not race-free) plus the herded-cgroup connect-time key."));
+            // Not a fault, a documented boundary (docs/LINUX_EBPF.md §2.1): the subvolume id is not proven.
+            checks.Add(new DoctorCheck(DoctorCheck.Skip, "bpf exe key", $"{real}: {resolution.Detail}; exe rules on btrfs are nft-only (not race-free) plus the herded-cgroup connect-time key.{selfCheck}"));
             return;
         }
 
         if (resolution.Key is not { } key)
         {
-            checks.Add(new DoctorCheck(DoctorCheck.Warn, "bpf exe key", $"{real}: {resolution.Detail}; exe rules on such paths are left to nftables (cgroup key only)."));
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "bpf exe key", $"{real}: {resolution.Detail}; exe rules on such paths are left to nftables (cgroup key only).{selfCheck}"));
             return;
         }
 
-        var subvolume = resolution.Mount is { FsType: "btrfs" } && statDev != resolution.Mount.Dev
-            ? $" stat st_dev {statDev} is a btrfs subvolume device and is NOT used."
-            : string.Empty;
-        checks.Add(new DoctorCheck(DoctorCheck.Pass, "bpf exe key", string.Create(CultureInfo.InvariantCulture, $"{real}: key dev {key.DevMajor}:{key.DevMinor} ino {key.Ino}, source mountinfo superblock dev ({resolution.Mount!.FsType} at {resolution.Mount.MountPoint}, {resolution.Mount.Source}).{subvolume}")));
+        var subvolume = resolution.Mount is { FsType: "btrfs" }
+            ? string.Create(CultureInfo.InvariantCulture, $" + btrfs subvolume id {key.Subvolume} ({resolution.Detail[(resolution.Detail.LastIndexOf(" from ", StringComparison.Ordinal) + 6)..]}); stat st_dev {statDev} is a btrfs subvolume device and is NOT used.")
+            : " (subvol 0: not btrfs).";
+        checks.Add(new DoctorCheck(DoctorCheck.Pass, "bpf exe key", string.Create(CultureInfo.InvariantCulture, $"{real}: key {Bpf.BpfKernelKeyCheck.Describe(key)}, source mountinfo superblock dev ({resolution.Mount!.FsType} at {resolution.Mount.MountPoint}, {resolution.Mount.Source}){subvolume}{selfCheck}")));
+    }
+
+    /// <summary>
+    /// Re-checks what the running daemon's program recorded in <c>axiom_selfcheck</c> for the daemon image
+    /// against the user-space key of that image (root only; Unverified when the map is not readable).
+    /// </summary>
+    private Bpf.BpfKernelKeyCheck KernelSelfCheck(Bpf.StatInodeReader reader, Bpf.MountInfoTable mounts)
+    {
+        if (!_isRoot)
+        {
+            return Bpf.BpfKernelKeyCheck.Unverified("axiom_selfcheck is readable as root");
+        }
+
+        var pin = Path.Combine(_targets.BpfPinDirectory ?? Bpf.BpfEnginePaths.DefaultPinDirectory, "maps", Bpf.BpfLayout.SelfCheckMap);
+        var dump = _runner.Run(Bpf.BpfCapabilityProbe.Bpftool, ["-j", "map", "dump", "pinned", pin], ToolTimeout);
+        var values = dump.Succeeded ? Bpf.BpfMapDump.Parse(dump.StandardOutput) : null;
+        var record = values is not null && values.TryGetValue("00000000", out var hex) ? Bpf.BpfLayout.ParseSelfCheck(hex) : null;
+        if (record is null)
+        {
+            return Bpf.BpfKernelKeyCheck.Unverified($"{pin} is not readable (daemon not running, layer inactive, or an ABI 1 object)");
+        }
+
+        var daemon = Path.Combine(_targets.ImageDirectory, ProtectedImageLayout.DaemonFileName);
+        var real = reader.RealPath(daemon);
+        var stat = real is null ? null : reader.Stat(real);
+        return Bpf.BpfKernelKeyCheck.Compare(record with { TargetTgid = 0 }, 0, real ?? daemon, btrfs => real is null || stat is null
+            ? new Bpf.BpfExeKeyResolution(null, $"{daemon} could not be resolved/stat'ed", null)
+            : Bpf.BpfExeKey.Resolve(real, stat, mounts, new Bpf.BpfKernelKeyCheck(Bpf.BpfKernelKeyState.Verified, btrfs, "doctor"), reader.SubvolumeId));
     }
 
     /// <summary>
@@ -345,6 +382,15 @@ public sealed class LinuxDoctor
         }
 
         var state = capability.FilterEnforcement?.State.ToString().ToLowerInvariant() ?? "unreported";
+
+        // A neutralised/degraded connect-time layer is a live enforcement problem even while the nft table
+        // is fine: new processes get the ~1 s exec-time window again (the "bpf layer" line has the detail).
+        if (capability.ConnectTimeLayer is { State: "neutralised" or "degraded" or "stale_programs" } layer)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "live enforcement", $"capability {capability.Status.ToString().ToLowerInvariant()}, enforcement {state}, but the connect-time BPF layer is {layer.State} ({layer.Status}); nftables only, not race-free{(capability.Reason is { Length: > 0 } reason ? "; " + reason : string.Empty)}"));
+            return;
+        }
+
         checks.Add(capability.Status == Axiom.Contracts.Firewall.FirewallCapabilityStatus.Available && capability.FilterEnforcement?.State is not (Axiom.Contracts.Firewall.FilterEnforcementState.Degraded or Axiom.Contracts.Firewall.FilterEnforcementState.Unavailable)
             ? new DoctorCheck(DoctorCheck.Pass, "live enforcement", $"capability available, enforcement {state}{(capability.Reason is { Length: > 0 } note ? "; " + note : string.Empty)}")
             : new DoctorCheck(DoctorCheck.Warn, "live enforcement", $"capability {capability.Status.ToString().ToLowerInvariant()}, enforcement {state}: {capability.Reason ?? "no reason given"}"));

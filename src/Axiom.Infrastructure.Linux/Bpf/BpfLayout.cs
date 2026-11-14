@@ -11,7 +11,8 @@ namespace Axiom.Infrastructure.Linux.Bpf;
 /// </summary>
 public static class BpfLayout
 {
-    public const int Abi = 1;
+    /// <summary>ABI 2: the exe key carries the btrfs subvolume id (24 bytes); ABI 1 had {dev, ino} only (16).</summary>
+    public const int Abi = 2;
 
     public const string ExeMap = "axiom_exe_verdicts";
     public const string CgroupMap = "axiom_cgroup_verdicts";
@@ -20,9 +21,44 @@ public static class BpfLayout
     public const string SelfCheckMap = "axiom_selfcheck";
     public const int SelfCheckSize = 40;
 
-    public static byte[] SelfCheckRequest(int tgid) => new byte[SelfCheckSize];
 
-    public static BpfSelfCheckRecord? ParseSelfCheck(string? hex) => null;
+    /// <summary>axiom_selfcheck value that arms (tgid &gt; 0) or disarms (0) the kernel-side record.</summary>
+    public static byte[] SelfCheckRequest(int tgid)
+    {
+        var bytes = new byte[SelfCheckSize];
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(0, 4), unchecked((uint)Math.Max(0, tgid)));
+        return bytes;
+    }
+
+    /// <summary>struct axiom_selfcheck: tgid, hits, exe key (24), flags, reserved — 40 bytes little-endian.</summary>
+    public static BpfSelfCheckRecord? ParseSelfCheck(string? hex)
+    {
+        if (hex is null || hex.Length != SelfCheckSize * 2)
+        {
+            return null;
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromHexString(hex);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+
+        var key = new BpfInode(
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(8, 4)),
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(12, 4)),
+            BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(16, 8)),
+            BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(24, 8)));
+        return new BpfSelfCheckRecord(
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0, 4)),
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(4, 4)),
+            key,
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(32, 4)));
+    }
 
     public const byte ActionAllow = 1;
     public const byte ActionBlock = 2;
@@ -32,7 +68,7 @@ public static class BpfLayout
     public const byte ProtoOther = 4;
     public const byte ProtoAny = ProtoTcp | ProtoUdp | ProtoOther;
 
-    public const int ExeKeySize = 16;
+    public const int ExeKeySize = 24;
     public const int CgroupKeySize = 8;
     public const int VerdictSize = 24;
 
@@ -51,6 +87,7 @@ public static class BpfLayout
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(0, 4), devMajor);
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(4, 4), devMinor);
         BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(8, 8), ino);
+        BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(16, 8), subvolume);
         return bytes;
     }
 

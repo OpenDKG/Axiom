@@ -11,7 +11,7 @@
 #ifndef AXIOM_BPF_H
 #define AXIOM_BPF_H
 
-#define AXIOM_BPF_ABI 1
+#define AXIOM_BPF_ABI 2
 
 /* Pin layout under /sys/fs/bpf/axiom (BpfEnginePaths mirrors these). */
 #define AXIOM_BPF_PIN_DIR "/sys/fs/bpf/axiom"
@@ -20,6 +20,7 @@
 #define AXIOM_BPF_EXE_MAP "axiom_exe_verdicts"
 #define AXIOM_BPF_CGROUP_MAP "axiom_cgroup_verdicts"
 #define AXIOM_BPF_STATS_MAP "axiom_stats"
+#define AXIOM_BPF_SELFCHECK_MAP "axiom_selfcheck"
 
 /* axiom_verdict.action */
 #define AXIOM_ACTION_ALLOW 1u
@@ -42,13 +43,35 @@
 #define AXIOM_STAT_ALLOWED_LOOPBACK 3
 #define AXIOM_STAT_COUNT 4
 
-/* Key of axiom_exe_verdicts: the executable's inode identity. dev_major/minor
- * are the kernel's MAJOR()/MINOR() of inode->i_sb->s_dev (what `stat -c '%Hd %Ld'`
- * prints for the file), ino is inode->i_ino. 16 bytes. */
+/* Key of axiom_exe_verdicts (ABI 2): the executable's inode identity.
+ * dev_major/minor are the kernel's MAJOR()/MINOR() of inode->i_sb->s_dev (the
+ * superblock device: mountinfo field 3, NOT stat's st_dev on btrfs), ino is
+ * inode->i_ino, subvol is the btrfs subvolume (root objectid,
+ * BTRFS_I(inode)->root->root_key.objectid; statx STATX_SUBVOL in user space) and
+ * 0 on every other filesystem. btrfs inode numbers are unique per subvolume
+ * only, so without subvol two binaries could share a key. 24 bytes, naturally
+ * aligned (packed changes nothing). ABI 1 had no subvol (16 bytes). */
 struct axiom_exe_key {
     __u32 dev_major;
     __u32 dev_minor;
     __u64 ino;
+    __u64 subvol;
+} __attribute__((packed));
+
+/* axiom_selfcheck.flags */
+#define AXIOM_SELFCHECK_BTRFS_CORE 1u  /* btrfs_inode/btrfs_root relocated (btrfs BTF present at load) */
+#define AXIOM_SELFCHECK_EXE_BTRFS 2u   /* the recorded exe lives on btrfs (s_magic) */
+
+/* Value of axiom_selfcheck[0] (ARRAY, one entry). The daemon writes its tgid,
+ * makes one connect(), reads back the key the program computed for its own
+ * exe and compares it with the user-space key; then writes 0 to stop
+ * recording. 40 bytes. */
+struct axiom_selfcheck {
+    __u32 target_tgid;
+    __u32 hits;
+    struct axiom_exe_key key;
+    __u32 flags;
+    __u32 reserved;
 } __attribute__((packed));
 
 /* Value of both verdict maps. rule_id is the .NET Guid's ToByteArray() order

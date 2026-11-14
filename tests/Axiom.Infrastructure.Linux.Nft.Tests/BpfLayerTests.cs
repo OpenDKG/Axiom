@@ -246,7 +246,7 @@ public sealed class BpfLayerTests
     public void Layout_encodes_keys_and_verdicts_little_endian_and_round_trips_rule_ids()
     {
         var key = BpfLayout.ExeKey(8, 2, 51643045);
-        Assert.Equal("08000000" + "02000000" + "a502140300000000", BpfLayout.HexString(key)); // 51643045 = 0x031402a5
+        Assert.Equal("08000000" + "02000000" + "a502140300000000" + "0000000000000000", BpfLayout.HexString(key)); // 51643045 = 0x031402a5; subvol 0 (not btrfs)
         Assert.Equal(BpfLayout.ExeKeySize, key.Length);
 
         var cgroup = BpfLayout.CgroupKey(93);
@@ -358,7 +358,7 @@ public sealed class BpfLayerTests
     public void Event_lines_parse_and_the_monitor_emits_the_flow_pair_with_a_bpf_id()
     {
         var hex = Convert.ToHexStringLower(RuleA.ToByteArray());
-        var line = "{\"abi\":1,\"ts\":123,\"pid\":4242,\"cgroup\":93,\"devMajor\":8,\"devMinor\":2,\"ino\":51643045,\"family\":2,\"proto\":6," +
+        var line = "{\"abi\":2,\"ts\":123,\"pid\":4242,\"cgroup\":93,\"devMajor\":8,\"devMinor\":2,\"ino\":51643045,\"family\":2,\"proto\":6," +
                    "\"daddr\":\"93.184.216.34\",\"dport\":443,\"verdict\":\"block\",\"source\":\"exe\",\"hook\":\"connect\",\"generation\":7,\"ruleId\":\"" + hex + "\"}";
         var flow = BpfEventParser.TryParse(line);
         Assert.NotNull(flow);
@@ -367,8 +367,8 @@ public sealed class BpfLayerTests
         Assert.Equal("0.0.0.0", flow.LocalAddress);
         Assert.Equal(RuleA, flow.RuleId);
         Assert.Equal("exe", flow.Source);
-        Assert.Null(BpfEventParser.TryParse("{\"abi\":1,\"type\":\"hello\",\"map\":\"/sys/fs/bpf/axiom/maps/axiom_events\"}"));
-        Assert.Null(BpfEventParser.TryParse(line.Replace("\"abi\":1", "\"abi\":2", StringComparison.Ordinal)));
+        Assert.Null(BpfEventParser.TryParse("{\"abi\":2,\"type\":\"hello\",\"map\":\"/sys/fs/bpf/axiom/maps/axiom_events\"}"));
+        Assert.Null(BpfEventParser.TryParse(line.Replace("\"abi\":2", "\"abi\":1", StringComparison.Ordinal)));
         Assert.Null(BpfEventParser.TryParse("not json"));
 
         var sink = new CollectingSink();
@@ -396,8 +396,8 @@ public sealed class BpfLayerTests
         var sink = new CollectingSink();
         var source = new FakeBpfEventSource(
         [
-            "{\"abi\":1,\"type\":\"hello\"}",
-            "{\"abi\":1,\"pid\":1,\"family\":10,\"proto\":17,\"daddr\":\"2606:2800:220:1:248:1893:25c8:1946\",\"dport\":53,\"verdict\":\"block\",\"ruleId\":\"" + hex + "\"}",
+            "{\"abi\":2,\"type\":\"hello\"}",
+            "{\"abi\":2,\"pid\":1,\"family\":10,\"proto\":17,\"daddr\":\"2606:2800:220:1:248:1893:25c8:1946\",\"dport\":53,\"verdict\":\"block\",\"ruleId\":\"" + hex + "\"}",
         ]);
         var monitor = new BpfEventMonitor(source, _ => null, _ => null, sink, TimeProvider.System);
         await monitor.RunAsync(CancellationToken.None);

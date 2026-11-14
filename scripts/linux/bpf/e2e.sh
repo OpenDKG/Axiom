@@ -68,8 +68,10 @@ echo "## A3 verdict entry for $TARGET only"
 # Superblock dev (what the BPF program reads), not stat's st_dev: they differ on btrfs (LINUX_EBPF.md §2.1).
 IFS=: read -r MAJ MIN < <(findmnt -no MAJ:MIN -T "$(realpath -e "$TARGET")" | tail -n1 | tr -d ' ')
 INO=$(stat -L -c '%i' "$TARGET")
-echo "  $TARGET dev $MAJ:$MIN ino $INO"
-KEY=$(python3 -I -c 'import struct,sys; print(" ".join(f"{b:02x}" for b in struct.pack("<IIQ", int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]))))' "$MAJ" "$MIN" "$INO")
+# ABI 2: + btrfs subvolume id (statx STATX_SUBVOL / BTRFS_IOC_INO_LOOKUP), 0 on other filesystems.
+SUBVOL=$(python3 -I "$(dirname "$0")/../btrfs-subvol.py" --key "$(realpath -e "$TARGET")")
+echo "  $TARGET dev $MAJ:$MIN ino $INO subvol $SUBVOL"
+KEY=$(python3 -I -c 'import struct,sys; print(" ".join(f"{b:02x}" for b in struct.pack("<IIQQ", int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]))))' "$MAJ" "$MIN" "$INO" "$SUBVOL")
 VALUE=$(python3 -I -c 'import struct,sys,uuid; print(" ".join(f"{b:02x}" for b in struct.pack("<BBHI16s", 2, 7, 0, 1, uuid.UUID(sys.argv[1]).bytes_le)))' "$RULE_ID")
 # shellcheck disable=SC2086
 bpftool map update pinned "$PIN/maps/axiom_exe_verdicts" key hex $KEY value hex $VALUE any && pass "exe verdict written (block, tcp|udp|other, generation 1)" || fail "map update"

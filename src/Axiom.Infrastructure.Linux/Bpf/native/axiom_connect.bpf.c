@@ -10,8 +10,9 @@
  * taken synchronously inside connect() from two keys that need no herding:
  *
  *   1. the task's cgroup id          -> axiom_cgroup_verdicts   (herded apps)
- *   2. the task's exe inode (dev,ino) -> axiom_exe_verdicts     (any process of
- *      the binary, from its very first syscall — this is what closes the race)
+ *   2. the task's exe inode (dev,ino,subvol) -> axiom_exe_verdicts (any process
+ *      of the binary, from its very first syscall — this is what closes the race;
+ *      subvol is the btrfs subvolume id, 0 elsewhere, ABI 2)
  *
  * A hit with action BLOCK returns 0: the kernel fails connect()/sendmsg() with
  * EPERM immediately, no packet leaves. Everything else returns 1 (allow) and the
@@ -69,6 +70,13 @@ struct {
 } axiom_exe_verdicts SEC(".maps");
 
 struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct axiom_selfcheck);
+} axiom_selfcheck SEC(".maps");
+
+struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, AXIOM_EVENTS_BYTES);
 } axiom_events SEC(".maps");
@@ -117,8 +125,57 @@ static __always_inline bool is_loopback(struct bpf_sock_addr *ctx, const bool is
     return false;
 }
 
+/*
+ * btrfs subvolume of an inode via CO-RE (docs/LINUX_EBPF.md §2.1). btrfs embeds the VFS inode in
+ * struct btrfs_inode (`vfs_inode`) whose `root` is the subvolume's btrfs_root; its root_key.objectid
+ * is the subvolume id (what statx STATX_SUBVOL and BTRFS_IOC_INO_LOOKUP report). The local
+ * `___axiom` flavours carry only the fields read here; libbpf relocates them against the running
+ * kernel's BTF (vmlinux when btrfs is built in, as on Fedora; /sys/kernel/btf/btrfs when it is a
+ * loaded module). Without btrfs BTF the type does not exist, the guarded branch is dead code the
+ * verifier never walks, and the program reports AXIOM_SELFCHECK_BTRFS_CORE unset so user space
+ * keeps btrfs exe rules nft-only.
+ */
+#define AXIOM_BTRFS_SUPER_MAGIC 0x9123683EUL
+
+struct btrfs_key___axiom {
+    __u64 objectid;
+} __attribute__((preserve_access_index));
+
+struct btrfs_root___axiom {
+    struct btrfs_key___axiom root_key;
+} __attribute__((preserve_access_index));
+
+struct btrfs_inode___axiom {
+    struct btrfs_root___axiom *root;
+    struct inode vfs_inode;
+} __attribute__((preserve_access_index));
+
+static __always_inline bool btrfs_core_available(void)
+{
+    return bpf_core_type_exists(struct btrfs_inode___axiom) &&
+           bpf_core_field_exists(struct btrfs_inode___axiom, root) &&
+           bpf_core_field_exists(struct btrfs_inode___axiom, vfs_inode) &&
+           bpf_core_field_exists(struct btrfs_root___axiom, root_key) &&
+           bpf_core_field_exists(struct btrfs_key___axiom, objectid);
+}
+
+static __always_inline __u64 btrfs_subvol(struct inode *inode)
+{
+    if (!btrfs_core_available())
+        return 0;
+
+    /* container_of(inode, struct btrfs_inode, vfs_inode) with the relocated member offset. */
+    const __u64 offset = bpf_core_field_offset(struct btrfs_inode___axiom, vfs_inode);
+    struct btrfs_inode___axiom *bi = (struct btrfs_inode___axiom *)((char *)inode - offset);
+    struct btrfs_root___axiom *root = BPF_CORE_READ(bi, root);
+    if (!root)
+        return 0;
+
+    return BPF_CORE_READ(root, root_key.objectid);
+}
+
 /* Fills the exe identity of the current task; false for kernel threads (no mm). */
-static __always_inline bool current_exe(struct axiom_exe_key *key)
+static __always_inline bool current_exe(struct axiom_exe_key *key, bool *on_btrfs)
 {
     struct task_struct *task = bpf_get_current_task_btf();
     struct mm_struct *mm = BPF_CORE_READ(task, mm);
@@ -137,7 +194,40 @@ static __always_inline bool current_exe(struct axiom_exe_key *key)
     key->dev_major = dev >> 20;        /* kernel MAJOR() */
     key->dev_minor = dev & 0xfffffu;   /* kernel MINOR() */
     key->ino = BPF_CORE_READ(inode, i_ino);
+    key->subvol = 0;
+    if (on_btrfs)
+        *on_btrfs = false;
+    if (BPF_CORE_READ(inode, i_sb, s_magic) == AXIOM_BTRFS_SUPER_MAGIC) {
+        key->subvol = btrfs_subvol(inode);
+        if (on_btrfs)
+            *on_btrfs = true;
+    }
     return true;
+}
+
+/*
+ * Self-check (docs/LINUX_EBPF.md §2.1): while user space has written its tgid into
+ * axiom_selfcheck[0], the first connect()/sendmsg() of that process records the key computed
+ * here, so the daemon can compare it with its own user-space derivation before trusting any key.
+ * One array lookup per call otherwise; the target is cleared right after the check.
+ */
+static __always_inline void record_selfcheck(void)
+{
+    __u32 zero = 0;
+    struct axiom_selfcheck *check = bpf_map_lookup_elem(&axiom_selfcheck, &zero);
+    if (!check || check->target_tgid == 0 || check->target_tgid != (__u32)(bpf_get_current_pid_tgid() >> 32))
+        return;
+    if (check->hits != 0)
+        return; /* first connect only; the daemon makes exactly one */
+
+    struct axiom_exe_key key = {};
+    bool on_btrfs = false;
+    if (!current_exe(&key, &on_btrfs))
+        return;
+
+    check->key = key;
+    check->flags = (btrfs_core_available() ? AXIOM_SELFCHECK_BTRFS_CORE : 0u) | (on_btrfs ? AXIOM_SELFCHECK_EXE_BTRFS : 0u);
+    check->hits = 1;
 }
 
 static __always_inline void emit_event(struct bpf_sock_addr *ctx, __u64 cgroup_id, const struct axiom_exe_key *exe,
@@ -179,6 +269,7 @@ static __always_inline void emit_event(struct bpf_sock_addr *ctx, __u64 cgroup_i
 static __always_inline int decide(struct bpf_sock_addr *ctx, __u8 hook, const bool is6)
 {
     stat_inc(AXIOM_STAT_LOOKUPS);
+    record_selfcheck(); /* before the loopback exemption: the daemon checks with a UDP connect to 127.0.0.1 */
     if (is_loopback(ctx, is6)) {
         stat_inc(AXIOM_STAT_ALLOWED_LOOPBACK);
         return 1;
@@ -186,7 +277,7 @@ static __always_inline int decide(struct bpf_sock_addr *ctx, __u8 hook, const bo
 
     const __u8 proto = proto_bit(ctx->protocol);
     struct axiom_exe_key exe = {};
-    const bool have_exe = current_exe(&exe);
+    const bool have_exe = current_exe(&exe, NULL);
     const __u64 cgroup_id = bpf_get_current_cgroup_id();
 
     /* Block wins over allow, as in the nft chain order (block rules are emitted first). */

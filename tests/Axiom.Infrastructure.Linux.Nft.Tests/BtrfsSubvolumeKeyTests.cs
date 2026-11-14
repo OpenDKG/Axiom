@@ -260,6 +260,16 @@ public sealed class BtrfsSubvolumeKeyTests
         Assert.Contains("neutralised", check.Detail, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Subvolume_sources_prefer_statx_fall_back_to_the_ioctl_and_must_agree()
+    {
+        Assert.Equal(new BpfSubvolumeId(256, "statx STATX_SUBVOL (BTRFS_IOC_INO_LOOKUP agrees)"), BtrfsSubvolumeReader.Combine(256, 256));
+        Assert.Equal(new BpfSubvolumeId(258, "statx STATX_SUBVOL"), BtrfsSubvolumeReader.Combine(258, null));
+        Assert.Equal(new BpfSubvolumeId(259, "BTRFS_IOC_INO_LOOKUP"), BtrfsSubvolumeReader.Combine(null, 259));
+        Assert.Null(BtrfsSubvolumeReader.Combine(256, 257));
+        Assert.Null(BtrfsSubvolumeReader.Combine(null, null));
+    }
+
     internal static string SelfCheckHex(uint tgid, uint hits, uint major, uint minor, ulong ino, ulong subvol, uint flags)
     {
         var bytes = new byte[BpfLayout.SelfCheckSize];

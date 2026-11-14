@@ -7,6 +7,7 @@ using Axiom.Infrastructure.Unix.Interop;
 namespace Axiom.Infrastructure.Linux.Bpf;
 
 /// <summary>Inode identity of a file as the kernel sees it: MAJOR/MINOR of the superblock device and the inode number.</summary>
+/// <remarks><see cref="Subvolume"/> is the btrfs subvolume id (root objectid) in exe keys, 0 elsewhere (ABI 2).</remarks>
 public sealed record BpfInode(uint DevMajor, uint DevMinor, ulong Ino, ulong Subvolume = 0);
 
 /// <summary>btrfs subvolume (root objectid) of a file and where it came from (<c>statx</c> or <c>ioctl</c>).</summary>
@@ -77,7 +78,11 @@ public sealed class StatInodeReader : IInodeReader
         return result.Succeeded && real.StartsWith('/') && !real.Contains('\n', StringComparison.Ordinal) ? real : null;
     }
 
-    public BpfSubvolumeId? SubvolumeId(string path) => null;
+    public BpfSubvolumeId? SubvolumeId(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        return BtrfsSubvolumeReader.Read(path);
+    }
 
     public string? ReadMountInfo()
     {
@@ -186,8 +191,10 @@ public static class BpfVerdictPlanner
                     mounts = MountInfoTable.Parse(text);
                 }
 
-                var resolution = mountInfoReadable
-                    ? BpfExeKey.Resolve(realPath, inode, mounts)
+                var resolution = kernel is { State: BpfKernelKeyState.Mismatch }
+                    ? new BpfExeKeyResolution(null, kernel.Detail, null)
+                    : mountInfoReadable
+                    ? BpfExeKey.Resolve(realPath, inode, mounts, kernel, inodes.SubvolumeId)
                     : new BpfExeKeyResolution(null, "/proc/self/mountinfo is unreadable; the superblock device the BPF program reads cannot be proven", null);
                 if (resolution.Key is not { } key)
                 {
@@ -197,9 +204,9 @@ public static class BpfVerdictPlanner
                 {
                     entries.Add(new BpfMapEntry(
                         BpfLayout.ExeMap,
-                        BpfLayout.ExeKey(key.DevMajor, key.DevMinor, key.Ino),
+                        BpfLayout.ExeKey(key.DevMajor, key.DevMinor, key.Ino, key.Subvolume),
                         value,
-                        string.Create(CultureInfo.InvariantCulture, $"exe {app} dev {key.DevMajor}:{key.DevMinor} ino {key.Ino} proto 0x{protoMask:x} ({resolution.Detail})")));
+                        string.Create(CultureInfo.InvariantCulture, $"exe {app} dev {key.DevMajor}:{key.DevMinor} ino {key.Ino} subvol {key.Subvolume} proto 0x{protoMask:x} ({resolution.Detail})")));
                 }
             }
 
