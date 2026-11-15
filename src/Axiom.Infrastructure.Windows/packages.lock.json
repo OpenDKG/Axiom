@@ -28,14 +28,21 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.34.0, )"
+          "Axiom.Contracts": "[0.50.0, )"
         }
       },
       "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.34.0, )",
+          "Axiom.Contracts": "[0.50.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
+        }
+      },
+      "axiom.service.hosting": {
+        "type": "Project",
+        "dependencies": {
+          "Axiom.Contracts": "[0.50.0, )",
+          "Axiom.Core": "[0.50.0, )"
         }
       },
       "CommunityToolkit.Mvvm": {
