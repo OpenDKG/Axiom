@@ -57,6 +57,11 @@ public sealed class AgentProcessEgressTests
     public void Windows_system_binaries_are_refused()
     {
         var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        if (string.IsNullOrWhiteSpace(windows))
+        {
+            windows = @"C:\Windows";
+        }
+
         var result = AgentFirewallRulePlanner.BuildProcessEgressBlockSpec(
             Path.Combine(windows, "System32", "svchost.exe"),
             Sid,

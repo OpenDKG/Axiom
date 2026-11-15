@@ -44,7 +44,12 @@ public static class AgentExecutables
             return false;
         }
 
-        var name = System.IO.Path.GetFileNameWithoutExtension(path);
+        // Windows paths reach this on Linux too (shared history/UI); Path.GetFileName does not
+        // split backslashes off Windows, so take the last segment under either separator.
+        var trimmed = path.TrimEnd('\\', '/');
+        var separator = trimmed.LastIndexOfAny(['\\', '/']);
+        var file = separator >= 0 ? trimmed[(separator + 1)..] : trimmed;
+        var name = System.IO.Path.GetFileNameWithoutExtension(file);
         if (name.Length > 0 &&
             Names.Contains(name, StringComparer.OrdinalIgnoreCase))
         {

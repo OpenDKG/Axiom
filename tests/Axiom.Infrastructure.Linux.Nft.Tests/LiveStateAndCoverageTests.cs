@@ -102,6 +102,194 @@ public sealed class LiveStateAndCoverageTests
     }
 
     [Fact]
+    public async Task Failed_detach_is_not_logged_as_reconciled_or_removed()
+    {
+        using var h = new BpfEffectiveStateTests.Harness();
+        await h.AttachAsync();
+        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl", RuleA), CancellationToken.None);
+        h.Bpftool.FailPrefixes.Add("bpftool map delete");
+        h.Bpftool.FailPrefixes.Add("bpftool cgroup detach");
+        await h.Adapter.RemoveOwnedRuleAsync(RuleA, CancellationToken.None);
+
+        var mark = h.Log.Count;
+        using var next = new Restarted(h);
+        await next.StartAsync();
+        Assert.DoesNotContain(h.Log.Skip(mark), line => line.Contains("reconciled orphaned state", StringComparison.Ordinal));
+        Assert.Contains(h.Log.Skip(mark), line => line.Contains("still attached after detach", StringComparison.Ordinal));
+
+        mark = h.Log.Count;
+        await next.Engine.StopAsync();
+        Assert.DoesNotContain(h.Log.Skip(mark), line => line.Contains("detached and", StringComparison.Ordinal));
+        Assert.Contains(h.Log.Skip(mark), line => line.Contains("stopped with 4 Axiom program(s) still attached", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Failed_detach_with_unreadable_attachment_state_is_not_logged_as_removed()
+    {
+        using var h = new BpfEffectiveStateTests.Harness();
+        await h.AttachAsync();
+        h.Bpftool.FailPrefixes.Add("bpftool cgroup detach");
+        h.Bpftool.FailPrefixes.Add("bpftool -j cgroup show"); // the only read that could prove zero fails too
+
+        var mark = h.Log.Count;
+        await h.Engine.StopAsync();
+
+        Assert.Equal(4, AxiomAttachments(h.Bpftool)); // the fake kernel kept every program
+        Assert.DoesNotContain(h.Log.Skip(mark), line => line.Contains("detached and", StringComparison.Ordinal));
+        Assert.Contains(h.Log.Skip(mark), line => line.Contains("could not be read", StringComparison.Ordinal));
+
+        // Fault cleared: a confirmed zero still reports the clean result.
+        h.Bpftool.FailPrefixes.Clear();
+        using var next = new Restarted(h);
+        await next.StartAsync();
+        mark = h.Log.Count;
+        await next.Engine.StopAsync();
+        Assert.Equal(0, AxiomAttachments(h.Bpftool));
+        Assert.Contains(h.Log.Skip(mark), line => line.Contains("detached and", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Attachment_json_is_unknown_unless_it_reads_as_the_array()
+    {
+        Assert.Null(BpfMapDump.ParseAttached("not json"));
+        Assert.Null(BpfMapDump.ParseAttached("{}"));
+        Assert.Null(BpfMapDump.ParseAttached("[{\"id\":1}]"));
+        var empty = BpfMapDump.ParseAttached("[]");
+        Assert.NotNull(empty);
+        Assert.Empty(empty);
+        var blank = BpfMapDump.ParseAttached("\n"); // bpftool v7.4.0 prints a newline when nothing is attached
+        Assert.NotNull(blank);
+        Assert.Empty(blank);
+
+        // Every id must be a nonzero uint32: one bad entry makes the whole array unreadable, never a zero.
+        Assert.Null(BpfMapDump.ParseAttached("[{\"id\":0,\"name\":\"axiom_connect4\"}]"));
+        Assert.Null(BpfMapDump.ParseAttached("[{\"id\":-1,\"name\":\"foreign\"}]"));
+        Assert.Null(BpfMapDump.ParseAttached("[{\"id\":4294967296,\"name\":\"foreign\"}]"));
+        Assert.Null(BpfMapDump.ParseAttached("[{\"id\":7,\"name\":\"sd_fw_egress\"},{\"id\":-1,\"name\":\"foreign\"}]"));
+        // Undecodable JSON string fields (unpaired surrogate escapes) are unknown, not an exception.
+        Assert.Null(BpfMapDump.ParseAttached("[{\"id\":1,\"name\":\"\\uD800\"}]"));
+        Assert.Null(BpfMapDump.ParseAttached("[{\"id\":1,\"name\":\"foreign\",\"attach_type\":\"\\uD800\"}]"));
+        var thirdParty = BpfMapDump.ParseAttached("[{\"id\":7,\"name\":\"sd_fw_egress\"}]");
+        Assert.NotNull(thirdParty);
+        Assert.Equal(ThirdPartyProgram, Assert.Single(thirdParty).Id);
+        var maxId = BpfMapDump.ParseAttached("[{\"id\":4294967295,\"name\":\"axiom_connect4\"}]");
+        Assert.NotNull(maxId);
+        Assert.Equal(4294967295L, Assert.Single(maxId).Id);
+        Assert.NotNull(BpfMapDump.ParseAttached("[{\"id\":1,\"name\":\"\\uD83D\\uDE00\"}]")); // valid surrogate pair still decodes
+    }
+
+    [Fact]
+    public async Task Startup_with_an_invalid_attachment_id_treats_the_state_as_unknown()
+    {
+        using var h = new BpfEffectiveStateTests.Harness();
+        await h.AttachAsync();
+        h.Bpftool.FailPrefixes.Add("bpftool cgroup detach");
+        h.Bpftool.CgroupShowOutput = "[{\"id\":7,\"name\":\"sd_fw_egress\"},{\"id\":-1,\"name\":\"foreign\"}]";
+
+        using var next = new Restarted(h);
+        await next.StartAsync(); // mixed valid/invalid ids must not throw or count as zero
+
+        Assert.False(next.Engine.Active);
+        Assert.True(next.Engine.StaleProgramsAttached);
+        Assert.Equal(4, AxiomAttachments(h.Bpftool)); // no second set loaded on top of the unread state
+        Assert.True(Directory.Exists(h.BpfPaths.PinDirectory));
+
+        h.Bpftool.FailPrefixes.Clear();
+        h.Bpftool.CgroupShowOutput = null;
+        await next.Supervisor.WatchOnceAsync(CancellationToken.None);
+        Assert.True(next.Engine.Active);
+        Assert.False(next.Engine.StaleProgramsAttached);
+        Assert.Equal(4, AxiomAttachments(h.Bpftool));
+    }
+
+    [Fact]
+    public async Task Undecodable_attachment_name_after_a_failed_delete_keeps_the_removal_pending()
+    {
+        using var h = new BpfEffectiveStateTests.Harness();
+        await h.AttachAsync();
+        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl", RuleA), CancellationToken.None);
+        h.Bpftool.FailPrefixes.Add("bpftool map delete");
+        h.Bpftool.FailPrefixes.Add("bpftool cgroup detach");
+        h.Bpftool.CgroupShowOutput = "[{\"id\":1,\"name\":\"axiom_connect4\"},{\"id\":2,\"name\":\"\\uD800\"}]";
+
+        var removal = await h.Adapter.RemoveOwnedRuleAsync(RuleA, CancellationToken.None); // must not throw
+
+        Assert.False(removal.Success);
+        Assert.Equal("bpf.stale_entry", removal.ErrorCode);
+        Assert.Contains(h.Adapter.PendingRemovals, pending => pending.RuleId == RuleA);
+        Assert.False(h.Engine.Neutralised);
+        Assert.Equal(4, AxiomAttachments(h.Bpftool));
+        Assert.True(Directory.Exists(h.BpfPaths.PinDirectory)); // retry evidence is not erased
+
+        h.Bpftool.FailPrefixes.Clear();
+        h.Bpftool.CgroupShowOutput = null;
+        var retry = await h.Adapter.RemoveOwnedRuleAsync(RuleA, CancellationToken.None);
+        Assert.True(retry.Success);
+        Assert.Empty(h.Adapter.PendingRemovals);
+    }
+
+    [Fact]
+    public async Task Startup_with_an_unreadable_attachment_state_keeps_the_pins_and_loads_no_second_set()
+    {
+        using var h = new BpfEffectiveStateTests.Harness();
+        await h.AttachAsync();
+        h.Bpftool.FailPrefixes.Add("bpftool cgroup detach");
+        h.Bpftool.CgroupShowOutput = "{not json"; // exit 0, but the attachment list cannot be read
+
+        var mark = h.Log.Count;
+        using var next = new Restarted(h);
+        await next.StartAsync();
+
+        Assert.False(next.Engine.Active);
+        Assert.True(next.Engine.StaleProgramsAttached);
+        Assert.Equal(4, AxiomAttachments(h.Bpftool)); // no second set loaded on top of the unread state
+        Assert.True(Directory.Exists(h.BpfPaths.PinDirectory)); // the only handles a later detach can use
+        Assert.Contains(h.Log.Skip(mark), line => line.Contains("could not be read", StringComparison.Ordinal));
+        var capabilities = await next.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.Equal("stale_programs", capabilities.ConnectTimeLayer!.State);
+        Assert.False(capabilities.ConnectTimeLayer.Healthy);
+        Assert.Contains("could not be read", capabilities.Reason, StringComparison.Ordinal);
+
+        // The state becomes readable again: the next watch tick detaches, unpins and loads one fresh set.
+        h.Bpftool.FailPrefixes.Clear();
+        h.Bpftool.CgroupShowOutput = null;
+        await next.Supervisor.WatchOnceAsync(CancellationToken.None);
+        Assert.True(next.Engine.Active);
+        Assert.False(next.Engine.StaleProgramsAttached);
+        Assert.Equal(4, AxiomAttachments(h.Bpftool));
+    }
+
+    [Fact]
+    public async Task Unreadable_attachment_state_after_a_failed_delete_does_not_report_neutralisation()
+    {
+        using var h = new BpfEffectiveStateTests.Harness();
+        await h.AttachAsync();
+        await h.Adapter.UpsertOwnedRuleAsync(Specs.Block("/usr/bin/curl", RuleA), CancellationToken.None);
+        h.Bpftool.FailPrefixes.Add("bpftool map delete");
+        h.Bpftool.FailPrefixes.Add("bpftool cgroup detach");
+        h.Bpftool.CgroupShowOutput = "{not json";
+
+        var mark = h.Log.Count;
+        var removal = await h.Adapter.RemoveOwnedRuleAsync(RuleA, CancellationToken.None);
+
+        Assert.False(h.Engine.Neutralised); // nothing proved the programs detached
+        Assert.Equal(4, AxiomAttachments(h.Bpftool));
+        Assert.True(Directory.Exists(h.BpfPaths.PinDirectory)); // retry evidence is not erased
+        Assert.False(removal.Success);
+        Assert.DoesNotContain("detached its own BPF programs", removal.ErrorMessage ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains(h.Log.Skip(mark), line => line.Contains("could not be read", StringComparison.Ordinal));
+
+        // Both faults clear: the retried removal deletes the stale verdicts and confirms the removal.
+        h.Bpftool.FailPrefixes.Clear();
+        h.Bpftool.CgroupShowOutput = null;
+        var retry = await h.Adapter.RemoveOwnedRuleAsync(RuleA, CancellationToken.None);
+        Assert.True(retry.Success);
+        Assert.False(h.Engine.Neutralised);
+        Assert.True(h.Engine.Active);
+        Assert.Empty(h.Adapter.PendingRemovals);
+    }
+
+    [Fact]
     public async Task Pending_removal_survives_a_restart_while_bpftool_is_unusable()
     {
         using var h = new BpfEffectiveStateTests.Harness();

@@ -56,7 +56,7 @@ if (-not $ReusePayload) {
     Write-Host "Publishing service payload..." -ForegroundColor Cyan
     Remove-Item $serviceOut -Recurse -Force -ErrorAction SilentlyContinue
     & $dotnet publish (Join-Path $root "src\Axiom.Service\Axiom.Service.csproj") `
-        -c Release -r win-x64 --self-contained true `
+        -f net10.0-windows -c Release -r win-x64 --self-contained true `
         -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json `
         -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:EnableCompressionInSingleFile=true `

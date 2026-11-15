@@ -302,7 +302,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             // second set on top would report a clean layer while the stale one keeps blocking. Refuse,
             // keep the pins so a later pass can still detach/delete through them, and say so.
             var stale = ListAttachedAxiomPrograms();
-            if (stale.Count > 0)
+            if (stale is not { Count: 0 })
             {
                 lock (_stateGate)
                 {
@@ -312,7 +312,9 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                     _generation = -1;
                 }
 
-                var reason = string.Create(CultureInfo.InvariantCulture, $"degraded: {stale.Count} Axiom BPF program(s) of a previous daemon are still attached at {_paths.CgroupRoot} and could not be detached ({string.Join(", ", stale.Select(program => $"{program.Name} id {program.Id}"))}); their maps may still hold verdicts of removed rules, so no new set was loaded");
+                var reason = stale is null
+                    ? string.Create(CultureInfo.InvariantCulture, $"degraded: the Axiom BPF attachment state at {_paths.CgroupRoot} could not be read (bpftool -j cgroup show failed or returned unreadable JSON); a previous daemon's programs may still be attached, so no new set was loaded and {_paths.PinDirectory} is kept for the next attempt")
+                    : string.Create(CultureInfo.InvariantCulture, $"degraded: {stale.Count} Axiom BPF program(s) of a previous daemon are still attached at {_paths.CgroupRoot} and could not be detached ({string.Join(", ", stale.Select(program => $"{program.Name} id {program.Id}"))}); their maps may still hold verdicts of removed rules, so no new set was loaded");
                 SetState(false, reason);
                 Log("BPF layer " + reason + ". Retrying on the next watch tick.");
                 return;
@@ -426,22 +428,28 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             }
 
             var neutralised = false;
+            List<(string Hook, long Id, string Name)>? remaining = null;
             if (failedDeletes.Count > 0)
             {
                 // A verdict the rule set no longer wants is still in an attached map and would keep
                 // blocking: the only safe move left is to stop enforcing anything from this layer.
                 Log(string.Create(CultureInfo.InvariantCulture, $"BPF verdicts generation {generation}: {failedDeletes.Count} stale entr{(failedDeletes.Count == 1 ? "y" : "ies")} could not be deleted after {attempts} passes ({string.Join("; ", failedDeletes)}); neutralising: detaching Axiom's programs at {_paths.CgroupRoot} (third-party programs untouched)."));
                 DetachAndUnpin();
-                var remaining = ListAttachedAxiomPrograms();
-                if (remaining.Count > 0)
+                remaining = ListAttachedAxiomPrograms();
+                if (remaining is { Count: > 0 })
                 {
                     // Detach failed too: the stale verdict still enforces. Say so; never pretend otherwise.
                     Log($"BPF layer: {remaining.Count} program(s) still attached after the detach ({string.Join(", ", remaining.Select(program => program.Name))}); the stale entries can still block.");
                 }
-                else
+                else if (remaining is { Count: 0 })
                 {
                     neutralised = true;
                     applied.Clear();
+                }
+                else
+                {
+                    // Nothing proved the programs detached: keep the retry state and never claim neutralisation.
+                    Log(string.Create(CultureInfo.InvariantCulture, $"BPF layer: the Axiom attachment state at {_paths.CgroupRoot} could not be read after the detach (bpftool -j cgroup show failed or returned unreadable JSON); the {failedDeletes.Count} stale entr{(failedDeletes.Count == 1 ? "y" : "ies")} may still be enforced, so the layer is not reported neutralised."));
                 }
             }
 
@@ -459,7 +467,9 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             {
                 lock (_stateGate)
                 {
-                    _status = string.Create(CultureInfo.InvariantCulture, $"degraded: {failedDeletes.Count} stale map entr{(failedDeletes.Count == 1 ? "y" : "ies")} could not be deleted and the programs could not be detached (generation {generation})");
+                    _status = remaining is null
+                        ? string.Create(CultureInfo.InvariantCulture, $"degraded: {failedDeletes.Count} stale map entr{(failedDeletes.Count == 1 ? "y" : "ies")} could not be deleted and whether the programs are still attached could not be read (generation {generation})")
+                        : string.Create(CultureInfo.InvariantCulture, $"degraded: {failedDeletes.Count} stale map entr{(failedDeletes.Count == 1 ? "y" : "ies")} could not be deleted and the programs could not be detached (generation {generation})");
                 }
             }
             lock (_stateGate)
@@ -554,7 +564,13 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             }
 
             SetState(false, "stopped");
-            Log($"BPF layer detached and {_paths.PinDirectory} removed.");
+            var remaining = ListAttachedAxiomPrograms();
+            var pins = Directory.Exists(_paths.PinDirectory);
+            Log(remaining is { Count: 0 } && !pins
+                ? $"BPF layer detached and {_paths.PinDirectory} removed."
+                : remaining is null
+                    ? $"BPF layer stopped with unconfirmed detachment: the attachment state at {_paths.CgroupRoot} could not be read (bpftool cgroup show failed) and {_paths.PinDirectory} {(pins ? "is still pinned" : "was removed")}; see the detach lines above."
+                    : string.Create(CultureInfo.InvariantCulture, $"BPF layer stopped with {remaining.Count} Axiom program(s) still attached and {_paths.PinDirectory} {(pins ? "still pinned" : "absent")}; see the detach lines above."));
         }
         finally
         {
@@ -746,12 +762,15 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             var pin = _paths.ProgramPin(program);
             if (File.Exists(pin))
             {
-                Run("cgroup", "detach", _paths.CgroupRoot, hook, "pinned", pin);
-                found.Add($"pinned {program}");
+                var detach = Run("cgroup", "detach", _paths.CgroupRoot, hook, "pinned", pin);
+                if (detach.Succeeded)
+                {
+                    found.Add($"pinned {program}");
+                }
             }
         }
 
-        foreach (var (hook, id, name) in ListAttachedAxiomPrograms())
+        foreach (var (hook, id, name) in ListAttachedAxiomPrograms() ?? [])
         {
             var detach = Run("cgroup", "detach", _paths.CgroupRoot, hook, "id", id.ToString(CultureInfo.InvariantCulture));
             if (detach.Succeeded)
@@ -761,11 +780,14 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         }
 
         var remaining = ListAttachedAxiomPrograms();
-        if (remaining.Count > 0)
+        if (remaining is not { Count: 0 })
         {
             // Unlinking the pins would not detach anything; it would only take away the handles a
-            // later delete/detach needs. Keep them while any Axiom program is still attached.
-            Log($"BPF layer: {remaining.Count} Axiom program(s) still attached after detach; keeping {_paths.PinDirectory}.");
+            // later delete/detach needs. Keep them while any Axiom program is still attached or
+            // while the attachment state cannot be read.
+            Log(remaining is null
+                ? $"BPF layer: the attachment state at {_paths.CgroupRoot} could not be read after detach; keeping {_paths.PinDirectory}."
+                : $"BPF layer: {remaining.Count} Axiom program(s) still attached after detach; keeping {_paths.PinDirectory}.");
             return found;
         }
 
@@ -795,7 +817,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         }
 
         var names = BpfLayout.Programs.Select(program => program.Program).ToHashSet(StringComparer.Ordinal);
-        return BpfMapDump.ParseAttached(show.StandardOutput).Select(program => program.Name).Where(names.Contains).Distinct(StringComparer.Ordinal).Count();
+        return BpfMapDump.ParseAttached(show.StandardOutput)?.Select(program => program.Name).Where(names.Contains).Distinct(StringComparer.Ordinal).Count();
     }
 
     /// <summary>Null when the loaded exe map has this daemon's key size (ABI <see cref="BpfLayout.Abi"/>), else why not.</summary>
@@ -876,19 +898,20 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         });
     }
 
-    /// <summary>Axiom's programs still attached at the cgroup root (name prefix <c>axiom_</c> as in <see cref="BpfLayout.Programs"/>).</summary>
-    private List<(string Hook, long Id, string Name)> ListAttachedAxiomPrograms()
+    /// <summary>Axiom's programs still attached at the cgroup root (name prefix <c>axiom_</c> as in <see cref="BpfLayout.Programs"/>), or null when <c>bpftool cgroup show</c> is unreadable.</summary>
+    private List<(string Hook, long Id, string Name)>? ListAttachedAxiomPrograms()
     {
         var show = Run("-j", "cgroup", "show", _paths.CgroupRoot);
         if (!show.Succeeded)
         {
-            return [];
+            return null;
         }
 
         var hooks = BpfLayout.Programs.ToDictionary(program => program.Program, program => program.Hook, StringComparer.Ordinal);
-        return BpfMapDump.ParseAttached(show.StandardOutput)
-            .Where(attached => hooks.ContainsKey(attached.Name))
-            .Select(attached => (hooks[attached.Name], attached.Id, attached.Name))
+        var attached = BpfMapDump.ParseAttached(show.StandardOutput);
+        return attached?
+            .Where(program => hooks.ContainsKey(program.Name))
+            .Select(program => (hooks[program.Name], program.Id, program.Name))
             .ToList();
     }
 
@@ -968,36 +991,78 @@ public static class BpfMapDump
         }
     }
 
-    /// <summary><c>bpftool -j cgroup show &lt;root&gt;</c>: <c>[{"id":N,"attach_type":"…","attach_flags":"multi","name":"…"}]</c>.</summary>
-    public static IReadOnlyList<(long Id, string Name, string AttachType)> ParseAttached(string json)
+    /// <summary>
+    /// <c>bpftool -j cgroup show &lt;root&gt;</c>: <c>[{"id":N,"attach_type":"…","attach_flags":"multi","name":"…"}]</c>.
+    /// Returns null when the successful output cannot be fully read as that array: an empty array is a
+    /// confirmed zero, unreadable/malformed output is unknown and must not be treated as zero.
+    /// </summary>
+    public static IReadOnlyList<(long Id, string Name, string AttachType)>? ParseAttached(string json)
     {
         ArgumentNullException.ThrowIfNull(json);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            // bpftool v7.4.0 prints a bare newline (rc 0) when nothing is attached at the root.
+            return [];
+        }
+
         try
         {
             using var document = JsonDocument.Parse(json);
             if (document.RootElement.ValueKind != JsonValueKind.Array)
             {
-                return [];
+                return null;
             }
 
             var programs = new List<(long, string, string)>();
             foreach (var element in document.RootElement.EnumerateArray())
             {
-                if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.Number)
+                if (element.ValueKind != JsonValueKind.Object
+                    || !element.TryGetProperty("id", out var id)
+                    || id.ValueKind != JsonValueKind.Number
+                    || !id.TryGetInt64(out var idValue)
+                    || idValue is <= 0 or > uint.MaxValue // kernel program ids are nonzero uint32
+                    || !element.TryGetProperty("name", out var nameElement)
+                    || nameElement.ValueKind != JsonValueKind.String
+                    || DecodeString(nameElement) is not { } name)
                 {
-                    continue;
+                    return null;
                 }
 
-                var name = element.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String ? nameElement.GetString() ?? string.Empty : string.Empty;
-                var type = element.TryGetProperty("attach_type", out var typeElement) && typeElement.ValueKind == JsonValueKind.String ? typeElement.GetString() ?? string.Empty : string.Empty;
-                programs.Add((id.GetInt64(), name, type));
+                var type = string.Empty;
+                if (element.TryGetProperty("attach_type", out var typeElement) && typeElement.ValueKind == JsonValueKind.String)
+                {
+                    if (DecodeString(typeElement) is not { } decoded)
+                    {
+                        return null;
+                    }
+
+                    type = decoded;
+                }
+
+                programs.Add((idValue, name, type));
             }
 
             return programs;
         }
         catch (JsonException)
         {
-            return [];
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="JsonElement.GetString"/> throws <see cref="InvalidOperationException"/> for a correctly
+    /// escaped string that is not valid UTF-16 (an unpaired surrogate): the output cannot be trusted then.
+    /// </summary>
+    private static string? DecodeString(JsonElement element)
+    {
+        try
+        {
+            return element.GetString();
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
         }
     }
 

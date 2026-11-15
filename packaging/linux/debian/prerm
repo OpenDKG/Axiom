@@ -11,6 +11,7 @@ set -e
 AXIOM_IMAGE_DAEMON=/usr/libexec/axiom/axiomd
 AXIOM_BUNDLED_DAEMON=/opt/axiom/axiomd/axiomd
 AXIOM_PIN_DIR=/sys/fs/bpf/axiom
+AXIOM_BPF_PINS_SCRIPT=/opt/axiom/bpf-pins.sh
 
 uninstall_service() {
     if [ -x "$AXIOM_IMAGE_DAEMON" ]; then
@@ -21,24 +22,23 @@ uninstall_service() {
     return 0
 }
 
-# Belt and braces for a daemon that was killed before it could detach: only Axiom's own pins.
-drop_stale_bpf_pins() {
-    [ -d "$AXIOM_PIN_DIR" ] || return 0
-    if command -v bpftool >/dev/null 2>&1; then
-        for hook in connect4 connect6 sendmsg4 sendmsg6; do
-            [ -e "$AXIOM_PIN_DIR/axiom_$hook" ] || continue
-            bpftool cgroup detach /sys/fs/cgroup "$hook" pinned "$AXIOM_PIN_DIR/axiom_$hook" >/dev/null 2>&1 || true
-        done
-    fi
-    rm -rf "$AXIOM_PIN_DIR"
-}
-
 case "$1" in
     remove|deconfigure)
+        # Belt and braces for a daemon that was killed before it could detach. Only Axiom's own
+        # pins are touched, and only after the kernel confirms nothing is attached: an unavailable
+        # or unreadable bpftool, or a remaining attachment, keeps the pins and fails the removal.
+        if [ ! -r "$AXIOM_BPF_PINS_SCRIPT" ]; then
+            echo "axiom prerm: $AXIOM_BPF_PINS_SCRIPT is missing; cannot verify the BPF layer, keeping $AXIOM_PIN_DIR." >&2
+            exit 1
+        fi
+        . "$AXIOM_BPF_PINS_SCRIPT"
         if [ -d /run/systemd/system ]; then
             uninstall_service
         fi
-        drop_stale_bpf_pins
+        if ! axiom_bpf_pins_remove "$AXIOM_PIN_DIR" /sys/fs/cgroup; then
+            echo "axiom prerm: the BPF layer is in an unknown state; keeping $AXIOM_PIN_DIR for recovery." >&2
+            exit 1
+        fi
         ;;
     upgrade|failed-upgrade)
         ;;

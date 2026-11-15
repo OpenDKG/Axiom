@@ -160,7 +160,7 @@ public sealed class UnixSocketIpcTests
         var paths = MacServicePaths.ForRoot(temp.Path);
         var logs = new List<string>();
         var policy = new PeerPolicy(OwnerUid: 1, AdminGroupMayWrite: false, _ => false);
-        var transport = new UnixSocketIpcTransport(paths, uid => PeerAuthorization.Decide(uid, policy) with { Allowed = true });
+        var transport = new UnixSocketIpcTransport(paths, uid => PeerAuthorization.Decide(uid, policy), _ => 501);
 
         using var cts = new CancellationTokenSource(Timeout);
         var server = transport.RunAsync(Dispatcher(line => { lock (logs) { logs.Add(line); } }), _ => { }, cts.Token);
@@ -376,7 +376,7 @@ public sealed class UnixSocketIpcTests
         var paths = MacServicePaths.ForRoot(temp.Path);
         var logs = new List<string>();
         // The test runs as one non-root uid; pretend it is uid 501 so root's exemption does not apply.
-        var transport = new UnixSocketIpcTransport(paths, _ => new PeerDecision(true, "uid:501", "test"));
+        var transport = new UnixSocketIpcTransport(paths, _ => new PeerDecision(true, "uid:501", "test"), _ => 501);
 
         using var cts = new CancellationTokenSource(Timeout);
         var server = transport.RunAsync(Dispatcher(_ => { }), line => { lock (logs) { logs.Add(line); } }, cts.Token);

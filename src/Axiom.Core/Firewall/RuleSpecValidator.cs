@@ -304,16 +304,18 @@ public static class RuleSpecValidator
             return;
         }
 
-        if (!Path.IsPathFullyQualified(appPath))
+        if (appPath.StartsWith(@"\\", StringComparison.Ordinal))
         {
-            errors.Add(new RuleSpecValidationError("rule.path.not_absolute", "Application path must be absolute."));
+            // UNC and extended-length prefixes need a separate policy decision (FND-006). Checked
+            // before the absolute test: on Linux a UNC path is not "fully qualified", which would
+            // report the wrong reason and diverge from the Windows build.
+            errors.Add(new RuleSpecValidationError("rule.path.unc_not_supported", "UNC and extended-length paths are not supported yet."));
             return;
         }
 
-        if (appPath.StartsWith(@"\\", StringComparison.Ordinal))
+        if (!IsAbsolutePath(appPath))
         {
-            // UNC and extended-length prefixes need a separate policy decision (FND-006).
-            errors.Add(new RuleSpecValidationError("rule.path.unc_not_supported", "UNC and extended-length paths are not supported yet."));
+            errors.Add(new RuleSpecValidationError("rule.path.not_absolute", "Application path must be absolute."));
             return;
         }
 
@@ -323,6 +325,15 @@ public static class RuleSpecValidator
             errors.Add(new RuleSpecValidationError("rule.path.unstable_segment", "Application path must be fully normalised (no '.' or '..' segments)."));
         }
     }
+
+    /// <summary>
+    /// Absolute under the running OS or under Windows rules. <see cref="RuleSpec"/> models a
+    /// Windows Firewall rule, and the Linux adapters reuse it, so validation must not depend on
+    /// which separator the host prefers (Path.IsPathFullyQualified(@"C:\…") is false on Linux).
+    /// </summary>
+    private static bool IsAbsolutePath(string path) =>
+        Path.IsPathFullyQualified(path) ||
+        (path.Length >= 3 && char.IsAsciiLetter(path[0]) && path[1] == ':' && PathSeparators.Contains(path[2]));
 
     private static RuleSpecValidationResult Invalid(string code, string message) =>
         new() { IsValid = false, Errors = [new RuleSpecValidationError(code, message)] };

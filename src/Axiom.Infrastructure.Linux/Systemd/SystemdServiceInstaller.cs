@@ -144,11 +144,15 @@ public sealed class SystemdServiceInstaller
             }
 
             // Stop the running instance (upgrade); "not loaded" is expected on first install. Like
-            // the Windows and macOS installers, a pending stop is awaited before the image is replaced.
-            _runner.Run(Systemctl, ["stop", ServiceTarget], ToolTimeout);
+            // the Windows and macOS installers, the stop is confirmed before the image is replaced:
+            // a failed or unreadable stop must never overwrite a daemon that may still be running.
+            var stop = _runner.Run(Systemctl, ["stop", ServiceTarget], ToolTimeout);
             if (!WaitForStop())
             {
-                error.WriteLine("The existing Axiom service did not stop in time.");
+                error.WriteLine(stop.Succeeded
+                    ? "The existing Axiom service is still active after systemctl stop; refusing to replace the running image."
+                    : $"systemctl stop failed ({stop.ExitCode}) and the service state could not be confirmed; refusing to replace the image.");
+                return 8;
             }
 
             if (staged is not null)
@@ -245,6 +249,16 @@ public sealed class SystemdServiceInstaller
 
         // disable --now waits for the daemon to exit; its shutdown restores Privacy Shield DNS.
         var stop = _runner.Run(Systemctl, ["disable", "--now", ServiceTarget], ToolTimeout);
+        if (!WaitForStop())
+        {
+            // A failed or unreadable stop is not "not running": removing the unit, image or recovery
+            // state here could strand a live daemon and its DNS/BPF state. Fail with everything kept.
+            error.WriteLine(stop.Succeeded
+                ? $"{ServiceTarget} is still active after systemctl disable --now; keeping {_options.UnitPath} and {_options.ImageDirectory}."
+                : $"systemctl disable --now failed ({stop.ExitCode}) and the {ServiceTarget} state could not be confirmed; keeping {_options.UnitPath} and {_options.ImageDirectory}.");
+            return 8;
+        }
+
         var code = 0;
         try
         {
@@ -424,16 +438,28 @@ public sealed class SystemdServiceInstaller
             : "No installing user was detected; IPC write commands are allowed for root and members of the axiom, sudo or wheel groups only.");
     }
 
-    /// <summary>After <c>systemctl stop</c>, poll <c>is-active</c> until the unit is no longer active (at most ~15 s).</summary>
+    /// <summary>
+    /// After <c>systemctl stop</c>/<c>disable --now</c>, poll <c>is-active</c> until systemd reports
+    /// a state that proves the unit is not running (at most ~15 s). Only <c>inactive</c> and
+    /// <c>failed</c> are a confirmed stop; an unreadable answer or a still-running state is not.
+    /// </summary>
     private bool WaitForStop()
     {
         for (var attempt = 0; attempt < 30; attempt++)
         {
             var state = _runner.Run(Systemctl, ["is-active", ServiceTarget], ToolTimeout);
             var text = state.StandardOutput.Trim();
-            if (!string.Equals(text, "active", StringComparison.Ordinal) && !string.Equals(text, "deactivating", StringComparison.Ordinal))
+            if (string.Equals(text, "inactive", StringComparison.Ordinal) ||
+                string.Equals(text, "failed", StringComparison.Ordinal))
             {
                 return true;
+            }
+
+            // systemd 255 reports an absent unit as "inactive"; empty output, "unknown" or an error
+            // is unreadable, not a confirmation that nothing is running.
+            if (text is not ("active" or "activating" or "deactivating" or "reloading"))
+            {
+                return false;
             }
 
             if (!_sleep(TimeSpan.FromMilliseconds(500)))

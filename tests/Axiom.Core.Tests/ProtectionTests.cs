@@ -170,7 +170,7 @@ public sealed class ProtectionTests
         bool isLoopback,
         ConnectionDirection direction) => new()
     {
-        AppDisplayName = Path.GetFileName(path) is { Length: > 0 } name ? name : "unknown",
+        AppDisplayName = path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries) is { Length: > 0 } segments ? segments[^1] : "unknown",
         AppPath = path,
         ProcessId = 1,
         Protocol = TransportProtocol.Tcp,

@@ -120,6 +120,8 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE/opt/axiom" "$STAGE/usr/share/applications" "$STAGE/usr/share/polkit-1/actions" \
   "$STAGE/usr/share/doc/axiom" "$STAGE/usr/share/icons/hicolor"
 cp -a "$APP/." "$STAGE/opt/axiom/"
+# Shared by prerm/%preun: verified BPF pin cleanup (see the file's header).
+install -m 0644 "$PKG/bpf-pins.sh" "$STAGE/opt/axiom/bpf-pins.sh"
 find "$STAGE/opt/axiom" -name '*.pdb' -delete
 # The policy/desktop files are installed to their system locations below; the copies the desktop
 # publish carries for reference are not needed in /opt.

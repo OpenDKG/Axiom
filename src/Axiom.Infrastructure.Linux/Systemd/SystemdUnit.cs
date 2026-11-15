@@ -96,7 +96,7 @@ public static class SystemdUnit
             # /run/systemd/resolve, and a missing ReadWritePaths entry aborts the unit with
             # 226/NAMESPACE before the daemon can start (Ubuntu 24.04 + systemd-networkd).
             ProtectSystem=strict
-            ReadWritePaths={Q(machineDataDirectory)} {Q(runDirectory)} /sys/fs/cgroup /sys/fs/bpf /etc/resolv.conf -/run/systemd/resolve -/run/NetworkManager
+            ReadWritePaths={Q(machineDataDirectory)} {Q(runDirectory)} /sys/fs/cgroup /sys/fs/bpf -/etc/resolv.conf -/run/systemd/resolve -/run/NetworkManager
             ProtectHome=read-only
             PrivateTmp=yes
             # ProtectKernelTunables=yes mounts /sys/fs/bpf read-only and ReadWritePaths/BindPaths cannot

@@ -45,7 +45,7 @@ $serviceError = Join-Path $env:TEMP "axiom-service.err.log"
 
 Write-Host "Starting the service (console mode)..." -ForegroundColor Cyan
 $service = Start-Process -FilePath $dotnet `
-    -ArgumentList @("run", "--project", $serviceProject, "-c", "Release", "--no-build") `
+    -ArgumentList @("run", "--project", $serviceProject, "-f", "net10.0-windows", "-c", "Release", "--no-build") `
     -PassThru -WindowStyle Hidden -RedirectStandardOutput $serviceLog -RedirectStandardError $serviceError
 
 try {

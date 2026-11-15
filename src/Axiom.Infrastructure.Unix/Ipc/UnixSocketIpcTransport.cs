@@ -30,6 +30,8 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
 
     private readonly Func<uint?, PeerDecision> _authorize;
 
+    private readonly Func<Socket, uint?> _readPeerUid;
+
     /// <summary>No install record: only root reads private data or writes; kept for tests and tools.</summary>
     public UnixSocketIpcTransport(UnixServicePaths paths)
         : this(paths, uid => PeerAuthorization.Decide(uid))
@@ -50,9 +52,23 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
     }
 
     public UnixSocketIpcTransport(UnixServicePaths paths, Func<uint?, PeerDecision> authorize)
+        : this(paths, authorize, null)
+    {
+    }
+
+    /// <param name="readPeerUid">
+    /// Peer-credential source; <c>null</c> reads <c>SO_PEERCRED</c>/<c>getpeereid</c>. Tests pass a
+    /// fixed uid to exercise a non-root policy while the suite itself runs as root.
+    /// </param>
+    public UnixSocketIpcTransport(
+        UnixServicePaths paths,
+        Func<uint?, PeerDecision> authorize,
+        Func<Socket, uint?>? readPeerUid)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _authorize = authorize ?? throw new ArgumentNullException(nameof(authorize));
+        _readPeerUid = readPeerUid ??
+            (socket => UnixPeerCredentials.TryGetPeerUid(socket, out var uid) ? uid : null);
     }
 
     public string Endpoint => _paths.IpcSocketPath;
@@ -168,7 +184,7 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
         var counted = false;
         try
         {
-            uid = UnixPeerCredentials.TryGetPeerUid(client, out var peerUid) ? peerUid : null;
+            uid = _readPeerUid(client);
             var decision = _authorize(uid);
             if (!decision.Allowed)
             {

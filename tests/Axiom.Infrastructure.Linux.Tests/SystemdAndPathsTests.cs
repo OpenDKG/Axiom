@@ -49,9 +49,6 @@ public sealed class SystemdAndPathsTests
         Assert.Contains("LogsDirectory=axiom", unit, StringComparison.Ordinal);
         Assert.Contains("ProtectSystem=strict", unit, StringComparison.Ordinal);
         Assert.Contains("ReadWritePaths=/var/lib/axiom /run/axiom", unit, StringComparison.Ordinal);
-        // A host with systemd-resolved has no /run/NetworkManager (and vice versa); without "-" a
-        // missing entry aborts the unit with 226/NAMESPACE before the daemon starts.
-        Assert.Contains(" /etc/resolv.conf -/run/systemd/resolve -/run/NetworkManager", unit, StringComparison.Ordinal);
         Assert.Contains(" /sys/fs/bpf ", unit, StringComparison.Ordinal); // BPF pins
         Assert.Contains("ProtectKernelTunables=no", unit, StringComparison.Ordinal); // it would mount /sys/fs/bpf read-only
         Assert.Contains("ReadOnlyPaths=-/proc/sys ", unit, StringComparison.Ordinal);
@@ -66,6 +63,27 @@ public sealed class SystemdAndPathsTests
         var spaced = SystemdUnit.Build("/opt/my app/axiomd", "/var/lib/axiom", "/run/axiom");
         Assert.Contains("ExecStart=\"/opt/my app/axiomd\"", spaced, StringComparison.Ordinal);
         Assert.Equal("/opt/my app/axiomd", SystemdUnit.ReadExecStart(spaced));
+    }
+
+    [Fact]
+    public void UnitTreatsMissingOptionalResolverPathsAsNonFatal()
+    {
+        var unit = SystemdUnit.Build("/usr/libexec/axiom/axiomd", "/var/lib/axiom", "/run/axiom");
+        var line = Assert.Single(unit.Split('\n'), line => line.StartsWith("ReadWritePaths=", StringComparison.Ordinal)).Trim();
+        var paths = line["ReadWritePaths=".Length..].Split(' ');
+
+        // Required for enforcement: an absent path must still fail the unit instead of silently starting sandboxed.
+        foreach (var required in new[] { "/var/lib/axiom", "/run/axiom", "/sys/fs/cgroup", "/sys/fs/bpf" })
+        {
+            Assert.Contains(required, paths);
+            Assert.DoesNotContain("-" + required, paths);
+        }
+
+        // Resolver integration is optional on a minimal image (no NetworkManager/resolved runtime dir).
+        foreach (var optional in new[] { "-/etc/resolv.conf", "-/run/systemd/resolve", "-/run/NetworkManager" })
+        {
+            Assert.Contains(optional, paths);
+        }
     }
 
     [Fact]
@@ -210,6 +228,154 @@ public sealed class SystemdAndPathsTests
         Assert.Equal(3, installer.Install(daemon, TextWriter.Null, error));
         Assert.Contains("not root-owned", error.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(Directory.GetFileSystemEntries(options.ImageRoot), entry => entry.Contains(".tmp", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void InstallerRefusesToReplaceWhileTheStopIsUnconfirmed()
+    {
+        using var temp = new TempDirectory();
+        var options = Options(temp);
+        var publish = Path.Combine(temp.Path, "publish");
+        Directory.CreateDirectory(publish);
+        var daemon = Path.Combine(publish, "axiomd");
+        File.WriteAllText(daemon, "#!/bin/sh\n");
+
+        // Upgrading an installed service whose stop never lands: the old image must survive.
+        Directory.CreateDirectory(options.ImageDirectory);
+        var oldDaemon = options.DaemonPath;
+        File.WriteAllText(oldDaemon, "old");
+
+        var runner = new FakeRunner()
+            .On("stat -c", arguments => new ProcessResult(0, string.Join('\n', arguments.Skip(2).Select(path =>
+                $"0 0 {(Directory.Exists(path) ? "41ed" : "81ed")} {path}")), string.Empty))
+            .On("systemctl stop", _ => new ProcessResult(1, string.Empty, "Job for axiomd.service failed"))
+            .On("systemctl is-active", "active\n", exitCode: 0);
+        var error = new StringWriter();
+        var installer = new SystemdServiceInstaller(runner, options, () => true, () => 1000, _ => true);
+
+        Assert.Equal(8, installer.Install(daemon, TextWriter.Null, error));
+
+        Assert.Contains("refusing to replace", error.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(oldDaemon));
+        Assert.Equal("old", File.ReadAllText(oldDaemon));
+        Assert.False(File.Exists(options.UnitPath));
+        Assert.DoesNotContain(Directory.GetFileSystemEntries(options.ImageRoot), entry => entry.Contains(".tmp", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void InstallerRefusesAfterAStopTimeout()
+    {
+        using var temp = new TempDirectory();
+        var options = Options(temp);
+        var publish = Path.Combine(temp.Path, "publish");
+        Directory.CreateDirectory(publish);
+        var daemon = Path.Combine(publish, "axiomd");
+        File.WriteAllText(daemon, "#!/bin/sh\n");
+        Directory.CreateDirectory(options.ImageDirectory);
+        var oldDaemon = options.DaemonPath;
+        File.WriteAllText(oldDaemon, "old");
+
+        var runner = new FakeRunner()
+            .On("stat -c", arguments => new ProcessResult(0, string.Join('\n', arguments.Skip(2).Select(path =>
+                $"0 0 {(Directory.Exists(path) ? "41ed" : "81ed")} {path}")), string.Empty))
+            .On("systemctl is-active", "deactivating\n", exitCode: 0);
+        var error = new StringWriter();
+        var installer = new SystemdServiceInstaller(runner, options, () => true, () => 1000, _ => true);
+
+        Assert.Equal(8, installer.Install(daemon, TextWriter.Null, error));
+        Assert.Contains("still active", error.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("old", File.ReadAllText(oldDaemon));
+        Assert.False(File.Exists(options.UnitPath));
+    }
+
+    [Fact]
+    public void InstallerTreatsAnAbsentServiceAsStoppedAndInstalls()
+    {
+        using var temp = new TempDirectory();
+        var options = Options(temp);
+        var publish = Path.Combine(temp.Path, "publish");
+        Directory.CreateDirectory(publish);
+        var daemon = Path.Combine(publish, "axiomd");
+        File.WriteAllText(daemon, "#!/bin/sh\n");
+
+        var runner = new FakeRunner()
+            .On("stat -c", arguments => new ProcessResult(0, string.Join('\n', arguments.Skip(2).Select(path =>
+                $"0 0 {(Directory.Exists(path) ? "41ed" : "81ed")} {path}")), string.Empty))
+            .On("systemctl stop", _ => new ProcessResult(5, "inactive\n", "Unit axiomd.service not loaded."))
+            .On("systemctl is-active", "inactive\n", exitCode: 4)
+            .On("systemctl enable --now", _ => new ProcessResult(0, string.Empty, string.Empty));
+        var error = new StringWriter();
+        var installer = new SystemdServiceInstaller(runner, options, () => true, () => 1000, _ => true);
+
+        Assert.Equal(0, installer.Install(daemon, TextWriter.Null, error));
+
+        Assert.Equal(string.Empty, error.ToString());
+        Assert.True(File.Exists(options.DaemonPath));
+        Assert.True(File.Exists(options.UnitPath));
+    }
+
+    [Fact]
+    public void UninstallKeepsUnitImageAndRecoveryStateWhenTheStopIsUnconfirmed()
+    {
+        using var temp = new TempDirectory();
+        var options = Options(temp);
+        InstallFixture(options);
+        var error = new StringWriter();
+        var runner = new FakeRunner()
+            .On("systemctl disable --now", _ => new ProcessResult(1, string.Empty, "Job for axiomd.service failed"))
+            .On("systemctl is-active", "active\n", exitCode: 0);
+        var installer = new SystemdServiceInstaller(runner, options, () => true, () => 1000, _ => true);
+
+        Assert.Equal(8, installer.Uninstall(TextWriter.Null, error));
+
+        Assert.Contains("keeping", error.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(options.UnitPath));
+        Assert.True(Directory.Exists(options.ImageDirectory));
+        Assert.DoesNotContain("systemctl daemon-reload", runner.Calls);
+    }
+
+    [Fact]
+    public void UninstallKeepsStateWhenTheStopStateIsUnreadable()
+    {
+        using var temp = new TempDirectory();
+        var options = Options(temp);
+        InstallFixture(options);
+        var error = new StringWriter();
+        var runner = new FakeRunner()
+            .On("systemctl disable --now", _ => new ProcessResult(1, string.Empty, "Job for axiomd.service failed"))
+            .On("systemctl is-active", string.Empty, exitCode: 1);
+        var installer = new SystemdServiceInstaller(runner, options, () => true, () => 1000, _ => true);
+
+        Assert.Equal(8, installer.Uninstall(TextWriter.Null, error));
+        Assert.Contains("could not be confirmed", error.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(options.UnitPath));
+        Assert.True(Directory.Exists(options.ImageDirectory));
+    }
+
+    [Fact]
+    public void UninstallOfAnAbsentServiceIsIdempotent()
+    {
+        using var temp = new TempDirectory();
+        var options = Options(temp);
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var runner = new FakeRunner()
+            .On("systemctl disable --now", _ => new ProcessResult(5, string.Empty, "Unit axiomd.service not loaded."))
+            .On("systemctl is-active", "inactive\n", exitCode: 4);
+        var installer = new SystemdServiceInstaller(runner, options, () => true, () => 1000, _ => true);
+
+        Assert.Equal(0, installer.Uninstall(output, error));
+        Assert.Equal(string.Empty, error.ToString());
+        Assert.Contains("was not running", output.ToString(), StringComparison.Ordinal);
+    }
+
+    private static void InstallFixture(SystemdInstallerOptions options)
+    {
+        Directory.CreateDirectory(options.ImageDirectory);
+        File.WriteAllText(options.DaemonPath, "installed");
+        Directory.CreateDirectory(Path.GetDirectoryName(options.UnitPath)!);
+        File.WriteAllText(options.UnitPath, "unit");
+        Directory.CreateDirectory(options.MachineDataDirectory);
     }
 
     [Fact]

@@ -172,7 +172,7 @@ if (-not $SkipPublish) {
 
     Write-Host "Publishing Service (win-x64, self-contained)..." -ForegroundColor Cyan
     Remove-Item $serviceOut -Recurse -Force -ErrorAction SilentlyContinue
-    & $dotnet publish $serviceProject -c Release -r win-x64 --self-contained true `
+    & $dotnet publish $serviceProject -f net10.0-windows -c Release -r win-x64 --self-contained true `
         -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:DebugType=None -p:DebugSymbols=false -o $serviceOut
     if ($LASTEXITCODE -ne 0) { throw "Service publish failed with exit code $LASTEXITCODE." }

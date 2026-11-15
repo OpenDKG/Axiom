@@ -8,6 +8,12 @@ set -e
 AXIOM_IMAGE_DAEMON=/usr/libexec/axiom/axiomd
 AXIOM_BUNDLED_DAEMON=/opt/axiom/axiomd/axiomd
 AXIOM_PIN_DIR=/sys/fs/bpf/axiom
+AXIOM_BPF_PINS_SCRIPT=/opt/axiom/bpf-pins.sh
+if [ ! -r "$AXIOM_BPF_PINS_SCRIPT" ]; then
+    echo "axiom %preun: $AXIOM_BPF_PINS_SCRIPT is missing; cannot verify the BPF layer, keeping $AXIOM_PIN_DIR." >&2
+    exit 1
+fi
+. "$AXIOM_BPF_PINS_SCRIPT"
 if [ -d /run/systemd/system ]; then
     if [ -x "$AXIOM_IMAGE_DAEMON" ]; then
         "$AXIOM_IMAGE_DAEMON" --uninstall-service
@@ -15,13 +21,8 @@ if [ -d /run/systemd/system ]; then
         "$AXIOM_BUNDLED_DAEMON" --uninstall-service
     fi
 fi
-if [ -d "$AXIOM_PIN_DIR" ]; then
-    if command -v bpftool >/dev/null 2>&1; then
-        for hook in connect4 connect6 sendmsg4 sendmsg6; do
-            [ -e "$AXIOM_PIN_DIR/axiom_$hook" ] || continue
-            bpftool cgroup detach /sys/fs/cgroup "$hook" pinned "$AXIOM_PIN_DIR/axiom_$hook" >/dev/null 2>&1 || true
-        done
-    fi
-    rm -rf "$AXIOM_PIN_DIR"
+if ! axiom_bpf_pins_remove "$AXIOM_PIN_DIR" /sys/fs/cgroup; then
+    echo "axiom %preun: the BPF layer is in an unknown state; keeping $AXIOM_PIN_DIR for recovery." >&2
+    exit 1
 fi
 exit 0

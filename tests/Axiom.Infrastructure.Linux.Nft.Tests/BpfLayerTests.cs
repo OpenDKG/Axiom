@@ -72,6 +72,9 @@ internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
     /// <summary>bpftool missing from PATH: every call throws like the real runner.</summary>
     public bool Missing { get; set; }
 
+    /// <summary>`-j cgroup show` exits 0 with this output instead of the tracked attachments (e.g. malformed JSON).</summary>
+    public string? CgroupShowOutput { get; set; }
+
     public ProcessResult Run(string fileName, IReadOnlyList<string> arguments, TimeSpan timeout)
     {
         var line = string.Join(' ', new[] { Path.GetFileName(fileName) }.Concat(arguments));
@@ -142,7 +145,7 @@ internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
                 case "detach" when args.Count >= 6 && args[4] == "id":
                     return Attached.Remove(long.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture)) ? Ok() : new ProcessResult(1, string.Empty, "Error: failed to detach program\n");
                 case "show":
-                    return Ok("[" + string.Join(',', Attached.Select(pair => $"{{\"id\":{pair.Key},\"attach_type\":\"{pair.Value.Hook}\",\"attach_flags\":\"multi\",\"name\":\"{pair.Value.Name}\"}}")) + "]");
+                    return Ok(CgroupShowOutput ?? "[" + string.Join(',', Attached.Select(pair => $"{{\"id\":{pair.Key},\"attach_type\":\"{pair.Value.Hook}\",\"attach_flags\":\"multi\",\"name\":\"{pair.Value.Name}\"}}")) + "]");
             }
         }
 
