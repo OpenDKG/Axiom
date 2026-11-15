@@ -195,10 +195,17 @@ public sealed class OptionalModuleInstaller
               throw "Blackbox installer hash mismatch. Expected {{BlackboxInstallerSha256}}, got $hash. Refusing to run an unpinned installer."
             }
             Write-Host 'Installer hash matches the pinned Axiom digest.' -ForegroundColor Green
-            Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
+            $sys32 = Join-Path $env:SystemRoot 'System32'
+            $hasVcRuntime = (Test-Path (Join-Path $sys32 'vcruntime140.dll')) -and (Test-Path (Join-Path $sys32 'msvcp140.dll'))
+            $storeBackend = if ($hasVcRuntime) { 'oxigraph' } else { 'oxigraph-worker' }
+            if (-not $hasVcRuntime) {
+              Write-Warning 'VC++ 2015-2022 redistributable not detected; defaulting Blackbox store backend to embedded oxigraph-worker.'
+            } else {
+              Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
+            }
             $env:BLACKBOX_MODE = 'block'
             $env:BLACKBOX_ATTACH_ALL = '1'
-            & $installer -StoreBackend oxigraph
+            & $installer -StoreBackend $storeBackend
 
             # The vendor pins the LF SHA-256 of the BIP-39 wordlist, but a Windows git clone with
             # core.autocrlf=true writes CRLF and seed-phrase detection disables itself. Normalize every
@@ -416,6 +423,57 @@ public sealed class OptionalModuleInstaller
         }
     }
 
+    private static string ResolvePowerShellExecutable()
+    {
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var trimmed = directory.Trim().Trim('"');
+                if (string.IsNullOrWhiteSpace(trimmed))
+                {
+                    continue;
+                }
+
+                foreach (var name in new[] { "pwsh.exe", "pwsh.cmd" })
+                {
+                    try
+                    {
+                        var full = Path.Combine(trimmed, name);
+                        if (File.Exists(full))
+                        {
+                            return full;
+                        }
+                    }
+                    catch (ArgumentException)
+                    {
+                    }
+                }
+            }
+        }
+
+        foreach (var root in new[]
+                 {
+                     Environment.GetEnvironmentVariable("ProgramFiles"),
+                     Environment.GetEnvironmentVariable("ProgramW6432"),
+                 })
+        {
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                continue;
+            }
+
+            var standard = Path.Combine(root, "PowerShell", "7", "pwsh.exe");
+            if (File.Exists(standard))
+            {
+                return standard;
+            }
+        }
+
+        return "powershell.exe";
+    }
+
     private static bool IsUnsafeInstallRoot(params string[] paths) =>
         paths.Any(StorageSafety.IsReparsePointInPath);
 
@@ -423,7 +481,7 @@ public sealed class OptionalModuleInstaller
     {
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
-            "powershell.exe",
+            ResolvePowerShellExecutable(),
             $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}")
         {
             UseShellExecute = false,
@@ -484,7 +542,7 @@ public sealed class OptionalModuleInstaller
     {
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
-            "powershell.exe",
+            ResolvePowerShellExecutable(),
             $"-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand {encoded}")
         {
             UseShellExecute = true,

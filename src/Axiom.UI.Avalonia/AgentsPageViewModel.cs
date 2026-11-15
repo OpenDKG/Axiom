@@ -51,7 +51,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         @"\b[A-Fa-f0-9]{32,}\b",
         RegexOptions.Compiled);
 
-    private readonly BlackboxDashboardClient _client = new();
+    private readonly BlackboxDashboardClient _client;
 
     private readonly BlackboxAutoSyncStore _autoSyncStore = new();
 
@@ -111,7 +111,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         IUserInteraction ui,
         IBlackboxDialogService dialogs,
         IUiTimerFactory timers,
-        IServiceRequestClient? serviceClient = null)
+        IServiceRequestClient? serviceClient = null,
+        BlackboxDashboardClient? blackboxClient = null)
         : base("Agent Protection", "Hooks, DKG and Blackbox protection for local AI agents", "\uE99A")
     {
         Security = security ?? throw new ArgumentNullException(nameof(security));
@@ -122,6 +123,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _ui = ui;
         _dialogs = dialogs;
         _serviceClient = serviceClient;
+        _client = blackboxClient ?? new BlackboxDashboardClient();
+        if (!IsAvailable)
+        {
+            _threatShareQueueText = "Indicator preview is unavailable in Store builds.";
+        }
 
         var autoSync = _autoSyncStore.Load();
         _isAutoSyncEnabled = autoSync.Enabled;
@@ -422,7 +428,15 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        if (!IsAvailable || _refreshing)
+        if (!IsAvailable)
+        {
+            ThreatShareQueueText = "Indicator preview is unavailable in Store builds.";
+            HasThreatShareCandidates = false;
+            CanSubmitThreatShare = false;
+            return;
+        }
+
+        if (_refreshing)
         {
             return;
         }
@@ -499,7 +513,6 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ApplyHealth(settingsTask.Result, graphTask.Result);
             ApplyHookEvidence();
             await RefreshSessionsAsync().ConfigureAwait(true);
-            await RefreshThreatShareAsync().ConfigureAwait(true);
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
@@ -509,6 +522,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             SummaryText = "No live Blackbox data is available.";
             ThreatSharingStatusText = "offline · dashboard unavailable";
             CanToggleThreatSharing = false;
+        }
+
+        try
+        {
+            await RefreshThreatShareAsync().ConfigureAwait(true);
         }
         finally
         {

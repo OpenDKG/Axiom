@@ -244,25 +244,25 @@
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="74,*,34">
-      <Border Grid.Row="0" Background="{DynamicResource Axiom.Window}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
-        <Grid Margin="28,0,22,0" ColumnDefinitions="*,Auto,Auto">
-          <StackPanel VerticalAlignment="Center" Spacing="2">
-            <TextBlock Text="{Binding SelectedPage.Title}" Classes="page-title" />
-            <TextBlock Text="{Binding SelectedPage.Subtitle}" Classes="page-subtitle" />
+    <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*,Auto">
+      <Border Grid.Row="0" MinHeight="74" Background="{DynamicResource Axiom.Window}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
+        <Grid Margin="24,8,20,8" ColumnDefinitions="*,0.95*,Auto" ColumnSpacing="14">
+          <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+            <TextBlock x:Name="HeaderPageTitle" Text="{Binding SelectedPage.Title}" Classes="page-title" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="HeaderPageSubtitle" Text="{Binding SelectedPage.Subtitle}" Classes="page-subtitle" TextWrapping="Wrap" />
           </StackPanel>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"
-                      Margin="24,0,20,0" MaxWidth="520">
-            <Border Width="3" Height="28" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}" />
-            <StackPanel Spacing="2">
+          <Grid Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="10" VerticalAlignment="Center"
+                MaxWidth="420">
+            <Border Grid.Column="0" Width="3" MinHeight="28" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}" />
+            <StackPanel Grid.Column="1" Spacing="2">
               <TextBlock Text="SYSTEM STATUS" Classes="kpi-label" />
               <controls:AxiomSelectableTextBlock Text="{Binding Overview.StatusText}" FontSize="10.5"
                                                  Foreground="{DynamicResource Axiom.TextSecondary}"
-                                                 TextWrapping="Wrap" MaxWidth="460" />
+                                                 TextWrapping="Wrap" />
             </StackPanel>
-          </StackPanel>
-          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-            <ComboBox Width="170" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
+          </Grid>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <ComboBox Width="156" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
                       ToolTip.Tip="Choose a theme. Axiom Glass is the new visual system." />
             <TextBlock Text="LOCAL-FIRST" Foreground="{DynamicResource Axiom.TextMuted}"
                        FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -272,7 +272,7 @@
 
       <ContentControl Grid.Row="1" Content="{Binding SelectedPage}" />
 
-      <Border Grid.Row="2" Background="{DynamicResource Axiom.SurfaceAlt}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
+      <Border Grid.Row="2" MinHeight="34" Background="{DynamicResource Axiom.SurfaceAlt}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
         <Grid Margin="28,0,22,0" ColumnDefinitions="*,Auto">
           <WrapPanel VerticalAlignment="Center" ItemHeight="13"
                      ClipToBounds="False">

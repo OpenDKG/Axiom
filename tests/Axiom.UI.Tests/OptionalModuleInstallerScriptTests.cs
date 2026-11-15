@@ -34,5 +34,7 @@ public sealed class OptionalModuleInstallerScriptTests
         Assert.Contains("$env:PATH", script, StringComparison.Ordinal);
         Assert.Contains("blackbox-install.ps1", script, StringComparison.Ordinal);
         Assert.Contains("ARGS:-3.12", script, StringComparison.Ordinal);
+        Assert.Contains("vcruntime140.dll", script, StringComparison.Ordinal);
+        Assert.Contains("oxigraph-worker", script, StringComparison.Ordinal);
     }
 }

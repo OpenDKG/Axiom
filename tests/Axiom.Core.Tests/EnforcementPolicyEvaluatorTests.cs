@@ -201,6 +201,28 @@ public sealed class EnforcementPolicyEvaluatorTests
         Assert.Equal(EnforcementDecision.Audit, outside.Decision);
     }
 
+    [Theory]
+    [InlineData(@"C:\work\..\secrets\token.txt")]
+    [InlineData(@"C:\work\.\..\secrets\.\token.txt")]
+    [InlineData(@"\\?\C:\secrets\token.txt")]
+    [InlineData(@"//?/C:/work/../secrets/token.txt")]
+    public void Path_scope_blocks_traversal_and_extended_prefix_escape_attempts(string escapedPath)
+    {
+        var policy = Policy(
+            Agent("claude", EnforcementMode.Monitor, Rule("allow-project", EnforcementRuleEffect.Allow, @"C:\work")),
+            new ProtectedResource { ResourceId = "secret-store", Scope = @"C:\secrets" });
+        var evaluator = new EnforcementPolicyEvaluator(policy);
+
+        var verdict = evaluator.Evaluate(
+            Request($"traversal-{escapedPath.Length}", "claude", AgentActionKind.ReadFile, escapedPath),
+            new EnforcementCapabilities { Strength = EnforcementStrength.HostHook, HostSupportsDeny = true });
+
+        Assert.Equal(EnforcementDecision.Block, verdict.Decision);
+        Assert.Equal("secret-store", verdict.RuleId);
+        Assert.Equal(EnforcementReasonCodes.ProtectedResource, verdict.ReasonCode);
+        Assert.True(verdict.CanEnforce);
+    }
+
     [Fact]
     public void Agent_identifier_is_case_insensitive()
     {

@@ -64,48 +64,53 @@
         </StackPanel>
       </Border>
 
-      <Grid ColumnDefinitions="*,14,*">
-        <Border Grid.Column="0" Classes="card" Padding="14">
-          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-            <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
-              <Image Source="avares://Axiom.UI.Avalonia/Assets/origintrail-logo.png"
-                     Width="104" Height="23" Stretch="Uniform" />
-            </Border>
-            <StackPanel Grid.Column="1" Spacing="4">
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
+      <Grid x:Name="ModuleCardsGrid" ColumnDefinitions="*,14,*">
+        <Border x:Name="DkgModuleCard" Grid.Column="0" Classes="card" Padding="14">
+          <StackPanel Spacing="10">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+              <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Center">
+                <Image Source="avares://Axiom.UI.Avalonia/Assets/origintrail-logo.png"
+                       Width="92" Height="20" Stretch="Uniform" />
+              </Border>
+              <controls:AxiomSelectableTextBlock Grid.Column="1" Text="origintrail.io" FontSize="10"
+                         Foreground="{DynamicResource Axiom.TextMuted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+            <StackPanel Spacing="4">
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <Border Grid.Column="0" Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
                         Classes.sq-on="{Binding Security.DkgConnected}"
                         Classes.sq-off="{Binding !Security.DkgConnected}"
                         ToolTip.Tip="{Binding Security.DkgHealthLabel}" />
-                <controls:AxiomSelectableTextBlock Text="{Binding Security.DkgBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              </StackPanel>
+                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Security.DkgBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              </Grid>
               <controls:AxiomSelectableTextBlock Text="Decentralized Knowledge Graph (DKG): optional local knowledge infrastructure and provenance. This status reflects a local node probe."
                          FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Text="origintrail.io" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             </StackPanel>
-          </Grid>
+          </StackPanel>
         </Border>
-        <Border Grid.Column="2" Classes="card" Padding="14">
-          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-            <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
-              <Image Source="avares://Axiom.UI.Avalonia/Assets/blackbox-logo.png"
-                     Width="104" Height="18" Stretch="Uniform" />
-            </Border>
-            <StackPanel Grid.Column="1" Spacing="4">
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
+        <Border x:Name="BlackboxModuleCard" Grid.Column="2" Classes="card" Padding="14">
+          <StackPanel Spacing="10">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+              <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Center">
+                <Image Source="avares://Axiom.UI.Avalonia/Assets/blackbox-logo.png"
+                       Width="92" Height="16" Stretch="Uniform" />
+              </Border>
+              <Image Grid.Column="1" Source="avares://Axiom.UI.Avalonia/Assets/umanitek-logo.png"
+                     Width="82" Height="18" Stretch="Uniform" HorizontalAlignment="Right" VerticalAlignment="Center"
+                     ToolTip.Tip="Umanitek" />
+            </Grid>
+            <StackPanel Spacing="4">
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <Border Grid.Column="0" Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
                         Classes.sq-on="{Binding Security.BlackboxConnected}"
                         Classes.sq-off="{Binding !Security.BlackboxConnected}"
                         ToolTip.Tip="{Binding Security.BlackboxHealthLabel}" />
-                <controls:AxiomSelectableTextBlock Text="{Binding Security.BlackboxBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              </StackPanel>
+                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Security.BlackboxBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              </Grid>
               <controls:AxiomSelectableTextBlock Text="Guardian Agent Blackbox by Umanitek: optional local agent-safety module. Connection alone does not prove every agent is protected."
                          FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <Image Source="avares://Axiom.UI.Avalonia/Assets/umanitek-logo.png"
-                     Width="92" Height="20" Stretch="Uniform" HorizontalAlignment="Left"
-                     ToolTip.Tip="Umanitek" />
             </StackPanel>
-          </Grid>
+          </StackPanel>
         </Border>
       </Grid>
 
