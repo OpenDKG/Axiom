@@ -287,6 +287,35 @@ public sealed class PrivacyShieldSourceTests
         Assert.Null(result.Sources.Single(s => s.Id == "hagezi-pro").Error);
     }
 
+    [Fact]
+    public void Rule_store_load_pools_repeated_source_ids()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"axiom-rules-pool-{Guid.NewGuid():N}.json");
+        try
+        {
+            var store = new PrivacyShieldRuleStore(path);
+            var now = DateTimeOffset.UtcNow;
+            var sourceA = new string("hagezi-pro".ToCharArray());
+            var sourceB = new string("hagezi-pro".ToCharArray());
+            Assert.False(ReferenceEquals(sourceA, sourceB));
+
+            Assert.True(store.Save(
+            [
+                new PrivacyShieldStoredRule("one.example", sourceA, PrivacyCategory.Ads, now),
+                new PrivacyShieldStoredRule("two.example", sourceB, PrivacyCategory.Ads, now),
+            ]));
+
+            var loaded = store.Load();
+            Assert.Equal(2, loaded.Count);
+            Assert.True(ReferenceEquals(loaded[0].SourceId, loaded[1].SourceId));
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".previous");
+        }
+    }
+
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(

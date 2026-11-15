@@ -243,21 +243,24 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
         PrivacyShieldSourceInfo source,
         CancellationToken cancellationToken)
     {
-        var bytes = await DownloadWithRetriesAsync(source.Url, cancellationToken).ConfigureAwait(false);
+        using var buffer = await DownloadWithRetriesAsync(source.Url, cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(source.Sha256))
         {
-            var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+            var digest = buffer.TryGetBuffer(out var segment)
+                ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(segment))
+                : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(buffer.ToArray()));
             if (!string.Equals(digest, source.Sha256, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidDataException("The source content does not match its pinned SHA-256.");
             }
         }
 
-        var body = Encoding.UTF8.GetString(bytes);
-        return PrivacyShieldPolicy.ParseList(body, PrivacyShieldPolicy.MaxRules);
+        buffer.Position = 0;
+        using var reader = new StreamReader(buffer, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 16 * 1024, leaveOpen: true);
+        return PrivacyShieldPolicy.ParseList(reader, PrivacyShieldPolicy.MaxRules);
     }
 
-    private async Task<byte[]> DownloadWithRetriesAsync(string url, CancellationToken cancellationToken)
+    private async Task<MemoryStream> DownloadWithRetriesAsync(string url, CancellationToken cancellationToken)
     {
         Exception? lastException = null;
         for (var attempt = 1; attempt <= MaxDownloadAttempts; attempt++)
@@ -312,7 +315,7 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
         return exception.Message;
     }
 
-    private async Task<byte[]> DownloadAsync(string url, CancellationToken cancellationToken)
+    private async Task<MemoryStream> DownloadAsync(string url, CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps)
@@ -328,19 +331,27 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
         await using var stream = await response.Content
             .ReadAsStreamAsync(cancellationToken)
             .ConfigureAwait(false);
-        using var buffer = new MemoryStream();
-        var chunk = new byte[16 * 1024];
-        int read;
-        while ((read = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
+        var buffer = new MemoryStream();
+        try
         {
-            if (buffer.Length + read > MaxBytes)
+            var chunk = new byte[16 * 1024];
+            int read;
+            while ((read = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
             {
-                throw new InvalidDataException("The blocklist exceeded the 20 MB import limit.");
+                if (buffer.Length + read > MaxBytes)
+                {
+                    throw new InvalidDataException("The blocklist exceeded the 20 MB import limit.");
+                }
+
+                buffer.Write(chunk, 0, read);
             }
 
-            buffer.Write(chunk, 0, read);
+            return buffer;
         }
-
-        return buffer.ToArray();
+        catch
+        {
+            await buffer.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 }

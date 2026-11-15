@@ -7,7 +7,12 @@
     <AssemblyName>Axiom.Desktop</AssemblyName>
     <AssemblyTitle>Axiom</AssemblyTitle>
     <ApplicationIcon>..\Axiom.UI\Resources\axiom.ico</ApplicationIcon>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
   </PropertyGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" />
