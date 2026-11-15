@@ -128,6 +128,29 @@ public static class AgentCommandGuard
             return any(verb in text for verb in verbs) and _hits_protected(text, protected)
 
 
+        def _sensitive_store(text: str) -> str:
+            # Credential stores the vendor's protected list does not name. The sweep found reads
+            # of these allowed: .git-credentials, .npmrc, .kube/config, GitHub CLI hosts.yml,
+            # browser Login Data/Cookies and extension storage, Firefox profiles, wallet files.
+            value = _normalize_command(text)
+            stores = (
+                (".git-credentials", "Git credential store"),
+                (".npmrc", "npm token store"),
+                (".kube\\config", "Kubernetes config"),
+                ("github cli\\hosts.yml", "GitHub CLI token"),
+                (".docker\\config.json", "Docker credential store"),
+                ("\\login data", "browser login database"),
+                ("\\network\\cookies", "browser cookie database"),
+                ("local extension settings", "browser extension storage"),
+                ("mozilla\\firefox\\profiles", "Firefox profile store"),
+                ("wallet.dat", "wallet file"),
+            )
+            for marker, label in stores:
+                if marker in value:
+                    return label
+            return ""
+
+
         def _protected_tokens(protected) -> list:
             # Tokens that identify a protected path inside a shell command. A trailing * uses its
             # parent directory (~/.ssh/* -> .ssh, C:\Lab\samples\* -> samples); a file pattern keeps
@@ -262,6 +285,14 @@ public static class AgentCommandGuard
                 return "script host execution"
             if "mshta" in text and "vbscript" in text:
                 return "mshta vbscript"
+            if "cmdkey" in text and "/list" in text:
+                return "credential enumeration (cmdkey)"
+            if "vaultcmd" in text:
+                return "credential enumeration (vaultcmd)"
+            if "netsh wlan" in text and "key=clear" in text:
+                return "Wi-Fi key extraction"
+            if "export-certificate" in text or ("certutil" in text and "-exportpfx" in text):
+                return "certificate export"
             return ""
 
 
@@ -289,6 +320,11 @@ public static class AgentCommandGuard
                 return None
             if protected is None:
                 protected = _load_protected_paths()
+            store = _sensitive_store(command_text)
+            if not store and isinstance(args, dict):
+                store = _sensitive_store(str(args.get("path") or args.get("filePath") or ""))
+            if store:
+                return ("credential-store", f"Blackbox blocked this call: it accesses a credential store ({store}).")
             if _tampers_with_guard(command_text):
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
             if _deletes_protected(command_text, protected):

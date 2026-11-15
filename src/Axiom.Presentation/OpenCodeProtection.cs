@@ -755,6 +755,11 @@ public sealed class OpenCodeProtection
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "permissions", session, call)
                         print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it changes ownership or permissions of a protected path."}), file=_out, flush=True)
                         return
+                    store = _sensitive_store(command_text) or _sensitive_store(str(raw_args.get("path") or ""))
+                    if store:
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "credential-store", session, call)
+                        print(json.dumps({"action": "block", "message": f"Blackbox blocked this call: it accesses a credential store ({store})."}), file=_out, flush=True)
+                        return
                     if _exfiltrates_protected(command_text, protected):
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "exfiltration", session, call)
                         print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it uploads a file from a protected path."}), file=_out, flush=True)
