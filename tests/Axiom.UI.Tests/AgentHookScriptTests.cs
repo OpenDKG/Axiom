@@ -79,6 +79,54 @@ public sealed class AgentHookScriptTests
     }
 
     [Fact]
+    public void OpenCode_bridge_normalizes_path_variants_before_protected_path_checks()
+    {
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+
+        // Shell variables and Win32 prefixes previously hid a protected path from the token
+        // match: `cat "$HOME/.ssh/id_rsa"`, `type %USERPROFILE%\...` and `\\?\C:\...` all
+        // passed while the literal form blocked.
+        Assert.Contains("def _normalize_command(command: str) -> str:", bridge, StringComparison.Ordinal);
+        Assert.Contains("text = _normalize_command(command)", bridge, StringComparison.Ordinal);
+        Assert.Contains("def _hidden_path_read(command: str, protected) -> bool:", bridge, StringComparison.Ordinal);
+        Assert.Contains("_hidden_path_read(command_text, protected)", bridge, StringComparison.Ordinal);
+        Assert.Contains("hidden path form", bridge, StringComparison.Ordinal);
+        string[] expansions =
+        [
+            "\"$env:userprofile\"", "\"%userprofile%\"", "\"$env:localappdata\"",
+            "\"%appdata%\"", "\"$home\"", "~/",
+        ];
+        foreach (var expansion in expansions)
+        {
+            Assert.Contains(expansion, bridge, StringComparison.Ordinal);
+        }
+
+        // move/rename of a protected file, and ownership/ACL tampering, are blocked with the
+        // same protected-path tokens as read/copy.
+        Assert.Contains("def _deletes_protected(command: str, protected) -> bool:", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"move-item\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"rename-item\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("def _tampers_with_protected(command: str, protected) -> bool:", bridge, StringComparison.Ordinal);
+        Assert.Contains("_tampers_with_protected(command_text, protected)", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"takeown\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"icacls\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"attrib\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("ownership or permissions of a protected path", bridge, StringComparison.Ordinal);
+
+        // Additional upload shapes observed in the lab.
+        Assert.Contains("--data-binary", bridge, StringComparison.Ordinal);
+        Assert.Contains("--upload-file", bridge, StringComparison.Ordinal);
+        Assert.Contains("requests.post", bridge, StringComparison.Ordinal);
+
+        Assert.True(
+            bridge.IndexOf("_tampers_with_protected(command_text", StringComparison.Ordinal) <
+            bridge.IndexOf("guard.on_pre_tool_call", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void OpenCode_bridge_carries_launch_and_upload_protection()
     {
         var build = typeof(OpenCodeProtection).GetMethod(
