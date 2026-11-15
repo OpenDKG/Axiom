@@ -206,6 +206,9 @@ public sealed class EnforcementPolicyEvaluatorTests
     [InlineData(@"C:\work\.\..\secrets\.\token.txt")]
     [InlineData(@"\\?\C:\secrets\token.txt")]
     [InlineData(@"//?/C:/work/../secrets/token.txt")]
+    [InlineData("\"C:\\secrets\\token.txt\"")]
+    [InlineData(@"'C:\work\..\secrets\token.txt'")]
+    [InlineData(@"file:///C:/secrets/token.txt")]
     public void Path_scope_blocks_traversal_and_extended_prefix_escape_attempts(string escapedPath)
     {
         var policy = Policy(
