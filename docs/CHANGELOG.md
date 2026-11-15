@@ -2,6 +2,14 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.55.0
+
+- **New Axiom brand mark in the app, the icon set and the MSIX assets.**
+  - `axiom-icon.png` (1024x1024) and `axiom-lockup.png` (2172x1222) regenerated from the new `logo.png` and `logo-letters.png`, in both the WPF and Avalonia asset folders.
+  - `axiom.ico` rebuilt as a nine-size icon set (16-256 px) for the window, tray and setup icon.
+  - MSIX tiles and splash regenerated with `packaging/msix/generate-assets.ps1`.
+  - The lockup keeps the new art's 1.78:1 aspect instead of the old 3:1, so navigation and first-run render it narrower without stretching.
+
 ## What's in 0.54.0
 
 - **Clean Windows 11 onboarding for Blackbox & DKG, Repair flow, and clean PowerShell uninstalls:**
