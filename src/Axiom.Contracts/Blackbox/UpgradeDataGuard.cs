@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Globalization;
-using System.IO;
 using System.Text.Json;
-using Axiom.Contracts.Blackbox;
 
-namespace Axiom.UI.Services;
+namespace Axiom.Contracts.Blackbox;
 
 /// <summary>One copied file, stored relative to the user's local application data.</summary>
 public sealed record UpgradeDataEntry(string RelativePath, long Length);

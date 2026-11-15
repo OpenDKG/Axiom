@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -9,7 +10,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Win32;
 using Axiom.Contracts.Blackbox;
-using Axiom.UI.Services;
+using Axiom.Presentation;
 
 namespace Axiom.Setup;
 
@@ -418,18 +419,23 @@ internal static class SetupInstaller
         Action<string> report,
         CancellationToken cancellationToken)
     {
-        var desktop = await ExtractResourceAsync(
-            PayloadPrefix + "Axiom.Desktop.exe",
-            Path.Combine(tempDir, "Axiom.Desktop.exe"),
-            cancellationToken).ConfigureAwait(false);
-        var service = await ExtractResourceAsync(
-            PayloadPrefix + "Axiom.Service.exe",
-            Path.Combine(tempDir, "Axiom.Service.exe"),
-            cancellationToken).ConfigureAwait(false);
-        var community = await ExtractResourceAsync(
-            PayloadPrefix + "community.feed.json",
-            Path.Combine(tempDir, "community", "feed.json"),
-            cancellationToken).ConfigureAwait(false);
+        await TryExtractPayloadArchiveAsync(tempDir, cancellationToken).ConfigureAwait(false);
+
+        var desktop = ExistingOrNull(Path.Combine(tempDir, "Axiom.Desktop.exe"))
+            ?? await ExtractResourceAsync(
+                PayloadPrefix + "Axiom.Desktop.exe",
+                Path.Combine(tempDir, "Axiom.Desktop.exe"),
+                cancellationToken).ConfigureAwait(false);
+        var service = ExistingOrNull(Path.Combine(tempDir, "Axiom.Service.exe"))
+            ?? await ExtractResourceAsync(
+                PayloadPrefix + "Axiom.Service.exe",
+                Path.Combine(tempDir, "Axiom.Service.exe"),
+                cancellationToken).ConfigureAwait(false);
+        var community = ExistingOrNull(Path.Combine(tempDir, "community", "feed.json"))
+            ?? await ExtractResourceAsync(
+                PayloadPrefix + "community.feed.json",
+                Path.Combine(tempDir, "community", "feed.json"),
+                cancellationToken).ConfigureAwait(false);
 
         if (desktop is null || service is null)
         {
@@ -440,6 +446,36 @@ internal static class SetupInstaller
         }
 
         return new PayloadPaths(desktop, service, community);
+    }
+
+    private static async Task TryExtractPayloadArchiveAsync(string tempDir, CancellationToken cancellationToken)
+    {
+        await using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(PayloadPrefix + "zip");
+        if (stream is null)
+        {
+            return;
+        }
+
+        var root = Path.GetFullPath(tempDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        foreach (var entry in archive.Entries)
+        {
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                continue;
+            }
+
+            var destination = Path.GetFullPath(Path.Combine(tempDir, entry.FullName));
+            if (!destination.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException($"Archive entry escapes temp directory: {entry.FullName}");
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            await using var entryStream = entry.Open();
+            await using var file = File.Create(destination);
+            await entryStream.CopyToAsync(file, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static async Task<string?> ExtractResourceAsync(

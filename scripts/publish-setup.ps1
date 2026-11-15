@@ -69,6 +69,17 @@ Copy-Item (Join-Path $desktopOut "Axiom.Desktop.exe") $payloadOut -Force
 Copy-Item (Join-Path $serviceOut "Axiom.Service.exe") $payloadOut -Force
 Copy-Item (Join-Path $desktopOut "community") $payloadOut -Recurse -Force
 
+$payloadZip = Join-Path $root "artifacts\publish\setup-payload.zip"
+Remove-Item $payloadZip -Force -ErrorAction SilentlyContinue
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory(
+    $payloadOut,
+    $payloadZip,
+    [System.IO.Compression.CompressionLevel]::Optimal,
+    $false)
+$zipSize = [math]::Round((Get-Item $payloadZip).Length / 1MB, 1)
+Write-Host "Compressed payload archive: $payloadZip ($zipSize MB)" -ForegroundColor Cyan
+
 Remove-Item $OutputDir -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "Publishing setup EXE..." -ForegroundColor Cyan
 & $dotnet publish $setupProject `
@@ -76,7 +87,7 @@ Write-Host "Publishing setup EXE..." -ForegroundColor Cyan
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
     -p:AllowedReferenceRelatedFileExtensions=none `
-    -p:AxiomPayloadDir="$payloadOut" -o $OutputDir
+    -p:AxiomPayloadZip="$payloadZip" -o $OutputDir
 if ($LASTEXITCODE -ne 0) { throw "Setup publish failed." }
 
 $setupExe = Join-Path $OutputDir "Axiom.Setup.exe"

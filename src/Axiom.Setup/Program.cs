@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using System.Windows;
-
 namespace Axiom.Setup;
 
 internal static class Program
@@ -38,17 +36,7 @@ internal static class Program
             return;
         }
 
-        var application = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
-
-        application.Resources.MergedDictionaries.Add(new ResourceDictionary
-        {
-            Source = new Uri("pack://application:,,,/Axiom.UI;component/Themes/Dark.xaml", UriKind.Absolute),
-        });
-        application.Resources.MergedDictionaries.Add(new ResourceDictionary
-        {
-            Source = new Uri("pack://application:,,,/Axiom.UI;component/Themes/Controls.xaml", UriKind.Absolute),
-        });
-
-        application.Run(new SetupWindow(options));
+        using var window = new SetupNativeWindow(options);
+        Environment.ExitCode = window.Run();
     }
 }
