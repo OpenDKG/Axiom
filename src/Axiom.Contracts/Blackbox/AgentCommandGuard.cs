@@ -144,6 +144,19 @@ public static class AgentCommandGuard
                 ("local extension settings", "browser extension storage"),
                 ("mozilla\\firefox\\profiles", "Firefox profile store"),
                 ("wallet.dat", "wallet file"),
+                (".netrc", "netrc credentials"),
+                (".pgpass", "PostgreSQL password file"),
+                (".vault-token", "Vault token"),
+                (".config\\gcloud", "gcloud credentials"),
+                (".azure", "Azure credentials"),
+                (".password-store", "pass store"),
+                ("key4.db", "Firefox key database"),
+                ("logins.json", "Firefox login database"),
+                ("\\web data", "browser autofill database"),
+                ("user data\\local state", "browser encryption key"),
+                ("\\1password\\", "password manager store"),
+                ("bitwarden", "password manager store"),
+                ("keepass", "password manager store"),
             )
             for marker, label in stores:
                 if marker in value:
