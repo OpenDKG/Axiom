@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.56.0
+
+- **Correct lockup: the grayscale AXIOM wordmark.**
+  - 0.55.0 shipped an older `logo-letters.png`; this release replaces `axiom-lockup.png` in both UI asset folders with the intended 2172x724 grayscale shield + AXIOM lockup.
+  - The 2172x724 canvas matches the historical lockup exactly, so the navigation rail, WPF header and first-run window show it at the previous size with no stretching.
+  - MSIX `Wide310x150Logo.png` and `SplashScreen.png` regenerated with `packaging/msix/generate-assets.ps1`.
+
 ## What's in 0.55.0
 
 - **New Axiom brand mark in the app, the icon set and the MSIX assets.**
