@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.32.0
+
+- **Clearer Community feed vs. VirusTotal (`VT Check`) feedback in Integrations.**
+  - Renamed the per-file row action button from `Check` to `VT Check` (with explanatory tooltip) and the context menu item to `Check hash on VirusTotal`, and initialized hashed rows to `VT: Not checked` (`Skipped` for unhashed entries) in `SecurityView.axaml` and `SecurityPageViewModel.cs`.
+  - `ScanFilesAsync` now awaits any in-flight or unpopulated configured Community feed before comparing scanned SHA-256 hashes, and `ApplyCommunityMatches` surfaces an explicit neutral notice (`HasScanCommunityNotice`) even when 0 matches occur so users can see how many community hashes were checked locally.
+  - Entering a VirusTotal API key from `VT Check` immediately runs the hash lookup on that row instead of requiring a second click, and `CreateReputationModule` reflects `IsConnected = true` when configured.
+
 ## What's in 0.31.0
 
 - **Reliable row-click selection and container-preserving refreshes across all tabs.**
