@@ -29,6 +29,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    private readonly SemaphoreSlim _sourceSyncSignal = new(0, 1);
+
     private readonly object _rulesGate = new();
 
     private readonly Dictionary<string, string> _sourceErrors =
@@ -74,6 +76,12 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     /// <summary>Whether the loopback resolver is listening right now.</summary>
     public bool IsResolverRunning => Volatile.Read(ref _server) is not null;
 
+    /// <summary>Whether automatic adapter DNS pointing is requested for port 53.</summary>
+    public bool ShouldAutoPointAdapterDns =>
+        _settings.Enabled &&
+        _settings.Port == 53 &&
+        (_settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(_settings.PreferredAdapterAlias));
+
     public async Task<PrivacyShieldStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -91,7 +99,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_settings.Enabled)
+            if (_settings.Enabled && _server is null)
             {
                 await StartServerLockedAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -205,6 +213,11 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             _settings = normalized;
             _lastError = CombineWarnings(startWarning, NotifyResolverStarted(candidate));
             EnsureConfiguredAdapterDns();
+            if (ShouldAutoUpdateSources())
+            {
+                SignalSourceSync();
+            }
+
             return CreateStatus();
         }
         finally
@@ -260,6 +273,23 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
         return false;
     }
+
+    internal void SignalSourceSync()
+    {
+        if (_sourceSyncSignal.CurrentCount == 0)
+        {
+            try
+            {
+                _sourceSyncSignal.Release();
+            }
+            catch (SemaphoreFullException)
+            {
+            }
+        }
+    }
+
+    internal async Task WaitForSourceSyncOrDelayAsync(TimeSpan delay, CancellationToken cancellationToken) =>
+        await _sourceSyncSignal.WaitAsync(delay, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Keeps the configured or active default-route adapter pointed at the local resolver while the
@@ -664,6 +694,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                                                 PrivacyCategory.Tracking |
                                                 PrivacyCategory.Analytics |
                                                 PrivacyCategory.Malware |
+                                                PrivacyCategory.Phishing |
                                                 PrivacyCategory.Custom);
 
         return settings with

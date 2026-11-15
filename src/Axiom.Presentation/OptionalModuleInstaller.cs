@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using Axiom.Contracts;
+using Axiom.Contracts.Blackbox;
 
 namespace Axiom.Presentation;
 
@@ -35,6 +36,9 @@ public sealed class OptionalModuleInstaller
 
     // Pinned vendor installer digest. Update only after reviewing a new official release.
     private const string BlackboxInstallerSha256 = "261122F5E879596E88D63C30D5D36D12B4E155986F83AA3EB83ADEB406E41179";
+
+    /// <summary>Marker recording which pinned vendor build is installed in this tree.</summary>
+    private const string InstalledBuildMarker = ".axiom-blackbox-build";
 
     public string DkgRoot { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -235,7 +239,44 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        return RunPowerShellScript(BuildBlackboxScript(), log);
+        if (IsPinnedBuildInstalled())
+        {
+            log?.Invoke("Blackbox pinned build is already installed; reusing the existing runtime (no vendor reinstall).");
+            return true;
+        }
+
+        var installed = RunPowerShellScript(BuildBlackboxScript(), log);
+        if (installed)
+        {
+            try
+            {
+                File.WriteAllText(Path.Combine(BlackboxRoot, InstalledBuildMarker), BlackboxInstallerSha256);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return installed;
+    }
+
+    private bool IsPinnedBuildInstalled()
+    {
+        try
+        {
+            var marker = Path.Combine(BlackboxRoot, InstalledBuildMarker);
+            if (!File.Exists(marker) ||
+                !string.Equals(File.ReadAllText(marker).Trim(), BlackboxInstallerSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return File.Exists(Path.Combine(BlackboxRoot, "agent-blackbox", "venv", "Scripts", "python.exe"));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private string BuildBlackboxScript()
@@ -273,16 +314,38 @@ public sealed class OptionalModuleInstaller
               throw "Blackbox installer hash mismatch. Expected {{BlackboxInstallerSha256}}, got $hash. Refusing to run an unpinned installer."
             }
             Write-Host 'Installer hash matches the pinned Axiom digest.' -ForegroundColor Green
-            Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
+            $sys32 = Join-Path $env:SystemRoot 'System32'
+            $hasVcRuntime = (Test-Path (Join-Path $sys32 'vcruntime140.dll')) -and (Test-Path (Join-Path $sys32 'msvcp140.dll'))
+            $storeBackend = if ($hasVcRuntime) { 'oxigraph' } else { 'oxigraph-worker' }
+            if (-not $hasVcRuntime) {
+              Write-Warning 'VC++ 2015-2022 redistributable not detected; defaulting Blackbox store backend to embedded oxigraph-worker.'
+            } else {
+              Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
+            }
             $env:BLACKBOX_MODE = 'block'
             $env:BLACKBOX_ATTACH_ALL = '1'
-            & $installer -StoreBackend oxigraph
+            & $installer -StoreBackend $storeBackend
+            $vendorExit = $LASTEXITCODE
+            if ($vendorExit -ne 0) {
+              # The pinned vendor build can fail its own "dependency environment committed" check.
+              # Repair it once with the vendor CLI; a usable venv is what Axiom actually needs.
+              $hermesExe = Join-Path $dir 'agent-blackbox\venv\Scripts\hermes.exe'
+              if (-not (Test-Path $hermesExe)) { $hermesExe = Join-Path $env:LOCALAPPDATA 'hermes\bin\hermes.exe' }
+              if (Test-Path $hermesExe) {
+                Write-Host "Vendor installer exited $vendorExit; running 'hermes pm repair'..." -ForegroundColor Yellow
+                & $hermesExe pm repair 2>&1 | ForEach-Object { Write-Host $_ }
+              }
+            }
 
             # The vendor pins the LF SHA-256 of the BIP-39 wordlist, but a Windows git clone with
-            # core.autocrlf=true writes CRLF and seed-phrase detection disables itself. Normalize the
-            # file back to LF so the pinned hash matches (issue #324 / OFFLINE_CONTINUITY_AUDIT.md).
-            $bip39 = Join-Path $dir 'agent-blackbox\plugins\blackbox\kernel\crypto_secrets\bip39_english.txt'
-            if (Test-Path $bip39) {
+            # core.autocrlf=true writes CRLF and seed-phrase detection disables itself. Normalize every
+            # installed copy back to LF so the pinned hash matches (issue #324 / #320).
+            foreach ($bip39 in @(
+              (Join-Path $dir 'agent-blackbox\plugins\blackbox\kernel\crypto_secrets\bip39_english.txt'),
+              (Join-Path $env:LOCALAPPDATA 'hermes\plugins\blackbox\kernel\crypto_secrets\bip39_english.txt'),
+              (Join-Path $env:USERPROFILE '.hermes\plugins\blackbox\kernel\crypto_secrets\bip39_english.txt')
+            )) {
+              if (-not (Test-Path $bip39)) { continue }
               $bytes = [System.IO.File]::ReadAllBytes($bip39)
               $normalized = New-Object byte[] $bytes.Length
               $count = 0
@@ -295,9 +358,9 @@ public sealed class OptionalModuleInstaller
                 $trimmed = New-Object byte[] $count
                 [Array]::Copy($normalized, $trimmed, $count)
                 [System.IO.File]::WriteAllBytes($bip39, $trimmed)
-                Write-Host "Normalized bip39_english.txt to LF ($count bytes)." -ForegroundColor Yellow
+                Write-Host "Normalized $bip39 to LF ($count bytes)." -ForegroundColor Yellow
               }
-              Write-Host ("bip39_english.txt SHA256: " + (Get-FileHash $bip39 -Algorithm SHA256).Hash) -ForegroundColor Yellow
+              Write-Host ("$bip39 SHA256: " + (Get-FileHash $bip39 -Algorithm SHA256).Hash) -ForegroundColor Yellow
             }
             $venv = Join-Path $dir 'agent-blackbox\venv\Scripts\python.exe'
             $venvW = Join-Path $dir 'agent-blackbox\venv\Scripts\pythonw.exe'
@@ -329,7 +392,11 @@ public sealed class OptionalModuleInstaller
                 Write-Warning "Blackbox dashboard did not answer yet. Start it from Axiom with the Start button."
               }
             }
+            if (-not (Test-Path $venv)) {
+              throw 'Blackbox runtime is not usable: the vendor venv is missing.'
+            }
             Write-Host 'Blackbox setup finished. Return to Axiom and click Check again.' -ForegroundColor Green
+            exit 0
             """;
     }
 
@@ -473,6 +540,8 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        BlackboxWordlistNormalizer.NormalizeAll();
+
         try
         {
             var launcher = Path.Combine(agent, "start-dashboard.py");
@@ -507,6 +576,86 @@ public sealed class OptionalModuleInstaller
         }
     }
 
+    public static bool HasVcRuntime(string? windowsDirectory = null)
+    {
+        var root = windowsDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            return false;
+        }
+
+        var system32 = Path.Combine(root, "System32");
+        return File.Exists(Path.Combine(system32, "vcruntime140.dll")) &&
+               File.Exists(Path.Combine(system32, "msvcp140.dll"));
+    }
+
+    public static string SelectBlackboxStoreBackend(bool hasVcRuntime) =>
+        hasVcRuntime ? "oxigraph" : "oxigraph-worker";
+
+    public static string ResolvePowerShellExecutable(
+        string? pathVariable = null,
+        Func<string, bool>? fileExists = null,
+        string? programFiles = null)
+    {
+        var exists = fileExists ?? File.Exists;
+        var path = pathVariable ?? Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            var candidates = OperatingSystem.IsWindows()
+                ? new[] { "pwsh.exe", "pwsh.cmd" }
+                : new[] { "pwsh" };
+            foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var trimmed = directory.Trim().Trim('"');
+                if (string.IsNullOrWhiteSpace(trimmed))
+                {
+                    continue;
+                }
+
+                foreach (var name in candidates)
+                {
+                    try
+                    {
+                        var full = Path.Combine(trimmed, name);
+                        if (exists(full))
+                        {
+                            return full;
+                        }
+                    }
+                    catch (ArgumentException)
+                    {
+                    }
+                }
+            }
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            foreach (var root in new[]
+                     {
+                         programFiles,
+                         Environment.GetEnvironmentVariable("ProgramFiles"),
+                         Environment.GetEnvironmentVariable("ProgramW6432"),
+                     })
+            {
+                if (string.IsNullOrWhiteSpace(root))
+                {
+                    continue;
+                }
+
+                var standard = Path.Combine(root, "PowerShell", "7", "pwsh.exe");
+                if (exists(standard))
+                {
+                    return standard;
+                }
+            }
+
+            return "powershell.exe";
+        }
+
+        return "pwsh";
+    }
+
     private static bool IsUnsafeInstallRoot(params string[] paths) =>
         paths.Any(StorageSafety.IsReparsePointInPath);
 
@@ -514,7 +663,7 @@ public sealed class OptionalModuleInstaller
     {
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
-            "powershell.exe",
+            ResolvePowerShellExecutable(),
             $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}")
         {
             UseShellExecute = false,
@@ -573,7 +722,7 @@ public sealed class OptionalModuleInstaller
     {
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
-            "powershell.exe",
+            ResolvePowerShellExecutable(),
             $"-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand {encoded}")
         {
             UseShellExecute = true,

@@ -68,7 +68,12 @@ public static class HermesConfigLocation
 }
 
 /// <summary>One row of the post-install protection self-test.</summary>
-public sealed record ProtectionCheck(string Name, bool ExpectBlock, string Tool, string Path);
+public sealed record ProtectionCheck(
+    string Name,
+    bool ExpectBlock,
+    string Tool,
+    string Path,
+    string Content = "AXIOM-SELF-TEST");
 
 /// <summary>Result of one executed check.</summary>
 public sealed record ProtectionCheckResult(string Name, bool ExpectBlock, bool Blocked, string Identifier)
@@ -82,6 +87,11 @@ public sealed record ProtectionCheckResult(string Name, bool ExpectBlock, bool B
 /// </summary>
 public static class AgentProtectionSelfTest
 {
+    // Non-uniform synthetic 12-word BIP-39 test mnemonic derived from
+    // SHA-256("AXIOM-TRADER-SHIELD-SELF-TEST-NEVER-FUNDED")[:16]; zero real funds.
+    private const string SyntheticSeedPhrase =
+        "oyster empty absurd stable fish mansion moral sphere cable blade forward monitor";
+
     public static IReadOnlyList<ProtectionCheck> DefaultChecks() =>
     [
         new ProtectionCheck("allowed read", ExpectBlock: false, "read", @"C:\AxiomSelfTest\allowed.txt"),
@@ -101,6 +111,29 @@ public static class AgentProtectionSelfTest
         new ProtectionCheck("protected write", ExpectBlock: true, "write", @"C:\AxiomSelfTest\.env"),
     ];
 
+    /// <summary>
+    /// Checks proving Trader Shield blocks a labelled seed-phrase write and a wallet keystore read.
+    /// Uses only synthetic test data.
+    /// </summary>
+    public static IReadOnlyList<ProtectionCheck> TraderShieldChecks() =>
+    [
+        new ProtectionCheck(
+            "seed-phrase write",
+            ExpectBlock: true,
+            "write_file",
+            @"C:\AxiomSelfTest\notes.txt",
+            "wallet backup words: " + SyntheticSeedPhrase),
+        new ProtectionCheck(
+            "wallet keystore read",
+            ExpectBlock: true,
+            "read_file",
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Exodus",
+                "exodus.wallet",
+                "seed.seco")),
+    ];
+
     /// <summary>OpenCode-shaped bridge payload (the bridge translates filePath to path).</summary>
     public static string BuildPayload(ProtectionCheck check, string session) =>
         JsonSerializer.Serialize(new Dictionary<string, object?>
@@ -110,7 +143,7 @@ public static class AgentProtectionSelfTest
             ["args"] = new Dictionary<string, object?>
             {
                 ["filePath"] = check.Path,
-                ["content"] = "AXIOM-SELF-TEST",
+                ["content"] = check.Content,
             },
             ["session"] = session,
             ["call"] = Guid.NewGuid().ToString("N")[..8],
@@ -139,7 +172,7 @@ public static class AgentProtectionSelfTest
     /// <summary>Extracts the first graph identifier from the decision message, when present.</summary>
     public static string Identifier(string stdout)
     {
-        var match = Regex.Match(stdout ?? string.Empty, @"(fileaccess:[a-z]+:[a-z-]+)");
+        var match = Regex.Match(stdout ?? string.Empty, @"((?:fileaccess:[a-z_]+:[a-z-]+)|(?:secret:[a-z-]+))");
         return match.Success ? match.Groups[1].Value : string.Empty;
     }
 

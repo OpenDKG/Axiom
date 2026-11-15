@@ -25,6 +25,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly IUserInteraction _ui;
     private readonly IThemeService _theme;
     private readonly IVisualEffectsService _visualEffects;
+    private readonly UpdateCheckService _updateChecker;
+    private readonly bool _ownsUpdateChecker;
+    private readonly IUiTimer _updateTimer;
     private readonly CancellationTokenSource _cancellation = new();
     private DateTimeOffset _lastProbeUtc = DateTimeOffset.MinValue;
     private DateTimeOffset _lastProtectionProbeUtc = DateTimeOffset.MinValue;
@@ -51,7 +54,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         IAgentSessionSource? agentSessions = null,
         IVisualEffectsService? visualEffects = null,
         Func<CancellationToken, Task<NetworkRecoveryRestoreResult>>? restoreNetwork = null,
-        ILoopbackListenerInspector? listenerInspector = null)
+        ILoopbackListenerInspector? listenerInspector = null,
+        UpdateCheckService? updateChecker = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(timers);
@@ -64,6 +68,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _ui = interaction;
         _theme = themeService ?? new FixedThemeService();
         _visualEffects = visualEffects ?? new FixedVisualEffectsService();
+        _ownsUpdateChecker = updateChecker is null;
+        _updateChecker = updateChecker ?? new UpdateCheckService(
+            typeof(ShellViewModel).Assembly.GetName().Version ?? new Version(0, 0, 0));
+        _updateTimer = timers.Create(UpdateCheckService.MinimumCheckInterval);
         var processes = processActions ?? new UnsupportedProcessActions();
         Overview = new OverviewPageViewModel(
             _monitor,
@@ -122,7 +130,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             Firewall,
             interaction,
             _visualEffects,
-            restoreNetwork);
+            restoreNetwork,
+            _updateChecker);
         AgentStats = new AgentStatsPageViewModel(Agents);
         AgentDashboard = new AgentDashboardPageViewModel(Agents);
         AgentHealth = new AgentHealthPageViewModel(Agents, Security);
@@ -157,6 +166,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _theme.Changed += OnThemeChanged;
         _monitor.Updated += OnMonitorUpdated;
         AlertCenter.Changed += OnAlertCenterChanged;
+        _updateChecker.Changed += OnUpdateCheckerChanged;
+        _updateTimer.Tick += OnUpdateTimerTick;
     }
 
     public IReadOnlyList<string> Themes { get; } =
@@ -193,11 +204,41 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private async Task OpenGitHubAsync()
+    private Task OpenGitHubAsync() =>
+        OpenExternalUrlAsync("https://github.com/a-51-50/Axiom");
+
+    [RelayCommand]
+    private Task OpenContactAsync() =>
+        OpenExternalUrlAsync("https://github.com/a-51-50/Axiom/issues/new/choose");
+
+    [RelayCommand]
+    private void OpenSupport() => SelectedPage = Support;
+
+    public bool UpdateAvailable => _updateChecker.IsUpdateAvailable;
+
+    public string LatestVersion => _updateChecker.LatestVersion;
+
+    public string UpdateTooltip => UpdateAvailable
+        ? $"Axiom {LatestVersion} is available"
+        : string.Empty;
+
+    public string UpdateReleaseDateText => _updateChecker.ReleaseDateText;
+
+    public string UpdateSummaryText => _updateChecker.SummaryText;
+
+    public bool HasUpdateReleaseDate => !string.IsNullOrWhiteSpace(UpdateReleaseDateText);
+
+    public bool HasUpdateSummary => !string.IsNullOrWhiteSpace(UpdateSummaryText);
+
+    [RelayCommand]
+    private Task OpenUpdateAsync() =>
+        OpenExternalUrlAsync(_updateChecker.ReleaseUrl);
+
+    private async Task OpenExternalUrlAsync(string url)
     {
         try
         {
-            await _ui.OpenExternalAsync("https://github.com/a-51-50/Axiom", CancellationToken.None)
+            await _ui.OpenExternalAsync(url, CancellationToken.None)
                 .ConfigureAwait(true);
         }
         catch (Exception exception) when (exception is
@@ -208,7 +249,37 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void OpenSupport() => SelectedPage = Support;
+    private void DismissUpdate() => _updateChecker.Dismiss();
+
+    /// <summary>Runs a silent update check if opted in and the 6-hour cooldown has elapsed.</summary>
+    public Task<bool> CheckForUpdatesAsync() =>
+        _updateChecker.CheckIfDueAsync(_cancellation.Token);
+
+    private void OnUpdateTimerTick(object? sender, EventArgs e) =>
+        _ = CheckForUpdatesAsync();
+
+    private void OnUpdateCheckerChanged(object? sender, EventArgs e)
+    {
+        if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            RaiseUpdatePropertiesChanged();
+        }
+        else
+        {
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(RaiseUpdatePropertiesChanged);
+        }
+    }
+
+    private void RaiseUpdatePropertiesChanged()
+    {
+        OnPropertyChanged(nameof(UpdateAvailable));
+        OnPropertyChanged(nameof(LatestVersion));
+        OnPropertyChanged(nameof(UpdateTooltip));
+        OnPropertyChanged(nameof(UpdateReleaseDateText));
+        OnPropertyChanged(nameof(UpdateSummaryText));
+        OnPropertyChanged(nameof(HasUpdateReleaseDate));
+        OnPropertyChanged(nameof(HasUpdateSummary));
+    }
 
     private void OnThemeChanged(object? sender, EventArgs e)
     {
@@ -318,16 +389,25 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _activePage = SelectedPage;
         (SelectedPage as IActivatablePage)?.Activate();
         RefreshStatus();
+        _updateTimer.Start();
         _ = ProbeServiceAsync(force: true);
+        _ = CheckForUpdatesAsync();
     }
 
     public void Dispose()
     {
+        _updateTimer.StopTimer();
+        _updateTimer.Tick -= OnUpdateTimerTick;
+        _updateChecker.Changed -= OnUpdateCheckerChanged;
         _monitor.Updated -= OnMonitorUpdated;
         _theme.Changed -= OnThemeChanged;
         AlertCenter.Changed -= OnAlertCenterChanged;
         _cancellation.Cancel();
         _cancellation.Dispose();
+        if (_ownsUpdateChecker)
+        {
+            _updateChecker.Dispose();
+        }
         Overview.Dispose();
         Connections.Dispose();
         Apps.Dispose();

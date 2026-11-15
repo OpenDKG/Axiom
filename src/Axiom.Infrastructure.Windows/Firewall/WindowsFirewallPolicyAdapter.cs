@@ -612,8 +612,10 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
 
     /// <summary>
     /// Windows Firewall rewrites IPv4 CIDR to address/mask form ("1.0.0.0/8" reads back as
-    /// "1.0.0.0/255.0.0.0"). Both forms are reduced to one canonical network/prefix string so the
-    /// read-back comparison checks the scope, not the notation.
+    /// "1.0.0.0/255.0.0.0") and bare host addresses as "/255.255.255.255" ("10.5.4.3" reads back
+    /// as "10.5.4.3/255.255.255.255"). Host masks (/32 for IPv4, /128 for IPv6) reduce to the bare
+    /// address and all other masks reduce to canonical network/prefix notation so read-back
+    /// verification compares the effective scope rather than Windows COM formatting.
     /// </summary>
     internal static string? NormalizeAddress(string value)
     {
@@ -678,7 +680,10 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
             bytes[index] = 0;
         }
 
-        return $"{new IPAddress(bytes)}/{prefix}";
+        var network = new IPAddress(bytes);
+        return prefix == maxPrefix
+            ? network.ToString()
+            : $"{network}/{prefix}";
     }
 
     private static int CountBits(byte[] mask)

@@ -104,31 +104,31 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.24.0, )"
+          "Axiom.Contracts": "[0.50.0, )"
         }
       },
       "axiom.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.24.0, )",
-          "Axiom.Core": "[0.24.0, )",
-          "Axiom.Presentation": "[0.24.0, )",
-          "Axiom.Service.Hosting": "[0.24.0, )",
+          "Axiom.Contracts": "[0.50.0, )",
+          "Axiom.Core": "[0.50.0, )",
+          "Axiom.Presentation": "[0.50.0, )",
+          "Axiom.Service.Hosting": "[0.50.0, )",
           "System.Management": "[10.0.14, )"
         }
       },
       "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.24.0, )",
+          "Axiom.Contracts": "[0.50.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
       "axiom.service.hosting": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.24.0, )",
-          "Axiom.Core": "[0.24.0, )"
+          "Axiom.Contracts": "[0.50.0, )",
+          "Axiom.Core": "[0.50.0, )"
         }
       },
       "CommunityToolkit.Mvvm": {

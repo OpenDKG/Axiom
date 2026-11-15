@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.IO;
 using System.Text;
+using Axiom.Contracts.Blackbox;
 
 namespace Axiom.Presentation;
 
@@ -116,7 +117,7 @@ public sealed class ClineProtection
         text.Contains(Marker, StringComparison.Ordinal) ||
         LegacyHookIdentity.IsLegacyManagedText(text);
 
-    private string BuildHookScript() => $$"""
+    private string BuildHookScript() => ($$"""
         # Managed by Axiom. Calls the local Blackbox guard for Cline PreToolUse.
         import datetime
         import contextlib
@@ -129,6 +130,9 @@ public sealed class ClineProtection
         ROOT = Path(r"{{BlackboxAgentRoot}}")
         sys.path.insert(0, str(ROOT))
         EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "agent-evidence.jsonl"
+
+
+        # <<AXIOM_COMMAND_GUARD>>
 
 
         def record(event_type, tool, decision, guard_status, duration_ms, error_code=""):
@@ -160,12 +164,27 @@ public sealed class ClineProtection
                 payload = json.load(sys.stdin)
                 call = payload.get("tool_call") or {}
                 tool = str(call.get("name", ""))
+                parsed_args = call.get("input") or {}
+                safety = _check_command_safety(parsed_args, _load_protected_paths())
+                if safety is not None:
+                    record(
+                        "GUARD_BLOCKED",
+                        tool,
+                        "block",
+                        "blocked",
+                        int((time.monotonic() - started) * 1000),
+                        error_code=safety[0])
+                    print(json.dumps({
+                        "cancel": True,
+                        "errorMessage": safety[1],
+                    }))
+                    return
                 with contextlib.redirect_stdout(sys.stderr):
                     from plugins.blackbox.guard.hooks import on_pre_tool_call
 
                     decision = on_pre_tool_call(
                         tool_name=tool,
-                        args=call.get("input") or {},
+                        args=parsed_args,
                         session_id=str(payload.get("taskId", "")),
                         tool_call_id=str(call.get("id", "")),
                     )
@@ -192,5 +211,5 @@ public sealed class ClineProtection
 
         if __name__ == "__main__":
             main()
-        """;
+        """).Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal);
 }

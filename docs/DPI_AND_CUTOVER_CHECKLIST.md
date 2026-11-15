@@ -43,16 +43,14 @@ Use a fixed workload, resolution, mode and idle period:
 
 ## 3. Hosted portable CI
 
-`.github/workflows/portable.yml` runs locked restore/build/test for `Axiom.Portable.slnx` on Ubuntu
-and macOS. It must pass on the host before the next release.
-
-The workflow is not in the repository yet because the local GitHub token lacks the `workflow`
-scope. Add it with a scoped token or a maintainer-approved path.
+`.github/workflows/portable.yml` defines locked restore/build/test for `Axiom.Portable.slnx` on
+Ubuntu and macOS (`workflow_dispatch`-gated while hosted billing/public-repo visibility is pending).
+Trigger and confirm green runs on Ubuntu and macOS before a cross-platform release.
 
 ## 4. Installer and cutover gates
 
 - [x] Avalonia Release build: 0 warnings, 0 errors.
-- [x] `dotnet test Axiom.sln`: 375/375 passed.
+- [x] `dotnet test Axiom.sln`: 1,089/1,089 passed (`v0.50.0` / `9e070ed`; historical 0.6.0 cutover baseline was 375/375).
 - [ ] `Axiom.Portable.slnx` locked restore/build/test passes on hosted Ubuntu and macOS.
 - [x] Self-contained package starts on a Windows 10 19044 host without the SDK.
 - [x] Installer installs the Avalonia `Axiom.Desktop.exe` and starts the bundled service.

@@ -58,7 +58,7 @@
                          FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             </StackPanel>
             <Border Grid.Column="1" Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="5" Padding="8,3" VerticalAlignment="Center">
-              <controls:AxiomSelectableTextBlock Text="Local audit Â· secrets masked" FontSize="10.5"
+              <controls:AxiomSelectableTextBlock Text="Local audit · secrets masked" FontSize="10.5"
                          Foreground="{DynamicResource Axiom.TextSecondary}" />
             </Border>
           </Grid>
@@ -116,33 +116,38 @@
               <ListBox Classes="data-list" ItemsSource="{Binding AgentActivity.Activity}"
                        SelectedItem="{Binding AgentActivity.SelectedActivity, Mode=TwoWay}" Height="196"
                        Background="Transparent" BorderThickness="0"
+                       controls:DataListSelection.SelectOnPointerPress="True"
                        ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemTemplate>
                   <DataTemplate>
                     <Grid ColumnDefinitions="64,90,110,*,70,76" Margin="0,1"
+                          Background="Transparent"
                           Tag="{Binding $parent[ListBox].DataContext}">
                       <Grid.ContextMenu>
                         <ContextMenu>
                           <MenuItem Header="Copy event"
-                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityEventCommand}" />
+                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityEventCommand}"
+                                    CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                           <MenuItem Header="Copy details"
-                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityDetailsCommand}" />
+                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityDetailsCommand}"
+                                    CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                           <MenuItem Header="Copy raw event JSON"
-                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityJsonCommand}" />
+                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityJsonCommand}"
+                                    CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                         </ContextMenu>
                       </Grid.ContextMenu>
-                      <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
+                      <TextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
                                  Foreground="{DynamicResource Axiom.TextMuted}" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11"
+                      <TextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11"
                                  Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding EventLabel}" FontSize="11"
+                      <TextBlock Grid.Column="2" Text="{Binding EventLabel}" FontSize="11"
                                  Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding ActionSummary}" FontSize="11.5"
+                      <TextBlock Grid.Column="3" Text="{Binding ActionSummary}" FontSize="11.5"
                                  Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding SecurityOutcome}" FontSize="10.5"
+                      <TextBlock Grid.Column="4" Text="{Binding SecurityOutcome}" FontSize="10.5"
                                  FontWeight="SemiBold" ToolTip.Tip="{Binding SecurityOutcomeDetail}"
                                  Classes="security" Classes.threat="{Binding IsSecurityThreat}" />
-                      <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding Severity}" FontSize="10.5"
+                      <TextBlock Grid.Column="5" Text="{Binding Severity}" FontSize="10.5"
                                  Foreground="{DynamicResource Axiom.TextMuted}" />
                     </Grid>
                   </DataTemplate>
@@ -218,28 +223,31 @@
                   <ListBox Classes="data-list" ItemsSource="{Binding AgentActivity.Findings}"
                            SelectedItem="{Binding AgentActivity.SelectedFinding, Mode=TwoWay}" Height="134"
                            Background="Transparent" BorderThickness="0"
+                           controls:DataListSelection.SelectOnPointerPress="True"
                            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemTemplate>
                       <DataTemplate>
                         <Grid ColumnDefinitions="64,90,94,70,*,84" Margin="0,1"
+                              Background="Transparent"
                               Tag="{Binding $parent[ListBox].DataContext}">
                           <Grid.ContextMenu>
                             <ContextMenu>
                               <MenuItem Header="Copy finding"
-                                        Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyFindingCommand}" />
+                                        Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyFindingCommand}"
+                                        CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                             </ContextMenu>
                           </Grid.ContextMenu>
-                          <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
+                          <TextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11"
+                          <TextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                          <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding Category}" FontSize="11"
+                          <TextBlock Grid.Column="2" Text="{Binding Category}" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                          <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding Severity}" FontSize="11"
+                          <TextBlock Grid.Column="3" Text="{Binding Severity}" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding Identifier}" Classes="mono" FontSize="11"
+                          <TextBlock Grid.Column="4" Text="{Binding Identifier}" Classes="mono" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                          <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding SecurityOutcome}" FontSize="10.5"
+                          <TextBlock Grid.Column="5" Text="{Binding SecurityOutcome}" FontSize="10.5"
                                      FontWeight="SemiBold" Classes="security"
                                      Classes.threat="{Binding IsBlocked}" Classes.flagged="{Binding IsFlagged}" />
                         </Grid>

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Firewall;
 using Axiom.Core.Firewall;
+using System.IO;
 
 namespace Axiom.Core.Enforcement;
 
@@ -106,6 +107,86 @@ public static class AgentFirewallRulePlanner
             RemotePorts = string.IsNullOrWhiteSpace(intent.RemotePorts) ? null : intent.RemotePorts.Trim(),
             CreatedBy = intent.ActorSid.Trim(),
             Description = "Axiom E4 scoped agent outbound control",
+        };
+
+        var validation = RuleSpecValidator.Validate(spec);
+        if (!validation.IsValid)
+        {
+            return Rejected(
+                EnforcementReasonCodes.InvalidRequest,
+                string.Join("; ", validation.Errors.Select(error => $"{error.Code}: {error.Message}")));
+        }
+
+        return new AgentFirewallPlanResult
+        {
+            IsAllowedToWriteOsRule = true,
+            Spec = spec,
+        };
+    }
+
+    /// <summary>
+    /// Builds an Axiom-owned outbound block for every destination of one executable (F-19 part C,
+    /// per-process egress containment). Requires explicit user authorization and refuses Windows
+    /// system binaries, so the rule cannot cut off the OS itself.
+    /// </summary>
+    public static AgentFirewallPlanResult BuildProcessEgressBlockSpec(
+        string executablePath,
+        string actorSid,
+        AgentNetworkPolicyOrigin origin,
+        bool explicitlyAuthorizedByUser)
+    {
+        if (origin is AgentNetworkPolicyOrigin.CommunitySignal or AgentNetworkPolicyOrigin.PublicFeed &&
+            !explicitlyAuthorizedByUser)
+        {
+            return Rejected(
+                EnforcementReasonCodes.CommunityAdvisoryOnly,
+                "Community and public-feed indicators remain advisory and cannot automatically create Windows Firewall rules.");
+        }
+
+        if (!explicitlyAuthorizedByUser)
+        {
+            return Rejected(
+                EnforcementReasonCodes.Disabled,
+                "A per-process egress block requires explicit user authorization.");
+        }
+
+        if (string.IsNullOrWhiteSpace(executablePath) || string.IsNullOrWhiteSpace(actorSid))
+        {
+            return Rejected(
+                EnforcementReasonCodes.InvalidRequest,
+                "Executable path and caller SID are required.");
+        }
+
+        var path = executablePath.Trim();
+        if (!Path.IsPathFullyQualified(path))
+        {
+            return Rejected(
+                EnforcementReasonCodes.InvalidRequest,
+                "The executable path must be absolute.");
+        }
+
+        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        if (!string.IsNullOrWhiteSpace(windows) &&
+            path.StartsWith(windows.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
+        {
+            return Rejected(
+                EnforcementReasonCodes.InvalidRequest,
+                "Refusing to block egress for a Windows system binary.");
+        }
+
+        var ruleId = RuleIdentity.ForAgentEndpoint(path, FirewallDirection.Outbound, "any");
+        var spec = new RuleSpec
+        {
+            ManagedRuleId = ruleId,
+            AppPath = path,
+            Direction = FirewallDirection.Outbound,
+            Action = FirewallAction.Block,
+            Profiles = FirewallProfile.All,
+            Protocol = NetworkProtocol.Any,
+            RemoteAddresses = [],
+            RemotePorts = null,
+            CreatedBy = actorSid.Trim(),
+            Description = "Axiom E4 per-process agent egress block",
         };
 
         var validation = RuleSpecValidator.Validate(spec);

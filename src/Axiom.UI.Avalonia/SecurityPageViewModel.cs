@@ -61,6 +61,7 @@ public sealed partial class FileScanRow : ObservableObject
         SizeBytes = entry.SizeBytes;
         Sha256 = entry.Sha256;
         SkippedReason = entry.SkippedReason;
+        _verdictText = entry.Sha256 is null ? "Skipped" : "VT: Not checked";
     }
 
     public string Path { get; }
@@ -82,7 +83,7 @@ public sealed partial class FileScanRow : ObservableObject
     public string StatusText => Sha256 is null ? "SKIPPED" : "HASHED";
 
     [ObservableProperty]
-    private string _verdictText = "Not checked";
+    private string _verdictText;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanBlockFromCommunity))]
@@ -242,6 +243,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     private CommunityFeedSettings _communitySettings = new(false, string.Empty, string.Empty);
 
     private bool _communityConnected;
+    private Task? _communityLoadTask;
     private readonly HashSet<string> _notifiedCommunityHashes = new(StringComparer.OrdinalIgnoreCase);
     private bool _dkgAutoStartAttempted;
     private bool _blackboxAutoStartAttempted;
@@ -337,6 +339,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     public ObservableCollection<ProtectedAgent> ProtectedAgents { get; } = [];
 
+    public TraderShieldSectionViewModel TraderShield { get; } = new();
+
     public bool IsAgentProtectionAvailable => !DistributionContext.IsStorePackage;
 
     [ObservableProperty]
@@ -344,6 +348,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private bool _hasCommunityMatches;
+
+    [ObservableProperty]
+    private bool _hasScanCommunityNotice;
 
     [ObservableProperty]
     private string _communityMatchesText = "No community feed matches in the scanned files.";
@@ -1022,10 +1029,52 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
         _notifiedCommunityHashes.IntersectWith(matchedHashes);
 
-        HasCommunityMatches = matches > 0;
-        CommunityMatchesText = matches == 0
-            ? "No community feed matches in the scanned files."
-            : $"{matches} scanned file(s) match the community feed. Review before running; blocking is optional and never automatic.";
+        var hashedCount = FileScanResults.Count(row => row.HasHash);
+        if (FileScanResults.Count == 0)
+        {
+            HasCommunityMatches = false;
+            HasScanCommunityNotice = false;
+            CommunityMatchesText = "No community feed matches in the scanned files.";
+        }
+        else if (matches > 0)
+        {
+            HasCommunityMatches = true;
+            HasScanCommunityNotice = false;
+            CommunityMatchesText =
+                $"{matches} of {hashedCount} hashed file(s) match the community feed ({CommunityEntries.Count} hashes loaded). " +
+                "Review before running; blocking is optional and never automatic.";
+            FileScanStatus =
+                $"{FileScanResults.Count} file(s) scanned · {matches} match(es) in {CommunityEntries.Count} community hashes. Hashes are not uploaded.";
+        }
+        else if (CommunityEntries.Count > 0)
+        {
+            HasCommunityMatches = false;
+            HasScanCommunityNotice = true;
+            CommunityMatchesText =
+                $"Checked {hashedCount} hashed file(s) locally against {CommunityEntries.Count} community feed hashes: 0 matches. " +
+                "Use VT Check on a row only if you want an online VirusTotal lookup (API key required).";
+            FileScanStatus =
+                $"{FileScanResults.Count} file(s) scanned · 0 matches in {CommunityEntries.Count} community hashes. Hashes are not uploaded.";
+        }
+        else if (IsCommunityConfigured)
+        {
+            HasCommunityMatches = false;
+            HasScanCommunityNotice = true;
+            CommunityMatchesText =
+                "Community feed is enabled, but 0 hashes are loaded. Click Refresh feed below to download hashes and re-check these files.";
+            FileScanStatus =
+                $"{FileScanResults.Count} file(s) scanned locally · community feed not loaded. Hashes are not uploaded.";
+        }
+        else
+        {
+            HasCommunityMatches = false;
+            HasScanCommunityNotice = true;
+            CommunityMatchesText =
+                "Community feed is off, so files were only hashed locally (0 lookups). " +
+                "Enable Community feed (no API key needed) or click VT Check with a VirusTotal API key.";
+            FileScanStatus =
+                $"{FileScanResults.Count} file(s) scanned locally · community feed off. Hashes are not uploaded.";
+        }
 
         if (newlyMatched.Count > 0)
         {
@@ -1063,11 +1112,14 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         if (!_reputationSettings.Enabled || string.IsNullOrWhiteSpace(_reputationSettings.ApiKey))
         {
             await SetupReputationAsync().ConfigureAwait(true);
-            return;
+            if (!_reputationSettings.Enabled || string.IsNullOrWhiteSpace(_reputationSettings.ApiKey))
+            {
+                return;
+            }
         }
 
         IsCheckingHash = true;
-        row.VerdictText = "Checking…";
+        row.VerdictText = "VT: Checking…";
 
         try
         {
@@ -1137,7 +1189,11 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     }
 
     [RelayCommand]
-    private Task RefreshCommunityAsync() => LoadCommunityAsync(updateEntries: true);
+    private Task RefreshCommunityAsync()
+    {
+        _communityLoadTask = LoadCommunityAsync(updateEntries: true);
+        return _communityLoadTask;
+    }
 
     [RelayCommand]
     private Task TestCommunityAsync() => LoadCommunityAsync(updateEntries: false);
@@ -1215,6 +1271,18 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
         try
         {
+            if (IsCommunityConfigured && CommunityEntries.Count == 0)
+            {
+                if (_communityLoadTask is { IsCompleted: false } inFlight)
+                {
+                    await inFlight.ConfigureAwait(true);
+                }
+                else if (!IsFetchingCommunity)
+                {
+                    await RefreshCommunityAsync().ConfigureAwait(true);
+                }
+            }
+
             var entries = await FileScanner.ScanAsync(folder).ConfigureAwait(true);
             foreach (var entry in entries)
             {
@@ -1222,8 +1290,10 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             }
 
             ApplyCommunityMatches();
-
-            FileScanStatus = $"{entries.Count} file(s) scanned locally. Hashes are not uploaded.";
+            if (entries.Count == 0)
+            {
+                FileScanStatus = "0 file(s) scanned locally. Hashes are not uploaded.";
+            }
         }
 #pragma warning disable CA1031 // The UI must show a scan failure instead of crashing.
         catch (Exception exception)
@@ -1502,15 +1572,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     private void SeedCheckingState()
     {
-        Modules.Add(new SecurityModule(
-            "Reputation provider",
-            ReputationStatus,
-            ReputationDetail,
-            "\uE9D9",
-            false,
-            true,
-            "Setup",
-            _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)));
+        Modules.Add(CreateReputationModule());
         if (!DistributionContext.IsStorePackage)
         {
             Modules.Add(new SecurityModule(
@@ -1535,15 +1597,31 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         }
 
         Modules.Add(CreateCommunityModule());
-        Modules.Add(new SecurityModule(
-            "File scanning",
-            "NOT ENABLED",
-            "No file is scanned, uploaded, quarantined or deleted.",
-            "\uE8A5",
-            false,
-            true,
-            "Scan"));
+        Modules.Add(CreateFileScanningModule());
     }
+
+    private SecurityModule CreateReputationModule()
+    {
+        var configured = _reputationSettings.Enabled && !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey);
+        return new SecurityModule(
+            "Reputation provider",
+            ReputationStatus,
+            ReputationDetail,
+            "\uE9D9",
+            configured,
+            true,
+            "Setup",
+            _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey));
+    }
+
+    private SecurityModule CreateFileScanningModule() => new(
+        "File scanning",
+        "ON DEMAND",
+        "Hashes folders locally (SHA-256) and checks them against your Community feed; VirusTotal VT Check is optional.",
+        "\uE8A5",
+        false,
+        true,
+        "Scan");
 
     private SecurityModule CreateCommunityModule() => new(
         "Community feed",
@@ -2071,15 +2149,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     {
         ApplyBrandLabels(dkg.IsConnected, blackbox.IsConnected);
         Modules.Clear();
-        Modules.Add(new SecurityModule(
-            "Reputation provider",
-            ReputationStatus,
-            ReputationDetail,
-            "\uE9D9",
-            false,
-            true,
-            "Setup",
-            _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)));
+        Modules.Add(CreateReputationModule());
         if (!DistributionContext.IsStorePackage)
         {
             var blackboxInstalled = _uninstaller.IsBlackboxInstalled;
@@ -2106,13 +2176,6 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         }
 
         Modules.Add(CreateCommunityModule());
-        Modules.Add(new SecurityModule(
-            "File scanning",
-            "NOT ENABLED",
-            "No file is scanned, uploaded, quarantined or deleted.",
-            "\uE8A5",
-            false,
-            true,
-            "Scan"));
+        Modules.Add(CreateFileScanningModule());
     }
 }

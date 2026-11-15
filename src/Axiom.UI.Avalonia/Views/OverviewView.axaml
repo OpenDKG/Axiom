@@ -104,6 +104,7 @@
               <ListBox.ItemTemplate>
                 <DataTemplate>
                   <Grid ColumnDefinitions="72,*" Margin="0,2"
+                        Background="Transparent"
                         Tag="{Binding $parent[ListBox].DataContext}">
                     <Grid.ContextMenu>
                       <ContextMenu>
@@ -132,9 +133,9 @@
                                   CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                       </ContextMenu>
                     </Grid.ContextMenu>
-                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
+                    <TextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
                                Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Summary}" FontSize="11.5"
+                    <TextBlock Grid.Column="1" Text="{Binding Summary}" FontSize="11.5"
                                Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
                   </Grid>
                 </DataTemplate>
@@ -224,6 +225,7 @@
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid ColumnDefinitions="200,84,240,*" Margin="0,2"
+                      Background="Transparent"
                       ToolTip.Tip="{Binding RowTooltip}"
                       Tag="{Binding $parent[ListBox].DataContext}">
                   <Grid.ContextMenu>
@@ -250,10 +252,10 @@
                                 CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                     </ContextMenu>
                   </Grid.ContextMenu>
-                  <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding AppDisplayName}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                  <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding ProtocolText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                  <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding RemoteEndpoint}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                  <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding State}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                  <TextBlock Grid.Column="0" Text="{Binding AppDisplayName}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" Text="{Binding ProtocolText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                  <TextBlock Grid.Column="2" Text="{Binding RemoteEndpoint}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="3" Text="{Binding State}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
