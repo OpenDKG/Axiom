@@ -760,6 +760,11 @@ public sealed class OpenCodeProtection
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "credential-store", session, call)
                         print(json.dumps({"action": "block", "message": f"Blackbox blocked this call: it accesses a credential store ({store})."}), file=_out, flush=True)
                         return
+                    injection = _axiom_injection(raw_args)
+                    if injection:
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "injection-heuristic", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: prompt-injection phrasing in the tool arguments."}), file=_out, flush=True)
+                        return
                     if _exfiltrates_protected(command_text, protected):
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "exfiltration", session, call)
                         print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it uploads a file from a protected path."}), file=_out, flush=True)
