@@ -85,7 +85,6 @@ public sealed class BpfPinCleanupTests
         ["", 0],
         ["[]", 0],
         ["  \n", 0],
-        ["""[]""", 0],
         ["""[{"id":1,"name":"foreign_prog"}]""", 0],
         ["""[{"id":1,"name":"x","attach_type":"connect4","attach_flags":"multi"}]""", 0],
         ["""[{"id":1,"name":"x","meta":{"tags":[1,true,null]}}]""", 0],

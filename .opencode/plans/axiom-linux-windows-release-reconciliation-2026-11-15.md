@@ -11,6 +11,13 @@ Revision 2 (2026-11-15T22:2xZ, single builder): an independent review rejected H
 The eight bounded findings (§12) are fixed in `821237d`; the counts and provenance below are the
 post-fix measurements. Review status: **not approved — fresh independent review required**.
 
+Revision 3 (2026-11-15T~17:5xZ, single builder): a fresh review of `400d4a9` (packaged inputs
+`821237d`) rejected exactly two HIGH blockers: the pin script's fake JSON acceptance (§12.9) and
+`postrm` deleting the unit/image after an ignored stop failure (§12.10). Both are fixed in
+`dc2d9cd`; revision-3 artifact `35433682…` was rebuilt from that commit. The new maintainer-script
+behaviour is **unit/fake-runner tested only** — no guest E2E was run for revision 3. Review status:
+**ready for fresh independent review; not approved**.
+
 ---
 
 ## 1. Provenance (checked 2026-11-15T16:30Z)
@@ -139,10 +146,10 @@ pre-authorised.
 | T5 | Restore compilability of both TFMs; move shared DNS tests to `net10.0` | T3,T4 | `src/Axiom.Service/*.csproj`, `Platform/ServicePlatform.*.cs`, `tests/Axiom.Service.Hosting.Tests/*`, `Axiom.Portable.slnx`, `Axiom.sln` | **done** |
 | T6 | Build and test Linux + shared suites, record counts | T5 | – | **done** (§8) |
 | T7 | Unix process-start source for the F-19 audit | T5 | new `Axiom.Infrastructure.Linux/ProcessIdentity` | **todo** (unassigned; not needed for the shippable surface) |
-| T8 | Build the `.deb` 0.53.0 (BPF objects included); fix unit paths found by E2E; rebuild after review fixes | T5 | `packaging/linux/*`, `scripts/linux/package.sh`, `src/Axiom.Infrastructure.Linux/Systemd/SystemdUnit.cs` | **done** — artifact `ce966fa9…` from `821237d`; verified pins script |
+| T8 | Build the `.deb` 0.53.0 (BPF objects included); fix unit paths found by E2E; rebuild after review fixes | T5 | `packaging/linux/*`, `scripts/linux/package.sh`, `src/Axiom.Infrastructure.Linux/Systemd/SystemdUnit.cs` | **done** — revision-3 artifact `35433682…` from `dc2d9cd`; pins/stop scripts unit-tested |
 | T9 | Linux package workflow (artifact only, provenance handoff) | T8 | `.github/workflows/linux-release.yml` | **done** — downloadable artifact + `PROVENANCE.txt`; no release attachment |
-| T10 | Guest E2E: install, service, doctor, IPC, canary, restart, remove, purge | T8 | – | **done** (second run, §7.1; GUI and live DNS redirect out of scope) |
-| T11 | Independent final review of the integrated diff against this plan | T6,T8 | – | **todo / rejected at `7fad752`** — fixes applied in `821237d`; a fresh review is required and this plan does not approve the result |
+| T10 | Guest E2E: install, service, doctor, IPC, canary, restart, remove, purge | T8 | – | **partial** — passed on the revision-2 artifact (§7.1); **not re-run for revision 3** (new postrm/pin paths are unit/fake-runner tested only) |
+| T11 | Independent final review of the integrated diff against this plan | T6,T8 | – | **todo / rejected twice** — fixes applied in `821237d` and `dc2d9cd`; a fresh review is required and this plan does not approve the result |
 | T12 | Linux release automation: local build + handoff to the approved release pipeline | T8 | `.github/workflows/linux-release.yml`, `scripts/linux/package.sh` | **partial** — the local `.deb` and a workflow artifact (with checksums/provenance) are ready for an approved release workflow. Attaching the asset to a public GitHub release is **not implemented** and needs a separate gated task with release-write permission. |
 
 ### Worker-ready prompts
@@ -164,7 +171,7 @@ Each task is bounded to its `Owned files`; nobody edits outside them without upd
 - **T11 (final review).** "Read this plan and review `git diff 5de2d636..<final commit>` plus the
   package manifest. Confirm each task's acceptance evidence exists, flag any Windows semantic
   change not listed in §4, and do not approve the release-upload gate." A fresh reviewer must also
-  re-check §12 findings 1–8 against `821237d`.
+  re-check §12 findings 1–10 against the final commit (`821237d` plus `dc2d9cd`).
 - **T12 (release automation, not publication).** "Build `build/linux/axiom_0.53.0_amd64.deb` with
   `scripts/linux/package.sh deb --arch x64` or run the `workflow_dispatch`-only `linux-release.yml`
   job, record the SHA-256, `PROVENANCE.txt` and `SHA256SUMS.txt`, and hand them to the approved
@@ -180,31 +187,41 @@ Each task is bounded to its `Owned files`; nobody edits outside them without upd
   `/usr/share/polkit-1/actions/com.axiom.firewall.policy`, hicolor icons, DEP-5 copyright.
 - Maintainer scripts: `postinst` → `axiomd --install-service` (stages `/usr/libexec/axiom`, writes
   the unit; an unconfirmed stop refuses the replacement); `prerm` → `--uninstall-service`,
-  detaches its own BPF pins only after `bpftool` proves no attachment, keeps `/var/lib/axiom` on
-  an unknown/failed state; `postrm purge` → deletes state.
+  detaches its own BPF pins only after `bpftool` proves no attachment (strict JSON: blank/`[]` means
+  none, otherwise a complete array of objects with a non-zero uint32 `id` and decoded string `name`
+  is required), keeps `/var/lib/axiom` on an unknown/failed state; `postrm remove|purge` → deletes
+  the unit/image/run dir only after a readable `inactive`/`failed` stop state, otherwise keeps them
+  (and on purge the data/logs) and fails; `purge` deletes state after that confirmation. The same
+  stop rule is in RPM `%postun`.
 - Hard dependencies include `nftables`, `polkitd | policykit-1`, `pkexec | policykit-1`, `systemd`,
-  `libbpf1`, `libssl3t64 | libssl3`, ICU and the X11/font stack from `dpkg-shlibdeps`.
-- **Current artifact (revision 2):** `axiom_0.53.0_amd64.deb`, 63,040,292 bytes,
-  `sha256 ce966fa9de012e31730994e2aebb6a2f140632b1311f920398d26b5ec009f356`, built from `821237d`
-  (`.deb` at `/tmp/opencode/axiom-recon/build/linux/`; copy in
-  `/tmp/opencode/axiom-recon-review-fixes/`). The final commit `aa244ee` changes only this plan and
-  `.github/workflows/linux-release.yml`, so the packaged inputs are identical to `821237d`. It
-  contains 506 entries (the 505 of the previous build plus `/opt/axiom/bpf-pins.sh`).
-- **Superseded, not deliverable:** `919682798343def69ffcc07661700c12992ab77b2ba2927b035e26f8b8170d63`
+  `libbpf1`, `libssl3t64 | libssl3`, ICU and the X11/font stack from `dpkg-shlibdeps`. The pin
+  parser uses POSIX awk from the base system (`mawk` Priority: required on Debian/Ubuntu, `gawk` in
+  Fedora's core group); python/jq are not used, and a missing awk keeps the pins and fails removal.
+- **Current artifact (revision 3):** `axiom_0.53.0_amd64.deb`, 63,039,852 bytes,
+  `sha256 3543368250a5e1c238ef18364e33acf0a2834f39d428ee62ecd530edece43c5c`, built from `dc2d9cd`
+  (`.deb` at `/tmp/opencode/axiom-recon/build/linux/`; copy, `SHA256SUMS.txt`, `PROVENANCE.txt` and
+  test logs in `/tmp/opencode/axiom-recon-packagefix-20261115/`). It contains 506 entries; the four
+  packaged shell scripts hash-match the repository files (see `package-verify.log`).
+- **Superseded, not deliverable:** `ce966fa9…` (revision 2, 63,040,292 bytes, 506 entries, build
+  `821237d`; `/tmp/opencode/axiom-recon-review-fixes/`) is the artifact rejected for the two HIGH
+  blockers (fake JSON acceptance, postrm ignoring an unconfirmed stop). Keep it as evidence; do not
+  ship or install it. `919682798343def69ffcc07661700c12992ab77b2ba2927b035e26f8b8170d63`
   (`/tmp/opencode/axiom-linux-release-20261115/`, 63,032,704 bytes, 505 entries, build `4e77777`)
-  is the artifact the review rejected (missing reviewed BPF fixes, unsafe prerm/stop handling,
-  `-/etc/resolv.conf` regression). Keep it only as evidence; do not ship or install it. The
-  earlier `ac9e42d7…` build (merge `3252623`) is also superseded (226/NAMESPACE unit abort).
+  is the earlier rejected artifact. The `ac9e42d7…` build (merge `3252623`) is also superseded
+  (226/NAMESPACE unit abort).
 - Integrity checklist: `dpkg-deb -I` shows Version 0.53.0/amd64; 506 entries; `sha256sum` matches
-  `SHA256SUMS.txt`; the same hash was observed inside the guest after `scp`; polkit XML parsed by
-  `package.sh`; desktop entry validated; no `.pdb`, no `libcoreclrtraceptprovider.so`.
+  `SHA256SUMS.txt`; every entry is root/root; packaged script hashes match the repo; polkit XML
+  parsed by `package.sh`; desktop entry validated; no `.pdb`, no `libcoreclrtraceptprovider.so`.
 - Not done: signing (no key authorised), `lintian` (not installed), RPM (no runtime test), x86-64
   baseline other than Ubuntu 24.04, arm64.
 
 ### 7.1 Guest E2E (second run, 2026-11-15T22:21Z, Ubuntu 24.04.5, kernel 6.8.0-147, existing disposable overlay)
 
-The overlay was booted **restricted** (`no default route`, loopback SSH only). No provisioning,
-dependency install, DNS/firewall change or egress was performed; `pkexec` was already present.
+This run exercised **revision 2 (`ce966fa9…`)**, not the revision-3 artifact. It is kept because the
+service/doctor/canary/restart/remove/purge contract did not change, but revision 3's new postrm stop
+confirmation and strict BPF JSON parser are **not guest-tested**; see §10. The overlay was booted
+**restricted** (`no default route`, loopback SSH only). No provisioning, dependency install,
+DNS/firewall change or egress was performed; `pkexec` was already present.
 
 | Step | Result |
 |---|---|
@@ -222,9 +239,10 @@ dependency install, DNS/firewall change or egress was performed; `pkexec` was al
 | Not run | Privacy Shield enable (would redirect the guest resolver — out of scope); GUI walkthrough (no display); upgrade over the rejected old artifact (unsafe; not installed). Installer stop-failure/timeout paths are covered by injected-runner unit tests, not by breaking systemd in the guest |
 
 
-## 8. Test evidence (host, revision 2, 2026-11-15T17:1xZ)
+## 8. Test evidence (host, revision 3, 2026-11-15T~17:5xZ)
 
-`dotnet test` per project in Release. This run was as **root** on Linux (host kernel 7.0.0-38).
+`dotnet test` per project in Release on the final commit `dc2d9cd`. This run was as **root** on
+Linux (host kernel 7.0.0-38). Logs: `/tmp/opencode/axiom-recon-packagefix-20261115/`.
 
 | Suite | Result |
 |---|---|
@@ -232,7 +250,7 @@ dependency install, DNS/firewall change or egress was performed; `pkexec` was al
 | Core | **184/184** — the Windows-path fixtures now run on Linux (`RuleSpecValidator`, agent path rules, normalisation) |
 | Persistence | 21/21 |
 | Unix | 47/47 |
-| Linux | **52/52** — 37 previous + 7 installer stop/unknown/absent/idempotence + 8 shell pin-cleanup cases |
+| Linux | **102/102** — 52 revision-2 + 35 strict BPF-list payloads + missing-awk + 14 Debian/RPM postrm stop cases |
 | MacOS | **249/249** — the root-run socket pair now injects peer uid 501, so the non-root cap and read-only policy are exercised |
 | McpServer | 34/34 |
 | Presentation | **294/294** — config paths built with `Path.Combine`, separator-agnostic wordlist assertions |
@@ -276,27 +294,34 @@ lock changes were discarded (`git checkout -- '*.lock.json'`); no unrelated lock
 ## 10. Gates and what is still not claimed
 
 - **Integration gate:** merge commit exists, both TFMs compile, all portable/Linux suites green
-  (revision 2 counts in §8).
-- **Review gate (open, rejected once):** the review of `5de2d636..7fad752` rejected eight findings;
-  they are fixed in `821237d` and need a **fresh independent review** of `5de2d636..<final commit>`.
-  This plan does not approve itself, and no GitHub/wiki readiness is claimed.
-- **Install gate (passed twice):** clean install, service start, doctor, IPC, enforcement canary,
-  restart, remove and purge on the disposable Ubuntu 24.04.5 guest, BPF attached and CO-RE verified
-  on guest kernel 6.8 (object built on host 7.0). Still unproven: Privacy Shield live
-  redirect/restore (deliberately not exercised), GUI, cross-version upgrade, guest failure injection
-  for the installer stop path (covered by injected-runner unit tests only).
+  (revision 3 counts in §8).
+- **Review gate (open, rejected twice):** the review of `5de2d636..7fad752` rejected eight findings
+  (fixed in `821237d`); the review of `400d4a9` rejected two more HIGH blockers (fixed in
+  `dc2d9cd`). A **fresh independent review** of `5de2d636..<final commit>` is required. This plan
+  does not approve itself, and no GitHub/wiki readiness is claimed.
+- **Install gate (passed on revision 2 only):** clean install, service start, doctor, IPC,
+  enforcement canary, restart, remove and purge on the disposable Ubuntu 24.04.5 guest, BPF
+  attached and CO-RE verified on guest kernel 6.8 (object built on host 7.0). **Revision 3 was not
+  re-installed on the guest**; its new postrm stop confirmation and strict BPF JSON parser are
+  covered by fake-runner shell tests against the exact packaged scripts, not live. Still unproven:
+  Privacy Shield live redirect/restore (deliberately not exercised), GUI, cross-version upgrade,
+  guest failure injection for the installer stop path or a live malformed/bpftool output.
 - **Release gate (not authorised):** no upload, tag, release notes, signing, push or deployment.
   T12 only prepares local/workflow artifacts for an approved release workflow.
 - Known limits to publish with any artifact: Ubuntu 24.04 x64 only; WMI/process-start audit absent
   on Linux; `.rpm` unbuilt/untested; GUI walkthrough not performed; Privacy Shield redirect not
-  exercised on the guest (unit-tested only); no signing; Windows runtime not executed on this host.
+  exercised on the guest (unit-tested only); no signing; Windows runtime not executed on this host;
+  the pin parser depends on base-system POSIX awk and fails safe (keeps pins) without it.
 - DoH status is not proof of an encrypted query: the unit tests use fake handlers and a local TLS
   mock can prove the protocol only; no live public DNS query is claimed.
 
 ## 11. Where the evidence lives
 
-- Worktree: `/tmp/opencode/axiom-recon` (branch `recon/linux-main-0.53.0`, fixes `821237d`).
-- Revision-2 artifact + `SHA256SUMS.txt` + guest logs:
+- Worktree: `/tmp/opencode/axiom-recon` (branch `recon/linux-main-0.53.0`, packaging fixes
+  `dc2d9cd`).
+- Revision-3 artifact + `SHA256SUMS.txt` + `PROVENANCE.txt` + build/test logs:
+  `/tmp/opencode/axiom-recon-packagefix-20261115/` (`.deb` `35433682…`, 63,039,852 bytes).
+- Revision-2 artifact + guest logs (superseded, evidence only):
   `/tmp/opencode/axiom-recon-review-fixes/` (`.deb` `ce966fa9…`, 63,040,292 bytes).
 - Rejected revision-1 artifact (evidence only, do not ship):
   `/tmp/opencode/axiom-linux-release-20261115/`.
@@ -307,7 +332,7 @@ lock changes were discarded (`git checkout -- '*.lock.json'`); no unrelated lock
 - Published (pre-existing): PR #276 comment `#issuecomment-6883150435`; wiki
   `projects/axiom/linux-e2e-validation-2026-11-12#review-follow-up-2026-11-14`.
 
-## 12. Review findings fixed in `821237d`
+## 12. Review findings fixed in `821237d`, plus revision-3 blockers in `dc2d9cd`
 
 | # | Finding | Fix (files) | Evidence |
 |---|---|---|---|
@@ -319,3 +344,5 @@ lock changes were discarded (`git checkout -- '*.lock.json'`); no unrelated lock
 | 6 | Installer replaced the image after an unconfirmed stop; uninstall removed unit/image and claimed "not running" | `WaitForStop` accepts only `inactive`/`failed`; install/uninstall return 8 and keep image/unit/recovery state on unknown or still-active; absent service still installs/uninstalls (idempotent) | 7 injected-runner tests (failure, timeout, absent, normal, uninstall failure/unreadable/idempotent) |
 | 7 | Portable suites not green | Product: Windows-absolute paths accepted on Linux in `RuleSpecValidator`/`AgentNetworkControl`; separator-aware `AgentExecutables`; UNC checked before absolute. Fixtures: config paths via `Path.Combine`, separator-agnostic assertions, root-run IPC peer uid seam | §8: Core 184, Presentation 294, MacOS 249, Linux 52, Nft 160, Hosting 31 |
 | 8 | Plan claimed guest egress/pkexec permission and an older artifact as deliverable | §5 now records actions without invented approval ("authorisation not established"); §7 marks the old `.deb` superseded/non-deliverable and records the new SHA; T12 clarified as local/workflow handoff only | this plan; workflow provenance step |
+| 9 | `packaging/linux/bpf-pins.sh` accepted any bracketed text as JSON: `[{}]`, `[broken]`, invalid id 0 removed pins, and an escaped `axiom_connect\u0034` was not detected while still attached | Replaced the substring check with a strict JSON parser (base-system POSIX awk, no python/jq): blank stdout or `[]` is bpftool's real empty answer; otherwise the document must be an array of objects with a non-zero uint32 `id` and a decoded string `name`; malformed/non-array/non-object/missing/duplicate/wrong-typed/unknown, bad escapes, trailing data and invalid ids fail and keep the pins. Missing awk also fails safe. RPM `%preun` inherits it | 35 payload cases (all listed counterexamples incl. escaped names, id 0/negative/string/overflow/leading zero, valid foreign, blank/`[]`) + missing-awk test; revision-2 guest smoke did not cover these counterexamples and is not counted |
+| 10 | `debian/postrm` and `rpm/postremove` ignored `systemctl disable --now` failure and deleted the unit and `/usr/libexec/axiom`, even if the daemon was still active/unknown | Delete only after a confirmed stop: `disable --now` plus a readable `is-active` of `inactive`/`failed`; still-active, timeout/unknown, missing systemctl or missing state keep the unit, image, run dir and (on purge) data/logs, and fail the removal. Upgrades still do nothing; RPM mirrored; test-only `AXIOM_MAINTAINER_TEST_ROOT` relocates paths | 14 fake-systemctl cases (Debian remove/purge success, active, timeout/unknown, missing systemctl, failed-disable-but-inactive, absent unit, no systemd, upgrade; RPM erase success/active/upgrade) against the exact packaged scripts; no guest E2E for revision 3 |
