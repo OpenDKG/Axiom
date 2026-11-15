@@ -21,6 +21,7 @@
           <ListBox.ItemTemplate>
             <DataTemplate>
               <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3"
+                    Background="Transparent"
                     Tag="{Binding $parent[ListBox].DataContext}">
                 <Grid.ContextMenu>
                   <ContextMenu>
@@ -31,11 +32,14 @@
                               Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockInboundAppCommand}"
                               CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                     <Separator />
-                    <MenuItem Header="End task"
+                    <MenuItem Header="End application"
                               Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndTaskAppCommand}"
                               CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                     <MenuItem Header="Copy executable path"
                               Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyPathAppCommand}"
+                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
+                    <MenuItem Header="Copy application details"
+                              Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyDetailsAppCommand}"
                               CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                   </ContextMenu>
                 </Grid.ContextMenu>
@@ -80,17 +84,19 @@
           <controls:AxiomSelectableTextBlock Text="{Binding SelectedApp.PathText}" Classes="mono" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <Border Height="1" Background="{DynamicResource Axiom.Border}" Margin="0,4" />
 
-          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
-            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="Sockets" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
-            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedApp.SocketsText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Protocols" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
-            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedApp.ProtocolText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="States" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
-            <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedApp.StatesText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="First seen" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
-            <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedApp.FirstSeenText}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="Rule" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
-            <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedApp.RuleText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="PIDs" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedApp.PidText}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Sockets" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedApp.SocketsText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="Protocols" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedApp.ProtocolText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="States" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedApp.StatesText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="First seen" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedApp.FirstSeenText}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="0" Text="Rule" FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedApp.RuleText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextPrimary}" />
           </Grid>
 
           <Expander Header="Advanced scope (protocol, ports, addresses, profiles)" IsExpanded="False"
@@ -117,10 +123,15 @@
                     IsEnabled="{Binding CanWrite}" Margin="0,0,8,8" Padding="12,6" />
             <Button Content="Block inbound" Command="{Binding BlockInboundCommand}"
                     IsEnabled="{Binding CanWrite}" Margin="0,0,8,8" Padding="12,6" />
-            <Button Content="End task" Classes="danger" Command="{Binding EndTaskAppCommand}"
-                    CommandParameter="{Binding SelectedApp}" Margin="0,0,8,8" Padding="12,6" />
+            <Button Content="End application" Classes="danger" Command="{Binding EndTaskAppCommand}"
+                    CommandParameter="{Binding SelectedApp}" Margin="0,0,8,8" Padding="12,6"
+                    ToolTip.Tip="End all running processes belonging to this application." />
             <Button Content="Copy path" Command="{Binding CopyPathAppCommand}"
                     CommandParameter="{Binding SelectedApp}" Margin="0,0,8,8" Padding="12,6" />
+            <Button Content="Copy details" Command="{Binding CopyDetailsAppCommand}"
+                    CommandParameter="{Binding SelectedApp}" Margin="0,0,8,8" Padding="12,6" />
+            <Button Content="Copy status" Command="{Binding CopyStatusCommand}"
+                    Margin="0,0,8,8" Padding="12,6" />
           </WrapPanel>
 
           <controls:AxiomSelectableTextBlock Text="{Binding WriteStatusText}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />

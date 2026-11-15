@@ -11,10 +11,10 @@
       "axiom.contracts": {
         "type": "Project"
       },
-      "axiom.ui": {
+      "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.6.1, )",
+          "Axiom.Contracts": "[0.34.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },

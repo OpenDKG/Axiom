@@ -90,6 +90,7 @@
               <ListBox.ItemTemplate>
                 <DataTemplate>
                   <StackPanel Spacing="2" Margin="0,3"
+                              Background="Transparent"
                               Tag="{Binding $parent[ListBox].DataContext}">
                     <StackPanel.ContextMenu>
                       <ContextMenu>
@@ -99,9 +100,9 @@
                                   Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyAllResultsCommand}" />
                       </ContextMenu>
                     </StackPanel.ContextMenu>
-                    <controls:AxiomSelectableTextBlock Text="{Binding Summary}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}"
+                    <TextBlock Text="{Binding Summary}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}"
                                TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" />
-                    <controls:AxiomSelectableTextBlock Text="{Binding AnalysisTimestampUtc, StringFormat={}{0:HH:mm:ss}}" Classes="mono" FontSize="10.5"
+                    <TextBlock Text="{Binding AnalysisTimestampUtc, StringFormat={}{0:HH:mm:ss}}" Classes="mono" FontSize="10.5"
                                Foreground="{DynamicResource Axiom.TextMuted}" />
                   </StackPanel>
                 </DataTemplate>

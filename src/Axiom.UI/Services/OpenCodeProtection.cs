@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.IO;
 using System.Text;
+using Axiom.Contracts.Blackbox;
 
 namespace Axiom.UI.Services;
 
@@ -459,10 +460,26 @@ public sealed class OpenCodeProtection
             }
 
             if (type === "session.step.started") {
+              // Forward the user text so the guard can scan it for injection. Event shapes vary
+              // by harness version; anything missing simply yields an empty string.
+              let promptText = ""
+              try {
+                const parts = data.message?.parts || data.info?.parts || data.parts || []
+                if (Array.isArray(parts)) {
+                  promptText = parts
+                    .filter((part) => part && part.type === "text" && typeof part.text === "string")
+                    .map((part) => part.text)
+                    .join("\n")
+                }
+                if (!promptText && typeof data.message?.text === "string") promptText = data.message.text
+              } catch {
+                promptText = ""
+              }
               runLifecycleBridge({
                 framework: "opencode",
                 event: "pre_api_request",
                 session,
+                user_message: promptText,
                 model: data.model,
                 workspace: data.info?.directory || "",
               })
@@ -534,6 +551,50 @@ public sealed class OpenCodeProtection
         EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "agent-evidence.jsonl"
 
 
+        # <<AXIOM_COMMAND_GUARD>>
+
+
+        def _reexec_committed_interpreter() -> None:
+            # The plugin starts this bridge with the vendor venv python. Hermes' package manager
+            # commits a different dependency environment and activate_dependencies swaps sys.path
+            # to it, so a venv built for another Python minor imports compiled packages for the
+            # wrong ABI (pydantic_core, _cffi_backend). Re-exec the committed interpreter once so
+            # the guard imports cleanly and no detector is skipped.
+            if os.environ.get("AXIOM_BRIDGE_REEXEC") == "1":
+                return
+            local = os.environ.get("LOCALAPPDATA") or str(Path.home())
+            candidates = []
+            try:
+                for install in (Path(local) / "hermes" / "installs").glob("*"):
+                    facts = install / "facts.json"
+                    if facts.is_file():
+                        try:
+                            data = json.loads(facts.read_text(encoding="utf-8"))
+                            env = (data.get("packages") or {}).get("venv", {}).get("environment")
+                            if env:
+                                candidates.append(Path(env) / "Scripts" / "python.exe")
+                        except Exception:
+                            pass
+                    envs = install / "environments"
+                    if envs.is_dir():
+                        for env in sorted(envs.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True):
+                            candidates.append(env / "venv" / "Scripts" / "python.exe")
+            except Exception:
+                return
+            current = os.path.normcase(os.path.abspath(sys.executable))
+            for candidate in candidates:
+                try:
+                    if not candidate.is_file():
+                        continue
+                    target = os.path.normcase(os.path.abspath(str(candidate)))
+                    if target == current:
+                        continue
+                    os.environ["AXIOM_BRIDGE_REEXEC"] = "1"
+                    os.execv(str(candidate), [str(candidate), os.path.abspath(__file__), *sys.argv[1:]])
+                except Exception:
+                    continue
+
+
         def record(framework, event_type, tool, decision, guard_status, duration_ms,
                    error_code="", session="", call=""):
             try:
@@ -559,7 +620,30 @@ public sealed class OpenCodeProtection
                 pass
 
 
+        def _quarantine_session(session: str, identifiers) -> None:
+            # A high/critical prompt-injection finding blocks the session's tools until the window
+            # expires; the vendor prompt hook is observer-only.
+            try:
+                marker = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "injection-quarantine.json"
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                marker.write_text(json.dumps({"session": session, "at": time.time(), "ids": list(identifiers)}))
+            except Exception:
+                pass
+
+
+        def _is_quarantined(session: str) -> bool:
+            try:
+                marker = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "injection-quarantine.json"
+                data = json.loads(marker.read_text())
+                if str(data.get("session") or "") != session:
+                    return False
+                return (time.time() - float(data.get("at") or 0)) < 900
+            except Exception:
+                return False
+
+
         def main() -> None:
+            _reexec_committed_interpreter()
             payload = {}
             started = time.monotonic()
             framework = "opencode"
@@ -574,6 +658,7 @@ public sealed class OpenCodeProtection
                 call = str(payload.get("call", ""))
                 event = str(payload.get("event", ""))
                 workspace = str(payload.get("workspace", ""))
+                _out = sys.stdout
                 with contextlib.redirect_stdout(sys.stderr):
                     from plugins.blackbox.guard import hooks as guard
 
@@ -581,22 +666,45 @@ public sealed class OpenCodeProtection
                         if hasattr(guard, "on_session_start"):
                             guard.on_session_start(session_id=session, framework=framework, workspace=workspace)
                         record(framework, "SESSION_STARTED", "", "ok", "ok", 0, session=session)
-                        print("{}")
+                        print("{}", file=_out, flush=True)
                         return
 
                     if event == "pre_api_request":
+                        user_text = str(payload.get("user_message") or "")
+                        request_messages = payload.get("request_messages") or []
                         if hasattr(guard, "on_pre_api_request"):
                             guard.on_pre_api_request(
-                                user_message="",
-                                request_messages=[],
+                                user_message=user_text,
+                                request_messages=request_messages,
                                 session_id=session,
                                 model=payload.get("model"),
                                 provider=framework,
                                 framework=framework,
                                 workspace=workspace,
                             )
+                        if user_text:
+                            try:
+                                from plugins.blackbox.guard import api_request as _api_request
+                                from plugins.blackbox.guard import graph_rules as _graph_rules
+                                from plugins.blackbox.kernel.config import load_blackbox_config
+                                cfg = load_blackbox_config()
+                                rs, _ = _graph_rules.detection_rules(cfg, "", {})
+                                sources = _api_request._untrusted_request_sources(user_text, request_messages)
+                                findings = _api_request._injection_by_source(sources, rs, cfg.discover)
+                                blocking = [
+                                    f for f in findings
+                                    if str(getattr(f, "category", "")) == "injection"
+                                    and str(getattr(f, "severity", "")).lower() in ("high", "critical")
+                                ]
+                                if blocking:
+                                    _quarantine_session(session, [getattr(f, "identifier", "") for f in blocking])
+                                    record(framework, "GUARD_BLOCKED", "", "block", "blocked", 0, "injection", session)
+                                    print(json.dumps({"action": "block", "message": "Prompt injection detected; the session is quarantined."}), file=_out, flush=True)
+                                    return
+                            except Exception:
+                                pass
                         record(framework, "PROMPT_SCANNED", "", "ok", "ok", 0, session=session)
-                        print("{}")
+                        print("{}", file=_out, flush=True)
                         return
 
                     if event == "session_end":
@@ -609,12 +717,67 @@ public sealed class OpenCodeProtection
                                 workspace=workspace,
                             )
                         record(framework, "SESSION_ENDED", "", "ok", "ok", 0, session=session)
-                        print("{}")
+                        print("{}", file=_out, flush=True)
                         return
 
+                    raw_args = payload.get("args") or {}
+                    if isinstance(raw_args, dict) and "filePath" in raw_args and "path" not in raw_args:
+                        # OpenCode names the file argument filePath; Blackbox's detectors read
+                        # "path" (action_parsing._PATH_KEYS is case-sensitive), so a raw
+                        # pass-through misses every file-access rule.
+                        raw_args = {**raw_args, "path": raw_args["filePath"]}
+                    try:
+                        from plugins.blackbox.kernel.config import load_blackbox_config
+                        protected = load_blackbox_config().protected_paths
+                    except Exception:
+                        protected = ()
+                    command_text = _command_text(raw_args)
+                    if _is_quarantined(session):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "quarantine", session, call)
+                        print(json.dumps({"action": "block", "message": "Session quarantined after a prompt-injection finding."}), file=_out, flush=True)
+                        return
+                    if _tampers_with_guard(command_text):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "tamper", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it modifies the local guard."}), file=_out, flush=True)
+                        return
+                    if _deletes_protected(command_text, protected):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "delete", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it deletes a protected path."}), file=_out, flush=True)
+                        return
+                    if _hidden_path_read(command_text, protected):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "read", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it reads a protected path through a hidden path form."}), file=_out, flush=True)
+                        return
+                    if _tampers_with_protected(command_text, protected):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "permissions", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it changes ownership or permissions of a protected path."}), file=_out, flush=True)
+                        return
+                    store = _sensitive_store(command_text) or _sensitive_store(_arg_path(raw_args))
+                    if store:
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "credential-store", session, call)
+                        print(json.dumps({"action": "block", "message": f"Blackbox blocked this call: it accesses a credential store ({store})."}), file=_out, flush=True)
+                        return
+                    injection = _axiom_injection(raw_args)
+                    if injection:
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "injection-heuristic", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: prompt-injection phrasing in the tool arguments."}), file=_out, flush=True)
+                        return
+                    if _exfiltrates_protected(command_text, protected):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "exfiltration", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it uploads a file from a protected path."}), file=_out, flush=True)
+                        return
+                    if _executes_protected(command_text, protected):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "execution", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it launches a file from a protected path."}), file=_out, flush=True)
+                        return
+                    escalation = _escalation_risk(command_text)
+                    if escalation:
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "escalation", session, call)
+                        print(json.dumps({"action": "block", "message": f"Blackbox blocked this call: {escalation}."}), file=_out, flush=True)
+                        return
                     decision = guard.on_pre_tool_call(
                         tool_name=tool,
-                        args=payload.get("args") or {},
+                        args=raw_args,
                         session_id=session,
                         tool_call_id=call,
                     )
@@ -639,7 +802,7 @@ public sealed class OpenCodeProtection
 
         if __name__ == "__main__":
             main()
-        """;
+        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal);
 
     private static string JsPath(string path) =>
         path.Replace("\\", "\\\\", StringComparison.Ordinal)

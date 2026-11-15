@@ -147,6 +147,15 @@ internal static class ServicePlatform
         ArgumentNullException.ThrowIfNull(builder);
     }
 
+    /// <summary>
+    /// Process-start audit (upstream F-19 part B) needs the Windows WMI feed; the Unix daemon
+    /// does not register a worker. shortdoc: no process-start source on Unix yet.
+    /// </summary>
+    public static void ConfigureProcessSpawnAudit(HostApplicationBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+    }
+
     public static void ConfigureServices(HostApplicationBuilder builder)
     {
         if (OperatingSystem.IsLinux())

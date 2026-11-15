@@ -36,8 +36,8 @@ alone are `addressed` until run live against a guest VM build.
 
 ## Non-negotiable claims
 
-- No host has `Host deny verified`; the UI shows `COOPERATIVE - NOT VERIFIED`.
+- No host or OS rule is claimed as `HOST_DENY_VERIFIED` / `OS_DENY_VERIFIED` without runtime proof; hooks without proven deny verification are surfaced as `COOPERATIVE - NOT VERIFIED`.
 - DKG reputation is not an input to the policy engine and cannot create a block.
-- Managed runner, broker and OS boundary are not implemented.
+- Managed runner/broker (`E3`) remains a feasibility prototype (`TrustedFileBroker` / `WindowsRunnerAndBrokerProbe`); full E4 OS boundary enforcement requires elevated Windows VM proof (see [validation/OS_ENFORCEMENT_AND_OFFLINE_RUNBOOK.md](validation/OS_ENFORCEMENT_AND_OFFLINE_RUNBOOK.md)).
 - Live canary rules: temporary protected directory, explicitly loaded hook, captured payload and
   absent side effect, `MANUAL REQUIRED` when it cannot be automated.

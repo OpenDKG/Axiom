@@ -41,7 +41,8 @@
               <CheckBox Content="Ads" IsChecked="{Binding Ads}" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,0,14,0" />
               <CheckBox Content="Tracking" IsChecked="{Binding Tracking}" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,0,14,0" />
               <CheckBox Content="Analytics" IsChecked="{Binding Analytics}" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,0,14,0" />
-              <CheckBox Content="Malware" IsChecked="{Binding Malware}" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <CheckBox Content="Malware" IsChecked="{Binding Malware}" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,0,14,0" />
+              <CheckBox Content="Phishing" IsChecked="{Binding Phishing}" Foreground="{DynamicResource Axiom.TextPrimary}" />
             </WrapPanel>
             <Grid ColumnDefinitions="*,10,*">
               <StackPanel Grid.Column="0" Spacing="4">
@@ -49,17 +50,18 @@
                 <TextBox Text="{Binding PortText}" />
               </StackPanel>
               <StackPanel Grid.Column="2" Spacing="4">
-                <controls:AxiomSelectableTextBlock Text="Upstream DNS (blank = system)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-                <TextBox Text="{Binding UpstreamText}" />
+                <controls:AxiomSelectableTextBlock Text="Upstream DNS / DoH (comma-separated, or leave empty for automatic DoH)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+                <TextBox Text="{Binding UpstreamText}" PlaceholderText="1.1.1.1, 9.9.9.9 (encrypted DoH · ISP blind)" />
               </StackPanel>
             </Grid>
+            <CheckBox Content="Encrypt upstream DNS via DoH (port 443 — hides queries from your ISP)" IsChecked="{Binding EncryptDnsViaDoh}" Foreground="{DynamicResource Axiom.TextPrimary}" />
 
             <controls:AxiomSelectableTextBlock Text="Blocklist sources" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,6,0,0" />
             <ItemsControl ItemsSource="{Binding Sources}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
                   <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
-                    <CheckBox Grid.Column="0" IsChecked="{Binding Enabled}" Margin="0,0,8,0" />
+                    <CheckBox Grid.Column="0" IsChecked="{Binding Enabled, Mode=TwoWay}" Margin="0,0,8,0" />
                     <StackPanel Grid.Column="1" Spacing="2">
                       <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" />
                       <controls:AxiomSelectableTextBlock Text="{Binding License}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
@@ -72,7 +74,10 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <Button Content="Update sources now" Command="{Binding UpdateSourcesCommand}" Padding="12,6" HorizontalAlignment="Left" />
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+              <Button Content="Update sources now" Command="{Binding UpdateSourcesCommand}" Padding="12,6" HorizontalAlignment="Left" />
+              <CheckBox Content="Auto-update every 24h" IsChecked="{Binding AutoUpdateSources}" VerticalAlignment="Center" />
+            </StackPanel>
 
             <controls:AxiomSelectableTextBlock Text="Custom allowlist (one domain per line)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" Margin="0,6,0,0" />
             <TextBox Text="{Binding AllowedDomainsText}" AcceptsReturn="True" MinHeight="64" MaxHeight="120" />

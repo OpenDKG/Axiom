@@ -1,6 +1,6 @@
 # Axiom security and privacy model
 
-**Applies to:** Axiom 0.10.23 for Windows. Axiom is a security tool under active development and cannot guarantee prevention of every threat.
+**Applies to:** Axiom 0.32.0+ for Windows. Axiom is a security tool under active development and cannot guarantee prevention of every threat.
 
 ## Trust boundaries and responsibilities
 

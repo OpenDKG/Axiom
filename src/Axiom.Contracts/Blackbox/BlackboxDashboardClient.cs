@@ -154,7 +154,7 @@ public sealed record BlackboxFinding(
     string Source,
     bool Confirmed)
 {
-    public string TimeText => Timestamp?.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "ΓÇö";
+    public string TimeText => Timestamp?.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "—";
 
     public bool IsBlocked => string.Equals(Decision, "block", StringComparison.OrdinalIgnoreCase);
 

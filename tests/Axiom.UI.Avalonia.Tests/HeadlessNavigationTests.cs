@@ -1,5 +1,7 @@
 ﻿// SPDX-License-Identifier: GPL-3.0-or-later
+using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Axiom.Contracts.Monitoring;
 using Axiom.Presentation;
 using Xunit;
@@ -11,24 +13,30 @@ public sealed class HeadlessNavigationTests
     [Fact]
     public void Main_window_navigates_through_every_page_without_a_render_error()
     {
-        TestAppBuilder.EnsureInitialized();
-
-        var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
-        var window = new MainWindow { DataContext = shell };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
-
-        Assert.Equal(14, shell.Pages.Count);
-        Assert.IsType<AgentDashboardPageViewModel>(shell.Pages[0]);
-        foreach (var page in shell.Pages)
+        TestAppBuilder.RunOnUiThread(() =>
         {
-            shell.SelectedPage = page;
+            var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
+            var window = new MainWindow { DataContext = shell };
+            window.Show();
             Dispatcher.UIThread.RunJobs();
-            Assert.Same(page, shell.SelectedPage);
-        }
 
-        window.Close();
-        shell.Dispose();
+            Assert.Equal(15, shell.Pages.Count);
+            Assert.IsType<AgentDashboardPageViewModel>(shell.Pages[0]);
+            Assert.NotNull(shell.OpenContactCommand);
+            var contactButton = window.GetVisualDescendants()
+                .OfType<Button>()
+                .FirstOrDefault(button => string.Equals(button.Content as string, "Contact", StringComparison.Ordinal));
+            Assert.NotNull(contactButton);
+            foreach (var page in shell.Pages)
+            {
+                shell.SelectedPage = page;
+                Dispatcher.UIThread.RunJobs();
+                Assert.Same(page, shell.SelectedPage);
+            }
+
+            window.Close();
+            shell.Dispose();
+        });
     }
 
     private sealed class FakeSource : IConnectionSnapshotSource

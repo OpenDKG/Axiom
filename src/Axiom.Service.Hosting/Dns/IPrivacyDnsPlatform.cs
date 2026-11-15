@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net;
+using Axiom.Contracts.Privacy;
 
 namespace Axiom.Service.Hosting.Dns;
 
@@ -12,7 +13,11 @@ namespace Axiom.Service.Hosting.Dns;
 /// </summary>
 public interface IPrivacyDnsPlatform
 {
-    /// <summary>Non-loopback system resolvers to forward allowed queries to.</summary>
+    /// <summary>
+    /// Non-loopback system resolvers to forward allowed queries to. The shared controller passes
+    /// them through <see cref="DnsUpstream.UpgradeEndpoints"/>, so a known public resolver on port
+    /// 53 is queried over RFC 8484 DoH on every platform; anything else stays plain UDP/TCP.
+    /// </summary>
     IReadOnlyList<IPEndPoint> DiscoverUpstreams();
 
     /// <summary>
@@ -41,6 +46,26 @@ public interface IPrivacyDnsPlatform
     /// attempted.
     /// </summary>
     bool RestoreIfNeeded();
+
+    /// <summary>
+    /// Adapter DNS persistence (upstream v0.23.3, Windows only): called after the resolver was
+    /// (re)configured and at worker start with whether a resolver is running and the current
+    /// settings. The Windows service, when it runs as LocalSystem, keeps the preferred or
+    /// default-route adapter pointed at the loopback resolver or restores it
+    /// (<c>PreferredAdapterAlias</c>, <c>AutoPointAdapterDns</c>). The default does nothing: on other
+    /// platforms these two settings are not implemented and never change system DNS, whatever
+    /// their value; the platform's own redirect is <see cref="OnResolverStarted"/>.
+    /// </summary>
+    void EnsureConfiguredAdapterDns(bool resolverRunning, PrivacyShieldSettings settings)
+    {
+    }
+
+    /// <summary>
+    /// Whether <see cref="EnsureConfiguredAdapterDns"/> is implemented on this platform. False
+    /// means <c>PreferredAdapterAlias</c> / <c>AutoPointAdapterDns</c> are accepted and stored but
+    /// have no effect, and a client must not present them as active.
+    /// </summary>
+    bool SupportsAdapterDnsPersistence => false;
 }
 
 /// <summary>No redirect, no attribution, no discovery (tests and unsupported hosts).</summary>
@@ -51,7 +76,7 @@ public sealed class NullPrivacyDnsPlatform : IPrivacyDnsPlatform
     public IDnsAppAttributor? Attributor => null;
 
     public string NoUpstreamWarning =>
-        "No non-loopback system DNS server was found; using fallback upstream DNS. " +
+        "No non-loopback system DNS server was found; using encrypted DoH fallback upstream DNS. " +
         "Set an explicit upstream address if this network requires a local resolver.";
 
     public IReadOnlyList<IPEndPoint> DiscoverUpstreams() => [];

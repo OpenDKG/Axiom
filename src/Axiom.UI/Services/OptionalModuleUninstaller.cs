@@ -17,10 +17,25 @@ public sealed class OptionalModuleUninstaller
 
     private readonly string _localAppData;
 
+    private readonly string? _environmentHome;
+
+    private readonly string? _environmentBlackboxHome;
+
     public OptionalModuleUninstaller(string? userProfile = null, string? localAppData = null)
+        : this(userProfile, localAppData, environmentHome: null, environmentBlackboxHome: null)
+    {
+    }
+
+    internal OptionalModuleUninstaller(
+        string? userProfile,
+        string? localAppData,
+        string? environmentHome,
+        string? environmentBlackboxHome)
     {
         _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _localAppData = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        _environmentHome = environmentHome;
+        _environmentBlackboxHome = environmentBlackboxHome;
     }
 
     private string ModulesRoot => Path.Combine(_localAppData, "Axiom", "modules");
@@ -142,6 +157,7 @@ public sealed class OptionalModuleUninstaller
     {
         new CodexProtection().Remove();
         new ClaudeProtection().Remove();
+        new AntigravityProtection().Remove();
         new CursorProtection().Remove();
         new CopilotProtection().Remove();
         new GeminiProtection().Remove();
@@ -154,11 +170,17 @@ public sealed class OptionalModuleUninstaller
 
     private string BuildBlackboxUninstallScript()
     {
-        var hermes = Path.Combine(_userProfile, ".hermes");
+        var hermes = BlackboxPaths.ResolveHermesHome(_userProfile, _localAppData, _environmentHome);
+        var blackboxHome = BlackboxPaths.ResolveBlackboxHome(
+            _userProfile,
+            _localAppData,
+            _environmentHome,
+            _environmentBlackboxHome);
         return $$"""
             $ErrorActionPreference = 'Continue'
             $root = '{{Escape(BlackboxRoot)}}'
             $hermes = '{{Escape(hermes)}}'
+            $blackboxHome = '{{Escape(blackboxHome)}}'
             $command = '{{Escape(BlackboxCommand)}}'
             function Test-ReparsePath($path) {
               $current = [IO.Path]::GetFullPath($path)
@@ -191,16 +213,22 @@ public sealed class OptionalModuleUninstaller
             }
             Write-Host 'Stopping Blackbox/DKG processes owned by this installation...' -ForegroundColor Cyan
             Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-              Where-Object { $_.CommandLine -and $_.CommandLine.Contains($root) } |
+              Where-Object {
+                $_.CommandLine -and (
+                  $_.CommandLine.Contains($root, [System.StringComparison]::OrdinalIgnoreCase) -or
+                  $_.CommandLine.Contains($blackboxHome, [System.StringComparison]::OrdinalIgnoreCase) -or
+                  $_.CommandLine.Contains('start-dashboard.py', [System.StringComparison]::OrdinalIgnoreCase))
+              } |
               ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-            $task = Get-ScheduledTask -TaskName 'Agent Blackbox DKG node' -ErrorAction SilentlyContinue
-            if ($task) {
-              Unregister-ScheduledTask -TaskName 'Agent Blackbox DKG node' -Confirm:$false -ErrorAction SilentlyContinue
-              Write-Host 'Removed scheduled task: Agent Blackbox DKG node'
+            foreach ($taskName in @('Agent Blackbox DKG node', 'Agent Blackbox dashboard')) {
+              $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+              if ($task) {
+                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+                Write-Host "Removed scheduled task: $taskName"
+              }
             }
             Remove-SafeDirectory $root
             Remove-SafeFile $command
-            $blackboxHome = Join-Path $hermes 'blackbox'
             Remove-SafeDirectory $blackboxHome
             $logs = Join-Path $hermes 'logs'
             if ((Test-Path -LiteralPath $logs) -and -not (Test-ReparsePath $logs)) {

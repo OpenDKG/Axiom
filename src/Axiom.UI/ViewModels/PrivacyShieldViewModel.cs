@@ -190,10 +190,16 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
     private bool _malware;
 
     [ObservableProperty]
+    private bool _phishing;
+
+    [ObservableProperty]
     private string _portText = "53";
 
     [ObservableProperty]
     private string _upstreamText = string.Empty;
+
+    [ObservableProperty]
+    private bool _encryptDnsViaDoh = true;
 
     [ObservableProperty]
     private string _allowedDomainsText = string.Empty;
@@ -212,6 +218,24 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
 
     [ObservableProperty]
     private string _statsText = "No queries observed.";
+
+    [ObservableProperty]
+    private string _ruleCountText = "0";
+
+    [ObservableProperty]
+    private string _queriesCountText = "0";
+
+    [ObservableProperty]
+    private string _allowedCountText = "0";
+
+    [ObservableProperty]
+    private string _blockedCountText = "0";
+
+    [ObservableProperty]
+    private string _errorsCountText = "0";
+
+    [ObservableProperty]
+    private string _blockRateText = "no queries yet";
 
     [ObservableProperty]
     private string _lastUpdatedText = "Not refreshed.";
@@ -270,6 +294,8 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         }
     }
 
+    public Task RefreshSummaryAsync() => RefreshStatsAsync();
+
     private async Task RefreshStatsAsync()
     {
         if (_client is null || IsBusy || _statsRefreshing)
@@ -313,7 +339,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
                 return;
             }
 
-            var status = await _client
+            var status = await CreateConfigureClient()
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
@@ -349,7 +375,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
                 return;
             }
 
-            var status = await _client
+            var status = await CreateConfigureClient()
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
@@ -385,13 +411,14 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
                 return;
             }
 
-            var status = await _client
+            var updateClient = new ServicePipeClient(requestTimeout: TimeSpan.FromMinutes(5));
+            var status = await CreateConfigureClient()
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
                     CancellationToken.None)
                 .ConfigureAwait(true);
-            status = await _client
+            status = await updateClient
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacySourcesUpdate,
                     null,
@@ -548,6 +575,11 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             categories |= PrivacyCategory.Malware;
         }
 
+        if (Phishing)
+        {
+            categories |= PrivacyCategory.Phishing;
+        }
+
         return new PrivacyShieldSettings
         {
             Enabled = Enabled,
@@ -555,6 +587,7 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             Categories = categories,
             Port = int.TryParse(PortText, out var port) ? port : 53,
             UpstreamDns = UpstreamText.Trim(),
+            EncryptDnsViaDoh = EncryptDnsViaDoh,
             AllowedDomains = PrivacyShieldPolicy.ParseList(
                 AllowedDomainsText,
                 PrivacyShieldPolicy.MaxSettingsDomains),
@@ -598,8 +631,10 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             Tracking = (settings.Categories & PrivacyCategory.Tracking) != 0;
             Analytics = (settings.Categories & PrivacyCategory.Analytics) != 0;
             Malware = (settings.Categories & PrivacyCategory.Malware) != 0;
+            Phishing = (settings.Categories & PrivacyCategory.Phishing) != 0;
             PortText = settings.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
             UpstreamText = settings.UpstreamDns;
+            EncryptDnsViaDoh = settings.EncryptDnsViaDoh;
             AllowedDomainsText = string.Join(Environment.NewLine, settings.AllowedDomains);
             BlockedDomainsText = string.Join(Environment.NewLine, settings.BlockedDomains);
             foreach (var source in Sources)
@@ -637,6 +672,14 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         StatsText = status.Running
             ? $"{status.Queries:N0} queries observed."
             : "No queries observed.";
+        RuleCountText = status.RuleCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        QueriesCountText = status.Queries.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        AllowedCountText = status.Allowed.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        BlockedCountText = status.Blocked.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        ErrorsCountText = status.Errors.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        BlockRateText = status.Queries > 0
+            ? $"{status.Blocked * 100.0 / status.Queries:0.0}% blocked"
+            : "no queries yet";
         LastUpdatedText = $"Updated {DateTimeOffset.Now:HH:mm:ss}";
         LastErrorText = status.LastError ?? string.Empty;
 
@@ -700,10 +743,14 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             Tracking = (categories & PrivacyCategory.Tracking) != 0;
             Analytics = (categories & PrivacyCategory.Analytics) != 0;
             Malware = (categories & PrivacyCategory.Malware) != 0;
+            Phishing = (categories & PrivacyCategory.Phishing) != 0;
         }
         finally
         {
             _updating = false;
         }
     }
+
+    private ServicePipeClient CreateConfigureClient() =>
+        new(requestTimeout: TimeSpan.FromSeconds(60));
 }

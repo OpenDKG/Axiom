@@ -2,24 +2,75 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Win32;
-using Axiom.UI.Services;
+using Axiom.Contracts.Blackbox;
+using Axiom.Presentation;
 
 namespace Axiom.Setup;
+
+internal sealed record ExistingInstallationInfo(
+    bool Exists,
+    string? Version,
+    string? DesktopPath,
+    string? ServicePath);
 
 internal sealed record SetupInstallResult(
     bool Success,
     string Message,
     IReadOnlyList<string> Log,
-    string? Warning = null);
+    string? Warning = null,
+    bool CoreInstalled = false,
+    bool PartialSuccess = false);
 
 internal static class SetupInstaller
 {
+    public static ExistingInstallationInfo DetectExistingInstallation(string installDir)
+    {
+        if (string.IsNullOrWhiteSpace(installDir))
+        {
+            return new ExistingInstallationInfo(false, null, null, null);
+        }
+
+        var desktop = Path.Combine(installDir, "Axiom.Desktop.exe");
+        var service = Path.Combine(installDir, "Axiom.Service.exe");
+        var exists = File.Exists(desktop) || File.Exists(service);
+        string? version = null;
+
+        var manifestPath = Path.Combine(installDir, "install.json");
+        if (File.Exists(manifestPath))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                    doc.RootElement.TryGetProperty("version", out var v) &&
+                    v.ValueKind == JsonValueKind.String)
+                {
+                    version = v.GetString();
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+            {
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(version) && File.Exists(desktop))
+        {
+            version = FileVersionInfo.GetVersionInfo(desktop).ProductVersion;
+        }
+
+        return new ExistingInstallationInfo(
+            exists,
+            string.IsNullOrWhiteSpace(version) ? null : version,
+            File.Exists(desktop) ? desktop : null,
+            File.Exists(service) ? service : null);
+    }
     private const string PayloadPrefix = "Axiom.Setup.Payload.";
 
     private static readonly JsonSerializerOptions ManifestJsonOptions = new()
@@ -38,10 +89,14 @@ internal static class SetupInstaller
         CancellationToken cancellationToken)
     {
         var log = new List<string>();
+        // Every step is timestamped so the UI and the log show how long a slow phase has been
+        // running; a complete install can legitimately take 10-20 minutes.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         void Report(string message)
         {
-            log.Add(message);
-            progress?.Report(message);
+            var line = string.Create(CultureInfo.InvariantCulture, $"[{clock.Elapsed:mm\\:ss}] {message}");
+            log.Add(line);
+            progress?.Report(line);
         }
 
         try
@@ -73,6 +128,13 @@ internal static class SetupInstaller
                 }
 
                 Directory.CreateDirectory(options.InstallDir);
+                var existing = DetectExistingInstallation(options.InstallDir);
+                if (existing.Exists)
+                {
+                    Report($"Existing Axiom installation detected at {options.InstallDir}" +
+                           $"{(existing.Version is null ? "" : $" (v{existing.Version})")}; upgrading in place.");
+                }
+
                 StopInstallDirServiceProcesses(options.InstallDir, Report);
                 Report($"Installing to {options.InstallDir}");
 
@@ -108,21 +170,52 @@ internal static class SetupInstaller
 
                 var blackboxInstalled = false;
                 var dkgInstalled = false;
+                var blackboxExit = false;
+                var dkgStepSucceeded = false;
+                var serviceRegisteredEarly = false;
+                string? upgradeWarning = null;
+                var partialIssues = new List<string>();
                 if (options.CompleteInstallation)
                 {
+                    serviceRegisteredEarly = SetupDefaults.EnsureServiceRegistered(options.InstallDir, Report);
                     Report("Complete installation selected: Blackbox, DKG and agent hooks will be configured.");
+                    Report("Complete installation may take 10-20 minutes: service registration, the verified " +
+                           "Blackbox download/install, a local DKG node and the agent hooks run in sequence.");
                     var setupProtection = new UserStateProtection();
                     var setupSnapshot = await Task.Run(
                         () => setupProtection.Capture(),
                         cancellationToken).ConfigureAwait(false);
                     var moduleInstaller = new OptionalModuleInstaller();
 
+                    // The vendor installer owns the Blackbox tree. Back up the findings, history and
+                    // identity first so an update can never silently drop them.
+                    var upgradeBackup = UpgradeDataGuard.Capture();
+                    if (upgradeBackup is not null)
+                    {
+                        Report($"Protected data backup: {upgradeBackup.Entries.Count} file(s), " +
+                               $"{upgradeBackup.TotalBytes / 1_048_576.0:F1} MB at {upgradeBackup.Directory}.");
+                    }
+
                     Report("Auditing official installer scope: Axiom modules, Hermes plugin config/mode and scheduled task only.");
-                    Report("Starting the official Blackbox installer. Follow its prompts and terms.");
-                    var blackboxExit = await Task.Run(
+                    Report("Configuring the official Blackbox runtime silently in the background...");
+                    blackboxExit = await Task.Run(
                         () => moduleInstaller.InstallBlackboxAndWait(Report),
                         cancellationToken).ConfigureAwait(false);
                     Report($"Blackbox installer exit code: {(blackboxExit ? "0" : "non-zero")}.");
+
+                    if (upgradeBackup is not null)
+                    {
+                        var dataCheck = UpgradeDataGuard.VerifyAndRestore(upgradeBackup.Directory);
+                        var intact = upgradeBackup.Entries.Count - dataCheck.Restored.Count - dataCheck.Shrunk.Count;
+                        Report($"Upgrade data check: {intact} intact, {dataCheck.Restored.Count} restored, " +
+                               $"{dataCheck.Shrunk.Count} smaller than the backup, {dataCheck.Failed.Count} failed.");
+                        if (!dataCheck.Ok)
+                        {
+                            upgradeWarning =
+                                $"{dataCheck.Failed.Count} protected file(s) could not be restored. " +
+                                $"The pre-upgrade copy is kept at {upgradeBackup.Directory}.";
+                        }
+                    }
 
                     var blackboxProvidesDkg = blackboxExit &&
                                               await TryWaitForBlackboxDkgAsync(cancellationToken).ConfigureAwait(false);
@@ -131,14 +224,25 @@ internal static class SetupInstaller
                         Report("Blackbox reports its own DKG node reachable; skipping Axiom's standalone DKG " +
                                "to avoid a second unused node on this machine.");
                         dkgInstalled = true;
+                        dkgStepSucceeded = true;
                     }
                     else
                     {
-                        Report("Starting the official DKG installer. Follow its prompts and terms.");
-                        var dkgExit = await Task.Run(
-                            () => moduleInstaller.InstallDkgAndWait(Report),
-                            cancellationToken).ConfigureAwait(false);
-                        Report($"DKG installer exit code: {(dkgExit ? "0" : "non-zero")}.");
+                        // If the Hermes config already names a DKG home, start that node instead of
+                        // initializing a second home the guard would never read (#307).
+                        if (moduleInstaller.StartDkg())
+                        {
+                            Report("Started the DKG node the Hermes config names; no second home was created.");
+                            dkgStepSucceeded = true;
+                        }
+                        else
+                        {
+                            Report("Configuring the official DKG node silently in the background...");
+                            dkgStepSucceeded = await Task.Run(
+                                () => moduleInstaller.InstallDkgAndWait(Report),
+                                cancellationToken).ConfigureAwait(false);
+                            Report($"DKG installer exit code: {(dkgStepSucceeded ? "0" : "non-zero")}.");
+                        }
                     }
 
                     var hermesLocal = Path.Combine(
@@ -173,10 +277,9 @@ internal static class SetupInstaller
                                $"{restoreFailures.Count} restore failure(s).");
                         if (restoreFailures.Count > 0)
                         {
-                            return new SetupInstallResult(
-                                false,
-                                "Optional setup stopped: a protected user-state change could not be restored.",
-                                log);
+                            Report("WARNING: some protected user-state files could not be restored while the " +
+                                   "desktop and DKG were running; the installation continues. Review the listed " +
+                                   "MCP/model/favorite/session files after the upgrade.");
                         }
                     }
                     else
@@ -186,14 +289,26 @@ internal static class SetupInstaller
 
                     blackboxInstalled = await WaitForEndpointAsync(
                         "http://127.0.0.1:9700/api/graph-status", cancellationToken).ConfigureAwait(false);
-                    if (!dkgInstalled)
-                    {
-                        dkgInstalled = await WaitForEndpointAsync(
-                            "http://127.0.0.1:9200/api/status", cancellationToken).ConfigureAwait(false);
-                    }
+
+                    // #307: the node, the guard and the CLI must agree on one DKG home. Probe the
+                    // resolved home's own port and token and prove the identity endpoint accepts it.
+                    var dkgHome = DkgHomeResolver.ResolveEffective(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        ReadConfigOrNull,
+                        Directory.Exists);
+                    var dkgIdentity = await WaitForDkgIdentityAsync(dkgHome, cancellationToken)
+                        .ConfigureAwait(false);
+                    dkgInstalled = dkgIdentity.Verified;
 
                     Report($"Blackbox endpoint: {(blackboxInstalled ? "connected" : "not verified")}; " +
                            $"DKG endpoint: {(dkgInstalled ? (blackboxProvidesDkg ? "provided by Blackbox" : "connected") : "not verified")}.");
+                    Report(dkgIdentity.Summary + ".");
+                    if (!dkgIdentity.Verified)
+                    {
+                        Report("WARNING: findings cannot be written to the local graph until the DKG " +
+                               "identity check passes; check that hermes config.yaml, the guard and the " +
+                               "node use this home.");
+                    }
 
                     Report("Installing agent hooks after the Blackbox runtime is prepared.");
                     var protection = new UserStateProtection();
@@ -203,19 +318,25 @@ internal static class SetupInstaller
                     var openCodeProtection = new OpenCodeProtection();
                     var codexProtection = new CodexProtection();
                     var claudeProtection = new ClaudeProtection();
+                    var antigravityProtection = new AntigravityProtection();
                     var cursorProtection = new CursorProtection();
                     var copilotProtection = new CopilotProtection();
                     var geminiProtection = new GeminiProtection();
                     var windsurfProtection = new WindsurfProtection();
                     var clineProtection = new ClineProtection();
+                    var zCodeProtection = new ZCodeProtection();
+                    var deepSeekProtection = new DeepSeekProtection();
                     var openCode = openCodeProtection.EnsureInstalled();
                     var codex = codexProtection.EnsureInstalled();
                     var claude = claudeProtection.EnsureInstalled();
+                    var antigravity = antigravityProtection.EnsureInstalled();
                     var cursor = cursorProtection.EnsureInstalled();
                     var copilot = copilotProtection.EnsureInstalled();
                     var gemini = geminiProtection.EnsureInstalled();
                     var windsurf = windsurfProtection.EnsureInstalled();
                     var cline = clineProtection.EnsureInstalled();
+                    var zCode = zCodeProtection.EnsureInstalled();
+                    var deepSeek = deepSeekProtection.EnsureInstalled();
                     var unexpectedChanges = await Task.Run(
                         () => protection.Verify(
                             protectedBefore,
@@ -232,6 +353,8 @@ internal static class SetupInstaller
                                 codexProtection.HookScriptPath,
                                 claudeProtection.SettingsPath,
                                 claudeProtection.HookScriptPath,
+                                antigravityProtection.HooksPath,
+                                antigravityProtection.HookScriptPath,
                                 cursorProtection.HooksPath,
                                 cursorProtection.HookScriptPath,
                                 copilotProtection.HooksPath,
@@ -242,6 +365,11 @@ internal static class SetupInstaller
                                 windsurfProtection.HooksPath,
                                 windsurfProtection.HookScriptPath,
                                 clineProtection.HookPath,
+                                zCodeProtection.ConfigPath,
+                                zCodeProtection.HookScriptPath,
+                                deepSeekProtection.HooksPath,
+                                deepSeekProtection.PatchPath,
+                                deepSeekProtection.HookScriptPath,
                             ]),
                         cancellationToken).ConfigureAwait(false);
                     if (unexpectedChanges.Count > 0)
@@ -253,10 +381,8 @@ internal static class SetupInstaller
                                $"{restoreFailures.Count} restore failure(s). MCP/model/favorite/session/Antigravity files must be reviewed.");
                         if (restoreFailures.Count > 0)
                         {
-                            return new SetupInstallResult(
-                                false,
-                                "Agent hook setup stopped: a protected user-state change could not be restored.",
-                                log);
+                            Report("WARNING: some agent-hook protected files could not be restored; the " +
+                                   "installation continues. Review the MCP/model/favorite/session files.");
                         }
                     }
                     else
@@ -266,9 +392,11 @@ internal static class SetupInstaller
 
                     Report($"Agent hooks: OpenCode/OpenChamber {(openCode ? "installed" : "skipped")}, " +
                            $"Codex {(codex ? "installed" : "skipped")}, Claude Code {(claude ? "installed" : "skipped")}, " +
+                           $"Antigravity {(antigravity ? "installed" : "skipped")}, " +
                            $"Cursor {(cursor ? "installed" : "skipped")}, " +
                            $"GitHub Copilot CLI {(copilot ? "installed" : "skipped")}, Gemini CLI {(gemini ? "installed" : "skipped")}, " +
-                           $"Windsurf Cascade {(windsurf ? "installed" : "skipped")}, Cline {(cline ? "installed" : "skipped")}.");
+                           $"Windsurf Cascade {(windsurf ? "installed" : "skipped")}, Cline {(cline ? "installed" : "skipped")}, " +
+                           $"ZCode {(zCode ? "installed" : "skipped")}, DeepSeek Harness {(deepSeek ? "installed" : "skipped")}.");
                 }
                 else
                 {
@@ -278,10 +406,35 @@ internal static class SetupInstaller
                 string? warning = null;
                 if (options.CompleteInstallation)
                 {
+                    if (!blackboxExit || !blackboxInstalled)
+                    {
+                        partialIssues.Add(
+                            "Blackbox runtime did not install cleanly or could not be reached; Blackbox-dependent agent protection remains unavailable until repaired.");
+                    }
+
+                    if (!dkgStepSucceeded || !dkgInstalled)
+                    {
+                        partialIssues.Add(
+                            "DKG node could not be initialized or verified (install Node.js LTS / npm if missing, then click Repair).");
+                    }
+
                     var defaults = await SetupDefaults
-                        .ApplyCompleteAsync(options.InstallDir, Report, cancellationToken)
+                        .ApplyCompleteAsync(options.InstallDir, Report, cancellationToken, serviceRegisteredEarly)
                         .ConfigureAwait(false);
-                    warning = defaults.Warning;
+                    if (!string.IsNullOrWhiteSpace(defaults.Warning))
+                    {
+                        partialIssues.Add(defaults.Warning);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(upgradeWarning))
+                    {
+                        partialIssues.Add(upgradeWarning);
+                    }
+
+                    if (partialIssues.Count > 0)
+                    {
+                        warning = string.Join("\n\n", partialIssues.Distinct(StringComparer.Ordinal));
+                    }
                 }
                 else
                 {
@@ -311,7 +464,8 @@ internal static class SetupInstaller
                     }
                 }
 
-                if (options.StartAfterInstall)
+                var partialSuccess = partialIssues.Count > 0;
+                if (options.StartAfterInstall && !partialSuccess)
                 {
                     Process.Start(new ProcessStartInfo(desktopTarget)
                     {
@@ -321,7 +475,17 @@ internal static class SetupInstaller
                     Report("Started Axiom");
                 }
 
-                return new SetupInstallResult(true, "Axiom was installed successfully.", log, warning);
+                var resultMessage = partialSuccess
+                    ? "Axiom core application and local service were installed, with optional-module warnings (partial success). Use Open Axiom, Repair after installing prerequisites, or Uninstall."
+                    : "Axiom was installed successfully.";
+
+                return new SetupInstallResult(
+                    Success: true,
+                    Message: resultMessage,
+                    Log: log,
+                    Warning: warning,
+                    CoreInstalled: true,
+                    PartialSuccess: partialSuccess);
             }
             finally
             {
@@ -344,23 +508,215 @@ internal static class SetupInstaller
         }
     }
 
+    public static async Task<SetupInstallResult> UninstallAsync(
+        SetupOptions options,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        var log = new List<string>();
+        var clock = Stopwatch.StartNew();
+        void Report(string message)
+        {
+            var line = string.Create(CultureInfo.InvariantCulture, $"[{clock.Elapsed:mm\\:ss}] {message}");
+            log.Add(line);
+            progress?.Report(line);
+        }
+
+        try
+        {
+            if (Process.GetProcessesByName("Axiom.Desktop").Length > 0 ||
+                Process.GetProcessesByName("Netpetra.Desktop").Length > 0)
+            {
+                return new SetupInstallResult(false, "Axiom is running. Close it before uninstalling.", log);
+            }
+
+            if (StorageSafety.IsReparsePointInPath(options.InstallDir))
+            {
+                return new SetupInstallResult(
+                    false,
+                    "Install location contains a junction or symbolic link. Refusing to uninstall from an unsafe path.",
+                    log);
+            }
+
+            Report($"Uninstalling Axiom from {options.InstallDir}...");
+            StopInstallDirServiceProcesses(options.InstallDir, Report);
+
+            string? warning = null;
+            var serviceExe = Path.Combine(options.InstallDir, "Axiom.Service.exe");
+            var protectedServiceExe = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                "Axiom",
+                "Axiom.Service.exe");
+            var uninstallHelper = File.Exists(serviceExe)
+                ? serviceExe
+                : File.Exists(protectedServiceExe)
+                    ? protectedServiceExe
+                    : null;
+
+            if (uninstallHelper is not null && await IsWindowsServiceRegisteredAsync(cancellationToken).ConfigureAwait(false))
+            {
+                Report("Removing Axiom Windows service registration (elevation prompt)...");
+                try
+                {
+                    using var proc = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = uninstallHelper,
+                        Arguments = "--uninstall-service",
+                        UseShellExecute = true,
+                        Verb = "runas",
+                        CreateNoWindow = true,
+                        WindowStyle = ProcessWindowStyle.Hidden,
+                    });
+                    if (proc is not null)
+                    {
+                        await proc.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+                        Report(proc.ExitCode == 0
+                            ? "Axiom Windows service removed."
+                            : $"Axiom service uninstaller exited with code {proc.ExitCode}.");
+                        if (proc.ExitCode != 0)
+                        {
+                            warning = $"Windows service uninstaller exited with code {proc.ExitCode}.";
+                        }
+                    }
+                }
+                catch (System.ComponentModel.Win32Exception exception) when (exception.NativeErrorCode == 1223)
+                {
+                    warning = "Administrator approval was cancelled; the Windows service registration may still exist.";
+                    Report(warning);
+                }
+            }
+
+            try
+            {
+                using var run = Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Run",
+                    writable: true);
+                run?.DeleteValue("Axiom", throwOnMissingValue: false);
+                Report("Removed Axiom startup registry entry.");
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                Report("Could not remove startup registry entry: " + exception.Message);
+            }
+
+            try
+            {
+                var shortcut = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "Microsoft",
+                    "Windows",
+                    "Start Menu",
+                    "Programs",
+                    "Axiom.lnk");
+                if (File.Exists(shortcut))
+                {
+                    File.Delete(shortcut);
+                    Report("Removed Start Menu shortcut.");
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                Report("Could not remove Start Menu shortcut: " + exception.Message);
+            }
+
+            if (Directory.Exists(options.InstallDir))
+            {
+                foreach (var fileName in new[] { "Axiom.Desktop.exe", "Axiom.Service.exe", "install.json" })
+                {
+                    var path = Path.Combine(options.InstallDir, fileName);
+                    if (File.Exists(path))
+                    {
+                        File.Delete(path);
+                        Report($"Removed {fileName}.");
+                    }
+                }
+
+                var communityDir = Path.Combine(options.InstallDir, "community");
+                if (Directory.Exists(communityDir))
+                {
+                    Directory.Delete(communityDir, recursive: true);
+                    Report("Removed community feed folder.");
+                }
+
+                if (!Directory.EnumerateFileSystemEntries(options.InstallDir).Any())
+                {
+                    Directory.Delete(options.InstallDir);
+                    Report("Removed empty install directory.");
+                }
+            }
+
+            var userAxiomDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Axiom");
+            foreach (var marker in new[] { SetupDefaults.ProfileFileName, "startup.json" })
+            {
+                var path = Path.Combine(userAxiomDir, marker);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+
+            Report("Axiom uninstall finished.");
+            return new SetupInstallResult(true, "Axiom was uninstalled cleanly.", log, warning, CoreInstalled: false, PartialSuccess: false);
+        }
+        catch (OperationCanceledException)
+        {
+            return new SetupInstallResult(false, "Uninstall was cancelled.", log);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return new SetupInstallResult(false, "Uninstall failed: " + exception.Message, log);
+        }
+    }
+
+    private static async Task<bool> IsWindowsServiceRegisteredAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var proc = Process.Start(new ProcessStartInfo("sc.exe", "query AxiomService")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+            if (proc is null)
+            {
+                return false;
+            }
+
+            await proc.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            return proc.ExitCode == 0;
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     private static async Task<PayloadPaths> ExtractPayloadAsync(
         string tempDir,
         Action<string> report,
         CancellationToken cancellationToken)
     {
-        var desktop = await ExtractResourceAsync(
-            PayloadPrefix + "Axiom.Desktop.exe",
-            Path.Combine(tempDir, "Axiom.Desktop.exe"),
-            cancellationToken).ConfigureAwait(false);
-        var service = await ExtractResourceAsync(
-            PayloadPrefix + "Axiom.Service.exe",
-            Path.Combine(tempDir, "Axiom.Service.exe"),
-            cancellationToken).ConfigureAwait(false);
-        var community = await ExtractResourceAsync(
-            PayloadPrefix + "community.feed.json",
-            Path.Combine(tempDir, "community", "feed.json"),
-            cancellationToken).ConfigureAwait(false);
+        await TryExtractPayloadArchiveAsync(tempDir, cancellationToken).ConfigureAwait(false);
+
+        var desktop = ExistingOrNull(Path.Combine(tempDir, "Axiom.Desktop.exe"))
+            ?? await ExtractResourceAsync(
+                PayloadPrefix + "Axiom.Desktop.exe",
+                Path.Combine(tempDir, "Axiom.Desktop.exe"),
+                cancellationToken).ConfigureAwait(false);
+        var service = ExistingOrNull(Path.Combine(tempDir, "Axiom.Service.exe"))
+            ?? await ExtractResourceAsync(
+                PayloadPrefix + "Axiom.Service.exe",
+                Path.Combine(tempDir, "Axiom.Service.exe"),
+                cancellationToken).ConfigureAwait(false);
+        var community = ExistingOrNull(Path.Combine(tempDir, "community", "feed.json"))
+            ?? await ExtractResourceAsync(
+                PayloadPrefix + "community.feed.json",
+                Path.Combine(tempDir, "community", "feed.json"),
+                cancellationToken).ConfigureAwait(false);
 
         if (desktop is null || service is null)
         {
@@ -371,6 +727,36 @@ internal static class SetupInstaller
         }
 
         return new PayloadPaths(desktop, service, community);
+    }
+
+    private static async Task TryExtractPayloadArchiveAsync(string tempDir, CancellationToken cancellationToken)
+    {
+        await using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(PayloadPrefix + "zip");
+        if (stream is null)
+        {
+            return;
+        }
+
+        var root = Path.GetFullPath(tempDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        foreach (var entry in archive.Entries)
+        {
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                continue;
+            }
+
+            var destination = Path.GetFullPath(Path.Combine(tempDir, entry.FullName));
+            if (!destination.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException($"Archive entry escapes temp directory: {entry.FullName}");
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            await using var entryStream = entry.Open();
+            await using var file = File.Create(destination);
+            await entryStream.CopyToAsync(file, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static async Task<string?> ExtractResourceAsync(
@@ -432,8 +818,23 @@ internal static class SetupInstaller
         }
     }
 
-    private static void CopyFile(string source, string destination, bool overwrite) =>
-        File.Copy(source, destination, overwrite);
+    private static void CopyFile(string source, string destination, bool overwrite)
+    {
+        // The service may still be releasing its image after a stop request; retry briefly instead
+        // of failing the whole upgrade on a sharing violation.
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.Copy(source, destination, overwrite);
+                return;
+            }
+            catch (IOException) when (attempt < 10)
+            {
+                Thread.Sleep(1000);
+            }
+        }
+    }
 
     private static string HashFile(string path)
     {
@@ -461,6 +862,42 @@ internal static class SetupInstaller
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Waits for the resolved DKG home to prove its own token. A 401 does not heal while the node
+    /// runs, so it is reported immediately instead of retrying for the full window.
+    /// </summary>
+    private static async Task<DkgIdentity> WaitForDkgIdentityAsync(
+        string home,
+        CancellationToken cancellationToken)
+    {
+        DkgIdentity? last = null;
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            last = await DkgIdentityProbe.CheckAsync(home, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            if (last.Verified || last.StatusCode is 401)
+            {
+                return last;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+        }
+
+        return last!;
+    }
+
+    private static string? ReadConfigOrNull(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? File.ReadAllText(path) : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

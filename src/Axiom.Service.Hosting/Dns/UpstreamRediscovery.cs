@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net;
+using Axiom.Contracts.Privacy;
 
 namespace Axiom.Service.Hosting.Dns;
 
@@ -58,15 +59,40 @@ public static class UpstreamRediscovery
     }
 
     /// <summary>
-    /// One discovery: re-reads the system resolvers and swaps them into <paramref name="server"/>
-    /// when <see cref="Decide"/> says so. Returns true when the upstreams changed. Discovery
-    /// errors are logged and leave the server untouched.
+    /// Whether a running resolver should be watched at all: the platform redirects system DNS to it
+    /// and the user configured no explicit upstream. An explicit upstream (IP, list or DoH URL) is
+    /// never replaced by discovery.
     /// </summary>
-    public static bool Rediscover(DnsProxyServer server, IPrivacyDnsPlatform platform, Action<string> log)
+    public static bool ShouldWatch(IPrivacyDnsPlatform platform, PrivacyShieldSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(platform);
+        ArgumentNullException.ThrowIfNull(settings);
+        return platform.RediscoversUpstreams && string.IsNullOrWhiteSpace(settings.UpstreamDns);
+    }
+
+    /// <summary>
+    /// One discovery: re-reads the system resolvers, applies the start path's selection
+    /// (<see cref="DnsUpstream.SelectSystemTargets"/> with the settings' <c>EncryptDnsViaDoh</c>) and
+    /// swaps the result into <paramref name="server"/> when it differs from the targets in use.
+    /// Returns true when the upstreams changed. Nothing is discovered or changed when an explicit
+    /// upstream is configured; an empty or loopback-only discovery keeps the current targets;
+    /// discovery errors are logged and leave the server untouched.
+    /// </summary>
+    public static bool Rediscover(
+        DnsProxyServer server,
+        IPrivacyDnsPlatform platform,
+        Action<string> log,
+        PrivacyShieldSettings settings)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(log);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (!string.IsNullOrWhiteSpace(settings.UpstreamDns))
+        {
+            return false;
+        }
 
         var streak = server.UpstreamFailureStreak;
         IReadOnlyList<IPEndPoint> discovered;
@@ -82,8 +108,12 @@ public static class UpstreamRediscovery
             return false;
         }
 
-        var replacement = Decide(server.Upstreams, discovered);
-        if (replacement is null)
+        // Loopback-free, de-duplicated discovery; null when nothing usable was found.
+        var candidates = Decide([], discovered);
+        var replacement = candidates is null
+            ? null
+            : DnsUpstream.SelectSystemTargets(candidates, settings.EncryptDnsViaDoh);
+        if (replacement is null || replacement.Count == 0 || replacement.SequenceEqual(server.Targets))
         {
             if (streak >= FailureStreakThreshold)
             {
@@ -94,7 +124,7 @@ public static class UpstreamRediscovery
         }
 
         var previous = server.Upstream;
-        server.UpdateUpstreams(replacement);
+        server.UpdateTargets(replacement);
         log($"upstreams changed: {previous} -> {server.Upstream}" +
             (streak > 0 ? $" (after {streak} consecutive failures)" : string.Empty));
         return true;
@@ -109,11 +139,13 @@ public static class UpstreamRediscovery
         DnsProxyServer server,
         IPrivacyDnsPlatform platform,
         Action<string> log,
+        PrivacyShieldSettings settings,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(log);
+        ArgumentNullException.ThrowIfNull(settings);
 
         log($"upstream rediscovery active: every {PollInterval.TotalSeconds:0} s, every {FailingPollInterval.TotalSeconds:0} s after {FailureStreakThreshold} consecutive upstream failures");
         var last = DateTimeOffset.UtcNow;
@@ -135,7 +167,7 @@ public static class UpstreamRediscovery
             }
 
             last = now;
-            Rediscover(server, platform, log);
+            Rediscover(server, platform, log, settings);
         }
     }
 }

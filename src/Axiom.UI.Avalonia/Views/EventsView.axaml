@@ -51,24 +51,35 @@
 
         <Border Grid.Row="1" Padding="16,10" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1"
                 Background="{DynamicResource Axiom.SurfaceAlt}">
-          <WrapPanel Orientation="Horizontal">
-            <Button Content="Inspect event" Command="{Binding InspectEventCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
-            <Button Content="Block outbound" Command="{Binding BlockEventOutboundCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
-            <Button Content="Block inbound" Command="{Binding BlockEventInboundCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
-            <Button Content="End task" Classes="danger" Command="{Binding EndEventTaskCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
-            <controls:AxiomSelectableTextBlock Text="{Binding WriteStatusText}" IsVisible="{Binding !CanWrite}"
-                       FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" Margin="4,0,12,0" />
-            <controls:AxiomSelectableTextBlock Text="{Binding ActionStatusText}"
-                       FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" TextWrapping="Wrap" />
-            <Button Content="Copy details" Command="{Binding CopyEventDetailsCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
-            <Button Content="Copy path" Command="{Binding CopyEventPathCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" />
-          </WrapPanel>
+          <StackPanel Spacing="6">
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="Inspect event" Command="{Binding InspectEventCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Block outbound" Command="{Binding BlockEventOutboundCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Block inbound" Command="{Binding BlockEventInboundCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="End process (PID)" Classes="danger" Command="{Binding EndEventTaskCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4"
+                      ToolTip.Tip="End only the specific PID associated with this event." />
+              <Button Content="Copy details" Command="{Binding CopyEventDetailsCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Copy path" Command="{Binding CopyEventPathCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Copy local" Command="{Binding CopyEventLocalCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Copy remote" Command="{Binding CopyEventRemoteCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Copy status" Command="{Binding CopyEventStatusCommand}"
+                      Padding="10,4" Margin="0,0,0,4" />
+            </WrapPanel>
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <controls:AxiomSelectableTextBlock Text="{Binding WriteStatusText}" IsVisible="{Binding !CanWrite}"
+                         FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Text="{Binding ActionStatusText}"
+                         FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+            </StackPanel>
+          </StackPanel>
         </Border>
 
         <Grid Grid.Row="2">
@@ -93,6 +104,7 @@
               <ListBox.ItemTemplate>
                 <DataTemplate>
                   <Grid ColumnDefinitions="72,1.2*,58,58,1.1*,1.2*,44,86,80,76,76" Margin="0,2"
+                        Background="Transparent"
                         ToolTip.Tip="{Binding RowTooltip}"
                         Tag="{Binding $parent[UserControl].DataContext}">
                     <Grid.ContextMenu>
@@ -121,7 +133,7 @@
                                   Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockEventInboundCommand}"
                                   CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                         <Separator />
-                        <MenuItem Header="End task"
+                        <MenuItem Header="End process (PID)"
                                   Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndEventTaskCommand}"
                                   CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                       </ContextMenu>
@@ -167,12 +179,13 @@
                         </Grid>
                       </Expander.Header>
                       <ListBox Classes="data-list" ItemsSource="{Binding Events}"
-                               SelectedItem="{Binding $parent[UserControl].DataContext.SelectedEvent, Mode=TwoWay}"
+                               controls:DataListSelection.SharedSelectedItem="{Binding $parent[UserControl].DataContext.SelectedEvent, Mode=TwoWay}"
                                Background="Transparent" BorderThickness="0"
                                MaxHeight="280" Margin="0,8,0,0">
                         <ListBox.ItemTemplate>
                           <DataTemplate>
                             <Grid ColumnDefinitions="58,58,1.1*,1.2*,44,86,80,76,76" Margin="0,2"
+                                  Background="Transparent"
                                   ToolTip.Tip="{Binding RowTooltip}"
                                   Tag="{Binding $parent[UserControl].DataContext}">
                               <Grid.ContextMenu>
@@ -201,7 +214,7 @@
                                             Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockEventInboundCommand}"
                                             CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                                   <Separator />
-                                  <MenuItem Header="End task"
+                                  <MenuItem Header="End process (PID)"
                                             Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndEventTaskCommand}"
                                             CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                                 </ContextMenu>

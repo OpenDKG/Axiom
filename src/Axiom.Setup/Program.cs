@@ -1,16 +1,45 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using System.Windows;
+using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace Axiom.Setup;
 
 internal static class Program
 {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int MessageBox(nint hWnd, string text, string caption, uint type);
+
     [STAThread]
     private static void Main(string[] args)
     {
+        // A second setup instance used to run concurrently with the first, each making its own
+        // multi-GB upgrade backup and fighting over the service. One instance only.
+        using var single = new Mutex(initiallyOwned: true, @"Global\AxiomSetup.SingleInstance", out var created);
+        if (!created)
+        {
+            _ = MessageBox(
+                nint.Zero,
+                "Axiom Setup is already running. Wait for the current installation to finish; running a second copy duplicates the upgrade backup and can freeze the machine.",
+                "Axiom Setup",
+                0x00000040);
+            Environment.ExitCode = 3;
+            return;
+        }
+
         var options = SetupOptions.Parse(args);
         if (options.Silent)
         {
+            if (options.Uninstall)
+            {
+                var uninstall = SetupInstaller
+                    .UninstallAsync(options, progress: null, CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+                Console.WriteLine(uninstall.Message);
+                Environment.ExitCode = uninstall.Success ? 0 : 1;
+                return;
+            }
+
             if (!options.AcceptRisk)
             {
                 Console.Error.WriteLine(
@@ -23,21 +52,26 @@ internal static class Program
                 .InstallAsync(options, progress: null, CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
+            if (!result.Success || result.PartialSuccess)
+            {
+                // Write the reason / partial-success warnings and the tail of the log so automated callers see what stopped optional steps.
+                Console.Error.WriteLine((result.Success ? "Axiom setup partial success: " : "Axiom setup failed: ") + result.Message);
+                if (!string.IsNullOrWhiteSpace(result.Warning))
+                {
+                    Console.Error.WriteLine(result.Warning);
+                }
+
+                foreach (var line in result.Log.TakeLast(20))
+                {
+                    Console.Error.WriteLine("  " + line);
+                }
+            }
+
             Environment.ExitCode = result.Success ? 0 : 1;
             return;
         }
 
-        var application = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
-
-        application.Resources.MergedDictionaries.Add(new ResourceDictionary
-        {
-            Source = new Uri("pack://application:,,,/Axiom.UI;component/Themes/Dark.xaml", UriKind.Absolute),
-        });
-        application.Resources.MergedDictionaries.Add(new ResourceDictionary
-        {
-            Source = new Uri("pack://application:,,,/Axiom.UI;component/Themes/Controls.xaml", UriKind.Absolute),
-        });
-
-        application.Run(new SetupWindow(options));
+        using var window = new SetupNativeWindow(options);
+        Environment.ExitCode = window.Run();
     }
 }

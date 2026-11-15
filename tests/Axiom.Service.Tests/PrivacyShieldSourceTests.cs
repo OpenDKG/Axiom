@@ -142,6 +142,77 @@ public sealed class PrivacyShieldSourceTests
         }
     }
 
+    [Fact]
+    public async Task Updater_processes_malware_sources_before_bulk_lists()
+    {
+        var adsSource = new PrivacyShieldSourceInfo(
+            "bulk-ads",
+            "Bulk Ads",
+            "https://example.test/ads.txt",
+            "MIT",
+            PrivacyCategory.Ads,
+            "ads");
+        var tifSource = new PrivacyShieldSourceInfo(
+            "hagezi-tif",
+            "HaGeZi TIF",
+            "https://example.test/tif.txt",
+            "MIT",
+            PrivacyCategory.Malware,
+            "tif");
+        var downloadOrder = new List<string>();
+        using var client = new HttpClient(new StubHandler(request =>
+        {
+            downloadOrder.Add(request.RequestUri!.AbsolutePath);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("bad-domain.example\n"),
+            };
+        }));
+        using var updater = new PrivacyShieldSourceUpdater(client);
+
+        var result = await updater.UpdateAsync([adsSource, tifSource], CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(["/tif.txt", "/ads.txt"], downloadOrder);
+        Assert.Equal("hagezi-tif", Assert.Single(result.Rules).SourceId);
+    }
+
+    [Fact]
+    public async Task Updater_processes_phishing_sources_before_bulk_lists()
+    {
+        var adsSource = new PrivacyShieldSourceInfo(
+            "bulk-ads",
+            "Bulk Ads",
+            "https://example.test/ads.txt",
+            "MIT",
+            PrivacyCategory.Ads,
+            "ads");
+        var phishingSource = new PrivacyShieldSourceInfo(
+            "phishing-filter",
+            "Phishing Filter",
+            "https://example.test/phishing.txt",
+            "MIT",
+            PrivacyCategory.Phishing,
+            "phishing");
+        var downloadOrder = new List<string>();
+        using var client = new HttpClient(new StubHandler(request =>
+        {
+            downloadOrder.Add(request.RequestUri!.AbsolutePath);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("phish-domain.example\n"),
+            };
+        }));
+        using var updater = new PrivacyShieldSourceUpdater(client);
+
+        var result = await updater.UpdateAsync([adsSource, phishingSource], CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(["/phishing.txt", "/ads.txt"], downloadOrder);
+        Assert.Equal("phishing-filter", Assert.Single(result.Rules).SourceId);
+        Assert.True(Assert.Single(result.Rules).Category.HasFlag(PrivacyCategory.Phishing));
+    }
+
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(

@@ -77,6 +77,54 @@ public sealed class BlackboxLocalStateTests
             DateTimeOffset.UtcNow));
     }
 
+    [Fact]
+    public void EvaluateContinuity_preserves_cached_ruleset_offline_and_flags_corruption()
+    {
+        using var temp = new TemporaryDirectory();
+        var syncedAt = new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero);
+        File.WriteAllText(
+            Path.Combine(temp.Path, "verified_lookup_state.json"),
+            """{"state":"degraded","reason":"store down"}""");
+        File.WriteAllText(
+            Path.Combine(temp.Path, "ruleset.json"),
+            $$"""
+              {
+                "synced_at": {{syncedAt.ToUnixTimeSeconds()}},
+                "graph_threats": [
+                  {"identifier":"injection:1","name":"Prompt override","category":"injection","severity":"high","source":"public"}
+                ],
+                "verified_scope": {
+                  "verified_counts": {
+                    "dependency": 252860,
+                    "ioc": 856005
+                  }
+                }
+              }
+              """);
+
+        var report = BlackboxLocalState.EvaluateContinuity(
+            temp.Path,
+            guardPresent: true,
+            dkgConnected: false,
+            now: syncedAt.AddHours(8));
+
+        Assert.True(report.GuardAvailable);
+        Assert.True(report.RulesetAvailable);
+        Assert.True(report.SyncStale);
+        Assert.True(report.DkgOffline);
+        Assert.False(report.IsUnprotected);
+
+        var sync = BlackboxLocalState.TryReadSync(temp.Path, syncedAt.AddHours(8));
+        Assert.NotNull(sync);
+        Assert.Equal("synced", sync!.State);
+        Assert.Equal(1_108_866, sync.VerifiedRules);
+
+        File.WriteAllText(Path.Combine(temp.Path, "ruleset.json"), "{corrupt");
+        var corrupted = BlackboxLocalState.EvaluateContinuity(temp.Path, guardPresent: true);
+        Assert.True(corrupted.RulesetCorrupted);
+        Assert.True(corrupted.IsUnprotected);
+    }
+
     private sealed class TemporaryDirectory : IDisposable
     {
         public TemporaryDirectory()

@@ -19,20 +19,27 @@
 
     <Border Grid.Row="2" Classes="card" Padding="16">
       <Grid RowDefinitions="Auto,Auto,*">
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,10">
-          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-            <Button Content="Block outbound" Padding="10,4"
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+          <WrapPanel Grid.Column="0" Orientation="Horizontal">
+            <Button Content="Block outbound" Padding="10,4" Margin="0,0,8,4"
                     Command="{Binding BlockOutboundCommand}" CommandParameter="{Binding SelectedConnection}" />
-            <Button Content="Block inbound" Padding="10,4"
+            <Button Content="Block inbound" Padding="10,4" Margin="0,0,8,4"
                     Command="{Binding BlockInboundCommand}" CommandParameter="{Binding SelectedConnection}" />
-            <Button Content="End task" Classes="danger" Padding="10,4"
+            <Button Content="End process (PID)" Classes="danger" Padding="10,4" Margin="0,0,8,4"
+                    ToolTip.Tip="End only the specific PID associated with this socket."
                     Command="{Binding EndTaskCommand}" CommandParameter="{Binding SelectedConnection}" />
-            <Button Content="Copy path" Padding="10,4"
+            <Button Content="Copy row" Padding="10,4" Margin="0,0,8,4"
+                    Command="{Binding CopyRowCommand}" CommandParameter="{Binding SelectedConnection}" />
+            <Button Content="Copy path" Padding="10,4" Margin="0,0,8,4"
                     Command="{Binding CopyPathCommand}" CommandParameter="{Binding SelectedConnection}" />
-            <Button Content="Copy remote" Padding="10,4"
+            <Button Content="Copy local" Padding="10,4" Margin="0,0,8,4"
+                    Command="{Binding CopyLocalCommand}" CommandParameter="{Binding SelectedConnection}" />
+            <Button Content="Copy remote" Padding="10,4" Margin="0,0,8,4"
                     Command="{Binding CopyRemoteCommand}" CommandParameter="{Binding SelectedConnection}" />
-          </StackPanel>
-          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+            <Button Content="Copy status" Padding="10,4" Margin="0,0,8,4"
+                    Command="{Binding CopyStatusCommand}" />
+          </WrapPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top"
                       IsVisible="{Binding IsGroupedByApp}">
             <controls:AxiomSelectableTextBlock Text="Sort" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}"
                                                VerticalAlignment="Center" />
@@ -61,6 +68,7 @@
           <ListBox.ItemTemplate>
             <DataTemplate>
               <Grid ColumnDefinitions="1.4*,62,62,1.15*,1.15*,44,86,76,1*" Margin="0,2"
+                    Background="Transparent"
                     ToolTip.Tip="{Binding RowTooltip}"
                     Tag="{Binding $parent[ListBox].DataContext}">
                 <Grid.ContextMenu>
@@ -86,7 +94,7 @@
                               Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockInboundCommand}"
                               CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                     <Separator />
-                    <MenuItem Header="End task"
+                    <MenuItem Header="End process (PID)"
                               Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndTaskCommand}"
                               CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                   </ContextMenu>
@@ -140,13 +148,14 @@
                       </Grid>
                     </Expander.Header>
                     <ListBox Classes="data-list" ItemsSource="{Binding Rows}"
-                             SelectedItem="{Binding $parent[UserControl].DataContext.SelectedConnection, Mode=TwoWay}"
+                             controls:DataListSelection.SharedSelectedItem="{Binding $parent[UserControl].DataContext.SelectedConnection, Mode=TwoWay}"
                              MaxHeight="240"
                              Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                       <ListBox.ItemTemplate>
                         <DataTemplate>
                           <Grid ColumnDefinitions="62,62,1.2*,1.2*,44,86,76" Margin="0,2"
+                                Background="Transparent"
                                 ToolTip.Tip="{Binding RowTooltip}"
                                 Tag="{Binding $parent[UserControl].DataContext}">
                             <Grid.ContextMenu>
@@ -172,7 +181,7 @@
                                           Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockInboundCommand}"
                                           CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                                 <Separator />
-                                <MenuItem Header="End task"
+                                <MenuItem Header="End process (PID)"
                                           Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndTaskCommand}"
                                           CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                               </ContextMenu>

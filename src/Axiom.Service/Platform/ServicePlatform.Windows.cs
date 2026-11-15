@@ -102,6 +102,12 @@ internal static class ServicePlatform
             provider.GetRequiredService<EnforcementController>().ReceiptJournal));
     }
 
+    /// <summary>Process-start audit (upstream F-19 part B): the WMI feed, Windows only.</summary>
+    public static void ConfigureProcessSpawnAudit(HostApplicationBuilder builder)
+    {
+        builder.Services.AddHostedService<ProcessSpawnAuditWorker>();
+    }
+
     // --- NetworkRecoveryCommand platform hooks (offline administrator recovery) ---
 
     private const uint AttachParentProcess = 0xFFFFFFFF;

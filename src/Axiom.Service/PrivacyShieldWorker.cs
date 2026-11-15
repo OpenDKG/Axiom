@@ -19,13 +19,73 @@ public sealed class PrivacyShieldWorker(
         }
 
         await controller.StartAsync(stoppingToken).ConfigureAwait(false);
+        controller.EnsureConfiguredAdapterDns();
+
+        // Catch up any newly added or stale blocklist sources right after startup, then check hourly
+        // against each source's 24h (or configured) age without blocking pipe responsiveness.
+        _ = RunAutoSourceUpdaterAsync(stoppingToken);
 
         try
         {
-            await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken).ConfigureAwait(false);
+            using var adapterTimer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+            while (await adapterTimer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+            {
+                if (controller.IsEnabled && !controller.IsResolverRunning)
+                {
+                    await controller.StartAsync(stoppingToken).ConfigureAwait(false);
+                }
+
+                if (controller.ShouldAutoPointAdapterDns)
+                {
+                    controller.EnsureConfiguredAdapterDns();
+                }
+            }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
+        }
+    }
+
+    private async Task RunAutoSourceUpdaterAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await controller
+                .WaitForSourceSyncOrDelayAsync(TimeSpan.FromSeconds(10), stoppingToken)
+                .ConfigureAwait(false);
+            await TryUpdateMissingOrStaleSourcesAsync(stoppingToken).ConfigureAwait(false);
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await controller
+                    .WaitForSourceSyncOrDelayAsync(TimeSpan.FromHours(1), stoppingToken)
+                    .ConfigureAwait(false);
+                await TryUpdateMissingOrStaleSourcesAsync(stoppingToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task TryUpdateMissingOrStaleSourcesAsync(CancellationToken stoppingToken)
+    {
+        if (!controller.ShouldAutoUpdateSources())
+        {
+            return;
+        }
+
+        try
+        {
+            await controller.UpdateSourcesAsync(stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Keep running on cached rules; the controller status retains the per-source error.
         }
     }
 

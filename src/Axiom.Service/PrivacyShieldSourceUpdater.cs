@@ -20,9 +20,9 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
 {
     private const int MaxBytes = 20 * 1024 * 1024;
 
-    // Keep room for every selected source so a large list cannot consume the whole cap before a
-    // smaller telemetry list such as WindowsSpyBlocker is imported.
-    private const int SourceReserve = 10_000;
+    // Keep room for every selected source so large ad/tracking lists cannot consume the cap before
+    // threat-intelligence, phishing, or telemetry feeds are imported.
+    private const int SourceReserve = 25_000;
 
     private readonly HttpClient _http;
 
@@ -48,19 +48,24 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
                 "Select at least one catalogued source before updating.");
         }
 
+        // Import threat-intelligence and phishing feeds first so they never lose priority to bulk lists.
+        var orderedSources = sources
+            .OrderBy(source => (source.Category & (PrivacyCategory.Malware | PrivacyCategory.Phishing)) != 0 ? 0 : 1)
+            .ToArray();
+
         var rules = new List<PrivacyShieldStoredRule>();
         var statuses = new List<PrivacyShieldSourceStatus>();
         var index = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var success = true;
 
-        for (var sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
+        for (var sourceIndex = 0; sourceIndex < orderedSources.Length; sourceIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var source = sources[sourceIndex];
-            var remainingSources = sources.Count - sourceIndex - 1;
+            var source = orderedSources[sourceIndex];
+            var remainingSources = orderedSources.Length - sourceIndex - 1;
             var reserve = Math.Min(
                 SourceReserve,
-                PrivacyShieldPolicy.MaxRules / Math.Max(2, sources.Count * 2));
+                PrivacyShieldPolicy.MaxRules / Math.Max(2, orderedSources.Length * 2));
             var sourceLimit = Math.Max(
                 1,
                 PrivacyShieldPolicy.MaxRules - (remainingSources * reserve));

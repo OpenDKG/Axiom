@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Axiom.Contracts.Blackbox;
 
 namespace Axiom.Presentation;
 
@@ -257,7 +258,7 @@ public sealed class WindsurfProtection
         return true;
     }
 
-    private static string BuildHookScript() => AgentPlatform.AdaptHookScript("""
+    private static string BuildHookScript() => AgentPlatform.AdaptHookScript(("""
         # Managed by Axiom. Calls the local Blackbox guard for Windsurf Cascade pre-hooks.
         import datetime
         import contextlib
@@ -270,6 +271,9 @@ public sealed class WindsurfProtection
         ROOT = Path(__file__).resolve().parent
         sys.path.insert(0, str(ROOT))
         EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "agent-evidence.jsonl"
+
+
+        # <<AXIOM_COMMAND_GUARD>>
 
 
         def record(event_type, tool, decision, guard_status, duration_ms, error_code=""):
@@ -314,6 +318,18 @@ public sealed class WindsurfProtection
                     tool = action or "unknown"
                     args = info
 
+                safety = _check_command_safety(args, _load_protected_paths())
+                if safety is not None:
+                    record(
+                        "GUARD_BLOCKED",
+                        tool,
+                        "block",
+                        "blocked",
+                        int((time.monotonic() - started) * 1000),
+                        error_code=safety[0])
+                    print(safety[1], file=sys.stderr)
+                    sys.exit(2)
+
                 with contextlib.redirect_stdout(sys.stderr):
                     from plugins.blackbox.guard.hooks import on_pre_tool_call
 
@@ -341,5 +357,5 @@ public sealed class WindsurfProtection
 
         if __name__ == "__main__":
             main()
-        """);
+        """).Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal));
 }

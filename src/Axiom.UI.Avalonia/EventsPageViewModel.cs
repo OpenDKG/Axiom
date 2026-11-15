@@ -225,9 +225,17 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
         }
 
         ActionStatusText = await _actions
-            .EndTaskAsync(target.AppDisplayName, [target.ProcessId])
+            .EndProcessAsync(target.AppDisplayName, target.ProcessId)
             .ConfigureAwait(true);
     }
+
+    [RelayCommand]
+    private Task CopyEventStatusAsync() =>
+        CopyAsync(!string.IsNullOrWhiteSpace(ActionStatusText)
+            ? ActionStatusText
+            : !CanWrite && !string.IsNullOrWhiteSpace(WriteStatusText)
+                ? WriteStatusText
+                : StatusText);
 
     private async Task CopyAsync(string? value)
     {
@@ -239,10 +247,12 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
         try
         {
             await _ui.CopyTextAsync(value, CancellationToken.None).ConfigureAwait(true);
+            ActionStatusText = "Copied to the clipboard.";
         }
         catch (Exception exception) when (exception is
                      InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
         {
+            ActionStatusText = "Clipboard is unavailable.";
         }
     }
 
@@ -323,11 +333,12 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
                     continue;
                 }
 
-                Rows.Clear();
-                foreach (var row in page.Rows)
-                {
-                    Rows.Add(new EventRowView(row));
-                }
+                var selectedKey = SelectedEvent is null ? null : EventIdentity(SelectedEvent);
+                var desiredRows = page.Rows.Select(row => new EventRowView(row)).ToList();
+                CollectionSync.SyncInPlace(Rows, desiredRows, EventRowIdentityComparer.Instance);
+                SelectedEvent = selectedKey is null
+                    ? null
+                    : Rows.FirstOrDefault(item => EventIdentity(item) == selectedKey);
 
                 TotalCount = page.TotalCount;
                 DatabaseText = page.DatabasePath;
@@ -495,6 +506,19 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
         return _client!.SendAsync<HistoryPage>(IpcCommandTypes.HistoryQuery, query, CancellationToken.None);
     }
 
+    private static string EventIdentity(EventRowView row) =>
+        $"{row.TypeText}|{row.AppPath}|{row.ProcessId}|{row.Protocol}|{row.LocalEndpoint}|{row.RemoteEndpoint}|{row.FirstSeenUtc.UtcTicks}";
+
+    private sealed class EventRowIdentityComparer : IEqualityComparer<EventRowView>
+    {
+        public static EventRowIdentityComparer Instance { get; } = new();
+
+        public bool Equals(EventRowView? x, EventRowView? y) =>
+            x is not null && y is not null && EventIdentity(x) == EventIdentity(y);
+
+        public int GetHashCode(EventRowView obj) => EventIdentity(obj).GetHashCode(StringComparison.Ordinal);
+    }
+
     private static TimeSpan RangeSpan(string range) => range switch
     {
         "15m" => TimeSpan.FromMinutes(15),
@@ -552,10 +576,6 @@ public sealed partial class EventAppGroup : ObservableObject
         var latest = rows.Max(row => row.LastSeenUtc);
         SummaryText = $"{endpoints} remote endpoint{(endpoints == 1 ? string.Empty : "s")} · latest {latest.ToLocalTime():HH:mm:ss}";
 
-        Events.Clear();
-        foreach (var row in rows)
-        {
-            Events.Add(row);
-        }
+        CollectionSync.SyncInPlace(Events, rows);
     }
 }

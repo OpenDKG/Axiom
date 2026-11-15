@@ -51,7 +51,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         @"\b[A-Fa-f0-9]{32,}\b",
         RegexOptions.Compiled);
 
-    private readonly BlackboxDashboardClient _client = new();
+    private readonly BlackboxDashboardClient _client;
 
     private readonly BlackboxAutoSyncStore _autoSyncStore = new();
 
@@ -78,6 +78,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private bool _refreshing;
 
     private bool _preservingActivitySelection;
+
+    private bool _preservingFindingSelection;
 
     private string? _selectedActivityIdentity;
 
@@ -109,7 +111,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         IUserInteraction ui,
         IBlackboxDialogService dialogs,
         IUiTimerFactory timers,
-        IServiceRequestClient? serviceClient = null)
+        IServiceRequestClient? serviceClient = null,
+        BlackboxDashboardClient? blackboxClient = null)
         : base("Agent Protection", "Hooks, DKG and Blackbox protection for local AI agents", "\uE99A")
     {
         Security = security ?? throw new ArgumentNullException(nameof(security));
@@ -120,6 +123,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _ui = ui;
         _dialogs = dialogs;
         _serviceClient = serviceClient;
+        _client = blackboxClient ?? new BlackboxDashboardClient();
+        if (!IsAvailable)
+        {
+            _threatShareQueueText = "Indicator preview is unavailable in Store builds.";
+        }
 
         var autoSync = _autoSyncStore.Load();
         _isAutoSyncEnabled = autoSync.Enabled;
@@ -147,7 +155,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     public bool IsAvailable => !DistributionContext.IsStorePackage;
 
     /// <summary>Truthful enforcement status shown above the host list.</summary>
-    public EnforcementSurfaceState Enforcement => EnforcementSurfaceState.Current;
+    [ObservableProperty]
+    private EnforcementSurfaceState _enforcement = EnforcementSurfaceState.Current;
 
     public IReadOnlyList<string> ActivityFilters { get; } =
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
@@ -420,7 +429,15 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        if (!IsAvailable || _refreshing)
+        if (!IsAvailable)
+        {
+            ThreatShareQueueText = "Indicator preview is unavailable in Store builds.";
+            HasThreatShareCandidates = false;
+            CanSubmitThreatShare = false;
+            return;
+        }
+
+        if (_refreshing)
         {
             return;
         }
@@ -496,8 +513,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ApplyFindings(findingsTask.Result);
             ApplyHealth(settingsTask.Result, graphTask.Result);
             ApplyHookEvidence();
+            await RefreshEnforcementAsync(
+                guardAvailable: true,
+                ReadString(settingsTask.Result, "mode")).ConfigureAwait(true);
             await RefreshSessionsAsync().ConfigureAwait(true);
-            await RefreshThreatShareAsync().ConfigureAwait(true);
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
@@ -507,6 +526,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             SummaryText = "No live Blackbox data is available.";
             ThreatSharingStatusText = "offline · dashboard unavailable";
             CanToggleThreatSharing = false;
+            ApplyHookEvidence();
+            await RefreshEnforcementAsync(guardAvailable: false, hookMode: null).ConfigureAwait(true);
+        }
+
+        try
+        {
+            await RefreshThreatShareAsync().ConfigureAwait(true);
         }
         finally
         {
@@ -712,30 +738,46 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         return new BlackboxAuditPage(entries, total);
     }
 
-    [RelayCommand]
-    private void CopyActivityEvent()
+    private static T? ResolveCopyTarget<T>(T? explicitItem, T? currentSelection, Action<T?> selectItem) where T : class
     {
-        if (SelectedActivity is not { } entry)
+        var target = explicitItem ?? currentSelection;
+        if (target is null)
+        {
+            return null;
+        }
+
+        if (!ReferenceEquals(currentSelection, target))
+        {
+            selectItem(target);
+        }
+
+        return target;
+    }
+
+    [RelayCommand]
+    private void CopyActivityEvent(BlackboxAuditEntry? entry = null)
+    {
+        if (ResolveCopyTarget(entry, SelectedActivity, value => SelectedActivity = value) is not { } target)
         {
             return;
         }
 
         CopyToClipboard(string.Join(
             Environment.NewLine,
-            $"Time: {entry.DateTimeText}",
-            $"Agent: {entry.Agent}",
-            $"Event: {entry.EventLabel} ({entry.Event})",
-            $"Details: {entry.ActionSummary}",
-            $"Session: {entry.SessionFull}",
-            $"Severity: {entry.Severity}",
-            $"Decision: {entry.Decision}",
-            $"Security: {entry.SecurityOutcomeDetail}"));
+            $"Time: {target.DateTimeText}",
+            $"Agent: {target.Agent}",
+            $"Event: {target.EventLabel} ({target.Event})",
+            $"Details: {target.ActionSummary}",
+            $"Session: {target.SessionFull}",
+            $"Severity: {target.Severity}",
+            $"Decision: {target.Decision}",
+            $"Security: {target.SecurityOutcomeDetail}"));
     }
 
     [RelayCommand]
-    private void CopyActivityDetails()
+    private void CopyActivityDetails(BlackboxAuditEntry? entry = null)
     {
-        if (SelectedActivity is null)
+        if (ResolveCopyTarget(entry, SelectedActivity, value => SelectedActivity = value) is null)
         {
             return;
         }
@@ -754,49 +796,57 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     }
 
     [RelayCommand]
-    private void CopyActivityJson() => CopyToClipboard(SelectedActivityRawText);
-
-    [RelayCommand]
-    private void CopyFinding()
+    private void CopyActivityJson(BlackboxAuditEntry? entry = null)
     {
-        if (SelectedFinding is not { } finding)
+        if (ResolveCopyTarget(entry, SelectedActivity, value => SelectedActivity = value) is null)
         {
             return;
         }
 
-        CopyToClipboard(string.Join(
-            Environment.NewLine,
-            $"Time: {finding.TimeText}",
-            $"Agent: {finding.Agent}",
-            $"Category: {finding.Category}",
-            $"Severity: {finding.Severity}",
-            $"Identifier: {finding.Identifier}",
-            $"Title: {finding.Title}",
-            $"Decision: {finding.Decision}",
-            $"Session: {finding.Session}",
-            $"Security: {finding.SecurityOutcome}"));
+        CopyToClipboard(SelectedActivityRawText);
     }
 
     [RelayCommand]
-    private void CopyHookEvidence()
+    private void CopyFinding(BlackboxFinding? finding = null)
     {
-        if (SelectedHookEvidence is not { } evidence)
+        if (ResolveCopyTarget(finding, SelectedFinding, value => SelectedFinding = value) is not { } target)
         {
             return;
         }
 
         CopyToClipboard(string.Join(
             Environment.NewLine,
-            $"Time: {evidence.Timestamp:O}",
-            $"Framework: {evidence.Framework}",
-            $"Event: {evidence.EventType}",
-            $"Tool: {evidence.Tool}",
-            $"Decision: {evidence.Decision}",
-            $"Guard status: {evidence.GuardStatus}",
-            $"Duration: {evidence.DurationMs} ms",
-            $"Error: {evidence.ErrorCode}",
-            $"Session: {evidence.Session}",
-            $"Call: {evidence.Call}"));
+            $"Time: {target.TimeText}",
+            $"Agent: {target.Agent}",
+            $"Category: {target.Category}",
+            $"Severity: {target.Severity}",
+            $"Identifier: {target.Identifier}",
+            $"Title: {target.Title}",
+            $"Decision: {target.Decision}",
+            $"Session: {target.Session}",
+            $"Security: {target.SecurityOutcome}"));
+    }
+
+    [RelayCommand]
+    private void CopyHookEvidence(AgentEvidenceEvent? evidence = null)
+    {
+        if (ResolveCopyTarget(evidence, SelectedHookEvidence, value => SelectedHookEvidence = value) is not { } target)
+        {
+            return;
+        }
+
+        CopyToClipboard(string.Join(
+            Environment.NewLine,
+            $"Time: {target.Timestamp:O}",
+            $"Framework: {target.Framework}",
+            $"Event: {target.EventType}",
+            $"Tool: {target.Tool}",
+            $"Decision: {target.Decision}",
+            $"Guard status: {target.GuardStatus}",
+            $"Duration: {target.DurationMs} ms",
+            $"Error: {target.ErrorCode}",
+            $"Session: {target.Session}",
+            $"Call: {target.Call}"));
     }
 
     [RelayCommand]
@@ -1182,7 +1232,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             $"{status.Pending} waiting for your review, {status.Submitted} shared in total, " +
             $"{status.TodaySubmitted}/{status.DailyLimit} today.{deferred}{unverified} " +
             (ThreatSharingEnabled
-                ? $"Sharing is on; nothing is sent until you press Share or Send now. {sandboxNote}"
+                ? $"Sharing is on; every share is checked locally (reporter terms, signing key, category, novelty) before anything is signed. {sandboxNote}"
                 : $"Sharing is off; nothing is signed or sent. {sandboxNote}") +
             consent;
     }
@@ -1349,6 +1399,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _threatShareSubmitting = true;
         CanSubmitThreatShare = false;
         ThreatShareActionText = "Submitting through the Blackbox reporter...";
+        var ruleset = ThreatShareCli.ReadRuleset();
+        var consent = ThreatShareCli.ConsentPresent();
+        var key = ThreatShareCli.ReporterKeyPresent();
+        var blocked = new List<string>();
         try
         {
             var shared = 0;
@@ -1359,6 +1413,14 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ThreatShareQueueStatus? latest = null;
             foreach (var item in publishable)
             {
+                var preflight = ThreatSharePreflight.Evaluate(
+                    item.Candidate, ThreatSharingEnabled, consent, key, ruleset);
+                if (!preflight.Ready)
+                {
+                    blocked.Add($"{item.Candidate.Value} ({preflight.FailureText})");
+                    continue;
+                }
+
                 var result = await _cli
                     .ReportAsync(item.Candidate, CancellationToken.None)
                     .ConfigureAwait(true);
@@ -1411,6 +1473,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 $"Submitted {shared}, deferred {deferred}, awaiting confirmation {unverified}, rejected {rejected}." +
                 (capReached
                     ? " The daily cap is reached; the remaining indicators stay queued."
+                    : string.Empty) +
+                (blocked.Count > 0
+                    ? $" {blocked.Count} not sent: {string.Join("; ", blocked.Take(3))}."
                     : string.Empty);
         }
         catch (Exception exception) when (exception is
@@ -1596,7 +1661,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     partial void OnSelectedSeverityFilterChanged(string value) => ApplyFilters();
 
-    private void ApplyActivity(BlackboxAuditPage page)
+    internal void ApplyActivity(BlackboxAuditPage page)
     {
         _allActivity.Clear();
         _allActivity.AddRange(NormalizeActivity(page.Entries, ReadFrameworkMap()));
@@ -1605,7 +1670,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         ApplyFilters();
     }
 
-    private void MergeActivity(BlackboxAuditPage page)
+    internal void MergeActivity(BlackboxAuditPage page)
     {
         _activityTotal = Math.Max(page.Total, _allActivity.Count);
         var incoming = NormalizeActivity(page.Entries, ReadFrameworkMap());
@@ -1735,26 +1800,25 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         ActivityFreshnessText = ActivityFreshness.Describe(newest, now, _hasLiveSession);
     }
 
-    private void ApplyFindings(BlackboxFindingPage page)
+    internal void ApplyFindings(BlackboxFindingPage page)
     {
         var selected = SelectedFinding;
         _allFindings.Clear();
         _allFindings.AddRange(page.Findings.OrderByDescending(finding => finding.Timestamp));
 
-        // The audit refreshes every 15 seconds. Replacing the items each time would drop the
-        // user's selection while they read a finding, so only rebuild when the page changed.
+        // The audit refreshes every 15 seconds. Sync in place instead of calling Clear(), so row
+        // containers stay attached across refreshes while preserving the active selection.
         if (!Findings.SequenceEqual(_allFindings))
         {
             var selectedKey = selected is null ? null : FindingIdentity(selected);
-            Findings.Clear();
-            foreach (var finding in _allFindings)
-            {
-                Findings.Add(finding);
-            }
+            _preservingFindingSelection = true;
+            CollectionSync.SyncInPlace(Findings, _allFindings);
 
+            _preservingFindingSelection = false;
             SelectedFinding = selectedKey is null
                 ? null
                 : Findings.FirstOrDefault(finding => FindingIdentity(finding) == selectedKey);
+            HasSelectedFinding = SelectedFinding is not null;
         }
 
         var blocked = _allFindings.Count(finding => finding.IsBlocked);
@@ -1783,7 +1847,15 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private static string FindingIdentity(BlackboxFinding finding) =>
         $"{finding.Timestamp?.UtcTicks}|{finding.Identifier}|{finding.Agent}|{finding.Title}";
 
-    partial void OnSelectedFindingChanged(BlackboxFinding? value) => HasSelectedFinding = value is not null;
+    partial void OnSelectedFindingChanged(BlackboxFinding? value)
+    {
+        if (value is null && _preservingFindingSelection)
+        {
+            return;
+        }
+
+        HasSelectedFinding = value is not null;
+    }
 
     private async Task<BlackboxVerifiedSync?> TryGetVerifiedSyncAsync()
     {
@@ -2029,18 +2101,69 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private void ApplyHookEvidence()
     {
-        HookEvidence.Clear();
-        foreach (var item in _agentEvidence.ReadRecent(60)
-                     .OrderByDescending(entry => entry.Timestamp)
-                     .Take(30))
+        var recent = _agentEvidence.ReadRecent(60)
+            .OrderByDescending(entry => entry.Timestamp)
+            .Take(30)
+            .ToList();
+
+        if (!HookEvidence.SequenceEqual(recent))
         {
-            HookEvidence.Add(item);
+            var selected = SelectedHookEvidence;
+            CollectionSync.SyncInPlace(HookEvidence, recent);
+
+            SelectedHookEvidence = selected is null
+                ? null
+                : HookEvidence.FirstOrDefault(item =>
+                    item.Timestamp == selected.Timestamp &&
+                    string.Equals(item.Framework, selected.Framework, StringComparison.Ordinal) &&
+                    string.Equals(item.EventType, selected.EventType, StringComparison.Ordinal) &&
+                    string.Equals(item.Tool, selected.Tool, StringComparison.Ordinal) &&
+                    string.Equals(item.Decision, selected.Decision, StringComparison.Ordinal));
         }
 
         _latestEvidenceUtc = HookEvidence.Count == 0
             ? null
             : HookEvidence.Max(item => (DateTimeOffset?)item.Timestamp);
         UpdateActivityFreshness();
+    }
+
+    private async Task RefreshEnforcementAsync(bool guardAvailable, string? hookMode)
+    {
+        EnforcementStatusDto? status = null;
+        EnforcementReceiptsSnapshotDto? receipts = null;
+
+        if (_serviceClient is not null)
+        {
+            try
+            {
+                status = await _serviceClient
+                    .SendAsync<EnforcementStatusDto>(IpcCommandTypes.EnforcementStatus, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+                receipts = await _serviceClient
+                    .SendAsync<EnforcementReceiptsSnapshotDto>(IpcCommandTypes.EnforcementReceipts, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
+            catch (Exception exception) when (exception is
+                ServiceUnavailableException or TimeoutException or System.Text.Json.JsonException or IOException)
+            {
+                // Leave controller telemetry null when the service pipe is absent or busy.
+            }
+        }
+
+        var normalizedMode = hookMode?.Trim().ToLowerInvariant() is "audit" or "block"
+            ? hookMode.Trim().ToLowerInvariant()
+            : Security.BlackboxModeText?.Trim().ToLowerInvariant() is "audit" or "block"
+                ? Security.BlackboxModeText.Trim().ToLowerInvariant()
+                : null;
+        var localHookDenies = HookEvidence.Count(entry =>
+            string.Equals(entry.EffectiveChannel, "HOST_DENY_SENT", StringComparison.Ordinal));
+
+        Enforcement = EnforcementSurfaceState.FromReceiptsAndStatus(
+            status,
+            receipts,
+            guardAvailable,
+            normalizedMode,
+            localHookDenies);
     }
 
     partial void OnSelectedActivityChanged(BlackboxAuditEntry? value)
@@ -2051,7 +2174,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         var identity = value is null ? null : ActivityIdentity(value);
-        if (value is not null && identity == _selectedActivityIdentity)
+        if (value is not null && HasSelectedActivity && identity == _selectedActivityIdentity)
         {
             return;
         }
@@ -2095,11 +2218,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         var selectedKey = SelectedActivity is null ? null : ActivityIdentity(SelectedActivity);
         _preservingActivitySelection = true;
-        Activity.Clear();
-        foreach (var entry in filtered)
-        {
-            Activity.Add(entry);
-        }
+        CollectionSync.SyncInPlace(Activity, filtered);
 
         _preservingActivitySelection = false;
         SelectedActivity = selectedKey is null
