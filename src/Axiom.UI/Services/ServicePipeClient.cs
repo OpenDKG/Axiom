@@ -3,8 +3,15 @@ using Axiom.Contracts.Ipc;
 
 namespace Axiom.UI.Services;
 
+/// <summary>
+/// A typed service failure the UI can show without exposing transport details. The code and
+/// message come from the local pipe protocol, which never carries remote input.
+/// </summary>
 public sealed class ServiceUnavailableException(string code, string message, Exception? inner = null)
-    : Exception($"Service unavailable: {message} ({code})", inner);
+    : Exception($"Service unavailable: {message} ({code})", inner)
+{
+    public string Code { get; } = code;
+}
 
 /// <summary>
 /// UI-facing adapter over the shared pipe client. It preserves the UI's existing exception contract

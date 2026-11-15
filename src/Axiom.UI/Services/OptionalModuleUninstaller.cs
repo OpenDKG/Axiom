@@ -17,10 +17,25 @@ public sealed class OptionalModuleUninstaller
 
     private readonly string _localAppData;
 
+    private readonly string? _environmentHome;
+
+    private readonly string? _environmentBlackboxHome;
+
     public OptionalModuleUninstaller(string? userProfile = null, string? localAppData = null)
+        : this(userProfile, localAppData, environmentHome: null, environmentBlackboxHome: null)
+    {
+    }
+
+    internal OptionalModuleUninstaller(
+        string? userProfile,
+        string? localAppData,
+        string? environmentHome,
+        string? environmentBlackboxHome)
     {
         _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _localAppData = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        _environmentHome = environmentHome;
+        _environmentBlackboxHome = environmentBlackboxHome;
     }
 
     private string ModulesRoot => Path.Combine(_localAppData, "Axiom", "modules");
@@ -155,11 +170,17 @@ public sealed class OptionalModuleUninstaller
 
     private string BuildBlackboxUninstallScript()
     {
-        var hermes = Path.Combine(_userProfile, ".hermes");
+        var hermes = BlackboxPaths.ResolveHermesHome(_userProfile, _localAppData, _environmentHome);
+        var blackboxHome = BlackboxPaths.ResolveBlackboxHome(
+            _userProfile,
+            _localAppData,
+            _environmentHome,
+            _environmentBlackboxHome);
         return $$"""
             $ErrorActionPreference = 'Continue'
             $root = '{{Escape(BlackboxRoot)}}'
             $hermes = '{{Escape(hermes)}}'
+            $blackboxHome = '{{Escape(blackboxHome)}}'
             $command = '{{Escape(BlackboxCommand)}}'
             function Test-ReparsePath($path) {
               $current = [IO.Path]::GetFullPath($path)
@@ -191,7 +212,6 @@ public sealed class OptionalModuleUninstaller
               Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
             }
             Write-Host 'Stopping Blackbox/DKG processes owned by this installation...' -ForegroundColor Cyan
-            $blackboxHome = Join-Path $hermes 'blackbox'
             Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
               Where-Object {
                 $_.CommandLine -and (
