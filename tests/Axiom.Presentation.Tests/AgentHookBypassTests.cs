@@ -134,7 +134,7 @@ public sealed class AgentHookBypassTests
             var localAppData = Directory.CreateDirectory(Path.Combine(sandbox.FullName, "localappdata"));
 
             var payload = BuildPreToolPayload("antigravity", "git status");
-            var (exitCode, stdout, _) = RunProcess(
+            var (exitCode, stdout, stderr) = RunProcess(
                 python,
                 [scriptPath],
                 sandbox.FullName,
@@ -145,7 +145,7 @@ public sealed class AgentHookBypassTests
                 });
 
             Assert.Equal(0, exitCode);
-            using var doc = JsonDocument.Parse(stdout);
+            using var doc = ParseJson(stdout, stderr, "antigravity");
             Assert.Equal("allow", doc.RootElement.GetProperty("decision").GetString());
         }
         finally
@@ -259,8 +259,8 @@ public sealed class AgentHookBypassTests
             return;
         }
 
-        Assert.Equal(0, exitCode);
-        using var doc = JsonDocument.Parse(stdout);
+        Assert.True(exitCode == 0, $"{host} expected exit code 0, got {exitCode}. stdout={stdout} stderr={stderr}");
+        using var doc = ParseJson(stdout, stderr, host);
         var root = doc.RootElement;
         switch (host)
         {
@@ -363,6 +363,18 @@ public sealed class AgentHookBypassTests
         return (process.ExitCode, stdout, stderr);
     }
 
+    private static JsonDocument ParseJson(string stdout, string stderr, string host)
+    {
+        try
+        {
+            return JsonDocument.Parse(stdout);
+        }
+        catch (JsonException ex)
+        {
+            throw new Xunit.Sdk.XunitException($"{host} produced invalid JSON. stdout='{stdout}' stderr='{stderr}' ({ex.Message})");
+        }
+    }
+
     private static string? FindWorkingPython()
     {
         var path = Environment.GetEnvironmentVariable("PATH");
@@ -371,32 +383,75 @@ public sealed class AgentHookBypassTests
             return null;
         }
 
-        foreach (var name in new[] { "python", "python3" })
+        var probeLocalAppData = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), $"axiom-py-probe-{Guid.NewGuid():N}"));
+        try
         {
-            foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            foreach (var name in new[] { "python", "python3" })
             {
-                foreach (var extension in new[] { string.Empty, ".exe" })
+                foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 {
-                    var candidate = Path.Combine(directory, name + extension);
-                    if (!File.Exists(candidate) ||
-                        candidate.Contains("WindowsApps", StringComparison.OrdinalIgnoreCase))
+                    foreach (var extension in new[] { string.Empty, ".exe" })
                     {
-                        continue;
-                    }
-
-                    try
-                    {
-                        var (exitCode, _, _) = RunProcess(candidate, ["--version"], Path.GetTempPath(), stdin: null);
-                        if (exitCode == 0)
+                        var candidate = Path.Combine(directory, name + extension);
+                        if (!File.Exists(candidate) ||
+                            candidate.Contains("WindowsApps", StringComparison.OrdinalIgnoreCase))
                         {
-                            return candidate;
+                            continue;
+                        }
+
+                        try
+                        {
+                            // Resolve launcher shims (e.g. PyManager) to the real interpreter binary so
+                            // overriding LOCALAPPDATA inside tests does not trigger shim re-downloads.
+                            var (probeCode, probeOut, _) = RunProcess(
+                                candidate,
+                                ["-c", "import sys; print(sys.executable)"],
+                                Path.GetTempPath(),
+                                stdin: null);
+                            if (probeCode != 0)
+                            {
+                                continue;
+                            }
+
+                            var resolved = probeOut
+                                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                .LastOrDefault();
+                            var executable = !string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved)
+                                ? resolved
+                                : candidate;
+
+                            var (versionCode, _, _) = RunProcess(
+                                executable,
+                                ["--version"],
+                                Path.GetTempPath(),
+                                stdin: null,
+                                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                                {
+                                    ["LOCALAPPDATA"] = probeLocalAppData.FullName,
+                                });
+                            if (versionCode == 0)
+                            {
+                                return executable;
+                            }
+                        }
+                        catch
+                        {
+                            // Try next candidate
                         }
                     }
-                    catch
-                    {
-                        // Try next candidate
-                    }
                 }
+            }
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(probeLocalAppData.FullName, recursive: true);
+            }
+            catch
+            {
+                // Best-effort cleanup
             }
         }
 
