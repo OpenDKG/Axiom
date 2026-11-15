@@ -6,6 +6,17 @@ polkit action, the desktop entry and the icon, and registers `axiomd` as a syste
 the daemon's own `--install-service` path. Proven on Ubuntu 24.04 (GNOME X11, kernel 7.0):
 docs/LINUX_TEST_REPORT.md rows P-1…P-8.
 
+## Package name
+
+The package is `axiom-firewall` (`.deb` and `.rpm`). Builds up to 0.17 were named `axiom`, which is
+also the name of an unrelated computer algebra system in the Debian and Ubuntu archives (version
+`20170501`). With the old name apt listed the archive's `20170501` as the upgrade candidate for the
+firewall, and on the Ubuntu 24.04 evidence box `unattended-upgrade` installed that family's add-on
+packages (`axiom-graphics`, `axiom-hypertex`, `axiom-doc`, ...), which left apt reporting unmet
+dependencies. `axiom-firewall` declares `Conflicts`/`Replaces: axiom (<< 1000)` so installing it
+removes an old 0.x build of ours and never matches the archive package. Paths, the unit name
+`axiomd.service` and the desktop id `com.axiom.firewall` are unchanged.
+
 ## 1. Build
 
 ```sh
@@ -31,8 +42,8 @@ Version: `<Version>` from `Directory.Build.props` (0.13.2). `--snapshot` appends
 `~git<yyyymmdd>.<sha>` so a draft sorts *before* the release it precedes (Debian `~` ordering);
 the RPM gets the same string with `~` replaced by `_`.
 
-Artifacts: `build/linux/axiom_<version>_amd64.deb` (63 MB, xz) and
-`build/linux/axiom-<version>-1.x86_64.rpm` (76 MB). Installed size 193 MB (self-contained .NET
+Artifacts: `build/linux/axiom-firewall_<version>_amd64.deb` (63 MB, xz) and
+`build/linux/axiom-firewall-<version>-1.x86_64.rpm` (76 MB). Installed size 193 MB (self-contained .NET
 runtime twice: window and daemon are separate processes with separate trust boundaries).
 
 ## 2. Desktop publish bundles the daemon
@@ -61,7 +72,7 @@ Proof: `ls build/linux/Axiom/axiomd/axiomd` after step 3, and the same file unde
 | `/usr/share/applications/com.axiom.firewall.desktop` | `Exec=/opt/axiom/Axiom`, `Icon=com.axiom.firewall`, `StartupWMClass=com.axiom.firewall` | 0644 |
 | `/usr/share/icons/hicolor/{16,24,32,48,64,128,256,512}x…/apps/com.axiom.firewall.png` | from `src/Axiom.UI.Avalonia/Assets/axiom-icon.png` (1024², committed resizes under `packaging/linux/icons`) | 0644 |
 | `/usr/share/polkit-1/actions/com.axiom.firewall.policy` | action `com.axiom.firewall.install`, `exec.path=/usr/libexec/axiom/axiomd` | 0644 |
-| `/usr/share/doc/axiom/{copyright,README.md,LINUX_PACKAGING.md}` | DEP-5 copyright (GPL-3.0-or-later) | 0644 |
+| `/usr/share/doc/axiom-firewall/{copyright,README.md,LINUX_PACKAGING.md}` | DEP-5 copyright (GPL-3.0-or-later) | 0644 |
 
 Created by `axiomd --install-service` at configure time (not package-owned files, so dpkg never
 overwrites or diffs them): `/usr/libexec/axiom` (root-owned read-only copy of `/opt/axiom/axiomd`,
@@ -71,7 +82,7 @@ audited), `/etc/systemd/system/axiomd.service`, `/var/lib/axiom` 0700, `/var/log
 ## 4. Control fields
 
 ```
-Package: axiom            Version: 0.13.2          Architecture: amd64
+Package: axiom-firewall   Version: 0.13.2          Architecture: amd64
 Section: net              Priority: optional       Homepage: https://github.com/a-51-50/Axiom
 Depends: <dpkg-shlibdeps: libbpf1 (>= 1:0.0.9), libc6 (>= 2.34), libfontconfig1 (>= 2.12.6),
          libgcc-s1 (>= 3.0), libstdc++6 (>= 6)>,
