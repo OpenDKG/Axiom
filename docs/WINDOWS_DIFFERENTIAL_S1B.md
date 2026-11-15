@@ -127,3 +127,109 @@ The service was uninstalled through the product after each build, and the data r
 checked absent. 0 Axiom firewall rules remain, and the adapter DNS is back to `10.0.2.3`. The `tester`
 credential file was copied to the guest only for the access probes, removed right after each use, and
 checked absent each time.
+
+
+# Round 4 (2026-11-15): `main` `d0991bd` vs S1b `f67b6c2`
+
+**Author-run on the project's Windows 11 test VM. This is not CI; no GitHub-hosted run exists for this
+revision.** Same VM, SDK 10.0.403 (pinned by `global.json`), scripts and method as above. Every tree is a
+fresh `git archive` with its own empty package folder. S1a's document, round 4, has the IPC and
+lock-file detail.
+
+| | Commit |
+|---|---|
+| main (pinned for this round) | `d0991bdcef4913bd626700e007bf814b2854b249` |
+| S1a | `d207ba7` (main `d0991bd` merged + lock files regenerated on Windows) |
+| **S1b tested** | **`f67b6c2483b09984d491680b47c46009844ab92`** = `382fc30` + `Merge S1a (main d0991bd + lock files) into S1b`. The commits after it change docs only. |
+
+## R4.1 Reconciliation with `main` `d0991bd`
+
+Git merged every file automatically. **No file was resolved by hand.** What `main` changed in the area
+S1b moves behind seams, and where it lands:
+
+| `main` change since `1cd0b79` | File | In S1b |
+|---|---|---|
+| fallback candidates from saved / current / gateway+DHCP servers; virtual adapters ordered last; netsh wait 45 s (`f5420ab`) | `PrivacyDnsFailSafe.cs` | unchanged file. S1b calls it through the delegates of `WindowsPrivacyDnsPlatform` (`ServicePlatform.Windows.cs`), so the Windows adapter code is `main`'s |
+| `ShouldAutoPointAdapterDns`; the worker re-points adapter DNS every 30 s and restarts a stopped resolver; source-sync signal | `PrivacyShieldController.cs`, `PrivacyShieldWorker.cs` | merged as written. The worker calls `controller.EnsureConfiguredAdapterDns()`, which S1b forwards to `WindowsPrivacyDnsPlatform.EnsureConfiguredAdapterDns`. `main`'s body of that method is unchanged since `1cd0b79`, so the moved copy is still current |
+| Phishing category; policy and source classification | `Axiom.Contracts/Privacy/*`, controller | merged as written |
+| process-spawn audit worker | `Program.cs` (+1 line) | merged as written |
+
+The DNS proxy, `DnsUpstream` (DoH upstream selection, no plaintext downgrade) and `SystemDnsResolver` are
+not changed by `main` since `1cd0b79`. So S1b's moved copies needed no update. Lock files: S1b changes no
+dependency over S1a. A `--force-evaluate` regeneration of `f67b6c2` on the VM gave files that are
+JSON-identical to the committed ones for all 7 `Axiom.Service.Hosting` graph files (14 identical in all). The
+other 8 differ only by NuGet's project-range refresh, so S1b has no lock-file commit.
+
+## R4.2 Restore, build and suites
+
+| Step | main `d0991bd` | S1b `f67b6c2` |
+|---|---|---|
+| `--locked-mode`: `Axiom.Portable.slnx` / `Axiom.sln` / per project | exit 0 / exit 0 / 22 of 22 | exit 0 / exit 0 / 23 of 23 |
+| clean restore `--no-http-cache` | exit 0, 88 packages | same |
+| `dotnet build Axiom.sln -c Release --no-restore` | 0 warnings, 0 errors | 0 warnings, 0 errors |
+| Contracts / Core / Infrastructure.Windows | 152 / 184 / 86 | 161 / 184 / 153 |
+| McpServer / Persistence / Presentation | 34 / 21 / 275 | 34 / 21 / 275 |
+| Service / UI.Avalonia / UI.Tests | 98 / 56 / 179 of 183 | 117 / 56 / 179 of 183 |
+
+Every count above is passed = total, except UI.Tests. **No test that passes on `main` is missing or
+failing on S1b.** The extra tests (Contracts +9, Infrastructure.Windows +67, Service +19) all pass.
+UI.Tests: the same 4 `AgentHookScriptTests` fail on both trees (no Python on the VM).
+`WindowsFirewallPolicyAdapterTests` COM / RCW flake: the full-suite runs passed. In 4 more runs, it failed
+once on each tree (`main` 1 / 4, S1a 1 / 4, S1b 1 / 4).
+
+## R4.3 Service differential
+
+The installed exe matches the published one: `main` `F4E01EAF…`, S1b `A9A3CC22…`. **168 checks per
+build: 160 identical after normalisation, 2 with the same shape and live values (the remote IP of the
+pending `curl.exe` ask), 6 different.** Every difference is additive, with an empty or null value:
+
+| Check | Difference |
+|---|---|
+| `publish_files` | `+Axiom.Service.Hosting.pdb` |
+| `snapshot` | each connection has `"remoteHost":""` |
+| `rules.query` (gate closed, gate open) | `capability.filterEnforcement: null` |
+| `rule.verify` (gate open; after the restart) | `enforcementVerified: null`, `filterRejectionReason: null` |
+
+No existing key or value changed. Block, unblock and persistence across a restart, `enforcement.*` (receipt
+results byte-identical), error paths and the connection matrix are identical to `main`. Access: the
+NETWORK logon and a **temporary standard local account** (created in the guest, random password never on
+the host, deleted with its profile afterwards) are denied at connect for all 10 probed commands, private
+reads and writes included. `axiom` (S4U and Interactive) is answered. This is identical to `main`.
+
+## R4.4 Privacy Shield and DoH, `main` vs S1b
+
+This ran in the same pass as R4.3, with a fresh install per build. **Every one of the 51 Privacy Shield
+checks is identical after normalisation, `main` vs S1b and `main` vs S1a.** The results, the same on all
+three builds:
+
+| Step | Result |
+|---|---|
+| before enabling | adapter DNS `Ethernet 10.0.2.3`; no DNS backup file; system resolution works |
+| enable (`upstreamDns:"1.1.1.1, 9.9.9.9"`, DoH on, `autoPointAdapterDns:true`, one custom blocked domain) | `Active`, running, bind `127.0.0.1, ::1` port 53, upstream `https://1.1.1.1/dns-query (DoH), https://9.9.9.9/dns-query (DoH)`; UDP+TCP 53 on loopback only |
+| adapter DNS while enabled | `127.0.0.1,10.0.2.3` (previous server kept); DNS backup file written |
+| allowed lookups (`example.com`, `www.wikipedia.org`, a default name) | resolve |
+| blocked custom name and its subdomain | `DNS name does not exist`; both listed in `recentBlocked` as `custom`; counters `queries=5 allowed=3 blocked=2 errors=0` |
+| automatic upstream (`upstreamDns:""`) | DoH 1.1.1.1 + 9.9.9.9, not the LAN resolver; resolves |
+| **unavailable encrypted upstream** (`https://192.0.2.1/dns-query`, DoH on) | stays `Active`, upstream still the DoH URL; lookups get `DNS server failure` (twice); error counter rises; **no answer through a plaintext fallback**; blocked names still NXDOMAIN |
+| `1.1.1.1` with `encryptDnsViaDoh:false` | still `https://1.1.1.1/dns-query (DoH)` (upgrade of well-known public resolvers) |
+| service restart with the shield on | `Active`, same settings and DoH upstream, adapter DNS still `127.0.0.1,10.0.2.3`; allowed resolves, blocked NXDOMAIN |
+| `privacy.sources.update` (`windowsspyblocker` + `blocklistproject-ads`) | `ok`, 236,174 rules, no source error; listed names NXDOMAIN, `example.com` resolves |
+| **disable** | `Disabled`; adapter DNS back to `Ethernet 10.0.2.3`, **equal to the value before enabling**; system resolution works |
+
+Only `privacy.status` counters right after the restart can differ between builds. On S1a's run, Windows
+telemetry (`svchost` looking up `v20.events.data.microsoft.com`) reached the resolver between the restart
+and the probe. The same field had 0 on `main` and S1b.
+
+## R4.5 Not tested in this round
+
+- An explicit LAN or local resolver as upstream with DoH off (only the public `1.1.1.1` case ran live), a
+  named `PreferredAdapterAlias` (the VM has one adapter), IPv6 adapter DNS, DoT/DoQ.
+- Desktop UI, installer, and any GitHub-hosted run.
+- A first differential pass was discarded: a second script reinstalled the service while it was running.
+  The results above come from the sequential re-run.
+
+## R4.6 Cleanup
+
+After each build: product uninstall, data roots removed and checked absent. At the end: no Axiom service,
+process or firewall rule; no temporary account, profile or staged secret; no `Ax*` scheduled task; adapter
+DNS `10.0.2.3`. The VM was shut down.
