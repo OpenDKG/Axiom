@@ -91,9 +91,12 @@ public static class SystemdUnit
             # /proc entries and rewrite system DNS) but with a reduced capability set and a read-only
             # view of the OS; only the state/run directories, the cgroup tree, the bpffs pin
             # directory (/sys/fs/bpf/axiom, connect-time BPF layer) and the resolver
-            # configuration are writable.
+            # configuration are writable. The resolver paths are prefixed with "-": a host running
+            # systemd-resolved has no /run/NetworkManager and one running NetworkManager may have no
+            # /run/systemd/resolve, and a missing ReadWritePaths entry aborts the unit with
+            # 226/NAMESPACE before the daemon can start (Ubuntu 24.04 + systemd-networkd).
             ProtectSystem=strict
-            ReadWritePaths={Q(machineDataDirectory)} {Q(runDirectory)} /sys/fs/cgroup /sys/fs/bpf /etc/resolv.conf /run/systemd/resolve /run/NetworkManager
+            ReadWritePaths={Q(machineDataDirectory)} {Q(runDirectory)} /sys/fs/cgroup /sys/fs/bpf /etc/resolv.conf -/run/systemd/resolve -/run/NetworkManager
             ProtectHome=read-only
             PrivateTmp=yes
             # ProtectKernelTunables=yes mounts /sys/fs/bpf read-only and ReadWritePaths/BindPaths cannot

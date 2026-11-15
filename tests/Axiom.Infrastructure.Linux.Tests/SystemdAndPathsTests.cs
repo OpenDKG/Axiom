@@ -49,6 +49,9 @@ public sealed class SystemdAndPathsTests
         Assert.Contains("LogsDirectory=axiom", unit, StringComparison.Ordinal);
         Assert.Contains("ProtectSystem=strict", unit, StringComparison.Ordinal);
         Assert.Contains("ReadWritePaths=/var/lib/axiom /run/axiom", unit, StringComparison.Ordinal);
+        // A host with systemd-resolved has no /run/NetworkManager (and vice versa); without "-" a
+        // missing entry aborts the unit with 226/NAMESPACE before the daemon starts.
+        Assert.Contains(" /etc/resolv.conf -/run/systemd/resolve -/run/NetworkManager", unit, StringComparison.Ordinal);
         Assert.Contains(" /sys/fs/bpf ", unit, StringComparison.Ordinal); // BPF pins
         Assert.Contains("ProtectKernelTunables=no", unit, StringComparison.Ordinal); // it would mount /sys/fs/bpf read-only
         Assert.Contains("ReadOnlyPaths=-/proc/sys ", unit, StringComparison.Ordinal);
