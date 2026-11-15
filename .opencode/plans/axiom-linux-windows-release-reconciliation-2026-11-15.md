@@ -98,18 +98,17 @@ Nov-14 head would be reconciling against a dead baseline.
 
 ## 5. Blocking question vs established requirements
 
-**Q1 (blocking, needs an answer):** the disposable Ubuntu 24.04 guest has `polkitd` but not
-`pkexec`/`policykit-1`; `dpkg -i` stops at:
+**Q1 (resolved 2026-11-15): authorised to install `pkexec` in the disposable guest only.**
+Done: temporary egress boot (`bin/start-provision.sh`), `apt-get install -y pkexec`
+(`124-2ubuntu1.24.04.4`), then the package installed cleanly. No host change. Original blocker,
+kept for the record — the guest had `polkitd` but not `pkexec`/`policykit-1`, so `dpkg -i` stopped at:
 ```
 axiom depends on pkexec | policykit-1; however:
   Package pkexec is not installed.
   Package policykit-1 is not installed.
 ```
 Installing that dependency is not pre-authorised, and the guest is booted restricted (no egress).
-Options: (a) authorise `sudo apt-get install -y pkexec` in the guest with a temporary egress boot
-(`bin/start-provision.sh`), then re-run the package E2E; (b) declare the dependency `Recommends` and
-accept a non-elevating desktop on minimal images; (c) leave the gate open. Recommendation: (a) —
-the dependency is honest and matches a desktop install.
+Chosen: (a). The dependency stays a hard `Depends` (honest for a desktop install).
 
 **Established (no further decision needed):** no live DNS resolver changes on host or guest; no
 network/firewall changes outside the guest; no dependency installs on the host; package install in
@@ -126,10 +125,10 @@ the disposable guest is authorised; artifacts stay local.
 | T5 | Restore compilability of both TFMs; move shared DNS tests to `net10.0` | T3,T4 | `src/Axiom.Service/*.csproj`, `Platform/ServicePlatform.*.cs`, `tests/Axiom.Service.Hosting.Tests/*`, `Axiom.Portable.slnx`, `Axiom.sln` | **done** |
 | T6 | Build and test Linux + shared suites, record counts | T5 | – | **done** (§8) |
 | T7 | Unix process-start source for the F-19 audit | T5 | new `Axiom.Infrastructure.Linux/ProcessIdentity` | **todo** (unassigned; not needed for the shippable surface) |
-| T8 | Build the `.deb` 0.53.0 (BPF objects included) | T5 | `packaging/linux/*`, `scripts/linux/package.sh` | **done** |
+| T8 | Build the `.deb` 0.53.0 (BPF objects included); fix unit paths found by E2E | T5 | `packaging/linux/*`, `scripts/linux/package.sh`, `src/Axiom.Infrastructure.Linux/Systemd/SystemdUnit.cs` | **done** `9196827` artifact, fix `4e77777` |
 | T9 | Linux package workflow (artifact only) | T8 | `.github/workflows/linux-release.yml` | **done** |
-| T10 | Guest E2E: install, service, doctor, IPC, DNS backup/restore, upgrade, uninstall | T8 + Q1 | – | **blocked on Q1**; pre-state + clean purge captured |
-| T11 | Final integrated diff review against this plan | T6,T8 | – | **todo** (see §10) |
+| T10 | Guest E2E: install, service, doctor, IPC, canary, restart, remove, purge | T8 + Q1 | – | **done** (GUI and live DNS redirect out of scope) |
+| T11 | Final integrated diff review against this plan | T6,T8 | – | **todo** — this session could not spawn a nested reviewer (`subagent_depth` limit); parent must run it (§10) |
 | T12 | Attach Linux asset to the v0.53.x release | separate authorisation | – | **explicitly out of scope** |
 
 ### Worker-ready prompts
@@ -163,14 +162,30 @@ Each task is bounded to its `Owned files`; nobody edits outside them without upd
   `postrm purge` → deletes state.
 - Hard dependencies include `nftables`, `polkitd | policykit-1`, `pkexec | policykit-1`, `systemd`,
   `libbpf1`, `libssl3t64 | libssl3`, ICU and the X11/font stack from `dpkg-shlibdeps`.
-- Artifact for this run: `axiom_0.53.0_amd64.deb`, 63 041 440 bytes,
-  `sha256 ac9e42d7fc5380098b475612267477afc67f97f9133162a36eff2720a719507f`
-  (`/tmp/opencode/axiom-linux-release-20261115/`).
+- Artifact for this run: `axiom_0.53.0_amd64.deb`,
+  `sha256 919682798343def69ffcc07661700c12992ab77b2ba2927b035e26f8b8170d63`
+  (`/tmp/opencode/axiom-linux-release-20261115/`; build `4e77777`).
+  The first build (`ac9e42d7…`, merge `3252623`) is superseded: its unit aborted with
+  226/NAMESPACE on a host without NetworkManager.
 - Integrity checklist: `dpkg-deb -I` shows Version 0.53.0/amd64; 505 entries; `sha256sum` matches
   `SHA256SUMS.txt`; the same hash was observed inside the guest after `scp`; polkit XML parsed by
   `package.sh`; desktop entry validated; no `.pdb`, no `libcoreclrtraceptprovider.so`.
 - Not done: signing (no key authorised), `lintian` (not installed), RPM, x86-64 baseline other than
   Ubuntu 24.04, arm64.
+
+### 7.1 Guest E2E (Ubuntu 24.04.5, kernel 6.8.0-147, disposable overlay)
+
+| Step | Result |
+|---|---|
+| `dpkg -i axiom_0.53.0_amd64.deb` (after `pkexec`) | `Setting up axiom (0.53.0)`, `Installed and started axiomd.service`; `enabled`, `active (running)` |
+| `axiomd --doctor` | `Result: all checks passed` — unit, protected image 234 entries, socket root 0666, state/log 0700, `dns backend: SystemdResolved; enp0s1: 10.0.2.3`, nftables v1.0.9 generation 1, `live enforcement verified`, BPF `4/4` pins, kernel self-check verified (CO-RE) |
+| IPC (`scripts/linux/axipc.py`) | `capabilities` → `milestone 0.53.0`, 23 commands, `firewallWrites: false`; `serviceHealth` → running, honest Linux limitations; `privacy.status` → `upstream: encrypted DoH (1.1.1.1, 9.9.9.9)`, disabled |
+| Enforcement canary (`scripts/linux/canary.sh unscoped --count 20`) | rules `connectTimeBlockingProven=True`; `slipped 0/20 blocked 20/20` for curl and python over IPv4 and IPv6 |
+| Restart | `active`, doctor all checks passed, BPF reattached, 4 pins |
+| `dpkg -r` | daemon stopped, unit and `/usr/libexec/axiom` removed, `/var/lib/axiom` + `/var/log/axiom` kept, nft table gone, pins gone |
+| `dpkg -P` | state/log/desktop/polkit action removed, `pkaction` no longer lists the action |
+| Resolver untouched throughout | `resolvectl` Link 2 `10.0.2.3` before and after; `/etc/resolv.conf` still → `/run/systemd/resolve/stub-resolv.conf` |
+| Not run | Privacy Shield enable (would redirect the guest resolver — out of scope); GUI walkthrough (no display); true cross-version upgrade (only a same-version reinstall was available) |
 
 ## 8. Test evidence (host, 2026-11-15)
 
@@ -221,12 +236,14 @@ Compile checks on Windows TFMs (Linux host, no runtime): `Axiom.Infrastructure.W
   (done, except pre-existing Windows-path test failures listed above).
 - **Review gate (open):** no fresh-context review of `5de2d636..3252623` has run. Parent should spawn
   one with the T11 prompt; this plan is the checklist.
-- **Install gate (blocked):** Q1. Until it is answered, there is **no** clean native install, service
-  start, IPC, DNS backup/restore or uninstall evidence for 0.53.0, and no BPF load proof on the
-  guest kernel (object built on host 7.0, guest 6.8, CO-RE).
+- **Install gate (passed 2026-11-15):** clean install, service start, doctor, IPC, enforcement
+  canary, restart, remove and purge on the disposable Ubuntu 24.04.5 guest, with the BPF layer
+  attached and CO-RE verified on kernel 6.8 (object built on host 7.0). Still unproven: Privacy
+  Shield live redirect/restore (deliberately not exercised), GUI, true cross-version upgrade.
 - **Release gate (not authorised):** no upload, no tag, no release notes, no signing.
-- Known limits to publish with any artifact: Ubuntu 24.04 x64 only; WMI process audit absent on
-  Linux; `.rpm` unbuilt/untested; GUI walkthrough not performed; BPF layer unverified on the guest.
+- Known limits to publish with any artifact: Ubuntu 24.04 x64 only; WMI/process-start audit absent
+  on Linux; `.rpm` unbuilt/untested; GUI walkthrough not performed; Privacy Shield redirect not
+  exercised on the guest (unit-tested only); no signing.
 
 ## 11. Where the evidence lives
 
