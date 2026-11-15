@@ -127,6 +127,32 @@ public sealed class AgentHookScriptTests
     }
 
     [Fact]
+    public void OpenCode_bridge_carries_credential_evasion_and_persistence_detection()
+    {
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+
+        string[] labels =
+        [
+            "credential hive export", "shadow-copy creation", "NTDS dump", "LSASS memory dump",
+            "event log clearing", "Defender tampering", "Defender exclusion", "firewall tampering",
+            "scheduled-task persistence (PowerShell)", "registry run-key persistence (PowerShell)",
+            "service creation", "startup folder persistence", "WMI process creation",
+            "download-and-execute", "in-memory compile", "script host execution", "mshta vbscript",
+        ];
+        foreach (var label in labels)
+        {
+            Assert.Contains(label, bridge, StringComparison.Ordinal);
+        }
+
+        Assert.True(
+            bridge.IndexOf("\"credential hive export\"", StringComparison.Ordinal) <
+            bridge.IndexOf("guard.on_pre_tool_call", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void OpenCode_bridge_carries_launch_and_upload_protection()
     {
         var build = typeof(OpenCodeProtection).GetMethod(
