@@ -84,4 +84,28 @@ public sealed class ProcessSpawnAuditRuntimeTests
         Assert.Equal(0, source.Subscribers);
         Assert.True(source.Disposed);
     }
+
+    [Fact]
+    public void Concurrent_process_spawns_write_valid_lines_without_corruption()
+    {
+        using var writer = new System.IO.StringWriter();
+        var sink = new JsonLinesProcessSpawnSink(writer);
+        var handler = new ProcessSpawnAuditHandler(new AgentProcessSpawnMonitor(), sink);
+        var source = new FakeSource();
+        using var runtime = new ProcessSpawnAuditRuntime(source, handler);
+        runtime.Start();
+
+        Parallel.For(0, 40, index =>
+            source.Raise(Spawn(100 + index, $@"C:\Users\lab\Downloads\dropper-{index}.exe")));
+
+        var lines = writer.ToString()
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(40, lines.Length);
+        Assert.Equal(40, runtime.Recorded);
+        foreach (var line in lines)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(line);
+            Assert.Equal("block", doc.RootElement.GetProperty("verdict").GetString());
+        }
+    }
 }

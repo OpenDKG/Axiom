@@ -15,8 +15,10 @@ public interface IProcessSpawnAuditSink
 /// </summary>
 public sealed class ProcessSpawnAuditHandler
 {
+    private readonly Lock _sync = new();
     private readonly AgentProcessSpawnMonitor _monitor;
     private readonly IProcessSpawnAuditSink _sink;
+    private int _recorded;
 
     public ProcessSpawnAuditHandler(AgentProcessSpawnMonitor monitor, IProcessSpawnAuditSink sink)
     {
@@ -25,7 +27,16 @@ public sealed class ProcessSpawnAuditHandler
     }
 
     /// <summary>Number of rows forwarded to the sink since the handler was created.</summary>
-    public int Recorded { get; private set; }
+    public int Recorded
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _recorded;
+            }
+        }
+    }
 
     /// <summary>
     /// Handles one process-start observation. Returns true when a row was written to the sink.
@@ -34,14 +45,18 @@ public sealed class ProcessSpawnAuditHandler
         ProcessSpawnEvent spawn,
         IReadOnlyCollection<string>? allowlist = null)
     {
-        var audit = _monitor.Observe(spawn, allowlist);
-        if (audit is null)
+        // WMI process-start callbacks can arrive concurrently across threadpool threads.
+        lock (_sync)
         {
-            return false;
-        }
+            var audit = _monitor.Observe(spawn, allowlist);
+            if (audit is null)
+            {
+                return false;
+            }
 
-        _sink.Record(audit);
-        Recorded++;
-        return true;
+            _sink.Record(audit);
+            _recorded++;
+            return true;
+        }
     }
 }

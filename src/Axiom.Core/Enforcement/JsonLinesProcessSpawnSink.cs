@@ -12,6 +12,7 @@ public sealed class JsonLinesProcessSpawnSink : IProcessSpawnAuditSink
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = false };
 
+    private readonly Lock _writeLock = new();
     private readonly TextWriter _writer;
 
     public JsonLinesProcessSpawnSink(TextWriter writer)
@@ -34,7 +35,11 @@ public sealed class JsonLinesProcessSpawnSink : IProcessSpawnAuditSink
             reason = audit.Decision.Reason,
         };
 
-        _writer.WriteLine(JsonSerializer.Serialize(row, Options));
-        _writer.Flush();
+        var line = JsonSerializer.Serialize(row, Options);
+        lock (_writeLock)
+        {
+            _writer.WriteLine(line);
+            _writer.Flush();
+        }
     }
 }

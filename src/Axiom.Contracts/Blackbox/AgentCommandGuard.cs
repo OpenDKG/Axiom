@@ -379,7 +379,12 @@ public static class AgentCommandGuard
             command_text = _command_text(args)
             store = _sensitive_store(command_text)
             if not store and isinstance(args, dict):
-                store = _sensitive_store(str(args.get("path") or args.get("filePath") or ""))
+                for key in ("path", "filePath", "file_path", "TargetFile", "AbsolutePath"):
+                    candidate = args.get(key)
+                    if isinstance(candidate, str) and candidate:
+                        store = _sensitive_store(candidate)
+                        if store:
+                            break
             if store:
                 return ("credential-store", f"Blackbox blocked this call: it accesses a credential store ({store}).")
             if not command_text:
