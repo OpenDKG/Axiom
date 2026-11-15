@@ -2,6 +2,12 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.39.0
+
+- **F-19 part B decision layer.**
+  - `AgentProcessSpawnPolicy` returns Allow/Record/Block for a process-creation event: agent children from download/staging folders are blocked, other agent children recorded, allowlisted images allowed, risky binaries outside agent sessions recorded.
+  - Pure and unit-tested (8 cases); the ETW/WMI subscription is the next step.
+
 ## What's in 0.38.0
 
 - **Behavioural test for the shared guard helpers.**
