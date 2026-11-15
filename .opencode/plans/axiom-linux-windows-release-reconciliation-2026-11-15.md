@@ -187,8 +187,9 @@ Each task is bounded to its `Owned files`; nobody edits outside them without upd
 - **Current artifact (revision 2):** `axiom_0.53.0_amd64.deb`, 63,040,292 bytes,
   `sha256 ce966fa9de012e31730994e2aebb6a2f140632b1311f920398d26b5ec009f356`, built from `821237d`
   (`.deb` at `/tmp/opencode/axiom-recon/build/linux/`; copy in
-  `/tmp/opencode/axiom-recon-review-fixes/`). It contains 506 entries (the 505 of the previous
-  build plus `/opt/axiom/bpf-pins.sh`).
+  `/tmp/opencode/axiom-recon-review-fixes/`). The final commit `aa244ee` changes only this plan and
+  `.github/workflows/linux-release.yml`, so the packaged inputs are identical to `821237d`. It
+  contains 506 entries (the 505 of the previous build plus `/opt/axiom/bpf-pins.sh`).
 - **Superseded, not deliverable:** `919682798343def69ffcc07661700c12992ab77b2ba2927b035e26f8b8170d63`
   (`/tmp/opencode/axiom-linux-release-20261115/`, 63,032,704 bytes, 505 entries, build `4e77777`)
   is the artifact the review rejected (missing reviewed BPF fixes, unsafe prerm/stop handling,
