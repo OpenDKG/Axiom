@@ -77,7 +77,7 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 **Current development release:** [0.32.0](docs/RELEASES/0.32.0.md), 15 November 2026. Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
 
-> **Version numbering:** development builds were previously numbered `0.10.x`. A short reset produced `0.2.0` and `0.3.0`, but GitHub orders releases by semantic version, which hid them below `0.10.25`. The public release line resumed at `0.11.0` and continues with `0.22.0`; `0.2.0`/`0.3.0` remain historical snapshots. `scripts/build-release.ps1` refuses a version that is not greater than the highest existing `v*` tag.
+> **Version numbering:** development builds were previously numbered `0.10.x`. A short reset produced `0.2.0` and `0.3.0`, but GitHub orders releases by semantic version, which hid them below `0.10.25`. The public release line resumed at `0.11.0` and continues through `0.32.0+`; `0.2.0`/`0.3.0` remain historical snapshots. `scripts/build-release.ps1` refuses a version that is not greater than the highest existing `v*` tag.
 
 - [Install and first-run modes](docs/INSTALL.md) â€” core vs Complete setup and required privileges.
 - [Architecture](docs/ARCHITECTURE.md) â€” Avalonia UI, local service, Windows Firewall and optional components.

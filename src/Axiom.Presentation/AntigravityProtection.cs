@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Axiom.Contracts.Blackbox;
 
 namespace Axiom.Presentation;
 
@@ -314,6 +315,9 @@ public sealed class AntigravityProtection
         EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "agent-evidence.jsonl"
 
 
+        # <<AXIOM_COMMAND_GUARD>>
+
+
         def record(event_type: str, tool: str, decision: str, guard_status: str, duration_ms: int,
                    error_code: str = "", session: str = "", call: str = "") -> None:
             try:
@@ -358,11 +362,26 @@ public sealed class AntigravityProtection
                 call = str(step_idx if step_idx is not None else (payload.get("tool_use_id") or ""))
                 workspaces = payload.get("workspacePaths")
                 workspace = ",".join(str(p) for p in workspaces) if isinstance(workspaces, list) else str(payload.get("cwd") or "")
+                parsed_args = args if isinstance(args, dict) else {}
+                safety = _check_command_safety(parsed_args, _load_protected_paths())
+                if safety is not None:
+                    record(
+                        "GUARD_BLOCKED",
+                        tool,
+                        "block",
+                        "blocked",
+                        int((time.monotonic() - started) * 1000),
+                        error_code=safety[0],
+                        session=session,
+                        call=call,
+                    )
+                    print(json.dumps({"decision": "deny", "reason": safety[1]}))
+                    return
                 with contextlib.redirect_stdout(sys.stderr):
                     from plugins.blackbox.guard import hooks as guard
                     decision = guard.on_pre_tool_call(
                         tool_name=tool,
-                        args=args if isinstance(args, dict) else {},
+                        args=parsed_args,
                         session_id=session,
                         tool_call_id=call,
                         framework="antigravity",
@@ -400,5 +419,5 @@ public sealed class AntigravityProtection
 
         if __name__ == "__main__":
             main()
-        """;
+        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal);
 }

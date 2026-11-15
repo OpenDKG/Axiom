@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.IO;
 using System.Text;
+using Axiom.Contracts.Blackbox;
 
 namespace Axiom.UI.Services;
 
@@ -550,175 +551,7 @@ public sealed class OpenCodeProtection
         EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "agent-evidence.jsonl"
 
 
-        def _tampers_with_guard(command: str) -> bool:
-            # An agent must not be able to delete or rewrite the local guard, its hooks or the
-            # bridge. Blackbox's own tamper detector did not catch a plain delete in the lab.
-            text = (command or "").lower()
-            markers = ("plugins\\blackbox", "plugins/blackbox", "axiom-guard-bridge", ".hermes\\blackbox", ".hermes/blackbox")
-            verbs = ("del ", "erase ", "rm ", "rmdir ", "move ", "ren ", "remove-item", "unlink ", ">", "copy ")
-            if not any(marker in text for marker in markers):
-                return False
-            return any(verb in text for verb in verbs)
-
-
-        def _normalize_command(command: str) -> str:
-            # Shell variables and Win32 prefixes hide a protected path from token matching:
-            # `cat "$HOME/.ssh/id_rsa"` and `type \\?\C:\...` were allowed while the literal
-            # form blocked. Expand them before any path check runs.
-            text = (command or "").lower()
-            home = os.path.normpath(str(Path.home())).lower()
-            profile = (os.environ.get("USERPROFILE") or str(Path.home())).lower()
-            replacements = {
-                "$env:userprofile": profile,
-                "%userprofile%": profile,
-                "$env:localappdata": (os.environ.get("LOCALAPPDATA") or "").lower(),
-                "%localappdata%": (os.environ.get("LOCALAPPDATA") or "").lower(),
-                "$env:appdata": (os.environ.get("APPDATA") or "").lower(),
-                "%appdata%": (os.environ.get("APPDATA") or "").lower(),
-                "${home}": home,
-                "$home": home,
-                "%home%": home,
-            }
-            for key, value in replacements.items():
-                if value:
-                    text = text.replace(key, value)
-            text = text.replace("\\\\?\\", "").replace("//?/", "").replace("\\\\.\\", "")
-            text = text.replace("~/", home + "\\").replace("~\\", home + "\\")
-            return " ".join(text.split())
-
-
-        def _deletes_protected(command: str, protected) -> bool:
-            # True when a shell command deletes one of the operator's protected files.
-            # Blackbox's custom file-access detector covers reads and copies; a shell
-            # del/rm/Remove-Item of a protected path would otherwise pass. Use the same
-            # path tokens as the launch/upload checks so wildcard directories such as
-            # ~/.ssh/* are covered (the old stem match skipped them).
-            text = (command or "").lower()
-            verbs = ("del ", "erase ", "rm ", "rmdir", "remove-item", "unlink ",
-                     "move ", "move-item", "ren ", "rename ", "rename-item", "mv ")
-            if not any(verb in text for verb in verbs):
-                return False
-            return _hits_protected(text, protected)
-
-
-        def _hidden_path_read(command: str, protected) -> bool:
-            # Blackbox blocks a literal read of a protected path. The same read written with a
-            # shell variable or a Win32 prefix ($HOME/.ssh, %USERPROFILE%\.ssh, \\?\C:\...)
-            # passed. Only commands that actually hide a path are checked, so a literal
-            # `.env.example` read is not a false positive.
-            raw = (command or "").lower()
-            hidden = ("$home", "%userprofile%", "$env:userprofile", "$env:localappdata",
-                      "%localappdata%", "$env:appdata", "%appdata%", "~/", "~\\", "\\\\?\\", "//?/")
-            if not any(marker in raw for marker in hidden):
-                return False
-            text = _normalize_command(raw)
-            if not _hits_protected(text, protected):
-                return False
-            verbs = ("cat ", "type ", "more ", "head ", "tail ", "get-content", "readalltext",
-                     "open(", ".read(", "copy ", "cp ", "get-item", "strings ", "forfiles")
-            return any(verb in text for verb in verbs)
-
-
-        def _tampers_with_protected(command: str, protected) -> bool:
-            # Ownership or ACL changes on a protected file let the agent read or copy it after
-            # the fact (takeown/icacls/attrib passed while a plain read blocked).
-            text = _normalize_command(command)
-            verbs = ("takeown", "icacls", "cacls", "attrib", "set-acl", "get-acl", "setaccessrule")
-            return any(verb in text for verb in verbs) and _hits_protected(text, protected)
-
-
-        def _protected_tokens(protected) -> list:
-            # Tokens that identify a protected path inside a shell command. A trailing * uses its
-            # parent directory (~/.ssh/* -> .ssh, C:\Lab\samples\* -> samples); a file pattern keeps
-            # its leading dot (.env, .pem) so short names do not match unrelated binaries.
-            tokens = []
-            for pattern in protected or ():
-                normalized = str(pattern).replace("~", "").replace("/", "\\").strip()
-                parts = [part for part in normalized.split("\\") if part and part != "*"]
-                if not parts:
-                    continue
-                tail = parts[-1]
-                if tail == "*":
-                    if len(parts) >= 2:
-                        tokens.append(parts[-2].lower())
-                    continue
-                token = tail.rstrip("*").rstrip(".").lower()
-                if token:
-                    tokens.append(token)
-            return [token for token in tokens if token]
-
-
-        def _hits_protected(command: str, protected) -> bool:
-            text = _normalize_command(command)
-            return any(token in text for token in _protected_tokens(protected))
-
-
-        def _executes_protected(command: str, protected) -> bool:
-            # An agent must not launch a file that lives in a protected path: reading and copying
-            # are covered by Blackbox, but Start-Process/&/cmd on the same file was allowed.
-            text = " ".join((command or "").lower().split())
-            if not _hits_protected(text, protected):
-                return False
-            verbs = ("start-process", "invoke-item", "cmd /c", "cmd.exe /c", "powershell", "pwsh",
-                     "rundll32", "regsvr32", "mshta", "wmic process call create", "schtasks /run",
-                     "& ", "&& ")
-            return any(verb in text for verb in verbs)
-
-
-        def _exfiltrates_protected(command: str, protected) -> bool:
-            # Uploading or encoding a protected file is exfiltration even when no file-access rule
-            # matched the argument (curl -F file=@… was allowed in the lab).
-            text = " ".join((command or "").lower().split())
-            if not _hits_protected(text, protected):
-                return False
-            if any(client in text for client in ("scp ", "sftp ", "ftp ")):
-                return True
-            clients = ("curl", "wget", "iwr", "irm", "invoke-webrequest", "invoke-restmethod", "certutil",
-                       "python", "python3")
-            flags = (" -f", "--form", "-d @", "--data @", "--data-binary", "-t ", "--upload-file",
-                     "-infile", "--post-file", "-encode", "upload", "requests.post", ".read()")
-            return any(client in text for client in clients) and any(flag in text for flag in flags)
-
-
-        def _escalation_risk(command: str) -> str:
-            # Remote-script execution and LOLBin download/persistence shapes. The pinned
-            # verified ruleset has no confirmed escalation rules yet (that needs a curator
-            # identity), so these high-risk agent actions would otherwise pass. Returns a
-            # short label for a block, or "" when the command is not one of these shapes.
-            text = " ".join((command or "").lower().split())
-            if not text:
-                return ""
-            text = text.replace(" |", "|").replace("| ", "|")
-            download = ("curl ", "wget ", "iwr ", "irm ", "invoke-webrequest",
-                        "invoke-restmethod", "bitsadmin")
-            pipe = ("|sh", "|bash", "|zsh", "|pwsh", "|powershell", "|python",
-                    "|node", "|iex", "invoke-expression")
-            if any(token in text for token in download) and any(token in text for token in pipe):
-                return "remote script piped into a shell"
-            if "base64" in text and any(token in text for token in pipe):
-                return "base64 payload piped into a shell"
-            if "certutil" in text and ("-urlcache" in text or "-verifyctl" in text or "-decode" in text):
-                return "certutil download or decode"
-            if "bitsadmin" in text and "/transfer" in text:
-                return "bitsadmin transfer"
-            if "mshta" in text and "http" in text:
-                return "mshta remote script"
-            if ("rundll32" in text or "regsvr32" in text) and "http" in text:
-                return "LOLBin remote script"
-            if ("powershell" in text or "pwsh" in text) and ("-enc " in text or "-encodedcommand" in text):
-                return "encoded PowerShell"
-            if "reg add" in text and "\\currentversion\\run" in text:
-                return "registry run-key persistence"
-            if "schtasks" in text and "/create" in text:
-                return "scheduled-task persistence"
-            if "vssadmin" in text and "delete" in text and "shadows" in text:
-                return "shadow-copy deletion"
-            if "wbadmin" in text and "delete catalog" in text:
-                return "backup catalog deletion"
-            if "bcdedit" in text and "recoveryenabled no" in text:
-                return "recovery disable"
-            return ""
-
+        # <<AXIOM_COMMAND_GUARD>>
 
 
         def _reexec_committed_interpreter() -> None:
@@ -825,6 +658,7 @@ public sealed class OpenCodeProtection
                 call = str(payload.get("call", ""))
                 event = str(payload.get("event", ""))
                 workspace = str(payload.get("workspace", ""))
+                _out = sys.stdout
                 with contextlib.redirect_stdout(sys.stderr):
                     from plugins.blackbox.guard import hooks as guard
 
@@ -832,7 +666,7 @@ public sealed class OpenCodeProtection
                         if hasattr(guard, "on_session_start"):
                             guard.on_session_start(session_id=session, framework=framework, workspace=workspace)
                         record(framework, "SESSION_STARTED", "", "ok", "ok", 0, session=session)
-                        print("{}")
+                        print("{}", file=_out, flush=True)
                         return
 
                     if event == "pre_api_request":
@@ -864,13 +698,13 @@ public sealed class OpenCodeProtection
                                 ]
                                 if blocking:
                                     _quarantine_session(session, [getattr(f, "identifier", "") for f in blocking])
-                                    record(framework, "GUARD_BLOCKED", "", "block", "blocked", 0, "", session)
-                                    print(json.dumps({"action": "block", "message": "Prompt injection detected; the session is quarantined."}))
+                                    record(framework, "GUARD_BLOCKED", "", "block", "blocked", 0, "injection", session)
+                                    print(json.dumps({"action": "block", "message": "Prompt injection detected; the session is quarantined."}), file=_out, flush=True)
                                     return
                             except Exception:
                                 pass
                         record(framework, "PROMPT_SCANNED", "", "ok", "ok", 0, session=session)
-                        print("{}")
+                        print("{}", file=_out, flush=True)
                         return
 
                     if event == "session_end":
@@ -883,7 +717,7 @@ public sealed class OpenCodeProtection
                                 workspace=workspace,
                             )
                         record(framework, "SESSION_ENDED", "", "ok", "ok", 0, session=session)
-                        print("{}")
+                        print("{}", file=_out, flush=True)
                         return
 
                     raw_args = payload.get("args") or {}
@@ -897,39 +731,39 @@ public sealed class OpenCodeProtection
                         protected = load_blackbox_config().protected_paths
                     except Exception:
                         protected = ()
-                    command_text = str(raw_args.get("command") or "") if isinstance(raw_args, dict) else ""
+                    command_text = _command_text(raw_args)
                     if _is_quarantined(session):
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "", session, call)
-                        print(json.dumps({"action": "block", "message": "Session quarantined after a prompt-injection finding."}))
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "quarantine", session, call)
+                        print(json.dumps({"action": "block", "message": "Session quarantined after a prompt-injection finding."}), file=_out, flush=True)
                         return
                     if _tampers_with_guard(command_text):
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it modifies the local guard."}))
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "tamper", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it modifies the local guard."}), file=_out, flush=True)
                         return
                     if _deletes_protected(command_text, protected):
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it deletes a protected path."}))
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "delete", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it deletes a protected path."}), file=_out, flush=True)
                         return
                     if _hidden_path_read(command_text, protected):
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it reads a protected path through a hidden path form."}))
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "read", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it reads a protected path through a hidden path form."}), file=_out, flush=True)
                         return
                     if _tampers_with_protected(command_text, protected):
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "permissions", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it changes ownership or permissions of a protected path."}))
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it changes ownership or permissions of a protected path."}), file=_out, flush=True)
                         return
                     if _exfiltrates_protected(command_text, protected):
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "exfiltration", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it uploads a file from a protected path."}))
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it uploads a file from a protected path."}), file=_out, flush=True)
                         return
                     if _executes_protected(command_text, protected):
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "execution", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it launches a file from a protected path."}))
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it launches a file from a protected path."}), file=_out, flush=True)
                         return
                     escalation = _escalation_risk(command_text)
                     if escalation:
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "escalation", session, call)
-                        print(json.dumps({"action": "block", "message": f"Blackbox blocked this call: {escalation}."}))
+                        print(json.dumps({"action": "block", "message": f"Blackbox blocked this call: {escalation}."}), file=_out, flush=True)
                         return
                     decision = guard.on_pre_tool_call(
                         tool_name=tool,
@@ -958,7 +792,7 @@ public sealed class OpenCodeProtection
 
         if __name__ == "__main__":
             main()
-        """;
+        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal);
 
     private static string JsPath(string path) =>
         path.Replace("\\", "\\\\", StringComparison.Ordinal)

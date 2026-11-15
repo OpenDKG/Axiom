@@ -194,7 +194,16 @@ internal static class EnforcementScopeMatcher
 
     private static string NormalizePath(string value)
     {
-        var normalized = value.Trim().Replace('\\', '/');
+        var normalized = value.Trim().Trim('"', '\'').Replace('\\', '/');
+        if (normalized.StartsWith("file:///", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized["file:///".Length..];
+        }
+        else if (normalized.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "//" + normalized["file://".Length..];
+        }
+
         if (normalized.StartsWith("//?/UNC/", StringComparison.OrdinalIgnoreCase))
         {
             normalized = "//" + normalized["//?/UNC/".Length..];
