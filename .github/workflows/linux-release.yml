@@ -2,8 +2,8 @@ name: Linux package
 
 # Builds the Linux .deb alongside the Windows release assets. This workflow only produces a
 # downloadable artifact: it does not create a GitHub release, upload an asset or push anything.
-# Releasing is a separate, explicitly authorised step (scripts/linux/package.sh on the release
-# machine, then a manual asset upload next to Axiom-Setup.exe / Axiom-<version>-win-x64.zip).
+# Attaching the package to a public release is a separate, explicitly gated task (release write
+# permission); this job hands the artifact + SHA256SUMS + PROVENANCE to the release pipeline.
 
 on:
   workflow_dispatch:
@@ -53,6 +53,18 @@ jobs:
           dpkg-deb -c axiom_*.deb > contents.txt
           cat SHA256SUMS.txt
 
+      - name: Provenance (handoff metadata, no release write)
+        run: |
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "ref=${{ github.event.inputs.ref || github.ref }}"
+            echo "dotnet=$(dotnet --version)"
+            echo "package=$(basename build/linux/axiom_*.deb)"
+            echo "version=$(dpkg-deb -f build/linux/axiom_*.deb Version)"
+            echo "architecture=$(dpkg-deb -f build/linux/axiom_*.deb Architecture)"
+            echo "sha256=$(sha256sum build/linux/axiom_*.deb | cut -d' ' -f1)"
+          } | tee build/linux/PROVENANCE.txt
+
       - name: Upload the package artifact
         uses: actions/upload-artifact@v4
         with:
@@ -62,5 +74,6 @@ jobs:
             build/linux/SHA256SUMS.txt
             build/linux/control.txt
             build/linux/contents.txt
+            build/linux/PROVENANCE.txt
           if-no-files-found: error
           retention-days: 14
