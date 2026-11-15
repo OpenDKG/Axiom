@@ -1,5 +1,7 @@
 ﻿// SPDX-License-Identifier: GPL-3.0-or-later
+using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Axiom.Contracts.Monitoring;
 using Axiom.Presentation;
 using Xunit;
@@ -20,6 +22,11 @@ public sealed class HeadlessNavigationTests
 
             Assert.Equal(14, shell.Pages.Count);
             Assert.IsType<AgentDashboardPageViewModel>(shell.Pages[0]);
+            Assert.NotNull(shell.OpenContactCommand);
+            var contactButton = window.GetVisualDescendants()
+                .OfType<Button>()
+                .FirstOrDefault(button => string.Equals(button.Content as string, "Contact", StringComparison.Ordinal));
+            Assert.NotNull(contactButton);
             foreach (var page in shell.Pages)
             {
                 shell.SelectedPage = page;
