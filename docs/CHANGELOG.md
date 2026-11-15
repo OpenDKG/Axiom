@@ -2,6 +2,17 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.31.0
+
+- **Reliable row-click selection and container-preserving refreshes across all tabs.**
+  - Styled `ListBox.data-list > ListBoxItem` and its template `ContentPresenter` with `Background="Transparent"`, `HorizontalContentAlignment="Stretch"`, and zero item-gap dead zones in `AxiomControls.axaml`, plus `DataListSelection.SelectOnPointerPress="True"` on the style and left-click focus handling in `DataListSelection.cs`.
+  - Replaced `AxiomSelectableTextBlock` table cells with `TextBlock` and added `Background="Transparent"` on row templates across `ConnectionsView`, `EventsView`, `AppsView`, `OverviewView`, `AgentsView`, `AiAnalystView`, and `FirewallView` (preserving copy context menus and selectable detail panes).
+  - Added `DataListSelection.SharedSelectedItem` for grouped `ListBox` views (`ConnectionsView`, `EventsView`) so multiple app groups share one ViewModel selection without sibling groups clearing it to `null`.
+  - Added `CollectionSync.SyncInPlace` across `AgentsPageViewModel`, `ConnectionsPageViewModel`, `ConnectionAppGroup`, and `EventsPageViewModel` (and fixed `OnSelectedActivityChanged` when `HasSelectedActivity` is false plus `SelectedEvent` preservation in `EventsPageViewModel`) so background polls no longer destroy row containers mid-click.
+- **Smaller `Axiom-Setup.exe` (`~149.7 MB` -> `91.0 MB`).**
+  - Moved `UpgradeDataGuard` to `Axiom.Contracts.Blackbox`, decoupled `Axiom.Setup` from `Axiom.UI` and WPF (`UseWPF=true`), and replaced the WPF window with a DPI-aware dark-mode Win32 UI (`SetupNativeWindow.cs` + `app.manifest`).
+  - Compressed the embedded Desktop/Service payload and community feed into a single `Axiom.Setup.Payload.zip` resource in `scripts/publish-setup.ps1` (extracted in `SetupInstaller.cs`) and enabled partial IL trimming (`PublishTrimmed=true`).
+
 ## What's in 0.30.0
 
 - **One DKG home and an identity assertion (#307).**
