@@ -47,8 +47,8 @@ depends:
   - libSM
 # Builds up to 0.17 were named `axiom`, which is also the name of an unrelated computer algebra
 # package in Debian, Ubuntu and their archives (version 20170501). The bound only matches our 0.x.
-replaces:
-  - axiom < 1000
+# No Obsoletes: rpm runs the old package's erase scriptlets after the new %post, which would
+# remove the service this package just installed. Remove an old `axiom` build first.
 conflicts:
   - axiom < 1000
 recommends:

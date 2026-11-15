@@ -13,8 +13,16 @@ also the name of an unrelated computer algebra system in the Debian and Ubuntu a
 `20170501`). With the old name apt listed the archive's `20170501` as the upgrade candidate for the
 firewall, and on the Ubuntu 24.04 evidence box `unattended-upgrade` installed that family's add-on
 packages (`axiom-graphics`, `axiom-hypertex`, `axiom-doc`, ...), which left apt reporting unmet
-dependencies. `axiom-firewall` declares `Conflicts`/`Replaces: axiom (<< 1000)` so installing it
-removes an old 0.x build of ours and never matches the archive package. Paths, the unit name
+dependencies. The bound `axiom (<< 1000)` matches an old 0.x build of ours and never the archive package.
+
+- `.deb`: `Conflicts`/`Replaces: axiom (<< 1000)`, so `dpkg -i`/`apt install` removes the old build in
+  favour of the new one and `/var/lib/axiom` carries over. dpkg leaves the old package in the
+  "config-files" state with its postrm, whose purge branch deletes `/var/lib/axiom`; the new postinst
+  replaces that script with a no-op (only when it carries our marker lines), so a later
+  `dpkg --purge axiom` drops the record and nothing else.
+- `.rpm`: `Conflicts: axiom < 1000` only. rpm would run the old package's erase scriptlets after the
+  new `%post` and remove the service again, so there is no `Obsoletes`: `dnf remove axiom` first
+  (`/var/lib/axiom` stays), then install `axiom-firewall`. Not tested on Fedora. Paths, the unit name
 `axiomd.service` and the desktop id `com.axiom.firewall` are unchanged.
 
 ## 1. Build
