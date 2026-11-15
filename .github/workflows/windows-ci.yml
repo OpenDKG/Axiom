@@ -59,9 +59,13 @@ jobs:
           dotnet --info | Select-Object -First 25
           python -c "import sys; print(sys.executable, sys.version)"
 
-      - name: Restore solution
+      - name: Restore solution (locked mode, portable + Windows)
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
-        run: dotnet restore Axiom.sln
+        run: |
+          dotnet restore Axiom.Portable.slnx --locked-mode
+          if ($LASTEXITCODE -ne 0) { throw "Portable locked-mode restore failed with exit code $LASTEXITCODE" }
+          dotnet restore Axiom.sln --locked-mode
+          if ($LASTEXITCODE -ne 0) { throw "Full solution locked-mode restore failed with exit code $LASTEXITCODE" }
 
       - name: Release build (analyzers & TreatWarningsAsErrors)
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"

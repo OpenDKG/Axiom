@@ -49,13 +49,15 @@ $setupProject = Join-Path $root "src\Axiom.Setup\Axiom.Setup.csproj"
 if (-not $ReusePayload) {
     Write-Host "Publishing desktop payload..." -ForegroundColor Cyan
     & $dotnet publish (Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj") `
-        -c Release -p:PublishProfile=win-x64-selfcontained
+        -c Release -p:PublishProfile=win-x64-selfcontained `
+        -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json
     if ($LASTEXITCODE -ne 0) { throw "Desktop publish failed." }
 
     Write-Host "Publishing service payload..." -ForegroundColor Cyan
     Remove-Item $serviceOut -Recurse -Force -ErrorAction SilentlyContinue
     & $dotnet publish (Join-Path $root "src\Axiom.Service\Axiom.Service.csproj") `
         -c Release -r win-x64 --self-contained true `
+        -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json `
         -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:EnableCompressionInSingleFile=true `
         -p:DebugType=None -p:DebugSymbols=false `
@@ -84,6 +86,7 @@ Remove-Item $OutputDir -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "Publishing setup EXE..." -ForegroundColor Cyan
 & $dotnet publish $setupProject `
     -c Release -r win-x64 --self-contained true `
+    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
     -p:AllowedReferenceRelatedFileExtensions=none `

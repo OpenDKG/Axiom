@@ -81,13 +81,15 @@ $project = Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Ava
 $serviceProject = Join-Path $root "src\Axiom.Service\Axiom.Service.csproj"
 
 Write-Host "Publishing Axiom $Version (win-x64)..." -ForegroundColor Cyan
-& $dotnet publish $project -c Release -p:PublishProfile=win-x64-selfcontained
+& $dotnet publish $project -c Release -p:PublishProfile=win-x64-selfcontained `
+    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
 
 Write-Host "Publishing Axiom service $Version (win-x64, self-contained)..." -ForegroundColor Cyan
 $serviceOutput = Join-Path $root "artifacts\publish\service"
 Remove-Item $serviceOutput -Recurse -Force -ErrorAction SilentlyContinue
 & $dotnet publish $serviceProject -c Release -r win-x64 --self-contained true `
+    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `
     -p:DebugType=None -p:DebugSymbols=false `
