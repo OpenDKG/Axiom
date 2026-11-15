@@ -16,12 +16,15 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private readonly IUserInteraction _ui;
     private readonly ConnectionActionService _actions;
     private readonly IServiceRequestClient? _serviceClient;
+    private readonly Action? _openPrivacyOverview;
+    private readonly Action? _openPrivacySettings;
     private readonly List<NewConnectionMarkerEvent> _sessionEvents = [];
     private readonly HashSet<string> _seenEventKeys = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AppRow> _topAppRows = new(StringComparer.OrdinalIgnoreCase);
 
     private int _rangeRequest;
     private DateTimeOffset _lastHistoryUtc = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastPrivacyRefreshUtc = DateTimeOffset.MinValue;
     private bool _isActive = true;
     private bool _dirty;
 
@@ -30,13 +33,19 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         TrafficEngine traffic,
         IUserInteraction? ui = null,
         IServiceRequestClient? serviceClient = null,
-        IProcessActions? processActions = null)
+        IProcessActions? processActions = null,
+        PrivacyShieldPageViewModel? privacyShield = null,
+        Action? openPrivacyOverview = null,
+        Action? openPrivacySettings = null)
         : base("Network Dashboard", "Live sockets, throughput and recent network activity", "O")
     {
         _monitor = monitor;
         _traffic = traffic;
         _ui = ui ?? new NullUserInteraction();
         _serviceClient = serviceClient;
+        PrivacyShield = privacyShield;
+        _openPrivacyOverview = openPrivacyOverview;
+        _openPrivacySettings = openPrivacySettings;
         _actions = new ConnectionActionService(
             serviceClient,
             _ui,
@@ -44,7 +53,18 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         _monitor.Updated += OnMonitorUpdated;
         _traffic.Updated += OnTrafficUpdated;
         Refresh();
+        QueuePrivacyRefresh(force: false);
     }
+
+    public PrivacyShieldPageViewModel? PrivacyShield { get; }
+
+    public bool HasPrivacyShield => PrivacyShield is not null;
+
+    [RelayCommand]
+    private void OpenPrivacyOverview() => _openPrivacyOverview?.Invoke();
+
+    [RelayCommand]
+    private void OpenPrivacySettings() => _openPrivacySettings?.Invoke();
 
     public void Activate()
     {
@@ -54,6 +74,25 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
             _dirty = false;
             Refresh();
         }
+
+        QueuePrivacyRefresh(force: true);
+    }
+
+    private void QueuePrivacyRefresh(bool force)
+    {
+        if (PrivacyShield is null || !_isActive)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!force && now - _lastPrivacyRefreshUtc < TimeSpan.FromSeconds(2))
+        {
+            return;
+        }
+
+        _lastPrivacyRefreshUtc = now;
+        _ = PrivacyShield.RefreshSummaryAsync();
     }
 
     public void Deactivate()
@@ -652,6 +691,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         }
 
         Refresh();
+        QueuePrivacyRefresh(force: false);
     }
 
     private void OnTrafficUpdated(object? sender, EventArgs e)

@@ -422,6 +422,39 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private string _statsText = "No queries observed.";
 
     [ObservableProperty]
+    private string _ruleCountText = "0";
+
+    [ObservableProperty]
+    private string _queriesCountText = "0";
+
+    [ObservableProperty]
+    private string _allowedCountText = "0";
+
+    [ObservableProperty]
+    private string _blockedCountText = "0";
+
+    [ObservableProperty]
+    private string _errorsCountText = "0";
+
+    [ObservableProperty]
+    private string _blockRateText = "no queries yet";
+
+    [ObservableProperty]
+    private string _endpointSummaryText = "Resolver stopped";
+
+    [ObservableProperty]
+    private string _profileSummaryText = "Balanced · 0 source(s)";
+
+    [ObservableProperty]
+    private bool _hasTopBlocked;
+
+    [ObservableProperty]
+    private bool _hasRecentBlocked;
+
+    [ObservableProperty]
+    private bool _hasBlockedHistory;
+
+    [ObservableProperty]
     private string _statsHintText = string.Empty;
 
     [ObservableProperty]
@@ -507,6 +540,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             IsBusy = false;
         }
     }
+
+    public Task RefreshSummaryAsync() => RefreshStatsAsync();
 
     private async Task RefreshStatsAsync()
     {
@@ -1089,6 +1124,20 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         StatsText = status.Running
             ? $"{status.Queries:N0} queries observed."
             : "No queries observed.";
+        RuleCountText = status.RuleCount.ToString("N0", CultureInfo.InvariantCulture);
+        QueriesCountText = status.Queries.ToString("N0", CultureInfo.InvariantCulture);
+        AllowedCountText = status.Allowed.ToString("N0", CultureInfo.InvariantCulture);
+        BlockedCountText = status.Blocked.ToString("N0", CultureInfo.InvariantCulture);
+        ErrorsCountText = status.Errors.ToString("N0", CultureInfo.InvariantCulture);
+        BlockRateText = status.Queries > 0
+            ? $"{status.Blocked * 100.0 / status.Queries:0.0}% blocked"
+            : "no queries yet";
+        EndpointSummaryText = status.Running
+            ? $"{status.BindAddress}:{status.Port} · {status.Upstream}"
+            : "Resolver stopped";
+        var enabledSourceCount = Sources.Count(source => source.Enabled);
+        var activeProfile = SelectedProfile?.Value.ToString() ?? status.Settings.Profile.ToString();
+        ProfileSummaryText = $"{activeProfile} · {enabledSourceCount} source(s)";
         UpdateStatsHint(status);
         if (SelectedAdapter is { UsesResolver: true } activeAdapter &&
             DnsHelperStatusText == "No adapter DNS change has been made.")
@@ -1135,6 +1184,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             .ToList();
 
         UpdateBlockedHistory(historyRows);
+        HasTopBlocked = TopBlocked.Count > 0;
+        HasRecentBlocked = RecentBlockedGroups.Count > 0;
+        HasBlockedHistory = BlockedHistoryGroups.Count > 0;
         RefreshAdapters(force: false);
     }
 

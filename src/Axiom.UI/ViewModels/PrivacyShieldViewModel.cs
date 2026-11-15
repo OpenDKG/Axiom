@@ -220,6 +220,24 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
     private string _statsText = "No queries observed.";
 
     [ObservableProperty]
+    private string _ruleCountText = "0";
+
+    [ObservableProperty]
+    private string _queriesCountText = "0";
+
+    [ObservableProperty]
+    private string _allowedCountText = "0";
+
+    [ObservableProperty]
+    private string _blockedCountText = "0";
+
+    [ObservableProperty]
+    private string _errorsCountText = "0";
+
+    [ObservableProperty]
+    private string _blockRateText = "no queries yet";
+
+    [ObservableProperty]
     private string _lastUpdatedText = "Not refreshed.";
 
     [ObservableProperty]
@@ -275,6 +293,8 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             IsBusy = false;
         }
     }
+
+    public Task RefreshSummaryAsync() => RefreshStatsAsync();
 
     private async Task RefreshStatsAsync()
     {
@@ -652,6 +672,14 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         StatsText = status.Running
             ? $"{status.Queries:N0} queries observed."
             : "No queries observed.";
+        RuleCountText = status.RuleCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        QueriesCountText = status.Queries.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        AllowedCountText = status.Allowed.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        BlockedCountText = status.Blocked.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        ErrorsCountText = status.Errors.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        BlockRateText = status.Queries > 0
+            ? $"{status.Blocked * 100.0 / status.Queries:0.0}% blocked"
+            : "no queries yet";
         LastUpdatedText = $"Updated {DateTimeOffset.Now:HH:mm:ss}";
         LastErrorText = status.LastError ?? string.Empty;
 

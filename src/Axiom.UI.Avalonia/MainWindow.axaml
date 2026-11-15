@@ -50,6 +50,9 @@
     <DataTemplate DataType="local:OverviewPageViewModel">
       <views:OverviewView />
     </DataTemplate>
+    <DataTemplate DataType="local:PrivacyOverviewPageViewModel">
+      <views:PrivacyOverviewView />
+    </DataTemplate>
     <DataTemplate DataType="local:ConnectionsPageViewModel">
       <views:ConnectionsView />
     </DataTemplate>

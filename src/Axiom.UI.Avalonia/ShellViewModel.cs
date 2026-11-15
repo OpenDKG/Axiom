@@ -73,12 +73,23 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             typeof(ShellViewModel).Assembly.GetName().Version ?? new Version(0, 0, 0));
         _updateTimer = timers.Create(UpdateCheckService.MinimumCheckInterval);
         var processes = processActions ?? new UnsupportedProcessActions();
+        PrivacyShield = new PrivacyShieldPageViewModel(
+            IsServiceMode ? serviceClient : null,
+            interaction,
+            dnsAdapterHelper ?? new UnsupportedDnsAdapterHelper(),
+            timers);
+        PrivacyOverview = new PrivacyOverviewPageViewModel(
+            PrivacyShield,
+            openSettings: () => SelectedPage = PrivacyShield);
         Overview = new OverviewPageViewModel(
             _monitor,
             _traffic,
             interaction,
             IsServiceMode ? serviceClient : null,
-            processes);
+            processes,
+            PrivacyShield,
+            openPrivacyOverview: () => SelectedPage = PrivacyOverview,
+            openPrivacySettings: () => SelectedPage = PrivacyShield);
         Connections = new ConnectionsPageViewModel(
             _monitor,
             interaction,
@@ -95,11 +106,6 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             interaction,
             processes);
         Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction, _monitor);
-        PrivacyShield = new PrivacyShieldPageViewModel(
-            IsServiceMode ? serviceClient : null,
-            interaction,
-            dnsAdapterHelper ?? new UnsupportedDnsAdapterHelper(),
-            timers);
         Security = new SecurityPageViewModel(
             interaction,
             securityDialogs ?? new UnsupportedSecurityDialogs(),
@@ -139,6 +145,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         [
             AgentDashboard,
             Overview,
+            PrivacyOverview,
             Connections,
             Apps,
             Events,
@@ -303,6 +310,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public AgentDashboardPageViewModel AgentDashboard { get; }
 
     public OverviewPageViewModel Overview { get; }
+
+    public PrivacyOverviewPageViewModel PrivacyOverview { get; }
 
     public ConnectionsPageViewModel Connections { get; }
 

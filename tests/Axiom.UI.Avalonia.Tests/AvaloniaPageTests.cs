@@ -16,8 +16,9 @@ public sealed class AvaloniaPageTests
     {
         var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
 
-        Assert.Equal(14, shell.Pages.Count);
+        Assert.Equal(15, shell.Pages.Count);
         Assert.Contains(shell.Pages, page => page.Title == "Agent Dashboard");
+        Assert.Contains(shell.Pages, page => page.Title == "Privacy Overview");
         Assert.Contains(shell.Pages, page => page.Title == "Integrations");
         Assert.Contains(shell.Pages, page => page.Title == "Agent Protection");
         Assert.Contains(shell.Pages, page => page.Title == "Agent Activity");
@@ -35,6 +36,7 @@ public sealed class AvaloniaPageTests
             [
                 "Agent Dashboard",
                 "Network Dashboard",
+                "Privacy Overview",
                 "Live Connections",
                 "Applications",
                 "Network Events",
@@ -115,6 +117,67 @@ public sealed class AvaloniaPageTests
         Assert.Contains("No DNS settings were changed", page.DetailText);
 
         page.Dispose();
+    }
+
+    [Fact]
+    public async Task Privacy_overview_and_network_overview_expose_live_privacy_metrics()
+    {
+        var client = new PrivacyStatusClient(new Axiom.Contracts.Privacy.PrivacyShieldStatus
+        {
+            State = "running",
+            Enabled = true,
+            Running = true,
+            Port = 53,
+            BindAddress = "127.0.0.1",
+            Upstream = "https://cloudflare-dns.com/dns-query",
+            RuleCount = 1_234,
+            Queries = 500,
+            Allowed = 420,
+            Blocked = 75,
+            Errors = 5,
+            Detail = "Listening on 127.0.0.1:53",
+        });
+
+        using var privacyShield = new PrivacyShieldPageViewModel(
+            client,
+            new NullUserInteraction(),
+            new UnsupportedDnsAdapterHelper(),
+            new FakeTimerFactory());
+
+        await privacyShield.RefreshCommand.ExecuteAsync(null);
+
+        var settingsOpened = false;
+        var privacyOverviewOpened = false;
+        var privacyOverview = new PrivacyOverviewPageViewModel(
+            privacyShield,
+            openSettings: () => settingsOpened = true);
+        using var monitor = new ConnectionMonitor(new FakeSource(), new FakeTimerFactory());
+        using var traffic = new TrafficEngine(new FakeTimerFactory());
+        using var networkOverview = new OverviewPageViewModel(
+            monitor,
+            traffic,
+            new NullUserInteraction(),
+            client,
+            privacyShield: privacyShield,
+            openPrivacyOverview: () => privacyOverviewOpened = true,
+            openPrivacySettings: () => settingsOpened = true);
+
+        Assert.Equal("ACTIVE", privacyShield.StatusBadge);
+        Assert.Equal("1,234", privacyShield.RuleCountText);
+        Assert.Equal("500", privacyShield.QueriesCountText);
+        Assert.Equal("420", privacyShield.AllowedCountText);
+        Assert.Equal("75", privacyShield.BlockedCountText);
+        Assert.Equal("5", privacyShield.ErrorsCountText);
+        Assert.Equal("15.0% blocked", privacyShield.BlockRateText);
+        Assert.Same(privacyShield, privacyOverview.PrivacyShield);
+        Assert.True(networkOverview.HasPrivacyShield);
+        Assert.Same(privacyShield, networkOverview.PrivacyShield);
+
+        privacyOverview.OpenSettingsCommand.Execute(null);
+        Assert.True(settingsOpened);
+
+        networkOverview.OpenPrivacyOverviewCommand.Execute(null);
+        Assert.True(privacyOverviewOpened);
     }
 
     [Fact]
@@ -339,6 +402,19 @@ public sealed class AvaloniaPageTests
     {
         public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken) =>
             throw new ServiceUnavailableException(IpcErrorCodes.ServiceUnavailable, "offline");
+    }
+
+    private sealed class PrivacyStatusClient(Axiom.Contracts.Privacy.PrivacyShieldStatus status) : IServiceRequestClient
+    {
+        public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
+        {
+            if (command == IpcCommandTypes.PrivacyStatus)
+            {
+                return Task.FromResult((T)(object)status);
+            }
+
+            throw new ServiceUnavailableException(IpcErrorCodes.NotSupported, "not supported");
+        }
     }
     private sealed class FakeTimerFactory : IUiTimerFactory
     {
