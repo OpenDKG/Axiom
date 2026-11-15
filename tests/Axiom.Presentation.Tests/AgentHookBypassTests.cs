@@ -223,8 +223,10 @@ public sealed class AgentHookBypassTests
     }
 
     [Theory]
+    [InlineData("codex", "path", @"C:\Users\alice\.git-credentials")]
     [InlineData("claude", "file_path", @"C:\Users\alice\.git-credentials")]
     [InlineData("antigravity", "AbsolutePath", @"C:/Users/alice/.kube/config")]
+    [InlineData("gemini-agent-hook", "absolute_path", @"C:\Users\alice\.git-credentials")]
     public void Host_bridges_block_file_read_arguments_targeting_credential_stores(
         string host,
         string pathKey,
@@ -255,14 +257,23 @@ public sealed class AgentHookBypassTests
                     conversationId = "sess-1",
                     stepIdx = 1,
                 })
-                : JsonSerializer.Serialize(new
-                {
-                    hook_event_name = "PreToolUse",
-                    tool_name = "Read",
-                    tool_input = new Dictionary<string, string> { [pathKey] = targetPath },
-                    session_id = "sess-1",
-                    tool_use_id = "call-fpath-1",
-                });
+                : host == "gemini-agent-hook"
+                    ? JsonSerializer.Serialize(new
+                    {
+                        hook_event_name = "BeforeTool",
+                        tool_name = "read_file",
+                        tool_input = new Dictionary<string, string> { [pathKey] = targetPath },
+                        session_id = "sess-1",
+                        tool_use_id = "call-fpath-1",
+                    })
+                    : JsonSerializer.Serialize(new
+                    {
+                        hook_event_name = "PreToolUse",
+                        tool_name = host == "codex" ? "read_file" : "Read",
+                        tool_input = new Dictionary<string, string> { [pathKey] = targetPath },
+                        session_id = "sess-1",
+                        tool_use_id = "call-fpath-1",
+                    });
 
             var (exitCode, stdout, stderr) = RunProcess(
                 python,
@@ -290,10 +301,64 @@ public sealed class AgentHookBypassTests
         }
     }
 
+    [Fact]
+    public void Gemini_agent_hook_before_tool_allows_benign_read_in_real_python()
+    {
+        var python = FindWorkingPython();
+        if (python is null)
+        {
+            return;
+        }
+
+        var sandbox = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"axiom-bypass-gemini-ok-{Guid.NewGuid():N}"));
+        try
+        {
+            WritePermissiveBlackboxStub(sandbox.FullName);
+            var scriptPath = Path.Combine(sandbox.FullName, "hook-gemini.py");
+            File.WriteAllText(scriptPath, AgentHookScript.Build("gemini"));
+            var localAppData = Directory.CreateDirectory(Path.Combine(sandbox.FullName, "localappdata"));
+
+            var payload = JsonSerializer.Serialize(new
+            {
+                hook_event_name = "BeforeTool",
+                tool_name = "read_file",
+                tool_input = new { absolute_path = @"C:\work\README.md" },
+                session_id = "sess-gemini-1",
+                tool_use_id = "call-gemini-ok",
+            });
+
+            var (exitCode, stdout, stderr) = RunProcess(
+                python,
+                [scriptPath],
+                sandbox.FullName,
+                payload,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["LOCALAPPDATA"] = localAppData.FullName,
+                });
+
+            Assert.Equal(0, exitCode);
+            Assert.DoesNotContain("\"deny\"", stdout, StringComparison.OrdinalIgnoreCase);
+
+            var evidencePath = Path.Combine(localAppData.FullName, "Axiom", "agent-evidence.jsonl");
+            Assert.True(File.Exists(evidencePath), "Expected isolated agent-evidence.jsonl to be written.");
+            var evidenceLines = File.ReadAllLines(evidencePath);
+            Assert.Contains(
+                evidenceLines,
+                line => line.Contains("\"GUARD_ALLOWED\"", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(sandbox.FullName, recursive: true);
+        }
+    }
+
     private static string BuildHostScript(string host, string isolatedRoot)
     {
         switch (host)
         {
+            case "gemini-agent-hook":
+                return AgentHookScript.Build("gemini");
             case "claude":
             case "codex":
             case "deepseek":
@@ -415,6 +480,7 @@ public sealed class AgentHookBypassTests
                 break;
             case "antigravity":
             case "gemini":
+            case "gemini-agent-hook":
                 Assert.Equal("deny", root.GetProperty("decision").GetString());
                 break;
             case "cursor":
