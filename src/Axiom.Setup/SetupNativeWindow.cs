@@ -358,11 +358,11 @@ internal sealed class SetupNativeWindow : IDisposable
 
         _hCompleteRadio = AddRadioButton(cx, cy, S(18), S(18), IdCompleteRadio, _initialOptions.CompleteInstallation);
         AddClickableLabel(
-            cx + S(22), cy + S(1), ciw - S(22), S(62), IdCompleteLabel,
+            cx + S(22), cy + S(1), ciw - S(22), S(78), IdCompleteLabel,
             "Complete installation (recommended)\r\n" +
-            "Registers the Axiom Windows service once (one elevation prompt), enables Axiom Shield (ask policy), Privacy Shield resolver (port 53 + DoH 443), autostart, notifications, Blackbox, DKG and coding-agent hooks.",
+            "Registers the Axiom Windows service (one elevation prompt), enables Axiom Shield (ask policy), Privacy Shield resolver (port 53 + DoH 443), autostart, notifications, the verified Blackbox runtime, a local DKG node and coding-agent hooks. Expect 10-20 minutes and heavy disk use; each step is shown.",
             _fontSmall);
-        cy += S(66);
+        cy += S(82);
 
         _hPartialRadio = AddRadioButton(cx, cy, S(18), S(18), IdPartialRadio, !_initialOptions.CompleteInstallation);
         AddClickableLabel(

@@ -46,6 +46,19 @@ public static class UpgradeDataGuard
     /// <summary>Rebuildable rule data, not history. Excluded to keep the backup small.</summary>
     private static readonly string[] SkipNames = ["privacy-shield-rules.json"];
 
+    /// <summary>
+    /// Rebuildable or very large vendor data that must not be copied on every upgrade: the
+    /// Oxigraph store/logs, node_modules and Python venvs. A lab upgrade copied 8.3 GB / 116k
+    /// files and froze the machine because these were included.
+    /// </summary>
+    private static readonly string[] SkipDirectories =
+        ["oxigraph-data", "node_modules", "venv", ".git", "__pycache__", "cache"];
+
+    private static readonly string[] SkipExtensions = [".log", ".tmp", ".etl"];
+
+    /// <summary>Individual files above this size are regenerable data, not findings or identity.</summary>
+    private const long MaxFileBytes = 32L * 1024 * 1024;
+
     private static readonly string[] AxiomTopLevelPatterns = ["*.json", "*.jsonl", "*.db", "*.db-wal", "*.db-shm"];
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -258,8 +271,36 @@ public static class UpgradeDataGuard
 
         return files
             .Where(path => !SkipNames.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase))
+            .Where(path => !SkipExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+            .Where(path => !InSkippedDirectory(path))
+            .Where(path => FileSize(path) <= MaxFileBytes)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static bool InSkippedDirectory(string path)
+    {
+        foreach (var segment in path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (Array.Exists(SkipDirectories, name => string.Equals(name, segment, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static long FileSize(string path)
+    {
+        try
+        {
+            return new FileInfo(path).Length;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return long.MaxValue;
+        }
     }
 
     private static string[] Enumerate(string path, string pattern, SearchOption option)
