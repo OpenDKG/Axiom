@@ -80,14 +80,16 @@ if [[ $SKIP_PUBLISH -eq 0 ]]; then
   DOTNET=${DOTNET:-$(command -v dotnet || echo "$HOME/.dotnet/dotnet")}
   [[ -x "$DOTNET" ]] || die "dotnet not found (set DOTNET or use --skip-publish with an existing $PUBLISH)"
   SERVICE_PROJECT=${AXIOM_SERVICE_PROJECT:-$ROOT/src/Axiom.Service/Axiom.Service.csproj}
-  read -r -a WRAP <<<"${DOTNET_WRAPPER:-}"
+  # Split the optional wrapper into an array only when it is set: `read -a` on empty input leaves
+  # an empty array, and macOS's bash 3.2 aborts on "${WRAP[@]}" under set -u.
+  [[ -n "${DOTNET_WRAPPER:-}" ]] && read -r -a WRAP <<<"$DOTNET_WRAPPER"
   rm -rf "$PUBLISH"
   log "dotnet publish Axiom.Desktop.Avalonia.MacOS ($RID)"
-  "${WRAP[@]}" "$DOTNET" publish "$ROOT/src/Axiom.Desktop.Avalonia.MacOS/Axiom.Desktop.Avalonia.MacOS.csproj" \
+  ${WRAP[@]+"${WRAP[@]}"} "$DOTNET" publish "$ROOT/src/Axiom.Desktop.Avalonia.MacOS/Axiom.Desktop.Avalonia.MacOS.csproj" \
     -c Release -r "$RID" --self-contained true -m:2 -nologo -v:q \
     -p:UseAppHost=true -p:PublishSingleFile=false -o "$PUBLISH/app"
   log "dotnet publish Axiom.Service -> axiomd ($RID)"
-  "${WRAP[@]}" "$DOTNET" publish "$SERVICE_PROJECT" \
+  ${WRAP[@]+"${WRAP[@]}"} "$DOTNET" publish "$SERVICE_PROJECT" \
     -f net10.0 -c Release -r "$RID" --self-contained true -m:2 -nologo -v:q \
     -p:UseAppHost=true -o "$PUBLISH/service"
   "$DOTNET" build-server shutdown >/dev/null 2>&1 || true
@@ -292,7 +294,10 @@ if command -v pkgbuild >/dev/null; then
   cat > "$SCRIPTS/postinstall" <<'EOF'
 #!/bin/sh
 # Installs the root daemon (launchd plist, root-owned helper copy, newsyslog rotation); idempotent.
-"$2/Axiom.app/Contents/Resources/service/axiomd" --install-service || exit 1
+# $2 is the target volume, not the app: the payload installs to <volume>/Applications/Axiom.app
+# (--install-location / and a root-relative payload), so the daemon path needs Applications/ in it.
+TARGET="${2:-/}"
+"$TARGET/Applications/Axiom.app/Contents/Resources/service/axiomd" --install-service || exit 1
 exit 0
 EOF
   chmod 755 "$SCRIPTS/postinstall"
@@ -301,6 +306,11 @@ EOF
   [[ -n "${AXIOM_INSTALLER_IDENTITY:-}" ]] && PKG_SIGN=(--sign "$AXIOM_INSTALLER_IDENTITY" --timestamp)
   pkgbuild --root "$PKGROOT" --identifier "$APP_ID.pkg" --version "$VERSION" --install-location / \
     --scripts "$SCRIPTS" ${PKG_SIGN[@]+"${PKG_SIGN[@]}"} "$PKG" >/dev/null
+  # The postinstall runs "$2/Applications/Axiom.app/...": fail the package if the payload does not
+  # place the app there, instead of shipping an installer that cannot start the daemon.
+  pkgutil --payload-files "$PKG" > "$OUT/pkg-payload-files.txt"
+  grep -qx './Applications/Axiom.app' "$OUT/pkg-payload-files.txt" \
+    || die "the payload does not install Applications/Axiom.app, but postinstall expects it there"
   log "installer: $PKG (unsigned unless AXIOM_INSTALLER_IDENTITY=\"Developer ID Installer: …\")"
 fi
 log "install (bundle only): sudo rm -rf /Applications/Axiom.app && sudo ditto '$APP' /Applications/Axiom.app"
