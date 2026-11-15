@@ -64,15 +64,68 @@ public static class AgentCommandGuard
             return any(verb in text for verb in verbs)
 
 
+        def _normalize_command(command: str) -> str:
+            # Shell variables and Win32 prefixes hide a protected path from token matching:
+            # `cat "$HOME/.ssh/id_rsa"` and `type \\?\C:\...` were allowed while the literal
+            # form blocked. Expand them before any path check runs.
+            text = (command or "").lower()
+            home = os.path.normpath(str(Path.home())).lower()
+            profile = (os.environ.get("USERPROFILE") or str(Path.home())).lower()
+            replacements = {
+                "$env:userprofile": profile,
+                "%userprofile%": profile,
+                "$env:localappdata": (os.environ.get("LOCALAPPDATA") or "").lower(),
+                "%localappdata%": (os.environ.get("LOCALAPPDATA") or "").lower(),
+                "$env:appdata": (os.environ.get("APPDATA") or "").lower(),
+                "%appdata%": (os.environ.get("APPDATA") or "").lower(),
+                "${home}": home,
+                "$home": home,
+                "%home%": home,
+            }
+            for key, value in replacements.items():
+                if value:
+                    text = text.replace(key, value)
+            text = text.replace("\\\\?\\", "").replace("//?/", "").replace("\\\\.\\", "")
+            text = text.replace("~/", home + "\\").replace("~\\", home + "\\")
+            return " ".join(text.split())
+
+
         def _deletes_protected(command: str, protected) -> bool:
             # True when a shell command deletes one of the operator's protected files.
             # Blackbox's custom file-access detector covers reads and copies; a shell
             # del/rm/Remove-Item of a protected path would otherwise pass.
             text = " ".join((command or "").lower().split())
-            verbs = ("del ", "erase ", "rm ", "rmdir", "remove-item", "unlink ")
+            verbs = ("del ", "erase ", "rm ", "rmdir", "remove-item", "unlink ",
+                     "move ", "move-item", "ren ", "rename ", "rename-item", "mv ")
             if not any(verb in text for verb in verbs):
                 return False
             return _hits_protected(text, protected)
+
+
+        def _hidden_path_read(command: str, protected) -> bool:
+            # Blackbox blocks a literal read of a protected path. The same read written with a
+            # shell variable or a Win32 prefix ($HOME/.ssh, %USERPROFILE%\.ssh, \\?\C:\...)
+            # passed. Only commands that actually hide a path are checked, so a literal
+            # `.env.example` read is not a false positive.
+            raw = (command or "").lower()
+            hidden = ("$home", "%userprofile%", "$env:userprofile", "$env:localappdata",
+                      "%localappdata%", "$env:appdata", "%appdata%", "~/", "~\\", "\\\\?\\", "//?/")
+            if not any(marker in raw for marker in hidden):
+                return False
+            text = _normalize_command(raw)
+            if not _hits_protected(text, protected):
+                return False
+            verbs = ("cat ", "type ", "more ", "head ", "tail ", "get-content", "readalltext",
+                     "open(", ".read(", "copy ", "cp ", "get-item", "strings ", "forfiles")
+            return any(verb in text for verb in verbs)
+
+
+        def _tampers_with_protected(command: str, protected) -> bool:
+            # Ownership or ACL changes on a protected file let the agent read or copy it after
+            # the fact (takeown/icacls/attrib passed while a plain read blocked).
+            text = _normalize_command(command)
+            verbs = ("takeown", "icacls", "cacls", "attrib", "set-acl", "get-acl", "setaccessrule")
+            return any(verb in text for verb in verbs) and _hits_protected(text, protected)
 
 
         def _protected_tokens(protected) -> list:
@@ -97,7 +150,7 @@ public static class AgentCommandGuard
 
 
         def _hits_protected(command: str, protected) -> bool:
-            text = (command or "").lower()
+            text = _normalize_command(command)
             return any(token in text for token in _protected_tokens(protected))
 
 
@@ -121,9 +174,10 @@ public static class AgentCommandGuard
                 return False
             if any(client in text for client in ("scp ", "sftp ", "ftp ")):
                 return True
-            clients = ("curl", "wget", "iwr", "irm", "invoke-webrequest", "invoke-restmethod", "certutil")
-            flags = (" -f", "--form", "-d @", "--data @", "-t ", "--upload-file", "-infile",
-                     "--post-file", "-encode", "upload")
+            clients = ("curl", "wget", "iwr", "irm", "invoke-webrequest", "invoke-restmethod", "certutil",
+                       "python", "python3")
+            flags = (" -f", "--form", "-d @", "--data @", "--data-binary", "-t ", "--upload-file",
+                     "-infile", "--post-file", "-encode", "upload", "requests.post", ".read()")
             return any(client in text for client in clients) and any(flag in text for flag in flags)
 
 
@@ -195,6 +249,10 @@ public static class AgentCommandGuard
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
             if _deletes_protected(command_text, protected):
                 return ("delete", "Blackbox blocked this call: it deletes a protected path.")
+            if _hidden_path_read(command_text, protected):
+                return ("read", "Blackbox blocked this call: it reads a protected path through a hidden path form.")
+            if _tampers_with_protected(command_text, protected):
+                return ("permissions", "Blackbox blocked this call: it changes ownership or permissions of a protected path.")
             if _exfiltrates_protected(command_text, protected):
                 return ("exfiltration", "Blackbox blocked this call: it uploads a file from a protected path.")
             if _executes_protected(command_text, protected):

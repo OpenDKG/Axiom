@@ -744,6 +744,14 @@ public sealed class OpenCodeProtection
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "delete", session, call)
                         print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it deletes a protected path."}), file=_out, flush=True)
                         return
+                    if _hidden_path_read(command_text, protected):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "read", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it reads a protected path through a hidden path form."}), file=_out, flush=True)
+                        return
+                    if _tampers_with_protected(command_text, protected):
+                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "permissions", session, call)
+                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it changes ownership or permissions of a protected path."}), file=_out, flush=True)
+                        return
                     if _exfiltrates_protected(command_text, protected):
                         record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "exfiltration", session, call)
                         print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it uploads a file from a protected path."}), file=_out, flush=True)
