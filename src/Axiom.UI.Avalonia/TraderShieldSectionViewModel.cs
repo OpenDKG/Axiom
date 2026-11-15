@@ -78,6 +78,10 @@ public sealed partial class TraderShieldSectionViewModel : ObservableObject
         Func<string, string, bool>? writeFile = null,
         Func<IReadOnlyList<ProtectionCheckResult>>? selfTestRunner = null)
     {
+        // Off Windows the default path would resolve to the user's own ~/.hermes/config.yaml (not a
+        // Blackbox-managed profile, which only the Windows installer creates): never read or write it.
+        // An explicit path (tests) keeps the section functional on every platform.
+        _platformSupported = configPath is not null || OperatingSystem.IsWindows();
         _configPath = configPath ?? TraderShieldProvisioner.ResolveConfigPath();
         _fileExists = fileExists ?? File.Exists;
         _readFile = readFile ?? DefaultReadFile;
@@ -94,7 +98,12 @@ public sealed partial class TraderShieldSectionViewModel : ObservableObject
         Reload();
     }
 
-    public bool IsAvailable => !DistributionContext.IsStorePackage;
+    public bool IsAvailable => _platformSupported && !DistributionContext.IsStorePackage;
+
+    private readonly bool _platformSupported;
+
+    public const string UnsupportedPlatformText =
+        "Trader Shield needs the Windows Blackbox module; it is not available on this platform.";
 
     public ObservableCollection<TraderShieldWalletOption> Wallets { get; } = [];
 
@@ -107,6 +116,12 @@ public sealed partial class TraderShieldSectionViewModel : ObservableObject
     [RelayCommand]
     public void Reload()
     {
+        if (!_platformSupported)
+        {
+            StatusText = UnsupportedPlatformText;
+            return;
+        }
+
         if (!_fileExists(_configPath))
         {
             ApplySettings(new TraderShieldSettings(false, TraderShieldProvisioner.SupportedWallets, []));
@@ -170,6 +185,12 @@ public sealed partial class TraderShieldSectionViewModel : ObservableObject
     [RelayCommand]
     public void SaveSettings()
     {
+        if (!_platformSupported)
+        {
+            StatusText = UnsupportedPlatformText;
+            return;
+        }
+
         if (!_fileExists(_configPath))
         {
             StatusText = "Hermes config not found — install Blackbox before saving Trader Shield settings.";
@@ -201,6 +222,12 @@ public sealed partial class TraderShieldSectionViewModel : ObservableObject
     {
         if (IsTesting)
         {
+            return;
+        }
+
+        if (!_platformSupported)
+        {
+            SelfTestStatusText = UnsupportedPlatformText;
             return;
         }
 
