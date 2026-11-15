@@ -7,7 +7,7 @@ This is the original feature-by-feature release history extracted from the long 
 - **Cline, Copilot CLI and Cursor verified live; hook coverage tests.**
   - Installed 0.30.0 hooks blocked 4/15 each; generated 0.50.x hooks block **15/15** (Cline `cancel`, Copilot `permissionDecision`, Cursor `permission`).
   - New `HarnessHookCoverageTests` assert the shared guard and each deny shape in the three templates.
-  - Known follow-up #361: the WPF `Axiom.UI.Services` copies of these templates still omit the shared guard.
+  - Known follow-up #362: the WPF `Axiom.UI.Services` copies of these templates still omit the shared guard.
 
 ## What's in 0.50.0
 
