@@ -317,6 +317,18 @@ public static class AgentCommandGuard
                 return ()
 
 
+        def _arg_path(args) -> str:
+            # Host tools disagree on the file argument name: OpenCode uses filePath, Codex
+            # "path", Claude Code "file_path". The store check must see all three.
+            if not isinstance(args, dict):
+                return ""
+            for key in ("path", "filePath", "file_path"):
+                value = args.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value
+            return ""
+
+
         def _command_text(args) -> str:
             if not isinstance(args, dict):
                 return ""
@@ -378,8 +390,8 @@ public static class AgentCommandGuard
                 return ("injection-heuristic", "Blackbox blocked this call: prompt-injection phrasing in the tool arguments.")
             command_text = _command_text(args)
             store = _sensitive_store(command_text)
-            if not store and isinstance(args, dict):
-                store = _sensitive_store(str(args.get("path") or args.get("filePath") or ""))
+            if not store:
+                store = _sensitive_store(_arg_path(args))
             if store:
                 return ("credential-store", f"Blackbox blocked this call: it accesses a credential store ({store}).")
             if not command_text:
