@@ -37,6 +37,9 @@ public sealed class OptionalModuleInstaller
     // Pinned vendor installer digest. Update only after reviewing a new official release.
     private const string BlackboxInstallerSha256 = "261122F5E879596E88D63C30D5D36D12B4E155986F83AA3EB83ADEB406E41179";
 
+    /// <summary>Marker recording which pinned vendor build is installed in this tree.</summary>
+    private const string InstalledBuildMarker = ".axiom-blackbox-build";
+
     public string DkgRoot { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Axiom",
@@ -236,7 +239,44 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        return RunPowerShellScript(BuildBlackboxScript(), log);
+        if (IsPinnedBuildInstalled())
+        {
+            log?.Invoke("Blackbox pinned build is already installed; reusing the existing runtime (no vendor reinstall).");
+            return true;
+        }
+
+        var installed = RunPowerShellScript(BuildBlackboxScript(), log);
+        if (installed)
+        {
+            try
+            {
+                File.WriteAllText(Path.Combine(BlackboxRoot, InstalledBuildMarker), BlackboxInstallerSha256);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return installed;
+    }
+
+    private bool IsPinnedBuildInstalled()
+    {
+        try
+        {
+            var marker = Path.Combine(BlackboxRoot, InstalledBuildMarker);
+            if (!File.Exists(marker) ||
+                !string.Equals(File.ReadAllText(marker).Trim(), BlackboxInstallerSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return File.Exists(Path.Combine(BlackboxRoot, "agent-blackbox", "venv", "Scripts", "python.exe"));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private string BuildBlackboxScript()
@@ -285,6 +325,17 @@ public sealed class OptionalModuleInstaller
             $env:BLACKBOX_MODE = 'block'
             $env:BLACKBOX_ATTACH_ALL = '1'
             & $installer -StoreBackend $storeBackend
+            $vendorExit = $LASTEXITCODE
+            if ($vendorExit -ne 0) {
+              # The pinned vendor build can fail its own "dependency environment committed" check.
+              # Repair it once with the vendor CLI; a usable venv is what Axiom actually needs.
+              $hermesExe = Join-Path $dir 'agent-blackbox\venv\Scripts\hermes.exe'
+              if (-not (Test-Path $hermesExe)) { $hermesExe = Join-Path $env:LOCALAPPDATA 'hermes\bin\hermes.exe' }
+              if (Test-Path $hermesExe) {
+                Write-Host "Vendor installer exited $vendorExit; running 'hermes pm repair'..." -ForegroundColor Yellow
+                & $hermesExe pm repair 2>&1 | ForEach-Object { Write-Host $_ }
+              }
+            }
 
             # The vendor pins the LF SHA-256 of the BIP-39 wordlist, but a Windows git clone with
             # core.autocrlf=true writes CRLF and seed-phrase detection disables itself. Normalize every
@@ -341,7 +392,11 @@ public sealed class OptionalModuleInstaller
                 Write-Warning "Blackbox dashboard did not answer yet. Start it from Axiom with the Start button."
               }
             }
+            if (-not (Test-Path $venv)) {
+              throw 'Blackbox runtime is not usable: the vendor venv is missing.'
+            }
             Write-Host 'Blackbox setup finished. Return to Axiom and click Check again.' -ForegroundColor Green
+            exit 0
             """;
     }
 
