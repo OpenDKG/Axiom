@@ -153,6 +153,45 @@ public sealed class AgentHookScriptTests
     }
 
     [Fact]
+    public void OpenCode_bridge_carries_credential_store_detection()
+    {
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+
+        // Credential stores outside the vendor's protected list: cloud/CLI tokens, browser
+        // login/cookie databases, extension storage, Firefox profiles and wallet files.
+        Assert.Contains("def _sensitive_store(text: str) -> str:", bridge, StringComparison.Ordinal);
+        Assert.Contains("_sensitive_store(command_text)", bridge, StringComparison.Ordinal);
+        string[] stores =
+        [
+            ".git-credentials", ".npmrc", ".kube\\\\config", "github cli\\\\hosts.yml",
+            "\\\\login data", "\\\\network\\\\cookies", "local extension settings",
+            "mozilla\\\\firefox\\\\profiles", "wallet.dat", "credential store",
+        ];
+        foreach (var store in stores)
+        {
+            Assert.Contains(store, bridge, StringComparison.Ordinal);
+        }
+
+        // Credential enumeration shapes stay in the shared escalation detector.
+        string[] labels =
+        [
+            "credential enumeration (cmdkey)", "credential enumeration (vaultcmd)",
+            "Wi-Fi key extraction", "certificate export",
+        ];
+        foreach (var label in labels)
+        {
+            Assert.Contains(label, bridge, StringComparison.Ordinal);
+        }
+
+        Assert.True(
+            bridge.IndexOf("_sensitive_store(command_text)", StringComparison.Ordinal) <
+            bridge.IndexOf("guard.on_pre_tool_call", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void OpenCode_bridge_carries_launch_and_upload_protection()
     {
         var build = typeof(OpenCodeProtection).GetMethod(
