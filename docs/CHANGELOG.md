@@ -2,6 +2,12 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.58.0
+
+- **Documentation screenshots refreshed for the 0.57 theme redesign.**
+  - Glass Dark and Glass Light dashboards, opaque Dark and Light themes, the Settings/About page in both glass themes, the leadership crop and the glass-vs-dark comparison were recaptured from the released 0.57.0 build.
+  - Screenshots now show the 0.56 monochrome lockup, the borderless frosted chrome and the current navigation.
+
 ## What's in 0.57.0
 
 - **Redesigned Glass themes & harmonized all six Avalonia desktop themes:**
