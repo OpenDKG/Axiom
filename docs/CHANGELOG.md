@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.50.0
+
+- **Reuse installed Blackbox and recover the vendor runtime.**
+  - A pinned-build marker plus a working vendor venv makes later Complete installs skip the vendor download/install entirely; a new pinned digest still reinstalls.
+  - A non-zero vendor exit triggers one `hermes pm repair` automatically; the install succeeds when the vendor venv exists and fails only when it is missing.
+  - Node and DKG were already reused (probe, skip standalone DKG, start the configured home).
+
 ## What's in 0.49.0
 
 - **Upgrade install speed and honesty.**
