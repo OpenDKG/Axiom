@@ -32,21 +32,21 @@ jobs:
           global-json-file: global.json
 
       - name: Environment
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: |
           dotnet --version
           dotnet --info | Select-Object -First 25
 
       - name: Restore solution
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: dotnet restore Axiom.sln
 
       - name: Release build (analyzers & TreatWarningsAsErrors)
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: dotnet build Axiom.sln -c Release --no-restore
 
       - name: Run full test suite (strict pass/skip gate)
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: |
           $resultsDir = Join-Path $env:RUNNER_TEMP 'test-results'
           New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
@@ -95,7 +95,7 @@ jobs:
           }
 
       - name: Check for vulnerable NuGet packages
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: |
           $output = dotnet list Axiom.sln package --vulnerable --include-transitive 2>&1 | Out-String
           Write-Host $output
@@ -107,7 +107,7 @@ jobs:
           }
 
       - name: Validate notices, licenses & starter feed integrity
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: |
           foreach ($required in @('LICENSE', 'NOTICE', 'AUTHORS.md', 'THIRD_PARTY_NOTICES.md', 'community/feed.json')) {
             if (-not (Test-Path $required)) {
@@ -147,11 +147,11 @@ jobs:
           global-json-file: global.json
 
       - name: Publish single-file Axiom Setup
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: .\scripts\publish-setup.ps1
 
       - name: Verify installer binary, hash & silent acceptance guard
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: |
           $setupExe = 'artifacts\publish\setup\Axiom.Setup.exe'
           if (-not (Test-Path $setupExe)) {
