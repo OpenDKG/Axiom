@@ -14,6 +14,9 @@ concurrency:
   group: windows-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  PSExecutionPolicyPreference: Bypass
+
 jobs:
   build-and-test:
     name: Build, Analyze & Test (Windows)
