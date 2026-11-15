@@ -2,6 +2,12 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.44.0
+
+- **F-19 Windows process-start feed.**
+  - `IProcessStartSource` + `WmiProcessStartSource` subscribe to `Win32_ProcessStartTrace`, resolve executable paths through an injected resolver (name fallback), and publish `ProcessSpawnEvent`.
+  - `Map` is pure and unit-tested (5 cases); the service host wiring is next.
+
 ## What's in 0.43.0
 
 - **F-19 audit sink.**
