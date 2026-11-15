@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using Axiom.Contracts;
 using Axiom.Contracts.Blackbox;
+using Axiom.Contracts.Modules;
 
 namespace Axiom.Presentation;
 
@@ -66,23 +67,88 @@ public sealed class OptionalModuleInstaller
     public bool IsDkgAvailable => ResolveDkgCommand().Command is not null;
 
     /// <summary>
+    /// Why the last install request did nothing, or null when it started.
+    /// </summary>
+    public string? LastError { get; private set; }
+
+    /// <summary>
+    /// Opens the visible winget script that installs missing optional-module prerequisites.
+    /// </summary>
+    public void InstallPrerequisites(ModulePrerequisiteReport report, bool includeVcRedist = false)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        LastError = null;
+
+        if (DistributionContext.IsStorePackage)
+        {
+            LastError = "Prerequisite installation is not available in the Microsoft Store build.";
+            return;
+        }
+
+        if (report.IsSatisfied && !includeVcRedist)
+        {
+            return;
+        }
+
+        StartPowerShell(ModulePrerequisites.BuildBootstrapScript(report, includeVcRedist, interactive: true));
+    }
+
+    /// <summary>
+    /// Silently installs missing optional-module prerequisites via winget during complete Setup.
+    /// </summary>
+    public bool InstallPrerequisitesAndWait(
+        ModulePrerequisiteReport report,
+        bool includeVcRedist = false,
+        Action<string>? log = null)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        LastError = null;
+
+        if (DistributionContext.IsStorePackage)
+        {
+            LastError = "Prerequisite installation is not available in the Microsoft Store build.";
+            log?.Invoke(LastError);
+            return false;
+        }
+
+        if (report.IsSatisfied && !includeVcRedist)
+        {
+            return true;
+        }
+
+        var ok = RunPowerShellScript(
+            ModulePrerequisites.BuildBootstrapScript(report, includeVcRedist, interactive: false),
+            log);
+        if (!ok)
+        {
+            LastError = $"Automatic prerequisite install did not finish cleanly for: {report.MissingSummary}.";
+        }
+
+        return ok;
+    }
+
+    /// <summary>
     /// Installs the DKG CLI into a per-user folder, then opens the official interactive setup on
     /// testnet and starts the node. The user answers the official prompts; nothing is hidden.
     /// </summary>
     public void InstallDkg()
     {
+        LastError = null;
         if (DistributionContext.IsStorePackage)
         {
+            LastError = "This optional third-party module is not included in the Microsoft Store build.";
             return;
         }
 
         if (IsUnsafeInstallRoot(DkgRoot, DkgHome))
         {
+            LastError = "DKG install refused: its target path contains a junction or symbolic link.";
             return;
         }
 
         if (!EnsureDkgManifests(null))
         {
+            LastError = "Could not write the pinned DKG npm manifest.";
             return;
         }
 
@@ -121,7 +187,10 @@ public sealed class OptionalModuleInstaller
 
     private string BuildDkgScript()
     {
-        var pathPreamble = BuildNodePathPreamble();
+        var pathPreamble = string.Join(
+            Environment.NewLine,
+            new[] { ModulePrerequisites.Probe().BuildPathPreamble(), BuildNodePathPreamble() }
+                .Where(line => !string.IsNullOrWhiteSpace(line)));
         return $$"""
             $ErrorActionPreference = 'Stop'
             {{pathPreamble}}
@@ -225,13 +294,16 @@ public sealed class OptionalModuleInstaller
     /// </summary>
     public void InstallBlackbox()
     {
+        LastError = null;
         if (DistributionContext.IsStorePackage)
         {
+            LastError = "This optional third-party module is not included in the Microsoft Store build.";
             return;
         }
 
         if (IsUnsafeInstallRoot(BlackboxRoot))
         {
+            LastError = "Blackbox install refused: its target path contains a junction or symbolic link.";
             return;
         }
 
@@ -294,8 +366,10 @@ public sealed class OptionalModuleInstaller
 
     private string BuildBlackboxScript()
     {
+        var pathPreamble = ModulePrerequisites.Probe().BuildPathPreamble();
         return $$"""
             $ErrorActionPreference = 'Stop'
+            {{pathPreamble}}
             $dir = '{{Escape(BlackboxRoot)}}'
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
             Set-Location $dir
@@ -321,9 +395,13 @@ public sealed class OptionalModuleInstaller
               try { Invoke-WebRequest -UseBasicParsing -Uri 'https://blackbox-w.umanitek.ai' -OutFile $installer }
               catch { Write-Warning "Vendor download failed: $($_.Exception.Message)" }
             }
+            if (-not (Test-Path $installer) -or (Get-Item $installer).Length -eq 0) {
+              throw 'Could not download the Umanitek Blackbox installer (https://blackbox-w.umanitek.ai).'
+            }
             $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
             Write-Host "Installer SHA256: $hash" -ForegroundColor Yellow
             if ($hash -ne '{{BlackboxInstallerSha256}}') {
+              Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
               throw "Blackbox installer hash mismatch. Expected {{BlackboxInstallerSha256}}, got $hash. Refusing to run an unpinned installer."
             }
             Write-Host 'Installer hash matches the pinned Axiom digest.' -ForegroundColor Green

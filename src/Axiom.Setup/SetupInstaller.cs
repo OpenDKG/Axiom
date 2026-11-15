@@ -196,6 +196,19 @@ internal static class SetupInstaller
                                $"{upgradeBackup.TotalBytes / 1_048_576.0:F1} MB at {upgradeBackup.Directory}.");
                     }
 
+                    var prereqs = Axiom.Contracts.Modules.ModulePrerequisites.Probe();
+                    var includeVcRedist = !OptionalModuleInstaller.HasVcRuntime();
+                    if (!prereqs.IsSatisfied || includeVcRedist)
+                    {
+                        Report($"Checking module prerequisites (missing: {(prereqs.IsSatisfied ? "VC++ x64 redistributable" : prereqs.MissingSummary)}; VC++ x64={(includeVcRedist ? "missing" : "ready")})...");
+                        var prereqReady = await Task.Run(
+                            () => moduleInstaller.InstallPrerequisitesAndWait(prereqs, includeVcRedist, Report),
+                            cancellationToken).ConfigureAwait(false);
+                        Report(prereqReady
+                            ? "Module prerequisites are ready."
+                            : $"Module prerequisite installation incomplete: {moduleInstaller.LastError ?? "see log above"}");
+                    }
+
                     Report("Auditing official installer scope: Axiom modules, Hermes plugin config/mode and scheduled task only.");
                     Report("Configuring the official Blackbox runtime silently in the background...");
                     blackboxExit = await Task.Run(
