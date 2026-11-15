@@ -132,7 +132,7 @@ public static class AgentCommandGuard
             # Credential stores the vendor's protected list does not name. The sweep found reads
             # of these allowed: .git-credentials, .npmrc, .kube/config, GitHub CLI hosts.yml,
             # browser Login Data/Cookies and extension storage, Firefox profiles, wallet files.
-            value = _normalize_command(text)
+            value = _normalize_command(text).replace("/", "\\")
             stores = (
                 (".git-credentials", "Git credential store"),
                 (".npmrc", "npm token store"),
