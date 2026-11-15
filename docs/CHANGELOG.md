@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.35.0
+
+- **Sensitive credential stores and credential enumeration detectors.**
+  - `_sensitive_store` blocks `.git-credentials`, `.npmrc`, `.kube\config`, `.docker\config.json`, GitHub CLI `hosts.yml`, browser `Login Data`/`Cookies`/extension storage, Firefox profiles and `wallet.dat`, including `$HOME`/`%VAR%`/`\\?\` variants and `read_file` paths.
+  - `_escalation_risk` adds `credential enumeration (cmdkey)`, `credential enumeration (vaultcmd)`, `Wi-Fi key extraction` and `certificate export`.
+  - Live VM verification pending the owner's install (lab stays on 0.30.0).
+
 ## What's in 0.34.0
 
 - **Credential, evasion, persistence and execution detectors (attack-vector sweep, part 2).**
