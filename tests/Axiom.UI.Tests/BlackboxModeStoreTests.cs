@@ -35,6 +35,22 @@ public sealed class BlackboxModeStoreTests
             "config.yaml.axiom-backup-*"));
     }
 
+    [Fact]
+    public void Prefers_local_appdata_hermes_home_when_present_alongside_user_profile()
+    {
+        using var temp = new TempTree();
+        var userHermes = Path.Combine(temp.Root, ".hermes");
+        var localHermes = Path.Combine(temp.Root, "hermes");
+        Directory.CreateDirectory(userHermes);
+        Directory.CreateDirectory(localHermes);
+        File.WriteAllText(Path.Combine(userHermes, "config.yaml"), "plugins:\n  entries:\n    blackbox:\n      mode: audit\n");
+        File.WriteAllText(Path.Combine(localHermes, "config.yaml"), "plugins:\n  entries:\n    blackbox:\n      mode: block\n");
+
+        var store = new BlackboxModeStore(temp.Root, temp.Root, environmentHome: string.Empty);
+        Assert.Equal(Path.Combine(localHermes, "config.yaml"), store.ConfigPath);
+        Assert.Equal("block", store.GetMode());
+    }
+
     private sealed class TempTree : IDisposable
     {
         public TempTree()

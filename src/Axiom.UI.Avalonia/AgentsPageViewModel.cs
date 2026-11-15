@@ -155,7 +155,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     public bool IsAvailable => !DistributionContext.IsStorePackage;
 
     /// <summary>Truthful enforcement status shown above the host list.</summary>
-    public EnforcementSurfaceState Enforcement => EnforcementSurfaceState.Current;
+    [ObservableProperty]
+    private EnforcementSurfaceState _enforcement = EnforcementSurfaceState.Current;
 
     public IReadOnlyList<string> ActivityFilters { get; } =
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
@@ -512,6 +513,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ApplyFindings(findingsTask.Result);
             ApplyHealth(settingsTask.Result, graphTask.Result);
             ApplyHookEvidence();
+            await RefreshEnforcementAsync(
+                guardAvailable: true,
+                ReadString(settingsTask.Result, "mode")).ConfigureAwait(true);
             await RefreshSessionsAsync().ConfigureAwait(true);
         }
         catch (Exception exception) when (exception is
@@ -522,6 +526,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             SummaryText = "No live Blackbox data is available.";
             ThreatSharingStatusText = "offline · dashboard unavailable";
             CanToggleThreatSharing = false;
+            ApplyHookEvidence();
+            await RefreshEnforcementAsync(guardAvailable: false, hookMode: null).ConfigureAwait(true);
         }
 
         try
@@ -2119,6 +2125,45 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ? null
             : HookEvidence.Max(item => (DateTimeOffset?)item.Timestamp);
         UpdateActivityFreshness();
+    }
+
+    private async Task RefreshEnforcementAsync(bool guardAvailable, string? hookMode)
+    {
+        EnforcementStatusDto? status = null;
+        EnforcementReceiptsSnapshotDto? receipts = null;
+
+        if (_serviceClient is not null)
+        {
+            try
+            {
+                status = await _serviceClient
+                    .SendAsync<EnforcementStatusDto>(IpcCommandTypes.EnforcementStatus, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+                receipts = await _serviceClient
+                    .SendAsync<EnforcementReceiptsSnapshotDto>(IpcCommandTypes.EnforcementReceipts, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
+            catch (Exception exception) when (exception is
+                ServiceUnavailableException or TimeoutException or System.Text.Json.JsonException or IOException)
+            {
+                // Leave controller telemetry null when the service pipe is absent or busy.
+            }
+        }
+
+        var normalizedMode = hookMode?.Trim().ToLowerInvariant() is "audit" or "block"
+            ? hookMode.Trim().ToLowerInvariant()
+            : Security.BlackboxModeText?.Trim().ToLowerInvariant() is "audit" or "block"
+                ? Security.BlackboxModeText.Trim().ToLowerInvariant()
+                : null;
+        var localHookDenies = HookEvidence.Count(entry =>
+            string.Equals(entry.EffectiveChannel, "HOST_DENY_SENT", StringComparison.Ordinal));
+
+        Enforcement = EnforcementSurfaceState.FromReceiptsAndStatus(
+            status,
+            receipts,
+            guardAvailable,
+            normalizedMode,
+            localHookDenies);
     }
 
     partial void OnSelectedActivityChanged(BlackboxAuditEntry? value)

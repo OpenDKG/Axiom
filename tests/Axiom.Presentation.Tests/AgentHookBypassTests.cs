@@ -353,6 +353,72 @@ public sealed class AgentHookBypassTests
         }
     }
 
+    [Fact]
+    public void Gemini_protection_script_maps_absolute_path_for_vendor_guard_and_denies_in_real_python()
+    {
+        var python = FindWorkingPython();
+        if (python is null)
+        {
+            return;
+        }
+
+        var sandbox = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"axiom-bypass-gemini-prot-{Guid.NewGuid():N}"));
+        try
+        {
+            var stubRoot = Directory.CreateDirectory(Path.Combine(sandbox.FullName, "plugins", "blackbox", "guard"));
+            File.WriteAllText(Path.Combine(sandbox.FullName, "plugins", "__init__.py"), string.Empty);
+            File.WriteAllText(Path.Combine(sandbox.FullName, "plugins", "blackbox", "__init__.py"), string.Empty);
+            File.WriteAllText(Path.Combine(stubRoot.FullName, "__init__.py"), string.Empty);
+            // Stub checks ONLY args.get("path"), NOT absolute_path, proving GeminiProtection forwards it.
+            File.WriteAllText(
+                Path.Combine(stubRoot.FullName, "hooks.py"),
+                """
+                def on_pre_tool_call(**kwargs):
+                    args = kwargs.get("args") or {}
+                    if args.get("path") == "/tmp/vendor-secret.txt":
+                        return {"action": "block", "message": "vendor saw mapped path"}
+                    return {"action": "allow"}
+                """);
+
+            var scriptPath = Path.Combine(sandbox.FullName, "axiom-gemini-hook.py");
+            File.WriteAllText(scriptPath, BuildHostScript("gemini", sandbox.FullName));
+            var localAppData = Directory.CreateDirectory(Path.Combine(sandbox.FullName, "localappdata"));
+
+            var payload = JsonSerializer.Serialize(new
+            {
+                hook_event_name = "BeforeTool",
+                tool_name = "read_file",
+                tool_input = new { absolute_path = "/tmp/vendor-secret.txt" },
+                session_id = "sess-gemini-prot-1",
+                tool_use_id = "call-gemini-prot-1",
+            });
+
+            var (exitCode, stdout, stderr) = RunProcess(
+                python,
+                [scriptPath],
+                sandbox.FullName,
+                payload,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["LOCALAPPDATA"] = localAppData.FullName,
+                });
+
+            Assert.Equal(0, exitCode);
+            AssertHostDeny("gemini", exitCode, stdout, stderr);
+            Assert.Contains("vendor saw mapped path", stdout, StringComparison.Ordinal);
+
+            var evidencePath = Path.Combine(localAppData.FullName, "Axiom", "agent-evidence.jsonl");
+            Assert.True(File.Exists(evidencePath));
+            Assert.Contains(
+                File.ReadAllLines(evidencePath),
+                line => line.Contains("\"GUARD_BLOCKED\"", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(sandbox.FullName, recursive: true);
+        }
+    }
+
     private static string BuildHostScript(string host, string isolatedRoot)
     {
         switch (host)

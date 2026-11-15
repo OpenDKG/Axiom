@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using Axiom.Contracts;
 using Axiom.Contracts.Blackbox;
+using Axiom.Contracts.Modules;
 
 namespace Axiom.Presentation;
 
@@ -75,23 +76,88 @@ public sealed class OptionalModuleInstaller
     public bool IsDkgAvailable => ResolveDkgCommand().Command is not null;
 
     /// <summary>
+    /// Why the last install request did nothing, or null when it started.
+    /// </summary>
+    public string? LastError { get; private set; }
+
+    /// <summary>
+    /// Opens the visible winget script that installs missing optional-module prerequisites.
+    /// </summary>
+    public void InstallPrerequisites(ModulePrerequisiteReport report, bool includeVcRedist = false)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        LastError = null;
+
+        if (DistributionContext.IsStorePackage)
+        {
+            LastError = "Prerequisite installation is not available in the Microsoft Store build.";
+            return;
+        }
+
+        if (report.IsSatisfied && !includeVcRedist)
+        {
+            return;
+        }
+
+        StartPowerShell(ModulePrerequisites.BuildBootstrapScript(report, includeVcRedist, interactive: true));
+    }
+
+    /// <summary>
+    /// Silently installs missing optional-module prerequisites via winget during complete Setup.
+    /// </summary>
+    public bool InstallPrerequisitesAndWait(
+        ModulePrerequisiteReport report,
+        bool includeVcRedist = false,
+        Action<string>? log = null)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        LastError = null;
+
+        if (DistributionContext.IsStorePackage)
+        {
+            LastError = "Prerequisite installation is not available in the Microsoft Store build.";
+            log?.Invoke(LastError);
+            return false;
+        }
+
+        if (report.IsSatisfied && !includeVcRedist)
+        {
+            return true;
+        }
+
+        var ok = RunPowerShellScript(
+            ModulePrerequisites.BuildBootstrapScript(report, includeVcRedist, interactive: false),
+            log);
+        if (!ok)
+        {
+            LastError = $"Automatic prerequisite install did not finish cleanly for: {report.MissingSummary}.";
+        }
+
+        return ok;
+    }
+
+    /// <summary>
     /// Installs the DKG CLI into a per-user folder, then opens the official interactive setup on
     /// testnet and starts the node. The user answers the official prompts; nothing is hidden.
     /// </summary>
     public void InstallDkg()
     {
+        LastError = null;
         if (DistributionContext.IsStorePackage)
         {
+            LastError = "This optional third-party module is not included in the Microsoft Store build.";
             return;
         }
 
         if (IsUnsafeInstallRoot(DkgRoot, DkgHome))
         {
+            LastError = "DKG install refused: its target path contains a junction or symbolic link.";
             return;
         }
 
         if (!EnsureDkgManifests(null))
         {
+            LastError = "Could not write the pinned DKG npm manifest.";
             return;
         }
 
@@ -112,6 +178,14 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        if (ResolveNpmExecutable() is null)
+        {
+            log?.Invoke(
+                "DKG prerequisite missing: npm is not installed or not on PATH. " +
+                "Install Node.js LTS (https://nodejs.org) so DKG can be installed.");
+            return false;
+        }
+
         if (!EnsureDkgManifests(log))
         {
             return false;
@@ -122,8 +196,13 @@ public sealed class OptionalModuleInstaller
 
     private string BuildDkgScript()
     {
+        var pathPreamble = string.Join(
+            Environment.NewLine,
+            new[] { ModulePrerequisites.Probe().BuildPathPreamble(), BuildNodePathPreamble() }
+                .Where(line => !string.IsNullOrWhiteSpace(line)));
         return $$"""
             $ErrorActionPreference = 'Stop'
+            {{pathPreamble}}
             $dkgRoot = '{{Escape(DkgRoot)}}'
             $dkgHome = '{{Escape(DkgHome)}}'
             $dkg = Join-Path $dkgRoot 'node_modules\.bin\dkg.cmd'
@@ -133,6 +212,9 @@ public sealed class OptionalModuleInstaller
             $installed = $null
             if (Test-Path $packagePath) {
               try { $installed = (Get-Content $packagePath -Raw | ConvertFrom-Json).version } catch { $installed = $null }
+            }
+            if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+              throw 'DKG prerequisite missing: npm is not installed or not on PATH. Install Node.js LTS and retry Repair.'
             }
             if ($installed -ne $dkgVersion -or -not (Test-Path $dkg)) {
               if (Test-Path $dkg) {
@@ -221,13 +303,16 @@ public sealed class OptionalModuleInstaller
     /// </summary>
     public void InstallBlackbox()
     {
+        LastError = null;
         if (DistributionContext.IsStorePackage)
         {
+            LastError = "This optional third-party module is not included in the Microsoft Store build.";
             return;
         }
 
         if (IsUnsafeInstallRoot(BlackboxRoot))
         {
+            LastError = "Blackbox install refused: its target path contains a junction or symbolic link.";
             return;
         }
 
@@ -290,8 +375,10 @@ public sealed class OptionalModuleInstaller
 
     private string BuildBlackboxScript()
     {
+        var pathPreamble = ModulePrerequisites.Probe().BuildPathPreamble();
         return $$"""
             $ErrorActionPreference = 'Stop'
+            {{pathPreamble}}
             $dir = '{{Escape(BlackboxRoot)}}'
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
             Set-Location $dir
@@ -317,17 +404,21 @@ public sealed class OptionalModuleInstaller
               try { Invoke-WebRequest -UseBasicParsing -Uri 'https://blackbox-w.umanitek.ai' -OutFile $installer }
               catch { Write-Warning "Vendor download failed: $($_.Exception.Message)" }
             }
+            if (-not (Test-Path $installer) -or (Get-Item $installer).Length -eq 0) {
+              throw 'Could not download the Umanitek Blackbox installer (https://blackbox-w.umanitek.ai).'
+            }
             $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
             Write-Host "Installer SHA256: $hash" -ForegroundColor Yellow
             if ($hash -ne '{{BlackboxInstallerSha256}}') {
+              Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
               throw "Blackbox installer hash mismatch. Expected {{BlackboxInstallerSha256}}, got $hash. Refusing to run an unpinned installer."
             }
             Write-Host 'Installer hash matches the pinned Axiom digest.' -ForegroundColor Green
             $sys32 = Join-Path $env:SystemRoot 'System32'
             $hasVcRuntime = (Test-Path (Join-Path $sys32 'vcruntime140.dll')) -and (Test-Path (Join-Path $sys32 'msvcp140.dll'))
-            $storeBackend = if ($hasVcRuntime) { 'oxigraph' } else { 'oxigraph-worker' }
+            $storeBackend = if ($hasVcRuntime) { 'oxigraph' } else { 'auto' }
             if (-not $hasVcRuntime) {
-              Write-Warning 'VC++ 2015-2022 redistributable not detected; defaulting Blackbox store backend to embedded oxigraph-worker.'
+              Write-Warning 'VC++ 2015-2022 redistributable not detected; selecting Blackbox store backend auto.'
             } else {
               Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
             }
@@ -613,7 +704,92 @@ public sealed class OptionalModuleInstaller
     }
 
     public static string SelectBlackboxStoreBackend(bool hasVcRuntime) =>
-        hasVcRuntime ? "oxigraph" : "oxigraph-worker";
+        hasVcRuntime ? "oxigraph" : "auto";
+
+    public static string? ResolveNpmExecutable(
+        string? pathVariable = null,
+        Func<string, bool>? fileExists = null,
+        string? programFiles = null,
+        string? programFilesX86 = null,
+        string? localAppData = null)
+    {
+        var exists = fileExists ?? File.Exists;
+        var names = OperatingSystem.IsWindows()
+            ? new[] { "npm.cmd", "npm.exe" }
+            : new[] { "npm" };
+
+        var candidates = new List<string>();
+        var path = pathVariable ?? Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            candidates.AddRange(path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            foreach (var root in new[]
+                     {
+                         programFiles ?? Environment.GetEnvironmentVariable("ProgramFiles"),
+                         Environment.GetEnvironmentVariable("ProgramW6432"),
+                         programFilesX86 ?? Environment.GetEnvironmentVariable("ProgramFiles(x86)"),
+                     })
+            {
+                if (!string.IsNullOrWhiteSpace(root))
+                {
+                    candidates.Add(Path.Combine(root, "nodejs"));
+                }
+            }
+
+            var local = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrWhiteSpace(local))
+            {
+                candidates.Add(Path.Combine(local, "Programs", "nodejs"));
+            }
+        }
+
+        foreach (var rawDir in candidates)
+        {
+            var trimmed = rawDir.Trim().Trim('"');
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                continue;
+            }
+
+            foreach (var name in names)
+            {
+                try
+                {
+                    var full = Path.Combine(trimmed, name);
+                    if (exists(full))
+                    {
+                        return full;
+                    }
+                }
+                catch (ArgumentException)
+                {
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public static string BuildNodePathPreamble(
+        string? pathVariable = null,
+        Func<string, bool>? fileExists = null,
+        string? programFiles = null,
+        string? programFilesX86 = null,
+        string? localAppData = null)
+    {
+        var npmPath = ResolveNpmExecutable(pathVariable, fileExists, programFiles, programFilesX86, localAppData);
+        var dir = npmPath is null ? null : Path.GetDirectoryName(npmPath);
+        if (string.IsNullOrWhiteSpace(dir))
+        {
+            return string.Empty;
+        }
+
+        return $"$env:PATH = '{Escape(dir)};' + $env:PATH";
+    }
 
     public static string ResolvePowerShellExecutable(
         string? pathVariable = null,

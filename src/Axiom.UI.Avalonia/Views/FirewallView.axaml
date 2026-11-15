@@ -310,13 +310,13 @@
                                 CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                     </ContextMenu>
                   </Grid.ContextMenu>
-                  <TextBlock Grid.Column="0" Text="{Binding Application}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="1" Text="{Binding DirectionText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="2" Text="{Binding ActionText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="3" Text="{Binding ProfilesText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="4" Text="{Binding ProtocolText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="5" Text="{Binding PortsText}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="6" Text="{Binding StateText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding Application}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding DirectionText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding ActionText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding ProfilesText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding ProtocolText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding PortsText}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="6" Text="{Binding StateText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
                   <Panel Grid.Column="7">
                     <Button Content="Unblock" Padding="10,3" Margin="6,0,0,0"
                             IsVisible="{Binding CanUnblock}"

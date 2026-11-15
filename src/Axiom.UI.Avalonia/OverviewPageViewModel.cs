@@ -16,12 +16,15 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private readonly IUserInteraction _ui;
     private readonly ConnectionActionService _actions;
     private readonly IServiceRequestClient? _serviceClient;
+    private readonly Action? _openPrivacyOverview;
+    private readonly Action? _openPrivacySettings;
     private readonly List<NewConnectionMarkerEvent> _sessionEvents = [];
     private readonly HashSet<string> _seenEventKeys = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AppRow> _topAppRows = new(StringComparer.OrdinalIgnoreCase);
 
     private int _rangeRequest;
     private DateTimeOffset _lastHistoryUtc = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastPrivacyRefreshUtc = DateTimeOffset.MinValue;
     private bool _isActive = true;
     private bool _dirty;
 
@@ -30,13 +33,19 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         TrafficEngine traffic,
         IUserInteraction? ui = null,
         IServiceRequestClient? serviceClient = null,
-        IProcessActions? processActions = null)
+        IProcessActions? processActions = null,
+        PrivacyShieldPageViewModel? privacyShield = null,
+        Action? openPrivacyOverview = null,
+        Action? openPrivacySettings = null)
         : base("Network Dashboard", "Live sockets, throughput and recent network activity", "O")
     {
         _monitor = monitor;
         _traffic = traffic;
         _ui = ui ?? new NullUserInteraction();
         _serviceClient = serviceClient;
+        PrivacyShield = privacyShield;
+        _openPrivacyOverview = openPrivacyOverview;
+        _openPrivacySettings = openPrivacySettings;
         _actions = new ConnectionActionService(
             serviceClient,
             _ui,
@@ -44,6 +53,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         _monitor.Updated += OnMonitorUpdated;
         _traffic.Updated += OnTrafficUpdated;
         Refresh();
+        QueuePrivacyRefresh(force: false);
     }
 
     /// <summary>
@@ -93,6 +103,16 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         return "Protection active: " + string.Join("; ", active) + ". No telemetry.";
     }
 
+    public PrivacyShieldPageViewModel? PrivacyShield { get; }
+
+    public bool HasPrivacyShield => PrivacyShield is not null;
+
+    [RelayCommand]
+    private void OpenPrivacyOverview() => _openPrivacyOverview?.Invoke();
+
+    [RelayCommand]
+    private void OpenPrivacySettings() => _openPrivacySettings?.Invoke();
+
     public void Activate()
     {
         _isActive = true;
@@ -101,6 +121,25 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
             _dirty = false;
             Refresh();
         }
+
+        QueuePrivacyRefresh(force: true);
+    }
+
+    private void QueuePrivacyRefresh(bool force)
+    {
+        if (PrivacyShield is null || !_isActive)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!force && now - _lastPrivacyRefreshUtc < TimeSpan.FromSeconds(2))
+        {
+            return;
+        }
+
+        _lastPrivacyRefreshUtc = now;
+        _ = PrivacyShield.RefreshSummaryAsync();
     }
 
     public void Deactivate()
@@ -559,13 +598,18 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     [RelayCommand]
     private async Task EndTaskAsync(ConnectionRow? row)
     {
-        if (row is not null)
+        var target = row ?? SelectedSocket;
+        if (target is not null)
         {
             ActionStatusText = await _actions
-                .EndTaskAsync(row.AppDisplayName, [row.ProcessId])
+                .EndProcessAsync(target.AppDisplayName, target.ProcessId)
                 .ConfigureAwait(true);
         }
     }
+
+    [RelayCommand]
+    private Task CopyStatusAsync() =>
+        CopyAsync(string.IsNullOrWhiteSpace(ActionStatusText) ? StatusText : ActionStatusText);
 
     [RelayCommand]
     private async Task InspectMarkerEventAsync(NewConnectionMarkerEvent? item)
@@ -624,7 +668,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         if (target is not null)
         {
             ActionStatusText = await _actions
-                .EndTaskAsync(target.App, [target.ProcessId])
+                .EndProcessAsync(target.App, target.ProcessId)
                 .ConfigureAwait(true);
         }
     }
@@ -660,7 +704,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         if (app is not null)
         {
             ActionStatusText = await _actions
-                .EndTaskAsync(app.Name, app.ProcessIds)
+                .EndApplicationAsync(app.Name, app.ProcessIds)
                 .ConfigureAwait(true);
         }
     }
@@ -675,11 +719,12 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         try
         {
             await _ui.CopyTextAsync(value, CancellationToken.None).ConfigureAwait(true);
+            ActionStatusText = "Copied to the clipboard.";
         }
         catch (Exception exception) when (exception is
                      InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
         {
-            // The clipboard can be owned by another process; do not crash the shell.
+            ActionStatusText = "Clipboard is unavailable.";
         }
     }
 
@@ -699,6 +744,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         }
 
         Refresh();
+        QueuePrivacyRefresh(force: false);
     }
 
     private void OnTrafficUpdated(object? sender, EventArgs e)

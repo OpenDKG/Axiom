@@ -2,6 +2,43 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.54.0
+
+- **Clean Windows 11 onboarding for Blackbox & DKG, Repair flow, and clean PowerShell uninstalls:**
+  - Promoted `ModulePrerequisites` into `Axiom.Contracts.Modules` with silent bootstrap support for `Node.js LTS`, `Python 3.12`, `Git`, and `Microsoft.VCRedist.2015+.x64` (`VC++ 2015-2022 Redistributable`), invoked automatically during `CompleteInstallation` in `Axiom.Setup` and interactive `Install`/`Repair` actions.
+  - Separated folder existence (`HasBlackboxFiles`/`HasDkgFiles`) from verified runtime readiness (`IsBlackboxRuntimeInstalled`/`IsDkgRuntimeInstalled`) across `OptionalModuleUninstaller`, `SecurityPageViewModel`, and `SecurityViewModel`, surfacing `Repair` when `venv` or `dkg.cmd` is missing instead of failing on `Start`.
+  - Fixed local loopback probes (`OptionalModuleProbe.CreateLoopbackHttpClient` with `UseProxy = false` and `1s` connect timeout) to prevent Windows WPAD proxy auto-detect stalls causing false status-check timeouts.
+  - Shared `ModuleUninstallScripts` fixing `$HOME` read-only variable collision (`$dkgHome`), `Wait-Process -Timeout 5`, `ReadOnly` attribute cleanup on `.git`, reparse-point guards, and guarded scheduled-task removal.
+- **Privacy Shield DNS `127.0.0.1` auto-pointing & resilient blocklist downloads:**
+  - Configured `PrivacyShieldSourceUpdater` with `SocketsHttpHandler { UseProxy = false }` + IPv4-first address fallback, 3-minute download timeout, up to 3 bounded retries on transient connection resets, and partial-source commit (retaining all reachable blocklists such as HaGeZi/OISD/URLhaus/Phishing Filter with a warning when individual feeds fail instead of dropping everything).
+  - Enhanced `PrivacyDnsFailSafe` with `LastError` diagnostics, PowerShell stdout/stderr capture, and `netsh interface ipv4 set dnsservers` fallback, plus a service startup 3 s retry in `PrivacyShieldWorker` and explicit `AutoPointAdapterDns` UI toggles in both Avalonia and WPF views.
+- **Service & Desktop memory footprint reduction:**
+  - Eliminated permanent dual ~1M-rule retention (`_rules`, `_policyRules`, and `_rulesTask`) in `PrivacyShieldController`, switched `PrivacyShieldPolicy` to pre-sized `PackedRule` storage with interned `SourceId` palette and `WithSettings` catalog reuse, converted `ParseList` to stream via `TextReader` and `Evaluate` to `ReadOnlySpan<char>` lookups, streamed `PrivacyShieldRuleStore.Save()` without LOH string buffers, and enabled `System.GC.ConserveMemory=7` with LOH compaction after rule loads and source updates.
+
+## What's in 0.53.0
+
+- **Service upgrades survive a crash-looping old service; failures explain themselves.**
+  - `ServiceInstaller` clears the service recovery actions before stopping the old image and restores them after the copy, so SCM can no longer restart the 0.30 image mid-upgrade and lock it (issue #367).
+  - The image copy retries for 30 s and records every blocked attempt; `sc` timeouts no longer throw `InvalidOperationException` from `ExitCode`.
+  - New `ServiceInstallLog` (`%ProgramData%\Axiom\logs\service-install.log`) records each elevated step, and Setup prints its tail when the service installer exits non-zero instead of only `exited with code 7`.
+- **Complete Setup & Optional Module fixes (issue #364):**
+  - Replaced unsupported `oxigraph-worker` fallback with `'auto'` when VC++ 2015–2022 Redistributable is missing, and added `npm` prerequisite detection before running DKG install scripts.
+  - Setup reports `"Partial Success"` cleanly when core Axiom installs and optional steps emit warnings, tracks existing installs (`Upgrade Axiom`), and adds `Open Axiom`, `Repair`, and `Uninstall` (plus `--silent --uninstall`).
+- **Dashboard usability & copyability improvements (issue #365):**
+  - Made dashboard status text and list cells selectable/copyable, added explicit `Copy row` / `Copy local` / `Copy remote` / `Copy details` / `Copy status` actions, disambiguated `End process (PID)` vs `End application`, and removed the redundant top-right `LOCAL-FIRST` chip.
+
+## What's in 0.52.0
+
+- **Live Agent Enforcement status, dedicated Privacy Overview page, and Network Dashboard DNS monitoring.**
+  - **Live Enforcement Telemetry (`Agent Protection`):** `AgentsPageViewModel.Enforcement` now polls `enforcement.status` and `enforcement.receipts` via service IPC, reads the live Blackbox `block` / `audit` mode, and counts recent local `HOST_DENY_SENT` hook events while keeping ADR 0010 cooperative honesty invariants intact.
+  - **Dedicated `Privacy Overview` Page & `Network Dashboard` DNS Monitor:** Added a new `Privacy Overview` page under `OVERVIEW` sharing the single-owner `PrivacyShieldPageViewModel` (live KPI cards for `ACTIVE RULES`, `QUERIES`, `ALLOWED`, `BLOCKED`, `ERRORS`, DoH/adapter diagnostics, recent & top blocked domains, and per-app history) plus an embedded `Privacy Shield (DNS Monitor)` summary card inside `Network Dashboard` (Avalonia and WPF).
+
+## What's in 0.51.0
+
+- **Cline, Copilot CLI and Cursor verified live; hook coverage tests.**
+  - Installed 0.30.0 hooks blocked 4/15 each; generated 0.50.x hooks block **15/15** (Cline `cancel`, Copilot `permissionDecision`, Cursor `permission`).
+  - `HarnessHookCoverageTests` assert the shared guard and each deny shape in both assemblies; main synced the WPF `Axiom.UI.Services` copies (issue #362).
+
 ## What's in 0.50.0
 
 - **Reuse installed Blackbox and recover the vendor runtime.**

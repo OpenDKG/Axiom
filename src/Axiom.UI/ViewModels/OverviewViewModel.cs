@@ -19,11 +19,21 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
     private readonly HashSet<string> _seenEventKeys = new(StringComparer.Ordinal);
     private string? _selectedEventKey;
 
-    public OverviewViewModel(ConnectionMonitor monitor, AgentsViewModel agentActivity)
+    private DateTimeOffset _lastPrivacyRefreshUtc = DateTimeOffset.MinValue;
+    private bool _isActive = true;
+    private readonly Action? _openPrivacyShield;
+
+    public OverviewViewModel(
+        ConnectionMonitor monitor,
+        AgentsViewModel agentActivity,
+        PrivacyShieldViewModel? privacyShield = null,
+        Action? openPrivacyShield = null)
         : base("Overview", "Live sockets from this host · system-wide throughput counters", "\uE80F")
     {
         _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
         AgentActivity = agentActivity ?? throw new ArgumentNullException(nameof(agentActivity));
+        PrivacyShield = privacyShield;
+        _openPrivacyShield = openPrivacyShield;
         monitor.Updated += OnMonitorUpdated;
         _traffic.Updated += OnTrafficUpdated;
 
@@ -183,9 +193,42 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
 
     public void Start() => _traffic.Start();
 
-    public void Activate() => AgentActivity.Activate();
+    public PrivacyShieldViewModel? PrivacyShield { get; }
 
-    public void Deactivate() => AgentActivity.Deactivate();
+    public bool HasPrivacyShield => PrivacyShield is not null;
+
+    [RelayCommand]
+    private void OpenPrivacyShield() => _openPrivacyShield?.Invoke();
+
+    public void Activate()
+    {
+        _isActive = true;
+        AgentActivity.Activate();
+        QueuePrivacyRefresh(force: true);
+    }
+
+    public void Deactivate()
+    {
+        _isActive = false;
+        AgentActivity.Deactivate();
+    }
+
+    private void QueuePrivacyRefresh(bool force)
+    {
+        if (PrivacyShield is null || !_isActive)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!force && now - _lastPrivacyRefreshUtc < TimeSpan.FromSeconds(2))
+        {
+            return;
+        }
+
+        _lastPrivacyRefreshUtc = now;
+        _ = PrivacyShield.RefreshSummaryAsync();
+    }
 
     public void Dispose()
     {
@@ -252,7 +295,11 @@ public sealed partial class OverviewViewModel : PageViewModel, IActivatablePage,
             : "Click or hover over an event marker for connection details.";
     }
 
-    private void OnMonitorUpdated(object? sender, EventArgs e) => UpdateLiveCounters();
+    private void OnMonitorUpdated(object? sender, EventArgs e)
+    {
+        UpdateLiveCounters();
+        QueuePrivacyRefresh(force: false);
+    }
 
     private void UpdateLiveCounters()
     {

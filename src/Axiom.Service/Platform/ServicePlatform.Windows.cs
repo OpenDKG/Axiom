@@ -77,7 +77,8 @@ internal static class ServicePlatform
         new WindowsPrivacyDnsPlatform(
             PrivacyDnsFailSafe.RestoreIfNeeded,
             MachineStateSecurity.IsRunningAsSystem,
-            alias => PrivacyDnsFailSafe.EnsureAdapterPointed(alias));
+            alias => PrivacyDnsFailSafe.EnsureAdapterPointed(alias),
+            () => PrivacyDnsFailSafe.LastError);
 
     public static void ConfigureServices(HostApplicationBuilder builder)
     {

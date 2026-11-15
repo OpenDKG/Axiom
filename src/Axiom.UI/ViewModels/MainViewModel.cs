@@ -41,7 +41,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         var security = new SecurityViewModel();
         var agents = new AgentsViewModel(security, agentSessions);
-        _overview = new OverviewViewModel(monitor, agents);
+        var privacyShield = new PrivacyShieldViewModel(ConnectionSourceRegistry.IsServiceMode);
+        _overview = new OverviewViewModel(
+            monitor,
+            agents,
+            privacyShield,
+            openPrivacyShield: () => SelectedPage = privacyShield);
 
         var pages = new List<PageViewModel>
         {
@@ -58,7 +63,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         pages.Add(new FirewallRulesViewModel(ConnectionSourceRegistry.IsServiceMode));
         pages.Add(security);
-        pages.Add(new PrivacyShieldViewModel(ConnectionSourceRegistry.IsServiceMode));
+        pages.Add(privacyShield);
         pages.Add(new AiAnalystViewModel(monitor, _client));
         pages.Add(new SupportViewModel());
         pages.Add(new SettingsViewModel(monitor));

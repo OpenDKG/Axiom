@@ -51,6 +51,30 @@ public sealed class DeepSeekProtectionTests
         Assert.False(File.Exists(protection.PatchPath));
     }
 
+    [Fact]
+    public void IsDeepSeekAvailable_ignores_hookless_deepseek_cli_and_skips_orphaned_hook_provisioning()
+    {
+        // #353: deepseek-cli on npm installs a `deepseek` command with no hook surface.
+        Assert.False(AgentBinaryLocator.IsDeepSeekAvailable(
+            name => string.Equals(name, "deepseek", StringComparison.OrdinalIgnoreCase),
+            _ => false));
+        Assert.True(AgentBinaryLocator.IsDeepSeekAvailable(
+            name => string.Equals(name, "dsh", StringComparison.OrdinalIgnoreCase),
+            _ => false));
+
+        using var temp = new TempTree();
+        CreateFakePython(temp.Root);
+        var protection = new DeepSeekProtection(temp.Root, temp.Root, Path.Combine(temp.Root, ".dsh"));
+        if (!AgentBinaryLocator.IsDeepSeekAvailable())
+        {
+            Assert.False(protection.IsDeepSeekDetected);
+            Assert.False(protection.EnsureInstalled());
+            Assert.False(File.Exists(protection.HookScriptPath));
+            Assert.False(File.Exists(protection.HooksPath));
+            Assert.False(File.Exists(protection.PatchPath));
+        }
+    }
+
     private static void CreateFakePython(string root)
     {
         var python = Path.Combine(

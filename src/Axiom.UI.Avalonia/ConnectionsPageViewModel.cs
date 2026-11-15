@@ -154,20 +154,27 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
     }
 
     [RelayCommand]
+    private Task CopyStatusAsync() => CopyRawAsync(StatusText);
+
+    [RelayCommand]
     private async Task EndTaskAsync(ConnectionRow? row)
     {
-        if (row is not null)
+        var target = row ?? SelectedConnection;
+        if (target is not null)
         {
             StatusText = await _actions
-                .EndTaskAsync(row.AppDisplayName, [row.ProcessId])
+                .EndProcessAsync(target.AppDisplayName, target.ProcessId)
                 .ConfigureAwait(true);
             _actionStatusUntilUtc = DateTime.UtcNow + ActionStatusHold;
         }
     }
 
-    private async Task CopyAsync(ConnectionRow? row, string? value)
+    private Task CopyAsync(ConnectionRow? row, string? value) =>
+        row is null ? Task.CompletedTask : CopyRawAsync(value);
+
+    private async Task CopyRawAsync(string? value)
     {
-        if (row is null || string.IsNullOrWhiteSpace(value) || value == "—")
+        if (string.IsNullOrWhiteSpace(value) || value == "—")
         {
             return;
         }

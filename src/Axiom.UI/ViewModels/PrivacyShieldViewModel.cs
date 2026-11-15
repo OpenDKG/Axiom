@@ -202,6 +202,13 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
     private bool _encryptDnsViaDoh = true;
 
     [ObservableProperty]
+    private bool _autoPointAdapterDns;
+
+    private string _preferredAdapterAlias = string.Empty;
+    private bool _autoUpdateSources = true;
+    private int _autoUpdateIntervalHours = 24;
+
+    [ObservableProperty]
     private string _allowedDomainsText = string.Empty;
 
     [ObservableProperty]
@@ -218,6 +225,24 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
 
     [ObservableProperty]
     private string _statsText = "No queries observed.";
+
+    [ObservableProperty]
+    private string _ruleCountText = "0";
+
+    [ObservableProperty]
+    private string _queriesCountText = "0";
+
+    [ObservableProperty]
+    private string _allowedCountText = "0";
+
+    [ObservableProperty]
+    private string _blockedCountText = "0";
+
+    [ObservableProperty]
+    private string _errorsCountText = "0";
+
+    [ObservableProperty]
+    private string _blockRateText = "no queries yet";
 
     [ObservableProperty]
     private string _lastUpdatedText = "Not refreshed.";
@@ -275,6 +300,8 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             IsBusy = false;
         }
     }
+
+    public Task RefreshSummaryAsync() => RefreshStatsAsync();
 
     private async Task RefreshStatsAsync()
     {
@@ -568,6 +595,14 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             Port = int.TryParse(PortText, out var port) ? port : 53,
             UpstreamDns = UpstreamText.Trim(),
             EncryptDnsViaDoh = EncryptDnsViaDoh,
+            PreferredAdapterAlias = AutoPointAdapterDns
+                ? (!string.IsNullOrWhiteSpace(_preferredAdapterAlias)
+                    ? _preferredAdapterAlias
+                    : SelectedAdapter?.Name ?? string.Empty)
+                : string.Empty,
+            AutoPointAdapterDns = AutoPointAdapterDns,
+            AutoUpdateSources = _autoUpdateSources,
+            AutoUpdateIntervalHours = _autoUpdateIntervalHours,
             AllowedDomains = PrivacyShieldPolicy.ParseList(
                 AllowedDomainsText,
                 PrivacyShieldPolicy.MaxSettingsDomains),
@@ -615,6 +650,12 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             PortText = settings.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
             UpstreamText = settings.UpstreamDns;
             EncryptDnsViaDoh = settings.EncryptDnsViaDoh;
+            _preferredAdapterAlias = settings.PreferredAdapterAlias;
+            AutoPointAdapterDns = settings.AutoPointAdapterDns;
+            _autoUpdateSources = settings.AutoUpdateSources;
+            _autoUpdateIntervalHours = settings.AutoUpdateIntervalHours > 0
+                ? settings.AutoUpdateIntervalHours
+                : 24;
             AllowedDomainsText = string.Join(Environment.NewLine, settings.AllowedDomains);
             BlockedDomainsText = string.Join(Environment.NewLine, settings.BlockedDomains);
             foreach (var source in Sources)
@@ -652,6 +693,14 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
         StatsText = status.Running
             ? $"{status.Queries:N0} queries observed."
             : "No queries observed.";
+        RuleCountText = status.RuleCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        QueriesCountText = status.Queries.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        AllowedCountText = status.Allowed.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        BlockedCountText = status.Blocked.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        ErrorsCountText = status.Errors.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        BlockRateText = status.Queries > 0
+            ? $"{status.Blocked * 100.0 / status.Queries:0.0}% blocked"
+            : "no queries yet";
         LastUpdatedText = $"Updated {DateTimeOffset.Now:HH:mm:ss}";
         LastErrorText = status.LastError ?? string.Empty;
 

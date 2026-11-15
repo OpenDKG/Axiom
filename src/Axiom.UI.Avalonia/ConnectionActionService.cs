@@ -86,29 +86,69 @@ public sealed class ConnectionActionService(
         }
     }
 
-    public async Task<string> EndTaskAsync(string appName, IReadOnlyList<int> processIds)
+    public Task<string> EndProcessAsync(string appName, int processId)
     {
-        if (processIds.Count == 0)
+        if (processId <= 0)
         {
-            return "This row has no live PID to end.";
+            return Task.FromResult("This row has no live PID to end.");
         }
 
+        return EndScopedAsync(
+            title: "End process (PID)",
+            confirmLabel: "End process",
+            cancelStatus: "End process cancelled.",
+            body: $"End process {appName} (PID {processId})?\n\nUnsaved work in that process will be lost.",
+            processIds: [processId],
+            targetDescription: $"{appName} (PID {processId})");
+    }
+
+    public Task<string> EndApplicationAsync(string appName, IReadOnlyList<int> processIds)
+    {
+        var liveIds = processIds.Where(pid => pid > 0).Distinct().ToArray();
+        if (liveIds.Length == 0)
+        {
+            return Task.FromResult("This application has no live processes to end.");
+        }
+
+        var pidList = string.Join(", ", liveIds);
+        return EndScopedAsync(
+            title: "End application",
+            confirmLabel: "End application",
+            cancelStatus: "End application cancelled.",
+            body: $"End all running processes for {appName} (PID {pidList})?\n\nUnsaved work in those processes will be lost.",
+            processIds: liveIds,
+            targetDescription: appName);
+    }
+
+    public Task<string> EndTaskAsync(string appName, IReadOnlyList<int> processIds) =>
+        processIds.Count == 1
+            ? EndProcessAsync(appName, processIds[0])
+            : EndApplicationAsync(appName, processIds);
+
+    private async Task<string> EndScopedAsync(
+        string title,
+        string confirmLabel,
+        string cancelStatus,
+        string body,
+        IReadOnlyList<int> processIds,
+        string targetDescription)
+    {
         var confirmed = await ui.ConfirmAsync(
-            "End task",
-            $"End {appName} (PID {string.Join(", ", processIds)})?\n\nUnsaved work in that process will be lost.",
-            "End task",
+            title,
+            body,
+            confirmLabel,
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);
 
         if (!confirmed)
         {
-            return "End task cancelled.";
+            return cancelStatus;
         }
 
         var ended = processes.EndProcesses(processIds);
         return ended == 0
-            ? $"No process could be ended for {appName}. It may already be gone, or access was denied."
-            : $"Ended {ended} process(es) for {appName}.";
+            ? $"No process could be ended for {targetDescription}. It may already be gone, or access was denied."
+            : $"Ended {ended} process(es) for {targetDescription}.";
     }
 
     private static string[] SplitAddresses(string value) =>

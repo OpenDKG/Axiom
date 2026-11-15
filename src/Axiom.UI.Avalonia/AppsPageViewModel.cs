@@ -131,26 +131,28 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
     [RelayCommand]
     private async Task EndTaskAppAsync(AppRow? app)
     {
-        if (app is null || app.ProcessIds.Count == 0)
+        var liveIds = app?.ProcessIds.Where(pid => pid > 0).Distinct().ToArray() ?? [];
+        if (app is null || liveIds.Length == 0)
         {
-            WriteStatusText = "This application has no live PID to end.";
+            WriteStatusText = "This application has no live processes to end.";
             return;
         }
 
         var confirmed = await _ui.ConfirmAsync(
-            "End task",
-            $"End {app.Name} (PID {string.Join(", ", app.ProcessIds)})?\n\nUnsaved work in that process will be lost.",
-            "End task",
+            "End application",
+            $"End all running processes for {app.Name} (PID {string.Join(", ", liveIds)})?\n\nUnsaved work in those processes will be lost.",
+            "End application",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);
 
         if (!confirmed)
         {
+            WriteStatusText = "End application cancelled.";
             return;
         }
 
-        var ended = _processes.EndProcesses(app.ProcessIds);
-        WriteStatusText = $"Ended {ended} process(es) for {app.Name}.";
+        var ended = _processes.EndProcesses(liveIds);
+        WriteStatusText = $"Ended {ended} process(es) for application {app.Name}.";
     }
 
     [RelayCommand]
@@ -161,16 +163,53 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
             return;
         }
 
+        await CopyValueAsync(app.Path, "Executable path copied.", "Could not copy the path.").ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task CopyDetailsAppAsync(AppRow? app)
+    {
+        var target = app ?? SelectedApp;
+        if (target is null)
+        {
+            return;
+        }
+
+        var details =
+            $"Application: {target.Name}\n" +
+            $"Path: {target.PathText}\n" +
+            $"PIDs: {target.PidText}\n" +
+            $"Sockets: {target.SocketsText}\n" +
+            $"Protocols: {target.ProtocolText}\n" +
+            $"States: {target.StatesText}\n" +
+            $"First seen: {target.FirstSeenText}\n" +
+            $"Rule: {target.RuleText}";
+
+        await CopyValueAsync(details, "Application details copied.", "Could not copy application details.")
+            .ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private Task CopyStatusAsync() =>
+        CopyValueAsync(WriteStatusText, "Status message copied.", "Could not copy status.");
+
+    private async Task CopyValueAsync(string? value, string successMessage, string failureMessage)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value == "—")
+        {
+            return;
+        }
+
         try
         {
-            await _ui.CopyTextAsync(app.Path, CancellationToken.None).ConfigureAwait(true);
-            WriteStatusText = "Executable path copied.";
+            await _ui.CopyTextAsync(value, CancellationToken.None).ConfigureAwait(true);
+            WriteStatusText = successMessage;
         }
 #pragma warning disable CA1031 // Clipboard can be locked by another process.
         catch (Exception)
 #pragma warning restore CA1031
         {
-            WriteStatusText = "Could not copy the path.";
+            WriteStatusText = failureMessage;
         }
     }
 

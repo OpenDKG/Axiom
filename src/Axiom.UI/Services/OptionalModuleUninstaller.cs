@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using Axiom.Contracts;
+using Axiom.Contracts.Modules;
 
 namespace Axiom.UI.Services;
 
@@ -17,10 +18,25 @@ public sealed class OptionalModuleUninstaller
 
     private readonly string _localAppData;
 
+    private readonly string? _environmentHome;
+
+    private readonly string? _environmentBlackboxHome;
+
     public OptionalModuleUninstaller(string? userProfile = null, string? localAppData = null)
+        : this(userProfile, localAppData, environmentHome: null, environmentBlackboxHome: null)
+    {
+    }
+
+    internal OptionalModuleUninstaller(
+        string? userProfile,
+        string? localAppData,
+        string? environmentHome,
+        string? environmentBlackboxHome)
     {
         _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _localAppData = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        _environmentHome = environmentHome;
+        _environmentBlackboxHome = environmentBlackboxHome;
     }
 
     private string ModulesRoot => Path.Combine(_localAppData, "Axiom", "modules");
@@ -60,13 +76,27 @@ public sealed class OptionalModuleUninstaller
         "plugin",
         "axiom-blackbox.ts");
 
-    public bool IsBlackboxInstalled => Directory.Exists(BlackboxRoot) || File.Exists(BlackboxCommand);
+    public string BlackboxPython => Path.Combine(BlackboxRoot, "agent-blackbox", "venv", "Scripts", "python.exe");
+
+    public string BlackboxPythonW => Path.Combine(BlackboxRoot, "agent-blackbox", "venv", "Scripts", "pythonw.exe");
+
+    public string DkgCommand => Path.Combine(DkgRoot, "node_modules", ".bin", "dkg.cmd");
+
+    public bool HasBlackboxFiles => Directory.Exists(BlackboxRoot) || File.Exists(BlackboxCommand);
+
+    public bool IsBlackboxRuntimeInstalled => File.Exists(BlackboxPython) || File.Exists(BlackboxPythonW);
+
+    public bool IsBlackboxInstalled => HasBlackboxFiles;
 
     public string ReputationSettingsPath => Path.Combine(_localAppData, "Axiom", "reputation.json");
 
     public string CommunitySettingsPath => Path.Combine(_localAppData, "Axiom", "community-feed.json");
 
-    public bool IsDkgInstalled => Directory.Exists(DkgRoot) || Directory.Exists(DkgHome);
+    public bool HasDkgFiles => Directory.Exists(DkgRoot) || Directory.Exists(DkgHome);
+
+    public bool IsDkgRuntimeInstalled => File.Exists(DkgCommand);
+
+    public bool IsDkgInstalled => HasDkgFiles;
 
     /// <summary>
     /// Removes only Axiom-managed OpenCode V2/V1 plugins. A user-authored plugin at any current
@@ -153,109 +183,19 @@ public sealed class OptionalModuleUninstaller
         RemoveManagedOpenCodePlugin();
     }
 
-    private string BuildBlackboxUninstallScript()
-    {
-        var hermes = Path.Combine(_userProfile, ".hermes");
-        return $$"""
-            $ErrorActionPreference = 'Continue'
-            $root = '{{Escape(BlackboxRoot)}}'
-            $hermes = '{{Escape(hermes)}}'
-            $command = '{{Escape(BlackboxCommand)}}'
-            function Test-ReparsePath($path) {
-              $current = [IO.Path]::GetFullPath($path)
-              while ($current) {
-                if (Test-Path -LiteralPath $current) {
-                  $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
-                  if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                    return $true
-                  }
-                }
-                $parent = Split-Path -Parent $current
-                if (-not $parent -or $parent -eq $current) { break }
-                $current = $parent
-              }
-              return $false
-            }
-            function Remove-SafeFile($path) {
-              if (-not (Test-Path -LiteralPath $path) -or (Test-ReparsePath $path)) {
-                if (Test-Path -LiteralPath $path) { Write-Warning "Skipped reparse point: $path" }
-                return
-              }
-              Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-            }
-            function Remove-SafeDirectory($path) {
-              if (-not (Test-Path -LiteralPath $path) -or (Test-ReparsePath $path)) {
-                if (Test-Path -LiteralPath $path) { Write-Warning "Skipped reparse point: $path" }
-                return
-              }
-              Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
-            }
-            Write-Host 'Stopping Blackbox/DKG processes owned by this installation...' -ForegroundColor Cyan
-            $blackboxHome = Join-Path $hermes 'blackbox'
-            Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-              Where-Object {
-                $_.CommandLine -and (
-                  $_.CommandLine.Contains($root, [System.StringComparison]::OrdinalIgnoreCase) -or
-                  $_.CommandLine.Contains($blackboxHome, [System.StringComparison]::OrdinalIgnoreCase) -or
-                  $_.CommandLine.Contains('start-dashboard.py', [System.StringComparison]::OrdinalIgnoreCase))
-              } |
-              ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-            foreach ($taskName in @('Agent Blackbox DKG node', 'Agent Blackbox dashboard')) {
-              $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-              if ($task) {
-                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-                Write-Host "Removed scheduled task: $taskName"
-              }
-            }
-            Remove-SafeDirectory $root
-            Remove-SafeFile $command
-            Remove-SafeDirectory $blackboxHome
-            $logs = Join-Path $hermes 'logs'
-            if ((Test-Path -LiteralPath $logs) -and -not (Test-ReparsePath $logs)) {
-              Get-ChildItem -LiteralPath $logs -Filter 'blackbox-*' -ErrorAction SilentlyContinue | ForEach-Object {
-                if (-not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                  Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
-                }
-              }
-            }
-            Write-Host 'Blackbox files removed. Other Hermes data and global packages were kept.' -ForegroundColor Green
-            """;
-    }
+    private string BuildBlackboxUninstallScript() =>
+        ModuleUninstallScripts.BuildBlackboxScript(
+            BlackboxRoot,
+            BlackboxPaths.ResolveHermesHome(_userProfile, _localAppData, _environmentHome),
+            BlackboxPaths.ResolveBlackboxHome(
+                _userProfile,
+                _localAppData,
+                _environmentHome,
+                _environmentBlackboxHome),
+            BlackboxCommand);
 
-    private string BuildDkgUninstallScript() => $$"""
-        $ErrorActionPreference = 'Continue'
-        $root = '{{Escape(DkgRoot)}}'
-        $home = '{{Escape(DkgHome)}}'
-        function Test-ReparsePath($path) {
-          $current = [IO.Path]::GetFullPath($path)
-          while ($current) {
-            if (Test-Path -LiteralPath $current) {
-              $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
-              if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                return $true
-              }
-            }
-            $parent = Split-Path -Parent $current
-            if (-not $parent -or $parent -eq $current) { break }
-            $current = $parent
-          }
-          return $false
-        }
-        function Remove-SafeDirectory($path) {
-          if (-not (Test-Path -LiteralPath $path) -or (Test-ReparsePath $path)) {
-            if (Test-Path -LiteralPath $path) { Write-Warning "Skipped reparse point: $path" }
-            return
-          }
-          Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Host 'Stopping local DKG processes...' -ForegroundColor Cyan
-        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-          Where-Object { $_.CommandLine -and ($_.CommandLine.Contains($root) -or $_.CommandLine.Contains($home)) } |
-          ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-        Remove-SafeDirectory $root
-        Remove-SafeDirectory $home
-        Write-Host 'Local DKG node and its testnet home removed.' -ForegroundColor Green
-        """;
+    private string BuildDkgUninstallScript() =>
+        ModuleUninstallScripts.BuildDkgScript(DkgRoot, DkgHome);
 
     public void RemoveReputationSettings() => DeleteFile(ReputationSettingsPath);
 
@@ -333,6 +273,4 @@ public sealed class OptionalModuleUninstaller
 
         Process.Start(startInfo);
     }
-
-    private static string Escape(string value) => value.Replace("'", "''", StringComparison.Ordinal);
 }

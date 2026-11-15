@@ -175,4 +175,31 @@ public sealed class PrivacyShieldPolicyTests
         Assert.Equal(string.Empty, defaults.PreferredAdapterAlias);
         Assert.False(defaults.AutoPointAdapterDns);
     }
+
+    [Fact]
+    public void With_settings_preserves_compiled_catalog_rules_across_category_and_allow_updates()
+    {
+        var initial = PrivacyShieldPolicy.Create(
+            new PrivacyShieldSettings { Categories = PrivacyCategory.Ads },
+            [
+                new PrivacyShieldStoredRule("catalog.example", "hagezi-pro", PrivacyCategory.Ads, DateTimeOffset.UtcNow),
+            ]);
+
+        var updated = initial.WithSettings(new PrivacyShieldSettings
+        {
+            Categories = PrivacyCategory.None,
+            AllowedDomains = ["sub.catalog.example"],
+            BlockedDomains = ["custom-only.example"],
+        });
+
+        Assert.True(updated.Evaluate("catalog.example").Blocked);
+        Assert.Equal("hagezi-pro", updated.Evaluate("catalog.example").SourceId);
+        Assert.False(updated.Evaluate("sub.catalog.example").Blocked);
+        Assert.True(updated.Evaluate("custom-only.example").Blocked);
+        Assert.Equal(2, updated.RuleCount);
+
+        using var reader = new StringReader("0.0.0.0 stream-a.example\nstream-b.example\n");
+        var streamed = PrivacyShieldPolicy.ParseList(reader, 100);
+        Assert.Equal(["stream-a.example", "stream-b.example"], streamed);
+    }
 }

@@ -66,6 +66,13 @@ public interface IPrivacyDnsPlatform
     /// have no effect, and a client must not present them as active.
     /// </summary>
     bool SupportsAdapterDnsPersistence => false;
+
+    /// <summary>
+    /// Error of the last <see cref="EnsureConfiguredAdapterDns"/> that tried to point an adapter at
+    /// the resolver (upstream v0.54: surfaced as the shield's last error when none is set). Null
+    /// when that call succeeded, did nothing, or on platforms without adapter DNS persistence.
+    /// </summary>
+    string? AdapterDnsError => null;
 }
 
 /// <summary>No redirect, no attribution, no discovery (tests and unsupported hosts).</summary>
