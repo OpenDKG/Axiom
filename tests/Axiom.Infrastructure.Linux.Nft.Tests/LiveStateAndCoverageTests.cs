@@ -216,6 +216,12 @@ public sealed class LiveStateAndCoverageTests
         var live = Capability(
             FirewallCapabilityStatus.Available,
             new ConnectTimeLayerReport { State = "active", Healthy = true, Attached = true, Generation = 12, MapsVerified = true, ConnectTimeProvenRules = [RuleA], NftOnlyRules = [RuleB] });
+        var id = 40L;
+        foreach (var (hook, program) in BpfLayout.Programs)
+        {
+            bpftool.Attached[id++] = (program, hook); // the doctor also counts the kernel's attached set
+        }
+
         var doctor = new LinuxDoctor(new ActiveUnitRunner(bpftool), targets, isRoot: true, () => new DoctorLiveState(live, null));
 
         var checks = doctor.Collect();
