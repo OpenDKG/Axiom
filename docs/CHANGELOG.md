@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.46.0
+
+- **Live Codex sweep fix.**
+  - Installed Codex CLI 0.169.0 in the lab VM and provisioned its hook: installed 0.30.0 blocked 4/15 vectors, the 0.45.0 template 14/15, 0.46.0 **15/15**.
+  - Fixed `_check_command_safety` returning before the credential-store check when a tool call had no command string, so `read_file` on `.git-credentials` passed; the store check now runs before the early return and covers `path`/`filePath`.
+  - Behavioural test asserts store-path blocking and benign path/command cases.
+
 ## What's in 0.45.0
 
 - **F-19 service wiring.**
