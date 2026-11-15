@@ -103,10 +103,10 @@ Recommends: linux-tools-common | bpftool, libsecret-1-0, gnome-shell-extension-a
 | Script | When | Action |
 |---|---|---|
 | `postinst configure` | first install and every upgrade | `/opt/axiom/axiomd/axiomd --install-service`: stage `/opt/axiom/axiomd` → `/usr/libexec/axiom` (chown 0:0, 0755/0644, verified with `stat`), `systemctl stop` of a running daemon (its shutdown restores Privacy Shield DNS) **confirmed with `is-active` before the image is replaced** — an unconfirmed or still-active stop fails the install and keeps the old image/unit, replace the image, write the unit, `daemon-reload`, `enable --now` with retries. Idempotent. Skipped with a notice when systemd is not running (chroot/image build). A failing install fails the configure step, so the user sees the error instead of a half-registered service |
-| `prerm remove\|deconfigure` | package removal | `/usr/libexec/axiom/axiomd --uninstall-service` (bundle copy as fallback): `disable --now`, unit file, `table inet axiom` + `axiom.slice`, DNS backup restore, `/usr/libexec/axiom`; then stale `/sys/fs/bpf/axiom` pins are detached and removed **only after `bpftool -j cgroup show` confirms no Axiom program is attached**. Missing/unreadable bpftool, a malformed list, a failed detach that still shows an attachment, or an unconfirmed `systemctl` stop keeps the pins/unit/image for recovery and fails the removal (belt and braces, only Axiom's pin directory) |
+| `prerm remove\|deconfigure` | package removal | `/usr/libexec/axiom/axiomd --uninstall-service` (bundle copy as fallback): `disable --now`, unit file, `table inet axiom` + `axiom.slice`, DNS backup restore, `/usr/libexec/axiom`; then stale `/sys/fs/bpf/axiom` pins are detached and removed **only after `bpftool -j cgroup show` proves no Axiom program is attached**. The list is parsed as JSON: bpftool's blank stdout or `[]` means no attachment, and every other successful answer must be an array of objects with a non-zero uint32 `id` and a decoded string `name`. Missing/unreadable bpftool or awk, malformed JSON (non-array, non-object element, missing/duplicate/wrong-typed field, invalid id, bad escape, trailing data), a failed detach that still shows an attachment, or an unconfirmed `systemctl` stop keeps the pins/unit/image for recovery and fails the removal (belt and braces, only Axiom's pin directory). Parsing uses POSIX awk from the base system (`mawk` is Priority: required on Debian/Ubuntu, `gawk` is in Fedora's core group); python/jq are not used and a missing awk fails safe |
 | `prerm upgrade` | upgrade | nothing: the old daemon keeps running from `/usr/libexec/axiom` while dpkg swaps `/opt/axiom`; the new postinst replaces it |
-| `postrm remove` | after removal | unit file / `/usr/libexec/axiom` / `/run/axiom` if a prerm could not run (idempotent) |
-| `postrm purge` | `dpkg -P` / `apt purge` | additionally `rm -rf /var/lib/axiom /var/log/axiom` (rules, settings, history, DNS backup). Never on upgrade. Per-user state (`~/.local/state/axiom`, `~/.local/share/Axiom`) is not touched |
+| `postrm remove` | after removal | unit file / `/usr/libexec/axiom` / `/run/axiom` if a prerm could not run (idempotent). The leftover unit is deleted **only after the stop is confirmed** (`systemctl disable --now` plus a readable `is-active` of `inactive`/`failed`); a still-active, timeout/unknown or unavailable systemctl keeps the unit/image/run directory and fails the removal |
+| `postrm purge` | `dpkg -P` / `apt purge` | additionally `rm -rf /var/lib/axiom /var/log/axiom` (rules, settings, history, DNS backup) **after the same stop confirmation**; an unconfirmed stop keeps the data/logs too. Never on upgrade. Per-user state (`~/.local/state/axiom`, `~/.local/share/Axiom`) is not touched |
 
 Nothing in the scripts touches a path Axiom did not create. Upgrades in place over an older
 package *or* a dev install (`sudo build/linux/axiomd/axiomd --install-service`) work the same way:
@@ -138,8 +138,8 @@ staged root: `packaging/linux/nfpm.yaml.in` carries the control mapping
 `recommends: bpftool, libsecret`, `license: GPL-3.0-or-later`) and
 `packaging/linux/rpm/{postinstall,preremove,postremove}` translate the Debian semantics to RPM's
 numeric `$1` (`%post` 1/2 = install/upgrade → `--install-service`; `%preun` 0 = erase →
-`--uninstall-service` + pins; `%postun` 0 = erase → leftovers; upgrades do nothing). RPM has no
-purge: `/var/lib/axiom` stays after erase.
+`--uninstall-service` + pins; `%postun` 0 = erase → leftovers, unit/image kept and erase failed
+when the stop is unconfirmed; upgrades do nothing). RPM has no purge: `/var/lib/axiom` stays after erase.
 
 **Status: installed, upgraded and removed on Fedora 45** (Cloud Base 45-1.4, kernel 7.2.11-300.fc45, SELinux
 Enforcing, firewalld active, nftables 1.1.6, rpm 6.1.0, dnf5; LINUX_TEST_REPORT.md F-1…F-12). No other RPM
