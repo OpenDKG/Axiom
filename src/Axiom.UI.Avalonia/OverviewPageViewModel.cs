@@ -551,13 +551,18 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     [RelayCommand]
     private async Task EndTaskAsync(ConnectionRow? row)
     {
-        if (row is not null)
+        var target = row ?? SelectedSocket;
+        if (target is not null)
         {
             ActionStatusText = await _actions
-                .EndTaskAsync(row.AppDisplayName, [row.ProcessId])
+                .EndProcessAsync(target.AppDisplayName, target.ProcessId)
                 .ConfigureAwait(true);
         }
     }
+
+    [RelayCommand]
+    private Task CopyStatusAsync() =>
+        CopyAsync(string.IsNullOrWhiteSpace(ActionStatusText) ? StatusText : ActionStatusText);
 
     [RelayCommand]
     private async Task InspectMarkerEventAsync(NewConnectionMarkerEvent? item)
@@ -616,7 +621,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         if (target is not null)
         {
             ActionStatusText = await _actions
-                .EndTaskAsync(target.App, [target.ProcessId])
+                .EndProcessAsync(target.App, target.ProcessId)
                 .ConfigureAwait(true);
         }
     }
@@ -652,7 +657,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         if (app is not null)
         {
             ActionStatusText = await _actions
-                .EndTaskAsync(app.Name, app.ProcessIds)
+                .EndApplicationAsync(app.Name, app.ProcessIds)
                 .ConfigureAwait(true);
         }
     }
@@ -667,11 +672,12 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         try
         {
             await _ui.CopyTextAsync(value, CancellationToken.None).ConfigureAwait(true);
+            ActionStatusText = "Copied to the clipboard.";
         }
         catch (Exception exception) when (exception is
                      InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
         {
-            // The clipboard can be owned by another process; do not crash the shell.
+            ActionStatusText = "Clipboard is unavailable.";
         }
     }
 

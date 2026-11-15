@@ -225,9 +225,17 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
         }
 
         ActionStatusText = await _actions
-            .EndTaskAsync(target.AppDisplayName, [target.ProcessId])
+            .EndProcessAsync(target.AppDisplayName, target.ProcessId)
             .ConfigureAwait(true);
     }
+
+    [RelayCommand]
+    private Task CopyEventStatusAsync() =>
+        CopyAsync(!string.IsNullOrWhiteSpace(ActionStatusText)
+            ? ActionStatusText
+            : !CanWrite && !string.IsNullOrWhiteSpace(WriteStatusText)
+                ? WriteStatusText
+                : StatusText);
 
     private async Task CopyAsync(string? value)
     {
@@ -239,10 +247,12 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
         try
         {
             await _ui.CopyTextAsync(value, CancellationToken.None).ConfigureAwait(true);
+            ActionStatusText = "Copied to the clipboard.";
         }
         catch (Exception exception) when (exception is
                      InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
         {
+            ActionStatusText = "Clipboard is unavailable.";
         }
     }
 
