@@ -17,7 +17,7 @@ concurrency:
 jobs:
   build-and-test:
     name: Build, Analyze & Test (Windows)
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64, axiom]
     timeout-minutes: 45
 
     steps:
@@ -30,21 +30,21 @@ jobs:
           global-json-file: global.json
 
       - name: Environment
-        shell: pwsh
+        shell: powershell
         run: |
           dotnet --version
           dotnet --info | Select-Object -First 25
 
       - name: Restore solution
-        shell: pwsh
+        shell: powershell
         run: dotnet restore Axiom.sln
 
       - name: Release build (analyzers & TreatWarningsAsErrors)
-        shell: pwsh
+        shell: powershell
         run: dotnet build Axiom.sln -c Release --no-restore
 
       - name: Run full test suite (strict pass/skip gate)
-        shell: pwsh
+        shell: powershell
         run: |
           $resultsDir = Join-Path $env:RUNNER_TEMP 'test-results'
           New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
@@ -93,7 +93,7 @@ jobs:
           }
 
       - name: Check for vulnerable NuGet packages
-        shell: pwsh
+        shell: powershell
         run: |
           $output = dotnet list Axiom.sln package --vulnerable --include-transitive 2>&1 | Out-String
           Write-Host $output
@@ -105,7 +105,7 @@ jobs:
           }
 
       - name: Validate notices, licenses & starter feed integrity
-        shell: pwsh
+        shell: powershell
         run: |
           foreach ($required in @('LICENSE', 'NOTICE', 'AUTHORS.md', 'THIRD_PARTY_NOTICES.md', 'community/feed.json')) {
             if (-not (Test-Path $required)) {
@@ -130,7 +130,7 @@ jobs:
   packaging-verification:
     name: Setup Packaging & Safe CLI Check
     needs: build-and-test
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64, axiom]
     timeout-minutes: 30
 
     steps:
@@ -143,11 +143,11 @@ jobs:
           global-json-file: global.json
 
       - name: Publish single-file Axiom Setup
-        shell: pwsh
+        shell: powershell
         run: .\scripts\publish-setup.ps1
 
       - name: Verify installer binary, hash & silent acceptance guard
-        shell: pwsh
+        shell: powershell
         run: |
           $setupExe = 'artifacts\publish\setup\Axiom.Setup.exe'
           if (-not (Test-Path $setupExe)) {
