@@ -377,15 +377,15 @@ public static class AgentCommandGuard
             if injection:
                 return ("injection-heuristic", "Blackbox blocked this call: prompt-injection phrasing in the tool arguments.")
             command_text = _command_text(args)
-            if not command_text:
-                return None
-            if protected is None:
-                protected = _load_protected_paths()
             store = _sensitive_store(command_text)
             if not store and isinstance(args, dict):
                 store = _sensitive_store(str(args.get("path") or args.get("filePath") or ""))
             if store:
                 return ("credential-store", f"Blackbox blocked this call: it accesses a credential store ({store}).")
+            if not command_text:
+                return None
+            if protected is None:
+                protected = _load_protected_paths()
             if _tampers_with_guard(command_text):
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
             if _deletes_protected(command_text, protected):
