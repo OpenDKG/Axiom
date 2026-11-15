@@ -156,7 +156,9 @@ public partial class MainWindow : Window
 
         // Selectable text handles the pointer before the row does. Keep row selection working when
         // the user left-clicks or right-clicks text inside a ListBox item.
-        SelectContainingListItem(e.Source as Visual);
+        Controls.DataListSelection.SelectContainingListItem(
+            e.Source as Visual,
+            focusItem: true);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -197,8 +199,23 @@ public partial class MainWindow : Window
     private void OnMinimizeClicked(object? sender, RoutedEventArgs e) =>
         WindowState = WindowState.Minimized;
 
-    private void OnAlertsClicked(object? sender, RoutedEventArgs e) =>
+    private void OnUpdateClicked(object? sender, RoutedEventArgs e)
+    {
+        AlertsPopup.IsOpen = false;
+        UpdatePopup.IsOpen = !UpdatePopup.IsOpen;
+    }
+
+    private void OnUpdateDownloadClicked(object? sender, RoutedEventArgs e) =>
+        UpdatePopup.IsOpen = false;
+
+    private void OnUpdateDismissClicked(object? sender, RoutedEventArgs e) =>
+        UpdatePopup.IsOpen = false;
+
+    private void OnAlertsClicked(object? sender, RoutedEventArgs e)
+    {
+        UpdatePopup.IsOpen = false;
         AlertsPopup.IsOpen = !AlertsPopup.IsOpen;
+    }
 
     private void OnAlertItemClicked(object? sender, RoutedEventArgs e)
     {
@@ -230,19 +247,5 @@ public partial class MainWindow : Window
         ToolTip.SetTip(
             MaximizeButton,
             WindowState == WindowState.Maximized ? "Restore" : "Maximize");
-    }
-
-    private static void SelectContainingListItem(Visual? visual)
-    {
-        while (visual is not null)
-        {
-            if (visual is ListBoxItem item && item.GetVisualParent() is ListBox list)
-            {
-                list.SelectedItem = item.DataContext;
-                return;
-            }
-
-            visual = visual.GetVisualParent();
-        }
     }
 }

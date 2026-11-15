@@ -1,8 +1,6 @@
-# Axiom agent enforcement policy engine
+# Axiom agent enforcement policy engine (Stage E1 specification)
 
-**Status:** implemented as a library only (stage E1 of the independent enforcement handoff). It is
-**not wired** to any agent hook, host adapter, UI page, Windows Firewall rule or DKG lookup. Nothing
-in the running application calls it yet.
+**Status:** Core E1 policy engine implemented in `Axiom.Core/Enforcement` and unit tested (`EnforcementPolicyEvaluatorTests.cs`). Subsequent stages (`E2` host adapter & receipts, `E3` broker prototype, `E4` `AgentFirewallEnforcer`, `E5` UI status surfacing) are wired in later commits and tracked with their live-VM verification status in [ENFORCEMENT_TRACKER.md](ENFORCEMENT_TRACKER.md) and [validation/RELEASE_READINESS_MATRIX.md](validation/RELEASE_READINESS_MATRIX.md).
 
 ## What this slice contains
 
@@ -57,13 +55,11 @@ agent's allow decision.
 | Remembered verdicts | 1024 |
 | Audit entries (default) | 512 |
 
-## Not implemented here
+## Boundaries outside Stage E1
 
-- No hook, plugin or host-adapter wiring; the current hooks keep their existing fail-open behaviour.
-- No host capability matrix, live host deny test or `VERIFIED BLOCKING` state.
-- No managed runner, restricted token, AppContainer boundary or file broker.
-- No DKG annotation, Check graph call, firewall rule or DNS change.
-- No UI, no persistence of user choices, no migration of existing settings.
-- No per-agent network policy; Axiom Shield remains the enforcement authority for its own rules.
+Stage E1 (`Axiom.Core/Enforcement`) intentionally excludes host wiring, OS enforcement, DKG lookups, and UI rendering so the pure evaluator stays deterministic and offline. Those responsibilities belong to separate components tracked in [ENFORCEMENT_TRACKER.md](ENFORCEMENT_TRACKER.md):
 
-These are stages E0/E2/E3/E4/E5 of the handoff and remain separate, scoped Draft PRs.
+- Host adapter mapping, `EnforcementController`, and sentinel canary verification (`E2`).
+- Managed runner / broker feasibility probes (`E3`, prototype only).
+- Per-agent scoped firewall rules and dual-destination canary verification (`E4`, `AgentFirewallEnforcer`).
+- UI truth-surface status states (`E5`, `EnforcementSurfaceState`) and live Windows VM runtime validation (`docs/validation/RELEASE_READINESS_MATRIX.md`).

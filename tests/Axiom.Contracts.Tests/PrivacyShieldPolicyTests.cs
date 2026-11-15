@@ -46,11 +46,15 @@ public sealed class PrivacyShieldPolicyTests
     [Fact]
     public void HaGeZi_source_is_pinned_to_a_commit_with_a_digest()
     {
-        var source = Assert.Single(PrivacyShieldSourceCatalog.All, item => item.Id == "hagezi-pro");
+        var pro = Assert.Single(PrivacyShieldSourceCatalog.All, item => item.Id == "hagezi-pro");
+        var tif = Assert.Single(PrivacyShieldSourceCatalog.All, item => item.Id == "hagezi-tif");
 
-        Assert.Contains("@924bb2a8306e609ae8b0113c2b676f5fde072d16", source.Url, StringComparison.Ordinal);
-        Assert.Equal(64, source.Sha256.Length);
-        Assert.DoesNotContain("@latest", source.Url, StringComparison.Ordinal);
+        foreach (var source in new[] { pro, tif })
+        {
+            Assert.Contains("@924bb2a8306e609ae8b0113c2b676f5fde072d16", source.Url, StringComparison.Ordinal);
+            Assert.Equal(64, source.Sha256.Length);
+            Assert.DoesNotContain("@latest", source.Url, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -123,11 +127,11 @@ public sealed class PrivacyShieldPolicyTests
     }
 
     [Fact]
-    public void Source_catalog_has_six_license_cleared_entries()
+    public void Source_catalog_has_eight_license_cleared_entries()
     {
         var sources = PrivacyShieldSourceCatalog.All;
 
-        Assert.Equal(6, sources.Count);
+        Assert.Equal(8, sources.Count);
         Assert.Equal(
             sources.Count,
             sources.Select(source => source.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
@@ -136,12 +140,39 @@ public sealed class PrivacyShieldPolicyTests
             source.License));
         Assert.All(sources, source => Assert.StartsWith("https://", source.Url, StringComparison.Ordinal));
 
-        // Only the dedicated malware list may claim the malware category, so a shared indicator is
-        // never an ad or tracker mislabelled as malware.
-        var malware = sources.Where(source =>
-            source.Category.HasFlag(PrivacyCategory.Malware)).ToArray();
-        Assert.Single(malware);
-        Assert.Equal("urlhaus-domains", malware[0].Id);
-        Assert.Equal(PrivacyCategory.Malware, malware[0].Category);
+        // Only dedicated malware/phishing lists may claim the malware or phishing categories, so a
+        // shared indicator is never an ad or tracker mislabelled as malware or phishing.
+        var malware = sources
+            .Where(source => source.Category.HasFlag(PrivacyCategory.Malware))
+            .Select(source => (source.Id, source.Category))
+            .ToArray();
+        Assert.Equal(2, malware.Length);
+        Assert.Contains(("urlhaus-domains", PrivacyCategory.Malware), malware);
+        Assert.Contains(("hagezi-tif", PrivacyCategory.Malware | PrivacyCategory.Phishing), malware);
+
+        var phishing = sources
+            .Where(source => source.Category.HasFlag(PrivacyCategory.Phishing))
+            .Select(source => (source.Id, source.Category))
+            .ToArray();
+        Assert.Equal(2, phishing.Length);
+        Assert.Contains(("hagezi-tif", PrivacyCategory.Malware | PrivacyCategory.Phishing), phishing);
+        Assert.Contains(("phishing-filter", PrivacyCategory.Phishing), phishing);
+
+        Assert.True(PrivacyShieldCategories.ForProfile(PrivacyShieldProfile.Strict)
+            .HasFlag(PrivacyCategory.Phishing));
+        Assert.Equal("Phishing", PrivacyShieldCategories.Label(PrivacyCategory.Phishing));
+    }
+
+    [Fact]
+    public void Rule_capacity_supports_all_catalogued_lists_and_auto_update_defaults()
+    {
+        Assert.True(PrivacyShieldPolicy.MaxRules >= 1_000_000);
+
+        var defaults = new PrivacyShieldSettings();
+        Assert.Equal(53, defaults.Port);
+        Assert.True(defaults.AutoUpdateSources);
+        Assert.Equal(24, defaults.AutoUpdateIntervalHours);
+        Assert.Equal(string.Empty, defaults.PreferredAdapterAlias);
+        Assert.False(defaults.AutoPointAdapterDns);
     }
 }

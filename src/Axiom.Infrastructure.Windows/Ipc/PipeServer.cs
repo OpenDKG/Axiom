@@ -194,7 +194,9 @@ public sealed class PipeServer
                 return;
             }
 
-            await _dispatcher.HandleConnectionAsync(server, clientSid!, cancellationToken).ConfigureAwait(false);
+            await _dispatcher
+                .HandleConnectionAsync(server, WindowsPipeCaller.Authenticated(clientSid!), cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 }

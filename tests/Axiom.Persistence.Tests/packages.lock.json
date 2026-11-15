@@ -134,7 +134,7 @@
       "axiom.persistence": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.5.3, )",
+          "Axiom.Contracts": "[0.34.0, )",
           "Microsoft.Data.Sqlite": "[10.0.14, )"
         }
       },

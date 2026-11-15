@@ -362,11 +362,10 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         : ManualSetupTextWindows;
 
     private static string ManualSetupTextWindows =>
-        $"The Axiom service never changes adapter DNS silently. The optional {PlatformText.ElevationName} helper changes " +
-        $"only the selected adapter after you confirm {PlatformText.ElevationPrompt}; it saves the previous DNS, " +
-        "keeps it behind the resolver as a fallback, and can restore it. If you do not use the helper, " +
-        "set the adapter DNS to 127.0.0.1 (port 53) and keep the router's DNS as the second entry " +
-        $"manually. Until {PlatformText.OsName} DNS points at this resolver, normal traffic bypasses it " +
+        "Complete installation enables the Axiom Windows service to point your active adapter's DNS " +
+        "at 127.0.0.1 automatically while keeping your existing DNS server behind it as a fallback. " +
+        "You can also use the UAC helper or 'Restore DNS' below to switch adapters manually or opt out. " +
+        "Until Windows DNS points at this resolver, normal traffic bypasses it " +
         "and the counters stay at zero. This is DNS filtering only: applications still connect " +
         "directly to destination IPs; traffic is not routed or proxied through Axiom.";
 
@@ -397,10 +396,23 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private bool _malware;
 
     [ObservableProperty]
+    private bool _phishing;
+
+    [ObservableProperty]
+    private bool _autoUpdateSources = true;
+
+    private string _preferredAdapterAlias = string.Empty;
+    private bool _autoPointAdapterDns;
+    private int _autoUpdateIntervalHours = 24;
+
+    [ObservableProperty]
     private string _portText = "53";
 
     [ObservableProperty]
     private string _upstreamText = string.Empty;
+
+    [ObservableProperty]
+    private bool _encryptDnsViaDoh = true;
 
     [ObservableProperty]
     private string _allowedDomainsText = string.Empty;
@@ -550,13 +562,14 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                 return;
             }
 
-            var status = await _client
+            var status = await CreateConfigureClient()!
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
                     CancellationToken.None)
                 .ConfigureAwait(true);
             ApplyStatus(status);
+            WarnIfSourcesDropped(settings, status);
         }
         catch (ServiceUnavailableException exception)
         {
@@ -586,7 +599,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                 return;
             }
 
-            var status = await _client
+            var status = await CreateConfigureClient()!
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
@@ -622,19 +635,23 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                 return;
             }
 
-            await _client
+            await CreateConfigureClient()!
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacyConfigure,
                     settings,
                     CancellationToken.None)
                 .ConfigureAwait(true);
-            var status = await _client
+            var updateClient = _client is ServicePipeClient
+                ? new ServicePipeClient(requestTimeout: TimeSpan.FromMinutes(5))
+                : _client;
+            var status = await updateClient
                 .SendAsync<PrivacyShieldStatus>(
                     IpcCommandTypes.PrivacySourcesUpdate,
                     null,
                     CancellationToken.None)
                 .ConfigureAwait(true);
             ApplyStatus(status);
+            WarnIfSourcesDropped(settings, status);
         }
         catch (ServiceUnavailableException exception)
         {
@@ -671,9 +688,40 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             return;
         }
 
+        var adapterName = SelectedAdapter.Name;
+        _preferredAdapterAlias = adapterName;
+        _autoPointAdapterDns = true;
+
+        if (CreateConfigureClient() is { } configureClient)
+        {
+            try
+            {
+                var status = await configureClient
+                    .SendAsync<PrivacyShieldStatus>(
+                        IpcCommandTypes.PrivacyConfigure,
+                        BuildSettings(),
+                        CancellationToken.None)
+                    .ConfigureAwait(true);
+                ApplyStatus(status);
+                RefreshAdapters();
+                var updatedAdapter = Adapters.FirstOrDefault(adapter =>
+                    string.Equals(adapter.Name, adapterName, StringComparison.OrdinalIgnoreCase));
+                if (updatedAdapter?.UsesResolver == true)
+                {
+                    SelectedAdapter = updatedAdapter;
+                    DnsHelperStatusText =
+                        $"Adapter '{adapterName}' now uses 127.0.0.1 and will stay configured across restarts and updates.";
+                    return;
+                }
+            }
+            catch (ServiceUnavailableException)
+            {
+            }
+        }
+
         var confirmed = await _ui.ConfirmAsync(
             "Change adapter DNS",
-            $"Point adapter '{SelectedAdapter.Name}' at the Privacy Shield loopback resolver 127.0.0.1?\n\n" +
+            $"Point adapter '{adapterName}' at the Privacy Shield loopback resolver 127.0.0.1?\n\n" +
             "The adapter keeps its current DNS servers behind the resolver as a fallback, so a stopped " +
             $"resolver cannot take the network down. {PlatformText.OsName} will ask for elevation. The previous DNS " +
             "settings are saved and can be restored.",
@@ -690,10 +738,10 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         try
         {
             var exitCode = await _dnsHelper
-                .EnableAsync(SelectedAdapter.Name, "127.0.0.1", CancellationToken.None)
+                .EnableAsync(adapterName, "127.0.0.1", CancellationToken.None)
                 .ConfigureAwait(true);
             DnsHelperStatusText = exitCode == 0
-                ? $"Adapter '{SelectedAdapter.Name}' now uses 127.0.0.1, with its previous DNS kept as fallback. Original settings were saved."
+                ? $"Adapter '{adapterName}' now uses 127.0.0.1, with its previous DNS kept as fallback. Original settings were saved."
                 : $"The elevated DNS helper exited with code {exitCode}.";
         }
         catch (Exception exception) when (exception is
@@ -717,7 +765,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
         var confirmed = await _ui.ConfirmAsync(
             "Restore adapter DNS",
-            $"Restore the adapter DNS settings saved by the Privacy Shield helper? {PlatformText.OsName} will ask for elevation.",
+            "Restore the original adapter DNS settings and pause automatic loopback DNS persistence?",
             "Restore DNS",
             destructive: false,
             CancellationToken.None).ConfigureAwait(true);
@@ -725,6 +773,30 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         {
             DnsHelperStatusText = "DNS restore cancelled.";
             return;
+        }
+
+        _autoPointAdapterDns = false;
+        if (CreateConfigureClient() is { } configureClient)
+        {
+            try
+            {
+                var status = await configureClient
+                    .SendAsync<PrivacyShieldStatus>(
+                        IpcCommandTypes.PrivacyConfigure,
+                        BuildSettings(),
+                        CancellationToken.None)
+                    .ConfigureAwait(true);
+                ApplyStatus(status);
+                RefreshAdapters();
+                if (!Adapters.Any(adapter => adapter.UsesResolver))
+                {
+                    DnsHelperStatusText = "Original adapter DNS settings were restored.";
+                    return;
+                }
+            }
+            catch (ServiceUnavailableException)
+            {
+            }
         }
 
         DnsHelperStatusText = $"Waiting for {(OperatingSystem.IsWindows() ? "the Windows elevation prompt" : PlatformText.ElevationPrompt)}...";
@@ -928,6 +1000,11 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             categories |= PrivacyCategory.Malware;
         }
 
+        if (Phishing)
+        {
+            categories |= PrivacyCategory.Phishing;
+        }
+
         return new PrivacyShieldSettings
         {
             Enabled = Enabled,
@@ -935,6 +1012,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             Categories = categories,
             Port = int.TryParse(PortText, out var port) ? port : 53,
             UpstreamDns = UpstreamText.Trim(),
+            EncryptDnsViaDoh = EncryptDnsViaDoh,
             AllowedDomains = PrivacyShieldPolicy.ParseList(
                 AllowedDomainsText,
                 PrivacyShieldPolicy.MaxSettingsDomains),
@@ -945,6 +1023,10 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                 .Where(source => source.Enabled)
                 .Select(source => source.Id)
                 .ToArray(),
+            PreferredAdapterAlias = _preferredAdapterAlias,
+            AutoPointAdapterDns = _autoPointAdapterDns,
+            AutoUpdateSources = AutoUpdateSources,
+            AutoUpdateIntervalHours = _autoUpdateIntervalHours,
         };
     }
 
@@ -978,10 +1060,27 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             Tracking = (settings.Categories & PrivacyCategory.Tracking) != 0;
             Analytics = (settings.Categories & PrivacyCategory.Analytics) != 0;
             Malware = (settings.Categories & PrivacyCategory.Malware) != 0;
+            Phishing = (settings.Categories & PrivacyCategory.Phishing) != 0;
             PortText = settings.Port.ToString(CultureInfo.InvariantCulture);
             UpstreamText = settings.UpstreamDns;
+            EncryptDnsViaDoh = settings.EncryptDnsViaDoh;
             AllowedDomainsText = string.Join(Environment.NewLine, settings.AllowedDomains);
             BlockedDomainsText = string.Join(Environment.NewLine, settings.BlockedDomains);
+            AutoUpdateSources = settings.AutoUpdateSources;
+            _autoUpdateIntervalHours = settings.AutoUpdateIntervalHours > 0
+                ? settings.AutoUpdateIntervalHours
+                : 24;
+            _preferredAdapterAlias = settings.PreferredAdapterAlias;
+            _autoPointAdapterDns = settings.AutoPointAdapterDns;
+            if (!string.IsNullOrWhiteSpace(_preferredAdapterAlias))
+            {
+                var matchingAdapter = Adapters.FirstOrDefault(adapter =>
+                    string.Equals(adapter.Name, _preferredAdapterAlias, StringComparison.OrdinalIgnoreCase));
+                if (matchingAdapter is not null)
+                {
+                    SelectedAdapter = matchingAdapter;
+                }
+            }
             foreach (var source in Sources)
             {
                 var state = status.Sources.FirstOrDefault(item =>
@@ -1409,10 +1508,34 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             Tracking = (categories & PrivacyCategory.Tracking) != 0;
             Analytics = (categories & PrivacyCategory.Analytics) != 0;
             Malware = (categories & PrivacyCategory.Malware) != 0;
+            Phishing = (categories & PrivacyCategory.Phishing) != 0;
         }
         finally
         {
             _updating = false;
         }
+    }
+
+    private IServiceRequestClient? CreateConfigureClient() =>
+        _client is ServicePipeClient
+            ? new ServicePipeClient(requestTimeout: TimeSpan.FromSeconds(60))
+            : _client;
+
+    private void WarnIfSourcesDropped(PrivacyShieldSettings requested, PrivacyShieldStatus actual)
+    {
+        var dropped = requested.EnabledSourceIds
+            .Where(id => !actual.Settings.EnabledSourceIds.Contains(id, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+        if (dropped.Length == 0)
+        {
+            return;
+        }
+
+        var note =
+            $"The running Axiom service skipped {dropped.Length} source(s) ({string.Join(", ", dropped)}). " +
+            "Update or restart Axiom Service so the latest blocklist catalog is active.";
+        LastErrorText = string.IsNullOrWhiteSpace(LastErrorText)
+            ? note
+            : $"{LastErrorText} {note}";
     }
 }

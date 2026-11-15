@@ -48,6 +48,7 @@ public sealed record ThreatShareReportResult(ThreatShareReportStatus Status, str
 public sealed class ThreatShareCli
 {
     private static readonly TimeSpan LocalRulesetFreshnessWindow = TimeSpan.FromHours(24);
+    private static readonly TimeSpan PlanTimeout = TimeSpan.FromSeconds(30);
     private readonly Func<string?> _resolveHermesPath;
 
     public ThreatShareCli(Func<string?>? hermesPathResolver = null)
@@ -85,7 +86,7 @@ public sealed class ThreatShareCli
         }
 
         var severity = ThreatShareVocabulary.NormalizeSeverity(candidate.Severity);
-        var execution = await ExecuteHermesAsync(
+        var execution = await ExecuteAsync(
             [
                 "blackbox", "report",
                 "--type", "ioc",
@@ -108,7 +109,7 @@ public sealed class ThreatShareCli
             return new(ThreatShareReportStatus.Rejected, "an indicator identifier is required to retract");
         }
 
-        var execution = await ExecuteHermesAsync(
+        var execution = await ExecuteAsync(
             ["blackbox", "report", "--retract", indicatorId.Trim()],
             cancellationToken).ConfigureAwait(false);
 
@@ -120,48 +121,80 @@ public sealed class ThreatShareCli
         int ExitCode,
         ThreatShareReportResult? ImmediateFailure);
 
-    private async Task<CommandExecution> ExecuteHermesAsync(
+    private async Task<CommandExecution> ExecuteAsync(
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken)
     {
-        var hermes = _resolveHermesPath();
-        if (hermes is null)
+        var plans = ThreatShareLauncher.BuildPlans(
+            arguments,
+            BlackboxRoot(),
+            ThreatShareLauncher.FindRuntimePython(),
+            _resolveHermesPath(),
+            VenvPython(),
+            BlackboxPaths.ResolveHermesHome());
+
+        if (plans.Count == 0)
         {
             return new(
                 string.Empty,
                 -1,
-                new(ThreatShareReportStatus.RetryableFailure, "the Blackbox hermes CLI was not found"));
+                new(ThreatShareReportStatus.RetryableFailure, "the Blackbox reporter was not found"));
         }
 
+        string? last = null;
+        foreach (var plan in plans)
+        {
+            var execution = await RunPlanAsync(plan, cancellationToken).ConfigureAwait(false);
+            if (execution is not null)
+            {
+                return execution;
+            }
+
+            last = plan.Description;
+        }
+
+        return new(
+            string.Empty,
+            -1,
+            new(
+                ThreatShareReportStatus.RetryableFailure,
+                $"the Blackbox reporter could not run through {last ?? "any launcher"}"));
+    }
+
+    /// <summary>Runs one plan; null means the launcher never reached the reporter, so the next runs.</summary>
+    private static async Task<CommandExecution?> RunPlanAsync(
+        ThreatShareLaunchPlan plan,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            var start = new ProcessStartInfo(hermes)
+            var start = new ProcessStartInfo(plan.FileName)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                WorkingDirectory = Path.GetDirectoryName(hermes) ?? string.Empty,
+                WorkingDirectory = plan.WorkingDirectory,
             };
 
-            foreach (var argument in arguments)
+            foreach (var argument in plan.Arguments)
             {
                 start.ArgumentList.Add(argument);
             }
 
-            start.Environment[BlackboxPaths.HermesHomeVariable] = BlackboxPaths.ResolveHermesHome();
+            foreach (var (key, value) in plan.Environment)
+            {
+                start.Environment[key] = value;
+            }
 
             using var process = Process.Start(start);
             if (process is null)
             {
-                return new(
-                    string.Empty,
-                    -1,
-                    new(ThreatShareReportStatus.RetryableFailure, "the Blackbox CLI could not be started"));
+                return null;
             }
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(45));
+            timeout.CancelAfter(PlanTimeout);
 
             var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
             var stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
@@ -169,7 +202,7 @@ public sealed class ThreatShareCli
             var text = ((await stdoutTask.ConfigureAwait(false)) + "\n" +
                         (await stderrTask.ConfigureAwait(false))).Replace("\r", string.Empty);
 
-            return new(text, process.ExitCode, null);
+            return IsUnavailable(text) ? null : new CommandExecution(text, process.ExitCode, null);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -178,12 +211,12 @@ public sealed class ThreatShareCli
                 -1,
                 new(
                     ThreatShareReportStatus.UnknownOutcome,
-                    "the Blackbox CLI timed out after it started; the report may already be published"));
+                    "the Blackbox reporter timed out after it started; the report may already be published"));
         }
         catch (Exception exception) when (exception is
                      System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
-            return new(string.Empty, -1, new(ThreatShareReportStatus.RetryableFailure, exception.Message));
+            return null;
         }
     }
 
@@ -211,6 +244,11 @@ public sealed class ThreatShareCli
         }
 
         var line = FirstNonEmptyLine(text, exitCode);
+
+        if (IsUnavailable(text))
+        {
+            return new(ThreatShareReportStatus.RetryableFailure, line);
+        }
 
         if (IsPolicyRefusal(text))
         {
@@ -258,6 +296,15 @@ public sealed class ThreatShareCli
     private static string FirstNonEmptyLine(string text, int exitCode) =>
         text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault(value => value.Length > 0) ?? $"exit code {exitCode}";
+
+    /// <summary>True when the launcher never reached the reporter (plugin not registered, wrong interpreter).</summary>
+    public static bool IsUnavailable(string text) =>
+        text.Contains("is not a `hermes` command", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("Failed to load plugin", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("No module named", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("is not recognized as an internal or external command", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("cannot find the file", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("The system cannot find the file", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsOffline(string text) =>
         text.Contains("not running", StringComparison.OrdinalIgnoreCase) ||
@@ -532,6 +579,31 @@ public sealed class ThreatShareCli
         var lane = IsSandboxModeEnabled(hermes) ? "Sandbox lane (test only)" : "Production graph (CC0 1.0 replicated)";
         return $"Reporter profile: {hermes}. Consent {(consent ? "present" : "missing")}, " +
                $"reporter key {(key ? "present" : "missing")}, destination: {lane}.";
+    }
+
+    /// <summary>True when the profile already holds the reporter's signing key.</summary>
+    public static bool ReporterKeyPresent() => File.Exists(BlackboxPaths.ReporterKeyPath());
+
+    /// <summary>The Blackbox installation root (vendor tree, venv and reporter module).</summary>
+    public static string BlackboxRoot() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Axiom", "modules", "blackbox", "agent-blackbox");
+
+    public static string VenvPython() => Path.Combine(BlackboxRoot(), "venv", "Scripts", "python.exe");
+
+    /// <summary>The local ruleset text, used by the preflight to refuse a known indicator.</summary>
+    public static string ReadRuleset()
+    {
+        try
+        {
+            var path = Path.Combine(BlackboxPaths.ResolveBlackboxHome(), "ruleset.json");
+            return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return string.Empty;
+        }
     }
 
     private static string? DefaultHermesPath()

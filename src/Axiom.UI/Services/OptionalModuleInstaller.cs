@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using Axiom.Contracts;
+using Axiom.Contracts.Blackbox;
 
 namespace Axiom.UI.Services;
 
@@ -18,6 +19,9 @@ public sealed class OptionalModuleInstaller
 
     // Pinned vendor installer digest. Update only after reviewing a new official release.
     private const string BlackboxInstallerSha256 = "261122F5E879596E88D63C30D5D36D12B4E155986F83AA3EB83ADEB406E41179";
+
+    /// <summary>Marker recording which pinned vendor build is installed in this tree.</summary>
+    private const string InstalledBuildMarker = ".axiom-blackbox-build";
 
     public string DkgRoot { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -42,18 +46,28 @@ public sealed class OptionalModuleInstaller
     public bool IsDkgInstalled => File.Exists(DkgCommand);
 
     /// <summary>
+    /// Why the last install request did nothing, or null when it started. The UI shows this text:
+    /// a silent return looks like a broken button.
+    /// </summary>
+    public string? LastError { get; private set; }
+
+    /// <summary>
     /// Installs the DKG CLI into a per-user folder, then opens the official interactive setup on
     /// testnet and starts the node. The user answers the official prompts; nothing is hidden.
     /// </summary>
     public void InstallDkg()
     {
+        LastError = null;
+
         if (DistributionContext.IsStorePackage)
         {
+            LastError = "This optional third-party module is not included in the Microsoft Store build.";
             return;
         }
 
         if (IsUnsafeInstallRoot(DkgRoot, DkgHome))
         {
+            LastError = "DKG install refused: its target path contains a junction or symbolic link.";
             return;
         }
 
@@ -79,8 +93,10 @@ public sealed class OptionalModuleInstaller
 
     private string BuildDkgScript()
     {
+        var pathPreamble = ModulePrerequisites.Probe().BuildPathPreamble();
         return $$"""
             $ErrorActionPreference = 'Stop'
+            {{pathPreamble}}
             $dkgRoot = '{{Escape(DkgRoot)}}'
             $dkgHome = '{{Escape(DkgHome)}}'
             $dkg = Join-Path $dkgRoot 'node_modules\.bin\dkg.cmd'
@@ -94,8 +110,9 @@ public sealed class OptionalModuleInstaller
             npm rebuild better-sqlite3 --prefix $dkgRoot
             if ($LASTEXITCODE -ne 0) { throw "better-sqlite3 rebuild failed with exit code $LASTEXITCODE" }
             $env:DKG_HOME = $dkgHome
-            Write-Host 'Starting the official DKG testnet setup. Answer the prompts in this window.' -ForegroundColor Cyan
-            & $dkg init --network testnet --role edge --store oxigraph
+            Write-Host 'Running non-interactive DKG setup with defaults...' -ForegroundColor Cyan
+            $answers = 1..14 | ForEach-Object { '' }
+            $answers | & $dkg init --network testnet --role edge --store oxigraph -y
             if ($LASTEXITCODE -eq 0) {
               Write-Host 'Starting the DKG node in the background...' -ForegroundColor Cyan
               Start-Process -FilePath $dkg -WorkingDirectory $dkgRoot -WindowStyle Hidden -ArgumentList @('start')
@@ -110,13 +127,17 @@ public sealed class OptionalModuleInstaller
     /// </summary>
     public void InstallBlackbox()
     {
+        LastError = null;
+
         if (DistributionContext.IsStorePackage)
         {
+            LastError = "This optional third-party module is not included in the Microsoft Store build.";
             return;
         }
 
         if (IsUnsafeInstallRoot(BlackboxRoot))
         {
+            LastError = "Blackbox install refused: its target path contains a junction or symbolic link.";
             return;
         }
 
@@ -137,28 +158,139 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        return RunPowerShellScript(BuildBlackboxScript(), log);
+        // The vendor installer used to run on every Complete install. Upgrading Axiom then spent
+        // minutes re-installing an unchanged Blackbox build (and could fail on vendor state such as
+        // "no dependency environment is committed"). Reuse the same pinned build when the marker
+        // and the vendor venv are present; a new pinned digest still forces a reinstall.
+        if (IsPinnedBuildInstalled())
+        {
+            log?.Invoke("Blackbox pinned build is already installed; reusing the existing runtime (no vendor reinstall).");
+            return true;
+        }
+
+        var installed = RunPowerShellScript(BuildBlackboxScript(), log);
+        if (installed)
+        {
+            try
+            {
+                File.WriteAllText(Path.Combine(BlackboxRoot, InstalledBuildMarker), BlackboxInstallerSha256);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return installed;
+    }
+
+    private bool IsPinnedBuildInstalled() => IsPinnedBuildInstalledAt(BlackboxRoot);
+
+    internal static bool IsPinnedBuildInstalledAt(string blackboxRoot)
+    {
+        try
+        {
+            var marker = Path.Combine(blackboxRoot, InstalledBuildMarker);
+            if (!File.Exists(marker) ||
+                !string.Equals(File.ReadAllText(marker).Trim(), BlackboxInstallerSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return File.Exists(Path.Combine(blackboxRoot, "agent-blackbox", "venv", "Scripts", "python.exe"));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private string BuildBlackboxScript()
     {
+        var pathPreamble = ModulePrerequisites.Probe().BuildPathPreamble();
         return $$"""
             $ErrorActionPreference = 'Stop'
+            {{pathPreamble}}
             $dir = '{{Escape(BlackboxRoot)}}'
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
             Set-Location $dir
             $installer = Join-Path $dir 'blackbox-install.ps1'
+
+            # The vendor installer calls 'py -3.12'. On a clean Windows without the launcher
+            # python.exe receives '-3' and the venv is never created; provide a shim for this run.
+            $pyOk = $false
+            if (Get-Command py -ErrorAction SilentlyContinue) {
+              & py -3.12 --version *> $null
+              $pyOk = ($LASTEXITCODE -eq 0)
+            }
+            if (-not $pyOk -and (Get-Command python -ErrorAction SilentlyContinue)) {
+              $shim = Join-Path $dir 'py.cmd'
+              $shimText = "@echo off`r`nsetlocal`r`nset `"ARGS=%*`"`r`nset `"ARGS=%ARGS:-3.12=%`"`r`nset `"ARGS=%ARGS:-3=%`"`r`npython %ARGS%`r`n"
+              Set-Content -Path $shim -Value $shimText -Encoding Ascii
+              $env:PATH = $dir + ';' + $env:PATH
+              Write-Host 'Provided a py launcher shim for the vendor installer.' -ForegroundColor Yellow
+            }
+
             Write-Host 'Downloading the official Umanitek Blackbox installer...' -ForegroundColor Cyan
-            Invoke-WebRequest -UseBasicParsing -Uri 'https://blackbox-w.umanitek.ai' -OutFile $installer
+            if (-not (Test-Path $installer) -or (Get-Item $installer).Length -eq 0) {
+              try { Invoke-WebRequest -UseBasicParsing -Uri 'https://blackbox-w.umanitek.ai' -OutFile $installer }
+              catch { Write-Warning "Vendor download failed: $($_.Exception.Message)" }
+            }
             $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
             Write-Host "Installer SHA256: $hash" -ForegroundColor Yellow
             if ($hash -ne '{{BlackboxInstallerSha256}}') {
               throw "Blackbox installer hash mismatch. Expected {{BlackboxInstallerSha256}}, got $hash. Refusing to run an unpinned installer."
             }
             Write-Host 'Installer hash matches the pinned Axiom digest.' -ForegroundColor Green
-            Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
-            & $installer -StoreBackend oxigraph
+            $sys32 = Join-Path $env:SystemRoot 'System32'
+            $hasVcRuntime = (Test-Path (Join-Path $sys32 'vcruntime140.dll')) -and (Test-Path (Join-Path $sys32 'msvcp140.dll'))
+            $storeBackend = if ($hasVcRuntime) { 'oxigraph' } else { 'oxigraph-worker' }
+            if (-not $hasVcRuntime) {
+              Write-Warning 'VC++ 2015-2022 redistributable not detected; defaulting Blackbox store backend to embedded oxigraph-worker.'
+            } else {
+              Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
+            }
+            $env:BLACKBOX_MODE = 'block'
+            $env:BLACKBOX_ATTACH_ALL = '1'
+            & $installer -StoreBackend $storeBackend
+            $vendorExit = $LASTEXITCODE
+            if ($vendorExit -ne 0) {
+              # The pinned vendor build can fail its own "dependency environment committed" check.
+              # Repair it once with the vendor CLI; a usable venv is what Axiom actually needs.
+              $hermesExe = Join-Path $dir 'agent-blackbox\venv\Scripts\hermes.exe'
+              if (-not (Test-Path $hermesExe)) { $hermesExe = Join-Path $env:LOCALAPPDATA 'hermes\bin\hermes.exe' }
+              if (Test-Path $hermesExe) {
+                Write-Host "Vendor installer exited $vendorExit; running 'hermes pm repair'..." -ForegroundColor Yellow
+                & $hermesExe pm repair 2>&1 | ForEach-Object { Write-Host $_ }
+              }
+            }
+
+            # The vendor pins the LF SHA-256 of the BIP-39 wordlist, but a Windows git clone with
+            # core.autocrlf=true writes CRLF and seed-phrase detection disables itself. Normalize every
+            # installed copy back to LF so the pinned hash matches (issue #324 / #320).
+            foreach ($bip39 in @(
+              (Join-Path $dir 'agent-blackbox\plugins\blackbox\kernel\crypto_secrets\bip39_english.txt'),
+              (Join-Path $env:LOCALAPPDATA 'hermes\plugins\blackbox\kernel\crypto_secrets\bip39_english.txt'),
+              (Join-Path $env:USERPROFILE '.hermes\plugins\blackbox\kernel\crypto_secrets\bip39_english.txt')
+            )) {
+              if (-not (Test-Path $bip39)) { continue }
+              $bytes = [System.IO.File]::ReadAllBytes($bip39)
+              $normalized = New-Object byte[] $bytes.Length
+              $count = 0
+              for ($i = 0; $i -lt $bytes.Length; $i++) {
+                if ($bytes[$i] -eq 13 -and ($i + 1) -lt $bytes.Length -and $bytes[$i + 1] -eq 10) { continue }
+                $normalized[$count] = $bytes[$i]
+                $count++
+              }
+              if ($count -ne $bytes.Length) {
+                $trimmed = New-Object byte[] $count
+                [Array]::Copy($normalized, $trimmed, $count)
+                [System.IO.File]::WriteAllBytes($bip39, $trimmed)
+                Write-Host "Normalized $bip39 to LF ($count bytes)." -ForegroundColor Yellow
+              }
+              Write-Host ("$bip39 SHA256: " + (Get-FileHash $bip39 -Algorithm SHA256).Hash) -ForegroundColor Yellow
+            }
             $venv = Join-Path $dir 'agent-blackbox\venv\Scripts\python.exe'
+            $venvW = Join-Path $dir 'agent-blackbox\venv\Scripts\pythonw.exe'
             if (Test-Path $venv) {
               Write-Host 'Repairing missing Blackbox Python dependencies...' -ForegroundColor Cyan
               & $venv -m pip install ruamel.yaml python-dotenv rich pyyaml aiohttp cryptography psutil fastapi uvicorn
@@ -176,7 +308,8 @@ public sealed class OptionalModuleInstaller
               try { Invoke-WebRequest $dashboard -UseBasicParsing -TimeoutSec 2 | Out-Null; $running = $true } catch { }
               if (-not $running) {
                 Write-Host 'Starting the Blackbox dashboard...' -ForegroundColor Cyan
-                Start-Process -FilePath $venv -ArgumentList @($launcher) -WorkingDirectory $agent -WindowStyle Hidden
+                $dashExe = if (Test-Path $venvW) { $venvW } else { $venv }
+                Start-Process -FilePath $dashExe -ArgumentList @($launcher) -WorkingDirectory $agent -WindowStyle Hidden
                 Start-Sleep -Seconds 8
               }
               try {
@@ -186,13 +319,39 @@ public sealed class OptionalModuleInstaller
                 Write-Warning "Blackbox dashboard did not answer yet. Start it from Axiom with the Start button."
               }
             }
+            if (-not (Test-Path $venv)) {
+              throw 'Blackbox runtime is not usable: the vendor venv is missing.'
+            }
             Write-Host 'Blackbox setup finished. Return to Axiom and click Check again.' -ForegroundColor Green
+            exit 0
             """;
     }
 
     /// <summary>
-    /// Starts an installed DKG node without reinstalling it. Returns false when the local CLI is
-    /// missing.
+    /// Opens the visible winget script that installs the missing optional-module prerequisites.
+    /// </summary>
+    public void InstallPrerequisites(ModulePrerequisiteReport report)
+    {
+        LastError = null;
+
+        if (DistributionContext.IsStorePackage)
+        {
+            LastError = "Prerequisite installation is not available in the Microsoft Store build.";
+            return;
+        }
+
+        if (report.IsSatisfied)
+        {
+            return;
+        }
+
+        StartPowerShell(ModulePrerequisites.BuildBootstrapScript(report));
+    }
+
+    /// <summary>
+    /// Starts an installed DKG node without reinstalling it. Prefers the CLI and home the Hermes
+    /// config names, so starting a node never creates a second home the guard does not read.
+    /// Returns false when no local CLI is available.
     /// </summary>
     public bool StartDkg()
     {
@@ -201,19 +360,36 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        if (!File.Exists(DkgCommand) || IsUnsafeInstallRoot(DkgRoot, DkgHome, DkgCommand))
+        var (configuredBin, configuredHome) = ResolveConfiguredDkg();
+        string? command;
+        var useOwnHome = false;
+        if (configuredBin is not null && File.Exists(configuredBin) && !IsUnsafeInstallRoot(configuredBin))
+        {
+            command = configuredBin;
+        }
+        else if (File.Exists(DkgCommand) && !IsUnsafeInstallRoot(DkgRoot, DkgHome, DkgCommand))
+        {
+            command = DkgCommand;
+            useOwnHome = true;
+        }
+        else
         {
             return false;
         }
 
-        var startInfo = new ProcessStartInfo("cmd.exe", $"/c \"\"{DkgCommand}\" start\"")
+        var startInfo = new ProcessStartInfo("cmd.exe", $"/c \"\"{command}\" start\"")
         {
             UseShellExecute = false,
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden,
-            WorkingDirectory = DkgRoot,
+            WorkingDirectory = Path.GetDirectoryName(command) ?? DkgRoot,
         };
-        startInfo.Environment["DKG_HOME"] = DkgHome;
+
+        var effectiveHome = useOwnHome ? DkgHome : configuredHome;
+        if (!string.IsNullOrWhiteSpace(effectiveHome))
+        {
+            startInfo.Environment["DKG_HOME"] = effectiveHome;
+        }
 
         try
         {
@@ -233,6 +409,27 @@ public sealed class OptionalModuleInstaller
         }
     }
 
+    /// <summary>The DKG CLI and home the guard and node actually use, when the Hermes config names them.</summary>
+    private static (string? Bin, string? Home) ResolveConfiguredDkg()
+    {
+        try
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var configPath = Path.Combine(localAppData, "hermes", "config.yaml");
+            if (!File.Exists(configPath))
+            {
+                return (null, null);
+            }
+
+            var text = File.ReadAllText(configPath);
+            return (DkgHomeResolver.ReadConfiguredBin(text), DkgHomeResolver.ReadConfiguredHome(text));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return (null, null);
+        }
+    }
+
     /// <summary>
     /// Starts the installed Blackbox dashboard without reinstalling it. Returns false when the
     /// per-user virtual environment is missing.
@@ -245,7 +442,9 @@ public sealed class OptionalModuleInstaller
         }
 
         var agent = Path.Combine(BlackboxRoot, "agent-blackbox");
-        var venv = Path.Combine(agent, "venv", "Scripts", "python.exe");
+        var venvPythonW = Path.Combine(agent, "venv", "Scripts", "pythonw.exe");
+        var venvPython = Path.Combine(agent, "venv", "Scripts", "python.exe");
+        var venv = File.Exists(venvPythonW) ? venvPythonW : venvPython;
         if (!File.Exists(venv) || IsUnsafeInstallRoot(BlackboxRoot, agent, venv))
         {
             return false;
@@ -285,6 +484,57 @@ public sealed class OptionalModuleInstaller
         }
     }
 
+    private static string ResolvePowerShellExecutable()
+    {
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var trimmed = directory.Trim().Trim('"');
+                if (string.IsNullOrWhiteSpace(trimmed))
+                {
+                    continue;
+                }
+
+                foreach (var name in new[] { "pwsh.exe", "pwsh.cmd" })
+                {
+                    try
+                    {
+                        var full = Path.Combine(trimmed, name);
+                        if (File.Exists(full))
+                        {
+                            return full;
+                        }
+                    }
+                    catch (ArgumentException)
+                    {
+                    }
+                }
+            }
+        }
+
+        foreach (var root in new[]
+                 {
+                     Environment.GetEnvironmentVariable("ProgramFiles"),
+                     Environment.GetEnvironmentVariable("ProgramW6432"),
+                 })
+        {
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                continue;
+            }
+
+            var standard = Path.Combine(root, "PowerShell", "7", "pwsh.exe");
+            if (File.Exists(standard))
+            {
+                return standard;
+            }
+        }
+
+        return "powershell.exe";
+    }
+
     private static bool IsUnsafeInstallRoot(params string[] paths) =>
         paths.Any(StorageSafety.IsReparsePointInPath);
 
@@ -292,15 +542,20 @@ public sealed class OptionalModuleInstaller
     {
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
-            "powershell.exe",
-            $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}")
+            ResolvePowerShellExecutable(),
+            $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}")
         {
-            UseShellExecute = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
             WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            WindowStyle = ProcessWindowStyle.Normal,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
         };
 
-        log?.Invoke("A third-party installer window is opening. Follow its prompts and terms.");
+        log?.Invoke("Running third-party installer silently in the background...");
+        BackgroundWindowHider.HideDescendants(TimeSpan.FromMinutes(10));
         using var process = Process.Start(startInfo);
         if (process is null)
         {
@@ -308,8 +563,39 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        ProcessWindowHider.Start(process.Id, TimeSpan.FromMinutes(10));
+
+        var logGate = new object();
+        process.OutputDataReceived += (_, args) =>
+        {
+            if (string.IsNullOrWhiteSpace(args.Data) || log is null)
+            {
+                return;
+            }
+
+            lock (logGate)
+            {
+                log(args.Data);
+            }
+        };
+        process.ErrorDataReceived += (_, args) =>
+        {
+            if (string.IsNullOrWhiteSpace(args.Data) || log is null)
+            {
+                return;
+            }
+
+            lock (logGate)
+            {
+                log(args.Data);
+            }
+        };
+
+        process.StandardInput.Close();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
         process.WaitForExit();
-        log?.Invoke($"Installer window finished with exit code {process.ExitCode}.");
+        log?.Invoke($"Installer finished with exit code {process.ExitCode}.");
         return process.ExitCode == 0;
     }
 
@@ -317,7 +603,7 @@ public sealed class OptionalModuleInstaller
     {
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
-            "powershell.exe",
+            ResolvePowerShellExecutable(),
             $"-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand {encoded}")
         {
             UseShellExecute = true,

@@ -1,5 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Axiom.UI.Avalonia.Controls">
   <Style Selector="Button">
     <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
@@ -109,9 +110,19 @@
     <Setter Property="Padding" Value="10,6" />
   </Style>
 
+  <Style Selector="ListBox.data-list">
+    <Setter Property="controls:DataListSelection.SelectOnPointerPress" Value="True" />
+  </Style>
   <Style Selector="ListBox.data-list > ListBoxItem">
-    <Setter Property="Padding" Value="8,5" />
-    <Setter Property="Margin" Value="0,1" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Padding" Value="8,6" />
+    <Setter Property="Margin" Value="0" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="ListBox.data-list > ListBoxItem /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
     <Setter Property="CornerRadius" Value="6" />
   </Style>
   <Style Selector="ListBox.data-list > ListBoxItem:selected">

@@ -247,14 +247,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
             .ToList();
 
         _rebuilding = true;
-        if (!VisibleConnections.SequenceEqual(filtered))
-        {
-            VisibleConnections.Clear();
-            foreach (var row in filtered)
-            {
-                VisibleConnections.Add(row);
-            }
-        }
+        CollectionSync.SyncInPlace(VisibleConnections, filtered);
 
         var traffic = _monitor.AppTraffic.ToDictionary(
             item => item.Key,

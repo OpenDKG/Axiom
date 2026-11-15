@@ -267,6 +267,176 @@ public sealed class PrivacyShieldTests
         }
     }
 
+    [Fact]
+    public async Task Controller_accepts_doh_urls_and_upgrades_public_resolver_ips()
+    {
+        var directory = CreateTemporaryDirectory();
+        var settingsPath = Path.Combine(directory, "settings.json");
+        var rulesPath = Path.Combine(directory, "rules.json");
+        var port = ReservePort();
+        await using var controller = new PrivacyShieldController(
+            new PrivacyShieldSettingsStore(settingsPath),
+            new PrivacyShieldRuleStore(rulesPath));
+
+        try
+        {
+            var byIp = await controller.ConfigureAsync(
+                EnabledSettings(port) with { UpstreamDns = "1.1.1.1" },
+                CancellationToken.None);
+            Assert.True(byIp.Running);
+            Assert.Contains("https://1.1.1.1/dns-query (DoH)", byIp.Upstream, StringComparison.Ordinal);
+
+            var byUrl = await controller.ConfigureAsync(
+                EnabledSettings(port) with { UpstreamDns = "https://dns.google/dns-query" },
+                CancellationToken.None);
+            Assert.True(byUrl.Running);
+            Assert.Contains("https://dns.google/dns-query (DoH)", byUrl.Upstream, StringComparison.Ordinal);
+
+            var rejected = await controller.ConfigureAsync(
+                EnabledSettings(port) with { UpstreamDns = "https://localhost/dns-query" },
+                CancellationToken.None);
+            Assert.Contains("invalid", rejected.LastError, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Settings_persist_adapter_preferences_and_detect_missing_or_stale_sources()
+    {
+        var directory = CreateTemporaryDirectory();
+        var port = ReservePort();
+        var rulesPath = Path.Combine(directory, "privacy-shield-rules.json");
+        var settingsPath = Path.Combine(directory, "privacy-shield.json");
+        var staleTime = DateTimeOffset.UtcNow.AddHours(-30);
+        var freshTime = DateTimeOffset.UtcNow.AddHours(-2);
+
+        try
+        {
+            var store = new PrivacyShieldRuleStore(rulesPath);
+            Assert.True(store.Save(
+            [
+                new PrivacyShieldStoredRule("ad.example", "hagezi-pro", PrivacyCategory.Ads, freshTime),
+                new PrivacyShieldStoredRule("old.example", "oisd-big", PrivacyCategory.Ads, staleTime),
+            ]));
+
+            await using var first = new PrivacyShieldController(
+                new PrivacyShieldSettingsStore(settingsPath),
+                store);
+            await first.StartAsync(CancellationToken.None);
+
+            var status = await first.ConfigureAsync(
+                EnabledSettings(port) with
+                {
+                    PreferredAdapterAlias = "Ethernet 2",
+                    AutoPointAdapterDns = true,
+                    AutoUpdateSources = true,
+                    AutoUpdateIntervalHours = 24,
+                    EnabledSourceIds = ["hagezi-pro", "hagezi-tif"],
+                },
+                CancellationToken.None);
+
+            Assert.Equal("Ethernet 2", status.Settings.PreferredAdapterAlias);
+            Assert.True(status.Settings.AutoPointAdapterDns);
+            Assert.True(status.Settings.AutoUpdateSources);
+            Assert.Equal(24, status.Settings.AutoUpdateIntervalHours);
+            // hagezi-tif has never been downloaded yet, so auto-update must trigger immediately.
+            Assert.True(first.ShouldAutoUpdateSources());
+
+            // Fresh single source: no auto-update required.
+            await first.ConfigureAsync(
+                status.Settings with
+                {
+                    EnabledSourceIds = ["hagezi-pro"],
+                },
+                CancellationToken.None);
+            Assert.False(first.ShouldAutoUpdateSources());
+
+            // Stale source (> 24h old): auto-update triggers again.
+            await first.ConfigureAsync(
+                status.Settings with
+                {
+                    EnabledSourceIds = ["hagezi-pro", "oisd-big"],
+                },
+                CancellationToken.None);
+            Assert.True(first.ShouldAutoUpdateSources());
+
+            await using var restarted = new PrivacyShieldController(
+                new PrivacyShieldSettingsStore(settingsPath),
+                store);
+            await restarted.StartAsync(CancellationToken.None);
+            var reloaded = await restarted.GetStatusAsync(CancellationToken.None);
+            Assert.Equal("Ethernet 2", reloaded.Settings.PreferredAdapterAlias);
+            Assert.True(reloaded.Settings.AutoPointAdapterDns);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Controller_defaults_empty_upstream_to_encrypted_doh_when_isp_privacy_is_enabled()
+    {
+        var directory = CreateTemporaryDirectory();
+        var port = ReservePort();
+        await using var controller = new PrivacyShieldController(
+            new PrivacyShieldSettingsStore(Path.Combine(directory, "settings.json")),
+            new PrivacyShieldRuleStore(Path.Combine(directory, "rules.json")));
+
+        try
+        {
+            var autoDoh = await controller.ConfigureAsync(
+                EnabledSettings(port) with
+                {
+                    UpstreamDns = string.Empty,
+                    EncryptDnsViaDoh = true,
+                },
+                CancellationToken.None);
+            Assert.True(autoDoh.Running);
+            Assert.Contains("(DoH)", autoDoh.Upstream, StringComparison.Ordinal);
+            Assert.Contains("encrypted with DoH", autoDoh.Detail, StringComparison.OrdinalIgnoreCase);
+
+            var multiDoh = await controller.ConfigureAsync(
+                EnabledSettings(port) with
+                {
+                    UpstreamDns = "1.1.1.1, 9.9.9.9",
+                    EncryptDnsViaDoh = true,
+                },
+                CancellationToken.None);
+            Assert.True(multiDoh.Running);
+            Assert.Contains("https://1.1.1.1/dns-query (DoH)", multiDoh.Upstream, StringComparison.Ordinal);
+            Assert.Contains("https://9.9.9.9/dns-query (DoH)", multiDoh.Upstream, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Dns_failsafe_prefers_ipv4_gateway_or_dhcp_when_saved_backup_is_loopback_or_ipv6_site_local()
+    {
+        var candidates = PrivacyDnsFailSafe.BuildFallbackCandidates(
+            savedAddresses: ["127.0.0.1", "fec0:0:0:ffff::1"],
+            currentAddresses: ["127.0.0.1", "::1"],
+            gatewayAndDhcpAddresses: ["192.168.1.1"]);
+
+        Assert.Contains("192.168.1.1", candidates);
+        Assert.DoesNotContain("127.0.0.1", candidates);
+        Assert.DoesNotContain("::1", candidates);
+    }
+
+    [Fact]
+    public void Dns_failsafe_identifies_virtual_interfaces()
+    {
+        Assert.True(PrivacyDnsFailSafe.IsVirtualInterface("vEthernet (Default Switch)", "Hyper-V Virtual Ethernet Adapter"));
+        Assert.True(PrivacyDnsFailSafe.IsVirtualInterface("vEthernet (WSL)", "Hyper-V Virtual Ethernet Adapter"));
+        Assert.False(PrivacyDnsFailSafe.IsVirtualInterface("Wi-Fi", "Intel(R) Wi-Fi 6E AX211 160MHz"));
+    }
+
     private static PrivacyShieldSettings EnabledSettings(int port) => new()
     {
         Enabled = true,

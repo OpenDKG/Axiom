@@ -81,14 +81,19 @@ $project = Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Ava
 $serviceProject = Join-Path $root "src\Axiom.Service\Axiom.Service.csproj"
 
 Write-Host "Publishing Axiom $Version (win-x64)..." -ForegroundColor Cyan
-& $dotnet publish $project -c Release -p:PublishProfile=win-x64-selfcontained
+& $dotnet publish $project -c Release -p:PublishProfile=win-x64-selfcontained `
+    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
 
 Write-Host "Publishing Axiom service $Version (win-x64, self-contained)..." -ForegroundColor Cyan
 $serviceOutput = Join-Path $root "artifacts\publish\service"
 Remove-Item $serviceOutput -Recurse -Force -ErrorAction SilentlyContinue
 & $dotnet publish $serviceProject -c Release -r win-x64 --self-contained true `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None `
+    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:EnableCompressionInSingleFile=true `
+    -p:DebugType=None -p:DebugSymbols=false `
+    -p:AllowedReferenceRelatedFileExtensions=none `
     -o $serviceOutput
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish (service) failed with exit code $LASTEXITCODE." }
 
@@ -101,7 +106,7 @@ if (-not (Test-Path $serviceExe)) { throw "Published service not found: $service
 Write-Host "Publishing single-file Axiom Setup..." -ForegroundColor Cyan
 $setupScript = Join-Path $PSScriptRoot "publish-setup.ps1"
 $setupOutput = Join-Path $root "artifacts\publish\setup"
-& powershell -NoProfile -ExecutionPolicy Bypass -File $setupScript -OutputDir $setupOutput
+& powershell -NoProfile -ExecutionPolicy Bypass -File $setupScript -OutputDir $setupOutput -ReusePayload
 if ($LASTEXITCODE -ne 0) { throw "Setup publish failed with exit code $LASTEXITCODE." }
 
 $setupExe = Join-Path $setupOutput "Axiom.Setup.exe"
@@ -117,8 +122,9 @@ $zipPath = Join-Path $OutputDir $zipName
 $publicSetupExe = Join-Path $OutputDir "Axiom-Setup.exe"
 Copy-Item $setupExe $publicSetupExe -Force
 
+# Keep the portable ZIP separate from Axiom-Setup.exe so the archive does not duplicate the
+# embedded Desktop and Service executables.
 $files = @(
-    $publicSetupExe,
     $exe,
     $serviceExe,
     $communityDir,
