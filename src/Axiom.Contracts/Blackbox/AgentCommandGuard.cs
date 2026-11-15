@@ -322,7 +322,7 @@ public static class AgentCommandGuard
             # "path", Claude Code "file_path". The store check must see all three.
             if not isinstance(args, dict):
                 return ""
-            for key in ("path", "filePath", "file_path"):
+            for key in ("path", "filePath", "file_path", "TargetFile", "AbsolutePath"):
                 value = args.get(key)
                 if isinstance(value, str) and value.strip():
                     return value

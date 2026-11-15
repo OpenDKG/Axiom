@@ -57,6 +57,16 @@
                        FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </StackPanel>
         </Border>
+
+        <Border Classes="card" Padding="16">
+          <StackPanel Spacing="8">
+            <controls:AxiomSelectableTextBlock Text="Updates" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <CheckBox Content="Check for updates" IsChecked="{Binding CheckForUpdates}"
+                      Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="Contacts api.github.com on startup and every 6 hours to check for newer stable releases. Sends no installation ID or telemetry and never auto-downloads."
+                       FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
       </StackPanel>
 
       <StackPanel Grid.Column="2" Spacing="14" VerticalAlignment="Top">

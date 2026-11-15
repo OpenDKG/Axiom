@@ -18,6 +18,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     private readonly IVisualEffectsService _visualEffects;
     private readonly Func<CancellationToken, Task<NetworkRecoveryRestoreResult>>? _restoreNetwork;
     private readonly StartupSettingsStore _startupSettings = new();
+    private readonly UpdateCheckService _updateChecker;
+    private readonly bool _ownsUpdateChecker;
     private bool _updatingStartup;
 
     public SettingsPageViewModel(
@@ -28,7 +30,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         FirewallPageViewModel? firewall = null,
         IUserInteraction? userInteraction = null,
         IVisualEffectsService? visualEffects = null,
-        Func<CancellationToken, Task<NetworkRecoveryRestoreResult>>? restoreNetwork = null)
+        Func<CancellationToken, Task<NetworkRecoveryRestoreResult>>? restoreNetwork = null,
+        UpdateCheckService? updateChecker = null)
         : base("Settings", "Appearance, build and license information", "G")
     {
         ArgumentNullException.ThrowIfNull(monitor);
@@ -40,6 +43,9 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         _ui = userInteraction ?? new NullUserInteraction();
         _visualEffects = visualEffects ?? new FixedVisualEffectsService();
         _restoreNetwork = restoreNetwork;
+        _ownsUpdateChecker = updateChecker is null;
+        _updateChecker = updateChecker ?? new UpdateCheckService(
+            typeof(SettingsPageViewModel).Assembly.GetName().Version ?? new Version(0, 0, 0));
 
         if (_restoreNetwork is not null)
         {
@@ -69,6 +75,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         TrayNotificationsEnabled = TraySettingsStore.Enabled;
         NotificationsEnabled = NotificationSettingsStore.Enabled;
         HideBackgroundWindows = BackgroundWindowSettingsStore.Enabled;
+        CheckForUpdates = _updateChecker.CheckForUpdates;
         _updatingStartup = false;
         UpdateStartupStatus();
     }
@@ -223,6 +230,9 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     private bool _startMinimized;
 
     [ObservableProperty]
+    private bool _checkForUpdates = true;
+
+    [ObservableProperty]
     private string _startupStatusText = "Autostart: off";
 
     [ObservableProperty]
@@ -236,6 +246,16 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     partial void OnHideBackgroundWindowsChanged(bool value) =>
         BackgroundWindowSettingsStore.SetEnabled(value);
+
+    partial void OnCheckForUpdatesChanged(bool value)
+    {
+        if (_updatingStartup)
+        {
+            return;
+        }
+
+        _updateChecker.SetCheckForUpdatesEnabled(value);
+    }
 
     [RelayCommand]
     private void TestNotification()
@@ -302,6 +322,10 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     {
         _theme.Changed -= OnThemeChanged;
         _visualEffects.Changed -= OnVisualEffectsChanged;
+        if (_ownsUpdateChecker)
+        {
+            _updateChecker.Dispose();
+        }
     }
 
     public bool IsGlassDarkTheme => _theme.Current == UiTheme.GlassDark;

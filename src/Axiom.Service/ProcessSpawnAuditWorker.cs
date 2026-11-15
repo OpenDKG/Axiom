@@ -11,8 +11,9 @@ namespace Axiom.Service;
 /// <summary>
 /// F-19 part B host: subscribes to Windows process-start events for the service lifetime, applies
 /// the spawn policy/de-duplication and appends Record/Block rows to
-/// <c>%LOCALAPPDATA%\Axiom\process-spawn-audit.jsonl</c>. A failure to start the WMI feed is logged
-/// and never stops the service.
+/// <c>process-spawn-audit.jsonl</c> (under <c>%ProgramData%\Axiom</c> when running non-interactively
+/// as a service, or <c>%LOCALAPPDATA%\Axiom</c> interactively). A failure to start the WMI feed is
+/// logged and never stops the service.
 /// </summary>
 public sealed partial class ProcessSpawnAuditWorker : BackgroundService
 {
@@ -20,10 +21,7 @@ public sealed partial class ProcessSpawnAuditWorker : BackgroundService
     private readonly string _auditPath;
 
     public ProcessSpawnAuditWorker(ILogger<ProcessSpawnAuditWorker> logger)
-        : this(logger, Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Axiom",
-            "process-spawn-audit.jsonl"))
+        : this(logger, PrivacyShieldPaths.Resolve("process-spawn-audit.jsonl"))
     {
     }
 
@@ -99,7 +97,8 @@ public sealed partial class ProcessSpawnAuditWorker : BackgroundService
                 CultureInfo.InvariantCulture,
                 $"SELECT ExecutablePath FROM Win32_Process WHERE ProcessId = {processId}");
             using var searcher = new ManagementObjectSearcher(query);
-            foreach (var item in searcher.Get())
+            using var results = searcher.Get();
+            foreach (var item in results)
             {
                 using var process = item as ManagementObject;
                 return process?["ExecutablePath"] as string;

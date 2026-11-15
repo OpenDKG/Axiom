@@ -175,8 +175,23 @@ public partial class MainWindow : Window
     private void OnMinimizeClicked(object? sender, RoutedEventArgs e) =>
         WindowState = WindowState.Minimized;
 
-    private void OnAlertsClicked(object? sender, RoutedEventArgs e) =>
+    private void OnUpdateClicked(object? sender, RoutedEventArgs e)
+    {
+        AlertsPopup.IsOpen = false;
+        UpdatePopup.IsOpen = !UpdatePopup.IsOpen;
+    }
+
+    private void OnUpdateDownloadClicked(object? sender, RoutedEventArgs e) =>
+        UpdatePopup.IsOpen = false;
+
+    private void OnUpdateDismissClicked(object? sender, RoutedEventArgs e) =>
+        UpdatePopup.IsOpen = false;
+
+    private void OnAlertsClicked(object? sender, RoutedEventArgs e)
+    {
+        UpdatePopup.IsOpen = false;
         AlertsPopup.IsOpen = !AlertsPopup.IsOpen;
+    }
 
     private void OnAlertItemClicked(object? sender, RoutedEventArgs e)
     {

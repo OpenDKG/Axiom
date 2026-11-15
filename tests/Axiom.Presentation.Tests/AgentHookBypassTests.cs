@@ -222,6 +222,74 @@ public sealed class AgentHookBypassTests
         }
     }
 
+    [Theory]
+    [InlineData("claude", "file_path", @"C:\Users\alice\.git-credentials")]
+    [InlineData("antigravity", "AbsolutePath", @"C:/Users/alice/.kube/config")]
+    public void Host_bridges_block_file_read_arguments_targeting_credential_stores(
+        string host,
+        string pathKey,
+        string targetPath)
+    {
+        var python = FindWorkingPython();
+        if (python is null)
+        {
+            return;
+        }
+
+        var sandbox = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"axiom-bypass-fpath-{Guid.NewGuid():N}"));
+        try
+        {
+            WritePermissiveBlackboxStub(sandbox.FullName);
+            var scriptPath = Path.Combine(sandbox.FullName, $"hook-{host}.py");
+            File.WriteAllText(scriptPath, BuildHostScript(host, sandbox.FullName));
+            var localAppData = Directory.CreateDirectory(Path.Combine(sandbox.FullName, "localappdata"));
+
+            string payload = host == "antigravity"
+                ? JsonSerializer.Serialize(new
+                {
+                    toolCall = new
+                    {
+                        name = "view_file",
+                        args = new Dictionary<string, string> { [pathKey] = targetPath },
+                    },
+                    conversationId = "sess-1",
+                    stepIdx = 1,
+                })
+                : JsonSerializer.Serialize(new
+                {
+                    hook_event_name = "PreToolUse",
+                    tool_name = "Read",
+                    tool_input = new Dictionary<string, string> { [pathKey] = targetPath },
+                    session_id = "sess-1",
+                    tool_use_id = "call-fpath-1",
+                });
+
+            var (exitCode, stdout, stderr) = RunProcess(
+                python,
+                [scriptPath],
+                sandbox.FullName,
+                payload,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["LOCALAPPDATA"] = localAppData.FullName,
+                });
+
+            AssertHostDeny(host, exitCode, stdout, stderr);
+
+            var evidencePath = Path.Combine(localAppData.FullName, "Axiom", "agent-evidence.jsonl");
+            Assert.True(File.Exists(evidencePath), "Expected isolated agent-evidence.jsonl to be written.");
+            var evidenceLines = File.ReadAllLines(evidencePath);
+            Assert.Contains(
+                evidenceLines,
+                line => line.Contains("\"GUARD_BLOCKED\"", StringComparison.Ordinal) &&
+                        line.Contains("\"credential-store\"", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(sandbox.FullName, recursive: true);
+        }
+    }
+
     private static string BuildHostScript(string host, string isolatedRoot)
     {
         switch (host)
