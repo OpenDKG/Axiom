@@ -314,7 +314,55 @@ public static class AgentCommandGuard
             return ""
 
 
+        def _flatten_args(value) -> str:
+            # Concatenate every string value (and key) so a phrase split across fields or lines
+            # still matches; the vendor's injection scan uses the same scope.
+            parts = []
+
+            def walk(item):
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    for key, child in item.items():
+                        if isinstance(key, str):
+                            parts.append(key)
+                        walk(child)
+                elif isinstance(item, (list, tuple)):
+                    for child in item:
+                        walk(child)
+
+            walk(value)
+            return "\n".join(parts)
+
+
+        def _axiom_injection(value) -> str:
+            # Axiom-owned phrasings the vendor's curated regexes missed in the lab: plain
+            # "ignore previous instructions", "before answering, run ..." and zero-width
+            # obfuscation between words. Returns the matched phrase for a named block.
+            text = _flatten_args(value).lower()
+            for mark in ("\u200b", "\u200c", "\u200d", "\u2060", "\ufeff"):
+                text = text.replace(mark, "")
+            phrases = (
+                "ignore all previous instructions",
+                "ignore previous instructions",
+                "disregard previous instructions",
+                "disregard prior instructions",
+                "forget previous instructions",
+                "ignore the above instructions",
+                "before answering, run",
+                "before answering run",
+                "system override:",
+            )
+            for phrase in phrases:
+                if phrase in text:
+                    return phrase
+            return ""
+
+
         def _check_command_safety(args, protected=None):
+            injection = _axiom_injection(args)
+            if injection:
+                return ("injection-heuristic", "Blackbox blocked this call: prompt-injection phrasing in the tool arguments.")
             command_text = _command_text(args)
             if not command_text:
                 return None

@@ -192,6 +192,36 @@ public sealed class AgentHookScriptTests
     }
 
     [Fact]
+    public void OpenCode_bridge_carries_injection_phrase_heuristics()
+    {
+        var build = typeof(OpenCodeProtection).GetMethod(
+            "BuildBridge",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var bridge = (string)build.Invoke(null, null)!;
+
+        // Phrasings the vendor's curated regexes missed: plain "ignore previous instructions",
+        // "before answering, run ..." and zero-width obfuscation between words.
+        Assert.Contains("def _axiom_injection(value) -> str:", bridge, StringComparison.Ordinal);
+        Assert.Contains("def _flatten_args(value) -> str:", bridge, StringComparison.Ordinal);
+        Assert.Contains("_axiom_injection(raw_args)", bridge, StringComparison.Ordinal);
+        Assert.Contains("injection-heuristic", bridge, StringComparison.Ordinal);
+        string[] phrases =
+        [
+            "ignore all previous instructions", "ignore previous instructions",
+            "disregard previous instructions", "forget previous instructions",
+            "before answering, run", "system override:", "\\u200b",
+        ];
+        foreach (var phrase in phrases)
+        {
+            Assert.Contains(phrase, bridge, StringComparison.Ordinal);
+        }
+
+        Assert.True(
+            bridge.IndexOf("_axiom_injection(raw_args)", StringComparison.Ordinal) <
+            bridge.IndexOf("guard.on_pre_tool_call", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void OpenCode_bridge_carries_launch_and_upload_protection()
     {
         var build = typeof(OpenCodeProtection).GetMethod(

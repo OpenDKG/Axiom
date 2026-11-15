@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.36.0
+
+- **Prompt-injection phrase heuristics.**
+  - `_flatten_args` + `_axiom_injection` match "ignore previous instructions", "before answering, run", "system override:" and strip zero-width/BOM characters before matching.
+  - The OpenCode bridge blocks with a named `injection-heuristic`, and `_check_command_safety` applies the same check to every other host adapter.
+  - Live VM verification pending the owner's install (lab stays on 0.30.0).
+
 ## What's in 0.35.0
 
 - **Sensitive credential stores and credential enumeration detectors.**
