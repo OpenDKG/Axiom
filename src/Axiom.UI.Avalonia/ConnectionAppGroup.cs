@@ -95,34 +95,7 @@ public sealed partial class ConnectionAppGroup : ObservableObject
         MeasuredSinceUtc = measuredSinceUtc;
         HasMeasurement = measuredSinceUtc is not null ||
                          rows.Any(row => row.ObservedBytesSent is not null);
-        SyncRows(rows);
+        CollectionSync.SyncInPlace(Rows, rows);
         OnPropertyChanged(string.Empty);
-    }
-
-    /// <summary>Applies the new row set by moving existing rows instead of replacing containers.</summary>
-    private void SyncRows(IReadOnlyList<ConnectionRow> rows)
-    {
-        var live = rows.ToHashSet();
-        for (var index = Rows.Count - 1; index >= 0; index--)
-        {
-            if (!live.Contains(Rows[index]))
-            {
-                Rows.RemoveAt(index);
-            }
-        }
-
-        for (var index = 0; index < rows.Count; index++)
-        {
-            var row = rows[index];
-            var current = Rows.IndexOf(row);
-            if (current < 0)
-            {
-                Rows.Insert(index, row);
-            }
-            else if (current != index)
-            {
-                Rows.Move(current, index);
-            }
-        }
     }
 }

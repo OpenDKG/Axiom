@@ -153,7 +153,7 @@ public partial class MainWindow : Window
         // the user left-clicks or right-clicks text inside a ListBox item.
         Controls.DataListSelection.SelectContainingListItem(
             e.Source as Visual,
-            focusItem: properties.IsRightButtonPressed);
+            focusItem: true);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

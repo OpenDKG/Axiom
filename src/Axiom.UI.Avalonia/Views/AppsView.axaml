@@ -21,6 +21,7 @@
           <ListBox.ItemTemplate>
             <DataTemplate>
               <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3"
+                    Background="Transparent"
                     Tag="{Binding $parent[ListBox].DataContext}">
                 <Grid.ContextMenu>
                   <ContextMenu>
@@ -40,20 +41,20 @@
                   </ContextMenu>
                 </Grid.ContextMenu>
                 <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" Background="{DynamicResource Axiom.AccentSoft}" Margin="0,0,12,0">
-                  <controls:AxiomSelectableTextBlock Text="{Binding Initial}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource Axiom.Accent}"
+                  <TextBlock Text="{Binding Initial}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource Axiom.Accent}"
                              HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                  <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-                  <controls:AxiomSelectableTextBlock Text="{Binding PathText}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}"
+                  <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+                  <TextBlock Text="{Binding PathText}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}"
                              TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" MaxWidth="440" />
                   <Border Width="{Binding BarWidth}" Height="3" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}"
                           HorizontalAlignment="Left" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0"
                             HorizontalAlignment="Right" Spacing="2">
-                  <controls:AxiomSelectableTextBlock Text="{Binding SocketsText}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" HorizontalAlignment="Right" />
-                  <controls:AxiomSelectableTextBlock Text="{Binding ProtocolText}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" HorizontalAlignment="Right" />
+                  <TextBlock Text="{Binding SocketsText}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" HorizontalAlignment="Right" />
+                  <TextBlock Text="{Binding ProtocolText}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" HorizontalAlignment="Right" />
                 </StackPanel>
               </Grid>
             </DataTemplate>

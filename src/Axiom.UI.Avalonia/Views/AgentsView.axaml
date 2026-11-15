@@ -317,11 +317,11 @@
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
               <ListBox.ItemTemplate>
                 <DataTemplate>
-                  <Grid ColumnDefinitions="*,110,80,90" Margin="0,2">
-                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding CategoryLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding SeverityLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding Source}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                  <Grid ColumnDefinitions="*,110,80,90" Margin="0,2" Background="Transparent">
+                    <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Text="{Binding CategoryLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <TextBlock Grid.Column="2" Text="{Binding SeverityLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
+                    <TextBlock Grid.Column="3" Text="{Binding Source}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
                   </Grid>
                 </DataTemplate>
               </ListBox.ItemTemplate>

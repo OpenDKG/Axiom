@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
@@ -9,16 +11,42 @@ namespace Axiom.UI.Avalonia.Controls;
 
 /// <summary>
 /// Attached behavior for data <see cref="ListBox"/> controls so clicking any cell (including on
-/// right-click or nested visuals) selects the row immediately before context menus or copy actions run.
+/// right-click, padding, or nested visuals) selects the row immediately before context menus or
+/// copy actions run, and grouped lists can share a single ViewModel selection without clearing
+/// each other.
 /// </summary>
 public static class DataListSelection
 {
     public static readonly AttachedProperty<bool> SelectOnPointerPressProperty =
         AvaloniaProperty.RegisterAttached<ListBox, bool>("SelectOnPointerPress", typeof(DataListSelection));
 
+    public static readonly AttachedProperty<object?> SharedSelectedItemProperty =
+        AvaloniaProperty.RegisterAttached<ListBox, object?>(
+            "SharedSelectedItem",
+            typeof(DataListSelection),
+            defaultBindingMode: BindingMode.TwoWay);
+
+    private static readonly ConditionalWeakTable<ListBox, SyncState> SharedSyncStates = new();
+
     static DataListSelection()
     {
         SelectOnPointerPressProperty.Changed.AddClassHandler<ListBox>(OnSelectOnPointerPressChanged);
+        SharedSelectedItemProperty.Changed.AddClassHandler<ListBox>(OnSharedSelectedItemChanged);
+        global::Avalonia.Controls.Primitives.SelectingItemsControl.SelectionChangedEvent.AddClassHandler<ListBox>(
+            OnSharedListSelectionChanged);
+        Control.LoadedEvent.AddClassHandler<ListBox>(OnSharedListLoaded);
+    }
+
+    public static object? GetSharedSelectedItem(ListBox listBox)
+    {
+        ArgumentNullException.ThrowIfNull(listBox);
+        return listBox.GetValue(SharedSelectedItemProperty);
+    }
+
+    public static void SetSharedSelectedItem(ListBox listBox, object? value)
+    {
+        ArgumentNullException.ThrowIfNull(listBox);
+        listBox.SetValue(SharedSelectedItemProperty, value);
     }
 
     public static bool GetSelectOnPointerPress(ListBox listBox)
@@ -56,12 +84,89 @@ public static class DataListSelection
             list.SelectedItem = item.DataContext;
         }
 
-        if (focusItem && item.Focusable)
+        if (focusItem && item.Focusable && FindAncestor<Button>(visual) is null)
         {
             item.Focus();
         }
 
         return true;
+    }
+
+    private static bool UsesSharedSelection(ListBox listBox) =>
+        listBox.IsSet(SharedSelectedItemProperty);
+
+    private static SyncState GetSyncState(ListBox listBox) =>
+        SharedSyncStates.GetOrCreateValue(listBox);
+
+    private static void OnSharedSelectedItemChanged(ListBox listBox, AvaloniaPropertyChangedEventArgs args)
+    {
+        ApplySharedSelectionToList(listBox, GetSyncState(listBox), args.NewValue);
+    }
+
+    private static void OnSharedListLoaded(ListBox listBox, RoutedEventArgs e)
+    {
+        if (UsesSharedSelection(listBox))
+        {
+            ApplySharedSelectionToList(listBox, GetSyncState(listBox), GetSharedSelectedItem(listBox));
+        }
+    }
+
+    private static void OnSharedListSelectionChanged(ListBox listBox, SelectionChangedEventArgs e)
+    {
+        if (!UsesSharedSelection(listBox))
+        {
+            return;
+        }
+
+        var state = GetSyncState(listBox);
+        if (state.IsApplying)
+        {
+            return;
+        }
+
+        if (e.AddedItems.Count > 0 && listBox.SelectedItem is { } selected)
+        {
+            listBox.SetCurrentValue(SharedSelectedItemProperty, selected);
+        }
+    }
+
+    private static void ApplySharedSelectionToList(ListBox listBox, SyncState state, object? target)
+    {
+        if (state.IsApplying)
+        {
+            return;
+        }
+
+        state.IsApplying = true;
+        try
+        {
+            object? match = null;
+            if (target is not null)
+            {
+                foreach (var item in listBox.Items)
+                {
+                    if (ReferenceEquals(item, target) || Equals(item, target))
+                    {
+                        match = item;
+                        break;
+                    }
+                }
+            }
+
+            if (!ReferenceEquals(listBox.SelectedItem, match))
+            {
+                listBox.SelectedItem = match;
+            }
+        }
+        finally
+        {
+            state.IsApplying = false;
+        }
+    }
+
+    private sealed class SyncState
+    {
+        public bool IsApplying;
     }
 
     private static void OnSelectOnPointerPressChanged(ListBox listBox, AvaloniaPropertyChangedEventArgs args)
@@ -91,7 +196,7 @@ public static class DataListSelection
             return;
         }
 
-        SelectContainingListItem(e.Source as Visual, focusItem: properties.IsRightButtonPressed);
+        SelectContainingListItem(e.Source as Visual, focusItem: true);
     }
 
     private static void OnListContextRequested(object? sender, ContextRequestedEventArgs e)

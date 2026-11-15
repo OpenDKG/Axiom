@@ -1782,17 +1782,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _allFindings.Clear();
         _allFindings.AddRange(page.Findings.OrderByDescending(finding => finding.Timestamp));
 
-        // The audit refreshes every 15 seconds. Replacing the items each time would drop the
-        // user's selection while they read a finding, so only rebuild when the page changed.
+        // The audit refreshes every 15 seconds. Sync in place instead of calling Clear(), so row
+        // containers stay attached across refreshes while preserving the active selection.
         if (!Findings.SequenceEqual(_allFindings))
         {
             var selectedKey = selected is null ? null : FindingIdentity(selected);
             _preservingFindingSelection = true;
-            Findings.Clear();
-            foreach (var finding in _allFindings)
-            {
-                Findings.Add(finding);
-            }
+            CollectionSync.SyncInPlace(Findings, _allFindings);
 
             _preservingFindingSelection = false;
             SelectedFinding = selectedKey is null
@@ -2089,11 +2085,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         if (!HookEvidence.SequenceEqual(recent))
         {
             var selected = SelectedHookEvidence;
-            HookEvidence.Clear();
-            foreach (var item in recent)
-            {
-                HookEvidence.Add(item);
-            }
+            CollectionSync.SyncInPlace(HookEvidence, recent);
 
             SelectedHookEvidence = selected is null
                 ? null
@@ -2119,7 +2111,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         var identity = value is null ? null : ActivityIdentity(value);
-        if (value is not null && identity == _selectedActivityIdentity)
+        if (value is not null && HasSelectedActivity && identity == _selectedActivityIdentity)
         {
             return;
         }
@@ -2163,11 +2155,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         var selectedKey = SelectedActivity is null ? null : ActivityIdentity(SelectedActivity);
         _preservingActivitySelection = true;
-        Activity.Clear();
-        foreach (var entry in filtered)
-        {
-            Activity.Add(entry);
-        }
+        CollectionSync.SyncInPlace(Activity, filtered);
 
         _preservingActivitySelection = false;
         SelectedActivity = selectedKey is null
