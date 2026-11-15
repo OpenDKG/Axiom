@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.57.0
+
+- **Redesigned Glass themes & harmonized all six Avalonia desktop themes:**
+  - Rebuilt `Axiom Glass Dark` and `Axiom Glass Light` around an open, continuous frosted canvas: removed chrome divider walls around the titlebar, navigation rail, header, and status bar (`Border.glass-chrome`), unified geometry at `CornerRadius="6"`, dropped heavy boxy card shadows in glass modes, and set `TransparencyBackgroundFallback="Transparent"` on `MainWindow`.
+  - Tuned `Glass Dark` to a deeper smoked slate-obsidian glass veil (`#780C111A -> #66131B28 -> #7D0A0F17`) with frosted white-smoke tiles (`#1FFFFFFF -> #10FFFFFF`), pure white text, and crisp silver-chrome accents matching the `0.56.0` monochrome shield + `AXIOM` lockup.
+  - Harmonized the four opaque (non-transparent) themes (`Dark`, `Light`, `Dark Midnight`, `Light Warm`) with seamless borders, dimensional opaque gradient bases, subtle `CardBorder` fades, and logo-aligned accents (`#E2E8F0`, `#2B313A`, `#A5B4FC`, `#443C35`).
+
 ## What's in 0.56.0
 
 - **Correct lockup: the grayscale AXIOM wordmark.**

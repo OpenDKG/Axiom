@@ -160,7 +160,7 @@
   </Style>
   <Style Selector="ListBox.nav-list > ListBoxItem Border.nav-item">
     <Setter Property="Background" Value="Transparent" />
-    <Setter Property="CornerRadius" Value="7" />
+    <Setter Property="CornerRadius" Value="6" />
     <Setter Property="Padding" Value="8,7,12,7" />
   </Style>
   <Style Selector="ListBox.nav-list > ListBoxItem:pointerover Border.nav-item">
@@ -170,18 +170,80 @@
     <Setter Property="Background" Value="{DynamicResource Axiom.NavSelected}" />
   </Style>
 
+  <Style Selector="Border.glass-chrome">
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
   <Style Selector="Border.card">
     <Setter Property="Background" Value="{DynamicResource Axiom.Surface}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="CornerRadius" Value="6" />
     <Setter Property="Padding" Value="16" />
   </Style>
   <Style Selector="Grid.glass Border.card">
-    <Setter Property="BoxShadow" Value="0 12 32 0 #66000000, inset 0 1 0 0 #1FFFFFFF" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="BoxShadow" Value="0 0 0 0 #00000000" />
   </Style>
   <Style Selector="Grid.glasslight Border.card">
-    <Setter Property="BoxShadow" Value="0 12 28 0 #1A000000, inset 0 1 0 0 #B3FFFFFF" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="BoxShadow" Value="0 0 0 0 #00000000" />
+  </Style>
+
+  <Style Selector="Grid.glass Button">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="Grid.glass Button /template/ ContentPresenter">
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="Grid.glass Button:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+  </Style>
+  <Style Selector="Grid.glass Button:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+  </Style>
+  <Style Selector="Grid.glass Button.primary">
+    <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.AccentStrong}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+  </Style>
+  <Style Selector="Grid.glass Button.primary:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentStrong}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.AccentStrong}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="Opacity" Value="0.94" />
+  </Style>
+  <Style Selector="Grid.glass TextBox">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassInput}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="Grid.glass ComboBox">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="Grid.glass ListBox.nav-list > ListBoxItem Border.nav-item">
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="Grid.glass ListBox.nav-list > ListBoxItem:pointerover Border.nav-item">
+    <Setter Property="Background" Value="{DynamicResource Axiom.NavHover}" />
+  </Style>
+  <Style Selector="Grid.glass ListBox.nav-list > ListBoxItem:selected Border.nav-item">
+    <Setter Property="Background" Value="{DynamicResource Axiom.NavSelected}" />
+    <Setter Property="BoxShadow" Value="0 0 0 0 #00000000" />
+  </Style>
+  <Style Selector="Grid.glasslight ListBox.nav-list > ListBoxItem:selected Border.nav-item">
+    <Setter Property="BoxShadow" Value="0 0 0 0 #00000000" />
+  </Style>
+  <Style Selector="Grid.glass Border.glass-pill">
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
   </Style>
 
   <Style Selector=":is(TextBlock).page-title">

@@ -77,10 +77,12 @@ buttons are wired to the same host service used by the window; there are no fake
 
 - **Shared palette** in `Axiom.UI.Avalonia/Themes/AxiomPalette.axaml`: translucent window gradients,
   glass sidebar, card gradients, gradient card borders, soft ambient glow and colour wash.
-- **Axiom Glass Dark:** deep graphite-blue base, frosted charcoal/blue panels, cyan accent lines,
-  indigo download colour, ambient cyan light in the upper-left.
-- **Axiom Glass Light:** pearl gradient base, frosted white panels, blue-grey accents, white sheen
-  and soft shadows.
+- **Axiom Glass Dark:** smoked obsidian translucent base (`AcrylicBlur` / `Mica` composited underneath),
+  frosted charcoal-glass sidebar, header and cards, platinum-chrome accent lines (`#E2E8F0`),
+  sky/indigo traffic indicators, and cool silver specular ambient light in the upper-left.
+- **Axiom Glass Light:** frosted ice-quartz translucent base, luminous white frosted glass cards with
+  titanium edge bevels, gunmetal graphite accents (`#383E46` / `#1E2228`) matched to the monochrome
+  shield mark, and crisp crystal sheen and soft shadows.
 - **Cards** take the gradient border and an inset top highlight in glass themes only, plus a soft
   drop shadow; the classic themes keep flat solid surfaces with no shadow.
 - **Dense tables** keep solid or near-opaque surfaces for legibility; translucency is limited to the

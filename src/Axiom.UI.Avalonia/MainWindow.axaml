@@ -7,7 +7,8 @@
         x:Class="Axiom.UI.Avalonia.MainWindow"
         Title="Axiom — Free Open-Source Network &amp; AI Agent Security"
         Width="1460" Height="900" MinWidth="900" MinHeight="600"
-        Background="Transparent" Foreground="{DynamicResource Axiom.TextPrimary}"
+        Background="Transparent" TransparencyBackgroundFallback="Transparent"
+        Foreground="{DynamicResource Axiom.TextPrimary}"
         FontFamily="Segoe UI Variable Text, Segoe UI, Inter, Noto Sans"
         UseLayoutRounding="True"
         WindowDecorations="BorderOnly"
@@ -94,7 +95,7 @@
     <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Window}" />
     <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.AmbientGlow}" />
     <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.AmbientWash}" />
-    <Border Grid.Row="0" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}"
+    <Border Classes="glass-chrome" Grid.Row="0" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}"
             BorderThickness="0,0,0,1" chrome:WindowDecorationProperties.ElementRole="TitleBar">
       <Grid ColumnDefinitions="*,Auto" Margin="18,0,4,0">
         <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
@@ -232,12 +233,12 @@
       </Border>
     </Popup>
 
-    <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,1,0">
+    <Border Classes="glass-chrome" Grid.Row="1" Grid.Column="0" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,*,Auto">
         <StackPanel Grid.Row="0" Margin="20,18,20,14" Spacing="9">
           <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-lockup.png" Height="56" Stretch="Uniform"
                  HorizontalAlignment="Left" RenderOptions.BitmapInterpolationMode="HighQuality" />
-          <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="6" Padding="8,3"
+          <Border Classes="glass-pill" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="6" Padding="8,3"
                   HorizontalAlignment="Left">
             <TextBlock Text="LOCAL-FIRST · NO TELEMETRY" Foreground="{DynamicResource Axiom.Accent}"
                        FontSize="9" FontWeight="SemiBold" />
@@ -298,7 +299,7 @@
     </Border>
 
     <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*,Auto">
-      <Border Grid.Row="0" MinHeight="74" Background="{DynamicResource Axiom.Window}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
+      <Border Classes="glass-chrome" Grid.Row="0" MinHeight="74" Background="{DynamicResource Axiom.Header}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
         <Grid Margin="24,8,20,8" ColumnDefinitions="*,0.95*,Auto" ColumnSpacing="14">
           <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
             <controls:AxiomSelectableTextBlock x:Name="HeaderPageTitle" Text="{Binding SelectedPage.Title}" Classes="page-title" TextTrimming="CharacterEllipsis" />
@@ -323,7 +324,7 @@
 
       <ContentControl Grid.Row="1" Content="{Binding SelectedPage}" />
 
-      <Border Grid.Row="2" MinHeight="34" Background="{DynamicResource Axiom.SurfaceAlt}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
+      <Border Classes="glass-chrome" Grid.Row="2" MinHeight="34" Background="{DynamicResource Axiom.StatusBar}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
         <Grid Margin="28,0,22,0" ColumnDefinitions="*,Auto">
           <WrapPanel VerticalAlignment="Center" ItemHeight="13"
                      ClipToBounds="False">
