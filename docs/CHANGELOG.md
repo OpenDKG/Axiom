@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.51.0
+
+- **Cline, Copilot CLI and Cursor verified live; hook coverage tests.**
+  - Installed 0.30.0 hooks blocked 4/15 each; generated 0.50.x hooks block **15/15** (Cline `cancel`, Copilot `permissionDecision`, Cursor `permission`).
+  - New `HarnessHookCoverageTests` assert the shared guard and each deny shape in the three templates.
+  - Known follow-up #362: the WPF `Axiom.UI.Services` copies of these templates still omit the shared guard.
+
 ## What's in 0.50.0
 
 - **Reuse installed Blackbox and recover the vendor runtime.**
