@@ -2,6 +2,12 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.52.0
+
+- **Live Agent Enforcement status, dedicated Privacy Overview page, and Network Dashboard DNS monitoring.**
+  - **Live Enforcement Telemetry (`Agent Protection`):** `AgentsPageViewModel.Enforcement` now polls `enforcement.status` and `enforcement.receipts` via service IPC, reads the live Blackbox `block` / `audit` mode, and counts recent local `HOST_DENY_SENT` hook events while keeping ADR 0010 cooperative honesty invariants intact.
+  - **Dedicated `Privacy Overview` Page & `Network Dashboard` DNS Monitor:** Added a new `Privacy Overview` page under `OVERVIEW` sharing the single-owner `PrivacyShieldPageViewModel` (live KPI cards for `ACTIVE RULES`, `QUERIES`, `ALLOWED`, `BLOCKED`, `ERRORS`, DoH/adapter diagnostics, recent & top blocked domains, and per-app history) plus an embedded `Privacy Shield (DNS Monitor)` summary card inside `Network Dashboard` (Avalonia and WPF).
+
 ## What's in 0.51.0
 
 - **Cline, Copilot CLI and Cursor verified live; hook coverage tests.**
