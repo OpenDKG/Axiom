@@ -73,6 +73,16 @@
                        FontSize="11" FontWeight="SemiBold"
                        Foreground="#FFFFFF" TextWrapping="Wrap" />
           </Border>
+          <Border IsVisible="{Binding HasScanCommunityNotice}"
+                  Background="{DynamicResource Axiom.SurfaceAlt}"
+                  BorderBrush="{DynamicResource Axiom.Border}"
+                  BorderThickness="1"
+                  CornerRadius="8"
+                  Padding="10,8">
+            <controls:AxiomSelectableTextBlock Text="{Binding CommunityMatchesText}"
+                       FontSize="11"
+                       Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+          </Border>
           <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <ItemsControl ItemsSource="{Binding FileScanResults}">
               <ItemsControl.ItemTemplate>
@@ -81,7 +91,7 @@
                           Tag="{Binding $parent[ItemsControl].DataContext}">
                     <Border.ContextMenu>
                       <ContextMenu>
-                        <MenuItem Header="Check hash reputation"
+                        <MenuItem Header="Check hash on VirusTotal"
                                   IsEnabled="{Binding $parent[ContextMenu].PlacementTarget.DataContext.HasHash}"
                                   Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CheckHashCommand}"
                                   CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
@@ -99,7 +109,7 @@
                                   CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                       </ContextMenu>
                     </Border.ContextMenu>
-                    <Grid ColumnDefinitions="*,180,86,76,150,136">
+                    <Grid ColumnDefinitions="*,180,86,76,150,148">
                       <StackPanel Grid.Column="0" Spacing="2">
                         <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
                         <controls:AxiomSelectableTextBlock Text="{Binding Path}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
@@ -113,8 +123,9 @@
                       <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding VerdictText}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}"
                                  VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                       <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <Button Content="Check" Padding="8,3" FontSize="11"
+                        <Button Content="VT Check" Padding="8,3" FontSize="11"
                                 IsEnabled="{Binding HasHash}"
+                                ToolTip.Tip="Look up this SHA-256 hash online via VirusTotal (API key required). Local Community feed hashes are checked automatically on scan."
                                 Command="{Binding $parent[ItemsControl].DataContext.CheckHashCommand}"
                                 CommandParameter="{Binding}" />
                         <Button Content="Block" Classes="danger" Padding="8,3" FontSize="11"
