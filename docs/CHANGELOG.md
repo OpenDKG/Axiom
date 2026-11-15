@@ -8,6 +8,11 @@ This is the original feature-by-feature release history extracted from the long 
   - `ServiceInstaller` clears the service recovery actions before stopping the old image and restores them after the copy, so SCM can no longer restart the 0.30 image mid-upgrade and lock it (issue #367).
   - The image copy retries for 30 s and records every blocked attempt; `sc` timeouts no longer throw `InvalidOperationException` from `ExitCode`.
   - New `ServiceInstallLog` (`%ProgramData%\Axiom\logs\service-install.log`) records each elevated step, and Setup prints its tail when the service installer exits non-zero instead of only `exited with code 7`.
+- **Complete Setup & Optional Module fixes (issue #364):**
+  - Replaced unsupported `oxigraph-worker` fallback with `'auto'` when VC++ 2015–2022 Redistributable is missing, and added `npm` prerequisite detection before running DKG install scripts.
+  - Setup reports `"Partial Success"` cleanly when core Axiom installs and optional steps emit warnings, tracks existing installs (`Upgrade Axiom`), and adds `Open Axiom`, `Repair`, and `Uninstall` (plus `--silent --uninstall`).
+- **Dashboard usability & copyability improvements (issue #365):**
+  - Made dashboard status text and list cells selectable/copyable, added explicit `Copy row` / `Copy local` / `Copy remote` / `Copy details` / `Copy status` actions, disambiguated `End process (PID)` vs `End application`, and removed the redundant top-right `LOCAL-FIRST` chip.
 
 ## What's in 0.52.0
 
