@@ -355,3 +355,150 @@ S1a.
 - The probe credential for `tester` was copied to the guest only for the access probes, removed right
   after each use, and checked absent (`TP_AFTER_AUTH=False`, `tp_present False` after each reset).
 - Not covered: an enabled enforcement policy, the desktop UI, the installer, GitHub CI.
+
+
+# Round 4 (2026-11-15): `main` `d0991bd` vs S1a `d207ba7`
+
+**Author-run on the project's Windows 11 test VM. This is not CI; no GitHub-hosted run exists for this
+revision.** Same VM and method as round 3. SDK 10.0.403, the version pinned by `global.json`. Every tree is a
+`git archive` of its commit, expanded into an empty directory, with its own empty `NUGET_PACKAGES` folder.
+
+| | Commit |
+|---|---|
+| main (pinned for this round) | `d0991bdcef4913bd626700e007bf814b2854b249` (v0.50.0 docs/CI sync; 87 commits after `1cd0b79`) |
+| S1a before the lock-file commit | `d1dc1fa` = `3bc7625` + `Merge main d0991bd` (conflicts only in 6 `packages.lock.json`, `main`'s version taken) |
+| **S1a tested** | **`d207ba7fc3c611112a72f3bba3df6bde88dddaa7`** = `d1dc1fa` + the lock-file commit. The commit after it changes this document only. |
+
+## R4.1 IPC commands on `main` `d0991bd`
+
+`IpcCommandTypes` (`src/Axiom.Contracts/Ipc/IpcProtocol.cs`) is unchanged between `1cd0b79` and `d0991bd`,
+and so is `PipeServer.cs`. **No IPC command was added**, so no new classification was needed. All 32
+commands are classified; `IpcCommandAccessTests.EveryCommandIsClassifiedExactlyOnce` fails if a constant
+in `IpcCommandTypes.All` is unclassified. `enforcement.status` and `enforcement.receipts` are PrivateRead,
+`enforcement.evaluate` is Write.
+
+On Windows (tree `d207ba7`): `IpcCommandAccessTests` 48 / 48 and `IpcCallerEntryPointTests` 3 / 3 pass.
+They include the denial cases: `PublicOnlyCallerNeverReachesAnEnforcementHandler` (status, receipts and evaluate
+answer `unauthorized`), `ReadOnlyCallerReadsStatusAndReceiptsButCannotEvaluate`, `CallerFlagsGateTheClasses`
+and the per-caller rows of `EnforcementCommandsPerCaller`. `PipeServer` still builds the caller with
+`WindowsPipeCaller.Authenticated(sid)` after the pipe DACL and the client SID check.
+
+## R4.2 Lock files
+
+`main` `d0991bd` (#280) changed the lock-file model. Every lock file is now plain. Only `Axiom.Desktop` and
+`Axiom.Setup` carry `win-x64`, through their `<RuntimeIdentifiers>`. Publishing uses its own
+`obj/publish.packages.lock.json`, and `windows-ci.yml` restores `Axiom.Portable.slnx` and `Axiom.sln` with
+`--locked-mode`. The round-3 method (restore each project in the shape of its lock file) was replaced by
+exactly those two solution-level restores, plus `--locked-mode` per project.
+
+| Restore (`--locked-mode`, fresh copy, empty package folder) | main `d0991bd` | S1a merge `d1dc1fa` (main's lock files) | S1a `d207ba7` |
+|---|---|---|---|
+| `dotnet restore Axiom.Portable.slnx` | exit 0 | exit 1 (`Axiom.Service.Hosting`) | exit 0 |
+| `dotnet restore Axiom.sln` | exit 0 | exit 1 (7 projects, `NU1004`) | exit 0 |
+| per project | 22 / 22 pass | 16 / 23 pass | **23 / 23 pass** |
+
+The 7 projects that failed on `d1dc1fa` are `Axiom.Desktop`, `Axiom.Desktop.Avalonia.Windows`,
+`Axiom.Infrastructure.Windows`, `Axiom.Service`, `Axiom.Service.Hosting`,
+`Axiom.Infrastructure.Windows.Tests` and `Axiom.Service.Tests`. They fail with `NU1004` "A new project
+reference to Axiom.Service.Hosting was found", or with a runtime-identifier change for the Hosting file that
+still had round 3's `net10.0/win-x64` section.
+
+**Fix (`d207ba7`).** On the VM, the `Axiom.Service.Hosting` lock file was deleted, then
+`dotnet restore Axiom.sln --force-evaluate` was run (plain, like `main`'s CI). Against the committed files:
+
+- **No NuGet package entry changed in any of the 22 files.**
+- Only the 7 files above are taken. Their diff adds the `axiom.service.hosting` project entry and refreshes
+  in-repo project ranges. The Hosting file loses its `win-x64` section and gets range `0.50.0`. Line endings
+  are LF.
+- The other 15 files differ only by NuGet's in-repo project-range refresh (for example `[0.34.0, )` to
+  `[0.50.0, )`), or not at all. They are left as on `main`.
+
+## R4.3 Clean restore, build and suites
+
+| Step | main `d0991bd` | S1a `d207ba7` |
+|---|---|---|
+| `dotnet restore Axiom.sln --no-http-cache` (empty package folder) | exit 0, 88 packages, `System.CodeDom` 10.0.14 | same |
+| `dotnet build Axiom.sln -c Release --no-restore` | 0 warnings, 0 errors | 0 warnings, 0 errors |
+| Axiom.Contracts.Tests | 152 / 152 | 152 / 152 |
+| Axiom.Core.Tests | 184 / 184 | 184 / 184 |
+| Axiom.Infrastructure.Windows.Tests | 86 / 86 | 137 / 137 |
+| Axiom.McpServer.Tests | 34 / 34 | 34 / 34 |
+| Axiom.Persistence.Tests | 21 / 21 | 21 / 21 |
+| Axiom.Presentation.Tests | 275 / 275 | 275 / 275 |
+| Axiom.Service.Tests | 98 / 98 | 98 / 98 |
+| Axiom.UI.Avalonia.Tests | 56 / 56 | 56 / 56 |
+| Axiom.UI.Tests | 179 / 183 | 179 / 183 |
+
+Failing names compared per suite from the trx files (`cmptrx.py`):
+
+- **No test that passes on `main` is missing or failing on S1a.** The 51 extra results are
+  `IpcCommandAccessTests` (48) and `IpcCallerEntryPointTests` (3). All pass.
+- **Axiom.UI.Tests**: the same 4 `AgentHookScriptTests` fail on both trees
+  (`Apply_patch_path_extraction_and_host_deny_shapes_match_each_host`,
+  `Guard_helpers_block_vectors_in_a_real_python_run`,
+  `Lifecycle_bridge_is_valid_python_when_python_is_available`,
+  `OpenCode_bridge_compiles_when_python_is_available`). The VM has no Python. This is the environment, not
+  the code.
+- `WindowsFirewallPolicyAdapterTests` COM / RCW flake: the full-suite run passed on both trees. In 4 more
+  runs of the suite per tree, each tree failed once, with `InvalidComObjectException` (`main`:
+  `Unknown_rule_is_reported_as_absent`; S1a: `Owned_rules_all_follow_the_naming_contract`). S1a does not
+  touch the adapter or its tests.
+
+## R4.4 Service differential
+
+Same probe script for both builds, with a product uninstall and the data roots removed between builds. The
+installed `Axiom.Service.exe` has the same SHA-256 as the published one: `main` `F4E01EAF…`, S1a
+`FD15F81E…`.
+
+**168 checks per build: 166 identical after normalisation, 1 with the same shape and different live
+traffic (`snapshot`: connection count and byte counters), 1 different: `publish_files`** (S1a adds
+`Axiom.Service.Hosting.pdb`). That covers:
+
+- core commands;
+- `enforcement.status` / `.receipts` / `.evaluate` with the write gate closed and open, with fixed request
+  ids and times. The receipt results (0, 4, 4, 5 and, after the restart, 0 receipts) are **byte-identical
+  without normalisation**, hash chains included;
+- malformed, oversized and invalid-UTF-8 payloads, the unknown command, invalid rule payloads, and the
+  connection matrix;
+- the Privacy Shield phase (identical; the S1b document has the detail).
+
+Block, unblock and persistence, identical on both builds:
+
+1. `curl https://example.com` before: exit 0, HTTP 200.
+2. `protection.enable`, then `rule.apply` (block `curl.exe` outbound): 1 firewall rule; curl exit 7.
+3. Service restart: the rule is still present, `rule.verify` gives `presentInOs:true`,
+   `effectiveAction:"block"`; curl still exit 7.
+4. `rule.remove`: curl exit 0, HTTP 200. `protection.disable`: 0 Axiom firewall rules.
+
+With the gate closed, every `rule.apply` / `rule.remove` answers `not_supported` "Firewall writes are
+disabled on this service." on both builds.
+
+## R4.5 Access: authenticated caller and a second local account
+
+The service was installed with `--allowed-sid` for `axiom`. The probe sends 10 commands: `serviceHealth`,
+`capabilities`, five private reads (`snapshot`, `history.query`, `config.get`, `privacy.status`,
+`enforcement.status`), `enforcement.receipts`, and two writes (`enforcement.evaluate`, `rule.apply`). It ran
+in two places: after the differential above, and again on a fresh install of each build.
+
+| Caller | main `d0991bd` | S1a `d207ba7` |
+|---|---|---|
+| `axiom`, Interactive elevated (install owner) | answered: reads `ok`, evaluate `ok` (`ENF-DISABLED`), `rule.apply` `not_supported` (gate closed), `history.query {}` `invalid_request`, `config.get` `not_supported` | identical |
+| `axiom`, S4U limited token | same as the line above | identical |
+| SSH (NETWORK logon) | denied at connect, 10 / 10 (`UnauthorizedAccessException`) | identical |
+| **temporary standard local account** (member of Users only) | **denied at connect, 10 / 10** | **identical** |
+
+The temporary account was new for each run (`axr4` + 6 random letters). It was created inside the guest,
+with a random password that was generated there and never printed or copied to the host. It ran the probe
+through `Start-Process -Credential` from the owner's interactive task. Afterwards the account, its profile
+entry, its profile directory and the staged secret were removed, and each run checked that they were gone
+(`account=False profile_dirs=0 profile_entries=0 tp_present=False`). On Windows the pipe DACL already
+refuses this caller at connect, so the dispatcher's own private-read and write denial for a restricted
+caller is shown by the unit tests in R4.1. The live run shows only that the Windows path still refuses.
+
+## R4.6 Not tested in this round
+
+- An enabled enforcement policy file (every evaluate is `ENF-DISABLED`).
+- A local account that the pipe DACL admits but that is not the install owner. Windows has no such caller.
+- Desktop UI, installer and setup, and any GitHub-hosted run.
+- A first differential pass was discarded: a second script reinstalled the service while it was running.
+  All results above come from the sequential re-run.
