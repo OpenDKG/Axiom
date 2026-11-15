@@ -2,6 +2,12 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.42.0
+
+- **F-19 service wiring seam.**
+  - `IProcessSpawnAuditSink` + `ProcessSpawnAuditHandler`: the process-start subscription calls the handler, which applies policy/de-duplication and forwards only Record/Block rows; exposes `Recorded`.
+  - 4 unit tests; the ETW/WMI event source is still to come.
+
 ## What's in 0.41.0
 
 - **F-19 part C: per-process egress block planning.**
