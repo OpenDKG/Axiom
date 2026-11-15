@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
@@ -68,7 +69,7 @@ public sealed class AxiomTools
     [McpServerTool(Name = "axiom_get_status"), Description("Return Axiom service health, monitoring source, data quality, last snapshot, capabilities and limitations. Read-only.")]
     public static async Task<string> GetStatus()
     {
-        return await GuardAsync(async () =>
+        return await GuardAsync("axiom_get_status", async () =>
         {
             var health = await Client.GetHealthAsync(CancellationToken.None);
             var capabilities = await Client.GetCapabilitiesAsync(CancellationToken.None);
@@ -118,7 +119,7 @@ public sealed class AxiomTools
         [Description("inbound, outbound or unknown.")] string? direction = null,
         [Description("Maximum rows, 1-500. Default 100.")] int limit = 100)
     {
-        return await GuardAsync(async () =>
+        return await GuardAsync("axiom_list_connections", async () =>
         {
             var snapshot = await Client.GetSnapshotAsync(CancellationToken.None);
             var now = DateTimeOffset.UtcNow;
@@ -161,7 +162,7 @@ public sealed class AxiomTools
         [Description("Maximum rows, 1-500. Default 200.")] int limit = 200,
         [Description("Offset, 0 or greater.")] int offset = 0)
     {
-        return await GuardAsync(async () =>
+        return await GuardAsync("axiom_get_connection_history", async () =>
         {
             var to = ParseUtc(toUtc) ?? DateTimeOffset.UtcNow;
             var from = ParseUtc(fromUtc) ?? to.AddHours(-24);
@@ -199,7 +200,7 @@ public sealed class AxiomTools
         [Description("Exact process ID.")] int? pid = null,
         [Description("Case-insensitive executable/application name.")] string? process = null)
     {
-        return await GuardAsync(async () =>
+        return await GuardAsync("axiom_inspect_process", async () =>
         {
             if (pid is null && string.IsNullOrWhiteSpace(process))
             {
@@ -267,7 +268,7 @@ public sealed class AxiomTools
         [Description("Remote endpoint, e.g. 203.0.113.10:443.")] string? remoteEndpoint = null,
         [Description("Local endpoint to disambiguate.")] string? localEndpoint = null)
     {
-        return await GuardAsync(async () =>
+        return await GuardAsync("axiom_analyze_connection", async () =>
         {
             if (pid is null && string.IsNullOrWhiteSpace(remoteEndpoint) && string.IsNullOrWhiteSpace(localEndpoint))
             {
@@ -350,6 +351,7 @@ public sealed class AxiomTools
         [Description("Maximum alerts, 1-200. Default 50.")] int limit = 50)
     {
         var boundedLimit = Math.Clamp(limit, 1, 200);
+        McpAuditLog.Record("axiom_get_threat_alerts", "UNAVAILABLE", 0);
         return Task.FromResult(Serialize(new
         {
             schemaVersion = SchemaVersion,
@@ -366,6 +368,7 @@ public sealed class AxiomTools
         [Description("ip, domain or sha256. Optional; inferred when obvious.")] string? indicatorType = null)
     {
         var trimmed = (indicator ?? string.Empty).Trim();
+        McpAuditLog.Record("axiom_get_reputation", "UNAVAILABLE", 0);
         return Task.FromResult(Serialize(new
         {
             schemaVersion = SchemaVersion,
@@ -382,7 +385,7 @@ public sealed class AxiomTools
     [McpServerTool(Name = "axiom_get_firewall_rules"), Description("Return read-only Axiom-owned firewall rules, capability and write-gate state. Does not change Windows Firewall.")]
     public static async Task<string> GetFirewallRules()
     {
-        return await GuardAsync(async () =>
+        return await GuardAsync("axiom_get_firewall_rules", async () =>
         {
             var snapshot = await Client.GetFirewallRulesAsync(CancellationToken.None);
             return new
@@ -401,7 +404,7 @@ public sealed class AxiomTools
         [Description("History window in hours, 1-168. Default 24.")] int hours = 24,
         [Description("Maximum connections considered, 1-500. Default 200.")] int limit = 200)
     {
-        return await GuardAsync(async () =>
+        return await GuardAsync("axiom_generate_security_report", async () =>
         {
             var to = DateTimeOffset.UtcNow;
             var from = to.AddHours(-Math.Clamp(hours, 1, 168));
@@ -456,14 +459,18 @@ public sealed class AxiomTools
         });
     }
 
-    private static async Task<string> GuardAsync(Func<Task<object?>> action)
+    private static async Task<string> GuardAsync(string toolName, Func<Task<object?>> action)
     {
+        var started = Stopwatch.GetTimestamp();
         try
         {
-            return Serialize(await action().ConfigureAwait(false));
+            var payload = Serialize(await action().ConfigureAwait(false));
+            McpAuditLog.Record(toolName, "OK", (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            return payload;
         }
         catch (ServiceUnavailableException exception)
         {
+            McpAuditLog.Record(toolName, "UNAVAILABLE", (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
             return Serialize(new
             {
                 schemaVersion = SchemaVersion,
@@ -474,6 +481,7 @@ public sealed class AxiomTools
         }
         catch (ArgumentException exception)
         {
+            McpAuditLog.Record(toolName, "INVALID_INPUT", (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
             return Serialize(new
             {
                 schemaVersion = SchemaVersion,
@@ -483,6 +491,7 @@ public sealed class AxiomTools
         }
         catch (Exception exception) when (exception is IOException or JsonException)
         {
+            McpAuditLog.Record(toolName, "ERROR", (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
             return Serialize(new
             {
                 schemaVersion = SchemaVersion,

@@ -116,4 +116,68 @@ public sealed class TraderShieldProvisionerTests
         Assert.False(TraderShieldProvisioner.IsWalletAddress("not-an-address"));
         Assert.False(TraderShieldProvisioner.IsWalletAddress(""));
     }
+
+    [Fact]
+    public void Build_and_read_roundtrip_selected_wallets_and_addresses()
+    {
+        var addr = "0x" + new string('b', 40);
+        var updated = TraderShieldProvisioner.Apply(
+            "plugins:\n  entries:\n    blackbox:\n      mode: block\n      report: false\n",
+            enabled: true,
+            addresses: [addr.ToUpperInvariant()],
+            wallets: ["exodus", "unknown-wallet", "metamask"]);
+
+        var parsed = TraderShieldProvisioner.Read(updated);
+
+        Assert.True(parsed.Enabled);
+        Assert.Equal(["metamask", "exodus"], parsed.Wallets);
+        Assert.Equal([addr], parsed.Addresses);
+        Assert.Contains("report: false", updated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Read_handles_yaml_block_lists()
+    {
+        const string yaml = """
+            plugins:
+              entries:
+                blackbox:
+                  mode: block
+                  shields:
+                    trader:
+                      enabled: true
+                      wallets:
+                        - phantom
+                        - rabby
+                      addresses:
+                        - 0x1111111111111111111111111111111111111111
+            """;
+
+        var parsed = TraderShieldProvisioner.Read(yaml);
+
+        Assert.True(parsed.Enabled);
+        Assert.Equal(["phantom", "rabby"], parsed.Wallets);
+        Assert.Equal(["0x1111111111111111111111111111111111111111"], parsed.Addresses);
+    }
+
+    [Fact]
+    public void Self_test_checks_include_labelled_seed_write_and_keystore_read()
+    {
+        var checks = AgentProtectionSelfTest.TraderShieldChecks();
+
+        Assert.Equal(2, checks.Count);
+        Assert.All(checks, check => Assert.True(check.ExpectBlock));
+        Assert.Contains(checks, check => check.Tool == "write_file" && check.Content.Contains("wallet backup words:", StringComparison.Ordinal));
+        Assert.Contains(checks, check => check.Tool == "read_file" && check.Path.Contains("exodus.wallet", StringComparison.OrdinalIgnoreCase));
+
+        var seedPayload = AgentProtectionSelfTest.BuildPayload(checks[0], "test-session");
+        Assert.Contains("wallet backup words:", seedPayload, StringComparison.Ordinal);
+
+        Assert.Equal(
+            "fileaccess:read_file:crypto-wallet",
+            AgentProtectionSelfTest.Identifier("blocked: (fileaccess:read_file:crypto-wallet)"));
+        Assert.Equal(
+            "secret:seed-phrase",
+            AgentProtectionSelfTest.Identifier("blocked: (secret:seed-phrase)"));
+    }
 }

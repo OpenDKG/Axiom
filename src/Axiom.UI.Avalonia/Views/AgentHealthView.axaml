@@ -68,7 +68,7 @@
                 </StackPanel>
               </StackPanel>
             </StackPanel>
-            <Button Grid.Column="1" Content="Install/repair agent hooksÃ¢â‚¬Â¦"
+            <Button Grid.Column="1" Content="Install/repair agent hooks…"
                     Command="{Binding Security.InstallAgentHooksCommand}" Padding="12,6"
                     VerticalAlignment="Top" />
           </Grid>

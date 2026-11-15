@@ -89,10 +89,10 @@ An update must never cost the user their history:
 
 ## Roadmap
 
-- **0.23.0** — this release: complete-install provisioning, hardened agent bridge, reputation-safe
-  sharing, update data guard, BIP-39 fix, offline continuity from 0.22.0.
-- **0.24.0 – 0.25.0** — Linux and macOS ports, upstream Blackbox RFC items.
-- **1.0.0** — production sign-off.
+- **0.23.0 – 0.32.0** — Complete-install provisioning, hardened agent bridge, reputation-safe sharing, update data guard, BIP-39 fix, E1–E5 enforcement architecture, Avalonia UI migration, and `VT Check` / community feed separation ([0.32.0](RELEASES/0.32.0.md)).
+- **1.0 validation** — Agent bypass audit, threat-sharing & release-trust hardening, CI reproducibility, and isolated Windows VM runtime proofs tracked in [Release Readiness Matrix](validation/RELEASE_READINESS_MATRIX.md).
+- **Linux and macOS ports** — Separate platform validation gates (see PR #274 / PR #276).
+- **1.0.0** — Production sign-off after live isolated-VM and code-signing gates are met.
 
 See [SECURITY_MODEL.md](SECURITY_MODEL.md), [ARCHITECTURE.md](ARCHITECTURE.md),
 [THREAT_INTELLIGENCE.md](THREAT_INTELLIGENCE.md) and [OFFLINE_CONTINUITY_AUDIT.md](OFFLINE_CONTINUITY_AUDIT.md)

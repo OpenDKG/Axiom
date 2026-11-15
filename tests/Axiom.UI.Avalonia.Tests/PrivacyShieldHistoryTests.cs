@@ -123,6 +123,99 @@ public sealed class PrivacyShieldHistoryTests
         };
     }
 
+    [Fact]
+    public async Task Apply_sends_phishing_category_and_all_eight_sources()
+    {
+        var client = new ConfiguringPrivacyShieldClient(dropLastTwoSources: false);
+        var page = CreatePage(client);
+        try
+        {
+            page.Phishing = true;
+            foreach (var source in page.Sources)
+            {
+                source.Enabled = true;
+            }
+
+            await page.ApplyCommand.ExecuteAsync(null);
+
+            Assert.NotNull(client.LastConfiguredSettings);
+            Assert.True(client.LastConfiguredSettings!.Categories.HasFlag(PrivacyCategory.Phishing));
+            Assert.Equal(8, client.LastConfiguredSettings.EnabledSourceIds.Count);
+            Assert.Contains("hagezi-tif", client.LastConfiguredSettings.EnabledSourceIds);
+            Assert.Contains("phishing-filter", client.LastConfiguredSettings.EnabledSourceIds);
+            Assert.True(page.Sources.All(source => source.Enabled));
+            Assert.True(string.IsNullOrEmpty(page.LastErrorText));
+        }
+        finally
+        {
+            page.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Apply_warns_when_service_drops_newly_enabled_sources()
+    {
+        var client = new ConfiguringPrivacyShieldClient(dropLastTwoSources: true);
+        var page = CreatePage(client);
+        try
+        {
+            foreach (var source in page.Sources)
+            {
+                source.Enabled = true;
+            }
+
+            await page.ApplyCommand.ExecuteAsync(null);
+
+            Assert.Contains("hagezi-tif", page.LastErrorText, StringComparison.Ordinal);
+            Assert.Contains("phishing-filter", page.LastErrorText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            page.Dispose();
+        }
+    }
+
+    private sealed class ConfiguringPrivacyShieldClient(bool dropLastTwoSources) : IServiceRequestClient
+    {
+        public PrivacyShieldSettings? LastConfiguredSettings { get; private set; }
+
+        public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
+        {
+            if (command == IpcCommandTypes.PrivacyConfigure && payload is PrivacyShieldSettings settings)
+            {
+                LastConfiguredSettings = settings;
+                var keptSources = dropLastTwoSources
+                    ? settings.EnabledSourceIds
+                        .Where(id => id is not ("hagezi-tif" or "phishing-filter"))
+                        .ToArray()
+                    : settings.EnabledSourceIds;
+                var effective = settings with { EnabledSourceIds = keptSources };
+                return Task.FromResult((T)(object)new PrivacyShieldStatus
+                {
+                    State = "Active",
+                    Enabled = effective.Enabled,
+                    Running = effective.Enabled,
+                    Port = effective.Port,
+                    BindAddress = "127.0.0.1",
+                    Upstream = effective.UpstreamDns,
+                    Queries = 0,
+                    Allowed = 0,
+                    Blocked = 0,
+                    Errors = 0,
+                    RuleCount = 0,
+                    Settings = effective,
+                });
+            }
+
+            if (command == IpcCommandTypes.PrivacyStatus)
+            {
+                return Task.FromResult((T)(object)Status(secondApp: false));
+            }
+
+            throw new ServiceUnavailableException(IpcErrorCodes.NotSupported, "not supported");
+        }
+    }
+
     private sealed class PrivacyShieldClient(PrivacyShieldStatus status) : IServiceRequestClient
     {
         public PrivacyShieldStatus Status { get; set; } = status;

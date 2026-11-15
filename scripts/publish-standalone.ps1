@@ -26,7 +26,10 @@ $project = Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Ava
 $arguments = @(
     "publish", $project,
     "-c", "Release",
-    "-p:PublishProfile=win-x64-selfcontained"
+    "-p:PublishProfile=win-x64-selfcontained",
+    "-p:RestoreLockedMode=false",
+    "-p:RestorePackagesWithLockFile=false",
+    "-p:NuGetLockFilePath=obj/publish.packages.lock.json"
 )
 
 if ($Output) {

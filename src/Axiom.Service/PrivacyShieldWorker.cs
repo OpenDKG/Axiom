@@ -24,7 +24,19 @@ public sealed class PrivacyShieldWorker(PrivacyShieldController controller) : Ba
 
         try
         {
-            await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken).ConfigureAwait(false);
+            using var adapterTimer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+            while (await adapterTimer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+            {
+                if (controller.IsEnabled && !controller.IsResolverRunning)
+                {
+                    await controller.StartAsync(stoppingToken).ConfigureAwait(false);
+                }
+
+                if (controller.ShouldAutoPointAdapterDns)
+                {
+                    controller.EnsureConfiguredAdapterDns();
+                }
+            }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -35,12 +47,16 @@ public sealed class PrivacyShieldWorker(PrivacyShieldController controller) : Ba
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken).ConfigureAwait(false);
+            await controller
+                .WaitForSourceSyncOrDelayAsync(TimeSpan.FromSeconds(10), stoppingToken)
+                .ConfigureAwait(false);
             await TryUpdateMissingOrStaleSourcesAsync(stoppingToken).ConfigureAwait(false);
 
-            using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
-            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+            while (!stoppingToken.IsCancellationRequested)
             {
+                await controller
+                    .WaitForSourceSyncOrDelayAsync(TimeSpan.FromHours(1), stoppingToken)
+                    .ConfigureAwait(false);
                 await TryUpdateMissingOrStaleSourcesAsync(stoppingToken).ConfigureAwait(false);
             }
         }

@@ -1,0 +1,52 @@
+name: Portable CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-ci-${{ github.event.inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable-build-and-test:
+    name: Portable Build & Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Set up .NET SDK from global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Set up Python 3.12 for agent hook runtime tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore portable solution (locked mode)
+        run: dotnet restore Axiom.Portable.slnx --locked-mode
+
+      - name: Build portable solution (Release)
+        run: dotnet build Axiom.Portable.slnx -c Release --no-restore
+
+      - name: Test portable solution
+        run: dotnet test Axiom.Portable.slnx -c Release --no-build --no-restore -m:1

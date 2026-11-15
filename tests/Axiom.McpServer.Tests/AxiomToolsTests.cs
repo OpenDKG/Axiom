@@ -103,4 +103,56 @@ public sealed class AxiomToolsTests
         Assert.False(root.GetProperty("current").GetBoolean());
         Assert.Contains("Unknown is not clean", root.GetProperty("message").GetString());
     }
+
+    [Fact]
+    public async Task Mcp_tool_calls_write_bounded_json_audit_records_without_disrupting_responses()
+    {
+        var tempRoot = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), $"axiom-mcp-audit-{Guid.NewGuid():N}"));
+        var auditPath = Path.Combine(tempRoot.FullName, "mcp-audit.jsonl");
+
+        try
+        {
+            McpAuditLog.AuditPathResolver = () => auditPath;
+
+            var alertJson = await AxiomTools.GetThreatAlerts(limit: 5);
+            var invalidAnalyzeJson = await AxiomTools.AnalyzeConnection();
+            await Task.WhenAll(Enumerable.Range(0, 12)
+                .Select(index => AxiomTools.GetReputation($"203.0.113.{index}")));
+
+            Assert.Contains("UNAVAILABLE", alertJson, StringComparison.Ordinal);
+            Assert.Contains("INVALID_INPUT", invalidAnalyzeJson, StringComparison.Ordinal);
+            Assert.True(File.Exists(auditPath), "Expected MCP audit log file to exist.");
+
+            var lines = File.ReadAllLines(auditPath);
+            Assert.Equal(14, lines.Length);
+
+            var toolsSeen = new List<string>();
+            foreach (var line in lines)
+            {
+                using var doc = JsonDocument.Parse(line);
+                var entry = doc.RootElement;
+                toolsSeen.Add(entry.GetProperty("tool").GetString() ?? string.Empty);
+                Assert.True(entry.TryGetProperty("timestampUtc", out _));
+                Assert.True(entry.GetProperty("durationMs").GetInt64() >= 0);
+            }
+
+            Assert.Contains("axiom_get_threat_alerts", toolsSeen);
+            Assert.Contains("axiom_analyze_connection", toolsSeen);
+            Assert.Contains("axiom_get_reputation", toolsSeen);
+
+            // An unwritable or invalid audit target must never break MCP tool calls.
+            var blockingFile = Path.Combine(tempRoot.FullName, "file-not-dir");
+            File.WriteAllText(blockingFile, "lock");
+            McpAuditLog.AuditPathResolver = () => Path.Combine(blockingFile, "mcp-audit.jsonl");
+
+            using var resilientDoc = JsonDocument.Parse(await AxiomTools.GetThreatAlerts());
+            Assert.Equal("UNAVAILABLE", resilientDoc.RootElement.GetProperty("status").GetString());
+        }
+        finally
+        {
+            McpAuditLog.AuditPathResolver = McpAuditLog.DefaultAuditPath;
+            Directory.Delete(tempRoot.FullName, recursive: true);
+        }
+    }
 }

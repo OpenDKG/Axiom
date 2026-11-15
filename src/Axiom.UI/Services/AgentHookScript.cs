@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Contracts.Blackbox;
+
 namespace Axiom.UI.Services;
 
 /// <summary>
@@ -10,7 +12,7 @@ public static class AgentHookScript
     /// <summary>Bump when hook behavior changes so Codex invalidates its trust hash.</summary>
     public const string Version = "2";
 
-    public static string Build(string framework) => $$"""
+    public static string Build(string framework) => ($$"""
         # Managed by Axiom. Calls the local Blackbox guard for Claude Code and Codex lifecycle hooks.
         import contextlib
         import datetime
@@ -26,6 +28,9 @@ public static class AgentHookScript
         sys.path.insert(0, str(ROOT))
         EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "agent-evidence.jsonl"
         PATCH_PATH = re.compile(r"^\*\*\*\s+(?:Update|Add|Delete)\s+File:\s*(.+?)\s*$", re.MULTILINE)
+
+
+        # <<AXIOM_COMMAND_GUARD>>
 
 
         def record(event_type, tool="", decision="", guard_status="ok", duration_ms=0, error_code="",
@@ -97,6 +102,9 @@ public static class AgentHookScript
             if not isinstance(raw, dict):
                 return raw
             args = dict(raw)
+            # Gemini's read_file passes absolute_path; the vendor guard reads path.
+            if not args.get("path") and isinstance(args.get("absolute_path"), str):
+                args["path"] = args["absolute_path"]
             tool = str(payload.get("tool_name") or "").strip().lower()
             if tool in ("apply_patch", "edit", "write") and not any(
                 isinstance(args.get(key), str) and args.get(key)
@@ -113,6 +121,8 @@ public static class AgentHookScript
         def deny(message):
             if FRAMEWORK == "codex":
                 return {"decision": "block", "reason": message}
+            if FRAMEWORK == "gemini":
+                return {"decision": "deny", "reason": message}
             return {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
@@ -182,10 +192,26 @@ public static class AgentHookScript
                            session=sid)
                     return
 
-                if event in ("pretooluse", "pre_tool_use"):
+                if event in ("pretooluse", "pre_tool_use", "beforetool", "before_tool"):
+                    parsed_args = tool_args(payload)
+                    safety = _check_command_safety(parsed_args, _load_protected_paths())
+                    if safety is not None:
+                        record(
+                            "GUARD_BLOCKED",
+                            tool,
+                            "block",
+                            "blocked",
+                            int((time.monotonic() - started) * 1000),
+                            error_code=safety[0],
+                            session=sid,
+                            call=call,
+                        )
+                        sys.stdout.write(json.dumps(deny(safety[1]), separators=(",", ":")))
+                        sys.stdout.flush()
+                        return
                     decision = guard.on_pre_tool_call(
                         tool_name=tool,
-                        args=tool_args(payload),
+                        args=parsed_args,
                         session_id=sid,
                         task_id=tid,
                         tool_call_id=tool_call_id(payload),
@@ -266,5 +292,5 @@ public static class AgentHookScript
 
         if __name__ == "__main__":
             main()
-        """;
+        """).Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal);
 }

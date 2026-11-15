@@ -11,6 +11,7 @@ public enum PrivacyCategory
     Analytics = 8,
     Malware = 16,
     Custom = 32,
+    Phishing = 64,
 }
 
 public enum PrivacyShieldProfile
@@ -30,6 +31,7 @@ public static class PrivacyShieldCategories
                                        PrivacyCategory.Tracking |
                                        PrivacyCategory.Analytics |
                                        PrivacyCategory.Malware |
+                                       PrivacyCategory.Phishing |
                                        PrivacyCategory.Custom,
         _ => PrivacyCategory.Telemetry |
              PrivacyCategory.Ads |
@@ -45,6 +47,7 @@ public static class PrivacyShieldCategories
         PrivacyCategory.Tracking => "Tracking",
         PrivacyCategory.Analytics => "Analytics",
         PrivacyCategory.Malware => "Malware",
+        PrivacyCategory.Phishing => "Phishing",
         PrivacyCategory.Custom => "Custom",
         _ => "Unknown",
     };
@@ -218,7 +221,7 @@ public static class PrivacyShieldSourceCatalog
             "HaGeZi Threat Intelligence Feeds (Mini)",
             "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@924bb2a8306e609ae8b0113c2b676f5fde072d16/wildcard/tif.mini-onlydomains.txt",
             "GPL-3.0",
-            PrivacyCategory.Malware,
+            PrivacyCategory.Malware | PrivacyCategory.Phishing,
             "Malware, C2, phishing and scam domains curated by HaGeZi (pinned commit and checked by SHA-256 digest). " +
             "Matches stay local with source/version provenance and are not proposed to the community.",
             "D21FCEA658825CD93FE44E325D9CB23170EEA657D0D7A031107AA7264E31B08F"),
@@ -227,7 +230,7 @@ public static class PrivacyShieldSourceCatalog
             "Phishing domains (OpenPhish / PhishTank)",
             "https://malware-filter.gitlab.io/malware-filter/phishing-filter-domains.txt",
             "MIT",
-            PrivacyCategory.Malware,
+            PrivacyCategory.Phishing,
             "Active phishing domains compiled by malware-filter from OpenPhish, PhishTank and ipthreat (MIT, " +
             "updated every 12 hours). Matches stay local with source/version provenance."),
     ];

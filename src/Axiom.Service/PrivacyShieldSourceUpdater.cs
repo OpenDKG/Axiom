@@ -50,7 +50,7 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
 
         // Import threat-intelligence and phishing feeds first so they never lose priority to bulk lists.
         var orderedSources = sources
-            .OrderBy(source => (source.Category & PrivacyCategory.Malware) != 0 ? 0 : 1)
+            .OrderBy(source => (source.Category & (PrivacyCategory.Malware | PrivacyCategory.Phishing)) != 0 ? 0 : 1)
             .ToArray();
 
         var rules = new List<PrivacyShieldStoredRule>();

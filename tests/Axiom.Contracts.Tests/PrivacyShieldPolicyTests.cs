@@ -140,16 +140,27 @@ public sealed class PrivacyShieldPolicyTests
             source.License));
         Assert.All(sources, source => Assert.StartsWith("https://", source.Url, StringComparison.Ordinal));
 
-        // Only dedicated malware/phishing lists may claim the malware category, so a shared
-        // indicator is never an ad or tracker mislabelled as malware.
+        // Only dedicated malware/phishing lists may claim the malware or phishing categories, so a
+        // shared indicator is never an ad or tracker mislabelled as malware or phishing.
         var malware = sources
             .Where(source => source.Category.HasFlag(PrivacyCategory.Malware))
             .Select(source => (source.Id, source.Category))
             .ToArray();
-        Assert.Equal(3, malware.Length);
+        Assert.Equal(2, malware.Length);
         Assert.Contains(("urlhaus-domains", PrivacyCategory.Malware), malware);
-        Assert.Contains(("hagezi-tif", PrivacyCategory.Malware), malware);
-        Assert.Contains(("phishing-filter", PrivacyCategory.Malware), malware);
+        Assert.Contains(("hagezi-tif", PrivacyCategory.Malware | PrivacyCategory.Phishing), malware);
+
+        var phishing = sources
+            .Where(source => source.Category.HasFlag(PrivacyCategory.Phishing))
+            .Select(source => (source.Id, source.Category))
+            .ToArray();
+        Assert.Equal(2, phishing.Length);
+        Assert.Contains(("hagezi-tif", PrivacyCategory.Malware | PrivacyCategory.Phishing), phishing);
+        Assert.Contains(("phishing-filter", PrivacyCategory.Phishing), phishing);
+
+        Assert.True(PrivacyShieldCategories.ForProfile(PrivacyShieldProfile.Strict)
+            .HasFlag(PrivacyCategory.Phishing));
+        Assert.Equal("Phishing", PrivacyShieldCategories.Label(PrivacyCategory.Phishing));
     }
 
     [Fact]

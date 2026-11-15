@@ -170,6 +170,9 @@ public sealed class PrivacyShieldPolicy
         return new DnsPolicyDecision(false, PrivacyCategory.None, null, "No local block rule matched.");
     }
 
+    [ThreadStatic]
+    private static IdnMapping? t_idnMapping;
+
     public static string? NormalizeDomain(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -199,13 +202,20 @@ public sealed class PrivacyShieldPolicy
         }
 
         string ascii;
-        try
+        if (IsAsciiLowerable(candidate))
         {
-            ascii = new IdnMapping().GetAscii(candidate).ToLowerInvariant();
+            ascii = candidate.ToLowerInvariant();
         }
-        catch (ArgumentException)
+        else
         {
-            return null;
+            try
+            {
+                ascii = (t_idnMapping ??= new IdnMapping()).GetAscii(candidate).ToLowerInvariant();
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
         }
 
         if (ascii.Length == 0 || ascii.Length > 253 || !ascii.Contains('.'))
@@ -213,21 +223,48 @@ public sealed class PrivacyShieldPolicy
             return null;
         }
 
-        foreach (var label in ascii.Split('.'))
+        var labelStart = 0;
+        for (var i = 0; i <= ascii.Length; i++)
         {
-            if (label.Length is 0 or > 63)
+            if (i < ascii.Length && ascii[i] != '.')
+            {
+                continue;
+            }
+
+            var labelLength = i - labelStart;
+            if (labelLength is 0 or > 63 ||
+                ascii[labelStart] == '-' ||
+                ascii[i - 1] == '-')
             {
                 return null;
             }
 
-            if (label[0] == '-' || label[^1] == '-' ||
-                label.Any(character => !char.IsLetterOrDigit(character) && character is not '-' and not '_'))
+            for (var j = labelStart; j < i; j++)
             {
-                return null;
+                var character = ascii[j];
+                if (!char.IsAsciiLetterOrDigit(character) && character is not '-' and not '_')
+                {
+                    return null;
+                }
             }
+
+            labelStart = i + 1;
         }
 
         return ascii;
+    }
+
+    private static bool IsAsciiLowerable(string value)
+    {
+        foreach (var ch in value)
+        {
+            if (ch > 0x7F)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Parses a bounded plain-domain/hosts/DNSMasq/wildcard list. Invalid lines are skipped.</summary>
