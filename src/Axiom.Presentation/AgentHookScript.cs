@@ -102,6 +102,9 @@ public static class AgentHookScript
             if not isinstance(raw, dict):
                 return raw
             args = dict(raw)
+            # Gemini's read_file passes absolute_path; the vendor guard reads path.
+            if not args.get("path") and isinstance(args.get("absolute_path"), str):
+                args["path"] = args["absolute_path"]
             tool = str(payload.get("tool_name") or "").strip().lower()
             if tool in ("apply_patch", "edit", "write") and not any(
                 isinstance(args.get(key), str) and args.get(key)
@@ -118,6 +121,8 @@ public static class AgentHookScript
         def deny(message):
             if FRAMEWORK == "codex":
                 return {"decision": "block", "reason": message}
+            if FRAMEWORK == "gemini":
+                return {"decision": "deny", "reason": message}
             return {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
@@ -187,7 +192,7 @@ public static class AgentHookScript
                            session=sid)
                     return
 
-                if event in ("pretooluse", "pre_tool_use"):
+                if event in ("pretooluse", "pre_tool_use", "beforetool", "before_tool"):
                     parsed_args = tool_args(payload)
                     safety = _check_command_safety(parsed_args, _load_protected_paths())
                     if safety is not None:

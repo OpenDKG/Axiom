@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.48.0
+
+- **Live Gemini CLI sweep fix.**
+  - Installed Gemini CLI 0.68.0 and provisioned its hook: 0.30.0 blocked 2/15 vectors, 0.47.0 2/15, 0.48.0 **15/15**.
+  - Fixed three Gemini-specific defects: `BeforeTool` event name was not matched, the deny shape was Claude's, and `absolute_path` was not mapped to `path` for the vendor rule or the Axiom store check.
+  - Template test asserts the event names, the Gemini deny shape and the `absolute_path` mapping.
+
 ## What's in 0.47.0
 
 - **Live Claude Code sweep fix.**
