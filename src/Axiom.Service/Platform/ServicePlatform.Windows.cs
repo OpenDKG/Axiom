@@ -104,6 +104,9 @@ internal static class ServicePlatform
         builder.Services.AddSingleton(provider => new AgentFirewallEnforcer(
             provider.GetRequiredService<FirewallRuleCoordinator>(),
             provider.GetRequiredService<EnforcementController>().ReceiptJournal));
+
+        // Upstream v0.54 F-19 part B: WMI process-start audit (registered in Program.cs upstream).
+        builder.Services.AddHostedService<ProcessSpawnAuditWorker>();
     }
 
     // --- NetworkRecoveryCommand platform hooks (offline administrator recovery) ---

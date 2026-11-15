@@ -138,8 +138,9 @@ internal static class ServicePlatform
     /// so a status would describe a policy file no user owns; with no evaluate there is nothing to
     /// report. Answering "disabled" would look like a working feature that is switched off.</item>
     /// </list>
-    /// The Windows-only E4 scoped agent firewall enforcer (AgentFirewallEnforcer) is not compiled
-    /// into this target at all. A macOS filter acknowledgement is never mapped to
+    /// The Windows-only E4 scoped agent firewall enforcer (AgentFirewallEnforcer) and the WMI
+    /// process-start audit (ProcessSpawnAuditWorker, F-19 part B) are not compiled into this target
+    /// at all. A macOS filter acknowledgement is never mapped to
     /// <c>OS_DENY_VERIFIED</c>; that state needs an observed absent side effect (a canary).
     /// </summary>
     public static void ConfigureAgentEnforcement(HostApplicationBuilder builder)
