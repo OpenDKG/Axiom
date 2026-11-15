@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.53.0
+
+- **Service upgrades survive a crash-looping old service; failures explain themselves.**
+  - `ServiceInstaller` clears the service recovery actions before stopping the old image and restores them after the copy, so SCM can no longer restart the 0.30 image mid-upgrade and lock it (issue #367).
+  - The image copy retries for 30 s and records every blocked attempt; `sc` timeouts no longer throw `InvalidOperationException` from `ExitCode`.
+  - New `ServiceInstallLog` (`%ProgramData%\Axiom\logs\service-install.log`) records each elevated step, and Setup prints its tail when the service installer exits non-zero instead of only `exited with code 7`.
+
 ## What's in 0.52.0
 
 - **Live Agent Enforcement status, dedicated Privacy Overview page, and Network Dashboard DNS monitoring.**
