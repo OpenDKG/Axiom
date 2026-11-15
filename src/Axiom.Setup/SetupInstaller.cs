@@ -40,10 +40,14 @@ internal static class SetupInstaller
         CancellationToken cancellationToken)
     {
         var log = new List<string>();
+        // Every step is timestamped so the UI and the log show how long a slow phase has been
+        // running; a complete install can legitimately take 10-20 minutes.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         void Report(string message)
         {
-            log.Add(message);
-            progress?.Report(message);
+            var line = string.Create(CultureInfo.InvariantCulture, $"[{clock.Elapsed:mm\\:ss}] {message}");
+            log.Add(line);
+            progress?.Report(line);
         }
 
         try
@@ -116,6 +120,8 @@ internal static class SetupInstaller
                 {
                     serviceRegisteredEarly = SetupDefaults.EnsureServiceRegistered(options.InstallDir, Report);
                     Report("Complete installation selected: Blackbox, DKG and agent hooks will be configured.");
+                    Report("Complete installation may take 10-20 minutes: service registration, the verified " +
+                           "Blackbox download/install, a local DKG node and the agent hooks run in sequence.");
                     var setupProtection = new UserStateProtection();
                     var setupSnapshot = await Task.Run(
                         () => setupProtection.Capture(),
@@ -210,10 +216,9 @@ internal static class SetupInstaller
                                $"{restoreFailures.Count} restore failure(s).");
                         if (restoreFailures.Count > 0)
                         {
-                            return new SetupInstallResult(
-                                false,
-                                "Optional setup stopped: a protected user-state change could not be restored.",
-                                log);
+                            Report("WARNING: some protected user-state files could not be restored while the " +
+                                   "desktop and DKG were running; the installation continues. Review the listed " +
+                                   "MCP/model/favorite/session files after the upgrade.");
                         }
                     }
                     else
@@ -315,10 +320,8 @@ internal static class SetupInstaller
                                $"{restoreFailures.Count} restore failure(s). MCP/model/favorite/session/Antigravity files must be reviewed.");
                         if (restoreFailures.Count > 0)
                         {
-                            return new SetupInstallResult(
-                                false,
-                                "Agent hook setup stopped: a protected user-state change could not be restored.",
-                                log);
+                            Report("WARNING: some agent-hook protected files could not be restored; the " +
+                                   "installation continues. Review the MCP/model/favorite/session files.");
                         }
                     }
                     else

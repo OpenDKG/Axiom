@@ -41,6 +41,37 @@ public sealed class UpgradeDataGuardTests
     }
 
     [Fact]
+    public void Capture_skips_oxigraph_logs_node_modules_and_oversized_files()
+    {
+        var local = NewRoot();
+        try
+        {
+            Write(local, @"hermes\blackbox\findings.jsonl", "keep");
+            Write(local, @"Axiom\modules\blackbox\agent-blackbox\.dkg\agent-key.bin", "identity");
+            Write(local, @"hermes\blackbox\node\.dkg\oxigraph-data\0001.log", new string('x', 1024));
+            Write(local, @"hermes\blackbox\node_modules\pkg\index.js", "js");
+            Write(local, @"hermes\blackbox\daemon.log", "log");
+            Write(local, @"Axiom\big.bin", new string('b', 33 * 1024 * 1024));
+
+            var backup = UpgradeDataGuard.Capture(
+                local, Path.Combine(local, "backups"), new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero));
+
+            Assert.NotNull(backup);
+            Assert.Contains(backup!.Entries, entry => entry.RelativePath.EndsWith("findings.jsonl", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(backup.Entries, entry => entry.RelativePath.EndsWith("agent-key.bin", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(backup.Entries, entry => entry.RelativePath.Contains("oxigraph-data", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(backup.Entries, entry => entry.RelativePath.Contains("node_modules", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(backup.Entries, entry => entry.RelativePath.EndsWith("daemon.log", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(backup.Entries, entry => entry.RelativePath.EndsWith("big.bin", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(2, backup.Entries.Count);
+        }
+        finally
+        {
+            Delete(local);
+        }
+    }
+
+    [Fact]
     public void Verify_restores_missing_and_empty_files_and_reports_a_shrunken_file()
     {
         var local = NewRoot();

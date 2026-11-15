@@ -2,6 +2,14 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.49.0
+
+- **Upgrade install speed and honesty.**
+  - `UpgradeDataGuard` skips `oxigraph-data`, `node_modules`, `venv`, `.git`, caches, logs and files above 32 MB, so the backup is megabytes instead of the 8.3 GB / 116,903 files that froze the machine.
+  - Setup refuses a second concurrent instance (named mutex) instead of duplicating the backup.
+  - Protected user-state restore failures are warnings, not a failed install, with a clear review note.
+  - The Complete option states 10-20 minutes and what it installs; every step carries elapsed time.
+
 ## What's in 0.48.0
 
 - **Live Gemini CLI sweep fix.**
