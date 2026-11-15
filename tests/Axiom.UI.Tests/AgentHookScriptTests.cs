@@ -169,6 +169,9 @@ public sealed class AgentHookScriptTests
             ".git-credentials", ".npmrc", ".kube\\\\config", "github cli\\\\hosts.yml",
             "\\\\login data", "\\\\network\\\\cookies", "local extension settings",
             "mozilla\\\\firefox\\\\profiles", "wallet.dat", "credential store",
+            ".netrc", ".pgpass", ".vault-token", ".config\\\\gcloud", ".azure",
+            ".password-store", "key4.db", "logins.json", "\\\\web data",
+            "user data\\\\local state", "bitwarden", "keepass",
         ];
         foreach (var store in stores)
         {
