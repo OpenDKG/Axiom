@@ -300,6 +300,12 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             (_settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(_settings.PreferredAdapterAlias)))
         {
             PrivacyDnsFailSafe.EnsureAdapterPointed(_settings.PreferredAdapterAlias);
+            if (!string.IsNullOrWhiteSpace(PrivacyDnsFailSafe.LastError) &&
+                string.IsNullOrWhiteSpace(_lastError))
+            {
+                _lastError = PrivacyDnsFailSafe.LastError;
+            }
+
             return;
         }
 
@@ -350,7 +356,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 else
                 {
                     SetRules(result.Rules);
-                    _lastError = null;
+                    _lastError = result.Error;
                     if (_settings.Enabled)
                     {
                         await StartServerLockedAsync(cancellationToken).ConfigureAwait(false);
