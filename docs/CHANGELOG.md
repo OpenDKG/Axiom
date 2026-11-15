@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.33.0
+
+- **Guard hardening from the attack-vector sweep (0.30.0/0.32.0 lab tests).**
+  - Protected-path checks normalize shell variables (`C:\Users\llm`, `%USERPROFILE%`, `%APPDATA%`, `~`) and strip `\\?\`/`//?/`/`\\.\` prefixes; hidden-path reads are blocked.
+  - `move`/`rename` and ownership/ACL changes (`takeown`, `icacls`, `attrib`, `Set-Acl`) on protected paths are blocked.
+  - Extra upload shapes (`--data-binary`, `-T`, `--post-file`, Python `requests.post`) count as exfiltration of a protected file.
+
 ## What's in 0.32.0
 
 - **Clearer Community feed vs. VirusTotal (`VT Check`) feedback in Integrations.**
