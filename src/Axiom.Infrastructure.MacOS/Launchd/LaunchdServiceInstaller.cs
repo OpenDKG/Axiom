@@ -203,6 +203,7 @@ public sealed class LaunchdServiceInstaller
         var ownerUid = _detectOwner();
 
         string? staged = null;
+        string? previous = null;
         try
         {
             if (!runningFromHelper)
@@ -226,17 +227,21 @@ public sealed class LaunchdServiceInstaller
 
             var plist = BuildPlist(_options.DaemonPath, logFile);
 
-            // Stop the running instance (upgrade); "not loaded" is expected on first install. Like
-            // the Windows installer, a pending stop is awaited before the protected image is replaced.
+            // Stop the running instance (upgrade); "not loaded" is expected on first install. A stop
+            // that does not complete leaves the old daemon running with its protected image open, so
+            // replacing it would be a half-swapped install: refuse instead.
             _runner.Run(Launchctl, ["bootout", ServiceTarget], ToolTimeout);
             if (!WaitForJobRemoval())
             {
-                error.WriteLine("The existing Axiom service did not stop in time.");
+                error.WriteLine(
+                    $"The existing Axiom service did not stop within {JobRemovalAttempts * JobRemovalDelay.TotalSeconds:0}s; " +
+                    "refusing to replace the installed daemon. Stop it with 'sudo launchctl bootout system/com.axiom.service' and retry.");
+                return 6;
             }
 
             if (staged is not null)
             {
-                Replace(staged);
+                previous = Replace(staged);
                 staged = null;
             }
 
@@ -282,9 +287,15 @@ public sealed class LaunchdServiceInstaller
         if (!bootstrap.Succeeded)
         {
             error.WriteLine($"launchctl bootstrap failed ({bootstrap.ExitCode}): {bootstrap.StandardError.Trim()}");
+            if (previous is not null)
+            {
+                RollBack(previous, error);
+            }
+
             return 1;
         }
 
+        TryDeleteDirectory(previous);
         output.WriteLine($"Installed and started {ServiceTarget} from {_options.HelperDirectory} ({_options.PlistPath}).");
         return 0;
     }
@@ -423,8 +434,11 @@ public sealed class LaunchdServiceInstaller
         return staged;
     }
 
-    /// <summary>Atomically swaps the staged copy into place and removes the previous one.</summary>
-    private void Replace(string staged)
+    /// <summary>
+    /// Atomically swaps the staged copy into place and returns the previous copy, which is kept
+    /// until the new daemon has bootstrapped so a failed upgrade can roll back.
+    /// </summary>
+    private string? Replace(string staged)
     {
         string? previous = null;
         if (Directory.Exists(_options.HelperDirectory))
@@ -434,7 +448,31 @@ public sealed class LaunchdServiceInstaller
         }
 
         Directory.Move(staged, _options.HelperDirectory);
-        TryDeleteDirectory(previous);
+        return previous;
+    }
+
+    /// <summary>
+    /// Puts the previous daemon copy back and starts it, so a failed upgrade is not an outage. The
+    /// plist and the helper path do not change across an upgrade, so the existing job definition
+    /// still points at the restored copy.
+    /// </summary>
+    private void RollBack(string previous, TextWriter error)
+    {
+        try
+        {
+            TryDeleteDirectory(_options.HelperDirectory);
+            Directory.Move(previous, _options.HelperDirectory);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            error.WriteLine($"Could not restore the previous daemon copy from {previous}: {exception.Message}");
+            return;
+        }
+
+        var bootstrap = _runner.Run(Launchctl, ["bootstrap", "system", _options.PlistPath], ToolTimeout);
+        error.WriteLine(bootstrap.Succeeded
+            ? "Restored and started the previous daemon copy after the failed upgrade."
+            : $"The previous daemon copy was restored but launchctl bootstrap still failed ({bootstrap.ExitCode}): {bootstrap.StandardError.Trim()}");
     }
 
     private List<string> Verify(string directory)
@@ -489,16 +527,22 @@ public sealed class LaunchdServiceInstaller
 
     private const int BootstrapAttempts = 8;
 
-    private static readonly TimeSpan BootstrapRetryDelay = TimeSpan.FromSeconds(2);
+    /// <summary>Delay between bootstrap attempts; tests shorten it.</summary>
+    internal TimeSpan BootstrapRetryDelay { get; init; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>Poll budget for <see cref="WaitForJobRemoval"/>; tests shorten it.</summary>
+    internal int JobRemovalAttempts { get; init; } = 30;
+
+    internal TimeSpan JobRemovalDelay { get; init; } = TimeSpan.FromMilliseconds(500);
 
     /// <summary>
     /// After <c>bootout</c> returns, launchd may still hold the job while the old daemon exits
     /// (DNS restore, socket cleanup). Poll <c>launchctl print</c> until it no longer finds the job,
-    /// at most ~15 s, so the subsequent <c>bootstrap</c> does not fail with EIO.
+    /// ~15 s by default, so the caller can refuse the upgrade rather than replace a running image.
     /// </summary>
     private bool WaitForJobRemoval()
     {
-        for (var attempt = 0; attempt < 30; attempt++)
+        for (var attempt = 0; attempt < JobRemovalAttempts; attempt++)
         {
             var print = _runner.Run(Launchctl, ["print", ServiceTarget], ToolTimeout);
             if (!print.Succeeded)
@@ -506,7 +550,7 @@ public sealed class LaunchdServiceInstaller
                 return true;
             }
 
-            Thread.Sleep(500);
+            Thread.Sleep(JobRemovalDelay);
         }
 
         return false;

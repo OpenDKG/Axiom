@@ -140,6 +140,87 @@ public sealed class LaunchdServiceInstallerTests
     }
 
     [Fact]
+    public void InstallRefusesToReplaceTheDaemonWhileTheOldJobIsStillLoaded()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var layout = Layout(temp);
+        var bundle = Path.Combine(temp.Path, "bundle");
+        Directory.CreateDirectory(bundle);
+        var exe = Path.Combine(bundle, "axiomd");
+        File.WriteAllText(exe, "#!/bin/sh\n");
+        File.SetUnixFileMode(exe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        File.WriteAllText(Path.Combine(bundle, "Axiom.Core.dll"), "dll");
+        var runner = StatAsRoot(new FakeRunner().On("launchctl print", "Could not find service", 113));
+        var installer = new LaunchdServiceInstaller(runner, layout, () => true, () => 501)
+        {
+            JobRemovalAttempts = 1,
+            JobRemovalDelay = TimeSpan.Zero,
+        };
+        Assert.Equal(0, installer.Install(exe, TextWriter.Null, TextWriter.Null));
+
+        // The upgrade must not swap the protected image while the old daemon is still loaded.
+        File.WriteAllText(Path.Combine(bundle, "Axiom.Core.dll"), "dll2");
+        runner.On("launchctl print", "service com.axiom.service is running", 0);
+        var error = new StringWriter();
+
+        Assert.Equal(6, installer.Install(exe, TextWriter.Null, error));
+
+        Assert.Equal("dll", File.ReadAllText(Path.Combine(layout.HelperDirectory, "Axiom.Core.dll")));
+        Assert.Contains("did not stop", error.ToString(), StringComparison.Ordinal);
+        Assert.Single(runner.Calls, call => call.StartsWith("launchctl bootstrap", StringComparison.Ordinal));
+        Assert.Single(Directory.GetDirectories(layout.HelperRoot));
+    }
+
+    [Fact]
+    public void InstallRestoresThePreviousDaemonWhenTheNewCopyCannotBoot()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var layout = Layout(temp);
+        var bundle = Path.Combine(temp.Path, "bundle");
+        Directory.CreateDirectory(bundle);
+        var exe = Path.Combine(bundle, "axiomd");
+        File.WriteAllText(exe, "#!/bin/sh\n");
+        File.SetUnixFileMode(exe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        File.WriteAllText(Path.Combine(bundle, "Axiom.Core.dll"), "dll");
+        var runner = StatAsRoot(new FakeRunner().On("launchctl print", "Could not find service", 113));
+        var installer = new LaunchdServiceInstaller(runner, layout, () => true, () => 501)
+        {
+            JobRemovalAttempts = 1,
+            JobRemovalDelay = TimeSpan.Zero,
+            BootstrapRetryDelay = TimeSpan.Zero,
+        };
+        Assert.Equal(0, installer.Install(exe, TextWriter.Null, TextWriter.Null));
+
+        // The new copy cannot start; the old one can, so the upgrade must roll back rather than
+        // leave the service down with the new image installed.
+        File.WriteAllText(Path.Combine(bundle, "Axiom.Core.dll"), "dll2");
+        runner.On("launchctl bootstrap", _ => new ProcessResult(
+            File.Exists(Path.Combine(layout.HelperDirectory, "Axiom.Core.dll")) &&
+            File.ReadAllText(Path.Combine(layout.HelperDirectory, "Axiom.Core.dll")) == "dll2"
+                ? 1
+                : 0,
+            string.Empty,
+            "Input/output error"));
+        var error = new StringWriter();
+
+        Assert.Equal(1, installer.Install(exe, TextWriter.Null, error));
+
+        Assert.Equal("dll", File.ReadAllText(Path.Combine(layout.HelperDirectory, "Axiom.Core.dll")));
+        Assert.Contains("Restored and started the previous daemon copy", error.ToString(), StringComparison.Ordinal);
+        Assert.Single(Directory.GetDirectories(layout.HelperRoot));
+    }
+
+    [Fact]
     public void InstallRefusesWhenTheCopyIsNotRootOwned()
     {
         if (OperatingSystem.IsWindows())
