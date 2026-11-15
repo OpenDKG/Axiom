@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.38.0
+
+- **Behavioural test for the shared guard helpers.**
+  - Executes the extracted `AgentCommandGuard` Python block and asserts 15 vectors across `_sensitive_store`, `_hidden_path_read`, `_tampers_with_protected`, `_escalation_risk` and `_axiom_injection`.
+  - Skips when Python is unavailable; CI provisions Python 3.12.
+- Adds the F-19 containment design document (process audit + per-process egress).
+
 ## What's in 0.37.0
 
 - **Extended credential-store coverage.**
