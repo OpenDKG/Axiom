@@ -218,6 +218,50 @@ public static class AgentCommandGuard
                 return "backup catalog deletion"
             if "bcdedit" in text and "recoveryenabled no" in text:
                 return "recovery disable"
+            if "reg save" in text and any(hive in text for hive in ("hklm\\sam", "hklm\\security", "hklm\\system")):
+                return "credential hive export"
+            if "vssadmin" in text and "create shadow" in text:
+                return "shadow-copy creation"
+            if "ntdsutil" in text:
+                return "NTDS dump"
+            if "lsass" in text and any(tool in text for tool in ("procdump", "comsvcs", "minidump", "rundll32")):
+                return "LSASS memory dump"
+            if ("wevtutil" in text and (" cl " in text or "clear-log" in text)) or "clear-eventlog" in text:
+                return "event log clearing"
+            if "set-mppreference" in text and any(
+                flag in text
+                for flag in ("disablerealtimemonitoring", "disableantispyware",
+                             "disableioavprotection", "disablescriptscanning")
+            ):
+                return "Defender tampering"
+            if "add-mppreference" in text and "exclusion" in text:
+                return "Defender exclusion"
+            if "netsh advfirewall" in text and "state off" in text:
+                return "firewall tampering"
+            if "netsh firewall" in text and "opmode disable" in text:
+                return "firewall tampering"
+            if "register-scheduledtask" in text:
+                return "scheduled-task persistence (PowerShell)"
+            if ("new-itemproperty" in text or "set-itemproperty" in text) and "\\currentversion\\run" in text:
+                return "registry run-key persistence (PowerShell)"
+            if "sc create" in text or "new-service" in text:
+                return "service creation"
+            if "startup" in text and any(
+                verb in text for verb in ("copy ", "move ", "set-content", "out-file", "new-item", "add-content", ">")
+            ):
+                return "startup folder persistence"
+            if "wmic process call create" in text:
+                return "WMI process creation"
+            if "downloadstring" in text and ("iex" in text or "invoke-expression" in text):
+                return "download-and-execute"
+            if "add-type" in text and "typedefinition" in text:
+                return "in-memory compile"
+            if any(host in text for host in ("wscript", "cscript")) and any(
+                ext in text for ext in (".vbs", ".js", ".wsf")
+            ):
+                return "script host execution"
+            if "mshta" in text and "vbscript" in text:
+                return "mshta vbscript"
             return ""
 
 
