@@ -12,7 +12,7 @@ namespace Axiom.Setup;
 internal sealed class SetupNativeWindow : IDisposable
 {
     private const string WindowClassName = "AxiomSetupNativeWindow";
-    private const int LogicalWidth = 656;
+    private const int LogicalWidth = 700;
     private const int LogicalHeight = 840;
 
     private const uint WmCreate = 0x0001;
@@ -59,9 +59,12 @@ internal sealed class SetupNativeWindow : IDisposable
     private const uint EmScrollCaret = 0x00B7;
 
     private const uint MbOk = 0x00000000;
+    private const uint MbYesNo = 0x00000004;
     private const uint MbIconError = 0x00000010;
+    private const uint MbIconQuestion = 0x00000020;
     private const uint MbIconWarning = 0x00000030;
     private const uint MbIconInformation = 0x00000040;
+    private const int IdYes = 6;
 
     private const int DwmwaUseImmersiveDarkMode = 20;
     private const uint SpiGetWorkArea = 0x0030;
@@ -80,6 +83,9 @@ internal sealed class SetupNativeWindow : IDisposable
     private const int IdLogEdit = 112;
     private const int IdInstallBtn = 113;
     private const int IdCloseBtn = 114;
+    private const int IdOpenAxiomBtn = 115;
+    private const int IdRepairBtn = 116;
+    private const int IdUninstallBtn = 117;
 
     private static readonly int ColorBg = Rgb(15, 20, 28);
     private static readonly int ColorCard = Rgb(23, 30, 41);
@@ -113,6 +119,9 @@ internal sealed class SetupNativeWindow : IDisposable
     private nint _hLogEdit;
     private nint _hInstallBtn;
     private nint _hCloseBtn;
+    private nint _hOpenAxiomBtn;
+    private nint _hRepairBtn;
+    private nint _hUninstallBtn;
     private nint _hWarningTitle;
 
     private nint _brushBg;
@@ -127,6 +136,8 @@ internal sealed class SetupNativeWindow : IDisposable
     private double _scale = 1.0;
     private bool _installing;
     private bool _completedSuccessfully;
+    private bool _lastOperationWasUninstall;
+    private bool _lastOperationWasRepair;
     private SetupInstallResult? _installResult;
     private string _installButtonText = "Install Axiom";
     private string _closeButtonText = "Cancel";
@@ -404,11 +415,29 @@ internal sealed class SetupNativeWindow : IDisposable
 
         // Footer buttons
         int btnY = card3Bottom + S(12);
-        int cancelW = S(108);
-        int installW = S(148);
+        int openW = S(106);
+        int repairW = S(86);
+        int uninstallW = S(96);
+        int cancelW = S(96);
+        int installW = S(138);
+        int openX = pad;
+        int repairX = openX + openW + S(8);
+        int uninstallX = repairX + repairW + S(8);
         int closeX = cw - pad - cancelW;
-        int installX = closeX - S(10) - installW;
+        int installX = closeX - S(8) - installW;
 
+        _hOpenAxiomBtn = NativeMethods.CreateWindowEx(
+            0, "BUTTON", "Open Axiom",
+            WsChild | WsVisible | WsTabStop | BsOwnerDraw | WsDisabled,
+            openX, btnY, openW, btnH, _hwnd, IdOpenAxiomBtn, nint.Zero, nint.Zero);
+        _hRepairBtn = NativeMethods.CreateWindowEx(
+            0, "BUTTON", "Repair",
+            WsChild | WsVisible | WsTabStop | BsOwnerDraw | WsDisabled,
+            repairX, btnY, repairW, btnH, _hwnd, IdRepairBtn, nint.Zero, nint.Zero);
+        _hUninstallBtn = NativeMethods.CreateWindowEx(
+            0, "BUTTON", "Uninstall",
+            WsChild | WsVisible | WsTabStop | BsOwnerDraw | WsDisabled,
+            uninstallX, btnY, uninstallW, btnH, _hwnd, IdUninstallBtn, nint.Zero, nint.Zero);
         _hInstallBtn = NativeMethods.CreateWindowEx(
             0, "BUTTON", _installButtonText,
             WsChild | WsVisible | WsTabStop | BsOwnerDraw | WsDisabled,
@@ -418,6 +447,7 @@ internal sealed class SetupNativeWindow : IDisposable
             WsChild | WsVisible | WsTabStop | BsOwnerDraw,
             closeX, btnY, cancelW, btnH, _hwnd, IdCloseBtn, nint.Zero, nint.Zero);
 
+        RefreshExistingInstallUi(logExisting: true);
         NativeMethods.SetFocus(_hAgreeCheck);
     }
 
@@ -524,7 +554,14 @@ internal sealed class SetupNativeWindow : IDisposable
         _ = NativeMethods.SetBkMode(dis.hDC, 1 /* TRANSPARENT */);
         _ = NativeMethods.SetTextColor(dis.hDC, textColor);
 
-        string caption = isInstall ? _installButtonText : _closeButtonText;
+        string caption = dis.CtlID switch
+        {
+            IdInstallBtn => _installButtonText,
+            IdOpenAxiomBtn => "Open Axiom",
+            IdRepairBtn => "Repair",
+            IdUninstallBtn => "Uninstall",
+            _ => _closeButtonText,
+        };
         RECT r = dis.rcItem;
         _ = NativeMethods.DrawText(dis.hDC, caption, caption.Length, ref r, 0x01 /* DT_CENTER */ | 0x04 /* DT_VCENTER */ | 0x20 /* DT_SINGLELINE */);
 
@@ -579,7 +616,41 @@ internal sealed class SetupNativeWindow : IDisposable
 
         if (id == IdInstallBtn && code == BnClicked)
         {
-            StartInstall();
+            StartInstall(isRepair: false);
+            return;
+        }
+
+        if (id == IdOpenAxiomBtn && code == BnClicked && !_installing)
+        {
+            LaunchInstalledAxiom();
+            return;
+        }
+
+        if (id == IdRepairBtn && code == BnClicked && !_installing)
+        {
+            int answer = NativeMethods.MessageBox(
+                _hwnd,
+                $"Repair the Axiom installation at {_initialOptions.InstallDir} using the selected installation mode?",
+                "Axiom Setup — Repair",
+                MbYesNo | MbIconQuestion);
+            if (answer == IdYes)
+            {
+                StartInstall(isRepair: true);
+            }
+            return;
+        }
+
+        if (id == IdUninstallBtn && code == BnClicked && !_installing)
+        {
+            int answer = NativeMethods.MessageBox(
+                _hwnd,
+                $"Uninstall Axiom from {_initialOptions.InstallDir}?\n\nThis removes the installed application binaries, Start Menu shortcut, autostart entry and Windows service registration.",
+                "Axiom Setup — Uninstall",
+                MbYesNo | MbIconWarning);
+            if (answer == IdYes)
+            {
+                StartUninstall();
+            }
             return;
         }
 
@@ -604,6 +675,54 @@ internal sealed class SetupNativeWindow : IDisposable
         NativeMethods.SendMessage(_hPartialRadio, BmSetCheck, complete ? BstUnchecked : BstChecked, 0);
     }
 
+    private void RefreshExistingInstallUi(bool logExisting = false)
+    {
+        var existing = SetupInstaller.DetectExistingInstallation(_initialOptions.InstallDir);
+        _installButtonText = existing.Exists ? "Upgrade Axiom" : "Install Axiom";
+
+        bool hasDesktop = existing.DesktopPath is not null;
+        bool hasAnyInstall = existing.Exists;
+        NativeMethods.EnableWindow(_hOpenAxiomBtn, !_installing && hasDesktop);
+        NativeMethods.EnableWindow(_hRepairBtn, !_installing && hasAnyInstall);
+        NativeMethods.EnableWindow(_hUninstallBtn, !_installing && hasAnyInstall);
+        NativeMethods.InvalidateRect(_hOpenAxiomBtn, nint.Zero, true);
+        NativeMethods.InvalidateRect(_hRepairBtn, nint.Zero, true);
+        NativeMethods.InvalidateRect(_hUninstallBtn, nint.Zero, true);
+        UpdateInstallEnabled();
+
+        if (logExisting && existing.Exists)
+        {
+            var versionLabel = existing.Version is null ? "" : $" v{existing.Version}";
+            var notice = $"Detected existing Axiom{versionLabel} installation at {_initialOptions.InstallDir}.\r\n" +
+                         "Click Open Axiom, Repair, Uninstall, or accept the risk notice to Upgrade Axiom.\r\n";
+            NativeMethods.SendMessage(_hLogEdit, EmSetSel, -1, -1);
+            NativeMethods.SendMessageText(_hLogEdit, EmReplaceSel, 0, notice);
+        }
+    }
+
+    private void LaunchInstalledAxiom()
+    {
+        var desktopTarget = System.IO.Path.Combine(_initialOptions.InstallDir, "Axiom.Desktop.exe");
+        if (!System.IO.File.Exists(desktopTarget))
+        {
+            _ = NativeMethods.MessageBox(_hwnd, "Axiom.Desktop.exe was not found in the install directory.", "Axiom Setup", MbOk | MbIconError);
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(desktopTarget)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = _initialOptions.InstallDir,
+            });
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            _ = NativeMethods.MessageBox(_hwnd, "Could not launch Axiom: " + exception.Message, "Axiom Setup", MbOk | MbIconError);
+        }
+    }
+
     private void UpdateInstallEnabled()
     {
         bool canInstall = !_installing && !_completedSuccessfully && IsChecked(_hAgreeCheck);
@@ -611,15 +730,13 @@ internal sealed class SetupNativeWindow : IDisposable
         NativeMethods.InvalidateRect(_hInstallBtn, nint.Zero, true);
     }
 
-    private void StartInstall()
+    private void BeginBusyState()
     {
-        if (_installing || !IsChecked(_hAgreeCheck))
-        {
-            return;
-        }
-
         _installing = true;
         NativeMethods.EnableWindow(_hInstallBtn, false);
+        NativeMethods.EnableWindow(_hOpenAxiomBtn, false);
+        NativeMethods.EnableWindow(_hRepairBtn, false);
+        NativeMethods.EnableWindow(_hUninstallBtn, false);
         NativeMethods.EnableWindow(_hAgreeCheck, false);
         NativeMethods.EnableWindow(_hShortcutCheck, false);
         NativeMethods.EnableWindow(_hLaunchCheck, false);
@@ -627,13 +744,33 @@ internal sealed class SetupNativeWindow : IDisposable
         NativeMethods.EnableWindow(_hPartialRadio, false);
         NativeMethods.EnableWindow(_hCloseBtn, false);
         NativeMethods.InvalidateRect(_hInstallBtn, nint.Zero, true);
+        NativeMethods.InvalidateRect(_hOpenAxiomBtn, nint.Zero, true);
+        NativeMethods.InvalidateRect(_hRepairBtn, nint.Zero, true);
+        NativeMethods.InvalidateRect(_hUninstallBtn, nint.Zero, true);
         NativeMethods.InvalidateRect(_hCloseBtn, nint.Zero, true);
         NativeMethods.SetWindowText(_hLogEdit, string.Empty);
+    }
+
+    private void StartInstall(bool isRepair)
+    {
+        if (_installing)
+        {
+            return;
+        }
+
+        if (!isRepair && !IsChecked(_hAgreeCheck))
+        {
+            return;
+        }
+
+        _lastOperationWasUninstall = false;
+        _lastOperationWasRepair = isRepair;
+        BeginBusyState();
 
         var options = _initialOptions with
         {
             CreateShortcut = IsChecked(_hShortcutCheck),
-            StartAfterInstall = IsChecked(_hLaunchCheck),
+            StartAfterInstall = !isRepair && IsChecked(_hLaunchCheck),
             CompleteInstallation = IsChecked(_hCompleteRadio),
         };
 
@@ -647,6 +784,32 @@ internal sealed class SetupNativeWindow : IDisposable
         {
             _installResult = await SetupInstaller
                 .InstallAsync(options, progress, CancellationToken.None)
+                .ConfigureAwait(false);
+            NativeMethods.PostMessage(_hwnd, WmAppDone, 0, 0);
+        });
+    }
+
+    private void StartUninstall()
+    {
+        if (_installing)
+        {
+            return;
+        }
+
+        _lastOperationWasUninstall = true;
+        _lastOperationWasRepair = false;
+        BeginBusyState();
+
+        var progress = new NativeLogProgress(message =>
+        {
+            _logQueue.Enqueue(message);
+            NativeMethods.PostMessage(_hwnd, WmAppLog, 0, 0);
+        });
+
+        _ = Task.Run(async () =>
+        {
+            _installResult = await SetupInstaller
+                .UninstallAsync(_initialOptions, progress, CancellationToken.None)
                 .ConfigureAwait(false);
             NativeMethods.PostMessage(_hwnd, WmAppDone, 0, 0);
         });
@@ -678,19 +841,54 @@ internal sealed class SetupNativeWindow : IDisposable
         var result = _installResult;
         bool startAfter = IsChecked(_hLaunchCheck);
 
+        NativeMethods.EnableWindow(_hAgreeCheck, true);
+        NativeMethods.EnableWindow(_hShortcutCheck, true);
+        NativeMethods.EnableWindow(_hLaunchCheck, true);
+        NativeMethods.EnableWindow(_hCompleteRadio, true);
+        NativeMethods.EnableWindow(_hPartialRadio, true);
+        NativeMethods.EnableWindow(_hCloseBtn, true);
+
+        if (_lastOperationWasUninstall)
+        {
+            _completedSuccessfully = false;
+            _closeButtonText = result is { Success: true } ? "Close" : "Cancel";
+            RefreshExistingInstallUi();
+            NativeMethods.InvalidateRect(_hCloseBtn, nint.Zero, true);
+            if (result is { Success: true })
+            {
+                if (result.Warning is { Length: > 0 } uninstallWarning)
+                {
+                    _ = NativeMethods.MessageBox(_hwnd, $"{result.Message}\n\n{uninstallWarning}", "Axiom Setup", MbOk | MbIconWarning);
+                }
+                else
+                {
+                    _ = NativeMethods.MessageBox(_hwnd, result.Message, "Axiom Setup", MbOk | MbIconInformation);
+                }
+            }
+            else
+            {
+                _ = NativeMethods.MessageBox(_hwnd, result?.Message ?? "Uninstall failed.", "Axiom Setup failed", MbOk | MbIconError);
+            }
+            return;
+        }
+
         if (result is { Success: true })
         {
-            _completedSuccessfully = true;
+            _completedSuccessfully = !result.PartialSuccess;
             _closeButtonText = "Close";
-            NativeMethods.EnableWindow(_hCloseBtn, true);
+            RefreshExistingInstallUi();
             NativeMethods.InvalidateRect(_hCloseBtn, nint.Zero, true);
 
-            if (result.Warning is { Length: > 0 } warning)
+            if (result.PartialSuccess || result.Warning is { Length: > 0 })
             {
-                _ = NativeMethods.MessageBox(_hwnd, warning, "Axiom Setup", MbOk | MbIconWarning);
+                var body = string.IsNullOrWhiteSpace(result.Warning)
+                    ? result.Message
+                    : $"{result.Message}\n\n{result.Warning}";
+                _ = NativeMethods.MessageBox(_hwnd, body, "Axiom Setup — Partial Success", MbOk | MbIconWarning);
+                return;
             }
 
-            if (startAfter)
+            if (startAfter && !_lastOperationWasRepair)
             {
                 NativeMethods.PostMessage(_hwnd, WmClose, 0, 0);
                 return;
@@ -700,13 +898,7 @@ internal sealed class SetupNativeWindow : IDisposable
         }
         else
         {
-            NativeMethods.EnableWindow(_hAgreeCheck, true);
-            NativeMethods.EnableWindow(_hShortcutCheck, true);
-            NativeMethods.EnableWindow(_hLaunchCheck, true);
-            NativeMethods.EnableWindow(_hCompleteRadio, true);
-            NativeMethods.EnableWindow(_hPartialRadio, true);
-            NativeMethods.EnableWindow(_hCloseBtn, true);
-            UpdateInstallEnabled();
+            RefreshExistingInstallUi();
             NativeMethods.InvalidateRect(_hCloseBtn, nint.Zero, true);
             _ = NativeMethods.MessageBox(
                 _hwnd,

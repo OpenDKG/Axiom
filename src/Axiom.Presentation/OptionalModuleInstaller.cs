@@ -103,6 +103,14 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        if (ResolveNpmExecutable() is null)
+        {
+            log?.Invoke(
+                "DKG prerequisite missing: npm is not installed or not on PATH. " +
+                "Install Node.js LTS (https://nodejs.org) so DKG can be installed.");
+            return false;
+        }
+
         if (!EnsureDkgManifests(log))
         {
             return false;
@@ -113,8 +121,10 @@ public sealed class OptionalModuleInstaller
 
     private string BuildDkgScript()
     {
+        var pathPreamble = BuildNodePathPreamble();
         return $$"""
             $ErrorActionPreference = 'Stop'
+            {{pathPreamble}}
             $dkgRoot = '{{Escape(DkgRoot)}}'
             $dkgHome = '{{Escape(DkgHome)}}'
             $dkg = Join-Path $dkgRoot 'node_modules\.bin\dkg.cmd'
@@ -124,6 +134,9 @@ public sealed class OptionalModuleInstaller
             $installed = $null
             if (Test-Path $packagePath) {
               try { $installed = (Get-Content $packagePath -Raw | ConvertFrom-Json).version } catch { $installed = $null }
+            }
+            if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+              throw 'DKG prerequisite missing: npm is not installed or not on PATH. Install Node.js LTS and retry Repair.'
             }
             if ($installed -ne $dkgVersion -or -not (Test-Path $dkg)) {
               if (Test-Path $dkg) {
@@ -316,9 +329,9 @@ public sealed class OptionalModuleInstaller
             Write-Host 'Installer hash matches the pinned Axiom digest.' -ForegroundColor Green
             $sys32 = Join-Path $env:SystemRoot 'System32'
             $hasVcRuntime = (Test-Path (Join-Path $sys32 'vcruntime140.dll')) -and (Test-Path (Join-Path $sys32 'msvcp140.dll'))
-            $storeBackend = if ($hasVcRuntime) { 'oxigraph' } else { 'oxigraph-worker' }
+            $storeBackend = if ($hasVcRuntime) { 'oxigraph' } else { 'auto' }
             if (-not $hasVcRuntime) {
-              Write-Warning 'VC++ 2015-2022 redistributable not detected; defaulting Blackbox store backend to embedded oxigraph-worker.'
+              Write-Warning 'VC++ 2015-2022 redistributable not detected; selecting Blackbox store backend auto.'
             } else {
               Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
             }
@@ -590,7 +603,92 @@ public sealed class OptionalModuleInstaller
     }
 
     public static string SelectBlackboxStoreBackend(bool hasVcRuntime) =>
-        hasVcRuntime ? "oxigraph" : "oxigraph-worker";
+        hasVcRuntime ? "oxigraph" : "auto";
+
+    public static string? ResolveNpmExecutable(
+        string? pathVariable = null,
+        Func<string, bool>? fileExists = null,
+        string? programFiles = null,
+        string? programFilesX86 = null,
+        string? localAppData = null)
+    {
+        var exists = fileExists ?? File.Exists;
+        var names = OperatingSystem.IsWindows()
+            ? new[] { "npm.cmd", "npm.exe" }
+            : new[] { "npm" };
+
+        var candidates = new List<string>();
+        var path = pathVariable ?? Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            candidates.AddRange(path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            foreach (var root in new[]
+                     {
+                         programFiles ?? Environment.GetEnvironmentVariable("ProgramFiles"),
+                         Environment.GetEnvironmentVariable("ProgramW6432"),
+                         programFilesX86 ?? Environment.GetEnvironmentVariable("ProgramFiles(x86)"),
+                     })
+            {
+                if (!string.IsNullOrWhiteSpace(root))
+                {
+                    candidates.Add(Path.Combine(root, "nodejs"));
+                }
+            }
+
+            var local = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrWhiteSpace(local))
+            {
+                candidates.Add(Path.Combine(local, "Programs", "nodejs"));
+            }
+        }
+
+        foreach (var rawDir in candidates)
+        {
+            var trimmed = rawDir.Trim().Trim('"');
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                continue;
+            }
+
+            foreach (var name in names)
+            {
+                try
+                {
+                    var full = Path.Combine(trimmed, name);
+                    if (exists(full))
+                    {
+                        return full;
+                    }
+                }
+                catch (ArgumentException)
+                {
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public static string BuildNodePathPreamble(
+        string? pathVariable = null,
+        Func<string, bool>? fileExists = null,
+        string? programFiles = null,
+        string? programFilesX86 = null,
+        string? localAppData = null)
+    {
+        var npmPath = ResolveNpmExecutable(pathVariable, fileExists, programFiles, programFilesX86, localAppData);
+        var dir = npmPath is null ? null : Path.GetDirectoryName(npmPath);
+        if (string.IsNullOrWhiteSpace(dir))
+        {
+            return string.Empty;
+        }
+
+        return $"$env:PATH = '{Escape(dir)};' + $env:PATH";
+    }
 
     public static string ResolvePowerShellExecutable(
         string? pathVariable = null,

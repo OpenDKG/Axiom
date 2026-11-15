@@ -88,6 +88,15 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        var prerequisites = ModulePrerequisites.Probe();
+        var hasNpm = prerequisites.Tools.Any(t => t.Tool == ModuleTool.Node && t.IsAvailable);
+        if (!hasNpm)
+        {
+            LastError = "DKG prerequisite missing: Node.js/npm is not installed or not on PATH. Install Node.js LTS first.";
+            log?.Invoke(LastError);
+            return false;
+        }
+
         return RunPowerShellScript(BuildDkgScript(), log);
     }
 
@@ -101,6 +110,9 @@ public sealed class OptionalModuleInstaller
             $dkgHome = '{{Escape(DkgHome)}}'
             $dkg = Join-Path $dkgRoot 'node_modules\.bin\dkg.cmd'
             New-Item -ItemType Directory -Force -Path $dkgRoot, $dkgHome | Out-Null
+            if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+              throw 'DKG prerequisite missing: npm is not installed or not on PATH. Install Node.js LTS and retry.'
+            }
             if (-not (Test-Path $dkg)) {
               Write-Host 'Installing @origintrail-official/dkg (local, --ignore-scripts)...' -ForegroundColor Cyan
               npm install --prefix $dkgRoot --ignore-scripts --no-fund --no-audit '{{DkgPackage}}'
@@ -243,9 +255,9 @@ public sealed class OptionalModuleInstaller
             Write-Host 'Installer hash matches the pinned Axiom digest.' -ForegroundColor Green
             $sys32 = Join-Path $env:SystemRoot 'System32'
             $hasVcRuntime = (Test-Path (Join-Path $sys32 'vcruntime140.dll')) -and (Test-Path (Join-Path $sys32 'msvcp140.dll'))
-            $storeBackend = if ($hasVcRuntime) { 'oxigraph' } else { 'oxigraph-worker' }
+            $storeBackend = if ($hasVcRuntime) { 'oxigraph' } else { 'auto' }
             if (-not $hasVcRuntime) {
-              Write-Warning 'VC++ 2015-2022 redistributable not detected; defaulting Blackbox store backend to embedded oxigraph-worker.'
+              Write-Warning 'VC++ 2015-2022 redistributable not detected; selecting Blackbox store backend auto.'
             } else {
               Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
             }

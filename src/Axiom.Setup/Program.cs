@@ -29,6 +29,17 @@ internal static class Program
         var options = SetupOptions.Parse(args);
         if (options.Silent)
         {
+            if (options.Uninstall)
+            {
+                var uninstall = SetupInstaller
+                    .UninstallAsync(options, progress: null, CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+                Console.WriteLine(uninstall.Message);
+                Environment.ExitCode = uninstall.Success ? 0 : 1;
+                return;
+            }
+
             if (!options.AcceptRisk)
             {
                 Console.Error.WriteLine(
@@ -41,11 +52,15 @@ internal static class Program
                 .InstallAsync(options, progress: null, CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
-            if (!result.Success)
+            if (!result.Success || result.PartialSuccess)
             {
-                // Silent mode used to exit 1 with no reason at all. Write the failure and the tail
-                // of the log so the caller (and the lab log) can see what stopped the install.
-                Console.Error.WriteLine("Axiom setup failed: " + result.Message);
+                // Write the reason / partial-success warnings and the tail of the log so automated callers see what stopped optional steps.
+                Console.Error.WriteLine((result.Success ? "Axiom setup partial success: " : "Axiom setup failed: ") + result.Message);
+                if (!string.IsNullOrWhiteSpace(result.Warning))
+                {
+                    Console.Error.WriteLine(result.Warning);
+                }
+
                 foreach (var line in result.Log.TakeLast(20))
                 {
                     Console.Error.WriteLine("  " + line);
