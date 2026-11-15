@@ -198,8 +198,8 @@ reads and writes included. `axiom` (S4U and Interactive) is answered. This is id
 
 ## R4.4 Privacy Shield and DoH, `main` vs S1b
 
-This ran in the same pass as R4.3, with a fresh install per build. **Every one of the 51 Privacy Shield
-checks is identical after normalisation, `main` vs S1b and `main` vs S1a.** The results, the same on all
+This ran in the same pass as R4.3, with a fresh install per build. **All 54 Privacy Shield checks (raw
+reply lines included) are identical after normalisation, `main` vs S1b and `main` vs S1a.** The results, the same on all
 three builds:
 
 | Step | Result |
@@ -216,9 +216,9 @@ three builds:
 | `privacy.sources.update` (`windowsspyblocker` + `blocklistproject-ads`) | `ok`, 236,174 rules, no source error; listed names NXDOMAIN, `example.com` resolves |
 | **disable** | `Disabled`; adapter DNS back to `Ethernet 10.0.2.3`, **equal to the value before enabling**; system resolution works |
 
-Only `privacy.status` counters right after the restart can differ between builds. On S1a's run, Windows
-telemetry (`svchost` looking up `v20.events.data.microsoft.com`) reached the resolver between the restart
-and the probe. The same field had 0 on `main` and S1b.
+The `privacy.status` counters right after the restart depend on background lookups. In the discarded
+first pass (see R4.5), Windows telemetry (`svchost` looking up `v20.events.data.microsoft.com`) reached the
+resolver in that window on one build. In the re-run the counters were equal on all three builds.
 
 ## R4.5 Not tested in this round
 
