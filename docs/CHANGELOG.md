@@ -2,6 +2,12 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.41.0
+
+- **F-19 part C: per-process egress block planning.**
+  - `BuildProcessEgressBlockSpec` emits an outbound any-destination block for one executable, requires explicit user authorization, refuses Windows system binaries, and reuses the existing rule validator/identity.
+  - 6 unit tests; not yet wired to the service, no rule written.
+
 ## What's in 0.40.0
 
 - **F-19 observation de-duplication.**
