@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.47.0
+
+- **Live Claude Code sweep fix.**
+  - Installed Claude Code 2.1.325 and provisioned its hook: 0.30.0 blocked 4/15 vectors, 0.46.0 14/15, 0.47.0 **15/15**.
+  - Claude's `Read`/`Write` pass `file_path`; the store check only knew `path`/`filePath`, so `.git-credentials` was readable. `_arg_path` now covers all three names in the shared guard and the OpenCode bridge.
+  - Behavioural test adds a `file_path` store case.
+
 ## What's in 0.46.0
 
 - **Live Codex sweep fix.**
