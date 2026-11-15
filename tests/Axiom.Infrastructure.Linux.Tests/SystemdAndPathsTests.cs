@@ -49,6 +49,12 @@ public sealed class SystemdAndPathsTests
         Assert.Contains("LogsDirectory=axiom", unit, StringComparison.Ordinal);
         Assert.Contains("ProtectSystem=strict", unit, StringComparison.Ordinal);
         Assert.Contains("ReadWritePaths=/var/lib/axiom /run/axiom", unit, StringComparison.Ordinal);
+
+        // PR #276 review, finding 1: resolver paths are optional ("-": a minimal host without
+        // NetworkManager or systemd-resolved must not fail with 226/NAMESPACE); Axiom's own state,
+        // runtime, cgroup and BPF paths stay required (no "-").
+        var readWrite = unit.Split('\n').Single(line => line.StartsWith("ReadWritePaths=", StringComparison.Ordinal))["ReadWritePaths=".Length..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(["/var/lib/axiom", "/run/axiom", "/sys/fs/cgroup", "/sys/fs/bpf", "-/etc/resolv.conf", "-/run/systemd/resolve", "-/run/NetworkManager"], readWrite);
         Assert.Contains(" /sys/fs/bpf ", unit, StringComparison.Ordinal); // BPF pins
         Assert.Contains("ProtectKernelTunables=no", unit, StringComparison.Ordinal); // it would mount /sys/fs/bpf read-only
         Assert.Contains("ReadOnlyPaths=-/proc/sys ", unit, StringComparison.Ordinal);
