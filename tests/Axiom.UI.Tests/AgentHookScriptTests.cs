@@ -225,6 +225,18 @@ public sealed class AgentHookScriptTests
     }
 
     [Fact]
+    public void Gemini_hook_handles_before_tool_and_returns_gemini_deny()
+    {
+        var hook = AgentHookScript.Build("gemini");
+
+        Assert.Contains("beforetool", hook, StringComparison.Ordinal);
+        Assert.Contains("before_tool", hook, StringComparison.Ordinal);
+        Assert.Contains("\"decision\": \"deny\"", hook, StringComparison.Ordinal);
+        Assert.Contains("absolute_path", hook, StringComparison.Ordinal);
+        Assert.Contains("args[\"path\"] = args[\"absolute_path\"]", hook, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OpenCode_bridge_carries_launch_and_upload_protection()
     {
         var build = typeof(OpenCodeProtection).GetMethod(
