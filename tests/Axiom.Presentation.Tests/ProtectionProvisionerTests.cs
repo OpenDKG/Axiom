@@ -7,8 +7,15 @@ namespace Axiom.Presentation.Tests;
 
 public sealed class ProtectionProvisionerTests
 {
-    private const string LocalConfig = @"C:\lab\AppData\Local\hermes\config.yaml";
-    private const string ProfileConfig = @"C:\lab\.hermes\config.yaml";
+    // Composed with Path.Combine so the fixtures match HermesConfigLocation.Candidates on every
+    // host: literal Windows paths diverge from the product's own composition on macOS/Linux.
+    private static readonly string LocalRoot = Path.Combine("lab", "AppData", "Local");
+
+    private static readonly string ProfileRoot = "lab";
+
+    private static readonly string LocalConfig = Path.Combine(LocalRoot, "hermes", "config.yaml");
+
+    private static readonly string ProfileConfig = Path.Combine(ProfileRoot, ".hermes", "config.yaml");
 
     [Fact]
     public void Provision_writes_block_mode_to_the_config_the_guard_reads()
@@ -19,8 +26,8 @@ public sealed class ProtectionProvisionerTests
         };
 
         var result = ProtectionProvisioner.Provision(
-            @"C:\lab\AppData\Local",
-            @"C:\lab",
+            LocalRoot,
+            ProfileRoot,
             path => files.ContainsKey(path),
             path => files.TryGetValue(path, out var text) ? text : null,
             (path, text) => files[path] = text,
@@ -42,8 +49,8 @@ public sealed class ProtectionProvisionerTests
         };
 
         var result = ProtectionProvisioner.Provision(
-            @"C:\lab\AppData\Local",
-            @"C:\lab",
+            LocalRoot,
+            ProfileRoot,
             path => files.ContainsKey(path),
             path => files.TryGetValue(path, out var text) ? text : null,
             (path, text) => files[path] = text,
@@ -64,8 +71,8 @@ public sealed class ProtectionProvisionerTests
         };
 
         var result = ProtectionProvisioner.Provision(
-            @"C:\lab\AppData\Local",
-            @"C:\lab",
+            LocalRoot,
+            ProfileRoot,
             path => files.ContainsKey(path),
             path => files.TryGetValue(path, out var text) ? text : null,
             (_, _) => { },
@@ -86,8 +93,8 @@ public sealed class ProtectionProvisionerTests
         };
 
         var result = ProtectionProvisioner.Provision(
-            @"C:\lab\AppData\Local",
-            @"C:\lab",
+            LocalRoot,
+            ProfileRoot,
             path => files.ContainsKey(path),
             path => files.TryGetValue(path, out var text) ? text : null,
             (path, text) => files[path] = text,
@@ -107,8 +114,8 @@ public sealed class ProtectionProvisionerTests
         };
 
         var result = ProtectionProvisioner.Provision(
-            @"C:\lab\AppData\Local",
-            @"C:\lab",
+            LocalRoot,
+            ProfileRoot,
             path => files.ContainsKey(path),
             path => files.TryGetValue(path, out var text) ? text : null,
             (path, text) => files[path] = text,
@@ -145,8 +152,8 @@ public sealed class ProtectionProvisionerTests
         };
 
         var result = ProtectionProvisioner.Provision(
-            @"C:\lab\AppData\Local",
-            @"C:\lab",
+            LocalRoot,
+            ProfileRoot,
             path => files.ContainsKey(path),
             path => files.TryGetValue(path, out var text) ? text : null,
             (path, text) => files[path] = text,
@@ -170,8 +177,8 @@ public sealed class ProtectionProvisionerTests
         };
 
         var result = ProtectionProvisioner.Provision(
-            @"C:\lab\AppData\Local",
-            @"C:\lab",
+            LocalRoot,
+            ProfileRoot,
             path => files.ContainsKey(path),
             path => files.TryGetValue(path, out var text) ? text : null,
             (path, text) => files[path] = text,
