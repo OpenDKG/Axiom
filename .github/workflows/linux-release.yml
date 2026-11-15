@@ -1,0 +1,66 @@
+name: Linux package
+
+# Builds the Linux .deb alongside the Windows release assets. This workflow only produces a
+# downloadable artifact: it does not create a GitHub release, upload an asset or push anything.
+# Releasing is a separate, explicitly authorised step (scripts/linux/package.sh on the release
+# machine, then a manual asset upload next to Axiom-Setup.exe / Axiom-<version>-win-x64.zip).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-package-${{ github.event.inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deb:
+    name: Build Ubuntu .deb (x64)
+    # The package is validated on Ubuntu 24.04 (docs/LINUX_TEST_REPORT.md); build on the same base.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Set up .NET SDK from global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install BPF build tools
+        run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev bpftool
+
+      - name: Build the .deb
+        run: scripts/linux/package.sh deb --arch x64
+
+      - name: Checksums and inventory
+        run: |
+          cd build/linux
+          sha256sum axiom_*.deb > SHA256SUMS.txt
+          dpkg-deb -I axiom_*.deb | sed -n '1,40p' > control.txt
+          dpkg-deb -c axiom_*.deb > contents.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload the package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: axiom-linux-x64-deb
+          path: |
+            build/linux/axiom_*.deb
+            build/linux/SHA256SUMS.txt
+            build/linux/control.txt
+            build/linux/contents.txt
+          if-no-files-found: error
+          retention-days: 14
