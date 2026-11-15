@@ -474,6 +474,40 @@ public sealed class AgentHookScriptTests
         }
     }
 
+    [Fact]
+    public void Ui_services_inline_protection_hooks_embed_command_guard_and_gemini_path_mapping()
+    {
+        var bindingFlags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+        var scripts = new (string Name, string Script)[]
+        {
+            ("GeminiProtection", (string)typeof(Axiom.UI.Services.GeminiProtection).GetMethod("BuildHookScript", bindingFlags)!.Invoke(null, null)!),
+            ("AntigravityProtection", (string)typeof(Axiom.UI.Services.AntigravityProtection).GetMethod("BuildScript", bindingFlags)!.Invoke(null, null)!),
+            ("CopilotProtection", (string)typeof(Axiom.UI.Services.CopilotProtection).GetMethod("BuildHookScript", bindingFlags)!.Invoke(null, null)!),
+            ("CursorProtection", (string)typeof(Axiom.UI.Services.CursorProtection).GetMethod("BuildHookScript", bindingFlags)!.Invoke(null, null)!),
+            ("WindsurfProtection", (string)typeof(Axiom.UI.Services.WindsurfProtection).GetMethod("BuildHookScript", bindingFlags)!.Invoke(null, null)!),
+            (
+                "ClineProtection",
+                (string)typeof(Axiom.UI.Services.ClineProtection)
+                    .GetMethod("BuildHookScript", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                    .Invoke(new Axiom.UI.Services.ClineProtection(@"C:\temp\user", @"C:\temp\local"), null)!
+            ),
+        };
+
+        foreach (var (name, script) in scripts)
+        {
+            Assert.True(
+                script.Contains("def _check_command_safety(", StringComparison.Ordinal),
+                $"{name} is missing injected AgentCommandGuard helpers.");
+            Assert.True(
+                script.Contains("_check_command_safety(", StringComparison.Ordinal),
+                $"{name} never invokes _check_command_safety.");
+            Assert.DoesNotContain("# <<AXIOM_COMMAND_GUARD>>", script, StringComparison.Ordinal);
+        }
+
+        var geminiScript = scripts[0].Script;
+        Assert.Contains("parsed_args[\"path\"] = parsed_args[\"absolute_path\"]", geminiScript, StringComparison.Ordinal);
+    }
+
     private static string WriteScript(string directory, string framework)
     {
         var path = Path.Combine(directory, framework + ".py");
