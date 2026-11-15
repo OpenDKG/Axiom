@@ -11,7 +11,7 @@ Revision 2 (2026-11-15T22:2xZ, single builder): an independent review rejected H
 The eight bounded findings (§12) are fixed in `821237d`; the counts and provenance below are the
 post-fix measurements. Review status: **not approved — fresh independent review required**.
 
-Revision 3 (2026-11-15T~17:5xZ, single builder): a fresh review of `400d4a9` (packaged inputs
+Revision 3 (2026-11-15T22:5xZ, single builder): a fresh review of `400d4a9` (packaged inputs
 `821237d`) rejected exactly two HIGH blockers: the pin script's fake JSON acceptance (§12.9) and
 `postrm` deleting the unit/image after an ignored stop failure (§12.10). Both are fixed in
 `dc2d9cd`; revision-3 artifact `35433682…` was rebuilt from that commit. The new maintainer-script
@@ -239,7 +239,7 @@ DNS/firewall change or egress was performed; `pkexec` was already present.
 | Not run | Privacy Shield enable (would redirect the guest resolver — out of scope); GUI walkthrough (no display); upgrade over the rejected old artifact (unsafe; not installed). Installer stop-failure/timeout paths are covered by injected-runner unit tests, not by breaking systemd in the guest |
 
 
-## 8. Test evidence (host, revision 3, 2026-11-15T~17:5xZ)
+## 8. Test evidence (host, revision 3, 2026-11-15T22:4x-22:5xZ)
 
 `dotnet test` per project in Release on the final commit `dc2d9cd`. This run was as **root** on
 Linux (host kernel 7.0.0-38). Logs: `/tmp/opencode/axiom-recon-packagefix-20261115/`.
