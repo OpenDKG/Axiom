@@ -106,4 +106,20 @@ public sealed class ThreatSharePreflightTests
         Assert.False(preflight.Ready);
         Assert.Contains(preflight.Failures, check => check.Name == "reason");
     }
+
+    [Theory]
+    [InlineData("url", "https://raw.githubusercontent.com")]
+    [InlineData("domain", "cdn.azureedge.net")]
+    [InlineData("domain", "assets.storage.googleapis.com")]
+    [InlineData("domain", "tenant.blob.core.windows.net")]
+    public void Cloud_object_stores_and_major_cdns_are_refused(string type, string value)
+    {
+        var preflight = ThreatSharePreflight.Evaluate(
+            Candidate(type, value), sharingEnabled: true, consentPresent: true, reporterKeyPresent: true,
+            rulesetJson: string.Empty);
+
+        Assert.False(preflight.Ready);
+        var category = Assert.Single(preflight.Failures, check => check.Name == "category");
+        Assert.False(category.Passed);
+    }
 }

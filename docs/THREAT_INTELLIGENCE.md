@@ -1,6 +1,6 @@
 # Threat intelligence: Axiom, Blackbox and OriginTrail DKG
 
-**Applies to:** Axiom 0.10.23 for Windows. Blackbox and OriginTrail are optional third-party integrations; their availability and retention policies may differ.
+**Applies to:** Axiom 0.32.0+ for Windows. Blackbox and OriginTrail are optional third-party integrations; their availability and retention policies may differ.
 
 ## The short version
 

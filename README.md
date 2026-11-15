@@ -75,7 +75,7 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 ## Current release and quick links
 
-**Current development release:** [0.22.0](docs/RELEASES/0.22.0.md), 14 November 2026. Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
+**Current development release:** [0.32.0](docs/RELEASES/0.32.0.md), 15 November 2026. Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
 
 > **Version numbering:** development builds were previously numbered `0.10.x`. A short reset produced `0.2.0` and `0.3.0`, but GitHub orders releases by semantic version, which hid them below `0.10.25`. The public release line resumed at `0.11.0` and continues with `0.22.0`; `0.2.0`/`0.3.0` remain historical snapshots. `scripts/build-release.ps1` refuses a version that is not greater than the highest existing `v*` tag.
 
@@ -347,6 +347,7 @@ For installation and recovery details, see [Installing Axiom](docs/INSTALL.md). 
 - [Security and privacy](docs/SECURITY_MODEL.md)
 - [Firewall recovery](docs/FIREWALL_RECOVERY.md)
 - [AI Analyst](docs/AI_ANALYST.md)
+- [Release readiness & security validation](docs/validation/RELEASE_READINESS_MATRIX.md)
 - [Historical changelog](docs/CHANGELOG.md)
 - [Licensing](docs/LICENSING.md)
 
