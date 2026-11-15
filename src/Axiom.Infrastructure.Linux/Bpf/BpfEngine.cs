@@ -657,7 +657,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 return;
             }
 
-            DetachAndUnpin();
+            var detach = DetachAndUnpin();
             lock (_stateGate)
             {
                 _applied.Clear();
@@ -667,7 +667,20 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             }
 
             SetState(false, "stopped");
-            Log($"BPF layer detached and {_paths.PinDirectory} removed.");
+
+            // PR #276 review, finding 3: say "detached" only after a readable zero and with the pins gone.
+            if (detach.Confirmed)
+            {
+                Log($"BPF layer detached and {_paths.PinDirectory} removed.");
+            }
+            else
+            {
+                Log(detach.Remaining is null
+                    ? $"BPF layer stop: detach not confirmed ({detach.Unreadable}); {_paths.PinDirectory} kept, Axiom programs may still be attached at {_paths.CgroupRoot}."
+                    : detach.Remaining.Count > 0
+                        ? $"BPF layer stop: detach not confirmed: {detach.Remaining.Count} Axiom program(s) still attached at {_paths.CgroupRoot} ({string.Join(", ", detach.Remaining.Select(program => $"{program.Name} id {program.Id}"))}); {_paths.PinDirectory} kept."
+                        : $"BPF layer stop: programs detached, but removing {_paths.PinDirectory} was not confirmed.");
+            }
         }
         finally
         {
