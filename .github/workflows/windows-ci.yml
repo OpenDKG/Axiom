@@ -1,0 +1,176 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build, Analyze & Test (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK from global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Environment
+        shell: pwsh
+        run: |
+          dotnet --version
+          dotnet --info | Select-Object -First 25
+
+      - name: Restore solution
+        shell: pwsh
+        run: dotnet restore Axiom.sln
+
+      - name: Release build (analyzers & TreatWarningsAsErrors)
+        shell: pwsh
+        run: dotnet build Axiom.sln -c Release --no-restore
+
+      - name: Run full test suite (strict pass/skip gate)
+        shell: pwsh
+        run: |
+          $resultsDir = Join-Path $env:RUNNER_TEMP 'test-results'
+          New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
+
+          dotnet test Axiom.sln -c Release --no-build -m:1 --logger "trx" --results-directory $resultsDir
+          if ($LASTEXITCODE -ne 0) {
+            throw "dotnet test failed with exit code $LASTEXITCODE"
+          }
+
+          $trxFiles = Get-ChildItem -Path $resultsDir -Filter *.trx -Recurse
+          if (-not $trxFiles) {
+            throw "No TRX test reports were produced."
+          }
+
+          $totalExecuted = 0
+          $totalPassed = 0
+          $totalFailed = 0
+          $totalSkipped = 0
+
+          $summary = New-Object System.Collections.Generic.List[string]
+          $summary.Add("## Windows CI Test Summary")
+          $summary.Add("| Suite | Executed | Passed | Failed | Skipped |")
+          $summary.Add("|---|---:|---:|---:|---:|")
+
+          foreach ($trx in $trxFiles | Sort-Object Name) {
+            [xml]$doc = Get-Content $trx.FullName
+            $c = $doc.TestRun.ResultSummary.Counters
+            $executed = [int]$c.executed
+            $passed = [int]$c.passed
+            $failed = [int]$c.failed
+            $skipped = [int]$c.total - $executed
+
+            $totalExecuted += $executed
+            $totalPassed += $passed
+            $totalFailed += $failed
+            $totalSkipped += $skipped
+
+            $summary.Add("| $($trx.Name) | $executed | $passed | $failed | $skipped |")
+          }
+
+          $summary.Add("| **Total** | **$totalExecuted** | **$totalPassed** | **$totalFailed** | **$totalSkipped** |")
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+          if ($totalFailed -gt 0 -or $totalSkipped -gt 0 -or $totalPassed -eq 0) {
+            throw "Strict test gate failed: executed=$totalExecuted passed=$totalPassed failed=$totalFailed skipped=$totalSkipped"
+          }
+
+      - name: Check for vulnerable NuGet packages
+        shell: pwsh
+        run: |
+          $output = dotnet list Axiom.sln package --vulnerable --include-transitive 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -ne 0) {
+            throw "dotnet list package --vulnerable failed with exit code $LASTEXITCODE"
+          }
+          if ($output -match 'has the following vulnerable packages') {
+            throw "Vulnerable NuGet package(s) detected."
+          }
+
+      - name: Validate notices, licenses & starter feed integrity
+        shell: pwsh
+        run: |
+          foreach ($required in @('LICENSE', 'NOTICE', 'AUTHORS.md', 'THIRD_PARTY_NOTICES.md', 'community/feed.json')) {
+            if (-not (Test-Path $required)) {
+              throw "Required legal/bundle file missing: $required"
+            }
+          }
+
+          $feed = Get-Content 'community/feed.json' -Raw | ConvertFrom-Json
+          if (-not $feed.entries -or $feed.entries.Count -lt 1) {
+            throw "community/feed.json must contain at least one valid entry."
+          }
+
+      - name: Upload TRX test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-test-results
+          path: ${{ runner.temp }}/test-results/**/*.trx
+          if-no-files-found: warn
+          retention-days: 14
+
+  packaging-verification:
+    name: Setup Packaging & Safe CLI Check
+    needs: build-and-test
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK from global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publish single-file Axiom Setup
+        shell: pwsh
+        run: .\scripts\publish-setup.ps1
+
+      - name: Verify installer binary, hash & silent acceptance guard
+        shell: pwsh
+        run: |
+          $setupExe = 'artifacts\publish\setup\Axiom.Setup.exe'
+          if (-not (Test-Path $setupExe)) {
+            throw "Expected installer binary was not produced: $setupExe"
+          }
+
+          $sizeBytes = (Get-Item $setupExe).Length
+          if ($sizeBytes -lt 50MB -or $sizeBytes -gt 125MB) {
+            throw "Unexpected Axiom.Setup.exe size: $sizeBytes bytes"
+          }
+
+          $hash = (Get-FileHash -Path $setupExe -Algorithm SHA256).Hash
+          Write-Host "Axiom.Setup.exe: $sizeBytes bytes, SHA256=$hash"
+
+          # Verify silent mode refuses unattended install without explicit --accept-risk (exit code 2).
+          $proc = Start-Process -FilePath (Resolve-Path $setupExe) -ArgumentList '--silent' -Wait -PassThru -NoNewWindow
+          if ($proc.ExitCode -ne 2) {
+            throw "Expected Axiom.Setup.exe --silent without --accept-risk to exit with code 2, got $($proc.ExitCode)"
+          }
+
+          @(
+            "## Setup Packaging Check",
+            "- Binary: ``Axiom.Setup.exe`` ($sizeBytes bytes)",
+            "- SHA-256: ``$hash``",
+            "- Silent consent gate (``--silent`` without ``--accept-risk``): exit code ``$($proc.ExitCode)``"
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
