@@ -2,6 +2,12 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.45.0
+
+- **F-19 service wiring.**
+  - `ProcessSpawnAuditWorker` runs the WMI feed -> policy/dedupe -> JSONL sink for the service lifetime, writing `%LOCALAPPDATA%\Axiom\process-spawn-audit.jsonl`.
+  - `ProcessSpawnAuditRuntime` is the testable subscription binding; 3 unit tests. WMI failure is logged and non-fatal.
+
 ## What's in 0.44.0
 
 - **F-19 Windows process-start feed.**
