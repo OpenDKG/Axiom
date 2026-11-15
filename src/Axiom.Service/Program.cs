@@ -58,7 +58,6 @@ builder.Services.AddSingleton<ThreatShareController>();
 builder.Services.AddSingleton<PrivacyShieldController>();
 builder.Services.AddHostedService<PrivacyShieldWorker>();
 builder.Services.AddHostedService<ThreatShareWorker>();
-builder.Services.AddHostedService<ProcessSpawnAuditWorker>();
 
 builder.Services.AddSingleton<MonitoringWorker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<MonitoringWorker>());
