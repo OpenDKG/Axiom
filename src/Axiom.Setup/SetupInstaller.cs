@@ -478,7 +478,8 @@ internal static class SetupInstaller
                 }
 
                 var partialSuccess = partialIssues.Count > 0;
-                if (options.StartAfterInstall && !partialSuccess)
+                SaveLastSetupWarning(warning);
+                if (options.StartAfterInstall)
                 {
                     Process.Start(new ProcessStartInfo(desktopTarget)
                     {
@@ -1081,6 +1082,33 @@ internal static class SetupInstaller
             {
                 Marshal.FinalReleaseComObject(shell);
             }
+        }
+    }
+
+    private static void SaveLastSetupWarning(string? warning)
+    {
+        try
+        {
+            var logDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Axiom",
+                "logs");
+            var path = Path.Combine(logDir, "setup-last-warning.txt");
+            if (string.IsNullOrWhiteSpace(warning))
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+
+                return;
+            }
+
+            Directory.CreateDirectory(logDir);
+            File.WriteAllText(path, warning);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
         }
     }
 
