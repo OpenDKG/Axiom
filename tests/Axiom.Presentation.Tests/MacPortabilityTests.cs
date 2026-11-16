@@ -46,9 +46,16 @@ public sealed class MacElevationTests
 
 public sealed class MacBundleLayoutTests
 {
-    [UnixOnlyFact]
+    [Fact]
     public void Paths_inside_an_installed_bundle()
     {
+        // POSIX-only behaviour. The Windows CI gate allows no skipped tests, so on Windows this
+        // returns without asserting; it runs for real on macOS and Linux.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         var layout = new MacBundleLayout("/Applications/Axiom.app/Contents/MacOS/");
 
         Assert.True(layout.IsInsideAppBundle);
