@@ -2,6 +2,11 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.63.0
+
+- **CI: the DNS proxy TCP test no longer flakes.**
+  - `DnsProxyTests.Proxy_blocks_matching_domains_over_tcp` failed on a busy runner when the proxy fell back to UDP-only because its TCP listener lost the bind race. The test now retries the bind up to five times before asserting, so it checks block behaviour instead of timing (issue #374).
+
 ## What's in 0.62.0
 
 - **Simple & Advanced UI modes (`SimpleHomeView`, `SimpleHomePageViewModel`, `UiModeSettingsStore`):**
