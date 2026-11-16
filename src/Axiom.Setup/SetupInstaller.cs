@@ -102,8 +102,16 @@ internal static class SetupInstaller
 
         try
         {
-            if (Process.GetProcessesByName("Axiom.Desktop").Length > 0 ||
-                Process.GetProcessesByName("Netpetra.Desktop").Length > 0)
+            var existingBeforeStop = DetectExistingInstallation(options.InstallDir);
+            if (existingBeforeStop.Exists)
+            {
+                if (!StopRunningDesktopProcesses(Report))
+                {
+                    return new SetupInstallResult(false, "Axiom is running and could not be closed automatically.", log);
+                }
+            }
+            else if (Process.GetProcessesByName("Axiom.Desktop").Length > 0 ||
+                     Process.GetProcessesByName("Netpetra.Desktop").Length > 0)
             {
                 return new SetupInstallResult(false, "Axiom is running. Close it before installing.", log);
             }
@@ -524,6 +532,51 @@ internal static class SetupInstaller
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
             return new SetupInstallResult(false, "Installation failed: " + exception.Message, log);
+        }
+    }
+
+    private static bool StopRunningDesktopProcesses(Action<string> report)
+    {
+        var running = Process.GetProcessesByName("Axiom.Desktop")
+            .Concat(Process.GetProcessesByName("Netpetra.Desktop"))
+            .ToArray();
+        if (running.Length == 0)
+        {
+            return true;
+        }
+
+        report($"Closing {running.Length} running Axiom desktop process(es) for in-place update...");
+        try
+        {
+            foreach (var proc in running)
+            {
+                try
+                {
+                    if (!proc.HasExited)
+                    {
+                        _ = proc.CloseMainWindow();
+                        if (!proc.WaitForExit(2500))
+                        {
+                            proc.Kill(entireProcessTree: true);
+                            _ = proc.WaitForExit(3000);
+                        }
+                    }
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+                {
+                }
+            }
+
+            Thread.Sleep(250);
+            return Process.GetProcessesByName("Axiom.Desktop").Length == 0 &&
+                   Process.GetProcessesByName("Netpetra.Desktop").Length == 0;
+        }
+        finally
+        {
+            foreach (var proc in running)
+            {
+                proc.Dispose();
+            }
         }
     }
 

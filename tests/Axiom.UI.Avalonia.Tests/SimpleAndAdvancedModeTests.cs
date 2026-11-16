@@ -80,6 +80,27 @@ public sealed class SimpleAndAdvancedModeTests : IDisposable
             Assert.Equal(5, shell.NavigationPages.Count);
             Assert.Same(shell.SimpleHome, shell.SelectedPage);
 
+            // SimpleHome surfaces AI agent activity cleanly and OpenAgents switches to Advanced -> Agents
+            shell.Agents.Activity.Add(new Axiom.Contracts.Blackbox.BlackboxAuditEntry(
+                DateTimeOffset.UtcNow,
+                "blocked",
+                "Codex",
+                "sess-1",
+                "bash",
+                "cat ~/.ssh/id_rsa",
+                "block",
+                "high",
+                "ssh-key",
+                "Blocked credential read"));
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(shell.SimpleHome.HasAgentActivity);
+            Assert.Single(shell.SimpleHome.RecentAgentActivity);
+
+            shell.SimpleHome.OpenAgentsCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(shell.IsAdvancedMode);
+            Assert.Same(shell.Agents, shell.SelectedPage);
+
             window.Close();
             shell.Dispose();
         });

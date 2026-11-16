@@ -147,19 +147,8 @@ public static class ProtectionProvisioner
         var agentRoot = Path.Combine(root, "Axiom", "modules", "blackbox", "agent-blackbox");
         var runner = CreateBridgeRunner(agentRoot);
 
-        var rulesPresent = false;
-        try
-        {
-            var rulesetPath = Path.Combine(root, "hermes", "blackbox", "ruleset.json");
-            if (File.Exists(rulesetPath))
-            {
-                rulesPresent = HasVerifiedRules(File.ReadAllText(rulesetPath));
-            }
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            rulesPresent = false;
-        }
+        var rulesetPath = Path.Combine(root, "hermes", "blackbox", "ruleset.json");
+        var rulesPresent = BlackboxLocalState.HasVerifiedRulesFile(rulesetPath);
 
         var result = Provision(
             root,

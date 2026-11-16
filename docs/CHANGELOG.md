@@ -2,6 +2,18 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.76.0
+
+- **Blackbox local ruleset state streams and caches instead of reloading multi-hundred-MB JSON every timer tick.**
+  - `BlackboxLocalState` (`Axiom.Presentation` and `Axiom.UI.Services`) previously called `File.ReadAllText` + `JsonNode.Parse` on `ruleset.json` during every 8s / 60s `Agents` timer refresh, `Security` continuity checks, and startup provisioning (`ProtectionProvisioner.ProvisionAtStartup`).
+  - Replaced DOM parsing of `ruleset.json` with a single-pass streaming `Utf8JsonReader` over a shared `64 KB` buffer (`ArrayPool<byte>`), bounded graph sampling (`MaxGraphThreatsSample = 256`, `MaxCategoryArraySample = 80`, `MaxCategoryMapSample = 12`), and a file-fingerprint `(Length, LastWriteTimeUtc.Ticks)` cache so unchanged rulesets incur zero re-reads or allocations.
+- **Simple View now surfaces AI Agent Guard and live AI Agent Activity alongside Network & Privacy.**
+  - Added an **AI AGENT GUARD** summary card and an **AI agent activity right now** feed to `SimpleHomeView` / `SimpleHomePageViewModel`, activated cleanly via `(Agents as IActivatablePage).Activate()` with one-click navigation into Advanced `Agents`.
+- **Setup Update automatically closes running Axiom, applies the update, relaunches Axiom, and exits Setup.**
+  - `SetupNativeWindow` and `SetupInstaller.InstallAsync` no longer block or prompt with `"Axiom is running"` during in-place updates; Setup closes `Axiom.Desktop` cleanly, completes the upgrade, launches the updated Axiom build, and closes itself automatically.
+- **Enforcement controller: only the parameterless service constructor auto-provisions default machine policy.**
+  - Fixes `EnforcementControllerTests.Missing_policy_file_is_disabled_and_returns_unavailable` broken in `0.75.0` when `GetStatus()` created missing test policy files.
+
 ## What's in 0.75.0
 
 - **The service provisions its own enforcement policy.**
