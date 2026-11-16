@@ -225,6 +225,10 @@ public static class AgentCommandGuard
                 ("logins.json", "Firefox login database"),
                 ("\\web data", "browser autofill database"),
                 ("user data\\local state", "browser encryption key"),
+                ("\\microsoft\\protect", "DPAPI master-key store"),
+                ("\\microsoft\\credentials", "DPAPI credential store"),
+                ("\\panther\\unattend", "Windows unattend file"),
+                ("defaultpassword", "Winlogon autologon password"),
                 ("\\1password\\", "password manager store"),
                 ("bitwarden", "password manager store"),
                 ("keepass", "password manager store"),
@@ -335,6 +339,8 @@ public static class AgentCommandGuard
                 return "USN journal deletion"
             if "cipher /w" in text:
                 return "free-space wipe"
+            if "export-pfxcertificate" in text:
+                return "private-key certificate export"
             if "wmic" in text and ("commandlineeventconsumer" in text or "\\root\\subscription" in text):
                 return "WMI event-consumer persistence"
             if "lsass" in text and any(tool in text for tool in ("procdump", "comsvcs", "minidump", "rundll32")):
