@@ -2,6 +2,15 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.60.0
+
+- **Redesigned theme-aligned `Axiom Setup` wizard (`SetupNativeWindow`, `SetupGdiPlus`, `SetupThemePalette`):**
+  - Replaced legacy Win32 controls with a double-buffered GDI+ setup window using `Axiom.Setup.Logo.png` (`Square150x150Logo.png`), DWM titlebar styling, unified `CornerRadius="6"` geometry, custom vector radio cards/checkboxes/progress bar, and dynamic synchronization with all six Axiom themes via `ThemeSettingsStore.Load()` (`GlassDark` smoked obsidian + `#E2E8F0` silver chrome by default, plus `Dark`, `DarkMidnight`, `GlassLight`, `Light`, and `LightWarm`).
+  - Replaced the single-column radio + path dump with clean side-by-side **Complete Protection (`RECOMMENDED`)** and **Core / Partial Build (`NO ADMIN`)** cards, an interactive **Write scope** view, a crisp **Development build notice** acceptance card, and a dedicated **Progress** view with live step summary, timer, animated shimmer bar, and dark/themed scrollable log.
+- **Automatic post-install / post-update launch & self-closing installer (`SetupInstaller`, `SetupNativeWindow`):**
+  - `SetupInstaller.InstallAsync` now launches `Axiom.Desktop.exe` whenever `StartAfterInstall` is enabled (`true` by default) once core installation succeeds (even when optional-module warnings occur, recording warnings to `%LOCALAPPDATA%\Axiom\logs\setup-last-warning.txt`).
+  - Interactive Install and Update (`Upgrade`) flows automatically close the installer upon completion without blocking popups, and prompt to close any already-running `Axiom.Desktop` instance so in-place updates finish cleanly.
+
 ## What's in 0.59.0
 
 - **Dark folded titanium Axiom brand mark & centered sidebar chrome:**
