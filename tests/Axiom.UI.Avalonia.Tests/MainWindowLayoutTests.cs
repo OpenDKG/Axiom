@@ -48,6 +48,44 @@ public sealed class MainWindowLayoutTests
         Assert.Equal(new PixelPoint(0, 40), position);
     }
 
+    [Theory]
+    // 1460x900 at 1.25 is 1125 px tall on a 1080 px screen; both dimensions are capped in pixels.
+    [InlineData(1920, 1080, 1.25, 1460.0, 864.0, 47, 0)]
+    // 1280/1.5 rounds up to 1281 in double arithmetic; the pixel cap must keep it at 1280.
+    [InlineData(1280, 800, 1.5, 853.3333333333334, 533.3333333333334, 0, 0)]
+    // A larger screen keeps the preferred size and centers it.
+    [InlineData(2560, 1600, 1.5, 1460.0, 900.0, 185, 125)]
+    public void Fractional_scale_never_exceeds_the_working_area(
+        int areaWidth,
+        int areaHeight,
+        double scaling,
+        double expectedWidth,
+        double expectedHeight,
+        int expectedX,
+        int expectedY)
+    {
+        var (width, height, position) = MainWindow.FitToWorkingArea(
+            1460, 900, 900, 600, new PixelRect(0, 0, areaWidth, areaHeight), scaling);
+
+        Assert.Equal(expectedWidth, width, 6);
+        Assert.Equal(expectedHeight, height, 6);
+        Assert.Equal(new PixelPoint(expectedX, expectedY), position);
+        Assert.True(width * scaling <= areaWidth + 1e-9);
+        Assert.True(height * scaling <= areaHeight + 1e-9);
+    }
+
+    [Fact]
+    public void Negative_working_area_origin_is_preserved()
+    {
+        // A monitor left of/above the primary has negative coordinates; centering must not clamp to 0.
+        var (width, height, position) = MainWindow.FitToWorkingArea(
+            1460, 900, 900, 600, new PixelRect(-1920, -200, 1920, 1080), 1.0);
+
+        Assert.Equal(1460, width);
+        Assert.Equal(900, height);
+        Assert.Equal(new PixelPoint(-1690, -110), position);
+    }
+
     [Fact]
     public void Main_window_opens_inside_the_primary_working_area()
     {

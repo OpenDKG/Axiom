@@ -86,9 +86,9 @@ App attribution of DNS queries (`ProcDnsProcessLookup`): query source `127.0.0.1
 `/etc/systemd/system/axiomd.service` written by `axiomd --install-service` (run via pkexec):
 
 ```ini
-[Unit]  Description=Axiom firewall daemon  After=network-pre.target nss-lookup.target  Wants=network-pre.target
+[Unit]  Description=Axiom firewall daemon  After=network-pre.target nss-lookup.target  Wants=network-pre.target  StartLimitIntervalSec=60  StartLimitBurst=5
 [Service] Type=notify  NotifyAccess=main  ExecStart=/usr/libexec/axiom/axiomd  Environment=AXIOM_SERVICE=1
-Restart=on-failure  RestartSec=10  RuntimeDirectory=axiom  RuntimeDirectoryMode=0755  StateDirectory=axiom  StateDirectoryMode=0700
+Restart=on-failure  RestartSec=2  RuntimeDirectory=axiom  RuntimeDirectoryMode=0755  StateDirectory=axiom  StateDirectoryMode=0700
 LogsDirectory=axiom  CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_BPF CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_KILL CAP_SYS_RESOURCE
 ProtectSystem=strict  ReadWritePaths=/var/lib/axiom /run/axiom /sys/fs/cgroup /etc/resolv.conf  ProtectHome=read-only  NoNewPrivileges=yes  PrivateTmp=yes
 [Install] WantedBy=multi-user.target

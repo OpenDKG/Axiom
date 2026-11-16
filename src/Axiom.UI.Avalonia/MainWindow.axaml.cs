@@ -45,6 +45,10 @@ public partial class MainWindow : Window
 
             var (width, height, position) = FitToWorkingArea(
                 Width, Height, MinWidth, MinHeight, screen.WorkingArea, screen.Scaling);
+            // A work area smaller than the 900x600 minimum cannot honour that minimum; lower the
+            // floor only as far as the screen requires so the window still opens fully visible.
+            MinWidth = Math.Min(MinWidth, width);
+            MinHeight = Math.Min(MinHeight, height);
             Width = width;
             Height = height;
             WindowStartupLocation = WindowStartupLocation.Manual;
@@ -77,8 +81,12 @@ public partial class MainWindow : Window
         var fittedHeight = Math.Max(
             Math.Min(height, availableHeight),
             Math.Min(minHeight, availableHeight));
-        var pixelWidth = (int)Math.Ceiling(fittedWidth * scaling);
-        var pixelHeight = (int)Math.Ceiling(fittedHeight * scaling);
+        // Ceiling can overshoot by one pixel at fractional scales (1280/1.5 -> 1280.0000000000002).
+        // Cap in pixels first, then report the DIP size that maps back to that pixel count.
+        var pixelWidth = Math.Min((int)Math.Ceiling(fittedWidth * scaling), workingArea.Width);
+        var pixelHeight = Math.Min((int)Math.Ceiling(fittedHeight * scaling), workingArea.Height);
+        fittedWidth = pixelWidth / scaling;
+        fittedHeight = pixelHeight / scaling;
 
         return (
             fittedWidth,

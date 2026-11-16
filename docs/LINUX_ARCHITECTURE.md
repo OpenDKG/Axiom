@@ -62,12 +62,16 @@ restore Privacy Shield DNS from the backup if present, remove the image; the dat
 Unit (`SystemdUnit.Build`), every directive with its reason in the generated file:
 
 ```
+[Unit]
+StartLimitIntervalSec=60   ; a persistent crash loop stays bounded
+StartLimitBurst=5
+
 [Service]
 Type=notify              ; READY=1 after the IPC socket listens, STOPPING=1 on shutdown
 NotifyAccess=main
 ExecStart=/usr/libexec/axiom/axiomd
 Restart=on-failure
-RestartSec=10
+RestartSec=2
 RuntimeDirectory=axiom   ; /run/axiom, recreated on each start
 StateDirectory=axiom     ; /var/lib/axiom, StateDirectoryMode=0700
 LogsDirectory=axiom
