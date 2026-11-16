@@ -2,6 +2,16 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.59.0
+
+- **Dark folded titanium Axiom brand mark & centered sidebar chrome:**
+  - Replaced `axiom-icon.png` and `axiom-lockup.png` in both UI asset folders (`src/Axiom.UI.Avalonia/Assets` and `src/Axiom.UI/Resources`), rebuilt multi-size `axiom.ico`, and regenerated MSIX Store tiles/splash (`packaging/msix/generate-assets.ps1`): removed the stray upper-right shield notch, refined the crisp diagonal metal fold (`brushed steel` vs `dark gunmetal`), matched the folded metallic finish across the `AXIOM` letters, and added subtle `xiom` lettering below `A` inside the shield.
+  - Centered the top-left `AXIOM` lockup and `LOCAL-FIRST · NO TELEMETRY` badge in `MainWindow.axaml`, removed the redundant top-left version label, centered the bottom-left footer (`Axiom` icon, name, version, description, and action buttons), and pointed `Contact` to `mailto:contact@opendkg.org`.
+- **Network Dashboard consolidation & sidebar reorganization:**
+  - Embedded `Live Connections`, `Applications`, and `Network Events` directly as compact tabs inside `Network Dashboard`, removed the duplicate `Privacy Shield` summary card from `Network Dashboard`, renamed `PROTECTION` to `AI` (including `AI Analyst`), and grouped `Network Control`, `Privacy Shield`, and `Integrations` under `NETWORK & PRIVACY`.
+- **Theme harmonization & Glass Dark depth polish:**
+  - Removed opaque black list/scroll surfaces in `Live Connections` and `Network Events` so glass themes keep translucent frosted surfaces, deepened `Axiom Glass Dark` backdrop gradients, darkened `Axiom.Warning` in `Light`/`GlassLight` to `#B45309`, styled `CheckBox`/`NumericUpDown` spinners/`Separator`/`Button.danger` across all themes, wrapped `umanitek-logo.png` cleanly in `AgentsView.axaml`, made `ThreatGraphControl` resolve theme palette brushes dynamically, and introduced `AxiomDialogTheme` so dialogs, setup prompts, first-run windows, and toast alerts follow the active theme.
+
 ## What's in 0.58.0
 
 - **Documentation screenshots refreshed for the 0.57 theme redesign.**

@@ -28,6 +28,7 @@
       <SolidColorBrush x:Key="Axiom.GlassControl" Color="#2B3647" />
       <SolidColorBrush x:Key="Axiom.GlassControlHover" Color="#374459" />
       <SolidColorBrush x:Key="Axiom.GlassInput" Color="#18202C" />
+      <SolidColorBrush x:Key="Axiom.PopupSurface" Color="#1E2634" />
       <SolidColorBrush x:Key="Axiom.Border" Color="#2B3545" />
       <SolidColorBrush x:Key="Axiom.BorderStrong" Color="#4D5B72" />
       <SolidColorBrush x:Key="Axiom.TextPrimary" Color="#FFFFFF" />
@@ -84,6 +85,7 @@
       <SolidColorBrush x:Key="Axiom.GlassControl" Color="#EEF2F8" />
       <SolidColorBrush x:Key="Axiom.GlassControlHover" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Axiom.GlassInput" Color="#F4F7FB" />
+      <SolidColorBrush x:Key="Axiom.PopupSurface" Color="#F6F8FC" />
       <SolidColorBrush x:Key="Axiom.Border" Color="#CFD8E5" />
       <SolidColorBrush x:Key="Axiom.BorderStrong" Color="#8C9BB0" />
       <SolidColorBrush x:Key="Axiom.TextPrimary" Color="#0F172A" />
@@ -96,7 +98,7 @@
       <SolidColorBrush x:Key="Axiom.Upload" Color="#0284C7" />
       <SolidColorBrush x:Key="Axiom.Download" Color="#4F46E5" />
       <SolidColorBrush x:Key="Axiom.Success" Color="#059669" />
-      <SolidColorBrush x:Key="Axiom.Warning" Color="#D97706" />
+      <SolidColorBrush x:Key="Axiom.Warning" Color="#B45309" />
       <SolidColorBrush x:Key="Axiom.Critical" Color="#DC2626" />
       <SolidColorBrush x:Key="Axiom.NavHover" Color="#EFF3F9" />
       <SolidColorBrush x:Key="Axiom.NavSelected" Color="#FFFFFF" />
@@ -140,6 +142,7 @@
       <SolidColorBrush x:Key="Axiom.GlassControl" Color="#212C4A" />
       <SolidColorBrush x:Key="Axiom.GlassControlHover" Color="#2C3A61" />
       <SolidColorBrush x:Key="Axiom.GlassInput" Color="#11182B" />
+      <SolidColorBrush x:Key="Axiom.PopupSurface" Color="#161E34" />
       <SolidColorBrush x:Key="Axiom.Border" Color="#263352" />
       <SolidColorBrush x:Key="Axiom.BorderStrong" Color="#475B8C" />
       <SolidColorBrush x:Key="Axiom.TextPrimary" Color="#F8FAFC" />
@@ -196,6 +199,7 @@
       <SolidColorBrush x:Key="Axiom.GlassControl" Color="#F4F0EA" />
       <SolidColorBrush x:Key="Axiom.GlassControlHover" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Axiom.GlassInput" Color="#FAF8F5" />
+      <SolidColorBrush x:Key="Axiom.PopupSurface" Color="#FAF8F5" />
       <SolidColorBrush x:Key="Axiom.Border" Color="#DDD5CA" />
       <SolidColorBrush x:Key="Axiom.BorderStrong" Color="#A39686" />
       <SolidColorBrush x:Key="Axiom.TextPrimary" Color="#1E1B18" />
@@ -228,37 +232,38 @@
     </ResourceDictionary>
     <ResourceDictionary x:Key="{x:Static themes:AxiomThemeVariants.GlassDark}">
       <LinearGradientBrush x:Key="Axiom.Window" StartPoint="0%,0%" EndPoint="100%,100%">
-        <GradientStop Color="#780C111A" Offset="0" />
-        <GradientStop Color="#66131B28" Offset="0.52" />
-        <GradientStop Color="#7D0A0F17" Offset="1" />
+        <GradientStop Color="#BD06090F" Offset="0" />
+        <GradientStop Color="#AD0A0F18" Offset="0.52" />
+        <GradientStop Color="#C405070C" Offset="1" />
       </LinearGradientBrush>
       <LinearGradientBrush x:Key="Axiom.Nav" StartPoint="0%,0%" EndPoint="0%,100%">
-        <GradientStop Color="#1F080C12" Offset="0" />
-        <GradientStop Color="#14080C12" Offset="1" />
+        <GradientStop Color="#6605080D" Offset="0" />
+        <GradientStop Color="#4D05080D" Offset="1" />
       </LinearGradientBrush>
       <LinearGradientBrush x:Key="Axiom.Header" StartPoint="0%,0%" EndPoint="100%,0%">
-        <GradientStop Color="#0A080C12" Offset="0" />
-        <GradientStop Color="#00080C12" Offset="1" />
+        <GradientStop Color="#4205080D" Offset="0" />
+        <GradientStop Color="#1F05080D" Offset="1" />
       </LinearGradientBrush>
       <LinearGradientBrush x:Key="Axiom.StatusBar" StartPoint="0%,0%" EndPoint="100%,0%">
-        <GradientStop Color="#24080C12" Offset="0" />
-        <GradientStop Color="#1A0A0F18" Offset="1" />
+        <GradientStop Color="#6105080D" Offset="0" />
+        <GradientStop Color="#47070B12" Offset="1" />
       </LinearGradientBrush>
       <LinearGradientBrush x:Key="Axiom.Surface" StartPoint="0%,0%" EndPoint="0%,100%">
-        <GradientStop Color="#1FFFFFFF" Offset="0" />
-        <GradientStop Color="#10FFFFFF" Offset="1" />
+        <GradientStop Color="#17FFFFFF" Offset="0" />
+        <GradientStop Color="#0BFFFFFF" Offset="1" />
       </LinearGradientBrush>
-      <SolidColorBrush x:Key="Axiom.SurfaceAlt" Color="#14FFFFFF" />
-      <SolidColorBrush x:Key="Axiom.GlassControl" Color="#1FFFFFFF" />
-      <SolidColorBrush x:Key="Axiom.GlassControlHover" Color="#33FFFFFF" />
-      <SolidColorBrush x:Key="Axiom.GlassInput" Color="#1F0F172A" />
+      <SolidColorBrush x:Key="Axiom.SurfaceAlt" Color="#10FFFFFF" />
+      <SolidColorBrush x:Key="Axiom.GlassControl" Color="#18FFFFFF" />
+      <SolidColorBrush x:Key="Axiom.GlassControlHover" Color="#2CFFFFFF" />
+      <SolidColorBrush x:Key="Axiom.GlassInput" Color="#13FFFFFF" />
+      <SolidColorBrush x:Key="Axiom.PopupSurface" Color="#F20F141D" />
       <SolidColorBrush x:Key="Axiom.Border" Color="#14FFFFFF" />
       <SolidColorBrush x:Key="Axiom.BorderStrong" Color="#38FFFFFF" />
       <SolidColorBrush x:Key="Axiom.TextPrimary" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Axiom.TextSecondary" Color="#E2E8F0" />
       <SolidColorBrush x:Key="Axiom.TextMuted" Color="#B8C5D6" />
       <SolidColorBrush x:Key="Axiom.Accent" Color="#E2E8F0" />
-      <SolidColorBrush x:Key="Axiom.AccentSoft" Color="#24FFFFFF" />
+      <SolidColorBrush x:Key="Axiom.AccentSoft" Color="#20FFFFFF" />
       <SolidColorBrush x:Key="Axiom.AccentStrong" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Axiom.AccentContrast" Color="#0F172A" />
       <SolidColorBrush x:Key="Axiom.Upload" Color="#7DD3FC" />
@@ -266,14 +271,14 @@
       <SolidColorBrush x:Key="Axiom.Success" Color="#4ADE80" />
       <SolidColorBrush x:Key="Axiom.Warning" Color="#FBBF24" />
       <SolidColorBrush x:Key="Axiom.Critical" Color="#FB7185" />
-      <SolidColorBrush x:Key="Axiom.NavHover" Color="#1AFFFFFF" />
-      <SolidColorBrush x:Key="Axiom.NavSelected" Color="#2BFFFFFF" />
+      <SolidColorBrush x:Key="Axiom.NavHover" Color="#16FFFFFF" />
+      <SolidColorBrush x:Key="Axiom.NavSelected" Color="#24FFFFFF" />
       <SolidColorBrush x:Key="Axiom.GridLine" Color="#1CFFFFFF" />
       <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#1C2533" />
       <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#99991B1B" />
-      <SolidColorBrush x:Key="Axiom.GlassTint" Color="#1FFFFFFF" />
-      <SolidColorBrush x:Key="Axiom.GlassHighlight" Color="#2BFFFFFF" />
-      <SolidColorBrush x:Key="Axiom.GlassBorder" Color="#29FFFFFF" />
+      <SolidColorBrush x:Key="Axiom.GlassTint" Color="#17FFFFFF" />
+      <SolidColorBrush x:Key="Axiom.GlassHighlight" Color="#24FFFFFF" />
+      <SolidColorBrush x:Key="Axiom.GlassBorder" Color="#26FFFFFF" />
       <LinearGradientBrush x:Key="Axiom.CardBorder" StartPoint="0%,0%" EndPoint="0%,100%">
         <GradientStop Color="#21FFFFFF" Offset="0" />
         <GradientStop Color="#08FFFFFF" Offset="0.45" />
@@ -281,11 +286,11 @@
       </LinearGradientBrush>
       <RadialGradientBrush x:Key="Axiom.AmbientGlow" Center="22%,8%" GradientOrigin="22%,8%"
                            RadiusX="0.65" RadiusY="0.55">
-        <GradientStop Color="#14FFFFFF" Offset="0" />
+        <GradientStop Color="#09FFFFFF" Offset="0" />
         <GradientStop Color="#00000000" Offset="1" />
       </RadialGradientBrush>
       <LinearGradientBrush x:Key="Axiom.AmbientWash" StartPoint="0%,0%" EndPoint="100%,100%">
-        <GradientStop Color="#0DFFFFFF" Offset="0" />
+        <GradientStop Color="#05FFFFFF" Offset="0" />
         <GradientStop Color="#00000000" Offset="1" />
       </LinearGradientBrush>
     </ResourceDictionary>
@@ -315,6 +320,7 @@
       <SolidColorBrush x:Key="Axiom.GlassControl" Color="#3DFFFFFF" />
       <SolidColorBrush x:Key="Axiom.GlassControlHover" Color="#66FFFFFF" />
       <SolidColorBrush x:Key="Axiom.GlassInput" Color="#3DFFFFFF" />
+      <SolidColorBrush x:Key="Axiom.PopupSurface" Color="#F2F4F7FB" />
       <SolidColorBrush x:Key="Axiom.Border" Color="#33FFFFFF" />
       <SolidColorBrush x:Key="Axiom.BorderStrong" Color="#73475569" />
       <SolidColorBrush x:Key="Axiom.TextPrimary" Color="#0F172A" />
@@ -327,7 +333,7 @@
       <SolidColorBrush x:Key="Axiom.Upload" Color="#0284C7" />
       <SolidColorBrush x:Key="Axiom.Download" Color="#4F46E5" />
       <SolidColorBrush x:Key="Axiom.Success" Color="#059669" />
-      <SolidColorBrush x:Key="Axiom.Warning" Color="#D97706" />
+      <SolidColorBrush x:Key="Axiom.Warning" Color="#B45309" />
       <SolidColorBrush x:Key="Axiom.Critical" Color="#DC2626" />
       <SolidColorBrush x:Key="Axiom.NavHover" Color="#38FFFFFF" />
       <SolidColorBrush x:Key="Axiom.NavSelected" Color="#59FFFFFF" />

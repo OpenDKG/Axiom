@@ -25,10 +25,13 @@
   <Style Selector="Button:pressed /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.Border}" />
   </Style>
+  <Style Selector="Button:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
   <Style Selector="Button:disabled /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
-    <Setter Property="Opacity" Value="0.48" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
   </Style>
   <Style Selector="Button.primary">
     <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
@@ -47,6 +50,14 @@
     <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
     <Setter Property="Opacity" Value="0.80" />
   </Style>
+  <Style Selector="Button.primary:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
+  <Style Selector="Button.primary:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
   <Style Selector="Button.danger">
     <Setter Property="Background" Value="{DynamicResource Axiom.DangerBackground}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Critical}" />
@@ -64,9 +75,17 @@
     <Setter Property="Foreground" Value="#FFFFFF" />
     <Setter Property="Opacity" Value="0.80" />
   </Style>
+  <Style Selector="Button.danger:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
+  <Style Selector="Button.danger:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
 
   <Style Selector="TextBox">
-    <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassInput}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="6" />
@@ -74,14 +93,32 @@
     <Setter Property="Padding" Value="10,5" />
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+    <Setter Property="PlaceholderForeground" Value="{DynamicResource Axiom.TextMuted}" />
+    <Setter Property="CaretBrush" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+  <Style Selector="TextBox /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassInput}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
   </Style>
   <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassInput}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
     <Setter Property="BorderThickness" Value="1" />
   </Style>
+  <Style Selector="TextBox:disabled /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="Opacity" Value="0.55" />
+  </Style>
 
   <Style Selector="ComboBox">
-    <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="6" />
@@ -89,15 +126,186 @@
     <Setter Property="Padding" Value="10,4" />
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+    <Setter Property="PlaceholderForeground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
+  <Style Selector="ComboBox /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="ComboBox:pointerover /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+  </Style>
+  <Style Selector="ComboBox:pressed /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+  </Style>
+  <Style Selector="ComboBox /template/ Border#HighlightBackground">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="ComboBox /template/ Border#PopupBorder">
+    <Setter Property="Background" Value="{DynamicResource Axiom.PopupSurface}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="ComboBoxItem">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="Padding" Value="10,6" />
+  </Style>
+  <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.NavHover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+  <Style Selector="ComboBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+
+  <Style Selector="NumericUpDown">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassInput}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+  <Style Selector="NumericUpDown /template/ ButtonSpinner#PART_Spinner">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="NumericUpDown /template/ ButtonSpinner#PART_Spinner RepeatButton">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextSecondary}" />
+  </Style>
+  <Style Selector="NumericUpDown /template/ ButtonSpinner#PART_Spinner RepeatButton:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+  </Style>
+  <Style Selector="NumericUpDown /template/ ButtonSpinner#PART_Spinner RepeatButton:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+  </Style>
+
+  <Style Selector="Separator">
+    <Setter Property="Background" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="Height" Value="1" />
+    <Setter Property="Margin" Value="0,4" />
+  </Style>
+
+  <Style Selector="ProgressBar">
+    <Setter Property="Background" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.Accent}" />
+    <Setter Property="CornerRadius" Value="4" />
   </Style>
 
   <Style Selector="CheckBox">
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
   </Style>
+  <Style Selector="CheckBox /template/ Border#NormalRectangle">
+    <Setter Property="Width" Value="16" />
+    <Setter Property="Height" Value="16" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassInput}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="BorderThickness" Value="1.2" />
+  </Style>
+  <Style Selector="CheckBox:pointerover /template/ Border#NormalRectangle">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+  </Style>
+  <Style Selector="CheckBox:pressed /template/ Border#NormalRectangle">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.AccentStrong}" />
+  </Style>
+  <Style Selector="CheckBox:checked /template/ Border#NormalRectangle">
+    <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+  </Style>
+  <Style Selector="CheckBox:checked:pointerover /template/ Border#NormalRectangle">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentStrong}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.AccentStrong}" />
+  </Style>
+  <Style Selector="CheckBox:checked:pressed /template/ Border#NormalRectangle">
+    <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+    <Setter Property="Opacity" Value="0.88" />
+  </Style>
+  <Style Selector="CheckBox:indeterminate /template/ Border#NormalRectangle">
+    <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+  </Style>
+  <Style Selector="CheckBox:checked /template/ Path#CheckGlyph">
+    <Setter Property="Fill" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="Stroke" Value="{DynamicResource Axiom.AccentContrast}" />
+  </Style>
+  <Style Selector="CheckBox:indeterminate /template/ Rectangle#IndeterminateMark">
+    <Setter Property="Fill" Value="{DynamicResource Axiom.AccentContrast}" />
+  </Style>
+  <Style Selector="CheckBox:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
+  <Style Selector="CheckBox:disabled /template/ Border#NormalRectangle">
+    <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="Opacity" Value="0.55" />
+  </Style>
+  <Style Selector="CheckBox:checked:disabled /template/ Border#NormalRectangle">
+    <Setter Property="Background" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="Opacity" Value="0.55" />
+  </Style>
+
+  <Style Selector="TabControl">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="TabItem">
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="Padding" Value="14,6" />
+    <Setter Property="Margin" Value="0,0,6,0" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
+  <Style Selector="TabItem /template/ Border#PART_LayoutRoot">
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="TabItem:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+  <Style Selector="TabItem:pointerover /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource Axiom.NavHover}" />
+  </Style>
+  <Style Selector="TabItem:selected">
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+  <Style Selector="TabItem:selected /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource Axiom.NavSelected}" />
+  </Style>
+  <Style Selector="TabItem:selected /template/ Border#PART_SelectedPipe">
+    <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+  </Style>
+
+  <Style Selector="ToolTip">
+    <Setter Property="Background" Value="{DynamicResource Axiom.PopupSurface}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
 
   <Style Selector="ContextMenu">
-    <Setter Property="Background" Value="{DynamicResource Axiom.Surface}" />
+    <Setter Property="Background" Value="{DynamicResource Axiom.PopupSurface}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="8" />
@@ -170,6 +378,44 @@
     <Setter Property="Background" Value="{DynamicResource Axiom.NavSelected}" />
   </Style>
 
+  <Style Selector="Expander">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+  <Style Selector="Expander /template/ ToggleButton#ExpanderHeader">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+  <Style Selector="Expander /template/ ToggleButton#ExpanderHeader /template/ Border#ToggleButtonBackground">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:pointerover /template/ Border#ToggleButtonBackground">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+  </Style>
+  <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:pressed /template/ Border#ToggleButtonBackground">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+  </Style>
+  <Style Selector="Expander /template/ Border#ExpanderContent">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="8,6,8,2" />
+  </Style>
+
   <Style Selector="Border.glass-chrome">
     <Setter Property="BorderThickness" Value="0" />
   </Style>
@@ -192,6 +438,7 @@
   <Style Selector="Grid.glass Button">
     <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
     <Setter Property="CornerRadius" Value="6" />
   </Style>
   <Style Selector="Grid.glass Button /template/ ContentPresenter">
@@ -200,10 +447,20 @@
   <Style Selector="Grid.glass Button:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
   </Style>
   <Style Selector="Grid.glass Button:pressed /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+  </Style>
+  <Style Selector="Grid.glass Button:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
+  <Style Selector="Grid.glass Button:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
   </Style>
   <Style Selector="Grid.glass Button.primary">
     <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
@@ -216,15 +473,74 @@
     <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
     <Setter Property="Opacity" Value="0.94" />
   </Style>
+  <Style Selector="Grid.glass Button.primary:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="Opacity" Value="0.82" />
+  </Style>
+  <Style Selector="Grid.glass Button.primary:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
+  <Style Selector="Grid.glass Button.primary:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
+  <Style Selector="Grid.glass Button.danger">
+    <Setter Property="Background" Value="{DynamicResource Axiom.DangerBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Critical}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+  <Style Selector="Grid.glass Button.danger:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.DangerBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Critical}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+    <Setter Property="Opacity" Value="0.92" />
+  </Style>
+  <Style Selector="Grid.glass Button.danger:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.DangerBackground}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+    <Setter Property="Opacity" Value="0.82" />
+  </Style>
+  <Style Selector="Grid.glass Button.danger:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
+  <Style Selector="Grid.glass Button.danger:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
+  </Style>
   <Style Selector="Grid.glass TextBox">
     <Setter Property="Background" Value="{DynamicResource Axiom.GlassInput}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
     <Setter Property="CornerRadius" Value="6" />
   </Style>
+  <Style Selector="Grid.glass TextBox /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassInput}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="Grid.glass TextBox:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+  </Style>
   <Style Selector="Grid.glass ComboBox">
     <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
     <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="Grid.glass ComboBox /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="Grid.glass Expander /template/ ToggleButton#ExpanderHeader">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
+  </Style>
+  <Style Selector="Grid.glass Expander /template/ ToggleButton#ExpanderHeader /template/ Border#ToggleButtonBackground">
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControl}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.CardBorder}" />
   </Style>
   <Style Selector="Grid.glass ListBox.nav-list > ListBoxItem Border.nav-item">
     <Setter Property="BorderThickness" Value="0" />

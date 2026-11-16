@@ -16,11 +16,11 @@ namespace Axiom.UI.Avalonia;
 /// </summary>
 public sealed class FirstRunDialog : Window
 {
-    private static readonly IBrush BackgroundBrush = new SolidColorBrush(Color.Parse("#0B0D11"));
-    private static readonly IBrush SurfaceBrush = new SolidColorBrush(Color.Parse("#12151C"));
-    private static readonly IBrush BorderBrushStatic = new SolidColorBrush(Color.Parse("#232936"));
-    private static readonly IBrush ForegroundBrush = new SolidColorBrush(Color.Parse("#F3F5F8"));
-    private static readonly IBrush MutedBrush = new SolidColorBrush(Color.Parse("#9EA7B8"));
+    private static IBrush BackgroundBrush => AxiomDialogTheme.WindowBackground;
+    private static IBrush SurfaceBrush => AxiomDialogTheme.Surface;
+    private static IBrush BorderBrushStatic => AxiomDialogTheme.Border;
+    private static IBrush ForegroundBrush => AxiomDialogTheme.TextPrimary;
+    private static IBrush MutedBrush => AxiomDialogTheme.TextMuted;
 
     private readonly CheckBox _dkg = new() { Content = "OriginTrail DKG testnet (npm package, local node)", Foreground = ForegroundBrush };
     private readonly CheckBox _blackbox = new() { Content = "Blackbox (Umanitek official installer; large third-party download)", Foreground = ForegroundBrush };
@@ -65,7 +65,7 @@ public sealed class FirstRunDialog : Window
         {
             Content = "Skip for now",
             Padding = new Thickness(14, 7),
-            Background = new SolidColorBrush(Color.Parse("#1A2430")),
+            Background = AxiomDialogTheme.SurfaceAlt,
             Foreground = ForegroundBrush,
             BorderBrush = BorderBrushStatic,
             BorderThickness = new Thickness(1),

@@ -28,7 +28,7 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
     }
 
     [Fact]
-    public void Contact_button_opens_issue_chooser_and_fits_supported_window_widths()
+    public void Contact_button_opens_contact_email_and_fits_supported_window_widths()
     {
         TestAppBuilder.RunOnUiThread(() =>
         {
@@ -56,7 +56,7 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
             shell.OpenContactCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
 
-            Assert.Contains("https://github.com/a-51-50/Axiom/issues/new/choose", interaction.OpenedUrls);
+            Assert.Contains("mailto:contact@opendkg.org", interaction.OpenedUrls);
 
             window.Close();
             shell.Dispose();
