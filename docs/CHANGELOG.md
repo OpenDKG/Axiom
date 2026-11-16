@@ -1,3 +1,10 @@
+## What's in 0.77.0
+
+- **Blocked actions by agent are visible in the app.**
+  - The vendor dashboard graph aggregates unique threat rules, so 3,189 blocked calls still drew three local nodes.
+  - `AgentBlockSummaryBuilder` counts `GUARD_BLOCKED` decisions per harness and per reason from `agent-evidence.jsonl`; `BlockedActionsChart` draws them natively in the Agents dashboard with totals for blocked, allowed and failed events.
+  - Lab evidence: 3,189 blocked of 4,044 events across 11 harnesses (claude 844, opencode 335, copilot 238, codex 237, cursor 225, antigravity 225, gemini 223, zcode 223, deepseek 223, cline 208, windsurf 208).
+
 # Axiom â€” historical change log
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).

@@ -222,6 +222,17 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     [ObservableProperty]
     private int _threatCount;
 
+    /// <summary>Blocked guard decisions by agent, built from the local evidence store.</summary>
+    [ObservableProperty]
+    private AgentBlockSummary _blockSummary = AgentBlockSummary.Empty;
+
+    public string BlockSummaryText => BlockSummary.HasBlocks
+        ? $"{BlockSummary.Blocked:N0} blocked of {BlockSummary.TotalEvents:N0} guard decisions across {BlockSummary.ByHarness.Count} agent(s)"
+        : "No blocked guard decisions recorded yet.";
+
+    partial void OnBlockSummaryChanged(AgentBlockSummary value) =>
+        OnPropertyChanged(nameof(BlockSummaryText));
+
     [ObservableProperty]
     private int _findingCount;
 
@@ -1766,6 +1777,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         InstallCount = installs;
         FileAccessCount = files;
         ThreatCount = threats;
+        BlockSummary = AgentBlockSummaryBuilder.Build(_agentEvidence.ReadRecent(4000));
 
         ActivityBreakdownText =
             $"{sessions} sessions · {apiCalls} API calls · {toolCalls} tool calls · " +
