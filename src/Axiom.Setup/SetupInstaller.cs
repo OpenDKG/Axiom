@@ -102,18 +102,9 @@ internal static class SetupInstaller
 
         try
         {
-            var existingBeforeStop = DetectExistingInstallation(options.InstallDir);
-            if (existingBeforeStop.Exists)
+            if (!StopRunningDesktopProcesses(Report))
             {
-                if (!StopRunningDesktopProcesses(Report))
-                {
-                    return new SetupInstallResult(false, "Axiom is running and could not be closed automatically.", log);
-                }
-            }
-            else if (Process.GetProcessesByName("Axiom.Desktop").Length > 0 ||
-                     Process.GetProcessesByName("Netpetra.Desktop").Length > 0)
-            {
-                return new SetupInstallResult(false, "Axiom is running. Close it before installing.", log);
+                return new SetupInstallResult(false, "Axiom is running and could not be closed automatically.", log);
             }
 
             var tempDir = Path.Combine(Path.GetTempPath(), "axiom-setup-" + Guid.NewGuid().ToString("N"));
@@ -545,7 +536,7 @@ internal static class SetupInstaller
             return true;
         }
 
-        report($"Closing {running.Length} running Axiom desktop process(es) for in-place update...");
+        report($"Closing {running.Length} running Axiom desktop process(es)...");
         try
         {
             foreach (var proc in running)

@@ -1363,7 +1363,7 @@ internal sealed class SetupNativeWindow : IDisposable
         var isUpdate = !isRepair && _existing.Exists;
         if (!EnsureAxiomClosedForSetup(
             isRepair ? "repair" : isUpdate ? "update" : "install",
-            autoClose: isUpdate))
+            autoClose: true))
         {
             return;
         }
@@ -1380,7 +1380,7 @@ internal sealed class SetupNativeWindow : IDisposable
         var options = _initialOptions with
         {
             CreateShortcut = _createShortcut,
-            StartAfterInstall = isUpdate || _startAfterInstall,
+            StartAfterInstall = !isRepair || _startAfterInstall,
             CompleteInstallation = _completeMode,
         };
 

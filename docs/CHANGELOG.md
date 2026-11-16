@@ -1,3 +1,8 @@
+## What's in 0.78.0
+
+- **Setup: automatic desktop shutdown & relaunch for every Install, Update, and Repair.**
+  - `SetupNativeWindow` and `SetupInstaller.InstallAsync` now automatically close any running `Axiom.Desktop` / `Netpetra.Desktop` process cleanly without prompting or aborting with `"Axiom is running"`, complete the install or in-place update, launch the installed Axiom build (`StartAfterInstall = true`), and exit Setup automatically.
+
 ## What's in 0.77.0
 
 - **Blocked actions by agent are visible in the app.**
