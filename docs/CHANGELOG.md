@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.67.0
+
+- **Guard: forensic and WMI persistence shapes now block.**
+  - Probe batch 5 on 0.66 hooks blocked every upload channel but allowed `fsutil usn deletejournal`, `cipher /w:` free-space wipes and a WMI `CommandLineEventConsumer` subscription (issue #389).
+  - `_escalation_risk` now reports USN-journal deletion, `cipher /w` and WMI event-consumer persistence.
+  - Re-verified 15/15; batches 1-4 and the per-harness tamper set stay clean.
+
 ## What's in 0.66.0
 
 - **Guard: cabinet/ESE staging, key-authenticated SSH and SAM hive queries now block.**
