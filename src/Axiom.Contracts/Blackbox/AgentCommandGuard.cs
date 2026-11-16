@@ -111,7 +111,8 @@ public static class AgentCommandGuard
             verbs = ("cat ", "type ", "more ", "head ", "tail ", "get-content", "readalltext",
                      "open(", ".read(", "copy ", "cp ", "get-item", "strings ", "forfiles",
                      "findstr", "select-string", "grep", " rg ", "tar ", "compress-archive",
-                     "copy-item", "move-item", "robocopy", "xcopy")
+                     "copy-item", "move-item", "robocopy", "xcopy", "openssl", "ssh-keygen",
+                     "gpg", "age ")
             if not any(verb in text for verb in verbs):
                 return False
             words = text.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()
@@ -152,6 +153,8 @@ public static class AgentCommandGuard
             value = _normalize_command(text).replace("/", "\\")
             stores = (
                 (".git-credentials", "Git credential store"),
+                (".aws", "AWS credential store"),
+                (".gnupg", "GnuPG keyring"),
                 (".npmrc", "npm token store"),
                 (".kube\\config", "Kubernetes config"),
                 ("github cli\\hosts.yml", "GitHub CLI token"),
@@ -271,7 +274,7 @@ public static class AgentCommandGuard
                 return "backup catalog deletion"
             if "bcdedit" in text and "recoveryenabled no" in text:
                 return "recovery disable"
-            if "reg save" in text and any(hive in text for hive in ("hklm\\sam", "hklm\\security", "hklm\\system")):
+            if ("reg save" in text or "reg export" in text) and any(hive in text for hive in ("hklm\\sam", "hklm\\security", "hklm\\system")):
                 return "credential hive export"
             if "vssadmin" in text and "create shadow" in text:
                 return "shadow-copy creation"
