@@ -2,6 +2,14 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.75.0
+
+- **The service provisions its own enforcement policy.**
+  - 0.74.0's installer wrote the policy unelevated, so the ProgramData write failed and `enforcement.status` still reported `enabled=false` (issue #403).
+  - `EnforcementPolicyProvisioner.EnsureMachineDefault` discovers local profiles with a `.ssh` store or an Axiom install and writes one machine-scope policy from the LocalSystem service on the first status request.
+  - Existing operator policies are never overwritten; the scope list is capped so rules stay under the 512 bound.
+  - Verified after install: `enabled=true` with agents, rules and protected resources, and `%ProgramData%\Axiom\enforcement-policy.json` present.
+
 ## What's in 0.74.0
 
 - **Enforcement policy is provisioned instead of missing.**

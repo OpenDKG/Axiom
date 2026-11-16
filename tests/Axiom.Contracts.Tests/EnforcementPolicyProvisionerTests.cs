@@ -43,6 +43,54 @@ public sealed class EnforcementPolicyProvisionerTests
     }
 
     [Fact]
+    public void EnsureMachineDefault_covers_local_profiles_and_is_written_once()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"axiom-machine-{Guid.NewGuid():N}");
+        try
+        {
+            var alice = Path.Combine(root, "alice");
+            var bob = Path.Combine(root, "Bob");
+            var publicProfile = Path.Combine(root, "Public");
+            Directory.CreateDirectory(Path.Combine(alice, ".ssh"));
+            Directory.CreateDirectory(Path.Combine(bob, "AppData", "Local", "Programs", "Axiom"));
+            Directory.CreateDirectory(publicProfile);
+
+            var policyPath = Path.Combine(root, "ProgramData", "Axiom", "enforcement-policy.json");
+            var written = EnforcementPolicyProvisioner.EnsureMachineDefault(root, policyPath);
+            Assert.NotNull(written);
+            Assert.Equal(policyPath, written);
+
+            var text = File.ReadAllText(written!);
+            var policy = JsonNode.Parse(text)!["policy"]!.AsObject();
+            var scopes = policy["protectedResources"]!.AsArray()
+                .Select(resource => resource!["scope"]!.GetValue<string>())
+                .ToArray();
+            Assert.Contains(scopes, scope => scope.StartsWith(alice, StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(scopes, scope => scope.StartsWith(bob, StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(scopes, scope => scope.StartsWith(publicProfile, StringComparison.OrdinalIgnoreCase));
+
+            var rules = policy["agents"]!.AsArray().Sum(agent => agent!["rules"]!.AsArray().Count);
+            Assert.True(rules <= 512);
+            Assert.Equal(scopes.Length * EnforcementPolicyProvisioner.AgentIds.Count, rules);
+
+            Assert.Null(EnforcementPolicyProvisioner.EnsureMachineDefault(root, policyPath));
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    [Fact]
     public void EnsureDefault_writes_once_and_keeps_an_operator_policy()
     {
         var root = Path.Combine(Path.GetTempPath(), $"axiom-enforcement-{Guid.NewGuid():N}");
