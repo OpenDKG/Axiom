@@ -670,3 +670,89 @@ installed): `sway` + `waybar` (+ `wayland-utils`, optional `xwayland`), with a S
 and the same page walk, then purge/rollback. Exact permissions still needed: Windows host/runner
 access; `lintian` install (or waiver); `sway`/`waybar` install; public DNS egress and guest resolver
 change; Fedora/arm64/signing/release infrastructure. This is not production readiness.
+
+## 15. Revision 8 — packaging readiness: lintian 508 E/3 W → 0 E/0 W, payload move, live upgrade
+
+Evidence root: `/tmp/opencode/axiom-packaging-readiness-20261116/` (`REPORT.md`, `PROVENANCE.txt`,
+`SHA256SUMS.txt`, build/test/lintian/guest logs, raw `doh-final.pcap`). Local and **unpublished**;
+fresh independent review of the code/artifact is still required. No push/merge/tag/release/upload/
+signing; no host network/DNS/firewall change.
+
+Scope came from the Ubuntu gate review, not from a new product requirement: the Linux installer has
+to install a policy-correct artifact on Ubuntu without an owner waiver for avoidable packaging
+mistakes. The filesystem move is the implementation of that, not a new feature.
+
+| Item | Value |
+|---|---|
+| Code commits | `2b35bd8` (path/modes/scripts/overrides) + `00049c2` (override contexts, man page, description wrap) |
+| Artifact | `axiom-firewall_0.59.0+linux.2_amd64.deb`, 63,836,160 bytes, sha256 `8098288fc92f5bffe1885bc78496f6984776967d1f452be491514a71cbadc03a` |
+| Source | code tree of `00049c2`; later commit is this plan file only (not packaged) |
+| Package version | `0.59.0+linux.2` (`--local linux.2`): dpkg sorts it above the tested `0.59.0`; app/upstream stay `0.59.0` |
+| Lintian | guest Ubuntu 24.04 `lintian` 2.117.0ubuntu1.6 on the exact artifact: **0 E / 0 W**, rc 0; one stderr duplicate-hint note (`ored-depends-on-obsolete-package`, no tag emitted) |
+
+### 15.1 Lintian before → after, with disposition
+
+| Tag (old artifact) | Old | After | Disposition |
+|---|---|---|---|
+| `dir-or-file-in-opt` | 466 | 0 | fixed: payload `/usr/lib/axiom-firewall` + `/usr/bin/axiom-firewall` |
+| `shared-library-is-executable` | 30 | 0 | fixed: shared libraries 0644 (Policy 8.1) |
+| `unstripped-binary-or-object` | 5 | 0 | fixed: `strip --strip-unneeded` on SkiaSharp/HarfBuzz/SQLite/BPF helper; `*.bpf.o` untouched |
+| `embedded-library` | 5 | 0 | **per-file override**: SkiaSharp freetype/libjpeg/libpng, runtime zlib (window+daemon) |
+| `binary-from-other-architecture` | 1 | 0 | **per-file override**: CO-RE BPF object, ELF `EM_BPF` |
+| `no-changelog` | 1 | 0 | fixed: generated `changelog.gz` from the package version |
+| `maintainer-script-calls-systemctl` | 1 | 0 | fixed: `deb-systemd-invoke stop` + `deb-systemd-helper disable`; the `is-active` read-back remains the authority |
+| `script-not-executable` | 1 | 0 | fixed: `bpf-pins.sh` 0755 |
+| `uses-dpkg-database-directly` | 1 | 0 | fixed: locate the replaced `axiom.postrm` with `dpkg-query --control-path`; rewriting it remains the owner-decision migration |
+| `extended-description-line-too-long` / `no-manual-page` | 0 | 0 | prevented: wrapped description; shipped `axiom-firewall(1)` |
+
+No blanket ignore and no vendor label: the override file has one line per file with a reason.
+Nothing security-relevant was waived (permissions, missing deps, linkage, copyright, signing).
+
+### 15.2 What the guest proved (fresh artifact, Ubuntu 24.04.5, kernel 6.8.0-147)
+
+- **Clean install** `dpkg -i` (no force): rc 0, unit active/enabled, `--doctor` all pass, 4/4 BPF
+  pins, `table inet axiom` generation 1. `/usr/bin/axiom-firewall` resolves to
+  `/usr/lib/axiom-firewall/Axiom`; startup log `base=/usr/lib/axiom-firewall/`; `/opt` does not exist.
+- **Sway/XWayland GUI**: app window 1598×970, `shell=xwayland`; shield enabled, an outbound block
+  rule for `/usr/bin/curl` applied **through the UI** (confirm dialog → generation 2, managed rule
+  count 1, connect-time proven) and curl failed rc 7; removing it through the UI restored curl
+  HTTP 200 and generation 3. This closes the earlier "GUI rule flow only under Xvfb" gap.
+- **Tray**: `org.kde.StatusNotifierWatcher` owned, item
+  `org.kde.StatusNotifierItem-<pid>-0/StatusNotifierItem` registered from the new path.
+- **lxpolkit cancel** (authorized package: 5 packages, listed below): with `axiomd` removed, the
+  Shield page's Enable → Continue ran `pkexec /usr/lib/axiom-firewall/axiomd/axiomd --install-service`;
+  the real agent dialog was captured; Cancel made polkitd log `FAILED to authenticate`, the UI said
+  "Administrator approval was cancelled", and there was no unit/image/nft/privilege change.
+  Wrong-password denial was **not** tested (no secret entered; not claimed).
+- **Upgrade** from the reviewed `0.59.0` artifact (still `/opt/axiom`), with an applied rule
+  (`/usr/bin/curl`, BPF connect-time proven) and `Dark Midnight` theme: `dpkg -i` rc 0, obsolete
+  `/opt` removed, new path installed, service active, doctor all pass, 4/4 pins, rule survived
+  (count 1, generation 3), DB and theme unchanged; curl was blocked before disabling shield.
+- **Purge while DoH-redirected**: rc 0; journal `restore 'enp0s1' -> 10.0.2.3: ok`; resolver
+  `ebdf5602…` and `resolved.conf` `bccfe813…` byte-identical; package/unit/image/data/pins/table
+  absent; no `/opt` leftovers.
+- **Public DoH**: defaults `https://1.1.1.1/dns-query`, `https://9.9.9.9/dns-query`; 5 queries,
+  0 errors; resolver redirected to 127.0.0.1; `axiomd` ESTAB to 1.1.1.1:443; **raw pcap retained**
+  (18,958 B, sha256 `9b9a9289…`): DNS only on loopback, 0 off-box packets to port 53. Quad9 still
+  not reachable from this egress (environment, unchanged).
+- Authorized guest additions this pass: `lxpolkit` 0.5.5-2ubuntu4 + `lxsession-data`,
+  `libgtk2.0-0t64`, `libgtk2.0-common`, `policykit-1` (5 packages, automatic); the previously
+  authorized lintian/sway/waybar/wayland-utils/xwayland set remains installed. No global auth
+  policy, user password or host change.
+
+### 15.3 Tests / builds (fresh, code tree `00049c2`)
+
+Portable build 0 warnings/0 errors. Portable suite: Contracts 157, Core 184, Persistence 21,
+Unix 47, Linux 108 (+6), MacOS 249, MCP 34, Presentation 299, Hosting 34, Desktop.MacOS 35,
+UI.Avalonia 96. Separate: Linux.Nft **160**, Desktop.Avalonia.Linux **51**. WPF UI, WPF tests and
+Avalonia Windows cross-builds 0 warnings/0 errors (runtime still not executed here).
+New tests: postinst migration (marker/`dpkg-query`/daemon path, unrelated `axiom` untouched, missing
+daemon fails), stop-helper fallback and read-back retention, new package prefix and launcher path.
+The strict BPF JSON awk parser, rendered unit and OS DNS restore tests are unchanged.
+
+### 15.4 Residual gates
+
+Fresh independent review of `00049c2` / `8098288…`; signing with an authorized key; release-write
+authorization; RPM build/test (config updated, not built); arm64; Windows runtime/WPF/locked restore
+(owner); polkit **wrong-password** denial (cancel path now proven); pure-Wayland backend. Quad9 is
+environment-limited here. This is not production readiness and not a release.
