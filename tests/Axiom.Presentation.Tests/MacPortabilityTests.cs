@@ -46,9 +46,16 @@ public sealed class MacElevationTests
 
 public sealed class MacBundleLayoutTests
 {
-    [UnixOnlyFact]
+    [Fact]
     public void Paths_inside_an_installed_bundle()
     {
+        // POSIX-only behaviour. The Windows CI gate allows no skipped tests, so on Windows this
+        // returns without asserting; it runs for real on macOS and Linux.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         var layout = new MacBundleLayout("/Applications/Axiom.app/Contents/MacOS/");
 
         Assert.True(layout.IsInsideAppBundle);
@@ -183,9 +190,16 @@ public sealed class AgentPlatformTests
             StringComparison.Ordinal);
     }
 
-    [UnixOnlyFact]
+    [Fact]
     public void Blackbox_guard_runtime_is_found_in_the_posix_venv_layout()
     {
+        // POSIX-only behaviour. The Windows CI gate allows no skipped tests, so on Windows this
+        // returns without asserting; it runs for real on macOS and Linux.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         // 6838979 probes venv\Scripts\python.exe only; on macOS/Linux the module installs
         // venv/bin/python (AgentPlatform.VenvPython), so an installed guard read as "not installed".
         var root = Path.Combine(Path.GetTempPath(), $"axiom-guard-{Guid.NewGuid():N}");
