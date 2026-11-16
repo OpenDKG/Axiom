@@ -34,6 +34,22 @@ public sealed class AgentCommandGuardTests
     }
 
     [Fact]
+    public void Guard_blocks_service_level_tampering_and_audit_trail_wipes()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        Assert.Contains("def _disables_guard(", helpers, StringComparison.Ordinal);
+        Assert.Contains("if _disables_guard(command_text):", helpers, StringComparison.Ordinal);
+        foreach (var verb in new[] { "\"sc stop\"", "stop-service", "taskkill", "schtasks /change", "icacls" })
+        {
+            Assert.Contains(verb, helpers, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("auditpol /clear", helpers, StringComparison.Ordinal);
+        Assert.Contains("shadowcopy delete", helpers, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Injection_heuristic_covers_non_english_instructions()
     {
         var helpers = AgentCommandGuard.PythonHelpers;

@@ -64,6 +64,51 @@ public static class AgentCommandGuard
             return any(verb in text for verb in verbs)
 
 
+        def _disables_guard(command: str) -> bool:
+            # Stopping, killing, disabling or re-ACLing the guard is tampering even when the command
+            # names no hook file: `sc stop Axiom`, `taskkill /im Axiom.Service.exe`,
+            # `Stop-Service Axiom`, `schtasks /change ... /disable`, `icacls ...\\Axiom` and deleting
+            # the evidence log all passed the sweep. So did audit-trail and shadow-copy wipes.
+            text = " ".join((command or "").lower().split())
+            if not text:
+                return False
+            targets = (
+                "axiom",
+                "axiom.service",
+                "axiom.desktop",
+                "axiom\\modules",
+                "axiom/modules",
+                "\\local\\axiom",
+                "/local/axiom",
+                "agent-evidence",
+                "agent blackbox",
+                "hermes\\blackbox",
+                "hermes/blackbox",
+            )
+            verbs = (
+                "sc stop",
+                "sc delete",
+                "stop-service",
+                "restart-service",
+                "set-service",
+                "net stop",
+                "taskkill",
+                "schtasks /change",
+                "schtasks /delete",
+                "disable-scheduledtask",
+                "unregister-scheduledtask",
+                "icacls",
+                "del ",
+                "erase ",
+                "rm ",
+                "rmdir",
+                "remove-item",
+            )
+            if any(verb in text for verb in verbs) and any(target in text for target in targets):
+                return True
+            return "auditpol /clear" in text or "shadowcopy delete" in text or "wmic shadowcopy" in text
+
+
         def _normalize_command(command: str) -> str:
             # Shell variables and Win32 prefixes hide a protected path from token matching:
             # `cat "$HOME/.ssh/id_rsa"` and `type \\?\C:\...` were allowed while the literal
@@ -434,6 +479,8 @@ public static class AgentCommandGuard
                 protected = _load_protected_paths()
             if _tampers_with_guard(command_text):
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
+            if _disables_guard(command_text):
+                return ("tamper", "Blackbox blocked this call: it stops or disables the local guard.")
             if _deletes_protected(command_text, protected):
                 return ("delete", "Blackbox blocked this call: it deletes a protected path.")
             if _reads_protected(command_text, protected):
