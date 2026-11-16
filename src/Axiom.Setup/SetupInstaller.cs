@@ -309,7 +309,7 @@ internal static class SetupInstaller
                         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                         ReadConfigOrNull,
                         Directory.Exists);
-                    var dkgIdentity = await WaitForDkgIdentityAsync(dkgHome, cancellationToken)
+                    var dkgIdentity = await WaitForDkgIdentityAsync(dkgHome, Report, cancellationToken)
                         .ConfigureAwait(false);
                     dkgInstalled = dkgIdentity.Verified;
 
@@ -884,16 +884,27 @@ internal static class SetupInstaller
     /// </summary>
     private static async Task<DkgIdentity> WaitForDkgIdentityAsync(
         string home,
+        Action<string>? report,
         CancellationToken cancellationToken)
     {
         DkgIdentity? last = null;
-        for (var attempt = 0; attempt < 30; attempt++)
+        // The node's first start initialises its store before the identity endpoint answers; the lab
+        // took well over 30 s, so give it up to 90 s and say what is happening instead of failing
+        // with "could not be initialized" while the node is still coming up (issue #381).
+        const int attempts = 90;
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
             last = await DkgIdentityProbe.CheckAsync(home, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             if (last.Verified || last.StatusCode is 401)
             {
                 return last;
+            }
+
+            if (report is not null && attempt is 29 or 59)
+            {
+                report($"DKG identity not verified after {attempt + 1}s; the node may still be starting " +
+                       $"({last.Summary}).");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
