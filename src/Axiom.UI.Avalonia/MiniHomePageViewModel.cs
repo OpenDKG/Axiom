@@ -26,6 +26,7 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
     private readonly Action _openAgents;
     private readonly Action _openSettings;
     private readonly Action _openSupport;
+    private readonly Action _openWebsite;
     private readonly Func<Task> _openGitHub;
     private readonly Action _expandView;
 
@@ -40,6 +41,7 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
         Action openAgents,
         Action openSettings,
         Action openSupport,
+        Action openWebsite,
         Func<Task> openGitHub,
         Action expandView)
         : base("Mini", "Compact blocked activity monitor", "M")
@@ -54,6 +56,7 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
         _openAgents = openAgents ?? throw new ArgumentNullException(nameof(openAgents));
         _openSettings = openSettings ?? throw new ArgumentNullException(nameof(openSettings));
         _openSupport = openSupport ?? throw new ArgumentNullException(nameof(openSupport));
+        _openWebsite = openWebsite ?? throw new ArgumentNullException(nameof(openWebsite));
         _openGitHub = openGitHub ?? throw new ArgumentNullException(nameof(openGitHub));
         _expandView = expandView ?? throw new ArgumentNullException(nameof(expandView));
 
@@ -216,6 +219,9 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
         SyncRecentAgentActivity();
         OnPropertyChanged(nameof(AgentsBlockedCountText));
     }
+
+    [RelayCommand]
+    private void OpenWebsite() => _openWebsite();
 
     private void SyncRecentAgentActivity()
     {

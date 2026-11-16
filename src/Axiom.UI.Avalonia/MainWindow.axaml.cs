@@ -17,7 +17,7 @@ public partial class MainWindow : Window
     private const double MiniWindowMinWidth = 760;
     private const double MiniWindowMinHeight = 430;
     private const double MiniWindowDefaultWidth = 820;
-    private const double MiniWindowDefaultHeight = 560;
+    private const double MiniWindowDefaultHeight = 640;
     private const double FullWindowMinWidth = 900;
     private const double FullWindowMinHeight = 600;
 

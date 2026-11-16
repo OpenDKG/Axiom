@@ -1,3 +1,10 @@
+## What's in 0.88.0
+
+- **Footer link, ghost logo buttons, Mini height, new icons.**
+  - Mini opens at 820x640 so the footer is visible; the Axiom logo/version opens opendkg.org/axiom in every mode.
+  - Logo buttons are ghost links with only a soft hover highlight (no grey box).
+  - Updated axiom icon/lockup, Blackbox, OriginTrail and Umanitek logos.
+
 ## What's in 0.87.0
 
 - **Compact Mini and plain selected buttons.**
