@@ -158,6 +158,23 @@ public sealed class MaintainerScriptCleanupTests
     }
 
     [Fact]
+    public void Deb_remove_skips_an_enablement_directory_that_is_a_symlink()
+    {
+        using var sandbox = new Sandbox();
+        sandbox.CreateEnablementLink();
+        sandbox.CreateSymlinkedEnablementDirectory("rogue.target.wants");
+        sandbox.CreateSymlinkedEnablementDirectory("rogue.target.requires");
+
+        var result = sandbox.Run(DebPostrm, "remove", disableExit: 0, state: "inactive", activeExit: 3);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.False(sandbox.Exists("etc/systemd/system/multi-user.target.wants/axiomd.service"));
+        Assert.True(sandbox.IsSymlink("outside-enablement/rogue.target.wants/axiomd.service"));
+        Assert.True(sandbox.IsSymlink("outside-enablement/rogue.target.requires/axiomd.service"));
+        Assert.True(sandbox.Exists(Sandbox.OutsideTarget));
+    }
+
+    [Fact]
     public void Deb_remove_preserves_a_regular_file_or_directory_named_axiomd_service()
     {
         using var sandbox = new Sandbox();
@@ -327,6 +344,14 @@ public sealed class MaintainerScriptCleanupTests
                 ? Absolute(OutsideTarget)
                 : Absolute(Unit);
             File.CreateSymbolicLink(Path.Combine(fullDirectory, name), target);
+        }
+
+        public void CreateSymlinkedEnablementDirectory(string name)
+        {
+            var outside = Absolute(Path.Combine("outside-enablement", name));
+            Directory.CreateDirectory(outside);
+            File.CreateSymbolicLink(Path.Combine(outside, "axiomd.service"), Absolute(OutsideTarget));
+            File.CreateSymbolicLink(Absolute(Path.Combine("etc/systemd/system", name)), outside);
         }
 
         public void CreateUnitFile(string relative)

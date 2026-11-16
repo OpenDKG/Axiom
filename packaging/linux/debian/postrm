@@ -59,9 +59,10 @@ remove_service_leftovers() {
     # A unit enabled by the daemon's own `systemctl enable` has no deb-systemd-helper state file,
     # so the helper may not know the symlink. Remove only Axiom's unit name from the enablement
     # directories systemd writes (*.wants/*.requires); a symlink elsewhere, a regular file, a
-    # directory or another unit name is left alone. POSIX glob, no recursive find.
+    # directory or another unit name is left alone. POSIX glob, no recursive find. An enablement
+    # directory that is itself a symlink may lead outside /etc/systemd/system, so it is skipped.
     for enablement in "$AXIOM_ROOT"/etc/systemd/system/*.wants "$AXIOM_ROOT"/etc/systemd/system/*.requires; do
-        [ -d "$enablement" ] || continue
+        [ -d "$enablement" ] && [ ! -L "$enablement" ] || continue
         if [ -L "$enablement/axiomd.service" ]; then
             rm -f "$enablement/axiomd.service"
         fi
