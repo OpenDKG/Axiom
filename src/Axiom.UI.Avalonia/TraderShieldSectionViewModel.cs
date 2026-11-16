@@ -82,7 +82,7 @@ public sealed partial class TraderShieldSectionViewModel : ObservableObject
         // Blackbox-managed profile, which only the Windows installer creates): never read or write it.
         // An explicit path (tests) keeps the section functional on every platform.
         _platformSupported = configPath is not null || OperatingSystem.IsWindows();
-        _configPath = configPath ?? TraderShieldProvisioner.ResolveConfigPath();
+        _configPath = configPath ?? (_platformSupported ? TraderShieldProvisioner.ResolveConfigPath() : string.Empty);
         _fileExists = fileExists ?? File.Exists;
         _readFile = readFile ?? DefaultReadFile;
         _writeFile = writeFile ?? DefaultWriteFile;

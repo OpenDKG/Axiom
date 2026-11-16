@@ -95,8 +95,17 @@ public sealed class ProvisioningPlatformGateTests
     }
 
     /// <summary>
+    /// Shared Avalonia files that name a provisioning entry point but reach it only behind an
+    /// <c>OperatingSystem.IsWindows()</c> gate. Each needs a behaviour test proving nothing runs
+    /// off Windows: TraderShieldSectionViewModel (upstream v0.5x) is covered by
+    /// <c>TraderShieldSectionViewModelTests.Off_windows_the_default_section_reads_and_writes_nothing</c>.
+    /// </summary>
+    private static readonly string[] RuntimeGatedSharedFiles = ["TraderShieldSectionViewModel.cs"];
+
+    /// <summary>
     /// The macOS desktop host and the shared Avalonia UI never call the Windows provisioning entry
-    /// points or the process-window hider; only Axiom.Desktop.Avalonia.Windows does.
+    /// points or the process-window hider; only Axiom.Desktop.Avalonia.Windows does (plus the
+    /// runtime-gated files listed in <see cref="RuntimeGatedSharedFiles"/>).
     /// </summary>
     [Fact]
     public void Mac_host_and_shared_avalonia_ui_do_not_call_windows_provisioning()
@@ -118,7 +127,8 @@ public sealed class ProvisioningPlatformGateTests
             .Where(Directory.Exists)
             .SelectMany(directory => Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
             .Where(file => !file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-                && !file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                && !file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                && !RuntimeGatedSharedFiles.Contains(Path.GetFileName(file)))
             .SelectMany(file => forbidden
                 .Where(name => File.ReadAllText(file).Contains(name, StringComparison.Ordinal))
                 .Select(name => $"{Path.GetFileName(file)}: {name}"))
