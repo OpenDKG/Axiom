@@ -17,6 +17,25 @@ public sealed class FixedThemeService : IThemeService
     }
 }
 
+/// <summary>In-memory UI mode service for tests and headless hosts; defaults to Advanced.</summary>
+public sealed class FixedUiModeService(UiMode initial = UiMode.Advanced) : IUiModeService
+{
+    public UiMode Current { get; private set; } = initial;
+
+    public event EventHandler? Changed;
+
+    public void Apply(UiMode mode)
+    {
+        if (Current == mode)
+        {
+            return;
+        }
+
+        Current = mode;
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+}
+
 /// <summary>Host without Windows autostart support. It reports unsupported and changes nothing.</summary>
 public sealed class UnsupportedAutostartService : IAutostartService
 {
