@@ -233,3 +233,70 @@ resolver in that window on one build. In the re-run the counters were equal on a
 After each build: product uninstall, data roots removed and checked absent. At the end: no Axiom service,
 process or firewall rule; no temporary account, profile or staged secret; no `Ax*` scheduled task; adapter
 DNS `10.0.2.3`. The VM was shut down.
+
+# Round 5 (2026-11-16): `main` `25bfcc1` vs S1b `e4eb91a`
+
+**Author-run on the project's Windows 11 test VM. This is not CI.** Same VM, SDK 10.0.403 and method as
+round 4. S1a's document, round 5, has the IPC-area analysis and the lock-file detail.
+
+| | Commit |
+|---|---|
+| main (pinned for this round) | `25bfcc176dbb40c63b34f225d31cffb254732587` (v0.64.0) |
+| S1a | `ab7df89` (main `25bfcc1` merged, no conflicts) |
+| **S1b tested** | **`e4eb91a536b07a2f8b4162481461ce81b946387a`** = `b32e7a8` + `Merge S1a (main 25bfcc1, v0.64.0) into S1b`. Later commits change docs only. |
+
+## R5.1 Reconciliation with `main` `25bfcc1`
+
+`main` changed four files S1b also changes: `PrivacyShieldController.cs`, `PrivacyShieldRuleStore.cs`,
+`PrivacyShieldWorker.cs` and `DnsProxyTests.cs`. Two needed a hand resolution:
+
+- `PrivacyShieldController.EnsureConfiguredAdapterDns`: since v0.64.0 upstream copies
+  `PrivacyDnsFailSafe.LastError` into the status error after pointing the adapter, if no other error is set.
+  S1b has this method body behind `IPrivacyDnsPlatform`. The seam member now returns the adapter error
+  (default `null`, so other platforms still never change system DNS). `WindowsPrivacyDnsPlatform` returns
+  `PrivacyDnsFailSafe.LastError` (a new optional delegate, wired in `ServicePlatform.Windows`) from the
+  pointing branch only, and the controller applies it as upstream does. New test:
+  `WindowsPrivacyDnsPlatformTests.Adapter_error_is_returned_only_after_pointing_the_adapter`.
+- `PrivacyShieldController.EnsureRulesLoadedAsync`: upstream's new body and signature (load once, adopt,
+  compact) are taken; S1b's upstream-watch helpers next to it are kept.
+- `PrivacyShieldRuleStore.Save`: upstream's streamed serialisation is taken; S1b's
+  `ServiceFiles.SetOwnerOnly` on the temporary file is kept, after the stream is closed.
+
+The worker's new 3-second first re-point and `PrivacyDnsFailSafe`'s netsh fallback merged automatically and
+are used unchanged on Windows.
+
+## R5.2 Restore, build and suites
+
+`--locked-mode` for `Axiom.Portable.slnx`, `Axiom.sln` and per project: pass, 22 / 22 (main 21 / 21). No lock
+file changed. Clean restore: 88 packages. Release build: 0 warnings, 0 errors. Suites, `main` → S1b:
+Contracts 160 → 169, Infrastructure.Windows 86 → 154, Service 101 → 120; all other suites equal. **No test
+that passes on `main` fails or is missing**; all 96 added tests pass. The same 4 Python `AgentHookScriptTests`
+fail on both trees. `WindowsFirewallPolicyAdapterTests` flake: 1 of 3 extra runs on each tree.
+
+## R5.3 Privacy Shield and DoH, `main` vs S1b
+
+`main` changed the DNS / Privacy Shield service code in this range, so the R4.4 pass was repeated with the
+same script, a fresh install per build and a reset between them. Each installed `Axiom.Service.exe` has the
+SHA-256 of its publish output (main `3A2D23BA…`, S1b `5C2699C0…`). **All 54 Privacy Shield checks, raw reply
+lines included, are identical after normalisation.** The only other difference of the 63 checks is
+`publish_files` (S1b adds `Axiom.Service.Hosting.pdb`). The results match R4.4: adapter DNS
+`127.0.0.1,10.0.2.3` while on, with a backup file; allowed names resolve; blocked custom names and their
+subdomains get NXDOMAIN; the automatic upstream is DoH 1.1.1.1 + 9.9.9.9; with an unreachable DoH upstream the
+shield stays `Active`, lookups get SERVFAIL with no plaintext fallback and blocked names stay NXDOMAIN;
+`1.1.1.1` with DoH off is still DoH; settings, upstream and adapter DNS survive a service restart; the source
+update gives 236,174 rules; disabling restores adapter DNS to exactly `10.0.2.3`. `lastError` is empty in
+every step on both builds, so the new adapter-error path did not fire on this VM.
+
+## R5.4 Not repeated or not tested in this round
+
+- The service differential and access probes of R4.3 (`main` did not change the dispatcher, caller
+  authorization or the write gate). No second account was created and the `tester` credential was not used.
+- A failing adapter-DNS setup live (the adapter-error path is covered by the unit test only), an explicit LAN
+  upstream with DoH off, a named `PreferredAdapterAlias`, IPv6 adapter DNS, desktop UI (including the new
+  Privacy Overview page), installer.
+
+## R5.5 Cleanup
+
+After each build: product uninstall, data roots removed and checked absent. At the end: no Axiom service,
+process or firewall rule, no staged secret, no `Ax*` scheduled task, adapter DNS `10.0.2.3`. The VM was
+powered off.
