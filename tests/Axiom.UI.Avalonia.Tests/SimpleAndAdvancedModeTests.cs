@@ -115,8 +115,8 @@ public sealed class SimpleAndAdvancedModeTests : IDisposable
             Assert.Contains(window.GetVisualDescendants(), v => v is MiniHomeView);
             Assert.True(shell.MiniHome.HasBlockedAgents);
             Assert.Single(shell.MiniHome.BlockedAgents);
-            Assert.Equal(420, window.MinWidth);
-            Assert.Equal(460, window.Width);
+            Assert.Equal(900, window.MinWidth);
+            Assert.Equal(1040, window.Width);
 
             // Switch back to Simple -> restores full window constraints
             shell.SwitchToSimpleModeCommand.Execute(null);
