@@ -1,3 +1,10 @@
+## What's in 0.85.0
+
+- **Mini is a one-row overview.**
+  - Three cards: Agent dashboard (sessions, tool calls, blocked, flagged), Network overview (sockets, processes, loopback, down/up), Privacy overview (rules, queries, allowed, blocked, errors).
+  - Small system-throughput chart below the row; Mini window opens at 1040x660 (min 900x560).
+  - The blocked lists and waiting-permission queue stay on the full pages.
+
 ## What's in 0.84.0
 
 - **Mini mode shows the real block count.**
