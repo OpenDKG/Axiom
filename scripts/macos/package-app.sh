@@ -222,7 +222,13 @@ if [[ -n "$IDENTITY" && $HAS_FILTER -eq 1 ]] && command -v dsymutil >/dev/null; 
 fi
 
 ENTITLEMENTS="$OUT/Axiom.entitlements"
-sed -e "s|@APP_GROUP@|$APP_GROUP|g" "$ROOT/scripts/macos/Axiom.entitlements" > "$ENTITLEMENTS"
+if [[ -n "$IDENTITY" ]]; then
+  sed -e "s|@APP_GROUP@|$APP_GROUP|g" "$ROOT/scripts/macos/Axiom.entitlements" > "$ENTITLEMENTS"
+else
+  # Ad hoc: no Apple identity means no authorised restricted entitlements, and macOS 26 kills a
+  # JIT binary that claims them. Keep only the runtime relaxations (see the file's comment).
+  sed -e "s|@APP_GROUP@|$APP_GROUP|g" "$ROOT/scripts/macos/Axiom-adhoc.entitlements" > "$ENTITLEMENTS"
+fi
 plutil -lint -s "$ENTITLEMENTS"
 
 is_macho() { # Mach-O or fat magic: feedface/feedfacf (thin), cefaedfe/cffaedfe (swapped), cafebabe (fat)

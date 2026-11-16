@@ -26,7 +26,8 @@ REPO="$TEMP/repo"
 mkdir -p "$REPO/scripts/macos" "$REPO/macos" "$REPO/src/Axiom.UI.Avalonia/Assets" \
          "$REPO/build/macos/osx-arm64/publish/app" "$REPO/build/macos/osx-arm64/publish/service"
 cp "$SRC/scripts/macos/package-app.sh" "$REPO/scripts/macos/"
-cp "$SRC/scripts/macos/Axiom.entitlements" "$SRC/scripts/macos/axiomd.entitlements" "$REPO/scripts/macos/"
+cp "$SRC/scripts/macos/Axiom.entitlements" "$SRC/scripts/macos/Axiom-adhoc.entitlements" \
+   "$SRC/scripts/macos/axiomd.entitlements" "$REPO/scripts/macos/"
 cp "$SRC/Directory.Build.props" "$REPO/"
 printf '#!/bin/sh\nexit 0\n' > "$REPO/build/macos/osx-arm64/publish/app/Axiom"
 printf '#!/bin/sh\nexit 0\n' > "$REPO/build/macos/osx-arm64/publish/service/axiomd"
@@ -103,7 +104,10 @@ run >/dev/null 2>&1 || fail "packaging failed with DOTNET_WRAPPER unset"
 [ "$(wc -l < "$DOTNET_CALLS" | tr -d ' ')" = "2" ] || fail "expected two publish calls"
 assert_file_has "$PKG_ARGS" "install-location /" "pkgbuild payload location"
 grep -q -- "--sign" "$PKG_ARGS" && fail "unsigned build passed --sign to pkgbuild"
-pass "DOTNET_WRAPPER unset: publishes twice, builds an unsigned pkg"
+ENT="$REPO/build/macos/osx-arm64/Axiom.entitlements"
+assert_file_has "$ENT" "allow-jit" "ad hoc app keeps the runtime relaxations"
+grep -q "<key>com.apple.developer" "$ENT" && fail "ad hoc app must not claim restricted entitlements"
+pass "DOTNET_WRAPPER unset: publishes twice, builds an unsigned pkg, ad hoc entitlements only"
 
 # --- 2. empty DOTNET_WRAPPER (bash 3.2 must not abort on ${WRAP[@]} under set -u) -----------
 DOTNET_WRAPPER="" run >/dev/null 2>&1 || fail "packaging failed with DOTNET_WRAPPER empty"
@@ -115,13 +119,19 @@ DOTNET_WRAPPER="$TEMP/wrap.sh" run >/dev/null 2>&1 || fail "packaging failed wit
 [ "$(wc -l < "$WRAP_LOG" | tr -d ' ')" = "2" ] || fail "wrapper did not prefix both publishes"
 pass "DOTNET_WRAPPER populated: both publishes run through the wrapper"
 
-# --- 4. installer identity signs the package -------------------------------------------------
+# --- 4. real identities sign the app and the package -----------------------------------------
 : > "$PKG_ARGS"
+AXIOM_SIGN_IDENTITY="Developer ID Application: Test (ABCDE12345)" \
 AXIOM_INSTALLER_IDENTITY="Developer ID Installer: Test (ABCDE12345)" run >/dev/null 2>&1 \
-  || fail "packaging failed with an installer identity"
+  || fail "packaging failed with signing identities"
 assert_file_has "$PKG_ARGS" -- "--sign Developer ID Installer: Test (ABCDE12345)" "pkg signature"
 assert_file_has "$PKG_ARGS" -- "--timestamp" "pkg signature timestamp"
-pass "AXIOM_INSTALLER_IDENTITY: pkgbuild signs and timestamps"
+ENT="$REPO/build/macos/osx-arm64/Axiom.entitlements"
+assert_file_has "$ENT" "system-extension.install" "signed app requests system-extension install"
+assert_file_has "$ENT" "ABCDE12345.com.axiom.firewall" "signed app uses the team-prefixed app group"
+grep -q "<key>com.apple.developer.networking.networkextension</key>" "$ENT" \
+  && fail "a JIT app must not carry the Network Extension entitlement (macOS 26 refuses to launch it)"
+pass "identities: pkg signed/timestamped; signed app keeps only the sysext-install entitlement"
 
 # --- 5. generated postinstall resolves the daemon on the target volume -----------------------
 SCRIPTS="$REPO/build/macos/osx-arm64/pkgscripts"
