@@ -316,6 +316,40 @@ public sealed class OptionalModuleInstaller
               if (Test-Path $hermes) {
                 & $hermes plugins enable blackbox --no-allow-tool-override
               }
+
+              # Same compatibility pass as the Avalonia installer: the committed Hermes environment
+              # can be built for a different Python minor than the vendor venv, which makes the
+              # plugin fail with `No module named '_cffi_backend'` (issue #370).
+              try {
+                $deps = @('cryptography', 'cffi', 'psutil', 'fastapi', 'uvicorn', 'ruamel.yaml', 'pyyaml', 'python-dotenv', 'rich', 'aiohttp')
+                $base = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'hermes\tools') -Directory -Filter 'python-*' -ErrorAction SilentlyContinue |
+                  ForEach-Object { Join-Path $_.FullName 'python.exe' } | Where-Object { Test-Path $_ } | Select-Object -First 1
+                if ($base) {
+                  Write-Host 'Ensuring the Hermes runtime has the Blackbox plugin dependencies...' -ForegroundColor Cyan
+                  & $base -m pip install --quiet --no-cache-dir @deps 2>&1 | ForEach-Object { Write-Host $_ }
+                }
+                $facts = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'hermes\installs') -Directory -ErrorAction SilentlyContinue |
+                  ForEach-Object { Join-Path $_.FullName 'facts.json' } | Where-Object { Test-Path $_ } | Select-Object -First 1
+                if ($base -and $facts) {
+                  $committed = (Get-Content $facts -Raw | ConvertFrom-Json).packages.venv.environment
+                  $envSite = if ($committed) { Join-Path $committed 'Lib\site-packages' } else { '' }
+                  if ($envSite -and (Test-Path $envSite)) {
+                    Write-Host 'Ensuring the committed Hermes environment has the plugin dependencies...' -ForegroundColor Cyan
+                    & $base -m pip install --quiet --no-cache-dir --target $envSite @deps 2>&1 | ForEach-Object { Write-Host $_ }
+                  }
+                }
+                $pluginDir = Join-Path $env:LOCALAPPDATA 'hermes\plugins\blackbox'
+                if ((Test-Path $hermes) -and (Test-Path $pluginDir)) {
+                  $doctor = (& $hermes plugins doctor $pluginDir 2>&1 | Out-String)
+                  if ($doctor -match 'ERROR|timed out|failed') {
+                    Write-Warning ("Blackbox plugin still does not load in Hermes; the Axiom guard is unaffected. " + ($doctor -replace '\s+', ' ').Trim())
+                  } else {
+                    Write-Host 'Blackbox plugin loads in Hermes.' -ForegroundColor Green
+                  }
+                }
+              } catch {
+                Write-Warning "Blackbox compatibility repair skipped: $($_.Exception.Message)"
+              }
               $agent = Join-Path $dir 'agent-blackbox'
               $launcher = Join-Path $agent 'start-dashboard.py'
               $code = "import argparse`nfrom plugins.blackbox.dashboard import cmd_dashboard`nraise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))`n"
