@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.68.0
+
+- **Guard: harness wiring files and the vendor plugin config are tamper-protected.**
+  - Batch 6 on 0.67 hooks blocked `hermes plugins disable/remove blackbox` and every hooks file except two: rewriting `hermes\config.yaml` and deleting `~/.zcode/cli/config.json` were allowed (issue #391).
+  - The tamper markers now include `hermes\config.yaml`, `.hermes\config.yaml` and `.zcode\cli\config.json` (both separators).
+  - Re-verified 12/12; batches 1-5 and the per-harness tamper set stay clean.
+
 ## What's in 0.67.0
 
 - **Guard: forensic and WMI persistence shapes now block.**

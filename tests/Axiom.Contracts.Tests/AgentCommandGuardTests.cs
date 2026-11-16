@@ -59,6 +59,15 @@ public sealed class AgentCommandGuardTests
     }
 
     [Fact]
+    public void Guard_protects_the_vendor_and_zcode_wiring_files()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        Assert.Contains("hermes\\\\config.yaml", helpers, StringComparison.Ordinal);
+        Assert.Contains(".zcode\\\\cli\\\\config.json", helpers, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Guard_blocks_anti_forensics_and_wmi_persistence()
     {
         var helpers = AgentCommandGuard.PythonHelpers;

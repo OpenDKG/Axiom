@@ -33,6 +33,12 @@ public static class AgentCommandGuard
                 "hermes/blackbox",
                 "axiom\\modules\\blackbox",
                 "axiom/modules/blackbox",
+                "hermes\\config.yaml",
+                "hermes/config.yaml",
+                ".hermes\\config.yaml",
+                ".hermes/config.yaml",
+                ".zcode\\cli\\config.json",
+                ".zcode/cli/config.json",
                 "hooks.json",
             )
             verbs = (
