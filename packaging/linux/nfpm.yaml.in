@@ -59,6 +59,9 @@ contents:
     dst: /usr/lib/axiom-firewall
     type: tree
   # Same stable launcher name as the .deb: /usr/bin/axiom-firewall -> the real apphost.
+  # nfpm symlink semantics: src/dst are installed filesystem paths, not build-host paths; src is
+  # the link target and dst is the link created. Prepending @STAGE@ here would ship a link to the
+  # build directory. Regular file/tree entries above are the ones that use @STAGE@.
   - src: /usr/lib/axiom-firewall/Axiom
     dst: /usr/bin/axiom-firewall
     type: symlink
