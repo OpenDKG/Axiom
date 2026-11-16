@@ -4,6 +4,9 @@ This is the original feature-by-feature release history extracted from the long 
 
 ## What's in 0.64.0
 
+- **Guard: openssl/ssh-keygen key reads, `reg export` of SAM, `.aws` archives.**
+  - A rotated 26-probe batch on 0.63 hooks allowed `openssl rsa -in …id_rsa`, `ssh-keygen -y -f …id_rsa`, `reg export HKLM\SAM` and `Compress-Archive ~/.aws`. The read check now covers openssl/ssh-keygen/gpg/age, the hive-export check accepts `reg export`, and `.aws`/`.gnupg` are credential stores (issue #382).
+  - Re-verified 26/26 against a hook generated from the patched source; controls still allow.
 - **Setup: the DKG identity check no longer warns while the node is still starting.**
   - `SetupInstaller` polled the node identity for 30 s and then warned "DKG node could not be initialized or verified" even though the node came up healthy moments later (issue #381). It now polls up to 90 s and reports at 30 s/60 s that the node may still be starting, so the warning only appears for a real failure.
 
