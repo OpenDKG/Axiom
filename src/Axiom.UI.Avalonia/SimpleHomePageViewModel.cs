@@ -1,21 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
+using Axiom.Contracts.Blackbox;
 using Axiom.Presentation;
+using CommunityToolkit.Mvvm.Input;
 
 namespace Axiom.UI.Avalonia;
 
 /// <summary>
 /// Streamlined home page for Simple mode: presents protection status, one-click Firewall/Privacy
-/// controls, pending app requests, and currently online apps without technical jargon.
+/// controls, pending app requests, currently online apps, and live AI agent activity without technical jargon.
 /// </summary>
 public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatablePage, IDisposable
 {
+    private const int MaxRecentAgentEntries = 15;
+
     private readonly Action _openFirewall;
     private readonly Action _openPrivacyOverview;
     private readonly Action _openNetworkAdvanced;
     private readonly Action _switchToAdvanced;
+    private readonly Action _openAgentsAdvanced;
 
     public SimpleHomePageViewModel(
         OverviewPageViewModel overview,
@@ -25,8 +30,9 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         Action openFirewall,
         Action openPrivacyOverview,
         Action openNetworkAdvanced,
-        Action switchToAdvanced)
-        : base("Home", "Essential firewall, privacy blocker, and live network overview", "H")
+        Action switchToAdvanced,
+        Action? openAgentsAdvanced = null)
+        : base("Home", "Essential firewall, privacy blocker, network, and AI agent overview", "H")
     {
         Overview = overview ?? throw new ArgumentNullException(nameof(overview));
         Firewall = firewall ?? throw new ArgumentNullException(nameof(firewall));
@@ -36,12 +42,18 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         _openPrivacyOverview = openPrivacyOverview ?? throw new ArgumentNullException(nameof(openPrivacyOverview));
         _openNetworkAdvanced = openNetworkAdvanced ?? throw new ArgumentNullException(nameof(openNetworkAdvanced));
         _switchToAdvanced = switchToAdvanced ?? throw new ArgumentNullException(nameof(switchToAdvanced));
+        _openAgentsAdvanced = openAgentsAdvanced ?? switchToAdvanced;
 
         Firewall.PropertyChanged += OnChildPropertyChanged;
         PrivacyShield.PropertyChanged += OnChildPropertyChanged;
         Overview.PropertyChanged += OnChildPropertyChanged;
+        Agents.PropertyChanged += OnChildPropertyChanged;
         Agents.Security.PropertyChanged += OnChildPropertyChanged;
         Overview.TopApps.CollectionChanged += OnTopAppsCollectionChanged;
+        Agents.Activity.CollectionChanged += OnAgentActivityCollectionChanged;
+        Agents.Security.ProtectedAgents.CollectionChanged += OnProtectedAgentsCollectionChanged;
+
+        SyncRecentAgentActivity();
     }
 
     public OverviewPageViewModel Overview { get; }
@@ -54,7 +66,11 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
 
     public ObservableCollection<AppRow> TopApps => Overview.TopApps;
 
+    public ObservableCollection<BlackboxAuditEntry> RecentAgentActivity { get; } = [];
+
     public bool HasOnlineApps => TopApps.Count > 0;
+
+    public bool HasAgentActivity => RecentAgentActivity.Count > 0;
 
     public bool IsShieldActive => Firewall.ShieldEnabled;
 
@@ -97,16 +113,41 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
             ? "AI Agent Guard is active and monitoring coding-assistant sessions locally."
             : "AI Agent modules are optional — switch to Advanced mode to inspect or configure them.";
 
+    public string AgentGuardBadgeText =>
+        Agents.Security.BlackboxConnected || Agents.Enforcement.CanClaimVerifiedBlocking
+            ? "ACTIVE"
+            : Agents.Security.ProtectedAgents.Count > 0
+                ? "DETECTED"
+                : "READY";
+
+    public string AgentGuardStatusText =>
+        Agents.Security.BlackboxConnected
+            ? $"{Agents.Security.ProtectedAgents.Count} AI tool(s) watched · {Agents.BlockedFindingCount} blocked threat(s)"
+            : Agents.Security.ProtectedAgents.Count > 0
+                ? $"{Agents.Security.ProtectedAgents.Count} local AI tool(s) found · {Agents.BlockedFindingCount} blocked"
+                : "Watches AI coding tools and blocks risky commands or secret reads";
+
+    public string AgentActivityCountText => $"{Agents.Activity.Count} events";
+
+    public string AgentActivitySummaryText =>
+        Agents.Activity.Count > 0
+            ? $"{Agents.ToolCallCount} tool call(s) · {Agents.FileAccessCount} file check(s) · {Agents.BlockedFindingCount} blocked"
+            : Agents.Security.BlackboxConnected
+                ? "Agent Guard is listening — tool calls, file checks, and blocks will appear here."
+                : "No recent AI agent activity has been recorded yet.";
+
     public void Activate()
     {
         (Overview as IActivatablePage).Activate();
         (PrivacyShield as IActivatablePage).Activate();
+        (Agents as IActivatablePage).Activate();
     }
 
     public void Deactivate()
     {
         (Overview as IActivatablePage).Deactivate();
         (PrivacyShield as IActivatablePage).Deactivate();
+        (Agents as IActivatablePage).Deactivate();
     }
 
     [RelayCommand]
@@ -153,6 +194,9 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
     private void OpenNetworkAdvanced() => _openNetworkAdvanced();
 
     [RelayCommand]
+    private void OpenAgents() => _openAgentsAdvanced();
+
+    [RelayCommand]
     private void SwitchToAdvanced() => _switchToAdvanced();
 
     public void Dispose()
@@ -160,13 +204,41 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         Firewall.PropertyChanged -= OnChildPropertyChanged;
         PrivacyShield.PropertyChanged -= OnChildPropertyChanged;
         Overview.PropertyChanged -= OnChildPropertyChanged;
+        Agents.PropertyChanged -= OnChildPropertyChanged;
         Agents.Security.PropertyChanged -= OnChildPropertyChanged;
         Overview.TopApps.CollectionChanged -= OnTopAppsCollectionChanged;
+        Agents.Activity.CollectionChanged -= OnAgentActivityCollectionChanged;
+        Agents.Security.ProtectedAgents.CollectionChanged -= OnProtectedAgentsCollectionChanged;
     }
 
-    private void OnTopAppsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    private void OnTopAppsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(HasOnlineApps));
+    }
+
+    private void OnAgentActivityCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SyncRecentAgentActivity();
+        OnPropertyChanged(nameof(AgentActivityCountText));
+        OnPropertyChanged(nameof(AgentActivitySummaryText));
+    }
+
+    private void OnProtectedAgentsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(AgentGuardBadgeText));
+        OnPropertyChanged(nameof(AgentGuardStatusText));
+    }
+
+    private void SyncRecentAgentActivity()
+    {
+        RecentAgentActivity.Clear();
+        var count = Math.Min(MaxRecentAgentEntries, Agents.Activity.Count);
+        for (var i = 0; i < count; i++)
+        {
+            RecentAgentActivity.Add(Agents.Activity[i]);
+        }
+
+        OnPropertyChanged(nameof(HasAgentActivity));
     }
 
     private void OnChildPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -182,5 +254,9 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         OnPropertyChanged(nameof(PrivacyActionText));
         OnPropertyChanged(nameof(CanTogglePrivacy));
         OnPropertyChanged(nameof(AiGuardSummaryText));
+        OnPropertyChanged(nameof(AgentGuardBadgeText));
+        OnPropertyChanged(nameof(AgentGuardStatusText));
+        OnPropertyChanged(nameof(AgentActivityCountText));
+        OnPropertyChanged(nameof(AgentActivitySummaryText));
     }
 }

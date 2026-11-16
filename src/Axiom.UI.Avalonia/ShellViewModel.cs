@@ -160,7 +160,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 _uiMode.Apply(UiMode.Advanced);
                 SelectedPage = Overview;
             },
-            switchToAdvanced: () => _uiMode.Apply(UiMode.Advanced));
+            switchToAdvanced: () => _uiMode.Apply(UiMode.Advanced),
+            openAgentsAdvanced: () =>
+            {
+                _uiMode.Apply(UiMode.Advanced);
+                SelectedPage = Agents;
+            });
         Pages =
         [
             AgentDashboard,

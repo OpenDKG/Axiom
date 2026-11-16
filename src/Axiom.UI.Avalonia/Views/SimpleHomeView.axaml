@@ -35,8 +35,8 @@
         </Grid>
       </Border>
 
-      <!-- Three clean summary cards -->
-      <Grid ColumnDefinitions="*,14,*,14,*">
+      <!-- Four summary cards: Firewall, Privacy, Network, AI Agents -->
+      <Grid ColumnDefinitions="*,14,*,14,*,14,*">
         <Border Grid.Column="0" Classes="card" Padding="16">
           <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
             <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
@@ -100,7 +100,28 @@
                                                  FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" />
             </StackPanel>
             <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
-              <Button Content="Full Network Monitor" Command="{Binding OpenNetworkAdvancedCommand}" Padding="12,5" FontSize="11" />
+              <Button Content="Network Monitor" Command="{Binding OpenNetworkAdvancedCommand}" Padding="12,5" FontSize="11" />
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <Border Grid.Column="6" Classes="card" Padding="16">
+          <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="2">
+                <controls:AxiomSelectableTextBlock Text="AI AGENT GUARD" Classes="kpi-label" />
+                <controls:AxiomSelectableTextBlock Text="{Binding AgentGuardBadgeText}"
+                                                   FontSize="20" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Axiom.TextPrimary}" />
+              </StackPanel>
+              <Border Grid.Column="1" Width="3" Height="28" CornerRadius="1.5"
+                      Background="{DynamicResource Axiom.Warning}" VerticalAlignment="Top" />
+            </Grid>
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Text="{Binding AgentGuardStatusText}"
+                                               FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}"
+                                               TextWrapping="Wrap" />
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+              <Button Content="Open Agents" Command="{Binding OpenAgentsCommand}" Padding="12,5" FontSize="11" />
             </StackPanel>
           </Grid>
         </Border>
@@ -149,56 +170,111 @@
         </StackPanel>
       </Border>
 
-      <!-- Apps currently online -->
-      <Border Classes="card" Padding="16">
-        <StackPanel Spacing="10">
-          <Grid ColumnDefinitions="*,Auto">
-            <StackPanel Spacing="2">
-              <controls:AxiomSelectableTextBlock Text="Apps using the internet right now" Classes="section-title" />
-              <controls:AxiomSelectableTextBlock Text="{Binding AiGuardSummaryText}"
-                                                 FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" />
-            </StackPanel>
-            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Overview.ProcessesText, StringFormat={}{0} active}"
-                                               FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
-          </Grid>
+      <!-- Live Network Apps + AI Agent Activity side by side -->
+      <Grid ColumnDefinitions="*,14,*">
+        <Border Grid.Column="0" Classes="card" Padding="16">
+          <StackPanel Spacing="10">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="2">
+                <controls:AxiomSelectableTextBlock Text="Apps using the internet right now" Classes="section-title" />
+                <controls:AxiomSelectableTextBlock Text="{Binding PrivacyStatusText}"
+                                                   FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}"
+                                                   TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Overview.ProcessesText, StringFormat={}{0} active}"
+                                                 FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+            </Grid>
 
-          <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding TopApps}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                  <Border Padding="10,8" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
-                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
-                      <Border Grid.Column="0" Width="30" Height="30" CornerRadius="6"
-                              Background="{DynamicResource Axiom.AccentSoft}">
-                        <TextBlock Text="{Binding Initial}" FontSize="12" FontWeight="Bold"
-                                   Foreground="{DynamicResource Axiom.Accent}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                      </Border>
-                      <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-                        <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                        <controls:AxiomSelectableTextBlock Text="{Binding PathText}" FontSize="10.5"
-                                                           Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
-                      </StackPanel>
-                      <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding SocketsText}"
-                                                         FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}"
-                                                         VerticalAlignment="Center" />
-                      <Button Grid.Column="3" Content="Block" Classes="danger" Padding="12,4" FontSize="11"
-                              Command="{Binding $parent[ItemsControl].DataContext.Overview.BlockTopAppOutboundCommand}"
-                              CommandParameter="{Binding}" />
-                    </Grid>
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
+            <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding TopApps}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Padding="10,8" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
+                      <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
+                        <Border Grid.Column="0" Width="28" Height="28" CornerRadius="6"
+                                Background="{DynamicResource Axiom.AccentSoft}">
+                          <TextBlock Text="{Binding Initial}" FontSize="11.5" FontWeight="Bold"
+                                     Foreground="{DynamicResource Axiom.Accent}"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                          <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                                             Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                          <controls:AxiomSelectableTextBlock Text="{Binding PathText}" FontSize="10.5"
+                                                             Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding SocketsText}"
+                                                           FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}"
+                                                           VerticalAlignment="Center" />
+                        <Button Grid.Column="3" Content="Block" Classes="danger" Padding="10,4" FontSize="11"
+                                Command="{Binding $parent[ItemsControl].DataContext.Overview.BlockTopAppOutboundCommand}"
+                                CommandParameter="{Binding}" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
 
-          <TextBlock Text="No apps are currently opening network connections."
-                     IsVisible="{Binding !HasOnlineApps}"
-                     FontSize="12" Foreground="{DynamicResource Axiom.TextMuted}"
-                     HorizontalAlignment="Center" Margin="0,12" />
-        </StackPanel>
-      </Border>
+            <TextBlock Text="No apps are currently opening network connections."
+                       IsVisible="{Binding !HasOnlineApps}"
+                       FontSize="12" Foreground="{DynamicResource Axiom.TextMuted}"
+                       HorizontalAlignment="Center" Margin="0,12" />
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Column="2" Classes="card" Padding="16">
+          <StackPanel Spacing="10">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="2">
+                <controls:AxiomSelectableTextBlock Text="AI agent activity right now" Classes="section-title" />
+                <controls:AxiomSelectableTextBlock Text="{Binding AgentActivitySummaryText}"
+                                                   FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}"
+                                                   TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding AgentActivityCountText}"
+                                                 FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+            </Grid>
+
+            <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto">
+              <ItemsControl x:Name="SimpleAgentActivityList" ItemsSource="{Binding RecentAgentActivity}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Padding="10,8" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
+                      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <Border Grid.Column="0" CornerRadius="5" Padding="7,3" VerticalAlignment="Center"
+                                Background="{DynamicResource Axiom.SurfaceAlt}"
+                                BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1">
+                          <TextBlock Text="{Binding SecurityOutcome}" FontSize="10" FontWeight="Bold"
+                                     Foreground="{DynamicResource Axiom.TextPrimary}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <controls:AxiomSelectableTextBlock Text="{Binding Agent}" FontSize="12.5" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource Axiom.TextPrimary}" />
+                            <controls:AxiomSelectableTextBlock Text="{Binding EventLabel}" FontSize="11"
+                                                               Foreground="{DynamicResource Axiom.Accent}" VerticalAlignment="Center" />
+                          </StackPanel>
+                          <controls:AxiomSelectableTextBlock Text="{Binding ActionSummary}" FontSize="10.5"
+                                                             Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding TimeText}"
+                                                           FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}"
+                                                           VerticalAlignment="Center" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+
+            <TextBlock Text="No AI agent actions have been recorded yet."
+                       IsVisible="{Binding !HasAgentActivity}"
+                       FontSize="12" Foreground="{DynamicResource Axiom.TextMuted}"
+                       HorizontalAlignment="Center" Margin="0,12" />
+          </StackPanel>
+        </Border>
+      </Grid>
     </StackPanel>
   </ScrollViewer>
 </UserControl>
