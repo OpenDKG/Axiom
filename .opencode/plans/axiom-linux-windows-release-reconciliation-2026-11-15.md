@@ -979,15 +979,16 @@ runtime claim.
 | Desktop Linux tests | **51/51** |
 | Locked restore | `dotnet restore Axiom.Portable.slnx --locked-mode` → rc 0 after the lock refresh; `Axiom.sln --locked-mode` still reports NU1004 for RID graphs on this Linux host (pre-existing, recorded in the evidence log) |
 | Lintian | guest Ubuntu 24.04 lintian 2.117.0ubuntu1.6 on the exact `.deb`: **0 E / 0 W**, rc 0; only the known duplicate-hint stderr note, no tag |
-| Guest upgrade | approved `0.59.0+linux.5` + `protection.enable` + applied `/usr/bin/curl` rule + dark theme → `dpkg -i` `0.73.0+linux.6`: rc 0, unit active, `/var/lib/axiom` rule count 1 with the rule still connect-time proven, nft table still carries the rule id, theme preserved, `/opt` absent; `--doctor` 13 PASS, 0 FAIL |
+| Guest upgrade (corrected repeat; raw IPC retained) | approved `0.59.0+linux.5` + `protection.enable` + applied `/usr/bin/curl` rule + dark theme → `dpkg -i` `0.73.0+linux.6`: rc 0, exact version, unit active. Raw pre/post `rules.query` JSON prove the exact seeded id `11111111-2222-3333-4444-555555555555`, exact spec, `state=applied`, `connectTimeBlockingProven=true`, count 1, enforcement verified. Full pre/post doctor stdout/stderr/rc retained: 13 PASS labels, no FAIL/WARN, rc 0. Full `/var/lib/axiom` tree manifested; only SQLite + generated filter generation fields changed, `protection.json` byte-identical, theme content/mode unchanged, no path lost. `/opt` absent |
 | Guest fresh install | `dpkg -i` rc 0, unit active, 13 PASS, 0 FAIL; canary unscoped `--count 10`: curl/python × IPv4/IPv6 `slipped 0/10 blocked 10/10`, all rules `connectTimeBlockingProven=True` |
 | Guest remove/purge | remove rc 0, unit inactive, `/usr/libexec/axiom` and `/usr/lib/axiom-firewall` gone; purge rc 0, package absent, `/var/lib/axiom`, `/sys/fs/bpf/axiom` and nft tables gone |
 | Host/VM hygiene | disposable run overlay only; baseline `ee941cef…` hash checked before the run; VM powered off after; no host DNS/firewall/package changes |
 
 Evidence: `/tmp/opencode/axiom-latest-reconciliation-20261116/` (`REPORT.md`, `PROVENANCE.txt`,
 `SHA256SUMS`, build/test/lintian/guest logs, lock hashes, source patch, `WINDOWS-WORKER.md`).
-The artifact was built from the merged tree containing `076b341`'s engine change; only the later
-lock refresh (`01fc9a3`) is outside the payload. The guest-tested file is preserved unchanged.
+The payload source is `076b341` (the working tree at build time). Commits `01fc9a3`, `919fcc0` and
+`12edd8e` change only lock files, tests and plan docs — `git diff 076b341..HEAD` over packaged code
+is empty. The guest-tested file is preserved unchanged.
 
 ### 18.6 Status and residual gates
 
@@ -999,3 +1000,34 @@ lock refresh (`01fc9a3`) is outside the payload. The guest-tested file is preser
 - Still deferred: RPM build/runtime (nfpm absent), arm64, Fedora, polkit wrong-password denial,
   pure-Wayland backend, runtime signing, release-write approval.
 - No `main` merge, no PR merge, no force-push, no tag/release/asset, no deployment.
+
+### 18.7 Corrected upgrade evidence (2026-11-16 repeat, no product change)
+
+The first pass's post-upgrade `rules.query` was parsed as `rule["state"]["applyState"]`; the wire
+format serializes `RuleState` as a camelCase **string**, so that parse crashed and the retained log
+had no post-upgrade rule state. Doctor output was counted, not retained. This was a harness bug;
+there is no evidence of a product regression. No source, commit or artifact was rebuilt.
+
+The corrected repeat on the same disposable guest (restricted, Ubuntu 24.04.5, kernel 6.8.0-147)
+reran exact `0.59.0+linux.5` -> exact `0.73.0+linux.6` and retained:
+
+- raw `rules.query` JSON before and after (`rules-pre.json`, `rules-post.json`), asserted for the
+  exact seeded id, exact `Axiom::<ID>::OUT`, exact spec fields, `state=applied`,
+  `connectTimeBlockingProven=true`, count 1, enforcement `verified`, layer `active`/healthy and the
+  id in `connectTimeProvenRules`;
+- full doctor stdout/stderr/exit before and after, asserted at 13 exact PASS labels, no FAIL/WARN,
+  rc 0 and final `Result: all checks passed.` (not a grep count);
+- exact installed versions and `Axiom.dll`/`axiomd.dll`/native hashes on both sides; the native
+  launchers are byte-identical between the artifacts;
+- a full `/var/lib/axiom` tree manifest with modes/ownership/hashes: only `axiom.db*`,
+  `filter/managed-rules.json` (generation/`lastVerifiedUtc`) and `filter/rules.nft` (generation
+  comment) changed; every other file kept bytes/mode/owner and no path disappeared;
+  `protection.json` byte-identical; theme content/mode unchanged;
+- cleanup: only the exact seeded rule was removed after re-querying it as the sole rule, protection
+  disabled, package purged; package/unit/image/data/logs/pins/nft/socket gone; guest resolver
+  symlink/hash `ebdf5602…`/mode/routes unchanged; VM off; baseline `ee941cef…` unchanged.
+
+Evidence: `guest/retry-20261116/` (`README.md`, `evidence/`, labelled partial attempts,
+`cleanup.log`). The superseded first-pass log remains at `guest/upgrade-old-to-new.log`.
+Result: `HARNESS_OK`, ssh rc 0. The guest run remains one Ubuntu 24.04 x64 VM; Windows runtime, RPM,
+arm64, signing and independent review are still open.
