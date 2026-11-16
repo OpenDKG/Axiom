@@ -484,7 +484,8 @@ implementations deliberately, not by blind merge.
 Portable suites: Contracts 157, Core 184, Persistence 21, Unix 47, Linux 102, MacOS 249, MCP 34,
 Presentation 299, UI.Avalonia 80, Service.Hosting 31; separately Linux.Nft 160 and
 Desktop.Avalonia.Linux 51. All pass. `Axiom.Portable.slnx --locked-mode` restore passes; the full
-solution restore fails `NETSDK1100` on Linux (WPF), unchanged. Windows cross-builds (Windows
+solution restore fails `NETSDK1100` on Linux (WPF), and with `EnableWindowsTargeting=true` fails
+`NU1004` for the Windows projects (stale lock graphs). Both need a Windows host (T17). Windows cross-builds (Windows
 infrastructure, service `net10.0-windows`, Windows Avalonia desktop, Service.Tests) pass; no
 Windows runtime is claimed.
 
