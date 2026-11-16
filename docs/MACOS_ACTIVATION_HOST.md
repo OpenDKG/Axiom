@@ -130,11 +130,14 @@ not in this repository. A locked/offline restore was not reproduced.
 
 ## Provenance
 
-- Corrected checkpoint: `<filled after commit>`; tree `<filled after commit>`.
+- Corrected code checkpoint: `1270dd0`; tree `5ba8287b3797e1091f362a4887dc4f45b246615b`.
 - Base: `3040997` (PR #274-derived), cumulative review base `815d400`.
 - Guest toolchain: macOS 26.6.2 (25G83) arm64, CLT Swift 6.3.3, .NET SDK 10.0.403, stock bash
   3.2.57.
-- Artifact `Axiom.pkg` and app archive SHA-256: `<filled after final build>`.
+- `Axiom.pkg` SHA-256
+  `f377d406eddb3a7eb8dac78a5eef71f41b6c79cbb94d629bc53a701c36c31ba3`.
+- `Axiom-1270dd0-app.tar.gz` (UI + host) SHA-256
+  `5aa6278a5b020d6102d7857fb6be536b722d981299657ed4da00804c8cbdb55f`.
 - Full private evidence: source archive, lock diffs, test logs, codesign/entitlement/profile
   state, payload/signature/Gatekeeper output, per-file hashes and guest/controller checksums.
 
