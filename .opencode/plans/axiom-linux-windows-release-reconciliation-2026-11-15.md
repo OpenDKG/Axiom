@@ -685,7 +685,7 @@ mistakes. The filesystem move is the implementation of that, not a new feature.
 | Item | Value |
 |---|---|
 | Code commits | `2b35bd8` (path/modes/scripts/overrides) + `00049c2` (override contexts, man page, description wrap) + `4e343b7` (leftover enablement symlink on removal) |
-| Artifact | `axiom-firewall_0.59.0+linux.3_amd64.deb`, 63,833,156 bytes, sha256 `1617f10041580a4da52564e77e85dcab2d96b64364600a3b22dacaf7b82bb383` |
+| Artifact | `axiom-firewall_0.59.0+linux.3_amd64.deb`, 63,833,156 bytes, sha256 `1617f10041580a4da52564e77e85dcab2d96b64364600a3b22dacaf7b82bb383`, 515 entries |
 | Source | code tree of `4e343b7`; later commit is this plan file only (not packaged) |
 | Package version | `0.59.0+linux.3` (`--local linux.3`): dpkg sorts it above the tested `0.59.0`; app/upstream stay `0.59.0` |
 | Lintian | guest Ubuntu 24.04 `lintian` 2.117.0ubuntu1.6 on the exact artifact: **0 E / 0 W**, rc 0; one stderr duplicate-hint note (`ored-depends-on-obsolete-package`, no tag emitted) |
@@ -734,8 +734,9 @@ Nothing security-relevant was waived (permissions, missing deps, linkage, copyri
   absent; no `/opt` leftovers.
 - **Public DoH**: defaults `https://1.1.1.1/dns-query`, `https://9.9.9.9/dns-query`; 5 queries,
   0 errors; resolver redirected to 127.0.0.1; `axiomd` ESTAB to 1.1.1.1:443; **raw pcap retained**
-  (18,958 B, sha256 `9b9a9289…`): DNS only on loopback, 0 off-box packets to port 53. Quad9 still
-  not reachable from this egress (environment, unchanged).
+  (9,584 B, sha256 `6eaa2047ed1584433013ab191e53ff57d12ef57263243f6b1c7073912d060cd3`, from
+  `/tmp/opencode/axiom-packaging-readiness-20261116/doh-final.pcap`): DNS only on loopback, 0
+  off-box packets to port 53. Quad9 still not reachable from this egress (environment, unchanged).
 - Authorized guest additions this pass: `lxpolkit` 0.5.5-2ubuntu4 + `lxsession-data`,
   `libgtk2.0-0t64`, `libgtk2.0-common`, `policykit-1` (5 packages, automatic); the previously
   authorized lintian/sway/waybar/wayland-utils/xwayland set remains installed. No global auth
@@ -759,3 +760,88 @@ Fresh independent review of `4e343b7` / `1617f100…`; signing with an authorize
 authorization; RPM build/test (config updated, not built); arm64; Windows runtime/WPF/locked restore
 (owner); polkit **wrong-password** denial (cancel path now proven); pure-Wayland backend. Quad9 is
 environment-limited here. This is not production readiness and not a release.
+
+## 16. Revision 9 — review follow-ups: postrm scope, nfpm symlink proof, pcap metadata
+
+Date: 2026-11-16 (UTC). Single local builder. An independent review of revision 8
+(`4e343b7` / `1617f100…`, locally built, unpushed) approved that artifact **with nits** and raised
+three narrow follow-ups. All three are resolved here. No source or backend behavior changed; the
+only code change is the scope of the Debian removal helper's leftover-link cleanup. Local and
+**unpublished**: the rebuilt artifact needs a fresh independent review and is not a release.
+
+| Item | Value |
+|---|---|
+| Follow-up commits | `ea0eb54` (postrm enablement scope + tests), `c4a8529` (nfpm launcher semantics + manifest regression + docs) |
+| Code tree for the new artifact | `c4a8529` (packaging/tests/docs only; application payload identical to `4e343b7`) |
+| Artifact | `axiom-firewall_0.59.0+linux.4_amd64.deb`, 63,838,580 bytes, sha256 `1ae47cec24a0761e448c8428265b3ef676be1295afa62dda46656850f85aebc0`, 515 entries |
+| Output | `/tmp/opencode/axiom-packaging-followups-20261116/` (`REPORT.md`, `PROVENANCE.txt`, `SHA256SUMS`, build/test/lintian/guest logs, `nfpm-schema.json`, `nfpm-rendered.yaml`, `rpmproof/`) |
+| Build | `scripts/linux/package.sh deb --arch x64 --local linux.4 --skip-publish`; the reuse is the unchanged self-contained publish from `4e343b7`, and the maintainer scripts/docs are restaged from `c4a8529` |
+| Preserved | `0.59.0+linux.3` (`1617f100…`) and all older artifacts untouched in the revision-8 evidence root |
+
+### 16.1 Follow-up 1 — nfpm launcher symlink (concern disproven, no code defect)
+
+The review suspected `src: /usr/lib/axiom-firewall/Axiom` was a staging path that should be
+prefixed with `@STAGE@`. Current authoritative nfpm documentation
+(<https://nfpm.goreleaser.com/docs/configuration/>, fetched 2026-11-16) states for `type: symlink`:
+"both `src` and `dst` are paths inside the package (or rather paths in the file system where the
+package will be installed) and not in the build environment … `src` is the link target and `dst`
+is the file that is created when installing." The existing entry is therefore correct; prepending
+`@STAGE@` would ship a link to a build directory. A comment now records that distinction, and
+`PackagingManifestTests` pins `src=/usr/lib/axiom-firewall/Axiom` (no `@STAGE@`) while the payload
+`type: tree` entry still starts at `@STAGE@`.
+
+Validation performed: `nfpm` is **not installed** on this host (and was not installed), so the
+nfpm-produced RPM remains **unbuilt** and RPM parity is not claimed. The sed-rendered config
+passes the official nfpm JSON schema (`jsonschema` 4.10.3, `NFPM_SCHEMA_OK`). `rpmbuild` 4.18.2
+was used only for a throwaway semantics proof: an RPM whose symlink target is
+`/usr/lib/axiom-firewall/Axiom` stores the absolute link and resolves it after
+`rpm --root … -i` (`readlink` returns the installed path, target present). That proves the RPM
+content model, not an Axiom nfpm build. The RPM equivalent scriptlet does not scan the unit tree;
+it relies on `systemctl disable`, now documented.
+
+### 16.2 Follow-up 2 — postrm leftover-link scope (confirmed defect, fixed)
+
+The old `postrm` ran `find /etc/systemd/system -type l -name axiomd.service -delete`, which could
+delete a same-named link outside systemd's enablement directories. It now removes only
+`/etc/systemd/system/*.wants/axiomd.service` and `*.requires/axiomd.service` symlinks, using a
+POSIX shell glob (no recursive `find`, no GNU-only `-maxdepth`). Anything else — another directory,
+a top-level foreign unit, a regular file, a directory, or a link target outside the package — is
+preserved. The confirmed-stop safety, `deb-systemd-invoke`/`deb-systemd-helper` path and
+`daemon-reload` are unchanged. RPM `%postun` has no equivalent scan.
+
+Tests: four negative shapes plus the `.wants`/`.requires` positives in
+`MaintainerScriptCleanupTests` (fake systemctl/helper), and a real guest upgrade/purge. On the
+guest, linux.3 created `/etc/systemd/system/multi-user.target.wants/axiomd.service`; the linux.4
+upgrade left it in place; purge removed it, while a foreign `sshd.service` enablement link, a
+top-level `sshd.service` link and a regular file named `axiomd.service` survived. Live note:
+`systemctl disable` (prerm) removes a same-name link anywhere it finds it, and
+`deb-systemd-helper disable` prunes empty subdirectories under `/etc/systemd/system` — distro
+behavior outside this script, which is why the arbitrary-directory and directory negatives are
+proven by the fake-runner tests rather than the live purge.
+
+### 16.3 Follow-up 3 — document metadata corrected
+
+The revision-8 pcap entry was stale: the actual retained file
+`/tmp/opencode/axiom-packaging-readiness-20261116/doh-final.pcap` is **9,584 bytes**, sha256
+`6eaa2047ed1584433013ab191e53ff57d12ef57263243f6b1c7073912d060cd3` (not 18,958 B / `9b9a9289…`).
+The revision-8 artifact is recorded with its actual **515** `dpkg-deb` entries; the earlier 506
+counts belong to the pre-rebuild artifacts and were not carried forward.
+
+### 16.4 Verification (fresh, final tree `c4a8529`)
+
+| Gate | Result |
+|---|---|
+| Lintian on the exact `linux.4` artifact | guest Ubuntu 24.04 lintian 2.117.0ubuntu1.6: **0 E / 0 W**, rc 0; same stderr duplicate-hint note, no tag |
+| Linux test project | **112/112** pass (109 prior + 2 narrowed-postrm cases + 2 manifest cases; one old symlink test replaced by the scoped pair) |
+| Portable regression | all projects green: Contracts 157, Core 184, Persistence 21, Unix 47, Linux 112, MacOS 249, MCP 34, Presentation 299, Hosting 34, Desktop.MacOS 35, UI.Avalonia 96 = **1,268**; Linux.Nft 160 and Desktop.Avalonia.Linux 51 were not rerun (unchanged) |
+| Guest lifecycle | linux.3 install → enablement link present; linux.4 upgrade rc 0, unit active, link untouched; purge rc 0, link removed, foreign link/regular file kept, unit/image/data/run/nft/pins gone, resolver `ebdf5602…` unchanged |
+| Guest clean install | linux.4 rc 0, unit active/enabled, doctor "all checks passed", 4/4 BPF pins, launcher resolves to `/usr/lib/axiom-firewall/Axiom`, no `/opt`; final purge rc 0 and clean |
+| Guest/host cleanup | VM powered off, port 2222 closed, baseline `ee941cef…` unchanged, `/root/Axiom` untouched |
+
+### 16.5 Residual gates
+
+Fresh independent review of `c4a8529` / `1ae47cec…`; signing with an authorized key; release-write
+authorization; RPM **build and runtime** (config semantics verified, nfpm absent, not built);
+arm64; Windows runtime/WPF/locked restore (owner runs the tests; nothing was uploaded); polkit
+wrong-password denial; pure-Wayland backend. The supported deliverable remains Ubuntu 24.04 x86_64
+`.deb`; RPM and Windows are deferred targets. This is not production readiness and not a release.
