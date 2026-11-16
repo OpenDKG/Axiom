@@ -50,6 +50,9 @@
     </Style>
   </Window.Styles>
   <Window.DataTemplates>
+    <DataTemplate DataType="local:MiniHomePageViewModel">
+      <views:MiniHomeView />
+    </DataTemplate>
     <DataTemplate DataType="local:SimpleHomePageViewModel">
       <views:SimpleHomeView />
     </DataTemplate>
@@ -114,24 +117,29 @@
                  RenderOptions.BitmapInterpolationMode="HighQuality" />
           <TextBlock Text="AXIOM" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <TextBlock Text="Free Open-Source Network &amp; AI Agent Security" FontSize="10.5"
+                     IsVisible="{Binding !IsMiniMode}"
                      Foreground="{DynamicResource Axiom.TextMuted}" />
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0" VerticalAlignment="Stretch">
           <Border Background="{DynamicResource Axiom.SurfaceAlt}"
                   BorderBrush="{DynamicResource Axiom.Border}"
                   BorderThickness="1" CornerRadius="6" Padding="2"
-                  Margin="0,0,10,0" VerticalAlignment="Center"
+                  Margin="0,0,8,0" VerticalAlignment="Center"
                   chrome:WindowDecorationProperties.ElementRole="User"
-                  ToolTip.Tip="Switch between Simple (everyday) and Advanced (full technical) views">
+                  ToolTip.Tip="Switch between Mini (compact), Simple (everyday), and Advanced (full technical) views">
             <StackPanel Orientation="Horizontal" Spacing="2">
+              <Button x:Name="MiniModeButton" Content="Mini"
+                      Command="{Binding SwitchToMiniModeCommand}"
+                      Classes.primary="{Binding IsMiniMode}"
+                      Padding="8,3" FontSize="11" CornerRadius="4" BorderThickness="0" />
               <Button x:Name="SimpleModeButton" Content="Simple"
                       Command="{Binding SwitchToSimpleModeCommand}"
                       Classes.primary="{Binding IsSimpleMode}"
-                      Padding="10,3" FontSize="11" CornerRadius="4" BorderThickness="0" />
+                      Padding="8,3" FontSize="11" CornerRadius="4" BorderThickness="0" />
               <Button x:Name="AdvancedModeButton" Content="Advanced"
                       Command="{Binding SwitchToAdvancedModeCommand}"
                       Classes.primary="{Binding IsAdvancedMode}"
-                      Padding="10,3" FontSize="11" CornerRadius="4" BorderThickness="0" />
+                      Padding="8,3" FontSize="11" CornerRadius="4" BorderThickness="0" />
             </StackPanel>
           </Border>
           <Button x:Name="AlertsButton" Classes="caption" Click="OnAlertsClicked" ToolTip.Tip="Notifications"
@@ -261,7 +269,7 @@
       </Border>
     </Popup>
 
-    <Border Classes="glass-chrome" Grid.Row="1" Grid.Column="0" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,1,0">
+    <Border Classes="glass-chrome" Grid.Row="1" Grid.Column="0" IsVisible="{Binding !IsMiniMode}" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,*,Auto">
         <StackPanel Grid.Row="0" Margin="20,18,20,14" Spacing="9">
           <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-lockup.png" Height="56" Stretch="Uniform"
@@ -332,7 +340,7 @@
     </Border>
 
     <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*,Auto">
-      <Border Classes="glass-chrome" Grid.Row="0" MinHeight="74" Background="{DynamicResource Axiom.Header}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
+      <Border Classes="glass-chrome" Grid.Row="0" IsVisible="{Binding !IsMiniMode}" MinHeight="74" Background="{DynamicResource Axiom.Header}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
         <Grid Margin="24,8,20,8" ColumnDefinitions="*,0.95*,Auto" ColumnSpacing="14">
           <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
             <controls:AxiomSelectableTextBlock x:Name="HeaderPageTitle" Text="{Binding SelectedPage.Title}" Classes="page-title" TextTrimming="CharacterEllipsis" />
@@ -357,7 +365,7 @@
 
       <ContentControl Grid.Row="1" Content="{Binding SelectedPage}" />
 
-      <Border Classes="glass-chrome" Grid.Row="2" MinHeight="34" Background="{DynamicResource Axiom.StatusBar}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
+      <Border Classes="glass-chrome" Grid.Row="2" IsVisible="{Binding !IsMiniMode}" MinHeight="34" Background="{DynamicResource Axiom.StatusBar}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
         <Grid Margin="28,0,22,0" ColumnDefinitions="*,Auto">
           <WrapPanel VerticalAlignment="Center" ItemHeight="13"
                      ClipToBounds="False">

@@ -4,8 +4,8 @@ using System.IO;
 namespace Axiom.Presentation;
 
 /// <summary>
-/// Stores the chosen shell complexity mode (<see cref="UiMode.Simple"/> or
-/// <see cref="UiMode.Advanced"/>) in a small per-user text file. Defaults to Simple for everyday
+/// Stores the chosen shell complexity mode (<see cref="UiMode.Mini"/>, <see cref="UiMode.Simple"/>,
+/// or <see cref="UiMode.Advanced"/>) in a small per-user text file. Defaults to Simple for everyday
 /// users on first launch.
 /// </summary>
 public static class UiModeSettingsStore

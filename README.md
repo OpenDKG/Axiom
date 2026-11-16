@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.82.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.83.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -75,9 +75,9 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 ## Current release and quick links
 
-**Current development release:** [0.78.0](docs/RELEASES/0.78.0.md), 16 November 2026. Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
+**Current development release:** [0.83.0](docs/RELEASES/0.83.0.md), 16 November 2026. Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
 
-> **Version numbering:** development builds were previously numbered `0.10.x`. A short reset produced `0.2.0` and `0.3.0`, but GitHub orders releases by semantic version, which hid them below `0.10.25`. The public release line resumed at `0.11.0` and continues through `0.78.0+`; `0.2.0`/`0.3.0` remain historical snapshots. `scripts/build-release.ps1` refuses a version that is not greater than the highest existing `v*` tag.
+> **Version numbering:** development builds were previously numbered `0.10.x`. A short reset produced `0.2.0` and `0.3.0`, but GitHub orders releases by semantic version, which hid them below `0.10.25`. The public release line resumed at `0.11.0` and continues through `0.83.0+`; `0.2.0`/`0.3.0` remain historical snapshots. `scripts/build-release.ps1` refuses a version that is not greater than the highest existing `v*` tag.
 
 - [Install and first-run modes](docs/INSTALL.md) â€” core vs Complete setup and required privileges.
 - [Architecture](docs/ARCHITECTURE.md) â€” Avalonia UI, local service, Windows Firewall and optional components.
@@ -90,8 +90,9 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 ## What it covers
 
-### Simple & Advanced interface modes
+### Mini, Simple & Advanced interface modes
 
+- **Mini Mode** shrinks the window into a compact `460×700` monitor (`Min 420×520`) without the sidebar, showing quick Shield / Privacy toggles, pending outbound approvals, and blocked items across **Network**, **AI Agents**, and **Privacy**, plus **♥ Donate**, **GitHub**, **Settings**, and **Expand**.
 - **Simple Mode** (default for everyday users) presents a single streamlined Home dashboard with
   four status cards (**Firewall Shield**, **Ad & Tracker Blocker**, **Internet Activity**, and
   **AI Agent Guard**), one-click outbound Allow/Block approvals, currently online apps, and live

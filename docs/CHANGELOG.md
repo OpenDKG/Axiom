@@ -1,3 +1,9 @@
+## What's in 0.83.0
+
+- **Mini mode (`Mini | Simple | Advanced`) — compact blocked-activity window.**
+  - Added a third `Mini` button in the top bar (`UiMode.Mini`) that collapses the 252px navigation sidebar, header, and footer bar and resizes `MainWindow` into a compact `460×700` widget layout (`MinWidth = 420`, `MinHeight = 520`), restoring the full window geometry on switch back to `Simple` or `Advanced`.
+  - `MiniHomeView` / `MiniHomePageViewModel` shows one-click **Shield** and **Privacy** toggles, pending Allow/Block requests, compact blocked-item lists for **Network**, **AI Agents**, and **Privacy**, and a bottom action strip with the Axiom logo/version, **♥ Donate**, **GitHub**, and **Settings**.
+
 ## What's in 0.82.0
 
 - **Polish and honest enforcement wording.**
