@@ -845,3 +845,70 @@ authorization; RPM **build and runtime** (config semantics verified, nfpm absent
 arm64; Windows runtime/WPF/locked restore (owner runs the tests; nothing was uploaded); polkit
 wrong-password denial; pure-Wayland backend. The supported deliverable remains Ubuntu 24.04 x86_64
 `.deb`; RPM and Windows are deferred targets. This is not production readiness and not a release.
+
+---
+
+## 17. Revision 10 — confirmed postrm symlinked-enablement-dir nit fixed; 0.59.0+linux.5
+
+Date: 2026-11-16 (UTC). Single local builder. The independent review of revision 9 confirmed one
+narrow packaging nit and approved the rest; no other code changed. Local and **unpublished**: the
+new artifact needs a fresh independent review and is not a release. No backend, BPF, Windows or
+spec behavior was touched.
+
+| Item | Value |
+|---|---|
+| Fix commit | `856cef8` — `packaging/linux/debian/postrm` (+1 guard line, comment) and `MaintainerScriptCleanupTests` (+1 case, +1 fixture helper) |
+| Artifact | `axiom-firewall_0.59.0+linux.5_amd64.deb`, 63,828,596 bytes, sha256 `4d28a261c1e108689d756b68e18ba2abe22e8eb086b418fcb0d9607b352456c0`, 515 entries |
+| Output | `/tmp/opencode/axiom-cleanup-boundary-20261116/` (`PROVENANCE.txt`, `SHA256SUMS`, `REPORT.md`, build/test/lintian/guest logs, repro artifact, extracted trees) |
+| Build | `scripts/linux/package.sh deb --arch x64 --local linux.5 --skip-publish` — the self-contained publish from `4e343b7` is reused unchanged, maintainer scripts/docs restaged from `856cef8` |
+| Preserved | `0.59.0+linux.4` (`1ae47cec…`) untouched in `/tmp/opencode/axiom-packaging-followups-20261116/`; `/root/Axiom` at `6991fb9…` clean; all older evidence dirs and worktrees untouched |
+
+### 17.1 Confirmed defect — `[ -d ]` follows a symlinked `*.wants`/`*.requires` directory
+
+`remove_service_leftovers` looped over `/etc/systemd/system/*.wants` and `*.requires` and accepted
+any entry for which `[ -d ]` was true. `[ -d ]` follows symlinks, so an enablement directory that is
+itself a symlink to a directory outside `/etc/systemd/system` let `rm -f "$dir/axiomd.service"`
+unlink a same-named symlink in that outside directory. The guard now skips symlinked enablement
+directories:
+
+```sh
+[ -d "$enablement" ] && [ ! -L "$enablement" ] || continue
+```
+
+Real enablement directories still lose only Axiom's own `axiomd.service` link. `/etc/systemd/system`
+itself being a symlink is deliberately out of scope: it is root-owned and trusted on Debian/Ubuntu,
+and a path canonicalizer would be a larger, riskier change than the confirmed defect warrants.
+RPM `%postun` has no equivalent directory scan, so it is unchanged.
+
+### 17.2 Verification
+
+| Gate | Result |
+|---|---|
+| Focused unit test | `MaintainerScriptCleanupTests` 18/18 pass, including the new `Deb_remove_skips_an_enablement_directory_that_is_a_symlink` (both `.wants` and `.requires` symlinked dirs, outside link and target retained, real enablement link still removed) |
+| Regression proof | The new test **fails** against the unfixed `postrm` (`Assert.True` on the outside link) and passes with the guard; not merely a passing test |
+| Linux test project | **113/113** pass (`Axiom.Infrastructure.Linux.Tests`, 112 prior + 1) |
+| Lintian on the exact `linux.5` artifact | guest Ubuntu 24.04 lintian 2.117.0ubuntu1.6: **0 E / 0 W**, rc 0; same stderr duplicate-hint note, no tag (`lintian-out.txt` empty) |
+| Guest smoke on the exact artifact | 21/21 pass: `dpkg -i` rc 0, unit active/enabled, enablement link present, launcher resolves to `/usr/lib/axiom-firewall/Axiom`, `axiomd --doctor` rc 0 with 13 PASS and no FAIL; then purge rc 0, unit/image/data gone, package gone, service inactive, and both symlinked `rogue.target.wants`/`rogue.target.requires` decoys kept their outside `axiomd.service` links. Decoys cleaned up. |
+| Guest/host cleanup | VM powered off, port 2222 closed, baseline `ee941cef…` unchanged, only the disposable run overlay used |
+
+**Build reproducibility, measured not asserted.** The requested "new artifact hash identical to the
+approved `linux.4`" is impossible by construction: the packaged `changelog.gz` embeds the build
+timestamp (`date -R`), so every rebuild differs. A control rebuild from the reviewed tree `c4a8529`
+(unchanged payload, `--local linux.4`) produced `e1022de0…`, not `1ae47cec…`. Extracting both showed
+all 479 payload paths identical **except** `usr/share/doc/axiom-firewall/changelog.gz`, whose only
+difference is the timestamp line; the control archive was byte-identical. The `linux.5` artifact
+differs from the approved `linux.4` in exactly `DEBIAN/control` (Version), `DEBIAN/postrm` and the
+`md5sums` line for the regenerated changelog — no payload drift. The approved `linux.4` binary in
+the revision-9 directory is untouched.
+
+### 17.3 Status and residual gates
+
+- Linux `.deb`: Ubuntu 24.04 x86_64 **supported candidate** at best — not "all Linux production".
+- Review: **fresh independent review of `856cef8` / `linux.5` is PENDING**. This revision is not a
+  review result.
+- Unchanged residual gates: Windows runtime/WPF/locked restore and Setup RID (**owner runs the
+  tests**; nothing uploaded, no credentials requested), runtime signing, release-write approval,
+  RPM build/runtime (nfpm absent), arm64, polkit wrong-password denial, pure-Wayland backend.
+- Baseline drift: owner reports upstream `main` is now **0.65**. This branch remains deliberately
+  based on `v0.59.0` (upstream `28918945…`); it is **not** a sync-with-latest claim. Moving the
+  baseline is an owner decision; this run does not chase it.
