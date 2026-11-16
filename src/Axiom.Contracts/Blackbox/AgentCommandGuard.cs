@@ -163,12 +163,12 @@ public static class AgentCommandGuard
                      "open(", ".read(", "copy ", "cp ", "get-item", "strings ", "forfiles",
                      "findstr", "select-string", "grep", " rg ", "tar ", "compress-archive",
                      "copy-item", "move-item", "robocopy", "xcopy", "openssl", "ssh-keygen",
-                     "gpg", "age ", "makecab", "expand ", "esentutl", "ssh -i")
+                     "gpg", "age ", "makecab", "expand ", "esentutl", "ssh -i", "split ", "csplit ")
             if not any(verb in text for verb in verbs):
                 return False
             words = text.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()
             tokens = _protected_tokens(protected)
-            return any(word in tokens for word in words)
+            return any(word in tokens for word in words) or _glob_hits(text, tokens)
 
 
         def _hidden_path_read(command: str, protected) -> bool:
@@ -225,6 +225,20 @@ public static class AgentCommandGuard
                 ("logins.json", "Firefox login database"),
                 ("\\web data", "browser autofill database"),
                 ("user data\\local state", "browser encryption key"),
+                ("\\microsoft\\protect", "DPAPI master-key store"),
+                ("\\microsoft\\credentials", "DPAPI credential store"),
+                ("\\panther\\unattend", "Windows unattend file"),
+                ("defaultpassword", "Winlogon autologon password"),
+                ("terraform.tfstate", "Terraform state (may hold secrets)"),
+                (".terraformrc", "Terraform CLI token"),
+                ("\\.pulumi", "Pulumi credential store"),
+                ("gh\\hosts.yml", "GitHub CLI token"),
+                ("slack\\tokens.json", "Slack token store"),
+                ("\\discord\\local storage", "Discord local storage"),
+                ("state.vscdb", "VS Code global state database"),
+                (".kdbx", "KeePass database"),
+                (".opvault", "1Password vault"),
+                (".htpasswd", "Apache htpasswd file"),
                 ("\\1password\\", "password manager store"),
                 ("bitwarden", "password manager store"),
                 ("keepass", "password manager store"),
@@ -232,7 +246,66 @@ public static class AgentCommandGuard
             for marker, label in stores:
                 if marker in value:
                     return label
+            if len(value) <= 4096 and "\n" not in value:
+                if _glob_hits(value, [marker for marker, _ in stores]):
+                    return "wildcard credential store"
             return ""
+
+
+        def _glob_fullmatch(window: str, value: str) -> bool:
+            # Match one wildcard spelling against the literal name it could resolve to. Reads done
+            # with a wildcard (`type C:\Users\me\.ss?\id_rsa`, `...\*\Login Data`) never
+            # contain the literal protected token, so a plain substring test misses them.
+            import re as _re
+
+            parts = []
+            index = 0
+            while index < len(window):
+                char = window[index]
+                if char == "*":
+                    parts.append(".*")
+                elif char == "?":
+                    parts.append(".")
+                elif char == "[":
+                    end = window.find("]", index + 1)
+                    if end < 0:
+                        parts.append("\\[")
+                    else:
+                        inner = window[index + 1:end].replace("\\", "\\\\")
+                        parts.append("[" + inner + "]")
+                        index = end
+                else:
+                    parts.append(_re.escape(char))
+                index += 1
+            try:
+                return _re.fullmatch("".join(parts), value, _re.IGNORECASE) is not None
+            except _re.error:
+                return False
+
+
+        def _glob_hits(text: str, needles) -> bool:
+            # True when a wildcard spelling in the command names one of the needles. Only windows
+            # around each wildcard are tested, so a long tool argument stays cheap.
+            text = (text or "").replace('"', " ").replace("'", " ")
+            spots = [index for index, char in enumerate(text) if char in "*?["][:64]
+            if not spots:
+                return False
+            for needle in needles:
+                candidate = (needle or "").lower()
+                if not candidate:
+                    continue
+                size = len(candidate)
+                for spot in spots:
+                    for start in range(max(0, spot - size + 1), spot + 1):
+                        window = text[start:start + size]
+                        # A character class spells one name character with several text
+                        # characters (`[.]ssh`), so extend the window to its closing bracket.
+                        closing = window.find("]")
+                        if "[" in window and closing > 0:
+                            window = text[start:start + size + closing]
+                        if _glob_fullmatch(window, candidate):
+                            return True
+            return False
 
 
         def _protected_tokens(protected) -> list:
@@ -258,7 +331,8 @@ public static class AgentCommandGuard
 
         def _hits_protected(command: str, protected) -> bool:
             text = _normalize_command(command)
-            return any(token in text for token in _protected_tokens(protected))
+            tokens = _protected_tokens(protected)
+            return any(token in text for token in tokens) or _glob_hits(text, tokens)
 
 
         def _executes_protected(command: str, protected) -> bool:
@@ -335,6 +409,8 @@ public static class AgentCommandGuard
                 return "USN journal deletion"
             if "cipher /w" in text:
                 return "free-space wipe"
+            if "export-pfxcertificate" in text:
+                return "private-key certificate export"
             if "wmic" in text and ("commandlineeventconsumer" in text or "\\root\\subscription" in text):
                 return "WMI event-consumer persistence"
             if "lsass" in text and any(tool in text for tool in ("procdump", "comsvcs", "minidump", "rundll32")):

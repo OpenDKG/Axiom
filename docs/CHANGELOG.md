@@ -2,6 +2,42 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.73.0
+
+- **Guard: wildcard spellings of protected and credential paths block.**
+  - Batch 13 on 0.72 hooks allowed `type C:\Users\<u>\.ss?\id_rsa`, `.ss*`, `[.]ssh`, `.aws\credential?`, `.kube\conf?g`, `vault.kdb?` and `...\Chrome\User Data\*\Login Data` (issue #401).
+  - `_glob_hits` matches the wildcard window against the literal protected token or store marker; `_reads_protected`, `_hits_protected` and `_sensitive_store` all use it.
+  - Re-verified 10/10; controls (`dir C:\Lab\*.md`, notes reads) still allow and batches 1-12 stay clean.
+- **DeepSeek: bridge/runtime pairing and Node engine are checked.**
+  - `DeepSeekProtection` no longer reports DSH protected from the bridge package alone; it compares the bridge and runtime versions that `dsh plugin add` enforces and warns when Node is below `engines.node` (issue #369).
+
+## What's in 0.72.0
+
+- **Guard: KeePass, 1Password and htpasswd files block by extension.**
+  - Batch 12 on 0.71 hooks blocked AWS SSO/config, Bitwarden, `.password-store` and a bidi (`U+202E`) path read, but allowed `vault.kdbx`, `backup.opvault` and `.htpasswd` copied outside their product directories (issue #399).
+  - `_sensitive_store` gains `.kdbx`, `.opvault` and `.htpasswd`; a `kdbx-notes.md` control still allows.
+  - Re-verified 10/10; batches 1-11 stay clean.
+
+## What's in 0.71.0
+
+- **Guard: cloud/IaC and chat-app secret stores block.**
+  - Batch 11 on 0.70 hooks allowed reading `terraform.tfstate`, `~/.terraformrc`, `~/.pulumi/credentials.json`, `~/.config/gh/hosts.yml`, Slack `tokens.json`, Discord local storage and VS Code `state.vscdb` (issue #397).
+  - `_sensitive_store` names those stores; the Linux-style `gh/hosts.yml` spelling is covered next to the Windows one.
+  - Re-verified 10/10; batches 1-10 stay clean. Trade-off documented: `terraform.tfstate` and `state.vscdb` are read by legitimate tooling but routinely hold credentials, so agent reads block by default.
+
+## What's in 0.70.0
+
+- **Guard: DPAPI stores, PFX export, autologon password and unattend files block.**
+  - Batch 10 on 0.69 hooks blocked Wi-Fi keys, `cmdkey`, `vaultcmd` and `certutil -exportPFX`, but allowed `dir %APPDATA%\Microsoft\Protect`, `Export-PfxCertificate`, `reg query …Winlogon /v DefaultPassword` and `type C:\Windows\Panther\Unattend.xml` (issue #395).
+  - `_sensitive_store` names the DPAPI stores, the Panther unattend file and `defaultpassword`; `_escalation_risk` reports `Export-PfxCertificate`.
+  - Re-verified 11/11; batches 1-9 stay clean.
+
+## What's in 0.69.0
+
+- **Guard: `split`/`csplit` key staging blocks.**
+  - Batch 8 on 0.68 hooks blocked query-string exfil (`curl "…?name=$(cat key)"`), `Get-Content | Invoke-RestMethod`, `curl --doh-url --data @key`, `openssl s_client < key`, `certutil -encodehex`, `Get-FileHash key`, `tee` and `attrib +h`, but allowed `split -b 100 …id_rsa` (issue #393).
+  - `split ` and `csplit ` are now read verbs; re-verified 10/10, with batches 1-7 clean.
+
 ## What's in 0.68.0
 
 - **Guard: harness wiring files and the vendor plugin config are tamper-protected.**

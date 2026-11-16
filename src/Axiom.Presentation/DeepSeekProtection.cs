@@ -34,14 +34,21 @@ public sealed class DeepSeekProtection
 
     private readonly string _dshHome;
 
+    private readonly string _npmModulesRoot;
+
     public DeepSeekProtection(
         string? userProfile = null,
         string? localAppData = null,
-        string? dshHome = null)
+        string? dshHome = null,
+        string? npmModulesRoot = null)
     {
         _userProfile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _localAppData = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         _dshHome = dshHome ?? ResolveDshHome(_userProfile);
+        _npmModulesRoot = npmModulesRoot ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "npm",
+            "node_modules");
     }
 
     public string DshHome => _dshHome;
@@ -72,35 +79,42 @@ public sealed class DeepSeekProtection
     public bool IsConfigured =>
         File.Exists(HooksPath) && HasAllHooks() && HasPatchBlock();
 
-    /// <summary>True only when the bridge package is also installed in a DSH profile.</summary>
-    public bool IsInstalled => IsConfigured && IsBridgeInstalled;
+    /// <summary>
+    /// True only when the hook file, the bridge mount and a bridge that matches the installed DSH
+    /// runtime are all present (issue #369: the version pairing is not optional). A Node below the
+    /// runtime's engine floor is surfaced as a warning instead, because DSH still runs on it.
+    /// </summary>
+    public bool IsInstalled => IsConfigured && IsBridgeInstalled && IsBridgeCompatible;
 
-    public bool IsBridgeInstalled
-    {
-        get
-        {
-            try
-            {
-                foreach (var root in BridgeSearchRoots())
-                {
-                    if (File.Exists(Path.Combine(
-                            root,
-                            "node_modules",
-                            "@deepseek-ai",
-                            "dsh-hooks-claude-code",
-                            "package.json")))
-                    {
-                        return true;
-                    }
-                }
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-            }
+    /// <summary>True when the bridge package exists in a DSH profile.</summary>
+    public bool IsBridgeInstalled => BridgeRoot() is not null;
 
-            return false;
-        }
-    }
+    /// <summary>Version declared by the installed bridge package, or null when it declares none.</summary>
+    public string? BridgeVersion => ReadPackageVersion(BridgeRoot());
+
+    /// <summary>Version declared by the installed DSH runtime, or null when it cannot be located.</summary>
+    public string? RuntimeVersion => ReadPackageVersion(RuntimeRoot());
+
+    /// <summary>
+    /// Null when the bridge version matches the DSH runtime, otherwise a short reason. A bridge
+    /// built for another runtime is rejected by <c>dsh plugin add</c>, so a present package alone
+    /// must not be reported as protection.
+    /// </summary>
+    public string? BridgeVersionMismatch =>
+        BridgeVersionMatches(BridgeVersion, RuntimeVersion)
+            ? null
+            : $"dsh-hooks-claude-code {BridgeVersion} does not match dsh {RuntimeVersion}";
+
+    public bool IsBridgeCompatible => BridgeVersionMismatch is null;
+
+    /// <summary>Node version found next to the DSH runtime, or null when node.exe is absent.</summary>
+    public string? NodeVersion => ReadNodeVersion();
+
+    /// <summary>Minimum Node version declared by the DSH runtime's <c>engines.node</c>.</summary>
+    public string? NodeRequirement => ReadNodeRequirement();
+
+    /// <summary>False when a detected Node is older than the DSH runtime's declared engine floor.</summary>
+    public bool NodeRequirementMet => NodeSatisfies(NodeVersion, NodeRequirement);
 
     public bool EnsureInstalled()
     {
@@ -376,6 +390,148 @@ public sealed class DeepSeekProtection
     }
 
     private static string EscapeYaml(string value) => value.Replace("'", "''", StringComparison.Ordinal);
+
+    private string? BridgeRoot()
+    {
+        try
+        {
+            foreach (var root in BridgeSearchRoots())
+            {
+                var package = Path.Combine(
+                    root,
+                    "node_modules",
+                    "@deepseek-ai",
+                    "dsh-hooks-claude-code");
+                if (File.Exists(Path.Combine(package, "package.json")))
+                {
+                    return package;
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        return null;
+    }
+
+    private string? RuntimeRoot()
+    {
+        var package = Path.Combine(_npmModulesRoot, "@deepseek-ai", "dsh");
+        return File.Exists(Path.Combine(package, "package.json")) ? package : null;
+    }
+
+    private static string? ReadPackageVersion(string? packageRoot)
+    {
+        if (packageRoot is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var manifest = JsonNode.Parse(
+                File.ReadAllText(Path.Combine(packageRoot, "package.json"))) as JsonObject;
+            return manifest?["version"] is JsonValue value &&
+                   value.TryGetValue<string>(out var text) &&
+                   !string.IsNullOrWhiteSpace(text)
+                ? text.Trim()
+                : null;
+        }
+        catch (Exception exception) when (exception is
+                     IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// A bridge and runtime pair is acceptable when both versions are known and equal; an unknown
+    /// version keeps the presence verdict so older manifests are not silently downgraded.
+    /// </summary>
+    internal static bool BridgeVersionMatches(string? bridgeVersion, string? runtimeVersion)
+    {
+        if (string.IsNullOrWhiteSpace(bridgeVersion) || string.IsNullOrWhiteSpace(runtimeVersion))
+        {
+            return true;
+        }
+
+        return string.Equals(
+            NormalizeVersion(bridgeVersion),
+            NormalizeVersion(runtimeVersion),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool NodeSatisfies(string? nodeVersion, string? requirement)
+    {
+        if (string.IsNullOrWhiteSpace(nodeVersion) || string.IsNullOrWhiteSpace(requirement))
+        {
+            return true;
+        }
+
+        var required = ParseVersion(requirement);
+        var actual = ParseVersion(nodeVersion);
+        return required is null || actual is null || actual >= required;
+    }
+
+    private static string NormalizeVersion(string value) => value.Trim().TrimStart('v', 'V');
+
+    private static Version? ParseVersion(string text)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"\d+\.\d+\.\d+");
+        return match.Success && Version.TryParse(match.Value, out var parsed) ? parsed : null;
+    }
+
+    private string? ReadNodeRequirement()
+    {
+        var runtime = RuntimeRoot();
+        if (runtime is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var manifest = JsonNode.Parse(
+                File.ReadAllText(Path.Combine(runtime, "package.json"))) as JsonObject;
+            return manifest?["engines"] is JsonObject engines &&
+                   engines["node"] is JsonValue value &&
+                   value.TryGetValue<string>(out var text) &&
+                   !string.IsNullOrWhiteSpace(text)
+                ? text.Trim()
+                : null;
+        }
+        catch (Exception exception) when (exception is
+                     IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadNodeVersion()
+    {
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        if (string.IsNullOrWhiteSpace(programFiles))
+        {
+            return null;
+        }
+
+        var node = Path.Combine(programFiles, "nodejs", "node.exe");
+        if (!File.Exists(node))
+        {
+            return null;
+        }
+
+        try
+        {
+            var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(node);
+            return string.IsNullOrWhiteSpace(info.FileVersion) ? info.ProductVersion : info.FileVersion;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     private IEnumerable<string> BridgeSearchRoots()
     {

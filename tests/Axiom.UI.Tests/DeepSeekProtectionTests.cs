@@ -18,7 +18,11 @@ public sealed class DeepSeekProtectionTests
         Directory.CreateDirectory(Path.Combine(temp.Root, ".dsh"));
         CreateFakePython(temp.Root);
 
-        var protection = new DeepSeekProtection(temp.Root, temp.Root, Path.Combine(temp.Root, ".dsh"));
+        var protection = new DeepSeekProtection(
+            temp.Root,
+            temp.Root,
+            Path.Combine(temp.Root, ".dsh"),
+            Path.Combine(temp.Root, "npm", "node_modules"));
         Assert.False(protection.EnsureInstalled());
         Assert.True(protection.IsConfigured);
         Assert.True(File.Exists(protection.HooksPath));
@@ -73,6 +77,74 @@ public sealed class DeepSeekProtectionTests
             Assert.False(File.Exists(protection.HooksPath));
             Assert.False(File.Exists(protection.PatchPath));
         }
+    }
+
+    [Fact]
+    public void Mismatched_bridge_version_is_not_reported_as_protection()
+    {
+        // #369: dsh plugin add rejects a bridge built for another dsh release, so a present
+        // package alone must not make Axiom claim DeepSeek is protected.
+        using var temp = new TempTree();
+        Directory.CreateDirectory(Path.Combine(temp.Root, ".dsh"));
+        CreateFakePython(temp.Root);
+
+        var npm = Path.Combine(temp.Root, "npm", "node_modules");
+        var protection = new DeepSeekProtection(
+            temp.Root,
+            temp.Root,
+            Path.Combine(temp.Root, ".dsh"),
+            npm);
+        protection.EnsureInstalled();
+        Assert.True(protection.IsConfigured);
+
+        WritePackage(Path.Combine(npm, "@deepseek-ai", "dsh"), "0.2.2-rc.1", ">= 24.9.0");
+        var bridge = Path.Combine(
+            protection.DshHome,
+            "profiles",
+            "web",
+            "node_modules",
+            "@deepseek-ai",
+            "dsh-hooks-claude-code");
+        WritePackage(bridge, "0.0.1-rc.5", null);
+
+        Assert.True(protection.IsBridgeInstalled);
+        Assert.Equal("0.0.1-rc.5", protection.BridgeVersion);
+        Assert.Equal("0.2.2-rc.1", protection.RuntimeVersion);
+        Assert.False(protection.IsBridgeCompatible);
+        Assert.Contains("0.0.1-rc.5", protection.BridgeVersionMismatch!, StringComparison.Ordinal);
+        Assert.False(protection.IsInstalled);
+
+        WritePackage(bridge, "0.2.2-rc.1", null);
+        Assert.True(protection.IsBridgeCompatible);
+        Assert.Null(protection.BridgeVersionMismatch);
+        Assert.True(protection.IsInstalled);
+    }
+
+    [Fact]
+    public void Bridge_and_node_version_checks_compare_numerically_and_keep_unknown_versions()
+    {
+        Assert.True(DeepSeekProtection.BridgeVersionMatches("v0.2.2-rc.3", "0.2.2-RC.3"));
+        Assert.False(DeepSeekProtection.BridgeVersionMatches("0.0.1-rc.5", "0.2.2-rc.1"));
+        Assert.True(DeepSeekProtection.BridgeVersionMatches(null, "0.2.2-rc.1"));
+        Assert.True(DeepSeekProtection.BridgeVersionMatches("0.2.2-rc.1", null));
+
+        Assert.True(DeepSeekProtection.NodeSatisfies("24.9.0", ">= 24.9.0"));
+        Assert.True(DeepSeekProtection.NodeSatisfies("24.10.1", ">= 24.9.0"));
+        Assert.False(DeepSeekProtection.NodeSatisfies("22.23.5", ">= 24.9.0"));
+        Assert.True(DeepSeekProtection.NodeSatisfies(null, ">= 24.9.0"));
+        Assert.True(DeepSeekProtection.NodeSatisfies("22.23.5", null));
+    }
+
+    private static void WritePackage(string root, string version, string? nodeEngine)
+    {
+        Directory.CreateDirectory(root);
+        var manifest = new JsonObject { ["version"] = version };
+        if (nodeEngine is not null)
+        {
+            manifest["engines"] = new JsonObject { ["node"] = nodeEngine };
+        }
+
+        File.WriteAllText(Path.Combine(root, "package.json"), manifest.ToJsonString());
     }
 
     private static void CreateFakePython(string root)
