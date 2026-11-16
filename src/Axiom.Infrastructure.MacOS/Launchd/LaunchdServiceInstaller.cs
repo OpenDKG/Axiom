@@ -204,6 +204,8 @@ public sealed class LaunchdServiceInstaller
 
         string? staged = null;
         string? previous = null;
+        byte[]? previousPlist = null;
+        var plistWritten = false;
         try
         {
             if (!runningFromHelper)
@@ -243,30 +245,34 @@ public sealed class LaunchdServiceInstaller
             {
                 previous = Replace(staged);
                 staged = null;
+                // Kept so a failure after the swap (before launchd has the new job) can put the
+                // previous daemon and its job definition back instead of leaving the service down.
+                previousPlist = File.Exists(_options.PlistPath) ? File.ReadAllBytes(_options.PlistPath) : null;
             }
 
             var problems = Verify(_options.HelperDirectory);
             if (problems.Count > 0)
             {
                 Report(error, $"Refusing to bootstrap: {_options.HelperDirectory} is not root-owned and read-only.", problems);
-                return 3;
+                return RollBackInstall(3, previous, previousPlist, plistWritten, error);
             }
 
             if (!runningFromHelper && !FilesMatch(executablePath, _options.DaemonPath))
             {
                 error.WriteLine("The protected service copy does not match the installer image.");
-                return 7;
+                return RollBackInstall(7, previous, previousPlist, plistWritten, error);
             }
 
             MacDataDirectoryPermissions.Enforce(_options.MachineDataDirectory);
             RecordOwner(ownerUid, output);
             FilterRulesFile.WriteAtomic(_options.PlistPath, plist, PrivilegedHelperLayout.FileMode);
+            plistWritten = true;
             WriteNewsyslogConf(logFile, output);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             error.WriteLine($"Could not install the daemon: {exception.Message}");
-            return 1;
+            return RollBackInstall(1, previous, previousPlist, plistWritten, error);
         }
         finally
         {
@@ -287,11 +293,7 @@ public sealed class LaunchdServiceInstaller
         if (!bootstrap.Succeeded)
         {
             error.WriteLine($"launchctl bootstrap failed ({bootstrap.ExitCode}): {bootstrap.StandardError.Trim()}");
-            if (previous is not null)
-            {
-                RollBack(previous, error);
-            }
-
+            RollBackInstall(1, previous, previousPlist, plistWritten, error);
             return 1;
         }
 
@@ -449,6 +451,44 @@ public sealed class LaunchdServiceInstaller
 
         Directory.Move(staged, _options.HelperDirectory);
         return previous;
+    }
+
+    /// <summary>
+    /// Undoes a failed install after the helper swap: restores the plist this attempt overwrote
+    /// (or removes one it created, so a half-install does not autostart at next boot) and then
+    /// restores and starts the previous daemon copy. Returns <paramref name="code"/> so callers
+    /// can <c>return RollBackInstall(...)</c>.
+    /// </summary>
+    private int RollBackInstall(int code, string? previous, byte[]? previousPlist, bool plistWritten, TextWriter error)
+    {
+        if (plistWritten)
+        {
+            try
+            {
+                if (previousPlist is null)
+                {
+                    File.Delete(_options.PlistPath);
+                    error.WriteLine($"Removed {_options.PlistPath}, written by the failed install.");
+                }
+                else
+                {
+                    File.WriteAllBytes(_options.PlistPath, previousPlist);
+                    SetMode(_options.PlistPath, PrivilegedHelperLayout.FileMode);
+                    error.WriteLine($"Restored the previous {_options.PlistPath}.");
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                error.WriteLine($"Could not restore {_options.PlistPath}: {exception.Message}");
+            }
+        }
+
+        if (previous is not null)
+        {
+            RollBack(previous, error);
+        }
+
+        return code;
     }
 
     /// <summary>

@@ -221,6 +221,88 @@ public sealed class LaunchdServiceInstallerTests
     }
 
     [Fact]
+    public void InstallRestoresThePreviousDaemonAndPlistWhenAnUpgradeFailsBeforeBootstrap()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var layout = Layout(temp);
+        var bundle = Path.Combine(temp.Path, "bundle");
+        Directory.CreateDirectory(bundle);
+        var exe = Path.Combine(bundle, "axiomd");
+        File.WriteAllText(exe, "#!/bin/sh\n");
+        File.SetUnixFileMode(exe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        File.WriteAllText(Path.Combine(bundle, "Axiom.Core.dll"), "dll");
+        var runner = StatAsRoot(new FakeRunner().On("launchctl print", "Could not find service", 113));
+        var installer = new LaunchdServiceInstaller(runner, layout, () => true, () => 501)
+        {
+            JobRemovalAttempts = 1,
+            JobRemovalDelay = TimeSpan.Zero,
+        };
+        Assert.Equal(0, installer.Install(exe, TextWriter.Null, TextWriter.Null));
+
+        // The plist the loaded job was defined by, and a newsyslog path that cannot be created:
+        // the failure lands after the helper swap and after the new plist is written, so both
+        // must be put back rather than left half-upgraded with the service down.
+        var previousPlist = File.ReadAllText(layout.PlistPath)
+            .Replace("<key>Label</key>", "<!-- previous job --><key>Label</key>", StringComparison.Ordinal);
+        File.WriteAllText(layout.PlistPath, previousPlist);
+        var newsyslogDirectory = Path.GetDirectoryName(layout.NewsyslogConfPath)!;
+        Directory.Delete(newsyslogDirectory, recursive: true);
+        File.WriteAllText(newsyslogDirectory, "not a directory");
+        File.WriteAllText(Path.Combine(bundle, "Axiom.Core.dll"), "dll2");
+        var error = new StringWriter();
+
+        Assert.Equal(1, installer.Install(exe, TextWriter.Null, error));
+
+        Assert.Equal("dll", File.ReadAllText(Path.Combine(layout.HelperDirectory, "Axiom.Core.dll")));
+        Assert.Equal(previousPlist, File.ReadAllText(layout.PlistPath));
+        Assert.Contains("Restored the previous", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Restored and started the previous daemon copy", error.ToString(), StringComparison.Ordinal);
+        Assert.Single(Directory.GetDirectories(layout.HelperRoot));
+        Assert.Equal(2, runner.Calls.Count(call => call.StartsWith("launchctl bootstrap", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void InstallRemovesThePlistItWroteWhenAFirstInstallCannotStart()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var layout = Layout(temp);
+        var bundle = Path.Combine(temp.Path, "bundle");
+        Directory.CreateDirectory(bundle);
+        var exe = Path.Combine(bundle, "axiomd");
+        File.WriteAllText(exe, "#!/bin/sh\n");
+        File.SetUnixFileMode(exe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        File.WriteAllText(Path.Combine(bundle, "Axiom.Core.dll"), "dll");
+        var runner = StatAsRoot(new FakeRunner()
+            .On("launchctl print", "Could not find service", 113)
+            .On("launchctl bootstrap", _ => new ProcessResult(1, string.Empty, "Input/output error")));
+        var installer = new LaunchdServiceInstaller(runner, layout, () => true, () => 501)
+        {
+            JobRemovalAttempts = 1,
+            JobRemovalDelay = TimeSpan.Zero,
+            BootstrapRetryDelay = TimeSpan.Zero,
+        };
+        var error = new StringWriter();
+
+        Assert.Equal(1, installer.Install(exe, TextWriter.Null, error));
+
+        // Nothing to restore on a first install, but the plist must not survive to autostart the
+        // daemon at next boot from a helper copy that never passed a bootstrap.
+        Assert.False(File.Exists(layout.PlistPath));
+        Assert.Contains($"Removed {layout.PlistPath}", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("launchctl bootstrap", string.Join('\n', runner.Calls), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InstallRefusesWhenTheCopyIsNotRootOwned()
     {
         if (OperatingSystem.IsWindows())
