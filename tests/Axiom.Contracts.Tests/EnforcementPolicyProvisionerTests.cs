@@ -11,7 +11,9 @@ public sealed class EnforcementPolicyProvisionerTests
     [Fact]
     public void Default_policy_is_an_enabled_block_policy_for_every_harness()
     {
-        var json = EnforcementPolicyProvisioner.BuildDefaultPolicy(@"C:\Users\lab");
+        // Path.Combine joins with the host separator, so the profile has to be a host path.
+        var profile = OperatingSystem.IsWindows() ? @"C:\Users\lab" : "/home/lab";
+        var json = EnforcementPolicyProvisioner.BuildDefaultPolicy(profile);
         var root = JsonNode.Parse(json)!.AsObject();
 
         Assert.True(root["enabled"]!.GetValue<bool>());
@@ -30,7 +32,7 @@ public sealed class EnforcementPolicyProvisionerTests
             {
                 Assert.True(ruleIds.Add(rule!["ruleId"]!.GetValue<string>()));
                 Assert.Equal("block", rule["effect"]!.GetValue<string>());
-                Assert.StartsWith(@"C:\Users\lab\", rule["targetScope"]!.GetValue<string>(), StringComparison.Ordinal);
+                Assert.StartsWith(profile + Path.DirectorySeparatorChar, rule["targetScope"]!.GetValue<string>(), StringComparison.Ordinal);
             }
         }
 
@@ -39,7 +41,7 @@ public sealed class EnforcementPolicyProvisionerTests
         Assert.Equal(EnforcementPolicyProvisioner.ProtectedScopes.Count, resources.Count);
         Assert.Contains(
             resources,
-            resource => resource!["scope"]!.GetValue<string>().EndsWith(@"\.ssh", StringComparison.Ordinal));
+            resource => resource!["scope"]!.GetValue<string>().EndsWith(Path.DirectorySeparatorChar + ".ssh", StringComparison.Ordinal));
     }
 
     [Fact]
