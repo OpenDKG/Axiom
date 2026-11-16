@@ -21,6 +21,14 @@ through the normal `dpkg -i` path on the existing Ubuntu 24.04.5 overlay (no for
 provisioning) and passed service, doctor, BPF, IPC, canary, restart durability, remove and purge
 (§7.2). Review status: **approved locally; not release-published and not upstream-merged**.
 
+Revision 4 (2026-11-16T02:0xZ UTC, single builder): the upstream baseline moved after revision 3
+(`main` v0.53.0 → v0.59.0, PR #276 head → `1827deb`, owner decision to rename the package
+`axiom-firewall`). Revision 4 merges v0.59.0 into local branch `recon/linux-main-0.59.0`
+(HEAD `126de46`), ports the package rename and the legacy-package purge disarm, rebuilds
+`axiom-firewall_0.59.0_amd64.deb` (`a09a88d9…`) and re-runs the guest matrix, including the first
+genuine cross-version upgrade and a local TLS DoH proof. **Independent review of `126de46` has not
+been done yet** (subagent depth limit); the prior approval covers `47c39da` only. See §13.
+
 ---
 
 ## 1. Provenance (checked 2026-11-15T16:30Z)
@@ -28,16 +36,17 @@ provisioning) and passed service, doctor, BPF, IPC, canary, restart durability, 
 | Item | Value |
 |---|---|
 | Canonical repo | `https://github.com/a-51-50/Axiom` (local `origin` is the `brxtrac/Axiom` fork; do not push to it) |
-| Upstream `main` | `5de2d63679ccef3524b6cde512d584cd9a1ae8d6` — "docs: include #364 and #365 in 0.53.0 release notes", 2026-11-15T16:28:30Z |
-| Latest Windows release | `v0.53.0`, published 2026-11-15T16:18:35Z; assets `Axiom-0.53.0-win-x64.zip`, `Axiom-Setup.exe`, `SHA256SUMS.txt` |
-| Linux PR | `#276 feature/linux-port` head `a4275f4a7a4d957e3d75d87879ca5fe539b572e0`; base `feature/macos-port`; **draft**, review `CHANGES_REQUESTED` |
+| Reconciliation target (revision 3) | `5de2d63679ccef3524b6cde512d584cd9a1ae8d6` — v0.53.0, 2026-11-15T16:28:30Z |
+| Current upstream `main` (revision 4) | `28918945b729dd4903c80c144cc8cf2416dee40e` — "feat(ui,brand): … release 0.59.0", 2026-11-16T01:19:52Z |
+| Latest Windows release | `v0.59.0`, published 2026-11-16T01:20:38Z; assets `Axiom-0.59.0-win-x64.zip`, `Axiom-Setup.exe`, `SHA256SUMS.txt` |
+| Delta after the 0.53 target | v0.54.0 shared fixes; v0.55/0.56 brand assets; v0.57 themes; v0.58 docs screenshots; v0.59 UI/nav/brand. See §13 |
+| Linux PR | `#276 feature/linux-port` head `1827deb11de7674dab96555a3a1071dcafc39921`; base `feature/macos-port`; **draft**, `CHANGES_REQUESTED`; owner comment 2026-11-15T20:14Z decides `axiom-firewall` for DEB/RPM |
 | macOS PR (Linux PR's base) | `#274 feature/macos-port` head `4f8c2267e58f32dd835b295fcae1987d746c042f`; base `main`; `CHANGES_REQUESTED` |
 | Linux PR merge-base with `main` | `16229f4c74f715c3c17433c118be320be63501b9` (2026-11-14T12:03:24+01:00) — i.e. **pre-v0.24.0** |
-| Divergence | `linux-port` 176 ahead / 157 behind `main`; 71 behind `macos-port` |
-| Reconciliation branch | local `recon/linux-main-0.53.0`, merge commit `3252623a1a5de3861a9069f2dc1b24a494f90941` (not pushed) |
+| Reconciliation branches | `recon/linux-main-0.53.0` HEAD `3d7ccf1` (approved local, prior); `recon/linux-main-0.59.0` HEAD `126de46` (revision 4, not independently reviewed) |
 | Worktree | `/tmp/opencode/axiom-recon` (from bare clone `/tmp/opencode/axiom-recon-src.git`) |
 | Preserved untouched | `/root/Axiom` at `6991fb9…` (clean), `/tmp/opencode/axiom-pr276-a4275f4` (clean review HEAD `b6b6049…`), all other worktrees |
-| Host toolchain | .NET SDK 10.0.403 (`/opt/dotnet`), clang, make, bpftool 7.4.0, dpkg-deb, fakeroot, desktop-file-validate; no `lintian`, no `nfpm` |
+| Host toolchain | .NET SDK 10.0.403 (`/opt/dotnet`), clang, make, bpftool 7.4.0, dpkg-deb, fakeroot, desktop-file-validate, rpmbuild; no `lintian`, no `nfpm`, no Xvfb |
 | Host kernel | 7.0.0-38-generic (BPF object built CO-RE against it) |
 
 Why the baseline moved: the Linux port was branched off a 2026-11-14 `main` (`16229f4`) that predates
@@ -74,7 +83,8 @@ Nov-14 head would be reconciling against a dead baseline.
 | DNS restore on stop/crash/uninstall | `PrivacyDnsFailSafe` | backup file + fail-safe restore in `--uninstall-service`/prerm | equivalent |
 | Upstream rediscovery | n/a (adapter DNS is explicit) | watches non-loopback resolvers, re-applies DoH selection, never downgrades | Linux/macOS only |
 | Process-start audit (F-19) | WMI `Win32_ProcessStartTrace` worker | **absent** — registration is behind `ServicePlatform.ConfigureProcessSpawnAudit`, Unix no-op | **Windows-only, deferred** |
-| Installer | `Axiom-Setup.exe` (per-user, service install) | `.deb` via `dpkg-deb` (+ `.rpm` via `nfpm` when present, untested here) | Linux `.deb` done |
+| Installer | `Axiom-Setup.exe` (per-user, service install) | `.deb` via `dpkg-deb` (+ `.rpm` via `nfpm` when present, untested here) | Linux `.deb` done; package is `axiom-firewall` since revision 4 |
+| Package identity | Windows installer / `Axiom-Setup.exe` | `axiom-firewall` DEB/RPM, `Conflicts`/`Replaces: axiom (<< 1000)` so the archive `axiom` package is untouched | owner-decided in #276; migration tested |
 | Desktop | Avalonia (`Axiom.Desktop.Avalonia.Windows`) + WPF `Axiom.UI` | Avalonia `Axiom.Desktop.Avalonia.Linux` | equivalent shell, no WPF |
 | Polkit / elevation | UAC | polkit action `com.axiom.firewall.install`, `pkexec` | equivalent |
 | Update check | `UpdateCheckService`, title-bar indicator | shared `Axiom.Presentation` service, UI in `Axiom.UI.Avalonia` | equivalent |
@@ -157,9 +167,12 @@ pre-authorised.
 | T7 | Unix process-start source for the F-19 audit | T5 | new `Axiom.Infrastructure.Linux/ProcessIdentity` | **todo** (unassigned; not needed for the shippable surface) |
 | T8 | Build the `.deb` 0.53.0 (BPF objects included); fix unit paths found by E2E; rebuild after review fixes | T5 | `packaging/linux/*`, `scripts/linux/package.sh`, `src/Axiom.Infrastructure.Linux/Systemd/SystemdUnit.cs` | **done** — revision-3 artifact `35433682…` from `dc2d9cd`; packaged scripts byte-verified before the 23:02Z live install (§7.2) |
 | T9 | Linux package workflow (artifact only, provenance handoff) | T8 | `.github/workflows/linux-release.yml` | **done** — downloadable artifact + `PROVENANCE.txt`; no release attachment |
-| T10 | Guest E2E: install, service, doctor, IPC, canary, restart, remove, purge | T8 | – | **done for revision 3** — normal `dpkg -i`, all-pass doctor, 4/4 BPF, IPC, 0/10 canary slips, restart durability, remove/purge on Ubuntu 24.04.5 (§7.2). Not covered: Privacy Shield live redirect, GUI, cross-version upgrade, live fault injection |
-| T11 | Independent final review of the integrated diff against this plan | T6,T8 | – | **done (local)** — independent review approved `47c39da` and artifact `35433682…`; approval covers the local commit/artifact only, not a release |
+| T10 | Guest E2E: install, service, doctor, IPC, canary, restart, remove, purge | T8 | – | **done for 0.53 + 0.59** — 0.53 revision 3 (§7.2) and the 0.59.0 artifact (§13): normal `dpkg -i`, all-pass doctor, 4/4 BPF, IPC, 0/10 canary slips, restart durability, remove/purge, migration, coexistence, local TLS DoH. Not covered: OS resolver redirect, GUI, RPM/arm64, Windows runtime |
+| T11 | Independent final review of the integrated diff against this plan | T6,T8 | – | **done (local) for `47c39da`**; **not done for `126de46`** (subagent depth limit). Approval covers only the local 0.53 commit/artifact; any later change reopens review |
 | T12 | Linux release automation: local build + handoff to the approved release pipeline | T8 | `.github/workflows/linux-release.yml`, `scripts/linux/package.sh` | **partial** — the local `.deb` and a workflow artifact (with checksums/provenance) are ready for an approved release workflow. Attaching the asset to a public GitHub release is **not implemented** and needs a separate gated task with release-write permission. |
+| T18 | Refresh the baseline to v0.59.0 and reconcile the shared 0.54 fixes | T2 | merge commit `126de46`; `src/Axiom.Service/PrivacyShield*`, `src/Axiom.Service.Hosting/Dns/IPrivacyDnsPlatform.cs`, `src/Axiom.Infrastructure.Windows/Dns/WindowsPrivacyDnsPlatform.cs`, `src/Axiom.Service/Platform/ServicePlatform.Windows.cs`, `src/Axiom.UI.Avalonia/*` | **done (unreviewed)** — v0.59.0 merged; portable/Linux suites green (§13). Independent review pending |
+| T19 | Rename the Linux package to `axiom-firewall` and protect the old package's data | T18 | `packaging/linux/debian/control.in`, `nfpm.yaml.in`, `debian/postinst`, `scripts/linux/package.sh`, `.github/workflows/linux-release.yml`, `docs/LINUX_PACKAGING.md` | **done** — normal install, cross-version upgrade from approved 0.53.0, old-record purge, coexistence with a stand-in archive `axiom` package (§13) |
+| T20 | Verify Privacy Shield DoH transport without mutating the OS resolver | T18 | – | **partial** — local TLS DoH proof (TLSv1.3 POST `/dns-query`, answer, untrusted-cert failure, failover) with the system resolver untouched. OS redirect/restore on port 53 remains blocked (§13.4) |
 
 ### Worker-ready prompts
 
@@ -195,26 +208,33 @@ Each task is bounded to its `Owned files`; nobody edits outside them without upd
 - Contents: `/opt/axiom` (desktop + bundled `axiomd/` with `bpf/axiom_connect.bpf.o` and
   `bpf/axiom-bpf-events`), `/usr/share/applications/com.axiom.firewall.desktop`,
   `/usr/share/polkit-1/actions/com.axiom.firewall.policy`, hicolor icons, DEP-5 copyright.
-- Maintainer scripts: `postinst` → `axiomd --install-service` (stages `/usr/libexec/axiom`, writes
-  the unit; an unconfirmed stop refuses the replacement); `prerm` → `--uninstall-service`,
-  detaches its own BPF pins only after `bpftool` proves no attachment (strict JSON: blank/`[]` means
-  none, otherwise a complete array of objects with a non-zero uint32 `id` and decoded string `name`
-  is required), keeps `/var/lib/axiom` on an unknown/failed state; `postrm remove|purge` → deletes
-  the unit/image/run dir only after a readable `inactive`/`failed` stop state, otherwise keeps them
-  (and on purge the data/logs) and fails; `purge` deletes state after that confirmation. The same
-  stop rule is in RPM `%postun`.
+- Maintainer scripts: `postinst` → disarms the replaced old `axiom` package's purge script (only when
+  it carries our marker lines; both `AXIOM_ROOT`-prefixed and older spelled-out forms) and runs
+  `axiomd --install-service` (stages `/usr/libexec/axiom`, writes the unit; an unconfirmed stop
+  refuses the replacement); `prerm` → `--uninstall-service`, detaches its own BPF pins only after
+  `bpftool` proves no attachment (strict JSON: blank/`[]` means none, otherwise a complete array of
+  objects with a non-zero uint32 `id` and decoded string `name` is required), keeps `/var/lib/axiom`
+  on an unknown/failed state; `postrm remove|purge` → deletes the unit/image/run dir only after a
+  readable `inactive`/`failed` stop state, otherwise keeps them (and on purge the data/logs) and
+  fails; `purge` deletes state after that confirmation. The same stop rule is in RPM `%postun`.
 - Hard dependencies include `nftables`, `polkitd | policykit-1`, `pkexec | policykit-1`, `systemd`,
   `libbpf1`, `libssl3t64 | libssl3`, ICU and the X11/font stack from `dpkg-shlibdeps`. The pin
   parser uses POSIX awk from the base system (`mawk` Priority: required on Debian/Ubuntu, `gawk` in
   Fedora's core group); python/jq are not used, and a missing awk keeps the pins and fails removal.
-- **Current artifact (revision 3, approved locally, live-installed):** `axiom_0.53.0_amd64.deb`,
-  63,039,852 bytes,
-  `sha256 3543368250a5e1c238ef18364e33acf0a2834f39d428ee62ecd530edece43c5c`, built from `dc2d9cd`
-  (`.deb` at `/tmp/opencode/axiom-recon/build/linux/`; copy, `SHA256SUMS.txt`, `PROVENANCE.txt` and
-  test logs in `/tmp/opencode/axiom-recon-packagefix-20261115/`). It contains 506 entries; the four
-  packaged shell scripts hash-match the repository files (see `package-verify.log`) and were
-  re-verified before the 23:02Z install (§7.2). Independent review approved the local commit and
-  this artifact; it is not a release.
+- **Current artifact (revision 4, local only):** `axiom-firewall_0.59.0_amd64.deb`,
+  64,311,868 bytes,
+  `sha256 a09a88d902e54faaf34c0f3b1887815f442be4b70859610643e3915498666824`, built from `126de46`
+  (`.deb` at `/tmp/opencode/axiom-recon/build/linux/`; copy, `SHA256SUMS.txt`, `PROVENANCE.txt`,
+  test logs and guest evidence in `/tmp/opencode/axiom-production-readiness-20261115/`). It contains
+  506 entries; the four packaged shell scripts hash-match the repository files and were
+  `cmp`-verified before the guest install. `Package: axiom-firewall`, `Version: 0.59.0`,
+  `Conflicts`/`Replaces: axiom (<< 1000)`. **No independent review of this commit yet.**
+- **Prior approved artifact (revision 3; superseded for delivery by revision 4):**
+  `axiom_0.53.0_amd64.deb`, 63,039,852 bytes,
+  `sha256 3543368250a5e1c238ef18364e33acf0a2834f39d428ee62ecd530edece43c5c`, built from `dc2d9cd`,
+  approved locally. It remains the only copy of the previous baseline and was used as the *old*
+  package in the revision-4 cross-version upgrade test; do not ship it (the `axiom` name collides
+  with the archive package).
 - **Superseded, not deliverable:** `ce966fa9…` (revision 2, 63,040,292 bytes, 506 entries, build
   `821237d`; `/tmp/opencode/axiom-recon-review-fixes/`) is the artifact rejected for the two HIGH
   blockers (fake JSON acceptance, postrm ignoring an unconfirmed stop). Keep it as evidence; do not
@@ -288,30 +308,30 @@ permission. The 23:02Z pass did not repeat that provisioning; it observed `pkexe
 present and used the normal install path.
 
 
-## 8. Test evidence (host, revision 3, 2026-11-15T22:4x-22:5xZ)
+## 8. Test evidence (host, revision 4, 2026-11-16T02:0xZ)
 
-`dotnet test` per project in Release on the final commit `dc2d9cd`. This run was as **root** on
-Linux (host kernel 7.0.0-38). Logs: `/tmp/opencode/axiom-recon-packagefix-20261115/`.
+`dotnet build Axiom.Portable.slnx -c Release` — 0 warnings, 0 errors, on `126de46`. Logs:
+`/tmp/opencode/axiom-production-readiness-20261115/portable-tests.log`.
 
 | Suite | Result |
 |---|---|
-| Contracts | 156/156 |
+| Contracts | 157/157 |
 | Core | **184/184** — the Windows-path fixtures now run on Linux (`RuleSpecValidator`, agent path rules, normalisation) |
 | Persistence | 21/21 |
 | Unix | 47/47 |
 | Linux | **102/102** — 52 revision-2 + 35 strict BPF-list payloads + missing-awk + 14 Debian/RPM postrm stop cases |
 | MacOS | **249/249** — the root-run socket pair now injects peer uid 501, so the non-root cap and read-only policy are exercised |
 | McpServer | 34/34 |
-| Presentation | **294/294** — config paths built with `Path.Combine`, separator-agnostic wordlist assertions |
+| Presentation | **299/299** — upstream 0.54/0.59 additions plus the config-path/wordlist fixes |
 | UI.Avalonia | 80/80 |
 | **Service.Hosting** | **31/31** — DoH/Rediscovery 27 + 4 release-script framework checks |
 | Linux.Nft.Tests | **160/160** — the 7 reviewed BPF tests restored |
 | Desktop.Avalonia.Linux.Tests | 51/51 |
 
-`Axiom.Portable.slnx` itself does not include `Linux.Nft.Tests`; it was run separately. The earlier
-"14 Core / 7 Presentation / 2 MacOS pre-existing failures" claim is withdrawn: the failures were a
-mix of a Linux-only product bug (Windows absolute paths rejected) and platform-specific fixtures,
-and they are fixed rather than excused.
+`Axiom.Portable.slnx` itself does not include `Linux.Nft.Tests`; it was run separately. Revision-3
+counts (Contracts 156, Presentation 294) are superseded by this run. The earlier "14 Core / 7
+Presentation / 2 MacOS pre-existing failures" claim stays withdrawn: the failures were a mix of a
+Linux-only product bug and platform-specific fixtures, fixed rather than excused.
 
 Windows cross-compile (Linux host, no Windows runtime): `Axiom.Infrastructure.Windows`,
 `Axiom.Service -f net10.0-windows`, `Axiom.Desktop.Avalonia.Windows`, and
@@ -342,46 +362,54 @@ lock changes were discarded (`git checkout -- '*.lock.json'`); no unrelated lock
 
 ## 10. Gates and what is still not claimed
 
-- **Integration gate:** merge commit exists, both TFMs compile, all portable/Linux suites green
-  (revision 3 counts in §8).
-- **Review gate (closed locally, not a release approval):** the review of `5de2d636..7fad752`
-  rejected eight findings (fixed in `821237d`); the review of `400d4a9` rejected two more HIGH
-  blockers (fixed in `dc2d9cd`). A fresh independent review then **approved** local commit
-  `47c39da` and artifact `35433682…`. That approval is scoped to the local commit/artifact; it is
-  not a release, merge, signing or publication approval.
-- **Install gate (passed on revision 3, 2026-11-15T23:02Z–23:06Z):** clean normal `dpkg -i` with
-  the approved artifact on the disposable Ubuntu 24.04.5 guest (`pkexec` already present, no
-  provisioning), service enabled/active, `--doctor` all checks passed, BPF 4/4 and CO-RE verified
-  on guest kernel 6.8 (object built on host 7.0), IPC, 0/10 canary slips IPv4+IPv6, restart
-  durability, `dpkg -r`, `dpkg -P`; resolver untouched; clean guest/host. Still unproven: Privacy
-  Shield live redirect/restore (deliberately not exercised), GUI (headless), cross-version
-  upgrade, guest failure injection for the installer/postrm stop path or a live malformed/absent
-  bpftool output (unit/fake-runner only), RPM/arm64/Windows runtime.
+- **Integration gate (revision 4):** merge commit `126de46` exists, both TFMs compile, portable
+  and Linux suites are green (§8); portable locked restore passes; Windows cross-builds pass. Full
+  solution locked restore is Windows-host-only (`NETSDK1100`).
+- **Review gate (revision 4 OPEN):** the review of `5de2d636..7fad752` rejected eight findings
+  (fixed in `821237d`); the review of `400d4a9` rejected two more HIGH blockers (fixed in
+  `dc2d9cd`); a fresh independent review **approved** `47c39da` and artifact `35433682…`. That
+  approval does **not** cover `126de46` or `a09a88d9…`; no independent review of revision 4 was
+  possible in this run (subagent depth limit). Do not present revision 4 as reviewed.
+- **Install gate (passed on 0.53 and 0.59):** clean normal `dpkg -i` on the disposable Ubuntu
+  24.04.5 guest (`pkexec` already present, no provisioning), service enabled/active, `--doctor`
+  all checks passed, BPF 4/4 and CO-RE verified on guest kernel 6.8, IPC, 0/10 canary slips
+  IPv4+IPv6, restart durability, remove/purge; resolver untouched; clean guest/host. Revision 4
+  adds cross-version upgrade from the approved 0.53.0 `axiom` package with rule/data preservation
+  and an old-record purge, coexistence with a stand-in archive `axiom` package, and a local-TLS
+  DoH proof (§13).
+- **Still unproven after revision 4:** Privacy Shield OS redirect/restore on port 53 (only the
+  DoH transport is proven), GUI, RPM/Fedora, arm64, Windows runtime/WPF/locked restore,
+  guest failure injection for the installer/postrm stop path or a live malformed/absent bpftool
+  output (unit/fake-runner only).
 - **Release gate (not authorised):** no upload, tag, release notes, signing, push or deployment.
   T12 only prepares local/workflow artifacts for an approved release workflow.
 - Known limits to publish with any artifact: Ubuntu 24.04 x64 only; WMI/process-start audit absent
   on Linux; `.rpm` unbuilt/untested; GUI walkthrough not performed; Privacy Shield redirect not
-  exercised on the guest (unit-tested only); no signing; Windows runtime not executed on this host;
-  the pin parser depends on base-system POSIX awk and fails safe (keeps pins) without it.
-- DoH status is not proof of an encrypted query: the unit tests use fake handlers and a local TLS
-  mock can prove the protocol only; no live public DNS query is claimed.
+  exercised live; no signing; Windows runtime not executed on this host; the pin parser depends on
+  base-system POSIX awk and fails safe (keeps pins) without it.
+- DoH transport is now proven live over local TLS, but `privacy.status` alone is not proof of an
+  encrypted query; the local server log with TLS version/cipher is the evidence.
 
 ### 10.1 Remaining worker-ready tasks (not started; each needs its stated permission)
 
 | ID | Task | Gate/permission | Acceptance |
 |---|---|---|---|
-| T7 | Unix process-start source for F-19 | none (code only) | Linux `IProcessStartSource` behind the existing seam, Windows WMI unchanged, `net10.0` tests prove a spawn row and `0600` file |
-| T13 | Cross-version upgrade | **two approved Linux artifacts**; none published yet. Do not install the rejected revisions (`ce966fa9…`, `9196827…`, `ac9e42d7…`) | With a prior approved N-1 and the approved 0.53.0 package: `dpkg -i` over N-1 keeps data/rules, replaces the unit/image, service returns active; `dpkg -r`/`-P` still clean. Must not use a rejected build as the baseline |
-| T14 | GUI walkthrough on Linux | guest display/provisioning permission (currently no display; installing Xvfb/desktop is out of scope) | Launch `/opt/axiom/Axiom` under Xvfb/desktop, navigate overview/rules/history/settings, no render error; separate from the headless desktop-file check already done |
-| T15 | Privacy Shield live DoH + redirect/restore | **explicit permission to change the guest resolver and run a controlled DNS target/egress** | Enable Privacy Shield against a controlled DoH endpoint, prove encrypted transport on the wire, prove redirect and fail-safe restore on stop/crash/uninstall, restore the pre-test resolver exactly. Never claim encrypted DNS from `privacy.status` alone |
+| T7 | Unix process-start source for F-19 | none (code only); **deferred** | Linux `IProcessStartSource` behind the existing seam, Windows WMI unchanged, `net10.0` tests prove a spawn row and `0600` file. Not required for the shipped surface; do not claim WMI parity |
+| T13 | Cross-version upgrade | **done** | Approved 0.53.0 `axiom` (data + applied rule) → 0.59.0 `axiom-firewall`: rule/data preserved, doctor passes, old `axiom` purge leaves data and the service active; stand-in archive `axiom` 20170501 stays intact |
+| T14 | GUI walkthrough on Linux | guest display/provisioning permission (no display; no Xvfb installed) | Launch `/opt/axiom/Axiom` under Xvfb/desktop, navigate overview/rules/history/settings, no render error; separate from the headless desktop-file check already done |
+| T15 | Privacy Shield OS redirect/restore | **explicit permission to change the disposable guest resolver** (port 53) | Enable Privacy Shield on port 53 against a controlled DoH endpoint, prove redirect and fail-safe restore on stop/crash/uninstall, restore the pre-test resolver exactly. DoH transport itself is proven (§13.4); redirect/restore is not |
 | T16 | RPM, arm64, Windows runtime | build host with `nfpm`/rpm; arm64 hardware or emulation; Windows host | RPM install/upgrade/erase with the mirrored scriptlets; arm64 `.deb` boots and doctor passes; `Axiom-Setup.exe`/service run on Windows. No claim from cross-compilation alone |
 | T17 | Windows locked restore / WPF tests | Windows host (host here cannot run WPF, `NETSDK1100`) | `dotnet restore Axiom.sln --locked-mode`, `Axiom.UI.Tests` and Windows service tests pass on Windows; record RID lock graphs |
+| T21 | Independent review of `126de46` + `a09a88d9…` | fresh-context reviewer (this run hit the subagent depth limit) | reviewer reads `3d7ccf1..126de46`, the packaging migration and the DoH test; confirms no Windows semantic change, no data-loss path, preserved safety fixes intact; findings fixed or accepted in writing |
 
 ## 11. Where the evidence lives
 
-- Worktree: `/tmp/opencode/axiom-recon` (branch `recon/linux-main-0.53.0`, packaging fixes
-  `dc2d9cd`, approved local HEAD `47c39da`).
-- Revision-3 artifact + `SHA256SUMS.txt` + `PROVENANCE.txt` + build/test logs:
+- Worktree: `/tmp/opencode/axiom-recon` (branch `recon/linux-main-0.59.0`, HEAD `126de46`;
+  previous branch `recon/linux-main-0.53.0` at `3d7ccf1`).
+- Revision-4 artifact + `SHA256SUMS.txt` + `PROVENANCE.txt` + host/guest logs + local DoH evidence:
+  `/tmp/opencode/axiom-production-readiness-20261115/` (`.deb` `a09a88d9…`, 64,311,868 bytes,
+  `REPORT.md`).
+- Revision-3 artifact + `SHA256SUMS.txt` + `PROVENANCE.txt` + build/test logs (prior baseline):
   `/tmp/opencode/axiom-recon-packagefix-20261115/` (`.deb` `35433682…`, 63,039,852 bytes).
 - Revision-3 live install/remove evidence (23:02Z–23:06Z): 
   `/tmp/opencode/axiom-recon-live-final-20261115/` (`EVIDENCE.md`, host/guest pre/post,
@@ -395,7 +423,8 @@ lock changes were discarded (`git checkout -- '*.lock.json'`); no unrelated lock
   `/tmp/opencode/axiom-review-closeout-20261114/REPORT.md`,
   `/tmp/opencode/axiom-review-parser-validation/REPORT.md`.
 - Published (pre-existing): PR #276 comment `#issuecomment-6883150435`; wiki
-  `projects/axiom/linux-e2e-validation-2026-11-12#review-follow-up-2026-11-14`.
+  `projects/axiom/linux-e2e-validation-2026-11-12#review-follow-up-2026-11-14`; issue #150
+  revision-3 comment `#issuecomment-6902932272`.
 
 ## 12. Review findings fixed in `821237d`, plus revision-3 blockers in `dc2d9cd`
 
@@ -411,3 +440,85 @@ lock changes were discarded (`git checkout -- '*.lock.json'`); no unrelated lock
 | 8 | Plan claimed guest egress/pkexec permission and an older artifact as deliverable | §5 now records actions without invented approval ("authorisation not established"); §7 marks the old `.deb` superseded/non-deliverable and records the new SHA; T12 clarified as local/workflow handoff only | this plan; workflow provenance step |
 | 9 | `packaging/linux/bpf-pins.sh` accepted any bracketed text as JSON: `[{}]`, `[broken]`, invalid id 0 removed pins, and an escaped `axiom_connect\u0034` was not detected while still attached | Replaced the substring check with a strict JSON parser (base-system POSIX awk, no python/jq): blank stdout or `[]` is bpftool's real empty answer; otherwise the document must be an array of objects with a non-zero uint32 `id` and a decoded string `name`; malformed/non-array/non-object/missing/duplicate/wrong-typed/unknown, bad escapes, trailing data and invalid ids fail and keep the pins. Missing awk also fails safe. RPM `%preun` inherits it | 35 payload cases (all listed counterexamples incl. escaped names, id 0/negative/string/overflow/leading zero, valid foreign, blank/`[]`) + missing-awk test; revision-2 guest smoke did not cover these counterexamples and is not counted |
 | 10 | `debian/postrm` and `rpm/postremove` ignored `systemctl disable --now` failure and deleted the unit and `/usr/libexec/axiom`, even if the daemon was still active/unknown | Delete only after a confirmed stop: `disable --now` plus a readable `is-active` of `inactive`/`failed`; still-active, timeout/unknown, missing systemctl or missing state keep the unit, image, run dir and (on purge) data/logs, and fail the removal. Upgrades still do nothing; RPM mirrored; test-only `AXIOM_MAINTAINER_TEST_ROOT` relocates paths | 14 fake-systemctl cases (Debian remove/purge success, active, timeout/unknown, missing systemctl, failed-disable-but-inactive, absent unit, no systemd, upgrade; RPM erase success/active/upgrade) against the exact packaged scripts; no guest E2E for revision 3 |
+
+## 13. Revision 4 — v0.59.0 parity, package rename, cross-version and DoH evidence
+
+Measured 2026-11-16T01:2xZ–02:1xZ UTC on the same host and disposable Ubuntu 24.04.5 overlay
+(kernel 6.8.0-147). No push, merge, tag, release, upload, signing, provisioning or resolver change.
+
+### 13.1 Delta after the approved 0.53 target (recorded, not chased further)
+
+`5de2d636..28918945` (v0.53.0 → v0.59.0):
+
+| Release | Content | Relevance to Linux |
+|---|---|---|
+| 0.54.0 | module prerequisites/repair, loopback probes, adapter DNS 127.0.0.1, feed resilience, memory reduction | **shared service/UI code used by Linux — merged** |
+| 0.55.0 / 0.56.0 | brand assets and icons | UI assets; merged as upstream |
+| 0.57.0 | Avalonia theme redesign | shared UI; merged as upstream |
+| 0.58.0 | docs screenshots | docs only |
+| 0.59.0 | brand/nav/dashboard polish | shared UI; merged as upstream |
+
+Upstream PR #276 advanced independently to `1827deb` with `5159056` (doctor counts), `788c0795`
+(detach logging), `a66fb55` (unreadable bpftool is unknown), `6504b97` (optional resolver paths),
+`78a2384` (rename), `1827deb` (old-package purge disarm). This branch already carried reviewed
+equivalents of the first four (from the `b6b6049` review series). The rename and disarm were
+**ported**; the divergent implementations of the BPF unknown-state fixes stay as the reviewed
+`b6b6049` code (Nft tests 160/160, live canary clean). A future PR refresh must reconcile both
+implementations deliberately, not by blind merge.
+
+### 13.2 Package rename and migration
+
+- `Package: axiom-firewall`, `Conflicts`/`Replaces: axiom (<< 1000)` in DEB and `conflicts: axiom < 1000`
+  (no `Obsoletes`) in the RPM mapping. Paths, `axiomd.service` and `com.axiom.firewall` unchanged.
+- `postinst` disarms `/var/lib/dpkg/info/axiom.postrm` only when it carries our markers, accepting
+  both the 0.53-era `AXIOM_ROOT`-prefixed paths and the older spelled-out paths. The archive
+  `axiom` package does not match these lines and is untouched.
+- Guest results: a stand-in distro `axiom` 20170501 package stayed installed with its files intact
+  across `axiom-firewall` install and purge; the approved 0.53.0 `axiom` package (with one applied
+  rule) upgraded to 0.59.0 keeping `managed-rule.json`, enforcer generation and the applied rule;
+  `dpkg --purge axiom` removed only the old record (data marker still present, service active).
+- The `nfpm` RPM path is still unbuilt and untested; no Fedora claim.
+
+### 13.3 Host gates (revision 4)
+
+Portable suites: Contracts 157, Core 184, Persistence 21, Unix 47, Linux 102, MacOS 249, MCP 34,
+Presentation 299, UI.Avalonia 80, Service.Hosting 31; separately Linux.Nft 160 and
+Desktop.Avalonia.Linux 51. All pass. `Axiom.Portable.slnx --locked-mode` restore passes; the full
+solution restore fails `NETSDK1100` on Linux (WPF), unchanged. Windows cross-builds (Windows
+infrastructure, service `net10.0-windows`, Windows Avalonia desktop, Service.Tests) pass; no
+Windows runtime is claimed.
+
+### 13.4 Privacy Shield DoH — what is proven, what is not
+
+Local TLS server + temporary test CA on the disposable guest; **no OS resolver change**. The
+resolver was enabled on loopback port 5353 with an explicit DoH upstream:
+
+- trusted cert: TLSv1.3 / `TLS_AES_256_GCM_SHA384`, `POST /dns-query`, valid A answer
+  (`203.0.113.7`), `queries 1 errors 0`;
+- untrusted cert only: SERVFAIL, `errors 1`, no answer and no plaintext fallback (the target has
+  no plain endpoint);
+- two-target list with untrusted first and trusted second: answer from the trusted target (the
+  untrusted handshake is rejected, then failover succeeds);
+- cleanup: privacy disabled, test CA/drop-in removed, daemon restarted, `/etc/resolv.conf` symlink
+  and sha256 unchanged, doctor passes.
+
+Not proven: pointing the OS resolver at Axiom on port 53, redirect/restore on stop/crash/uninstall,
+or any external DNS egress. That needs explicit permission to change the disposable guest resolver
+(T15).
+
+Test-harness note: the unit has `PrivateTmp=yes`, so `SSL_CERT_FILE` must point outside `/tmp`
+(used `/etc/axiom-test-ca.crt`, removed after). Before that, the same config returned SERVFAIL with
+no TCP attempt — that was the missing CA path, not a product DoH bug.
+
+### 13.5 Review and next gates
+
+`126de46` and `axiom-firewall_0.59.0_amd64.deb` (`a09a88d9…`) are **built and locally live-tested,
+not independently reviewed**. The parent/next session should run T21 with a fresh-context reviewer.
+Remaining product gates: T14 GUI, T15 OS redirect/restore, T16 RPM/arm64/Windows runtime, T17
+Windows WPF/locked restore, T7 Linux process audit (deferred, not parity).
+
+### 13.6 Product behaviour observed (not filed as a bug)
+
+`protection.disable` removes managed rules; the canary script calls it on cleanup, so rules
+applied before a canary run are gone afterwards. Re-enable protection and re-apply. This is
+consistent with the existing protection lifecycle, not with a silent claim of rule persistence.
