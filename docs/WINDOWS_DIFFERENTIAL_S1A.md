@@ -502,3 +502,60 @@ caller is shown by the unit tests in R4.1. The live run shows only that the Wind
 - Desktop UI, installer and setup, and any GitHub-hosted run.
 - A first differential pass was discarded: a second script reinstalled the service while it was running.
   All results above come from the sequential re-run.
+
+# Round 5 (2026-11-16): `main` `25bfcc1` vs S1a `ab7df89`
+
+**Author-run on the project's Windows 11 test VM. This is not CI.** Same VM, SDK 10.0.403 (pinned by
+`global.json`) and method as round 4. Every tree is a `git archive` of its commit, expanded into an empty
+directory, with its own empty `NUGET_PACKAGES` folder.
+
+| | Commit |
+|---|---|
+| main (pinned for this round) | `25bfcc176dbb40c63b34f225d31cffb254732587` (v0.64.0; 48 commits after `d0991bd`) |
+| **S1a tested** | **`ab7df89b01538d5c24fd4de8752270a645f73a90`** = `c7d2575` + `Merge main 25bfcc1 (v0.64.0) into S1a` (no conflicts). The commit after it changes this document only. |
+
+## R5.1 What `main` changed in the reviewed areas
+
+`main` `d0991bd..25bfcc1` touches 164 files; none of them is one of S1a's 26 files. Per area:
+
+| Area | Changed by `main`? |
+|---|---|
+| `IpcCommandTypes` / IPC commands (`src/Axiom.Contracts/Ipc/*`) | **No**: no command added, still 32, all classified in `IpcCommandAccess` |
+| Dispatcher (S1a's `IpcRequestDispatcher`; `main` has none) and `PipeServerWorker` / `Program.cs` | **No** |
+| `PipeServer` / caller authorization (`src/Axiom.Infrastructure.Windows/Ipc/*`) | **No** |
+| Firewall write gate (`PipeServer`, `ProtectionController`, `FirewallRuleCoordinator`, `RuleSpecValidator`, `WindowsFirewallPolicyAdapter`) | **No** |
+
+The only IPC-related changes are on the client side: the Avalonia Agents page now calls the existing
+`enforcement.status` / `enforcement.receipts` commands, and the WPF client's `ServiceUnavailableException`
+gained a `Code` property.
+**The R4 runtime comparison (pipe access with a second local account, block / unblock, restart
+persistence, `enforcement.*`) was therefore not repeated.** It still describes this code.
+
+## R5.2 Lock files, restore, build
+
+`main` changed no `packages.lock.json` and no package reference in the range. `--locked-mode`, fresh copy,
+empty package folder:
+
+| Restore | main `25bfcc1` | S1a `ab7df89` |
+|---|---|---|
+| `dotnet restore Axiom.Portable.slnx --locked-mode` | exit 0 | exit 0 |
+| `dotnet restore Axiom.sln --locked-mode` | exit 0 | exit 0 |
+| per project `--locked-mode` | 21 / 21 pass | 22 / 22 pass |
+
+**No lock file was regenerated or changed in this round.** Clean restore (`--no-http-cache`): exit 0,
+88 packages, on both trees. `dotnet build Axiom.sln -c Release --no-restore`: 0 warnings, 0 errors on both.
+
+## R5.3 Suites, `main` → S1a (passed / total, `dotnet test` totals)
+
+Contracts 160 → 160, Core 184 → 184, Infrastructure.Windows 86 → 137 (+51 IPC tests), McpServer 34 → 34,
+Persistence 21 → 21, Presentation 287 → 287, Service 101 → 101, UI.Avalonia 62 → 62, UI.Tests 194/198 →
+194/198. **No test that passes on `main` fails or is missing on S1a.** The 4 UI.Tests failures are the same
+`AgentHookScriptTests` on both trees (the VM has no Python). `IpcCommandAccessTests` 48 / 48 and
+`IpcCallerEntryPointTests` 3 / 3 pass. `WindowsFirewallPolicyAdapterTests` (COM/RCW flake) passed in both
+full-suite runs; in 3 extra runs per tree it failed once on each (main `Unknown_rule_is_reported_as_absent`,
+S1a `Capabilities_are_available`).
+
+## R5.4 Not repeated or not tested in this round
+
+- The service differential and the access probes (see R5.1 for why).
+- An enabled enforcement policy file, desktop UI, installer.
