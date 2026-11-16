@@ -127,6 +127,26 @@
         </Border>
       </Grid>
 
+      <!-- Blocked agent actions, same evidence as the Advanced dashboard -->
+      <Border Classes="card" Padding="16">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="2">
+              <controls:AxiomSelectableTextBlock Text="Blocked actions by agent" Classes="section-title" />
+              <controls:AxiomSelectableTextBlock Text="{Binding Agents.BlockSummaryText}"
+                                                 FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}"
+                                                 TextWrapping="Wrap" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Details" Command="{Binding OpenAgentsCommand}"
+                    Padding="12,5" FontSize="11" VerticalAlignment="Center" />
+          </Grid>
+          <controls:BlockedActionsChart Bars="{Binding Agents.BlockSummary.ByHarness}" MaxRows="5"
+                     TextBrush="{DynamicResource Axiom.TextSecondary}"
+                     MutedBrush="{DynamicResource Axiom.TextMuted}"
+                     BarBrush="{DynamicResource Axiom.Critical}" />
+        </StackPanel>
+      </Border>
+
       <!-- Pending outbound app approvals (shown only when apps are waiting) -->
       <Border Classes="card" Padding="16" IsVisible="{Binding Firewall.HasPending}">
         <StackPanel Spacing="10">

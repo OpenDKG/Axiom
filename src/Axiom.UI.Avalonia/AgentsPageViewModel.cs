@@ -227,7 +227,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private AgentBlockSummary _blockSummary = AgentBlockSummary.Empty;
 
     public string BlockSummaryText => BlockSummary.HasBlocks
-        ? $"{BlockSummary.Blocked:N0} blocked of {BlockSummary.TotalEvents:N0} guard decisions across {BlockSummary.ByHarness.Count} agent(s)"
+        ? $"{BlockSummary.Blocked:N0} blocked tool calls of {BlockSummary.TotalEvents:N0} guard decisions across {BlockSummary.HarnessCount} agent(s)"
         : "No blocked guard decisions recorded yet.";
 
     partial void OnBlockSummaryChanged(AgentBlockSummary value) =>

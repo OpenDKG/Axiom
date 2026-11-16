@@ -35,9 +35,9 @@
         <Border Grid.Column="4" Classes="card" Padding="14,8">
           <StackPanel Spacing="3">
             <Border Width="24" Height="2" CornerRadius="1.5" Background="{DynamicResource Axiom.Critical}" HorizontalAlignment="Left" />
-            <controls:AxiomSelectableTextBlock Text="BLOCKED" Classes="kpi-label" />
+            <controls:AxiomSelectableTextBlock Text="BLOCKED FINDINGS" Classes="kpi-label" />
             <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.BlockedFindingCount}" Classes="kpi-value" FontSize="24" />
-            <controls:AxiomSelectableTextBlock Text="explicit block decisions" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" />
+            <controls:AxiomSelectableTextBlock Text="explicit block decisions in the audit" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11" />
           </StackPanel>
         </Border>
         <Border Grid.Column="6" Classes="card" Padding="14,8">
