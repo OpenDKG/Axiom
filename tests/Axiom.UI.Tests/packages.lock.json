@@ -99,7 +99,7 @@
       "axiom.ui": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.68.0, )",
+          "Axiom.Contracts": "[0.73.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
