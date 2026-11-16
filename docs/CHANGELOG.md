@@ -1,3 +1,9 @@
+## What's in 0.87.0
+
+- **Compact Mini and plain selected buttons.**
+  - Mini cards size to their content (Auto row) and the window opens at 820x560 (min 760x430); chart 96 px, tighter padding.
+  - Selected glass buttons keep the lighter background but use the normal light text again; green text removed.
+
 ## What's in 0.86.0
 
 - **Mini compact overview restored.**

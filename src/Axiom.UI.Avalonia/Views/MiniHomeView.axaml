@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.MiniHomeView">
-  <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" Margin="16,14,16,12" RowSpacing="10">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="12,10,12,10" RowSpacing="8">
 
     <!-- Quick protection toggles -->
     <Grid Grid.Row="0" ColumnDefinitions="*,8,*,8,Auto">
@@ -20,7 +20,7 @@
     <!-- One compact row: agents, network and privacy key numbers -->
     <Grid Grid.Row="1" ColumnDefinitions="*,12,*,12,*">
 
-      <Border Grid.Column="0" Classes="card" Padding="12">
+      <Border Grid.Column="0" Classes="card" Padding="10">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="AGENT DASHBOARD" Classes="kpi-label" VerticalAlignment="Center" />
@@ -28,22 +28,22 @@
           </Grid>
           <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
             <TextBlock Text="Sessions" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Column="1" Text="{Binding Agents.SessionCount}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Column="1" Text="{Binding Agents.SessionCount}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" />
             <TextBlock Grid.Row="1" Text="Tool calls" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Agents.ToolCallCount}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Agents.ToolCallCount}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" />
             <TextBlock Grid.Row="2" Text="Blocked" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Agents.BlockSummary.Blocked}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Agents.BlockSummary.Blocked}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.Critical}" />
             <TextBlock Grid.Row="3" Text="Flagged" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Agents.FlaggedFindingCount}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Agents.FlaggedFindingCount}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.Warning}" />
           </Grid>
         </StackPanel>
       </Border>
 
-      <Border Grid.Column="2" Classes="card" Padding="12">
+      <Border Grid.Column="2" Classes="card" Padding="10">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="NETWORK OVERVIEW" Classes="kpi-label" VerticalAlignment="Center" />
@@ -51,22 +51,22 @@
           </Grid>
           <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
             <TextBlock Text="Active sockets" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Column="1" Text="{Binding Overview.ConnectionsText}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Column="1" Text="{Binding Overview.ConnectionsText}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" />
             <TextBlock Grid.Row="1" Text="Processes" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Overview.ProcessesText}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Overview.ProcessesText}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" />
             <TextBlock Grid.Row="2" Text="Loopback" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Overview.LoopbackText}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Overview.LoopbackText}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" />
             <TextBlock Grid.Row="3" Text="Throughput" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Overview.DownloadText}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Overview.DownloadText}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.Download}" />
           </Grid>
         </StackPanel>
       </Border>
 
-      <Border Grid.Column="4" Classes="card" Padding="12">
+      <Border Grid.Column="4" Classes="card" Padding="10">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="PRIVACY OVERVIEW" Classes="kpi-label" VerticalAlignment="Center" />
@@ -74,19 +74,19 @@
           </Grid>
           <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="4">
             <TextBlock Text="Active rules" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Column="1" Text="{Binding PrivacyShield.RuleCountText}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Column="1" Text="{Binding PrivacyShield.RuleCountText}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" />
             <TextBlock Grid.Row="1" Text="Queries" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding PrivacyShield.QueriesCountText}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding PrivacyShield.QueriesCountText}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" />
             <TextBlock Grid.Row="2" Text="Allowed" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PrivacyShield.AllowedCountText}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PrivacyShield.AllowedCountText}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.Success}" />
             <TextBlock Grid.Row="3" Text="Blocked" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PrivacyShield.BlockedCountText}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PrivacyShield.BlockedCountText}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.Critical}" />
             <TextBlock Grid.Row="4" Text="Errors" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding PrivacyShield.ErrorsCountText}" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding PrivacyShield.ErrorsCountText}" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.Warning}" />
           </Grid>
         </StackPanel>
@@ -94,7 +94,7 @@
     </Grid>
 
     <!-- System-wide throughput with current rates -->
-    <Border Grid.Row="2" Classes="card" Padding="12">
+    <Border Grid.Row="2" Classes="card" Padding="10">
       <StackPanel Spacing="6">
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Text="SYSTEM-WIDE THROUGHPUT" Classes="kpi-label" VerticalAlignment="Center" />
@@ -105,7 +105,7 @@
                        Foreground="{DynamicResource Axiom.Upload}" />
           </StackPanel>
         </Grid>
-        <controls:TrafficChartControl Height="120"
+        <controls:TrafficChartControl Height="96"
                                       UploadSeries="{Binding Overview.UploadSeries}"
                                       DownloadSeries="{Binding Overview.DownloadSeries}"
                                       GridLineBrush="{DynamicResource Axiom.GridLine}"
@@ -116,7 +116,7 @@
     </Border>
 
     <!-- Latest agent actions -->
-    <Border Grid.Row="3" Classes="card" Padding="12">
+    <Border Grid.Row="3" Classes="card" Padding="10">
       <StackPanel Spacing="6">
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Text="AGENT ACTIVITY" Classes="kpi-label" VerticalAlignment="Center" />
