@@ -485,9 +485,9 @@ Portable suites: Contracts 157, Core 184, Persistence 21, Unix 47, Linux 102, Ma
 Presentation 299, UI.Avalonia 80, Service.Hosting 31; separately Linux.Nft 160 and
 Desktop.Avalonia.Linux 51. All pass. `Axiom.Portable.slnx --locked-mode` restore passes; the full
 solution restore fails `NETSDK1100` on Linux (WPF), and with `EnableWindowsTargeting=true` fails
-`NU1004` for the Windows projects (stale lock graphs). Both need a Windows host (T17). Windows cross-builds (Windows
-infrastructure, service `net10.0-windows`, Windows Avalonia desktop, Service.Tests) pass; no
-Windows runtime is claimed.
+`NU1004` for the Windows projects (stale lock graphs). Both need a Windows host (T17).
+Windows cross-builds (Windows infrastructure, service `net10.0-windows`, Windows Avalonia desktop,
+Service.Tests) pass; no Windows runtime is claimed.
 
 ### 13.4 Privacy Shield DoH — what is proven, what is not
 
