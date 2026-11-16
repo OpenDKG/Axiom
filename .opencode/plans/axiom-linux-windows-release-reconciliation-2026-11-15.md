@@ -684,10 +684,10 @@ mistakes. The filesystem move is the implementation of that, not a new feature.
 
 | Item | Value |
 |---|---|
-| Code commits | `2b35bd8` (path/modes/scripts/overrides) + `00049c2` (override contexts, man page, description wrap) |
-| Artifact | `axiom-firewall_0.59.0+linux.2_amd64.deb`, 63,836,160 bytes, sha256 `8098288fc92f5bffe1885bc78496f6984776967d1f452be491514a71cbadc03a` |
-| Source | code tree of `00049c2`; later commit is this plan file only (not packaged) |
-| Package version | `0.59.0+linux.2` (`--local linux.2`): dpkg sorts it above the tested `0.59.0`; app/upstream stay `0.59.0` |
+| Code commits | `2b35bd8` (path/modes/scripts/overrides) + `00049c2` (override contexts, man page, description wrap) + `4e343b7` (leftover enablement symlink on removal) |
+| Artifact | `axiom-firewall_0.59.0+linux.3_amd64.deb`, 63,833,156 bytes, sha256 `1617f10041580a4da52564e77e85dcab2d96b64364600a3b22dacaf7b82bb383` |
+| Source | code tree of `4e343b7`; later commit is this plan file only (not packaged) |
+| Package version | `0.59.0+linux.3` (`--local linux.3`): dpkg sorts it above the tested `0.59.0`; app/upstream stay `0.59.0` |
 | Lintian | guest Ubuntu 24.04 `lintian` 2.117.0ubuntu1.6 on the exact artifact: **0 E / 0 W**, rc 0; one stderr duplicate-hint note (`ored-depends-on-obsolete-package`, no tag emitted) |
 
 ### 15.1 Lintian before → after, with disposition
@@ -727,7 +727,8 @@ Nothing security-relevant was waived (permissions, missing deps, linkage, copyri
 - **Upgrade** from the reviewed `0.59.0` artifact (still `/opt/axiom`), with an applied rule
   (`/usr/bin/curl`, BPF connect-time proven) and `Dark Midnight` theme: `dpkg -i` rc 0, obsolete
   `/opt` removed, new path installed, service active, doctor all pass, 4/4 pins, rule survived
-  (count 1, generation 3), DB and theme unchanged; curl was blocked before disabling shield.
+  (count 1, generation 3) and the theme file unchanged (the SQLite DB file hash moves with its WAL
+  checkpoint, so the retained rule is the data proof); curl was blocked before disabling shield.
 - **Purge while DoH-redirected**: rc 0; journal `restore 'enp0s1' -> 10.0.2.3: ok`; resolver
   `ebdf5602…` and `resolved.conf` `bccfe813…` byte-identical; package/unit/image/data/pins/table
   absent; no `/opt` leftovers.
@@ -740,19 +741,21 @@ Nothing security-relevant was waived (permissions, missing deps, linkage, copyri
   authorized lintian/sway/waybar/wayland-utils/xwayland set remains installed. No global auth
   policy, user password or host change.
 
-### 15.3 Tests / builds (fresh, code tree `00049c2`)
+### 15.3 Tests / builds (fresh, code tree `4e343b7`)
 
 Portable build 0 warnings/0 errors. Portable suite: Contracts 157, Core 184, Persistence 21,
-Unix 47, Linux 108 (+6), MacOS 249, MCP 34, Presentation 299, Hosting 34, Desktop.MacOS 35,
-UI.Avalonia 96. Separate: Linux.Nft **160**, Desktop.Avalonia.Linux **51**. WPF UI, WPF tests and
+Unix 47, Linux 109 (+7), MacOS 249, MCP 34, Presentation 299, Hosting 34, Desktop.MacOS 35,
+UI.Avalonia 96 (1,265 tests). Separate: Linux.Nft **160**, Desktop.Avalonia.Linux **51**
+(1,476 total). WPF UI, WPF tests and
 Avalonia Windows cross-builds 0 warnings/0 errors (runtime still not executed here).
 New tests: postinst migration (marker/`dpkg-query`/daemon path, unrelated `axiom` untouched, missing
-daemon fails), stop-helper fallback and read-back retention, new package prefix and launcher path.
+daemon fails), stop-helper fallback and read-back retention, leftover `systemctl enable` symlink
+cleanup, new package prefix and launcher path.
 The strict BPF JSON awk parser, rendered unit and OS DNS restore tests are unchanged.
 
 ### 15.4 Residual gates
 
-Fresh independent review of `00049c2` / `8098288…`; signing with an authorized key; release-write
+Fresh independent review of `4e343b7` / `1617f100…`; signing with an authorized key; release-write
 authorization; RPM build/test (config updated, not built); arm64; Windows runtime/WPF/locked restore
 (owner); polkit **wrong-password** denial (cancel path now proven); pure-Wayland backend. Quad9 is
 environment-limited here. This is not production readiness and not a release.
