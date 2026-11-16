@@ -68,6 +68,19 @@ public sealed class AgentCommandGuardTests
     }
 
     [Fact]
+    public void Guard_blocks_dpapi_cert_and_autologon_secret_sources()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        foreach (var marker in new[] { "\\\\microsoft\\\\protect", "\\\\microsoft\\\\credentials", "\\\\panther\\\\unattend", "defaultpassword" })
+        {
+            Assert.Contains(marker, helpers, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("export-pfxcertificate", helpers, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Guard_blocks_anti_forensics_and_wmi_persistence()
     {
         var helpers = AgentCommandGuard.PythonHelpers;
