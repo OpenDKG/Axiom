@@ -1,8 +1,10 @@
-# macOS activation host — corrected checkpoint
+# macOS activation host — approved handoff
 
-Status: **unreviewed correction**. The independent review of `9513176` rejected that checkpoint;
-this change addresses its four findings. The final reviewed commit is still pending re-review.
-Topology is unchanged: the independent reviewer agreed the app-like host is the supported model.
+Status: **approved for a local DCO commit** by the independent re-review of `1850d61`
+(tree `484e5208009120694e4f60a9716eaa52011269b1`). The re-review closed all four findings from
+the `9513176` rejection. This is not production certification: signed activation, notarization,
+Gatekeeper acceptance and enforcement remain unverified. The final metadata-only handoff commit
+does not change the reviewed code.
 
 ## Upstream position
 
@@ -12,6 +14,25 @@ Topology is unchanged: the independent reviewer agreed the app-like host is the 
   at observation it was 125 commits ahead of and 137 commits behind canonical `main`.
 - No merge, rebase, push or publication was performed. Do not read this branch as latest-main
   integrated work.
+
+## Independent review outcome
+
+Reviewed tip `1850d61`; corrected code `1270dd0`; rejected prior checkpoint `9513176`; cumulative
+base `815d400`. The reviewer approved the local DCO commit and recorded:
+
+1. **Closed** — `filterRefreshRequired` is `explicitReset || replaced`, called without an ad hoc
+   term; a failed save remains `state=error`. Four policy cases are tested.
+2. **Closed** — profile arrays and the boolean install entitlement are value-checked, not just
+   present. The reviewer's local fake-toolchain packaging run was 12/12 PASS, including wrong
+   network-extension, wrong app group and false install boolean.
+3. **Closed** — prompts and the native approval message use `Axiom Network Filter`; the desktop
+   test asserts it.
+4. **Closed** — previous plist is read before `Swap`, the moved-aside path is recorded before the
+   second move, and a failed plist restore never bootstraps the previous helper.
+
+Review limits: the reviewer did not re-run the guest suites, privileged activation, hashes or
+Gatekeeper checks. Builder-reported guest results below are not a second independent execution.
+The reviewer did not assess any code after `1850d61`; this final commit is metadata only.
 
 ## Plan and topology
 
@@ -130,14 +151,21 @@ not in this repository. A locked/offline restore was not reproduced.
 
 ## Provenance
 
+- Approved reviewed tip: `1850d61`; tree `484e5208009120694e4f60a9716eaa52011269b1`.
 - Corrected code checkpoint: `1270dd0`; tree `5ba8287b3797e1091f362a4887dc4f45b246615b`.
 - Base: `3040997` (PR #274-derived), cumulative review base `815d400`.
 - Guest toolchain: macOS 26.6.2 (25G83) arm64, CLT Swift 6.3.3, .NET SDK 10.0.403, stock bash
   3.2.57.
-- `Axiom.pkg` SHA-256
-  `f377d406eddb3a7eb8dac78a5eef71f41b6c79cbb94d629bc53a701c36c31ba3`.
-- `Axiom-1270dd0-app.tar.gz` (UI + host) SHA-256
+- Corrected code-checkpoint artifact: `Axiom.pkg` SHA-256
+  `f377d406eddb3a7eb8dac78a5eef71f41b6c79cbb94d629bc53a701c36c31ba3`;
+  `Axiom-1270dd0-app.tar.gz` SHA-256
   `5aa6278a5b020d6102d7857fb6be536b722d981299657ed4da00804c8cbdb55f`.
+- Docs-tip rebuild from `1850d61`: `Axiom.pkg` SHA-256
+  `0d10692ffef2a50ccc3bbf1d12ff1058ec0d34a0c10c5873dd0c657363f122ba`;
+  app archive SHA-256
+  `7c0836a4c2d062330c0cff81ece14ee82b76a0d091fc7ac56ba7b83905cdfc9a`.
+  It contains the same host/extension code as `1270dd0`; packaging/signature bytes differ. The
+  installer remains a private artifact, not a Git file.
 - Full private evidence: source archive, lock diffs, test logs, codesign/entitlement/profile
   state, payload/signature/Gatekeeper output, per-file hashes and guest/controller checksums.
 
