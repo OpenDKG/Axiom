@@ -60,6 +60,12 @@ public sealed class ThreatGraphControl : Control
             nameof(BorderBrush),
             new SolidColorBrush(Color.Parse("#2E3A47")));
 
+    public static readonly StyledProperty<IBrush?> AccentBrushProperty =
+        AvaloniaProperty.Register<ThreatGraphControl, IBrush?>(nameof(AccentBrush));
+
+    public static readonly StyledProperty<IBrush?> HubFillBrushProperty =
+        AvaloniaProperty.Register<ThreatGraphControl, IBrush?>(nameof(HubFillBrush));
+
     static ThreatGraphControl()
     {
         AffectsRender<ThreatGraphControl>(
@@ -70,7 +76,9 @@ public sealed class ThreatGraphControl : Control
             TextBrushProperty,
             MutedBrushProperty,
             SurfaceBrushProperty,
-            BorderBrushProperty);
+            BorderBrushProperty,
+            AccentBrushProperty,
+            HubFillBrushProperty);
     }
 
     public IReadOnlyList<BlackboxGraphThreat>? Threats
@@ -121,6 +129,18 @@ public sealed class ThreatGraphControl : Control
         set => SetValue(BorderBrushProperty, value);
     }
 
+    public IBrush? AccentBrush
+    {
+        get => GetValue(AccentBrushProperty);
+        set => SetValue(AccentBrushProperty, value);
+    }
+
+    public IBrush? HubFillBrush
+    {
+        get => GetValue(HubFillBrushProperty);
+        set => SetValue(HubFillBrushProperty, value);
+    }
+
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -132,7 +152,8 @@ public sealed class ThreatGraphControl : Control
             return;
         }
 
-        context.FillRectangle(SurfaceBrush, new Rect(0, 0, width, height));
+        var surface = ResolveThemeBrush(SurfaceBrushProperty, "Axiom.Surface", SurfaceBrush);
+        context.FillRectangle(surface, new Rect(0, 0, width, height));
         var center = new Point(width / 2, height / 2);
         var radius = Math.Min(width, height) / 2;
         var threats = Threats ?? [];
@@ -147,7 +168,7 @@ public sealed class ThreatGraphControl : Control
         var categoryRadius = Math.Max(58, radius * 0.48);
         var leafRadius = Math.Max(34, radius * 0.18);
         var span = Math.PI * 2 / slices.Count;
-        var accent = new SolidColorBrush(Color.FromRgb(0x5E, 0xEA, 0xD4));
+        var accent = AccentBrush ?? ResolveBrush("Axiom.Accent", "#FAFAFA");
 
         DrawHub(
             context,
@@ -182,7 +203,7 @@ public sealed class ThreatGraphControl : Control
                 categoryPoint.X,
                 categoryPoint.Y - 4,
                 10,
-                TextBrush,
+                ResolveThemeBrush(TextBrushProperty, "Axiom.TextPrimary", TextBrush),
                 center: true);
 
             var labelY = categoryPoint.Y + hubRadius + 6;
@@ -191,7 +212,7 @@ public sealed class ThreatGraphControl : Control
                 labelY = categoryPoint.Y - hubRadius - 24;
             }
 
-            DrawWrappedText(context, label, categoryPoint.X, labelY, 9, MutedBrush, 120);
+            DrawWrappedText(context, label, categoryPoint.X, labelY, 9, ResolveThemeBrush(MutedBrushProperty, "Axiom.TextMuted", MutedBrush), 120);
 
             var leaves = slice.Threats
                 .OrderByDescending(threat => SeverityRank(threat.Severity))
@@ -256,31 +277,50 @@ public sealed class ThreatGraphControl : Control
 
     private void DrawEmptyState(DrawingContext context, Point center, double radius)
     {
-        var outline = new Pen(BorderBrush, 1.4);
-        context.DrawEllipse(SurfaceBrush, outline, center, radius > 150 ? 32 : 26, radius > 150 ? 32 : 26);
-        DrawText(context, "Verified graph", center.X, center.Y - 7, 11, TextBrush, center: true);
-        DrawText(context, StateText, center.X, center.Y + 9, 10, MutedBrush, center: true);
+        var border = ResolveThemeBrush(BorderBrushProperty, "Axiom.Border", BorderBrush);
+        var surface = ResolveThemeBrush(SurfaceBrushProperty, "Axiom.Surface", SurfaceBrush);
+        var text = ResolveThemeBrush(TextBrushProperty, "Axiom.TextPrimary", TextBrush);
+        var muted = ResolveThemeBrush(MutedBrushProperty, "Axiom.TextMuted", MutedBrush);
+        var outline = new Pen(border, 1.4);
+        context.DrawEllipse(surface, outline, center, radius > 150 ? 32 : 26, radius > 150 ? 32 : 26);
+        DrawText(context, "Verified graph", center.X, center.Y - 7, 11, text, center: true);
+        DrawText(context, StateText, center.X, center.Y + 9, 10, muted, center: true);
         DrawText(
             context,
             "Waiting for a non-empty verified graph from the local DKG node.",
             center.X,
             center.Y + 48,
             10,
-            MutedBrush,
+            muted,
             center: true);
     }
 
     private void DrawHub(DrawingContext context, Point point, double size, IBrush brush, string label, string detail)
     {
+        var fill = HubFillBrush ?? ResolveBrush("Axiom.AccentSoft", "#20FFFFFF");
+        var text = ResolveThemeBrush(TextBrushProperty, "Axiom.TextPrimary", TextBrush);
+        var muted = ResolveThemeBrush(MutedBrushProperty, "Axiom.TextMuted", MutedBrush);
         context.DrawEllipse(
-            new SolidColorBrush(Color.FromArgb(38, 255, 255, 255)),
+            fill,
             new Pen(brush, 1.6),
             point,
             size,
             size);
-        DrawText(context, label, point.X, point.Y - 16, 10, TextBrush, center: true);
-        DrawText(context, detail, point.X, point.Y + 2, 9, MutedBrush, center: true);
+        DrawText(context, label, point.X, point.Y - 16, 10, text, center: true);
+        DrawText(context, detail, point.X, point.Y + 2, 9, muted, center: true);
     }
+
+    private IBrush ResolveThemeBrush(StyledProperty<IBrush> property, string key, IBrush fallback) =>
+        IsSet(property) ? GetValue(property) : ResolveBrush(key, fallback);
+
+    private static IBrush ResolveBrush(string key, string fallbackHex) =>
+        ResolveBrush(key, new SolidColorBrush(Color.Parse(fallbackHex)));
+
+    private static IBrush ResolveBrush(string key, IBrush fallback) =>
+        Application.Current?.TryFindResource(key, Application.Current.ActualThemeVariant, out var value) == true &&
+        value is IBrush brush
+            ? brush
+            : fallback;
 
     private void DrawText(
         DrawingContext context,

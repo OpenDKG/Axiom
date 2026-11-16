@@ -6,7 +6,12 @@
     <RootNamespace>Axiom.Service</RootNamespace>
     <AssemblyName>Axiom.Service</AssemblyName>
     <AssemblyTitle>Axiom Service</AssemblyTitle>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
   </PropertyGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />

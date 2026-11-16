@@ -62,7 +62,9 @@ public sealed record EnforcementSurfaceState
     public static EnforcementSurfaceState FromReceiptsAndStatus(
         EnforcementStatusDto? status,
         EnforcementReceiptsSnapshotDto? receipts = null,
-        bool guardAvailable = true)
+        bool guardAvailable = true,
+        string? hostHookMode = null,
+        int hostHookDenyCount = 0)
     {
         if (!guardAvailable)
         {
@@ -72,17 +74,6 @@ public sealed record EnforcementSurfaceState
                 VerificationLabel = "UNAVAILABLE - NOT PROTECTED",
                 Summary = "Blackbox guard or required protection state is unavailable; actions are unprotected.",
                 DetectorDetail = "Blackbox guard: UNAVAILABLE (guard could not be reached or ruleset is empty).",
-            };
-        }
-
-        if (status?.Error is { Length: > 0 } error)
-        {
-            return Current with
-            {
-                Verification = EnforcementVerification.Cooperative,
-                VerificationLabel = "POLICY INVALID - NOT VERIFIED",
-                Summary = "Local enforcement policy failed validation and remains disabled.",
-                PolicyDetail = $"Offline policy engine error: {error}",
             };
         }
 
@@ -96,6 +87,19 @@ public sealed record EnforcementSurfaceState
             status?.HostDenySentCount ?? 0,
             receipts?.Receipts.Count(r =>
                 string.Equals(r.Result, "HOST_DENY_SENT", StringComparison.Ordinal)) ?? 0);
+        var detectorDetail = FormatDetectorDetail(hostHookMode, hostSentCount, hostHookDenyCount);
+
+        if (status?.Error is { Length: > 0 } error)
+        {
+            return Current with
+            {
+                Verification = EnforcementVerification.Cooperative,
+                VerificationLabel = "POLICY INVALID - NOT VERIFIED",
+                Summary = "Local enforcement policy failed validation and remains disabled.",
+                DetectorDetail = detectorDetail,
+                PolicyDetail = $"Offline policy engine error: {error}",
+            };
+        }
 
         if (osVerifiedCount > 0)
         {
@@ -104,6 +108,7 @@ public sealed record EnforcementSurfaceState
                 Verification = EnforcementVerification.OsBoundaryVerified,
                 VerificationLabel = "OS_BOUNDARY_VERIFIED",
                 Summary = $"OS boundary refused direct action with absent side effect ({osVerifiedCount} verified receipt(s)).",
+                DetectorDetail = detectorDetail,
                 PolicyDetail = FormatPolicyDetail(status),
             };
         }
@@ -115,6 +120,7 @@ public sealed record EnforcementSurfaceState
                 Verification = EnforcementVerification.HostDenyVerified,
                 VerificationLabel = "HOST_DENY_VERIFIED (CANARY)",
                 Summary = $"Disposable canary confirmed host hook blocked action with absent side effect ({hostVerifiedCount} verified receipt(s)).",
+                DetectorDetail = detectorDetail,
                 PolicyDetail = FormatPolicyDetail(status),
             };
         }
@@ -126,14 +132,37 @@ public sealed record EnforcementSurfaceState
                 Verification = EnforcementVerification.Cooperative,
                 VerificationLabel = "HOST_DENY_SENT - NOT VERIFIED",
                 Summary = $"Host deny payload was returned ({hostSentCount} receipt(s)), but no side-effect verification canary has passed.",
+                DetectorDetail = detectorDetail,
                 PolicyDetail = FormatPolicyDetail(status),
             };
         }
 
         return Current with
         {
+            DetectorDetail = detectorDetail,
             PolicyDetail = FormatPolicyDetail(status),
         };
+    }
+
+    private static string FormatDetectorDetail(string? hostHookMode, int hostSentCount, int hostHookDenyCount)
+    {
+        var hookSuffix = hostHookDenyCount > 0
+            ? $" ({hostHookDenyCount} recent hook block(s))"
+            : hostSentCount > 0
+                ? $" ({hostSentCount} controller deny receipt(s))"
+                : string.Empty;
+
+        if (string.Equals(hostHookMode, "block", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Blackbox hooks (mode: block): active — compliant agent hooks return a block decision{hookSuffix}; OS-level blocking remains unverified.";
+        }
+
+        if (string.Equals(hostHookMode, "audit", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Blackbox hooks (mode: audit): monitoring only — switch Blackbox to Block below so agent hooks return deny verdicts{hookSuffix}.";
+        }
+
+        return Current.DetectorDetail;
     }
 
     private static string FormatPolicyDetail(EnforcementStatusDto? status)

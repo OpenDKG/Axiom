@@ -84,4 +84,32 @@ public sealed class AgentEvidenceStoreTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void Evidence_exposes_explicit_or_fallback_effective_channel()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"axiom-evidence-{Guid.NewGuid():N}.jsonl");
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            File.WriteAllLines(path,
+            [
+                $"{{\"timestampUtc\":\"{now:O}\",\"framework\":\"claude\",\"eventType\":\"GUARD_BLOCKED\",\"tool\":\"bash\",\"decision\":\"block\",\"guardStatus\":\"blocked\",\"channel\":\"host_deny_verified\"}}",
+                $"{{\"timestampUtc\":\"{now.AddSeconds(1):O}\",\"framework\":\"codex\",\"eventType\":\"GUARD_BLOCKED\",\"tool\":\"bash\",\"decision\":\"block\",\"guardStatus\":\"blocked\"}}",
+                $"{{\"timestampUtc\":\"{now.AddSeconds(2):O}\",\"framework\":\"gemini\",\"eventType\":\"GUARD_ALLOWED\",\"tool\":\"read_file\",\"decision\":\"allowed\",\"guardStatus\":\"allowed\"}}",
+                $"{{\"timestampUtc\":\"{now.AddSeconds(3):O}\",\"framework\":\"cursor\",\"eventType\":\"GUARD_FAILED\",\"tool\":\"bash\",\"decision\":\"\",\"guardStatus\":\"error\"}}",
+            ]);
+
+            var events = new AgentEvidenceStore(path).ReadRecent();
+
+            Assert.Equal("HOST_DENY_VERIFIED", events[0].EffectiveChannel);
+            Assert.Equal("HOST_DENY_SENT", events[1].EffectiveChannel);
+            Assert.Equal("DETECTOR_ONLY", events[2].EffectiveChannel);
+            Assert.Equal("FAILED_OPEN", events[3].EffectiveChannel);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

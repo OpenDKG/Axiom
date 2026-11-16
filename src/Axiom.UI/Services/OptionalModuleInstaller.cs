@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using Axiom.Contracts;
 using Axiom.Contracts.Blackbox;
+using Axiom.Contracts.Modules;
 
 namespace Axiom.UI.Services;
 
@@ -88,6 +89,15 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        var prerequisites = ModulePrerequisites.Probe();
+        var hasNpm = prerequisites.Tools.Any(t => t.Tool == ModuleTool.Npm && t.IsAvailable);
+        if (!hasNpm)
+        {
+            LastError = "DKG prerequisite missing: Node.js/npm is not installed or not on PATH. Install Node.js LTS first.";
+            log?.Invoke(LastError);
+            return false;
+        }
+
         return RunPowerShellScript(BuildDkgScript(), log);
     }
 
@@ -101,6 +111,9 @@ public sealed class OptionalModuleInstaller
             $dkgHome = '{{Escape(DkgHome)}}'
             $dkg = Join-Path $dkgRoot 'node_modules\.bin\dkg.cmd'
             New-Item -ItemType Directory -Force -Path $dkgRoot, $dkgHome | Out-Null
+            if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+              throw 'DKG prerequisite missing: npm is not installed or not on PATH. Install Node.js LTS and retry.'
+            }
             if (-not (Test-Path $dkg)) {
               Write-Host 'Installing @origintrail-official/dkg (local, --ignore-scripts)...' -ForegroundColor Cyan
               npm install --prefix $dkgRoot --ignore-scripts --no-fund --no-audit '{{DkgPackage}}'
@@ -235,17 +248,21 @@ public sealed class OptionalModuleInstaller
               try { Invoke-WebRequest -UseBasicParsing -Uri 'https://blackbox-w.umanitek.ai' -OutFile $installer }
               catch { Write-Warning "Vendor download failed: $($_.Exception.Message)" }
             }
+            if (-not (Test-Path $installer) -or (Get-Item $installer).Length -eq 0) {
+              throw 'Could not download the Umanitek Blackbox installer (https://blackbox-w.umanitek.ai).'
+            }
             $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
             Write-Host "Installer SHA256: $hash" -ForegroundColor Yellow
             if ($hash -ne '{{BlackboxInstallerSha256}}') {
+              Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
               throw "Blackbox installer hash mismatch. Expected {{BlackboxInstallerSha256}}, got $hash. Refusing to run an unpinned installer."
             }
             Write-Host 'Installer hash matches the pinned Axiom digest.' -ForegroundColor Green
             $sys32 = Join-Path $env:SystemRoot 'System32'
             $hasVcRuntime = (Test-Path (Join-Path $sys32 'vcruntime140.dll')) -and (Test-Path (Join-Path $sys32 'msvcp140.dll'))
-            $storeBackend = if ($hasVcRuntime) { 'oxigraph' } else { 'oxigraph-worker' }
+            $storeBackend = if ($hasVcRuntime) { 'oxigraph' } else { 'auto' }
             if (-not $hasVcRuntime) {
-              Write-Warning 'VC++ 2015-2022 redistributable not detected; defaulting Blackbox store backend to embedded oxigraph-worker.'
+              Write-Warning 'VC++ 2015-2022 redistributable not detected; selecting Blackbox store backend auto.'
             } else {
               Write-Host 'Running the official installer with the Oxigraph backend (no Docker).' -ForegroundColor Cyan
             }
@@ -298,6 +315,40 @@ public sealed class OptionalModuleInstaller
               $hermes = Join-Path $dir 'agent-blackbox\venv\Scripts\hermes.exe'
               if (Test-Path $hermes) {
                 & $hermes plugins enable blackbox --no-allow-tool-override
+              }
+
+              # Same compatibility pass as the Avalonia installer: the committed Hermes environment
+              # can be built for a different Python minor than the vendor venv, which makes the
+              # plugin fail with `No module named '_cffi_backend'` (issue #370).
+              try {
+                $deps = @('cryptography', 'cffi', 'psutil', 'fastapi', 'uvicorn', 'ruamel.yaml', 'pyyaml', 'python-dotenv', 'rich', 'aiohttp')
+                $base = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'hermes\tools') -Directory -Filter 'python-*' -ErrorAction SilentlyContinue |
+                  ForEach-Object { Join-Path $_.FullName 'python.exe' } | Where-Object { Test-Path $_ } | Select-Object -First 1
+                if ($base) {
+                  Write-Host 'Ensuring the Hermes runtime has the Blackbox plugin dependencies...' -ForegroundColor Cyan
+                  & $base -m pip install --quiet --no-cache-dir @deps 2>&1 | ForEach-Object { Write-Host $_ }
+                }
+                $facts = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'hermes\installs') -Directory -ErrorAction SilentlyContinue |
+                  ForEach-Object { Join-Path $_.FullName 'facts.json' } | Where-Object { Test-Path $_ } | Select-Object -First 1
+                if ($base -and $facts) {
+                  $committed = (Get-Content $facts -Raw | ConvertFrom-Json).packages.venv.environment
+                  $envSite = if ($committed) { Join-Path $committed 'Lib\site-packages' } else { '' }
+                  if ($envSite -and (Test-Path $envSite)) {
+                    Write-Host 'Ensuring the committed Hermes environment has the plugin dependencies...' -ForegroundColor Cyan
+                    & $base -m pip install --quiet --no-cache-dir --target $envSite @deps 2>&1 | ForEach-Object { Write-Host $_ }
+                  }
+                }
+                $pluginDir = Join-Path $env:LOCALAPPDATA 'hermes\plugins\blackbox'
+                if ((Test-Path $hermes) -and (Test-Path $pluginDir)) {
+                  $doctor = (& $hermes plugins doctor $pluginDir 2>&1 | Out-String)
+                  if ($doctor -match 'ERROR|timed out|failed') {
+                    Write-Warning ("Blackbox plugin still does not load in Hermes; the Axiom guard is unaffected. " + ($doctor -replace '\s+', ' ').Trim())
+                  } else {
+                    Write-Host 'Blackbox plugin loads in Hermes.' -ForegroundColor Green
+                  }
+                }
+              } catch {
+                Write-Warning "Blackbox compatibility repair skipped: $($_.Exception.Message)"
               }
               $agent = Join-Path $dir 'agent-blackbox'
               $launcher = Join-Path $agent 'start-dashboard.py'

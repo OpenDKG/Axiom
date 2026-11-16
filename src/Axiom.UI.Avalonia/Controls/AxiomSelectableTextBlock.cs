@@ -6,7 +6,8 @@ namespace Axiom.UI.Avalonia.Controls;
 
 /// <summary>
 /// Selectable text for read-only pages. Right-clicks are left unhandled so the containing row can
-/// still open its context menu (block, end task, copy path) instead of starting a text selection.
+/// still open its context menu (block, end process/app, copy path) instead of starting a text selection,
+/// and left-clicks inside a ListBoxItem also select the containing row.
 /// </summary>
 public sealed class AxiomSelectableTextBlock : SelectableTextBlock
 {
@@ -17,6 +18,7 @@ public sealed class AxiomSelectableTextBlock : SelectableTextBlock
             return;
         }
 
+        DataListSelection.SelectContainingListItem(this);
         base.OnPointerPressed(e);
     }
 }

@@ -263,6 +263,13 @@ internal static class SetupDefaults
             }
 
             report($"The elevated service installer exited with code {process.ExitCode}.");
+            // The elevated process runs with runas, so its stderr is not ours to read; it writes its
+            // own step log instead, and the reason belongs in the setup log (issue #367).
+            foreach (var line in ServiceInstallLog.Tail(8))
+            {
+                report("  service: " + line);
+            }
+
             return false;
         }
         catch (Win32Exception exception) when (exception.NativeErrorCode == 1223)

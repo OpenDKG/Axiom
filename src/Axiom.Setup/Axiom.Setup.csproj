@@ -28,6 +28,11 @@
     <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\packaging\msix\Assets\Square150x150Logo.png"
+                      LogicalName="Axiom.Setup.Logo.png" />
+  </ItemGroup>
+
   <!--
     Release publishing compresses the desktop/service payload and community feed into a single
     SmallestSize ZIP resource (AxiomPayloadZip). Normal developer builds have no embedded

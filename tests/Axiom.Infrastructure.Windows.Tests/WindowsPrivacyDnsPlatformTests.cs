@@ -87,6 +87,33 @@ public sealed class WindowsPrivacyDnsPlatformTests
         Assert.Equal(restored ? 1 : 0, restores);
     }
 
+    /// <summary>
+    /// Upstream v0.64.0: after pointing the adapter the controller reports
+    /// <c>PrivacyDnsFailSafe.LastError</c>. The seam returns it only from the pointing branch.
+    /// </summary>
+    [Fact]
+    public void Adapter_error_is_returned_only_after_pointing_the_adapter()
+    {
+        var restores = 0;
+        IPrivacyDnsPlatform platform = new WindowsPrivacyDnsPlatform(
+            () => { restores++; return true; },
+            () => true,
+            _ => false,
+            () => "Adapter 'Ethernet' has no valid IPv4 fallback DNS/gateway yet.");
+
+        var pointing = platform.EnsureConfiguredAdapterDns(
+            true,
+            new PrivacyShieldSettings { Enabled = true, Port = 53, AutoPointAdapterDns = true });
+        var restoring = platform.EnsureConfiguredAdapterDns(false, new PrivacyShieldSettings());
+
+        Assert.Equal("Adapter 'Ethernet' has no valid IPv4 fallback DNS/gateway yet.", pointing);
+        Assert.Null(restoring);
+        Assert.Equal(1, restores);
+        Assert.Null(((IPrivacyDnsPlatform)NullPrivacyDnsPlatform.Instance).EnsureConfiguredAdapterDns(
+            true,
+            new PrivacyShieldSettings { Enabled = true, Port = 53, AutoPointAdapterDns = true }));
+    }
+
     /// <summary>Without the LocalSystem probe and the adapter action (tests, tools) nothing is touched.</summary>
     [Fact]
     public void Adapter_dns_persistence_needs_the_service_helpers()

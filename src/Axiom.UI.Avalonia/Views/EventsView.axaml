@@ -49,26 +49,36 @@
           </Grid>
         </Border>
 
-        <Border Grid.Row="1" Padding="16,10" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1"
-                Background="{DynamicResource Axiom.SurfaceAlt}">
-          <WrapPanel Orientation="Horizontal">
-            <Button Content="Inspect event" Command="{Binding InspectEventCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
-            <Button Content="Block outbound" Command="{Binding BlockEventOutboundCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
-            <Button Content="Block inbound" Command="{Binding BlockEventInboundCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
-            <Button Content="End task" Classes="danger" Command="{Binding EndEventTaskCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
-            <controls:AxiomSelectableTextBlock Text="{Binding WriteStatusText}" IsVisible="{Binding !CanWrite}"
-                       FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" Margin="4,0,12,0" />
-            <controls:AxiomSelectableTextBlock Text="{Binding ActionStatusText}"
-                       FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" TextWrapping="Wrap" />
-            <Button Content="Copy details" Command="{Binding CopyEventDetailsCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,0" />
-            <Button Content="Copy path" Command="{Binding CopyEventPathCommand}"
-                    CommandParameter="{Binding SelectedEvent}" Padding="10,4" />
-          </WrapPanel>
+        <Border Grid.Row="1" Padding="16,10" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
+          <StackPanel Spacing="6">
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="Inspect event" Command="{Binding InspectEventCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Block outbound" Command="{Binding BlockEventOutboundCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Block inbound" Command="{Binding BlockEventInboundCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="End process (PID)" Classes="danger" Command="{Binding EndEventTaskCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4"
+                      ToolTip.Tip="End only the specific PID associated with this event." />
+              <Button Content="Copy details" Command="{Binding CopyEventDetailsCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Copy path" Command="{Binding CopyEventPathCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Copy local" Command="{Binding CopyEventLocalCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Copy remote" Command="{Binding CopyEventRemoteCommand}"
+                      CommandParameter="{Binding SelectedEvent}" Padding="10,4" Margin="0,0,8,4" />
+              <Button Content="Copy status" Command="{Binding CopyEventStatusCommand}"
+                      Padding="10,4" Margin="0,0,0,4" />
+            </WrapPanel>
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <controls:AxiomSelectableTextBlock Text="{Binding WriteStatusText}" IsVisible="{Binding !CanWrite}"
+                         FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+              <controls:AxiomSelectableTextBlock Text="{Binding ActionStatusText}"
+                         FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+            </StackPanel>
+          </StackPanel>
         </Border>
 
         <Grid Grid.Row="2">
@@ -122,22 +132,22 @@
                                   Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockEventInboundCommand}"
                                   CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                         <Separator />
-                        <MenuItem Header="End task"
+                        <MenuItem Header="End process (PID)"
                                   Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndEventTaskCommand}"
                                   CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                       </ContextMenu>
                     </Grid.ContextMenu>
-                    <TextBlock Grid.Column="0" Text="{Binding TypeText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                    <TextBlock Grid.Column="1" Text="{Binding AppDisplayName}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="2" Text="{Binding ProcessId}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                    <TextBlock Grid.Column="3" Text="{Binding Protocol}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                    <TextBlock Grid.Column="4" Text="{Binding LocalEndpoint}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="5" Text="{Binding RemoteEndpoint}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="6" Text="{Binding DirectionText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                    <TextBlock Grid.Column="7" Text="{Binding State}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                    <TextBlock Grid.Column="8" Text="{Binding Quality}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <TextBlock Grid.Column="9" Text="{Binding FirstSeenText}" Classes="mono" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <TextBlock Grid.Column="10" Text="{Binding LastSeenText}" Classes="mono" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TypeText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding AppDisplayName}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding ProcessId}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding Protocol}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding LocalEndpoint}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding RemoteEndpoint}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="6" Text="{Binding DirectionText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="7" Text="{Binding State}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="8" Text="{Binding Quality}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="9" Text="{Binding FirstSeenText}" Classes="mono" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="10" Text="{Binding LastSeenText}" Classes="mono" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
                   </Grid>
                 </DataTemplate>
               </ListBox.ItemTemplate>
@@ -203,20 +213,20 @@
                                             Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.BlockEventInboundCommand}"
                                             CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                                   <Separator />
-                                  <MenuItem Header="End task"
+                                  <MenuItem Header="End process (PID)"
                                             Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.EndEventTaskCommand}"
                                             CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
                                 </ContextMenu>
                               </Grid.ContextMenu>
-                              <TextBlock Grid.Column="0" Text="{Binding ProcessId}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                              <TextBlock Grid.Column="1" Text="{Binding Protocol}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                              <TextBlock Grid.Column="2" Text="{Binding LocalEndpoint}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                              <TextBlock Grid.Column="3" Text="{Binding RemoteEndpoint}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
-                              <TextBlock Grid.Column="4" Text="{Binding DirectionText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                              <TextBlock Grid.Column="5" Text="{Binding State}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                              <TextBlock Grid.Column="6" Text="{Binding Quality}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-                              <TextBlock Grid.Column="7" Text="{Binding FirstSeenText}" Classes="mono" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-                              <TextBlock Grid.Column="8" Text="{Binding LastSeenText}" Classes="mono" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+                              <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding ProcessId}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                              <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Protocol}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                              <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding LocalEndpoint}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                              <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding RemoteEndpoint}" Classes="mono" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                              <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding DirectionText}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                              <controls:AxiomSelectableTextBlock Grid.Column="5" Text="{Binding State}" FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                              <controls:AxiomSelectableTextBlock Grid.Column="6" Text="{Binding Quality}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+                              <controls:AxiomSelectableTextBlock Grid.Column="7" Text="{Binding FirstSeenText}" Classes="mono" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+                              <controls:AxiomSelectableTextBlock Grid.Column="8" Text="{Binding LastSeenText}" Classes="mono" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
                             </Grid>
                           </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -228,7 +238,7 @@
             </ItemsControl>
           </ScrollViewer>
 
-          <Border IsVisible="{Binding IsEmpty}" Background="{DynamicResource Axiom.Surface}">
+          <Border IsVisible="{Binding IsEmpty}" Background="Transparent">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520" Spacing="6">
               <controls:AxiomSelectableTextBlock Text="No events in this view." FontSize="15" FontWeight="SemiBold"
                          Foreground="{DynamicResource Axiom.TextPrimary}" HorizontalAlignment="Center" />

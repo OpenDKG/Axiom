@@ -108,4 +108,25 @@ public sealed class EnforcementSurfaceTests
         Assert.Equal("HOST_DENY_SENT", blocked.EffectiveChannel);
         Assert.Equal("DETECTOR_ONLY", allowed.EffectiveChannel);
     }
+
+    [Fact]
+    public void Host_hook_mode_block_and_audit_surface_truthful_detector_details()
+    {
+        var blocking = EnforcementSurfaceState.FromReceiptsAndStatus(
+            status: null,
+            guardAvailable: true,
+            hostHookMode: "block",
+            hostHookDenyCount: 4);
+        var auditing = EnforcementSurfaceState.FromReceiptsAndStatus(
+            status: null,
+            guardAvailable: true,
+            hostHookMode: "audit",
+            hostHookDenyCount: 0);
+
+        Assert.Equal(EnforcementVerification.Cooperative, blocking.Verification);
+        Assert.False(blocking.CanClaimVerifiedBlocking);
+        Assert.Contains("mode: block", blocking.DetectorDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("4 recent hook block", blocking.DetectorDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("mode: audit", auditing.DetectorDetail, StringComparison.OrdinalIgnoreCase);
+    }
 }
