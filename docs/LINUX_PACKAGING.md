@@ -22,8 +22,60 @@ dependencies. The bound `axiom (<< 1000)` matches an old 0.x build of ours and n
   `dpkg --purge axiom` drops the record and nothing else.
 - `.rpm`: `Conflicts: axiom < 1000` only. rpm would run the old package's erase scriptlets after the
   new `%post` and remove the service again, so there is no `Obsoletes`: `dnf remove axiom` first
-  (`/var/lib/axiom` stays), then install `axiom-firewall`. Not tested on Fedora. Paths, the unit name
-`axiomd.service` and the desktop id `com.axiom.firewall` are unchanged.
+  (`/var/lib/axiom` stays), then install `axiom-firewall`. Paths, the unit name `axiomd.service` and the
+  desktop id `com.axiom.firewall` are unchanged.
+
+### Upgrading from the old `axiom` package (supported steps)
+
+Debian/Ubuntu (`.deb`), either of:
+
+```sh
+sudo apt install ./axiom-firewall_<version>_amd64.deb axiom-   # trailing "axiom-" = remove our old package in the same transaction
+sudo dpkg -i ./axiom-firewall_<version>_amd64.deb              # dpkg removes the old build via Conflicts/Replaces
+sudo dpkg --purge axiom                                         # optional, afterwards: drops the old record only
+```
+
+Do **not** run a plain `sudo apt install ./axiom-firewall_<version>_amd64.deb` on a machine where Ubuntu's
+universe (or Debian main) is enabled and our old `axiom` 0.x is installed: apt satisfies `Conflicts: axiom (<< 1000)`
+by *upgrading* `axiom` to the archive's unrelated computer algebra system `20170501` (plus `axiom-databases`)
+instead of removing it. The firewall still ends up working and `/var/lib/axiom` is kept, but the user is left with
+a CAS they never asked for (remove it with `sudo apt purge axiom axiom-databases`; that does not touch Axiom data).
+No control field can prevent this without also forbidding the archive package next to ours, which is why the
+supported commands above name the removal explicitly.
+
+Fedora (`.rpm`):
+
+```sh
+sudo dnf remove axiom                                            # old build: stops and unregisters axiomd, keeps /var/lib/axiom
+sudo dnf install ./axiom-firewall-<version>-1.x86_64.rpm         # unsigned: dnf warns "skipped OpenPGP checks", no flag needed
+```
+
+Skipping the remove step is refused cleanly and changes nothing (`dnf install` exits 1 with
+`installed package axiom-0.17.0-1.x86_64 conflicts with axiom < 1000 provided by axiom-firewall-…`; `rpm -U
+--nosignature` exits 1 with `Failed dependencies: axiom < 1000 conflicts with axiom-firewall-…`; the old daemon keeps
+running). Fedora's repositories have no package named `axiom` (`dnf info axiom`: "No matches found").
+
+What carries over (both formats): the rules, the protection state and the Privacy Shield settings in
+`/var/lib/axiom` (root 0700). Per-user desktop settings under `~/.local/share/Axiom` are not touched by any package step.
+
+### Tested (author-run on project machines, not CI)
+
+Packages built from `buba/linux-main` `1e76851` (upstream main `25bfcc1`, v0.64.0): `axiom-firewall_0.64.0_amd64.deb`
+sha256 `54e3d6b3…d2c7`, `axiom-firewall-0.64.0-1.x86_64.rpm` sha256 `537fad9f…72d2`. Old packages: `axiom_0.17.0`
+.deb and `axiom-0.17.0-1.x86_64.rpm`, both built from `5159056` (the last builds under the old name).
+
+| Platform | Scenario | Result |
+|---|---|---|
+| Ubuntu 24.04.5 minimal cloud image (kernel 6.8, no NetworkManager, no bpftool) | archive `axiom` 20170501-12build3 (universe) installed first, then `apt install ./axiom-firewall…deb` | apt installs ours and removes nothing; shared paths are only the directories `/usr`, `/usr/share`, `/usr/share/doc`; `dpkg -V axiom` identical before and after (only the two man pages the minimal image never unpacks); sha256 of the archive packages' `postinst`/`postrm` unchanged after our install and after `apt purge axiom-firewall`; `axiom.postrm` has none of our marker lines, so the postinst leaves it alone; `axiomd` active; `--doctor` 12 PASS, 1 WARN (bpftool not installed on this image, nftables-only by design) |
+| same, fresh disk | old `axiom` 0.17 + a block rule + protection on + Privacy Shield settings (disabled, profile `strict`, one blocked domain), then `apt install ./…deb axiom-` | old package removed, postrm disarmed, `axiomd` active; rule, protection state and Privacy Shield settings read back unchanged; `dpkg --purge axiom` keeps every file in `/var/lib/axiom`; doctor as above |
+| same, fresh disk | same, with `dpkg -i ./…deb` | same result (dpkg: "will remove axiom in favour of axiom-firewall") |
+| same, fresh disk | same, with a plain `apt install ./…deb` | apt upgrades `axiom` 0.17 → archive CAS 20170501 (see above); data, rule and settings kept, `axiomd` active; CAS left installed |
+| Fedora 45 Cloud (kernel 7.2.11, btrfs, SELinux Enforcing, firewalld) | clean install, `dnf install ./…rpm` | bpftool pulled in as weak dep; `axiomd` active; doctor all PASS, 4 programs; canary (curl/python, IPv4/IPv6): blocked 10/10, after removing the python rule python 10/10 through and curl still blocked; restart and SIGKILL keep 4 programs and the same results; 0 AVCs; `dnf remove axiom-firewall` leaves no unit and 0 programs |
+| same, clean snapshot | old `axiom` 0.17 rpm + the same rule and settings; install without removing; then `dnf remove axiom` + `dnf install ./…rpm` | without removing: refused (above), nothing changed; after the documented steps: rule, protection state and Privacy Shield settings preserved, the rule enforces again (`curl https://1.1.1.1` blocked), `axiomd` active, doctor all PASS (btrfs subvolume key, 4 programs), 0 AVCs |
+
+Not tested: Debian proper, Ubuntu desktop images with universe *and* our old package (the minimal image has universe
+enabled, which is what triggers the plain-apt case), RHEL/Alma/openSUSE, upgrades from 0.x builds other than 0.17,
+and installing the archive `axiom` *after* `axiom-firewall` (the reverse order of the coexistence row).
 
 ## 1. Build
 
