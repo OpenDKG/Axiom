@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.71.0
+
+- **Guard: cloud/IaC and chat-app secret stores block.**
+  - Batch 11 on 0.70 hooks allowed reading `terraform.tfstate`, `~/.terraformrc`, `~/.pulumi/credentials.json`, `~/.config/gh/hosts.yml`, Slack `tokens.json`, Discord local storage and VS Code `state.vscdb` (issue #397).
+  - `_sensitive_store` names those stores; the Linux-style `gh/hosts.yml` spelling is covered next to the Windows one.
+  - Re-verified 10/10; batches 1-10 stay clean. Trade-off documented: `terraform.tfstate` and `state.vscdb` are read by legitimate tooling but routinely hold credentials, so agent reads block by default.
+
 ## What's in 0.70.0
 
 - **Guard: DPAPI stores, PFX export, autologon password and unattend files block.**

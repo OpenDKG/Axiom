@@ -81,6 +81,26 @@ public sealed class AgentCommandGuardTests
     }
 
     [Fact]
+    public void Guard_blocks_cloud_iac_and_chat_app_secret_stores()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        foreach (var marker in new[]
+                 {
+                     "terraform.tfstate",
+                     ".terraformrc",
+                     "\\\\.pulumi",
+                     "gh\\\\hosts.yml",
+                     "slack\\\\tokens.json",
+                     "\\\\discord\\\\local storage",
+                     "state.vscdb",
+                 })
+        {
+            Assert.Contains(marker, helpers, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void Guard_blocks_anti_forensics_and_wmi_persistence()
     {
         var helpers = AgentCommandGuard.PythonHelpers;
