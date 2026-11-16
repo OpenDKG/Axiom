@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              x:Class="Axiom.UI.Avalonia.Views.MiniHomeView">
-  <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="16,14,16,12" RowSpacing="10">
+  <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" Margin="16,14,16,12" RowSpacing="10">
 
     <!-- Quick protection toggles -->
     <Grid Grid.Row="0" ColumnDefinitions="*,8,*,8,Auto">
@@ -49,7 +49,7 @@
             <TextBlock Text="NETWORK OVERVIEW" Classes="kpi-label" VerticalAlignment="Center" />
             <Button Grid.Column="1" Content="Open" Command="{Binding OpenFirewallCommand}" Padding="8,2" FontSize="10" />
           </Grid>
-          <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="4">
+          <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
             <TextBlock Text="Active sockets" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
             <TextBlock Grid.Column="1" Text="{Binding Overview.ConnectionsText}" FontSize="13" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" />
@@ -59,12 +59,9 @@
             <TextBlock Grid.Row="2" Text="Loopback" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
             <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Overview.LoopbackText}" FontSize="13" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" />
-            <TextBlock Grid.Row="3" Text="Download" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Row="3" Text="Throughput" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
             <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Overview.DownloadText}" FontSize="13" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.Download}" />
-            <TextBlock Grid.Row="4" Text="Upload" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Overview.UploadText}" FontSize="13" FontWeight="SemiBold"
-                       Foreground="{DynamicResource Axiom.Upload}" />
           </Grid>
         </StackPanel>
       </Border>
@@ -96,11 +93,19 @@
       </Border>
     </Grid>
 
-    <!-- Small system-wide throughput graph -->
-    <Border Grid.Row="2" Classes="card" Padding="10">
-      <StackPanel Spacing="4">
-        <TextBlock Text="SYSTEM THROUGHPUT" Classes="kpi-label" />
-        <controls:TrafficChartControl Height="86"
+    <!-- System-wide throughput with current rates -->
+    <Border Grid.Row="2" Classes="card" Padding="12">
+      <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="SYSTEM-WIDE THROUGHPUT" Classes="kpi-label" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14">
+            <TextBlock Text="{Binding Overview.DownloadText, StringFormat=Down: {0}}" FontSize="11" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.Download}" />
+            <TextBlock Text="{Binding Overview.UploadText, StringFormat=Up: {0}}" FontSize="11" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.Upload}" />
+          </StackPanel>
+        </Grid>
+        <controls:TrafficChartControl Height="120"
                                       UploadSeries="{Binding Overview.UploadSeries}"
                                       DownloadSeries="{Binding Overview.DownloadSeries}"
                                       GridLineBrush="{DynamicResource Axiom.GridLine}"
@@ -110,8 +115,36 @@
       </StackPanel>
     </Border>
 
+    <!-- Latest agent actions -->
+    <Border Grid.Row="3" Classes="card" Padding="12">
+      <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="AGENT ACTIVITY" Classes="kpi-label" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Content="Open" Command="{Binding OpenAgentsCommand}" Padding="8,2" FontSize="10" />
+        </Grid>
+        <ItemsControl ItemsSource="{Binding RecentAgentActivity}" IsVisible="{Binding HasAgentActivity}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid ColumnDefinitions="64,90,*,Auto" ColumnSpacing="8" Margin="0,1">
+                <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" FontSize="10.5"
+                                                   Foreground="{DynamicResource Axiom.TextMuted}" />
+                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding ActionSummary}" FontSize="10.5"
+                                                   Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding SecurityOutcome}" FontSize="9.5"
+                                                   FontWeight="Bold" Foreground="{DynamicResource Axiom.TextMuted}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="No agent actions recorded yet." IsVisible="{Binding !HasAgentActivity}"
+                   FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+      </StackPanel>
+    </Border>
+
     <!-- Bottom bar: Axiom logo, Donate, GitHub, Settings -->
-    <Border Grid.Row="3" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
+    <Border Grid.Row="4" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
       <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png" Width="26" Height="26" Stretch="Uniform"

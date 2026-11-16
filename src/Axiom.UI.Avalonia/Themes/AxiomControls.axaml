@@ -463,19 +463,19 @@
     <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
   </Style>
   <Style Selector="Grid.glass Button.primary">
-    <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.AccentStrong}" />
-    <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.Success}" />
   </Style>
   <Style Selector="Grid.glass Button.primary:pointerover /template/ ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Axiom.AccentStrong}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.AccentStrong}" />
-    <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.Success}" />
     <Setter Property="Opacity" Value="0.94" />
   </Style>
   <Style Selector="Grid.glass Button.primary:pressed /template/ ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
-    <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.Success}" />
     <Setter Property="Opacity" Value="0.82" />
   </Style>
   <Style Selector="Grid.glass Button.primary:disabled">
