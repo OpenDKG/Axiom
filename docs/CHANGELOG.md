@@ -1,3 +1,7 @@
+## What's in 0.89.0
+
+- **Partner logos are readable.** OriginTrail 124x28, Blackbox 118x22 and Umanitek 108x26 in the module cards (were 92x16-20).
+
 ## What's in 0.88.0
 
 - **Footer link, ghost logo buttons, Mini height, new icons.**
