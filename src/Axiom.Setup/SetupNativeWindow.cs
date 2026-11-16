@@ -1297,7 +1297,7 @@ internal sealed class SetupNativeWindow : IDisposable
         }
     }
 
-    private bool EnsureAxiomClosedForSetup(string actionLabel)
+    private bool EnsureAxiomClosedForSetup(string actionLabel, bool autoClose = false)
     {
         var running = Process.GetProcessesByName("Axiom.Desktop")
             .Concat(Process.GetProcessesByName("Netpetra.Desktop"))
@@ -1309,14 +1309,17 @@ internal sealed class SetupNativeWindow : IDisposable
 
         try
         {
-            int ans = NativeMethods.MessageBox(
-                _hwnd,
-                $"Axiom is currently running.\n\nClose Axiom now so Setup can {actionLabel}?",
-                "Axiom Setup",
-                MbYesNo | MbIconQuestion);
-            if (ans != IdYes)
+            if (!autoClose)
             {
-                return false;
+                int ans = NativeMethods.MessageBox(
+                    _hwnd,
+                    $"Axiom is currently running.\n\nClose Axiom now so Setup can {actionLabel}?",
+                    "Axiom Setup",
+                    MbYesNo | MbIconQuestion);
+                if (ans != IdYes)
+                {
+                    return false;
+                }
             }
 
             foreach (var proc in running)
@@ -1357,7 +1360,10 @@ internal sealed class SetupNativeWindow : IDisposable
             return;
         }
 
-        if (!EnsureAxiomClosedForSetup(isRepair ? "repair" : _existing.Exists ? "update" : "install"))
+        var isUpdate = !isRepair && _existing.Exists;
+        if (!EnsureAxiomClosedForSetup(
+            isRepair ? "repair" : isUpdate ? "update" : "install",
+            autoClose: true))
         {
             return;
         }
@@ -1374,7 +1380,7 @@ internal sealed class SetupNativeWindow : IDisposable
         var options = _initialOptions with
         {
             CreateShortcut = _createShortcut,
-            StartAfterInstall = _startAfterInstall,
+            StartAfterInstall = !isRepair || _startAfterInstall,
             CompleteInstallation = _completeMode,
         };
 

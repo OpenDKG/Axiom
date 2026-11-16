@@ -10,6 +10,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Win32;
 using Axiom.Contracts.Blackbox;
+using Axiom.Contracts.Enforcement;
 using Axiom.Presentation;
 
 namespace Axiom.Setup;
@@ -101,10 +102,9 @@ internal static class SetupInstaller
 
         try
         {
-            if (Process.GetProcessesByName("Axiom.Desktop").Length > 0 ||
-                Process.GetProcessesByName("Netpetra.Desktop").Length > 0)
+            if (!StopRunningDesktopProcesses(Report))
             {
-                return new SetupInstallResult(false, "Axiom is running. Close it before installing.", log);
+                return new SetupInstallResult(false, "Axiom is running and could not be closed automatically.", log);
             }
 
             var tempDir = Path.Combine(Path.GetTempPath(), "axiom-setup-" + Guid.NewGuid().ToString("N"));
@@ -324,6 +324,10 @@ internal static class SetupInstaller
                     }
 
                     Report("Installing agent hooks after the Blackbox runtime is prepared.");
+                    var enforcementPolicy = EnforcementPolicyProvisioner.EnsureDefault();
+                    Report(enforcementPolicy is null
+                        ? "OS enforcement policy: an existing policy was kept (the service provisions one when absent)."
+                        : "OS enforcement policy: default written so the service can enforce protected credential stores.");
                     var protection = new UserStateProtection();
                     var protectedBefore = await Task.Run(
                         () => protection.Capture(),
@@ -519,6 +523,51 @@ internal static class SetupInstaller
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
             return new SetupInstallResult(false, "Installation failed: " + exception.Message, log);
+        }
+    }
+
+    private static bool StopRunningDesktopProcesses(Action<string> report)
+    {
+        var running = Process.GetProcessesByName("Axiom.Desktop")
+            .Concat(Process.GetProcessesByName("Netpetra.Desktop"))
+            .ToArray();
+        if (running.Length == 0)
+        {
+            return true;
+        }
+
+        report($"Closing {running.Length} running Axiom desktop process(es)...");
+        try
+        {
+            foreach (var proc in running)
+            {
+                try
+                {
+                    if (!proc.HasExited)
+                    {
+                        _ = proc.CloseMainWindow();
+                        if (!proc.WaitForExit(2500))
+                        {
+                            proc.Kill(entireProcessTree: true);
+                            _ = proc.WaitForExit(3000);
+                        }
+                    }
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+                {
+                }
+            }
+
+            Thread.Sleep(250);
+            return Process.GetProcessesByName("Axiom.Desktop").Length == 0 &&
+                   Process.GetProcessesByName("Netpetra.Desktop").Length == 0;
+        }
+        finally
+        {
+            foreach (var proc in running)
+            {
+                proc.Dispose();
+            }
         }
     }
 

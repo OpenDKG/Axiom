@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Axiom.Contracts.Enforcement;
 
 namespace Axiom.Presentation;
 
@@ -149,23 +150,13 @@ public static class ProtectionProvisioner
 
         var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         BlackboxWordlistNormalizer.NormalizeAll(root, userProfile);
+        EnforcementPolicyProvisioner.EnsureDefault(userProfile: userProfile);
 
         var agentRoot = Path.Combine(root, "Axiom", "modules", "blackbox", "agent-blackbox");
         var runner = CreateBridgeRunner(agentRoot);
 
-        var rulesPresent = false;
-        try
-        {
-            var rulesetPath = Path.Combine(root, "hermes", "blackbox", "ruleset.json");
-            if (File.Exists(rulesetPath))
-            {
-                rulesPresent = HasVerifiedRules(File.ReadAllText(rulesetPath));
-            }
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            rulesPresent = false;
-        }
+        var rulesetPath = Path.Combine(root, "hermes", "blackbox", "ruleset.json");
+        var rulesPresent = BlackboxLocalState.HasVerifiedRulesFile(rulesetPath);
 
         var result = Provision(
             root,

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Text.Json;
+using Axiom.Contracts.Enforcement;
 using Axiom.Contracts.Ipc;
 using Axiom.Core.Enforcement;
 
@@ -19,6 +20,7 @@ public sealed class EnforcementController
     private const int MaximumRememberedRequests = 1024;
 
     private readonly string _policyPath;
+    private readonly bool _provisionDefaultIfMissing;
     private readonly object _gate = new();
     private readonly Dictionary<string, string> _fingerprints = new(StringComparer.Ordinal);
     private readonly Queue<string> _fingerprintOrder = new();
@@ -27,14 +29,15 @@ public sealed class EnforcementController
     private CachedPolicy? _cached;
 
     public EnforcementController()
-        : this(DefaultPolicyPath())
+        : this(DefaultPolicyPath(), provisionDefaultIfMissing: true)
     {
     }
 
-    public EnforcementController(string policyPath)
+    public EnforcementController(string policyPath, bool provisionDefaultIfMissing = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyPath);
         _policyPath = Path.GetFullPath(policyPath);
+        _provisionDefaultIfMissing = provisionDefaultIfMissing;
     }
 
     public string PolicyPath => _policyPath;
@@ -45,6 +48,13 @@ public sealed class EnforcementController
     /// <summary>Current policy state and receipt summary. Missing file means disabled, not an error.</summary>
     public EnforcementStatusDto GetStatus()
     {
+        if (_provisionDefaultIfMissing)
+        {
+            // The service runs as LocalSystem, so it can write the machine-scope policy even when
+            // the desktop or installer could not. Provision once, then report the real state.
+            EnforcementPolicyProvisioner.EnsureMachineDefault(policyPath: _policyPath);
+        }
+
         var policy = LoadPolicy();
         var summary = _journal.Summarize();
 
@@ -267,9 +277,9 @@ public sealed class EnforcementController
         return Task.FromResult(verdictDto with { ReceiptResult = recordedReceipt.ResultToken });
     }
 
-    /// <summary>Default location of the opt-in policy file.</summary>
+    /// <summary>Default location of the opt-in policy file (machine scope: the service is LocalSystem).</summary>
     public static string DefaultPolicyPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "Axiom",
         "enforcement-policy.json");
 

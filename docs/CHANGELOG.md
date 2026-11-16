@@ -1,6 +1,61 @@
+## What's in 0.80.0
+
+- **SESSIONS card counts real sessions.**
+  - It counted `session_start`/`session_end` audit rows, which hosts often never emit, so it read 0 over 2,753 events with 333 recorded sessions.
+  - `AgentActivityMetrics.CountSessions` counts distinct non-empty session ids; the old category count is only a fallback.
+  - VM check: 125 distinct ids in the first 1,000 audit rows, matching the local-activity list.
+
+## What's in 0.79.0
+
+- **Blocked actions are visible in the Simple view too.**
+  - `SimpleHomeView` gains a compact *Blocked actions by agent* card (top five agents, **Details** opens the Agents dashboard), bound to the same `AgentBlockSummary` as the Advanced chart.
+  - `AgentBlockSummary` now reports `HarnessCount`/`ReasonCount`, so the subtitle shows the real 11 agents instead of the number of drawn bars.
+  - The Advanced KPI is labelled **BLOCKED FINDINGS** and the chart says *blocked tool calls* so audit findings and guard evidence are not conflated.
+  - `BlockedActionsChart` gained `MaxRows` for compact layouts.
+
+## What's in 0.78.0
+
+- **Setup: automatic desktop shutdown & relaunch for every Install, Update, and Repair.**
+  - `SetupNativeWindow` and `SetupInstaller.InstallAsync` now automatically close any running `Axiom.Desktop` / `Netpetra.Desktop` process cleanly without prompting or aborting with `"Axiom is running"`, complete the install or in-place update, launch the installed Axiom build (`StartAfterInstall = true`), and exit Setup automatically.
+
+## What's in 0.77.0
+
+- **Blocked actions by agent are visible in the app.**
+  - The vendor dashboard graph aggregates unique threat rules, so 3,189 blocked calls still drew three local nodes.
+  - `AgentBlockSummaryBuilder` counts `GUARD_BLOCKED` decisions per harness and per reason from `agent-evidence.jsonl`; `BlockedActionsChart` draws them natively in the Agents dashboard with totals for blocked, allowed and failed events.
+  - Lab evidence: 3,189 blocked of 4,044 events across 11 harnesses (claude 844, opencode 335, copilot 238, codex 237, cursor 225, antigravity 225, gemini 223, zcode 223, deepseek 223, cline 208, windsurf 208).
+
 # Axiom â€” historical change log
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
+
+## What's in 0.76.0
+
+- **Blackbox local ruleset state streams and caches instead of reloading multi-hundred-MB JSON every timer tick.**
+  - `BlackboxLocalState` (`Axiom.Presentation` and `Axiom.UI.Services`) previously called `File.ReadAllText` + `JsonNode.Parse` on `ruleset.json` during every 8s / 60s `Agents` timer refresh, `Security` continuity checks, and startup provisioning (`ProtectionProvisioner.ProvisionAtStartup`).
+  - Replaced DOM parsing of `ruleset.json` with a single-pass streaming `Utf8JsonReader` over a shared `64 KB` buffer (`ArrayPool<byte>`), bounded graph sampling (`MaxGraphThreatsSample = 256`, `MaxCategoryArraySample = 80`, `MaxCategoryMapSample = 12`), and a file-fingerprint `(Length, LastWriteTimeUtc.Ticks)` cache so unchanged rulesets incur zero re-reads or allocations.
+- **Simple View now surfaces AI Agent Guard and live AI Agent Activity alongside Network & Privacy.**
+  - Added an **AI AGENT GUARD** summary card and an **AI agent activity right now** feed to `SimpleHomeView` / `SimpleHomePageViewModel`, activated cleanly via `(Agents as IActivatablePage).Activate()` with one-click navigation into Advanced `Agents`.
+- **Setup Update automatically closes running Axiom, applies the update, relaunches Axiom, and exits Setup.**
+  - `SetupNativeWindow` and `SetupInstaller.InstallAsync` no longer block or prompt with `"Axiom is running"` during in-place updates; Setup closes `Axiom.Desktop` cleanly, completes the upgrade, launches the updated Axiom build, and closes itself automatically.
+- **Enforcement controller: only the parameterless service constructor auto-provisions default machine policy.**
+  - Fixes `EnforcementControllerTests.Missing_policy_file_is_disabled_and_returns_unavailable` broken in `0.75.0` when `GetStatus()` created missing test policy files.
+
+## What's in 0.75.0
+
+- **The service provisions its own enforcement policy.**
+  - 0.74.0's installer wrote the policy unelevated, so the ProgramData write failed and `enforcement.status` still reported `enabled=false` (issue #403).
+  - `EnforcementPolicyProvisioner.EnsureMachineDefault` discovers local profiles with a `.ssh` store or an Axiom install and writes one machine-scope policy from the LocalSystem service on the first status request.
+  - Existing operator policies are never overwritten; the scope list is capped so rules stay under the 512 bound.
+  - Verified after install: `enabled=true` with agents, rules and protected resources, and `%ProgramData%\Axiom\enforcement-policy.json` present.
+
+## What's in 0.74.0
+
+- **Enforcement policy is provisioned instead of missing.**
+  - `%ProgramData%\Axiom\enforcement-policy.json` was never written, so `enforcement.status` reported `enabled=false` with 0 agents, 0 rules and 0 protected resources (issue #403).
+  - New `EnforcementPolicyProvisioner` writes a conservative default: eleven harnesses in `protectSelectedOperations`, blocking reads/writes/deletes under `.ssh`, `.aws`, `.kube`, `.gnupg`, `.git-credentials`, `.npmrc`, `Microsoft\Credentials` and the Chrome profile.
+  - Installer writes it once (elevated) and never overwrites an operator policy; the service path moved to machine scope because it runs as LocalSystem.
+  - Verified after install: `enabled=true`, 11 agents, 88 rules, 8 protected resources.
 
 ## What's in 0.73.0
 
