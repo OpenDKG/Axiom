@@ -979,7 +979,7 @@ runtime claim.
 | Desktop Linux tests | **51/51** |
 | Locked restore | `dotnet restore Axiom.Portable.slnx --locked-mode` → rc 0 after the lock refresh; `Axiom.sln --locked-mode` still reports NU1004 for RID graphs on this Linux host (pre-existing, recorded in the evidence log) |
 | Lintian | guest Ubuntu 24.04 lintian 2.117.0ubuntu1.6 on the exact `.deb`: **0 E / 0 W**, rc 0; only the known duplicate-hint stderr note, no tag |
-| Guest upgrade | approved `0.59.0+linux.5` + `protection.enable` + applied `/usr/bin/curl` rule + dark theme → `dpkg -i` `0.73.0+linux.6`: rc 0, unit active, `/var/lib/axiom` rule count 1 and state `applied`, nft table still carries the rule id, theme preserved, `/opt` absent; quick `--doctor` 13 PASS, 0 FAIL |
+| Guest upgrade | approved `0.59.0+linux.5` + `protection.enable` + applied `/usr/bin/curl` rule + dark theme → `dpkg -i` `0.73.0+linux.6`: rc 0, unit active, `/var/lib/axiom` rule count 1 with the rule still connect-time proven, nft table still carries the rule id, theme preserved, `/opt` absent; `--doctor` 13 PASS, 0 FAIL |
 | Guest fresh install | `dpkg -i` rc 0, unit active, 13 PASS, 0 FAIL; canary unscoped `--count 10`: curl/python × IPv4/IPv6 `slipped 0/10 blocked 10/10`, all rules `connectTimeBlockingProven=True` |
 | Guest remove/purge | remove rc 0, unit inactive, `/usr/libexec/axiom` and `/usr/lib/axiom-firewall` gone; purge rc 0, package absent, `/var/lib/axiom`, `/sys/fs/bpf/axiom` and nft tables gone |
 | Host/VM hygiene | disposable run overlay only; baseline `ee941cef…` hash checked before the run; VM powered off after; no host DNS/firewall/package changes |
