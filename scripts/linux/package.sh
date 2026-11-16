@@ -128,7 +128,8 @@ log "staging $STAGE"
 rm -rf "$STAGE"
 PAYLOAD="$STAGE/usr/lib/axiom-firewall"
 mkdir -p "$PAYLOAD" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/usr/share/polkit-1/actions" \
-  "$STAGE/usr/share/doc/axiom-firewall" "$STAGE/usr/share/icons/hicolor" "$STAGE/usr/share/lintian/overrides"
+  "$STAGE/usr/share/doc/axiom-firewall" "$STAGE/usr/share/icons/hicolor" "$STAGE/usr/share/lintian/overrides" \
+  "$STAGE/usr/share/man/man1"
 cp -a "$APP/." "$PAYLOAD/"
 # Shared by prerm/%preun: verified BPF pin cleanup (see the file's header). Executable because a
 # maintainer script may run it directly; prerm sources it.
@@ -159,6 +160,7 @@ install -m 0644 "$ROOT/README.md" "$STAGE/usr/share/doc/axiom-firewall/README.md
 printf 'axiom-firewall (%s) unstable; urgency=medium\n\n  * Local Linux build; not an upstream release.\n\n -- The Axiom contributors <51213010+a-51-50@users.noreply.github.com>  %s\n' \
   "$VERSION" "$(LC_ALL=C date -R)" | gzip -9n >"$STAGE/usr/share/doc/axiom-firewall/changelog.gz"
 install -m 0644 "$PKG/debian/lintian-overrides" "$STAGE/usr/share/lintian/overrides/axiom-firewall"
+gzip -9n <"$PKG/man/axiom-firewall.1" >"$STAGE/usr/share/man/man1/axiom-firewall.1.gz"
 
 # Modes: nothing group/world-writable, directories 0755, files 0644, executables 0755, shared
 # libraries 0644 (Debian Policy 8.1). The daemon tree is audited again by --install-service after

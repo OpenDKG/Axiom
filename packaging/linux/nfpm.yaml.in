@@ -72,6 +72,8 @@ contents:
   - src: "@STAGE@/usr/share/doc/axiom-firewall"
     dst: /usr/share/doc/axiom-firewall
     type: tree
+  - src: "@STAGE@/usr/share/man/man1/axiom-firewall.1.gz"
+    dst: /usr/share/man/man1/axiom-firewall.1.gz
 scripts:
   postinstall: "@PKG@/rpm/postinstall"
   preremove: "@PKG@/rpm/preremove"

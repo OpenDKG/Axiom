@@ -14,8 +14,8 @@ Description: Network and AI agent security (desktop app + axiomd service)
  Axiom is a free, open-source per-application firewall with connection
  monitoring, history, Privacy Shield DNS filtering and AI-agent awareness.
  .
- This package installs the desktop application under /usr/lib/axiom-firewall,
- launched through /usr/bin/axiom-firewall, and registers the privileged background
- service axiomd as a systemd unit (root-owned image in /usr/libexec/axiom, data
- in /var/lib/axiom). Rules are enforced with nftables (socket cgroupv2) and, when
+ This package installs the desktop application under /usr/lib/axiom-firewall
+ and a launcher in /usr/bin, plus the privileged background service axiomd as
+ a systemd unit (root-owned image in /usr/libexec/axiom, data in
+ /var/lib/axiom). Rules are enforced with nftables (socket cgroupv2) and, when
  bpftool and a BTF-enabled kernel are available, a connect-time eBPF layer.

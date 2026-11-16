@@ -90,6 +90,7 @@ Proof: `ls build/linux/Axiom/axiomd/axiomd` after step 3, and the same file unde
 | `/usr/share/icons/hicolor/{16,24,32,48,64,128,256,512}x…/apps/com.axiom.firewall.png` | from `src/Axiom.UI.Avalonia/Assets/axiom-icon.png` (1024², committed resizes under `packaging/linux/icons`) | 0644 |
 | `/usr/share/polkit-1/actions/com.axiom.firewall.policy` | action `com.axiom.firewall.install`, `exec.path=/usr/libexec/axiom/axiomd` | 0644 |
 | `/usr/share/doc/axiom-firewall/{copyright,README.md,LINUX_PACKAGING.md,changelog.gz}` | DEP-5 copyright (GPL-3.0-or-later) | 0644 |
+| `/usr/share/man/man1/axiom-firewall.1.gz` | manual page for the launcher | 0644 |
 
 Created by `axiomd --install-service` at configure time (not package-owned files, so dpkg never
 overwrites or diffs them): `/usr/libexec/axiom` (root-owned read-only copy of `/usr/lib/axiom-firewall/axiomd`,
