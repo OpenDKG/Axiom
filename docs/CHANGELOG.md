@@ -1,3 +1,10 @@
+## What's in 0.80.0
+
+- **SESSIONS card counts real sessions.**
+  - It counted `session_start`/`session_end` audit rows, which hosts often never emit, so it read 0 over 2,753 events with 333 recorded sessions.
+  - `AgentActivityMetrics.CountSessions` counts distinct non-empty session ids; the old category count is only a fallback.
+  - VM check: 125 distinct ids in the first 1,000 audit rows, matching the local-activity list.
+
 ## What's in 0.79.0
 
 - **Blocked actions are visible in the Simple view too.**

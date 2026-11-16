@@ -1764,7 +1764,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private void UpdateActivitySummary()
     {
-        var sessions = _allActivity.Count(entry => entry.Category == "sessions");
+        // Distinct session ids, not session-category rows: many hosts emit no session_start,
+        // so counting those rows showed 0 while hundreds of sessions were recorded.
+        var sessions = AgentActivityMetrics.CountSessions(_allActivity);
+        if (sessions == 0)
+        {
+            sessions = _allActivity.Count(entry => entry.Category == "sessions");
+        }
         var apiCalls = _allActivity.Count(entry => entry.Category == "api");
         var toolCalls = _allActivity.Count(entry => entry.Category == "tools");
         var installs = _allActivity.Count(entry => entry.Category == "installs");
