@@ -137,15 +137,38 @@ public sealed class MaintainerScriptCleanupTests
     }
 
     [Fact]
-    public void Deb_remove_with_a_confirmed_stop_removes_a_leftover_enablement_symlink()
+    public void Deb_remove_with_a_confirmed_stop_removes_only_axiom_enablement_symlinks()
     {
         using var sandbox = new Sandbox();
         sandbox.CreateEnablementLink();
+        sandbox.CreateUnitTreeSymlink("graphical.target.requires", "axiomd.service", outsideTarget: true);
+        sandbox.CreateUnitTreeSymlink("custom.target.wants", "sshd.service");
+        sandbox.CreateUnitTreeSymlink("arbitrarydir", "axiomd.service");
+        sandbox.CreateUnitTreeSymlink(".", "sshd.service");
 
         var result = sandbox.Run(DebPostrm, "remove", disableExit: 0, state: "inactive", activeExit: 3);
 
         Assert.Equal(0, result.ExitCode);
         Assert.False(sandbox.Exists("etc/systemd/system/multi-user.target.wants/axiomd.service"));
+        Assert.False(sandbox.Exists("etc/systemd/system/graphical.target.requires/axiomd.service"));
+        Assert.True(sandbox.Exists(Sandbox.OutsideTarget));
+        Assert.True(sandbox.IsSymlink("etc/systemd/system/arbitrarydir/axiomd.service"));
+        Assert.True(sandbox.IsSymlink("etc/systemd/system/custom.target.wants/sshd.service"));
+        Assert.True(sandbox.IsSymlink("etc/systemd/system/sshd.service"));
+    }
+
+    [Fact]
+    public void Deb_remove_preserves_a_regular_file_or_directory_named_axiomd_service()
+    {
+        using var sandbox = new Sandbox();
+        sandbox.CreateUnitFile("multi-user.target.wants/axiomd.service");
+        sandbox.CreateUnitDirectory("graphical.target.requires/axiomd.service");
+
+        var result = sandbox.Run(DebPostrm, "remove", disableExit: 0, state: "inactive", activeExit: 3);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(sandbox.Exists("etc/systemd/system/multi-user.target.wants/axiomd.service"));
+        Assert.True(sandbox.Exists("etc/systemd/system/graphical.target.requires/axiomd.service"));
     }
 
     [Fact]
@@ -245,6 +268,7 @@ public sealed class MaintainerScriptCleanupTests
         public const string Data = "var/lib/axiom";
         public const string Log = "var/log/axiom";
         public const string SystemdRun = "run/systemd/system";
+        public const string OutsideTarget = "outside-axiomd.service";
 
         private readonly TempDirectory _temp = new();
 
@@ -256,6 +280,7 @@ public sealed class MaintainerScriptCleanupTests
             }
 
             File.WriteAllText(Absolute(Unit), "unit");
+            File.WriteAllText(Absolute(OutsideTarget), "outside target");
             File.WriteAllText(Path.Combine(Absolute(Image), "axiomd"), "image");
             File.WriteAllText(Path.Combine(Absolute(RunDir), "axiom.sock"), "run");
             File.WriteAllText(Path.Combine(Absolute(Data), "axiom.db"), "data");
@@ -283,15 +308,37 @@ public sealed class MaintainerScriptCleanupTests
 
         public bool Exists(string relative) => File.Exists(Absolute(relative)) || Directory.Exists(Absolute(relative));
 
+        public bool IsSymlink(string relative) => new FileInfo(Absolute(relative)).LinkTarget is not null;
+
         public void Delete(string relative) => File.Delete(Absolute(relative));
 
         public void DeleteDirectory(string relative) => Directory.Delete(Absolute(relative));
 
         public void CreateEnablementLink()
         {
-            var directory = Absolute("etc/systemd/system/multi-user.target.wants");
-            Directory.CreateDirectory(directory);
-            File.CreateSymbolicLink(Path.Combine(directory, "axiomd.service"), "../../axiomd.service");
+            CreateUnitTreeSymlink("multi-user.target.wants", "axiomd.service");
+        }
+
+        public void CreateUnitTreeSymlink(string directory, string name, bool outsideTarget = false)
+        {
+            var fullDirectory = Absolute(Path.Combine("etc/systemd/system", directory));
+            Directory.CreateDirectory(fullDirectory);
+            var target = outsideTarget
+                ? Absolute(OutsideTarget)
+                : Absolute(Unit);
+            File.CreateSymbolicLink(Path.Combine(fullDirectory, name), target);
+        }
+
+        public void CreateUnitFile(string relative)
+        {
+            var path = Absolute(Path.Combine("etc/systemd/system", relative));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, "regular");
+        }
+
+        public void CreateUnitDirectory(string relative)
+        {
+            Directory.CreateDirectory(Absolute(Path.Combine("etc/systemd/system", relative)));
         }
 
         public void RemoveStopHelpers()
