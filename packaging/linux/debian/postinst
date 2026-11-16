@@ -10,9 +10,26 @@
 set -e
 
 AXIOM_BUNDLED_DAEMON=/opt/axiom/axiomd/axiomd
+AXIOM_OLD_POSTRM="${DPKG_ADMINDIR:-/var/lib/dpkg}/info/axiom.postrm"
+
+# Builds up to 0.17 were packaged as `axiom`. Replacing one leaves it in dpkg's "config-files"
+# state with its postrm, whose purge branch deletes /var/lib/axiom and /var/log/axiom: the data
+# this package now owns. Disarm that script so `dpkg --purge axiom` only drops the record. The
+# marker lines only exist in our old postrm, never in the archive's unrelated `axiom` package.
+disarm_old_package_purge() {
+    [ -f "$AXIOM_OLD_POSTRM" ] || return 0
+    # Our 0.53-era postrm prefixes every path with AXIOM_ROOT (packaging-test seam); the older
+    # builds spell the paths out. Accept both, and nothing else.
+    grep -Eq '^AXIOM_DATA_DIR=(\$AXIOM_ROOT)?/var/lib/axiom$' "$AXIOM_OLD_POSTRM" || return 0
+    grep -Eq '^AXIOM_UNIT=(\$AXIOM_ROOT)?/etc/systemd/system/axiomd\.service$' "$AXIOM_OLD_POSTRM" || return 0
+    printf '#!/bin/sh\n# Replaced by axiom-firewall: /var/lib/axiom belongs to that package now.\nexit 0\n' >"$AXIOM_OLD_POSTRM"
+    chmod 0755 "$AXIOM_OLD_POSTRM"
+    echo "axiom-firewall: the replaced 'axiom' package can no longer delete /var/lib/axiom on purge."
+}
 
 case "$1" in
     configure)
+        disarm_old_package_purge
         if [ ! -x "$AXIOM_BUNDLED_DAEMON" ]; then
             echo "axiom: $AXIOM_BUNDLED_DAEMON is missing; the package is damaged." >&2
             exit 1

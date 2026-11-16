@@ -2,7 +2,7 @@
 # nfpm (https://nfpm.goreleaser.com) configuration for the Axiom .rpm, rendered by
 # scripts/linux/package.sh from the staged package root (@STAGE@). The .deb is built with dpkg-deb
 # from the same root; this file carries the RPM mapping of packaging/linux/debian/control.in.
-name: axiom
+name: axiom-firewall
 arch: "@ARCH@"
 platform: linux
 version: "@VERSION@"
@@ -45,6 +45,12 @@ depends:
   - libXrandr
   - libICE
   - libSM
+# Builds up to 0.17 were named `axiom`, also an unrelated computer algebra package in the
+# Debian/Ubuntu/Fedora archives (20170501). The bound only matches our 0.x. No Obsoletes: rpm
+# would run the old erase scriptlets after the new %post and remove the service again, so an old
+# `axiom` build must be removed first; `axiom-firewall` only declares the conflict.
+conflicts:
+  - axiom < 1000
 recommends:
   - bpftool
   - libsecret
@@ -59,8 +65,8 @@ contents:
   - src: "@STAGE@/usr/share/icons/hicolor"
     dst: /usr/share/icons/hicolor
     type: tree
-  - src: "@STAGE@/usr/share/doc/axiom"
-    dst: /usr/share/doc/axiom
+  - src: "@STAGE@/usr/share/doc/axiom-firewall"
+    dst: /usr/share/doc/axiom-firewall
     type: tree
 scripts:
   postinstall: "@PKG@/rpm/postinstall"

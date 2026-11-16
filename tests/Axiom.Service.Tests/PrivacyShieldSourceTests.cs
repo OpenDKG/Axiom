@@ -213,6 +213,109 @@ public sealed class PrivacyShieldSourceTests
         Assert.True(Assert.Single(result.Rules).Category.HasFlag(PrivacyCategory.Phishing));
     }
 
+    [Fact]
+    public async Task Transient_connection_reset_is_retried_and_succeeds()
+    {
+        var source = new PrivacyShieldSourceInfo(
+            "oisd-big",
+            "OISD Big",
+            "https://example.test/oisd.txt",
+            "MIT",
+            PrivacyCategory.Ads,
+            "oisd");
+        var attempts = 0;
+        using var client = new HttpClient(new StubHandler(_ =>
+        {
+            attempts++;
+            if (attempts == 1)
+            {
+                throw new IOException("Unable to read data from the transport connection: An existing connection was forcibly closed by the remote host.");
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("retried-ads.example\n"),
+            };
+        }));
+        using var updater = new PrivacyShieldSourceUpdater(client);
+
+        var result = await updater.UpdateAsync([source], CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(2, attempts);
+        Assert.Equal("retried-ads.example", Assert.Single(result.Rules).Domain);
+        Assert.Null(result.Error);
+    }
+
+    [Fact]
+    public async Task Partial_source_failure_keeps_reachable_rules_and_reports_warning()
+    {
+        var goodSource = new PrivacyShieldSourceInfo(
+            "hagezi-pro",
+            "HaGeZi Pro",
+            "https://example.test/hagezi.txt",
+            "GPL-3.0",
+            PrivacyCategory.Ads,
+            "hagezi");
+        var refusedSource = new PrivacyShieldSourceInfo(
+            "blocklistproject-ads",
+            "The Block List Project - Ads",
+            "https://example.test/refused.txt",
+            "Unlicense",
+            PrivacyCategory.Ads,
+            "blp");
+        using var client = new HttpClient(new StubHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("refused.txt", StringComparison.Ordinal))
+            {
+                throw new HttpRequestException("No connection could be made because the target machine actively refused it.");
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("working-filter.example\n"),
+            };
+        }));
+        using var updater = new PrivacyShieldSourceUpdater(client);
+
+        var result = await updater.UpdateAsync([goodSource, refusedSource], CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal("working-filter.example", Assert.Single(result.Rules).Domain);
+        Assert.Contains("blocklistproject-ads", result.Error, StringComparison.Ordinal);
+        Assert.NotNull(result.Sources.Single(s => s.Id == "blocklistproject-ads").Error);
+        Assert.Null(result.Sources.Single(s => s.Id == "hagezi-pro").Error);
+    }
+
+    [Fact]
+    public void Rule_store_load_pools_repeated_source_ids()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"axiom-rules-pool-{Guid.NewGuid():N}.json");
+        try
+        {
+            var store = new PrivacyShieldRuleStore(path);
+            var now = DateTimeOffset.UtcNow;
+            var sourceA = new string("hagezi-pro".ToCharArray());
+            var sourceB = new string("hagezi-pro".ToCharArray());
+            Assert.False(ReferenceEquals(sourceA, sourceB));
+
+            Assert.True(store.Save(
+            [
+                new PrivacyShieldStoredRule("one.example", sourceA, PrivacyCategory.Ads, now),
+                new PrivacyShieldStoredRule("two.example", sourceB, PrivacyCategory.Ads, now),
+            ]));
+
+            var loaded = store.Load();
+            Assert.Equal(2, loaded.Count);
+            Assert.True(ReferenceEquals(loaded[0].SourceId, loaded[1].SourceId));
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".previous");
+        }
+    }
+
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(

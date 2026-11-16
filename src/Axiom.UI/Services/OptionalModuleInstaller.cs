@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using Axiom.Contracts;
 using Axiom.Contracts.Blackbox;
+using Axiom.Contracts.Modules;
 
 namespace Axiom.UI.Services;
 
@@ -89,7 +90,7 @@ public sealed class OptionalModuleInstaller
         }
 
         var prerequisites = ModulePrerequisites.Probe();
-        var hasNpm = prerequisites.Tools.Any(t => t.Tool == ModuleTool.Node && t.IsAvailable);
+        var hasNpm = prerequisites.Tools.Any(t => t.Tool == ModuleTool.Npm && t.IsAvailable);
         if (!hasNpm)
         {
             LastError = "DKG prerequisite missing: Node.js/npm is not installed or not on PATH. Install Node.js LTS first.";
@@ -247,9 +248,13 @@ public sealed class OptionalModuleInstaller
               try { Invoke-WebRequest -UseBasicParsing -Uri 'https://blackbox-w.umanitek.ai' -OutFile $installer }
               catch { Write-Warning "Vendor download failed: $($_.Exception.Message)" }
             }
+            if (-not (Test-Path $installer) -or (Get-Item $installer).Length -eq 0) {
+              throw 'Could not download the Umanitek Blackbox installer (https://blackbox-w.umanitek.ai).'
+            }
             $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
             Write-Host "Installer SHA256: $hash" -ForegroundColor Yellow
             if ($hash -ne '{{BlackboxInstallerSha256}}') {
+              Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
               throw "Blackbox installer hash mismatch. Expected {{BlackboxInstallerSha256}}, got $hash. Refusing to run an unpinned installer."
             }
             Write-Host 'Installer hash matches the pinned Axiom digest.' -ForegroundColor Green

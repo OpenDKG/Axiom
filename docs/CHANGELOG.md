@@ -2,6 +2,57 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.59.0
+
+- **Dark folded titanium Axiom brand mark & centered sidebar chrome:**
+  - Replaced `axiom-icon.png` and `axiom-lockup.png` in both UI asset folders (`src/Axiom.UI.Avalonia/Assets` and `src/Axiom.UI/Resources`), rebuilt multi-size `axiom.ico`, and regenerated MSIX Store tiles/splash (`packaging/msix/generate-assets.ps1`): removed the stray upper-right shield notch, refined the crisp diagonal metal fold (`brushed steel` vs `dark gunmetal`), matched the folded metallic finish across the `AXIOM` letters, and added subtle `xiom` lettering below `A` inside the shield.
+  - Centered the top-left `AXIOM` lockup and `LOCAL-FIRST · NO TELEMETRY` badge in `MainWindow.axaml`, removed the redundant top-left version label, centered the bottom-left footer (`Axiom` icon, name, version, description, and action buttons), and pointed `Contact` to `mailto:contact@opendkg.org`.
+- **Network Dashboard consolidation & sidebar reorganization:**
+  - Embedded `Live Connections`, `Applications`, and `Network Events` directly as compact tabs inside `Network Dashboard`, removed the duplicate `Privacy Shield` summary card from `Network Dashboard`, renamed `PROTECTION` to `AI` (including `AI Analyst`), and grouped `Network Control`, `Privacy Shield`, and `Integrations` under `NETWORK & PRIVACY`.
+- **Theme harmonization & Glass Dark depth polish:**
+  - Removed opaque black list/scroll surfaces in `Live Connections` and `Network Events` so glass themes keep translucent frosted surfaces, deepened `Axiom Glass Dark` backdrop gradients, darkened `Axiom.Warning` in `Light`/`GlassLight` to `#B45309`, styled `CheckBox`/`NumericUpDown` spinners/`Separator`/`Button.danger` across all themes, wrapped `umanitek-logo.png` cleanly in `AgentsView.axaml`, made `ThreatGraphControl` resolve theme palette brushes dynamically, and introduced `AxiomDialogTheme` so dialogs, setup prompts, first-run windows, and toast alerts follow the active theme.
+
+## What's in 0.58.0
+
+- **Documentation screenshots refreshed for the 0.57 theme redesign.**
+  - Glass Dark and Glass Light dashboards, opaque Dark and Light themes, the Settings/About page in both glass themes, the leadership crop and the glass-vs-dark comparison were recaptured from the released 0.57.0 build.
+  - Screenshots now show the 0.56 monochrome lockup, the borderless frosted chrome and the current navigation.
+
+## What's in 0.57.0
+
+- **Redesigned Glass themes & harmonized all six Avalonia desktop themes:**
+  - Rebuilt `Axiom Glass Dark` and `Axiom Glass Light` around an open, continuous frosted canvas: removed chrome divider walls around the titlebar, navigation rail, header, and status bar (`Border.glass-chrome`), unified geometry at `CornerRadius="6"`, dropped heavy boxy card shadows in glass modes, and set `TransparencyBackgroundFallback="Transparent"` on `MainWindow`.
+  - Tuned `Glass Dark` to a deeper smoked slate-obsidian glass veil (`#780C111A -> #66131B28 -> #7D0A0F17`) with frosted white-smoke tiles (`#1FFFFFFF -> #10FFFFFF`), pure white text, and crisp silver-chrome accents matching the `0.56.0` monochrome shield + `AXIOM` lockup.
+  - Harmonized the four opaque (non-transparent) themes (`Dark`, `Light`, `Dark Midnight`, `Light Warm`) with seamless borders, dimensional opaque gradient bases, subtle `CardBorder` fades, and logo-aligned accents (`#E2E8F0`, `#2B313A`, `#A5B4FC`, `#443C35`).
+
+## What's in 0.56.0
+
+- **Correct lockup: the grayscale AXIOM wordmark.**
+  - 0.55.0 shipped an older `logo-letters.png`; this release replaces `axiom-lockup.png` in both UI asset folders with the intended 2172x724 grayscale shield + AXIOM lockup.
+  - The 2172x724 canvas matches the historical lockup exactly, so the navigation rail, WPF header and first-run window show it at the previous size with no stretching.
+  - MSIX `Wide310x150Logo.png` and `SplashScreen.png` regenerated with `packaging/msix/generate-assets.ps1`.
+
+## What's in 0.55.0
+
+- **New Axiom brand mark in the app, the icon set and the MSIX assets.**
+  - `axiom-icon.png` (1024x1024) and `axiom-lockup.png` (2172x1222) regenerated from the new `logo.png` and `logo-letters.png`, in both the WPF and Avalonia asset folders.
+  - `axiom.ico` rebuilt as a nine-size icon set (16-256 px) for the window, tray and setup icon.
+  - MSIX tiles and splash regenerated with `packaging/msix/generate-assets.ps1`.
+  - The lockup keeps the new art's 1.78:1 aspect instead of the old 3:1, so navigation and first-run render it narrower without stretching.
+
+## What's in 0.54.0
+
+- **Clean Windows 11 onboarding for Blackbox & DKG, Repair flow, and clean PowerShell uninstalls:**
+  - Promoted `ModulePrerequisites` into `Axiom.Contracts.Modules` with silent bootstrap support for `Node.js LTS`, `Python 3.12`, `Git`, and `Microsoft.VCRedist.2015+.x64` (`VC++ 2015-2022 Redistributable`), invoked automatically during `CompleteInstallation` in `Axiom.Setup` and interactive `Install`/`Repair` actions.
+  - Separated folder existence (`HasBlackboxFiles`/`HasDkgFiles`) from verified runtime readiness (`IsBlackboxRuntimeInstalled`/`IsDkgRuntimeInstalled`) across `OptionalModuleUninstaller`, `SecurityPageViewModel`, and `SecurityViewModel`, surfacing `Repair` when `venv` or `dkg.cmd` is missing instead of failing on `Start`.
+  - Fixed local loopback probes (`OptionalModuleProbe.CreateLoopbackHttpClient` with `UseProxy = false` and `1s` connect timeout) to prevent Windows WPAD proxy auto-detect stalls causing false status-check timeouts.
+  - Shared `ModuleUninstallScripts` fixing `$HOME` read-only variable collision (`$dkgHome`), `Wait-Process -Timeout 5`, `ReadOnly` attribute cleanup on `.git`, reparse-point guards, and guarded scheduled-task removal.
+- **Privacy Shield DNS `127.0.0.1` auto-pointing & resilient blocklist downloads:**
+  - Configured `PrivacyShieldSourceUpdater` with `SocketsHttpHandler { UseProxy = false }` + IPv4-first address fallback, 3-minute download timeout, up to 3 bounded retries on transient connection resets, and partial-source commit (retaining all reachable blocklists such as HaGeZi/OISD/URLhaus/Phishing Filter with a warning when individual feeds fail instead of dropping everything).
+  - Enhanced `PrivacyDnsFailSafe` with `LastError` diagnostics, PowerShell stdout/stderr capture, and `netsh interface ipv4 set dnsservers` fallback, plus a service startup 3 s retry in `PrivacyShieldWorker` and explicit `AutoPointAdapterDns` UI toggles in both Avalonia and WPF views.
+- **Service & Desktop memory footprint reduction:**
+  - Eliminated permanent dual ~1M-rule retention (`_rules`, `_policyRules`, and `_rulesTask`) in `PrivacyShieldController`, switched `PrivacyShieldPolicy` to pre-sized `PackedRule` storage with interned `SourceId` palette and `WithSettings` catalog reuse, converted `ParseList` to stream via `TextReader` and `Evaluate` to `ReadOnlySpan<char>` lookups, streamed `PrivacyShieldRuleStore.Save()` without LOH string buffers, and enabled `System.GC.ConserveMemory=7` with LOH compaction after rule loads and source updates.
+
 ## What's in 0.53.0
 
 - **Service upgrades survive a crash-looping old service; failures explain themselves.**

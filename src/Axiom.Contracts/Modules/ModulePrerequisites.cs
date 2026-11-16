@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using System.IO;
-
-namespace Axiom.UI.Services;
+namespace Axiom.Contracts.Modules;
 
 /// <summary>
 /// External tools the optional modules need before their installers can run. The installers are
@@ -74,11 +72,13 @@ public sealed class ModulePrerequisiteReport
 }
 
 /// <summary>
-/// Finds the tools the optional Blackbox and DKG installers need, and builds the one-click
-/// bootstrap script that installs whatever is missing.
+/// Finds the tools the optional Blackbox and DKG installers need, and builds the bootstrap scripts
+/// that install missing prerequisites through winget.
 /// </summary>
 public static class ModulePrerequisites
 {
+    private const string VcRedistPackageId = "Microsoft.VCRedist.2015+.x64";
+
     private static readonly (ModuleTool Tool, string DisplayName, string[] FileNames)[] Definitions =
     [
         (ModuleTool.Node, "Node.js", ["node.exe"]),
@@ -105,6 +105,7 @@ public static class ModulePrerequisites
     /// </summary>
     public static ModulePrerequisiteReport Probe(string? pathValue, Func<string, bool> fileExists)
     {
+        ArgumentNullException.ThrowIfNull(fileExists);
         var searchDirectories = BuildSearchDirectories(pathValue);
 
         var statuses = Definitions.Select(definition =>
@@ -145,16 +146,21 @@ public static class ModulePrerequisites
 
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
         foreach (var candidate in new[]
                  {
                      Path.Combine(programFiles, "nodejs"),
+                     Path.Combine(programFilesX86, "nodejs"),
                      Path.Combine(localAppData, "Programs", "nodejs"),
                      Path.Combine(programFiles, "Git", "cmd"),
                      Path.Combine(localAppData, "Programs", "Git", "cmd"),
+                     Path.Combine(localAppData, "Programs", "Python", "Python313"),
                      Path.Combine(localAppData, "Programs", "Python", "Python312"),
                      Path.Combine(localAppData, "Programs", "Python", "Python311"),
                      Path.Combine(localAppData, "Programs", "Python", "Python310"),
+                     Path.Combine(programFiles, "Python312"),
+                     Path.Combine(programFiles, "Python311"),
                  })
         {
             directories.Add(candidate);
@@ -170,47 +176,82 @@ public static class ModulePrerequisites
         directory.Contains(@"\WindowsApps", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Builds the visible PowerShell script that installs the missing tools through winget. The
-    /// user sees every command and approves the standard Windows installer prompts.
+    /// Builds the visible PowerShell script that installs the missing tools through winget.
     /// </summary>
-    public static string BuildBootstrapScript(ModulePrerequisiteReport report)
+    public static string BuildBootstrapScript(
+        ModulePrerequisiteReport report,
+        bool includeVcRedist = false,
+        bool interactive = true)
     {
-        var missing = report.Missing.Select(tool => tool.Tool).ToHashSet();
-        var steps = Bootstrap
-            .Where(step => missing.Contains(step.Tool))
-            .Select(step =>
-            {
-                var arguments = string.Join(" ", new[]
-                {
-                    "install",
-                    "--id", step.PackageId,
-                    "--silent",
-                    "--accept-package-agreements",
-                    "--accept-source-agreements",
-                    "--disable-interactivity",
-                }.Concat(step.ExtraArguments));
+        ArgumentNullException.ThrowIfNull(report);
 
-                return "Write-Host 'Installing " + PackageLabel(step.Tool) + "...' -ForegroundColor Cyan\n" +
-                       "winget " + arguments + "\n" +
-                       "if ($LASTEXITCODE -ne 0) { throw \"winget failed for " + step.PackageId + " with exit code $LASTEXITCODE\" }";
-            })
-            .ToArray();
+        var missing = report.Missing.Select(tool => tool.Tool).ToHashSet();
+        var steps = new List<string>();
+
+        if (includeVcRedist)
+        {
+            steps.Add(BuildWingetStep("Visual C++ 2015-2022 Redistributable", VcRedistPackageId, []));
+        }
+
+        foreach (var step in Bootstrap)
+        {
+            var needed = missing.Contains(step.Tool) ||
+                         (step.Tool == ModuleTool.Node && missing.Contains(ModuleTool.Npm));
+            if (needed)
+            {
+                steps.Add(BuildWingetStep(PackageLabel(step.Tool), step.PackageId, step.ExtraArguments));
+            }
+        }
+
+        if (interactive)
+        {
+            return $$"""
+                $ErrorActionPreference = 'Stop'
+                $winget = Get-Command winget -ErrorAction SilentlyContinue
+                if (-not $winget) {
+                  Write-Host 'winget is not available. Install Node.js, Python 3 and Git manually, then click Check again.' -ForegroundColor Red
+                  Write-Host 'https://nodejs.org/en/download  https://www.python.org/downloads/windows/  https://git-scm.com/download/win'
+                  Read-Host 'Press Enter to close'
+                  exit 2
+                }
+
+                {{string.Join("\n\n", steps)}}
+
+                Write-Host 'All prerequisites are installed. Return to Axiom and click Check again.' -ForegroundColor Green
+                Read-Host 'Press Enter to close'
+                """;
+        }
 
         return $$"""
             $ErrorActionPreference = 'Stop'
             $winget = Get-Command winget -ErrorAction SilentlyContinue
             if (-not $winget) {
-              Write-Host 'winget is not available. Install Node.js, Python 3 and Git manually, then click Check again.' -ForegroundColor Red
-              Write-Host 'https://nodejs.org/en/download  https://www.python.org/downloads/windows/  https://git-scm.com/download/win'
-              Read-Host 'Press Enter to close'
+              Write-Warning 'winget is not available; skipping automatic prerequisite installation.'
               exit 2
             }
 
             {{string.Join("\n\n", steps)}}
 
-            Write-Host 'All prerequisites are installed. Return to Axiom and click Check again.' -ForegroundColor Green
-            Read-Host 'Press Enter to close'
+            Write-Host 'Prerequisite installation finished.' -ForegroundColor Green
+            exit 0
             """;
+    }
+
+    private static string BuildWingetStep(string label, string packageId, string[] extraArguments)
+    {
+        var arguments = string.Join(" ", new[]
+        {
+            "install",
+            "--id", packageId,
+            "--silent",
+            "--accept-package-agreements",
+            "--accept-source-agreements",
+            "--disable-interactivity",
+        }.Concat(extraArguments));
+
+        return "Write-Host 'Installing " + label + "...' -ForegroundColor Cyan\n" +
+               "winget " + arguments + "\n" +
+               "if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne -1978335189) { throw \"winget failed for " + packageId + " with exit code $LASTEXITCODE\" }";
     }
 
     private static string PackageLabel(ModuleTool tool) => tool switch

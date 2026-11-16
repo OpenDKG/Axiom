@@ -402,8 +402,21 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private bool _autoUpdateSources = true;
 
     private string _preferredAdapterAlias = string.Empty;
+
+    [ObservableProperty]
     private bool _autoPointAdapterDns;
+
     private int _autoUpdateIntervalHours = 24;
+
+    partial void OnAutoPointAdapterDnsChanged(bool value)
+    {
+        if (_updating)
+        {
+            return;
+        }
+
+        _preferredAdapterAlias = value ? SelectedAdapter?.Name ?? string.Empty : string.Empty;
+    }
 
     [ObservableProperty]
     private string _portText = "53";
@@ -725,7 +738,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
         var adapterName = SelectedAdapter.Name;
         _preferredAdapterAlias = adapterName;
-        _autoPointAdapterDns = true;
+        AutoPointAdapterDns = true;
 
         if (CreateConfigureClient() is { } configureClient)
         {
@@ -812,7 +825,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             return;
         }
 
-        _autoPointAdapterDns = false;
+        AutoPointAdapterDns = false;
         if (CreateConfigureClient() is { } configureClient)
         {
             try
@@ -1061,7 +1074,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                 .Select(source => source.Id)
                 .ToArray(),
             PreferredAdapterAlias = _preferredAdapterAlias,
-            AutoPointAdapterDns = _autoPointAdapterDns,
+            AutoPointAdapterDns = AutoPointAdapterDns,
             AutoUpdateSources = AutoUpdateSources,
             AutoUpdateIntervalHours = _autoUpdateIntervalHours,
         };
@@ -1108,7 +1121,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                 ? settings.AutoUpdateIntervalHours
                 : 24;
             _preferredAdapterAlias = settings.PreferredAdapterAlias;
-            _autoPointAdapterDns = settings.AutoPointAdapterDns;
+            AutoPointAdapterDns = settings.AutoPointAdapterDns;
             if (!string.IsNullOrWhiteSpace(_preferredAdapterAlias))
             {
                 var matchingAdapter = Adapters.FirstOrDefault(adapter =>

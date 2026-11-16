@@ -202,6 +202,13 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
     private bool _encryptDnsViaDoh = true;
 
     [ObservableProperty]
+    private bool _autoPointAdapterDns;
+
+    private string _preferredAdapterAlias = string.Empty;
+    private bool _autoUpdateSources = true;
+    private int _autoUpdateIntervalHours = 24;
+
+    [ObservableProperty]
     private string _allowedDomainsText = string.Empty;
 
     [ObservableProperty]
@@ -588,6 +595,14 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             Port = int.TryParse(PortText, out var port) ? port : 53,
             UpstreamDns = UpstreamText.Trim(),
             EncryptDnsViaDoh = EncryptDnsViaDoh,
+            PreferredAdapterAlias = AutoPointAdapterDns
+                ? (!string.IsNullOrWhiteSpace(_preferredAdapterAlias)
+                    ? _preferredAdapterAlias
+                    : SelectedAdapter?.Name ?? string.Empty)
+                : string.Empty,
+            AutoPointAdapterDns = AutoPointAdapterDns,
+            AutoUpdateSources = _autoUpdateSources,
+            AutoUpdateIntervalHours = _autoUpdateIntervalHours,
             AllowedDomains = PrivacyShieldPolicy.ParseList(
                 AllowedDomainsText,
                 PrivacyShieldPolicy.MaxSettingsDomains),
@@ -635,6 +650,12 @@ public sealed partial class PrivacyShieldViewModel : PageViewModel, IActivatable
             PortText = settings.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
             UpstreamText = settings.UpstreamDns;
             EncryptDnsViaDoh = settings.EncryptDnsViaDoh;
+            _preferredAdapterAlias = settings.PreferredAdapterAlias;
+            AutoPointAdapterDns = settings.AutoPointAdapterDns;
+            _autoUpdateSources = settings.AutoUpdateSources;
+            _autoUpdateIntervalHours = settings.AutoUpdateIntervalHours > 0
+                ? settings.AutoUpdateIntervalHours
+                : 24;
             AllowedDomainsText = string.Join(Environment.NewLine, settings.AllowedDomains);
             BlockedDomainsText = string.Join(Environment.NewLine, settings.BlockedDomains);
             foreach (var source in Sources)

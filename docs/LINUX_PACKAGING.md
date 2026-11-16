@@ -6,6 +6,22 @@ polkit action, the desktop entry and the icon, and registers `axiomd` as a syste
 the daemon's own `--install-service` path. Proven on Ubuntu 24.04 (GNOME X11, kernel 7.0):
 docs/LINUX_TEST_REPORT.md rows P-1…P-8.
 
+## Package name and migration
+
+The package is `axiom-firewall` for both DEB and RPM. `axiom` is an unrelated computer algebra
+system in the Debian/Ubuntu archives (20170501) and in Fedora; builds up to 0.17 used that name,
+which let apt/unattended-upgrade treat the archive package as an upgrade. Paths, `axiomd.service`
+and the desktop id `com.axiom.firewall` are unchanged.
+
+- `.deb`: `Conflicts`/`Replaces: axiom (<< 1000)` matches only our 0.x builds. `dpkg -i` replaces
+  the old package and keeps `/var/lib/axiom`; the old package is left in the config-files state,
+  so `postinst` disarms its purge branch (only when the script carries our marker lines), and a
+  later `dpkg --purge axiom` drops the record only.
+- `.rpm`: `Conflicts: axiom < 1000` without `Obsoletes`; rpm would run the old erase scriptlets
+  after the new `%post` and remove the service again. Remove an old `axiom` build first
+  (`/var/lib/axiom` stays), then install `axiom-firewall`. Not tested on Fedora.
+
+
 ## 1. Build
 
 ```sh
@@ -31,8 +47,8 @@ Version: `<Version>` from `Directory.Build.props` (0.13.2). `--snapshot` appends
 `~git<yyyymmdd>.<sha>` so a draft sorts *before* the release it precedes (Debian `~` ordering);
 the RPM gets the same string with `~` replaced by `_`.
 
-Artifacts: `build/linux/axiom_<version>_amd64.deb` (63 MB, xz) and
-`build/linux/axiom-<version>-1.x86_64.rpm` (76 MB). Installed size 193 MB (self-contained .NET
+Artifacts: `build/linux/axiom-firewall_<version>_amd64.deb` (63 MB, xz) and
+`build/linux/axiom-firewall-<version>-1.x86_64.rpm` (76 MB). Installed size 193 MB (self-contained .NET
 runtime twice: window and daemon are separate processes with separate trust boundaries).
 
 ## 2. Desktop publish bundles the daemon

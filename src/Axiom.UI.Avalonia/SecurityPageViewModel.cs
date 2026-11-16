@@ -207,7 +207,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     private readonly CommunityFeedClient _communityClient = new();
 
-    private readonly HttpClient _blackboxClient = new() { Timeout = TimeSpan.FromSeconds(4) };
+    private readonly HttpClient _blackboxClient = OptionalModuleProbe.CreateLoopbackHttpClient(TimeSpan.FromSeconds(4));
 
     private readonly OpenCodeProtection _openCodeProtection = new();
 
@@ -599,7 +599,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         }
 
         _blackboxAutoStartAttempted = true;
-        if (DistributionContext.IsStorePackage || !_uninstaller.IsBlackboxInstalled)
+        if (DistributionContext.IsStorePackage || !_uninstaller.IsBlackboxRuntimeInstalled)
         {
             return;
         }
@@ -751,6 +751,48 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         return false;
     }
 
+    private async Task<bool> EnsureModulePrerequisitesAsync(bool includeVcRedist)
+    {
+        var report = ModulePrerequisites.Probe();
+        var missingVc = includeVcRedist && !OptionalModuleInstaller.HasVcRuntime();
+        if (report.IsSatisfied && !missingVc)
+        {
+            return true;
+        }
+
+        var missingParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(report.MissingSummary))
+        {
+            missingParts.Add(report.MissingSummary);
+        }
+
+        if (missingVc)
+        {
+            missingParts.Add("Visual C++ 2015-2022 Redistributable");
+        }
+
+        var summary = string.Join(", ", missingParts);
+        InstallStatusText = $"Missing prerequisites: {summary}.";
+
+        var installNow = await _ui.ConfirmAsync(
+            "Install prerequisites",
+            $"The optional module installers need: {summary}.\n\n" +
+            "Install them now? A PowerShell window shows every winget command.",
+            "Install prerequisites",
+            destructive: false,
+            CancellationToken.None).ConfigureAwait(true);
+        if (!installNow)
+        {
+            InstallStatusText = $"Install {summary} manually, then click Check again.";
+            return false;
+        }
+
+        _installer.InstallPrerequisites(report, missingVc);
+        InstallStatusText = _installer.LastError
+            ?? $"Prerequisite installer opened in PowerShell for {summary}. Complete it, then click Check again.";
+        return false;
+    }
+
     [RelayCommand]
     private async Task ActOnModuleAsync(string? module)
     {
@@ -787,15 +829,15 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
         if (module.Equals("Blackbox", StringComparison.Ordinal))
         {
-            if (_uninstaller.IsBlackboxInstalled)
+            if (_uninstaller.IsBlackboxRuntimeInstalled)
             {
                 SetModuleActionLabel(module, "Starting...");
                 InstallStatusText = "Starting the Blackbox dashboard...";
                 var started = _installer.StartBlackboxDashboard();
                 if (!started)
                 {
-                    SetModuleActionLabel(module, "Start");
-                    InstallStatusText = "Blackbox venv is missing. Reinstall Blackbox to repair it.";
+                    SetModuleActionLabel(module, _uninstaller.HasBlackboxFiles ? "Repair" : "Install");
+                    InstallStatusText = "Blackbox venv is missing. Click Repair to reinstall it.";
                     return;
                 }
 
@@ -814,12 +856,18 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 return;
             }
 
+            if (!await EnsureModulePrerequisitesAsync(includeVcRedist: true).ConfigureAwait(true))
+            {
+                return;
+            }
+
+            var isRepair = _uninstaller.HasBlackboxFiles;
             var confirmed = await _ui.ConfirmAsync(
-                "Install Blackbox",
-                "This downloads and runs Umanitek's official Windows installer with the Oxigraph " +
+                isRepair ? "Repair Blackbox" : "Install Blackbox",
+                "This downloads and runs Umanitek's official Windows installer with the Oxigraph/auto " +
                 "backend (no Docker).\n\nIt installs Python packages, clones the repository and may " +
                 "register a scheduled task. Review the installer; continue only if you trust it.",
-                "Open installer",
+                isRepair ? "Repair" : "Open installer",
                 destructive: true,
                 CancellationToken.None).ConfigureAwait(true);
 
@@ -829,21 +877,28 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             }
 
             _installer.InstallBlackbox();
+            if (_installer.LastError is { } blackboxError)
+            {
+                SetModuleActionLabel(module, isRepair ? "Repair" : "Install");
+                InstallStatusText = blackboxError;
+                return;
+            }
+
             InstallStatusText = "Blackbox installer opened in PowerShell. Complete it, then click Check again.";
             return;
         }
 
         if (module.StartsWith("OriginTrail", StringComparison.Ordinal))
         {
-            if (_uninstaller.IsDkgInstalled)
+            if (_installer.IsDkgAvailable)
             {
                 SetModuleActionLabel(module, "Starting...");
                 InstallStatusText = "Starting the DKG node...";
                 var started = _installer.StartDkg();
                 if (!started)
                 {
-                    SetModuleActionLabel(module, "Start");
-                    InstallStatusText = "DKG CLI is missing. Reinstall DKG to repair it.";
+                    SetModuleActionLabel(module, _uninstaller.HasDkgFiles ? "Repair" : "Install");
+                    InstallStatusText = "DKG CLI is missing. Click Repair to reinstall it.";
                     return;
                 }
 
@@ -862,11 +917,17 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 return;
             }
 
+            if (!await EnsureModulePrerequisitesAsync(includeVcRedist: false).ConfigureAwait(true))
+            {
+                return;
+            }
+
+            var isRepair = _uninstaller.HasDkgFiles;
             var confirmed = await _ui.ConfirmAsync(
-                "Install OriginTrail DKG",
+                isRepair ? "Repair OriginTrail DKG" : "Install OriginTrail DKG",
                 "This installs @origintrail-official/dkg into %LOCALAPPDATA%\\Axiom\\modules, " +
-                "opens the official testnet setup and starts the node.\n\nIt needs Node.js/npm. Continue?",
-                "Open installer",
+                "configures testnet and starts the node.\n\nIt needs Node.js/npm. Continue?",
+                isRepair ? "Repair" : "Open installer",
                 destructive: true,
                 CancellationToken.None).ConfigureAwait(true);
 
@@ -876,7 +937,14 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             }
 
             _installer.InstallDkg();
-            InstallStatusText = "DKG installer opened in PowerShell. Complete the prompts, then click Check again.";
+            if (_installer.LastError is { } dkgError)
+            {
+                SetModuleActionLabel(module, isRepair ? "Repair" : "Install");
+                InstallStatusText = dkgError;
+                return;
+            }
+
+            InstallStatusText = "DKG installer opened in PowerShell. Complete it, then click Check again.";
         }
     }
 
@@ -1598,25 +1666,29 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         Modules.Add(CreateReputationModule());
         if (!DistributionContext.IsStorePackage)
         {
+            var blackboxRuntime = _uninstaller.IsBlackboxRuntimeInstalled;
+            var blackboxFiles = _uninstaller.HasBlackboxFiles;
             Modules.Add(new SecurityModule(
                 "Blackbox",
                 "CHECKING",
                 "Looking for a local Blackbox dashboard on 127.0.0.1:9700.",
                 "\uE7BA",
                 false,
-                !_uninstaller.IsBlackboxInstalled,
-                "Install",
-                _uninstaller.IsBlackboxInstalled,
+                true,
+                blackboxRuntime ? "Start" : blackboxFiles ? "Repair" : "Install",
+                blackboxFiles,
                 _blackboxMode.IsAvailable));
+            var dkgAvailable = _installer.IsDkgAvailable;
+            var dkgFiles = _uninstaller.HasDkgFiles;
             Modules.Add(new SecurityModule(
                 "OriginTrail DKG",
                 "CHECKING",
                 "Looking for a local DKG node on 127.0.0.1:9200.",
                 "\uE968",
                 false,
-                !_uninstaller.IsDkgInstalled,
-                "Install",
-                _uninstaller.IsDkgInstalled));
+                true,
+                dkgAvailable ? "Start" : dkgFiles ? "Repair" : "Install",
+                dkgFiles));
         }
 
         Modules.Add(CreateCommunityModule());
@@ -2175,27 +2247,35 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         Modules.Add(CreateReputationModule());
         if (!DistributionContext.IsStorePackage)
         {
-            var blackboxInstalled = _uninstaller.IsBlackboxInstalled;
+            var blackboxRuntime = _uninstaller.IsBlackboxRuntimeInstalled;
+            var blackboxFiles = _uninstaller.HasBlackboxFiles;
+            var blackboxDetail = !blackbox.IsConnected && !blackboxRuntime && blackboxFiles
+                ? $"{blackbox.Detail} Incomplete Blackbox installation detected (venv is missing) — click Repair to reinstall."
+                : blackbox.Detail;
             Modules.Add(new SecurityModule(
                 "Blackbox",
                 blackbox.Status,
-                blackbox.Detail,
+                blackboxDetail,
                 "\uE7BA",
                 blackbox.IsConnected,
-                !blackboxInstalled || !blackbox.IsConnected,
-                blackboxInstalled ? "Start" : "Install",
-                blackboxInstalled,
+                !blackbox.IsConnected,
+                blackboxRuntime ? "Start" : blackboxFiles ? "Repair" : "Install",
+                blackboxFiles,
                 _blackboxMode.IsAvailable));
-            var dkgInstalled = _installer.IsDkgAvailable;
+            var dkgAvailable = _installer.IsDkgAvailable;
+            var dkgFiles = _uninstaller.HasDkgFiles;
+            var dkgDetail = !dkg.IsConnected && !dkgAvailable && dkgFiles
+                ? $"{dkg.Detail} Incomplete DKG installation detected (DKG CLI is missing) — click Repair to reinstall."
+                : dkg.Detail;
             Modules.Add(new SecurityModule(
                 "OriginTrail DKG",
                 dkg.Status,
-                dkg.Detail,
+                dkgDetail,
                 "\uE968",
                 dkg.IsConnected,
-                !dkgInstalled || !dkg.IsConnected,
-                dkgInstalled ? "Start" : "Install",
-                _uninstaller.IsDkgInstalled));
+                !dkg.IsConnected,
+                dkgAvailable ? "Start" : dkgFiles ? "Repair" : "Install",
+                dkgFiles));
         }
 
         Modules.Add(CreateCommunityModule());

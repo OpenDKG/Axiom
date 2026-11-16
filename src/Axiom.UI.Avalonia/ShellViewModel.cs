@@ -81,15 +81,6 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         PrivacyOverview = new PrivacyOverviewPageViewModel(
             PrivacyShield,
             openSettings: () => SelectedPage = PrivacyShield);
-        Overview = new OverviewPageViewModel(
-            _monitor,
-            _traffic,
-            interaction,
-            IsServiceMode ? serviceClient : null,
-            processes,
-            PrivacyShield,
-            openPrivacyOverview: () => SelectedPage = PrivacyOverview,
-            openPrivacySettings: () => SelectedPage = PrivacyShield);
         Connections = new ConnectionsPageViewModel(
             _monitor,
             interaction,
@@ -105,6 +96,19 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             timers,
             interaction,
             processes);
+        Overview = new OverviewPageViewModel(
+            _monitor,
+            _traffic,
+            interaction,
+            IsServiceMode ? serviceClient : null,
+            processes,
+            PrivacyShield,
+            openPrivacyOverview: () => SelectedPage = PrivacyOverview,
+            openPrivacySettings: () => SelectedPage = PrivacyShield,
+            connectionsTab: Connections,
+            appsTab: Apps,
+            eventsTab: Events,
+            timers: timers);
         Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction, _monitor);
         // Review #25: the Overview line follows the same state as the "SHIELD ON" badge.
         Overview.ProtectionState = () => new OverviewProtectionState(
@@ -152,15 +156,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             AgentDashboard,
             Overview,
             PrivacyOverview,
-            Connections,
-            Apps,
-            Events,
             Agents,
             AgentStats,
             AgentHealth,
+            AiAnalyst,
             Firewall,
             PrivacyShield,
-            AiAnalyst,
             Security,
             Settings,
             Support,
@@ -169,9 +170,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         // Navigation groups follow the UI terminology audit; only the first page of a group
         // carries the header so the nav list keeps one selection model.
         AgentDashboard.GroupLabel = "OVERVIEW";
-        Connections.GroupLabel = "MONITORING";
-        Agents.GroupLabel = "PROTECTION";
-        AiAnalyst.GroupLabel = "INTELLIGENCE";
+        Agents.GroupLabel = "AI";
+        Firewall.GroupLabel = "NETWORK & PRIVACY";
         Settings.GroupLabel = "GENERAL";
         _selectedPage = AgentDashboard;
         _activePage = AgentDashboard;
@@ -222,7 +222,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private Task OpenContactAsync() =>
-        OpenExternalUrlAsync("https://github.com/a-51-50/Axiom/issues/new/choose");
+        OpenExternalUrlAsync("mailto:contact@opendkg.org");
 
     [RelayCommand]
     private void OpenSupport() => SelectedPage = Support;
@@ -553,6 +553,27 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public void NavigateToPage(Type pageViewModelType, IReadOnlyList<string>? focusApps = null)
     {
         ArgumentNullException.ThrowIfNull(pageViewModelType);
+        if (pageViewModelType == typeof(ConnectionsPageViewModel))
+        {
+            Overview.SelectedMonitoringTabIndex = 0;
+            SelectedPage = Overview;
+            return;
+        }
+
+        if (pageViewModelType == typeof(AppsPageViewModel))
+        {
+            Overview.SelectedMonitoringTabIndex = 1;
+            SelectedPage = Overview;
+            return;
+        }
+
+        if (pageViewModelType == typeof(EventsPageViewModel))
+        {
+            Overview.SelectedMonitoringTabIndex = 2;
+            SelectedPage = Overview;
+            return;
+        }
+
         foreach (var page in Pages)
         {
             if (!pageViewModelType.IsInstanceOfType(page))

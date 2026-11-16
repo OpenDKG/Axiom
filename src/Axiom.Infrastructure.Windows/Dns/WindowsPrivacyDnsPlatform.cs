@@ -16,7 +16,8 @@ namespace Axiom.Infrastructure.Windows.Dns;
 public sealed class WindowsPrivacyDnsPlatform(
     Func<bool> restoreIfNeeded,
     Func<bool>? isRunningAsSystem = null,
-    Func<string?, bool>? ensureAdapterPointed = null) : IPrivacyDnsPlatform
+    Func<string?, bool>? ensureAdapterPointed = null,
+    Func<string?>? lastAdapterError = null) : IPrivacyDnsPlatform
 {
     public IDnsAppAttributor? Attributor { get; } = new ProcessDnsAppAttributor(new WindowsDnsProcessLookup());
 
@@ -37,12 +38,12 @@ public sealed class WindowsPrivacyDnsPlatform(
     /// unchanged: <c>_server is not null</c> is <paramref name="resolverRunning"/>,
     /// <c>_settings</c> is <paramref name="settings"/>.
     /// </summary>
-    public void EnsureConfiguredAdapterDns(bool resolverRunning, PrivacyShieldSettings settings)
+    public string? EnsureConfiguredAdapterDns(bool resolverRunning, PrivacyShieldSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         if (isRunningAsSystem is null || ensureAdapterPointed is null || !isRunningAsSystem())
         {
-            return;
+            return null;
         }
 
         if (resolverRunning &&
@@ -51,12 +52,14 @@ public sealed class WindowsPrivacyDnsPlatform(
             (settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(settings.PreferredAdapterAlias)))
         {
             ensureAdapterPointed(settings.PreferredAdapterAlias);
-            return;
+            return lastAdapterError?.Invoke();
         }
 
         if (!settings.Enabled || !settings.AutoPointAdapterDns)
         {
             restoreIfNeeded();
         }
+
+        return null;
     }
 }

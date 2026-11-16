@@ -47,8 +47,28 @@ public sealed class PrivacyShieldRuleStore
                 FileShare.Read,
                 bufferSize: 64 * 1024,
                 FileOptions.SequentialScan);
-            return JsonSerializer.Deserialize<List<PrivacyShieldStoredRule>>(stream, JsonOptions)
-                   ?? [];
+            var loaded = JsonSerializer.Deserialize<List<PrivacyShieldStoredRule>>(stream, JsonOptions);
+            if (loaded is null || loaded.Count == 0)
+            {
+                return [];
+            }
+
+            var sourcePool = new Dictionary<string, string>(StringComparer.Ordinal);
+            for (var i = 0; i < loaded.Count; i++)
+            {
+                var item = loaded[i];
+                if (!sourcePool.TryGetValue(item.SourceId, out var pooledSource))
+                {
+                    pooledSource = item.SourceId;
+                    sourcePool[pooledSource] = pooledSource;
+                }
+                else if (!ReferenceEquals(item.SourceId, pooledSource))
+                {
+                    loaded[i] = item with { SourceId = pooledSource };
+                }
+            }
+
+            return loaded;
         }
         catch (Exception exception) when (exception is
                      IOException or UnauthorizedAccessException or JsonException)
@@ -68,10 +88,16 @@ public sealed class PrivacyShieldRuleStore
             Directory.CreateDirectory(directory);
 
             var temporary = _path + ".tmp-" + Guid.NewGuid().ToString("N");
-            File.WriteAllText(
-                temporary,
-                JsonSerializer.Serialize(rules, JsonOptions),
-                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            using (var stream = new FileStream(
+                       temporary,
+                       FileMode.Create,
+                       FileAccess.Write,
+                       FileShare.None,
+                       bufferSize: 64 * 1024))
+            {
+                JsonSerializer.Serialize(stream, rules, JsonOptions);
+            }
+
             ServiceFiles.SetOwnerOnly(temporary);
 
             if (File.Exists(_path))

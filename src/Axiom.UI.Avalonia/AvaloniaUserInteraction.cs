@@ -18,9 +18,9 @@ namespace Axiom.UI.Avalonia;
 /// </summary>
 public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUserInteraction
 {
-    private static readonly IBrush Background = new SolidColorBrush(Color.Parse("#12151C"));
-    private static readonly IBrush Border = new SolidColorBrush(Color.Parse("#293244"));
-    private static readonly IBrush PrimaryText = new SolidColorBrush(Color.Parse("#F3F5F8"));
+    private static IBrush Background => AxiomDialogTheme.WindowBackground;
+    private static IBrush Border => AxiomDialogTheme.Border;
+    private static IBrush PrimaryText => AxiomDialogTheme.TextPrimary;
 
     public async Task<bool> ConfirmAsync(
         string title,

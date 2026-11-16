@@ -23,6 +23,8 @@ public static class PrivacyDnsFailSafe
         "Axiom",
         "privacy-shield-dns-backup.json");
 
+    public static string? LastError { get; private set; }
+
     /// <summary>True when any non-loopback adapter still sends DNS to the loopback resolver.</summary>
     public static bool AnyAdapterUsesLoopbackDns()
     {
@@ -49,6 +51,7 @@ public static class PrivacyDnsFailSafe
         var adapter = SelectTargetAdapter(preferredAdapterAlias);
         if (adapter is null)
         {
+            LastError = "No active default-route network adapter was found for automatic 127.0.0.1 DNS setup.";
             return false;
         }
 
@@ -56,6 +59,7 @@ public static class PrivacyDnsFailSafe
         var firstV4 = currentIps.FirstOrDefault(address => address.AddressFamily == AddressFamily.InterNetwork);
         if (firstV4 is not null && IPAddress.IsLoopback(firstV4))
         {
+            LastError = null;
             return false;
         }
 
@@ -76,6 +80,7 @@ public static class PrivacyDnsFailSafe
             previous.Where(text => IPAddress.TryParse(text, out var addr) && !addr.IsIPv6SiteLocal));
         if (!DnsAdapterPlan.HasFallback(ipv4Plan))
         {
+            LastError = $"Adapter '{adapter.Name}' has no valid IPv4 fallback DNS/gateway yet.";
             return false;
         }
 
@@ -87,9 +92,12 @@ public static class PrivacyDnsFailSafe
         var backupLiteral = EscapePowerShellSingleQuoted(BackupPath);
         var setV4 = $"Set-DnsClientServerAddress -InterfaceAlias $alias -ServerAddresses @('" +
                     string.Join("','", ipv4Plan.Select(EscapePowerShellSingleQuoted)) + "')";
+        var netshPrimary = $"netsh interface ipv4 set dnsservers name=\"$alias\" static '{EscapePowerShellSingleQuoted(ipv4Plan[0])}' validate=no | Out-Null";
+        var netshSecondary = string.Join("\n", ipv4Plan.Skip(1).Select((addr, i) =>
+            $"netsh interface ipv4 add dnsservers name=\"$alias\" '{EscapePowerShellSingleQuoted(addr)}' index={i + 2} validate=no | Out-Null"));
         var setV6 = DnsAdapterPlan.HasFallback(ipv6Plan)
-            ? "Set-DnsClientServerAddress -InterfaceAlias $alias -ServerAddresses @('" +
-              string.Join("','", ipv6Plan.Select(EscapePowerShellSingleQuoted)) + "')"
+            ? "try { Set-DnsClientServerAddress -InterfaceAlias $alias -ServerAddresses @('" +
+              string.Join("','", ipv6Plan.Select(EscapePowerShellSingleQuoted)) + "') } catch { }"
             : string.Empty;
 
         var script = $$"""
@@ -114,7 +122,12 @@ public static class PrivacyDnsFailSafe
                 interfaces = $entries
               } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $backup -Encoding UTF8
             }
-            {{setV4}}
+            try {
+              {{setV4}}
+            } catch {
+              {{netshPrimary}}
+              {{netshSecondary}}
+            }
             {{setV6}}
             ipconfig /flushdns | Out-Null
             Write-Host "Privacy Shield DNS automatically pointed '$alias' at the loopback resolver."
@@ -303,6 +316,7 @@ public static class PrivacyDnsFailSafe
 
             if (process is null)
             {
+                LastError = "Could not start PowerShell to configure adapter DNS.";
                 return false;
             }
 
@@ -318,16 +332,33 @@ public static class PrivacyDnsFailSafe
                 {
                 }
 
+                LastError = "Timed out while configuring adapter DNS to 127.0.0.1.";
                 return false;
             }
 
             _ = stdout.Wait(500);
             _ = stderr.Wait(500);
-            return process.ExitCode == 0;
+            if (process.ExitCode == 0)
+            {
+                LastError = null;
+                return true;
+            }
+
+            var errorText = stderr.IsCompletedSuccessfully ? stderr.Result.Trim() : string.Empty;
+            if (string.IsNullOrWhiteSpace(errorText) && stdout.IsCompletedSuccessfully)
+            {
+                errorText = stdout.Result.Trim();
+            }
+
+            LastError = string.IsNullOrWhiteSpace(errorText)
+                ? $"Adapter DNS configuration exited with code {process.ExitCode}."
+                : $"Adapter DNS configuration failed: {errorText}";
+            return false;
         }
         catch (Exception exception) when (exception is
                      System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
+            LastError = $"Adapter DNS configuration failed: {exception.Message}";
             return false;
         }
     }

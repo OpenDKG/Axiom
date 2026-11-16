@@ -17,12 +17,12 @@ namespace Axiom.UI.Avalonia;
 /// </summary>
 public static class AxiomAlertService
 {
-    private static readonly IBrush Surface = new SolidColorBrush(Color.Parse("#161B22"));
-    private static readonly IBrush WindowBackground = new SolidColorBrush(Color.Parse("#0E1116"));
-    private static readonly IBrush Border = new SolidColorBrush(Color.Parse("#2E3A47"));
-    private static readonly IBrush Primary = new SolidColorBrush(Color.Parse("#E6EDF3"));
-    private static readonly IBrush Muted = new SolidColorBrush(Color.Parse("#9BA9B8"));
-    private static readonly IBrush Critical = new SolidColorBrush(Color.Parse("#F87171"));
+    private static IBrush Surface => AxiomDialogTheme.Surface;
+    private static IBrush WindowBackground => AxiomDialogTheme.WindowBackground;
+    private static IBrush Border => AxiomDialogTheme.Border;
+    private static IBrush Primary => AxiomDialogTheme.TextPrimary;
+    private static IBrush Muted => AxiomDialogTheme.TextMuted;
+    private static IBrush Critical => AxiomDialogTheme.Critical;
     private static readonly Queue<AlertRequest> Pending = new();
     private static Func<Window?>? _windowProvider;
     private static Action? _showWindow;
@@ -176,11 +176,12 @@ public static class AxiomAlertService
         {
             Content = AlertRecord.ActionTextFor(request.Page),
             Padding = new Thickness(12, 6),
-            Background = new SolidColorBrush(Color.Parse("#1F6FEB")),
-            Foreground = Primary,
-            BorderBrush = Border,
+            Background = AxiomDialogTheme.Accent,
+            Foreground = AxiomDialogTheme.AccentContrast,
+            BorderBrush = AxiomDialogTheme.Accent,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
+            Classes = { "primary" },
         };
 
         var close = new Button
@@ -191,7 +192,7 @@ public static class AxiomAlertService
             Padding = new Thickness(0),
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
-            Background = new SolidColorBrush(Color.Parse("#1A2430")),
+            Background = AxiomDialogTheme.SurfaceAlt,
             Foreground = Primary,
             BorderBrush = Border,
             BorderThickness = new Thickness(1),

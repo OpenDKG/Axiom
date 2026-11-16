@@ -3,8 +3,8 @@
 #
 # Build the Linux packages of Axiom (docs/LINUX_PACKAGING.md):
 #
-#   build/linux/axiom_<version>_<amd64|arm64>.deb        (dpkg-deb; fakeroot when present)
-#   build/linux/axiom-<version>-1.<x86_64|aarch64>.rpm   (nfpm, only when `nfpm` is on PATH)
+#   build/linux/axiom-firewall_<version>_<amd64|arm64>.deb        (dpkg-deb; fakeroot when present)
+#   build/linux/axiom-firewall-<version>-1.<x86_64|aarch64>.rpm   (nfpm, only when `nfpm` is on PATH)
 #
 # Usage:
 #   scripts/linux/package.sh [deb|rpm|all] [--arch x64|arm64] [--skip-publish] [--no-bpf] [--snapshot]
@@ -71,7 +71,7 @@ APP="$OUT/Axiom"
 STAGE="$OUT/root"
 PKG="$ROOT/packaging/linux"
 NATIVE="$ROOT/src/Axiom.Infrastructure.Linux/Bpf/native"
-DEB="$OUT/axiom_${VERSION}_${DEB_ARCH}.deb"
+DEB="$OUT/axiom-firewall_${VERSION}_${DEB_ARCH}.deb"
 mkdir -p "$OUT"
 
 # ---------------------------------------------------------------------------------------------
@@ -118,7 +118,7 @@ fi
 log "staging $STAGE"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/opt/axiom" "$STAGE/usr/share/applications" "$STAGE/usr/share/polkit-1/actions" \
-  "$STAGE/usr/share/doc/axiom" "$STAGE/usr/share/icons/hicolor"
+  "$STAGE/usr/share/doc/axiom-firewall" "$STAGE/usr/share/icons/hicolor"
 cp -a "$APP/." "$STAGE/opt/axiom/"
 # Shared by prerm/%preun: verified BPF pin cleanup (see the file's header).
 install -m 0644 "$PKG/bpf-pins.sh" "$STAGE/opt/axiom/bpf-pins.sh"
@@ -139,9 +139,9 @@ if command -v desktop-file-validate >/dev/null 2>&1; then
 fi
 install -m 0644 "$PKG/com.axiom.firewall.policy" "$STAGE/usr/share/polkit-1/actions/"
 cp -a "$PKG/icons/hicolor/." "$STAGE/usr/share/icons/hicolor/"
-install -m 0644 "$PKG/debian/copyright" "$STAGE/usr/share/doc/axiom/copyright"
-install -m 0644 "$ROOT/README.md" "$STAGE/usr/share/doc/axiom/README.md"
-[[ -f "$ROOT/docs/LINUX_PACKAGING.md" ]] && install -m 0644 "$ROOT/docs/LINUX_PACKAGING.md" "$STAGE/usr/share/doc/axiom/"
+install -m 0644 "$PKG/debian/copyright" "$STAGE/usr/share/doc/axiom-firewall/copyright"
+install -m 0644 "$ROOT/README.md" "$STAGE/usr/share/doc/axiom-firewall/README.md"
+[[ -f "$ROOT/docs/LINUX_PACKAGING.md" ]] && install -m 0644 "$ROOT/docs/LINUX_PACKAGING.md" "$STAGE/usr/share/doc/axiom-firewall/"
 
 # Modes: nothing group/world-writable, directories 0755, files 0644, executables 0755. The
 # daemon tree is audited again by --install-service after it is copied to /usr/libexec/axiom.
@@ -160,7 +160,7 @@ SHLIBS_DEPENDS=""
 if command -v dpkg-shlibdeps >/dev/null 2>&1; then
   SHLIBDEPS_DIR=$(mktemp -d "${TMPDIR:-/tmp}/axiom-shlibdeps.XXXXXX")
   mkdir -p "$SHLIBDEPS_DIR/debian"
-  printf 'Source: axiom\n\nPackage: axiom\nArchitecture: %s\n' "$DEB_ARCH" >"$SHLIBDEPS_DIR/debian/control"
+  printf 'Source: axiom-firewall\n\nPackage: axiom-firewall\nArchitecture: %s\n' "$DEB_ARCH" >"$SHLIBDEPS_DIR/debian/control"
   # Every dynamic ELF object (the BPF object is ELF too but has no dynamic section).
   mapfile -t ELF_FILES < <(find "$STAGE/opt/axiom" -type f -not -name '*.bpf.o' -exec sh -c 'head -c 4 "$1" | grep -q "^.ELF" && echo "$1"' _ {} \;)
   SHLIBS_DEPENDS=$(cd "$SHLIBDEPS_DIR" && dpkg-shlibdeps -O --ignore-missing-info --warnings=0 \
@@ -234,6 +234,6 @@ case "$FORMATS" in
 esac
 
 log "artifacts:"
-ls -l "$OUT"/axiom_*.deb "$OUT"/axiom-*.rpm 2>/dev/null >&2 || true
+ls -l "$OUT"/axiom-firewall_*.deb "$OUT"/axiom-firewall-*.rpm 2>/dev/null >&2 || true
 [[ -f "$DEB" ]] && dpkg-deb -I "$DEB" >&2
 exit 0

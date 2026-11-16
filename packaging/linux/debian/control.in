@@ -1,4 +1,4 @@
-Package: axiom
+Package: axiom-firewall
 Version: @VERSION@
 Architecture: @ARCH@
 Maintainer: The Axiom contributors <51213010+a-51-50@users.noreply.github.com>
@@ -7,6 +7,8 @@ Section: net
 Priority: optional
 Homepage: https://github.com/a-51-50/Axiom
 Depends: @SHLIBS_DEPENDS@, nftables, polkitd | policykit-1, pkexec | policykit-1, systemd
+Conflicts: axiom (<< 1000)
+Replaces: axiom (<< 1000)
 Recommends: linux-tools-common | bpftool, libsecret-1-0, gnome-shell-extension-appindicator | plasma-workspace
 Description: Network and AI agent security (desktop app + axiomd service)
  Axiom is a free, open-source per-application firewall with connection
