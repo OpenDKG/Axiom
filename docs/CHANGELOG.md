@@ -2,6 +2,14 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.74.0
+
+- **Enforcement policy is provisioned instead of missing.**
+  - `%ProgramData%\Axiom\enforcement-policy.json` was never written, so `enforcement.status` reported `enabled=false` with 0 agents, 0 rules and 0 protected resources (issue #403).
+  - New `EnforcementPolicyProvisioner` writes a conservative default: eleven harnesses in `protectSelectedOperations`, blocking reads/writes/deletes under `.ssh`, `.aws`, `.kube`, `.gnupg`, `.git-credentials`, `.npmrc`, `Microsoft\Credentials` and the Chrome profile.
+  - Installer writes it once (elevated) and never overwrites an operator policy; the service path moved to machine scope because it runs as LocalSystem.
+  - Verified after install: `enabled=true`, 11 agents, 88 rules, 8 protected resources.
+
 ## What's in 0.73.0
 
 - **Guard: wildcard spellings of protected and credential paths block.**
