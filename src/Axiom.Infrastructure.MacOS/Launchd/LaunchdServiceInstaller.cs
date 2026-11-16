@@ -241,13 +241,13 @@ public sealed class LaunchdServiceInstaller
                 return 6;
             }
 
+            // Capture the job definition before touching either the helper or the plist: a failure
+            // in the swap or in the write must be able to put the old job back.
+            previousPlist = File.Exists(_options.PlistPath) ? File.ReadAllBytes(_options.PlistPath) : null;
             if (staged is not null)
             {
-                previous = Replace(staged);
+                Swap(staged, _options.HelperDirectory, out previous);
                 staged = null;
-                // Kept so a failure after the swap (before launchd has the new job) can put the
-                // previous daemon and its job definition back instead of leaving the service down.
-                previousPlist = File.Exists(_options.PlistPath) ? File.ReadAllBytes(_options.PlistPath) : null;
             }
 
             var problems = Verify(_options.HelperDirectory);
@@ -437,30 +437,31 @@ public sealed class LaunchdServiceInstaller
     }
 
     /// <summary>
-    /// Atomically swaps the staged copy into place and returns the previous copy, which is kept
-    /// until the new daemon has bootstrapped so a failed upgrade can roll back.
+    /// Swaps the staged copy into place. <paramref name="previous"/> is set as soon as the old copy
+    /// has been moved aside, before the second move can throw, so the caller can restore it.
     /// </summary>
-    private string? Replace(string staged)
+    internal static void Swap(string staged, string helperDirectory, out string? previous)
     {
-        string? previous = null;
-        if (Directory.Exists(_options.HelperDirectory))
+        previous = null;
+        if (Directory.Exists(helperDirectory))
         {
-            previous = _options.HelperDirectory + ".old-" + Guid.NewGuid().ToString("N");
-            Directory.Move(_options.HelperDirectory, previous);
+            previous = helperDirectory + ".old-" + Guid.NewGuid().ToString("N");
+            Directory.Move(helperDirectory, previous);
         }
 
-        Directory.Move(staged, _options.HelperDirectory);
-        return previous;
+        Directory.Move(staged, helperDirectory);
     }
 
     /// <summary>
     /// Undoes a failed install after the helper swap: restores the plist this attempt overwrote
     /// (or removes one it created, so a half-install does not autostart at next boot) and then
-    /// restores and starts the previous daemon copy. Returns <paramref name="code"/> so callers
-    /// can <c>return RollBackInstall(...)</c>.
+    /// restores the previous daemon copy. If the plist could not be restored, the daemon copy is
+    /// restored but not started, so it never runs with the wrong job definition. Returns
+    /// <paramref name="code"/> so callers can <c>return RollBackInstall(...)</c>.
     /// </summary>
-    private int RollBackInstall(int code, string? previous, byte[]? previousPlist, bool plistWritten, TextWriter error)
+    internal int RollBackInstall(int code, string? previous, byte[]? previousPlist, bool plistWritten, TextWriter error)
     {
+        var canStart = true;
         if (plistWritten)
         {
             try
@@ -479,24 +480,24 @@ public sealed class LaunchdServiceInstaller
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
+                canStart = false;
                 error.WriteLine($"Could not restore {_options.PlistPath}: {exception.Message}");
             }
         }
 
         if (previous is not null)
         {
-            RollBack(previous, error);
+            RollBack(previous, canStart, error);
         }
 
         return code;
     }
 
     /// <summary>
-    /// Puts the previous daemon copy back and starts it, so a failed upgrade is not an outage. The
-    /// plist and the helper path do not change across an upgrade, so the existing job definition
-    /// still points at the restored copy.
+    /// Puts the previous daemon copy back. It is started only when the previous plist was restored
+    /// successfully; the plist and helper paths do not change across an upgrade.
     /// </summary>
-    private void RollBack(string previous, TextWriter error)
+    private void RollBack(string previous, bool canStart, TextWriter error)
     {
         try
         {
@@ -506,6 +507,12 @@ public sealed class LaunchdServiceInstaller
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             error.WriteLine($"Could not restore the previous daemon copy from {previous}: {exception.Message}");
+            return;
+        }
+
+        if (!canStart)
+        {
+            error.WriteLine("Restored the previous daemon copy but will not start it: the previous plist could not be restored.");
             return;
         }
 

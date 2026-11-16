@@ -85,21 +85,23 @@ EOF
 cat > "$BIN/PlistBuddy" <<'EOF'
 #!/bin/sh
 # PlistBuddy -c "Print :Entitlements:<key>" <plist>
+# Linux stand-in for macOS's tool: profiles in these tests are small XML plists.
 key=${2#Print :Entitlements:}
 file=
 for argument; do file=$argument; done
-case "$key" in
-  com.apple.application-identifier)
-    if grep -q host "$file" 2>/dev/null; then
-      printf '%s\n' "${EXPECTED_HOST_APP_ID:-ABCDE12345.com.axiom.firewall.host}"
-    elif grep -q filter "$file" 2>/dev/null; then
-      printf '%s\n' "${EXPECTED_FILTER_APP_ID:-ABCDE12345.com.axiom.firewall.filter}"
-    else
-      printf 'WRONG\n'
-    fi
+keyline=$(grep "<key>$key</key>" "$file" 2>/dev/null | head -1)
+[ -n "$keyline" ] || exit 1
+case "$keyline" in
+  *'<array>'*)
+    printf 'Array {\n'
+    sed -n "/<key>$key<\/key>/,/<\/array>/p" "$file" \
+      | sed -n 's:.*<string>\([^<]*\)</string>.*:    \1:p'
+    printf '}\n'
     ;;
-  com.apple.developer.team-identifier) printf '%s\n' "${EXPECTED_TEAM_ID:-ABCDE12345}" ;;
-  *) printf '1\n' ;;
+  *'<string>'*)
+    printf '%s\n' "$keyline" | sed -n 's:.*<string>\([^<]*\)</string>.*:\1:p'
+    ;;
+  *) exit 1 ;;
 esac
 EOF
 cat > "$BIN/security" <<'EOF'
@@ -161,14 +163,46 @@ printf 'wrapped %s\n' "$1" >> "$WRAP_LOG"
 exec "$@"
 EOF
 chmod +x "$BIN"/* "$TEMP/wrap.sh"
-export PATH="$BIN:$PATH" PLISTBUDDY="$BIN/PlistBuddy"
+export PATH="$BIN:$PATH"
+if [ -x /usr/libexec/PlistBuddy ]; then
+  unset PLISTBUDDY || true
+else
+  export PLISTBUDDY="$BIN/PlistBuddy"
+fi
 export PKG_ARGS="$TEMP/pkgbuild.args" DOTNET_CALLS="$TEMP/dotnet.calls" WRAP_LOG="$TEMP/wrap.log"
 : > "$PKG_ARGS"; : > "$DOTNET_CALLS"; : > "$WRAP_LOG"
 
 HOST_PROFILE="$TEMP/host.provisionprofile"
 FILTER_PROFILE="$TEMP/filter.provisionprofile"
-printf 'fake host profile\n' > "$HOST_PROFILE"
-printf 'fake filter profile\n' > "$FILTER_PROFILE"
+cat > "$HOST_PROFILE" <<'PROFILE'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>Entitlements</key><dict>
+<key>com.apple.application-identifier</key><string>ABCDE12345.com.axiom.firewall.host</string>
+<key>com.apple.developer.team-identifier</key><string>ABCDE12345</string>
+<key>com.apple.developer.system-extension.install</key><true/>
+<key>com.apple.developer.networking.networkextension</key><array>
+<string>content-filter-provider-systemextension</string>
+</array>
+<key>com.apple.security.application-groups</key><array>
+<string>ABCDE12345.com.axiom.firewall</string>
+</array>
+</dict></dict></plist>
+PROFILE
+cat > "$FILTER_PROFILE" <<'PROFILE'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>Entitlements</key><dict>
+<key>com.apple.application-identifier</key><string>ABCDE12345.com.axiom.firewall.filter</string>
+<key>com.apple.developer.team-identifier</key><string>ABCDE12345</string>
+<key>com.apple.developer.networking.networkextension</key><array>
+<string>content-filter-provider-systemextension</string>
+</array>
+<key>com.apple.security.application-groups</key><array>
+<string>ABCDE12345.com.axiom.firewall</string>
+</array>
+</dict></dict></plist>
+PROFILE
 
 run() { # run the packager with the fake toolchain
   bash "$REPO/scripts/macos/package-app.sh" osx-arm64 "$@"
@@ -206,11 +240,33 @@ set -e
 [ "$code" != "0" ] || fail "signed packaging succeeded without profiles"
 pass "signed packaging without profiles fails clearly"
 
-EXPECTED_HOST_APP_ID="WRONG.com.axiom.firewall.host" \
+sed 's/ABCDE12345.com.axiom.firewall.host/WRONG.com.axiom.firewall.host/' \
+  "$HOST_PROFILE" > "$TEMP/host-wrong-appid.provisionprofile"
 AXIOM_SIGN_IDENTITY="Developer ID Application: Test (ABCDE12345)" \
-AXIOM_HOST_PROFILE="$HOST_PROFILE" AXIOM_FILTER_PROFILE="$FILTER_PROFILE" \
+AXIOM_HOST_PROFILE="$TEMP/host-wrong-appid.provisionprofile" AXIOM_FILTER_PROFILE="$FILTER_PROFILE" \
   run >/dev/null 2>&1 && fail "mismatched profile was accepted"
 pass "mismatched profile bundle id is refused"
+
+sed 's/content-filter-provider-systemextension/packet-tunnel-provider/' \
+  "$HOST_PROFILE" > "$TEMP/host-wrong-ne.provisionprofile"
+AXIOM_SIGN_IDENTITY="Developer ID Application: Test (ABCDE12345)" \
+AXIOM_HOST_PROFILE="$TEMP/host-wrong-ne.provisionprofile" AXIOM_FILTER_PROFILE="$FILTER_PROFILE" \
+  run >/dev/null 2>&1 && fail "wrong host network-extension value was accepted"
+pass "wrong host network-extension value is refused"
+
+sed 's/ABCDE12345.com.axiom.firewall/ABCDE12345.com.other/' \
+  "$FILTER_PROFILE" > "$TEMP/filter-wrong-group.provisionprofile"
+AXIOM_SIGN_IDENTITY="Developer ID Application: Test (ABCDE12345)" \
+AXIOM_HOST_PROFILE="$HOST_PROFILE" AXIOM_FILTER_PROFILE="$TEMP/filter-wrong-group.provisionprofile" \
+  run >/dev/null 2>&1 && fail "wrong filter app-group was accepted"
+pass "wrong filter application-group is refused"
+
+sed 's|<key>com.apple.developer.system-extension.install</key><true/>|<key>com.apple.developer.system-extension.install</key><false/>|' \
+  "$HOST_PROFILE" > "$TEMP/host-false-install.provisionprofile"
+AXIOM_SIGN_IDENTITY="Developer ID Application: Test (ABCDE12345)" \
+AXIOM_HOST_PROFILE="$TEMP/host-false-install.provisionprofile" AXIOM_FILTER_PROFILE="$FILTER_PROFILE" \
+  run >/dev/null 2>&1 && fail "non-true system-extension.install was accepted"
+pass "non-true system-extension.install is refused"
 
 # --- 5. real identities sign the UI and the package; the host keeps its own profile ----------
 : > "$PKG_ARGS"

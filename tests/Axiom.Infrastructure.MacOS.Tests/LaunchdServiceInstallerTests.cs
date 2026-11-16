@@ -267,6 +267,62 @@ public sealed class LaunchdServiceInstallerTests
     }
 
     [Fact]
+    public void SwapKeepsThePreviousCopyWhenTheNewCopyCannotMove()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var helper = Path.Combine(temp.Path, "com.axiom.service");
+        Directory.CreateDirectory(helper);
+        File.WriteAllText(Path.Combine(helper, "axiomd"), "old");
+
+        string? previous = null;
+        Assert.ThrowsAny<IOException>(() =>
+            LaunchdServiceInstaller.Swap(Path.Combine(temp.Path, "missing-staged"), helper, out previous));
+
+        // The old copy is moved aside before the second move fails: the caller must still be able
+        // to restore it instead of leaking it under .old-*.
+        Assert.NotNull(previous);
+        Assert.True(Directory.Exists(previous));
+        Assert.False(Directory.Exists(helper));
+        Assert.Equal("old", File.ReadAllText(Path.Combine(previous!, "axiomd")));
+    }
+
+    [Fact]
+    public void RollBackDoesNotStartTheOldDaemonWhenThePlistCannotBeRestored()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temp = new TempDirectory();
+        var layout = Layout(temp);
+        var previous = layout.HelperDirectory + ".old-test";
+        Directory.CreateDirectory(layout.HelperDirectory);
+        File.WriteAllText(Path.Combine(layout.HelperDirectory, "axiomd"), "old");
+        Directory.Move(layout.HelperDirectory, previous);
+        // A directory at the plist path makes File.WriteAllBytes fail during the rollback.
+        Directory.CreateDirectory(layout.PlistPath);
+
+        var runner = new FakeRunner();
+        var installer = new LaunchdServiceInstaller(runner, layout, () => true, () => 501);
+        var error = new StringWriter();
+
+        Assert.Equal(1, installer.RollBackInstall(1, previous, [1, 2, 3], plistWritten: true, error));
+
+        Assert.True(Directory.Exists(layout.HelperDirectory));
+        Assert.Equal("old", File.ReadAllText(Path.Combine(layout.HelperDirectory, "axiomd")));
+        Assert.False(Directory.Exists(previous));
+        Assert.DoesNotContain(runner.Calls, call => call.StartsWith("launchctl bootstrap", StringComparison.Ordinal));
+        Assert.Contains("Could not restore", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("will not start", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InstallRemovesThePlistItWroteWhenAFirstInstallCannotStart()
     {
         if (OperatingSystem.IsWindows())

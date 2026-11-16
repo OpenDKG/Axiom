@@ -386,6 +386,14 @@ if me != 0 {
     refusing.stop(); close(srv2)
 }
 
+// --- filter refresh policy (FilterRefreshPolicy.swift) ----------------------
+// Any replaced extension/host is re-signed, so the saved NEFilterManager configuration no longer
+// satisfies its code-signature requirement and must be re-created. `--reset-filter` forces it.
+check(!filterRefreshRequired(explicitReset: false, replaced: false), "unchanged activation keeps the filter configuration")
+check(filterRefreshRequired(explicitReset: true, replaced: false), "--reset-filter re-creates the configuration")
+check(filterRefreshRequired(explicitReset: false, replaced: true), "a replaced extension re-creates the configuration")
+check(filterRefreshRequired(explicitReset: true, replaced: true), "reset and replacement together still re-create")
+
 // --- shared fixtures (Tests/fixtures/rules-cases.json) ----------------------
 let fixturePath = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
     .appendingPathComponent("../../Tests/fixtures/rules-cases.json").standardized.path

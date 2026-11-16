@@ -219,13 +219,8 @@ func cdhash(of url: URL) -> String? {
     return unique.map { String(format: "%02x", $0) }.joined()
 }
 
-/// True when this process is ad hoc signed (development builds). An NEFilterManager
-/// configuration is bound to the code signature of the app that saved it; for an ad hoc
-/// signature that is the exact cdhash, so after every rebuild nesessionmanager rejects the
-/// existing configuration ("does not satisfy the code signature requirements") and the filter
-/// never starts. Dev builds therefore re-create the configuration whenever `activate` replaced
-/// the extension (the helper is re-signed alongside); Developer ID signatures satisfy a stable
-/// designated requirement and keep theirs. `--reset-filter` forces the re-creation.
+/// True when this process is ad hoc signed (development builds). Ad hoc signatures cannot
+/// authorise the host's restricted entitlements; SysextCore refuses before making any request.
 func isAdHocSigned() -> Bool {
     var code: SecCode?
     guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return false }
@@ -326,15 +321,16 @@ private func activate(_ out: SysextResult, queue: DispatchQueue, wait: Bool, for
         out.progress("waiting for approval: System Settings > General > Login Items & Extensions > Network Extensions")
         if !wait {
             out.finish(.needsApproval, state: "needs_approval",
-                       message: "Approve Axiom in System Settings > General > Login Items & Extensions > Network Extensions, then run activate again")
+                       message: "Approve Axiom Network Filter in System Settings > General > Login Items & Extensions > Network Extensions, then run activate again")
         }
     }
     let adHoc = isAdHocSigned()
     out["adHocSigned"] = adHoc
-    // `replaced`: an installed extension was replaced (every dev build has a new build number,
-    // and package-app.sh re-signs the helper alongside, so this is when the ad hoc config breaks).
+    // `replaced`: an installed extension was replaced. The activation host itself is re-signed
+    // whenever the extension or host changes, and the existing NEFilterManager configuration is
+    // bound to the old signature, so a replacement always re-creates it (even for Developer ID).
     let enableFilter = { (replaced: Bool) in
-        let reset = resetFilter || (adHoc && replaced)
+        let reset = filterRefreshRequired(explicitReset: resetFilter, replaced: replaced)
         out["filterReset"] = reset
         let save = {
             out.progress("extension active; enabling content filter")
@@ -350,7 +346,7 @@ private func activate(_ out: SysextResult, queue: DispatchQueue, wait: Bool, for
             }
         }
         if reset {
-            out.progress("re-creating the content filter configuration (ad hoc signature / --reset-filter)")
+            out.progress("re-creating the content filter configuration (replaced host/extension signature or --reset-filter)")
             updateFilter(enable: false, remove: true) { _, error in
                 if let error { out.progress("removing the old configuration failed: \(describe(error))") }
                 save()

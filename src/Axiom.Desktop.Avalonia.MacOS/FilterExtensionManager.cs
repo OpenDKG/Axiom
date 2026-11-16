@@ -19,6 +19,9 @@ public sealed record FilterExtensionStatus(
     public const string ApprovalPath =
         "System Settings > General > Login Items & Extensions > Network Extensions";
 
+    /// <summary>The name macOS shows for the requesting app in System Settings.</summary>
+    public const string HostDisplayName = "Axiom Network Filter";
+
     public const int ExitOk = 0;
 
     public const int ExitError = 1;
@@ -43,7 +46,7 @@ public sealed record FilterExtensionStatus(
         _ when NeedsReboot => "Restart the Mac to finish installing the Axiom network filter.",
         _ when NeedsApproval =>
             "The Axiom network filter is waiting for your approval in " + ApprovalPath +
-            ". Turn on Axiom, enter your password, then allow \"Filter Network Content\".",
+            ". Turn on " + HostDisplayName + ", enter your password, then allow \"Filter Network Content\".",
         "running" or "activated" or "enabled" when FilterEnabled => "The Axiom network filter is running.",
         "installed_filter_disabled" or "disabled" =>
             "The Axiom network filter is installed but turned off.",

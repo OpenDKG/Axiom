@@ -134,7 +134,7 @@ build_host() {
   rm -rf "$HOST_APP"
   mkdir -p "$HOST_APP/Contents/MacOS" "$HOST_APP/Contents/Library/SystemExtensions"
   compile AxiomSysext "$HOST_APP/Contents/MacOS/axiom-sysext" \
-    AxiomSysext/main.swift AxiomSysext/SysextCore.swift
+    AxiomSysext/main.swift AxiomSysext/SysextCore.swift AxiomSysext/FilterRefreshPolicy.swift
   substitute AxiomSysext/Info.plist "$HOST_APP/Contents/Info.plist"
   plutil -lint -s "$HOST_APP/Contents/Info.plist"
   cp -R "$EXT_BUNDLE" "$HOST_APP/Contents/Library/SystemExtensions/"
@@ -158,7 +158,8 @@ run_tests() {
   log "swiftc filter unit tests"
   swiftc -swift-version 5 -warnings-as-errors -sdk "$SDK" -target "$(uname -m)-apple-macos$MIN_OS" \
     -module-name FilterTests -o "$OBJ/filter-tests" \
-    AxiomFilter/RuleTable.swift AxiomFilter/RuleStore.swift AxiomFilter/EventSink.swift Tests/main.swift
+    AxiomFilter/RuleTable.swift AxiomFilter/RuleStore.swift AxiomFilter/EventSink.swift \
+    AxiomSysext/FilterRefreshPolicy.swift Tests/main.swift
   AXIOM_RULE_FIXTURES="$MACOS_DIR/Tests/fixtures/rules-cases.json" "$OBJ/filter-tests"
 }
 

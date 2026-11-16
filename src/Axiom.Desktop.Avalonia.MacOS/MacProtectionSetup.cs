@@ -39,6 +39,12 @@ public sealed class MacProtectionSetup(
 
     public static string DeclinedMarkerPath => Path.Combine(AxiomPaths.UserDataDirectory, "daemon-install-declined");
 
+    internal static string ActivationPrompt =>
+        "Axiom enforces firewall rules with a macOS network extension (AxiomFilter).\n\n" +
+        "macOS asks you to approve it once in " + FilterExtensionStatus.ApprovalPath +
+        " (turn on " + FilterExtensionStatus.HostDisplayName + " and enter your password) and then to allow \"Filter Network Content\". " +
+        "Axiom waits up to two minutes for the approval.";
+
     public string DaemonSummary => Daemon switch
     {
         DaemonState.Running => "Background service: running" + (DaemonVersion is null ? string.Empty : $" ({DaemonVersion})"),
@@ -183,10 +189,7 @@ public sealed class MacProtectionSetup(
 
             var approved = await ui.ConfirmAsync(
                 "Turn on the Axiom network filter",
-                "Axiom enforces firewall rules with a macOS network extension (AxiomFilter).\n\n" +
-                "macOS asks you to approve it once in " + FilterExtensionStatus.ApprovalPath +
-                " (turn on Axiom and enter your password) and then to allow \"Filter Network Content\". " +
-                "Axiom waits up to two minutes for the approval.",
+                ActivationPrompt,
                 "Turn on",
                 destructive: false,
                 cancellationToken).ConfigureAwait(true);

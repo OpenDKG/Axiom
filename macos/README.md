@@ -2,7 +2,8 @@
 
 Swift sources for the macOS enforcement layer. The contract with the .NET daemon and the
 desktop app is `docs/MACOS_ARCHITECTURE.md` §3; this file covers building, testing and
-packaging.
+packaging. The activation host, review corrections and signing gates are summarised in
+`docs/MACOS_ACTIVATION_HOST.md`.
 
 ```text
 macos/
@@ -149,7 +150,7 @@ axiom-sysext activate|deactivate|enable|disable|status [--timeout SECONDS] [--no
 
 | Command | Does |
 |---|---|
-| `activate` | Submits the activation request (install / upgrade; an installed copy with the same version, build **and** cdhash is kept unless `--force`), re-creates the filter configuration when an ad hoc signed helper replaced the extension or `--reset-filter` is given (see "Ad hoc builds and the filter configuration"), waits for user approval (up to `--timeout`, default 120 s; `--no-wait` returns exit 3 immediately when approval is needed), then saves and enables the `NEFilterManager` configuration (`filterSockets`, data provider `com.axiom.firewall.filter`, description "Axiom Firewall"). The first enable shows the "Filter Network Content" Allow prompt. |
+| `activate` | Submits the activation request (install / upgrade; an installed copy with the same version, build **and** cdhash is kept unless `--force`), re-creates the filter configuration whenever the extension/host was replaced or `--reset-filter` is given (the saved configuration is bound to the previous host signature), waits for user approval (up to `--timeout`, default 120 s; `--no-wait` returns exit 3 immediately when approval is needed), then saves and enables the `NEFilterManager` configuration (`filterSockets`, data provider `com.axiom.firewall.filter`, description "Axiom Firewall"). The first enable shows the "Filter Network Content" Allow prompt. |
 | `deactivate` | Removes the filter configuration, then submits the deactivation request (needs an admin password prompt: run it from the GUI session). |
 | `enable` / `disable` | Only toggles the filter configuration; the extension stays installed. |
 | `status` | No changes or prompts (15 s default timeout). |
@@ -209,8 +210,10 @@ flow reports, e.g. SSH sessions into the Mac drop): run upgrades from a local sh
 The ad hoc host carries no restricted entitlements and `SysextCore` refuses every restricted
 command with `state=unavailable` before touching `OSSystemExtensionRequest` or `NEFilterManager`.
 There is no ad hoc activation route; SIP-off/`systemextensionsctl developer on` do not authorise
-the entitlements. Signed builds keep the existing upgrade/reset behaviour: `activate` re-creates
-the filter configuration when `--reset-filter` is given or when the signature changed.
+the entitlements. Signed builds also re-create the filter configuration whenever `activate`
+replaces the extension: the host is re-signed by every build and the saved NEFilterManager
+configuration is bound to the previous signature. `--reset-filter` forces the same refresh when
+nothing was replaced.
 
 ## Behaviour notes (review #23)
 

@@ -228,6 +228,17 @@ public sealed class FilterExtensionStatusTests
     }
 
     [Fact]
+    public void Approval_instructions_name_the_requesting_host()
+    {
+        var status = FilterExtensionStatus.Parse("activate", 3, """{"command":"activate","exitCode":3,"ok":false,"state":"needs_approval"}""");
+
+        Assert.Contains("Axiom Network Filter", status.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("Turn on Axiom,", status.Summary, StringComparison.Ordinal);
+        Assert.Contains("Axiom Network Filter", MacProtectionSetup.ActivationPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("turn on Axiom and", MacProtectionSetup.ActivationPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Reboot_and_error_messages_are_surfaced()
     {
         Assert.True(FilterExtensionStatus.Parse("activate", 4, """{"state":"reboot_required","ok":false}""").NeedsReboot);

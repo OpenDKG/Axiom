@@ -128,23 +128,44 @@ validate_profile() {
   rm -f "$plist"
 }
 
-require_profile_entitlement() { # profile key label
+profile_array_contains() { # profile key value label
+  local plist out
+  plist=$(mktemp "${TMPDIR:-/tmp}/axiom-profile.XXXXXX") || die "cannot create a temporary file"
+  security cms -D -i "$1" > "$plist" 2>/dev/null || die "$4 profile is not a valid provisioning profile"
+  out=$("$PLISTBUDDY" -c "Print :Entitlements:$2" "$plist" 2>/dev/null) || {
+    rm -f "$plist"
+    die "$4 profile does not authorise $2"
+  }
+  case "$out" in
+    Array\ {*) ;;
+    *) rm -f "$plist"; die "$4 profile's $2 is not an array" ;;
+  esac
+  printf '%s\n' "$out" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -Fxq -- "$3" || {
+    rm -f "$plist"
+    die "$4 profile's $2 does not contain '$3'"
+  }
+  rm -f "$plist"
+}
+
+profile_boolean_true() { # profile key label
   local plist
   plist=$(mktemp "${TMPDIR:-/tmp}/axiom-profile.XXXXXX") || die "cannot create a temporary file"
   security cms -D -i "$1" > "$plist" 2>/dev/null || die "$3 profile is not a valid provisioning profile"
-  profile_value "$plist" "$2" >/dev/null \
-    || die "$3 profile does not authorise $2"
+  tr -d '[:space:]' < "$plist" | grep -q "<key>$2</key><true/>" || {
+    rm -f "$plist"
+    die "$3 profile's $2 is not boolean true"
+  }
   rm -f "$plist"
 }
 
 if [[ $SIGNING -eq 1 ]]; then
   validate_profile "$AXIOM_HOST_PROFILE" "$TEAM_ID.$HOST_ID" "host"
   validate_profile "$AXIOM_FILTER_PROFILE" "$TEAM_ID.$EXT_ID" "filter extension"
-  require_profile_entitlement "$AXIOM_HOST_PROFILE" "com.apple.developer.system-extension.install" "host"
-  require_profile_entitlement "$AXIOM_HOST_PROFILE" "com.apple.developer.networking.networkextension" "host"
-  require_profile_entitlement "$AXIOM_HOST_PROFILE" "com.apple.security.application-groups" "host"
-  require_profile_entitlement "$AXIOM_FILTER_PROFILE" "com.apple.developer.networking.networkextension" "filter extension"
-  require_profile_entitlement "$AXIOM_FILTER_PROFILE" "com.apple.security.application-groups" "filter extension"
+  profile_boolean_true "$AXIOM_HOST_PROFILE" "com.apple.developer.system-extension.install" "host"
+  profile_array_contains "$AXIOM_HOST_PROFILE" "com.apple.developer.networking.networkextension" "content-filter-provider-systemextension" "host"
+  profile_array_contains "$AXIOM_HOST_PROFILE" "com.apple.security.application-groups" "$APP_GROUP" "host"
+  profile_array_contains "$AXIOM_FILTER_PROFILE" "com.apple.developer.networking.networkextension" "content-filter-provider-systemextension" "filter extension"
+  profile_array_contains "$AXIOM_FILTER_PROFILE" "com.apple.security.application-groups" "$APP_GROUP" "filter extension"
 fi
 
 # ---------------------------------------------------------------------------------------------
