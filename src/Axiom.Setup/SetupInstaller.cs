@@ -327,7 +327,7 @@ internal static class SetupInstaller
                     Report("Installing agent hooks after the Blackbox runtime is prepared.");
                     var enforcementPolicy = EnforcementPolicyProvisioner.EnsureDefault();
                     Report(enforcementPolicy is null
-                        ? "OS enforcement policy: an existing policy was kept."
+                        ? "OS enforcement policy: an existing policy was kept (the service provisions one when absent)."
                         : "OS enforcement policy: default written so the service can enforce protected credential stores.");
                     var protection = new UserStateProtection();
                     var protectedBefore = await Task.Run(

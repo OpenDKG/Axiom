@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Text.Json;
+using Axiom.Contracts.Enforcement;
 using Axiom.Contracts.Ipc;
 using Axiom.Core.Enforcement;
 
@@ -45,6 +46,9 @@ public sealed class EnforcementController
     /// <summary>Current policy state and receipt summary. Missing file means disabled, not an error.</summary>
     public EnforcementStatusDto GetStatus()
     {
+        // The service runs as LocalSystem, so it can write the machine-scope policy even when the
+        // desktop or installer could not. Provision once, then report the real state.
+        EnforcementPolicyProvisioner.EnsureMachineDefault(policyPath: _policyPath);
         var policy = LoadPolicy();
         var summary = _journal.Summarize();
 
