@@ -307,8 +307,8 @@
 
         <StackPanel Grid.Row="2" Margin="16,0,16,10" Spacing="8">
           <Border Height="1" Background="{DynamicResource Axiom.Border}" />
-          <Button Command="{Binding OpenWebsiteCommand}" Background="Transparent" BorderThickness="0"
-                  Padding="0" HorizontalAlignment="Center" Cursor="Hand"
+          <Button Command="{Binding OpenWebsiteCommand}" Classes="ghost"
+                  HorizontalAlignment="Center" Cursor="Hand"
                   ToolTip.Tip="Open opendkg.org/axiom"
                   AutomationProperties.Name="Open the Axiom website">
             <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">

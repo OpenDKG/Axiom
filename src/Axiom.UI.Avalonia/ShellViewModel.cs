@@ -198,6 +198,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 _uiMode.Apply(UiMode.Simple);
                 SelectedPage = Support;
             },
+            openWebsite: () => OpenWebsiteCommand.Execute(null),
             openGitHub: OpenGitHubAsync,
             expandView: () => _uiMode.Apply(UiMode.Advanced));
         Pages =

@@ -599,4 +599,24 @@
   <Style Selector=":is(TextBlock).mono">
     <Setter Property="FontFamily" Value="Cascadia Mono, JetBrains Mono, Consolas, monospace" />
   </Style>
+
+  <!-- Ghost link button: no chrome until hover, then a soft theme-aware highlight. -->
+  <Style Selector="Button.ghost">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+  </Style>
+  <Style Selector="Button.ghost /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.ghost:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
 </Styles>
