@@ -267,9 +267,9 @@ public sealed class EnforcementController
         return Task.FromResult(verdictDto with { ReceiptResult = recordedReceipt.ResultToken });
     }
 
-    /// <summary>Default location of the opt-in policy file.</summary>
+    /// <summary>Default location of the opt-in policy file (machine scope: the service is LocalSystem).</summary>
     public static string DefaultPolicyPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "Axiom",
         "enforcement-policy.json");
 
