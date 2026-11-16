@@ -562,3 +562,44 @@ Residual: a persistent crash loop still ends in a fail-closed outage once the st
 this VM, not to every host. This is not production readiness: real Wayland/tray, polkit denial,
 public-DoH egress, Windows runtime, Fedora/RPM, arm64, signing, lintian and locked restore remain
 open, and no broad Windows parity is claimed.
+
+Revision 6 (2026-11-16T04:2xZ UTC, single builder): two review nits and the stale unit docs are
+fixed in local `d90c9ff48d121f6cacf99c0672140973ebd30a18`, rebuilt as
+`axiom-firewall_0.59.0_amd64.deb` sha256
+`06d8320192c2329eef4b8f3b7b6a55395758dbb6f37ec15b98495c906233d953` (64,324,056 bytes). The prior
+artifact (`fc78a518…`) is preserved unmodified under the new evidence root. Fresh independent
+review of `d90c9ff` / `06d832…` is required before any approval claim.
+
+| Finding | Fix | Fresh evidence |
+|---|---|---|
+| GUI ceil overshoot at fractional DPI | `MainWindow` caps the `ceil()`ed pixel size to the working area before converting back to DIPs; the 900x600 floor is lowered only when the screen cannot fit it | UI.Avalonia 94/94; real Xvfb: 1280x800@1x = 1280x800 at +0+0, 1280x800@1.5 = 1280x800 at +0+0 (no 1350x900 min overflow), 1920x1080@1.25 = 1825x1080 at +47+0; negative-origin and large-screen theories |
+| WPF hint stale/failed-probe enabled | Hint is now open / known-closed / unknown; a failed probe clears `WritesEnabled`, sets `WriteGateKnown=false`, and never claims "by design" for an unread gate. `WritesEnabled` remains the service write-gate bit only | `tests/Axiom.UI.Tests/FirewallRulesWriteGateTests.cs` cross-builds 0 warnings/0 errors; runtime **blocked** (no WindowsDesktop 10.0.0 on this Linux host), not claimed as pass |
+| Docs still showed `RestartSec=10` | Both unit examples now show `RestartSec=2`, `StartLimitIntervalSec=60`, `StartLimitBurst=5`; no other doc claims changed | targeted doc edit |
+
+Other gates checked this pass:
+
+- Portable locked restore exits 0 with a non-empty stdout log; all 34 lock hashes unchanged
+  (aggregate `197d6b93…` before and after).
+- Full-solution `restore --locked-mode -p:EnableWindowsTargeting=true` still fails `NU1004`
+  (stale Windows lock graphs: a new `Axiom.Service.Hosting` project reference and changed Setup
+  runtime identifiers). This is not a portable-solution failure. Non-locked restore with the
+  same flag succeeds and the full solution then builds 0 warnings / 0 errors; Windows tests
+  remain blocked at runtime.
+- `lintian` is absent and was not installed. Non-privileged `pkexec` without a controlling
+  terminal fails before any prompt (exit 127); this is the no-agent path, not a denial/cancel
+  proof.
+- Guest smoke on the new artifact: clean `dpkg -i` RC 0, correct `--doctor` all checks passed,
+  nftables generation 1, 4/4 BPF pins; Xvfb GUI 1280 and fractional sizes on-screen; Network
+  Control READ-ONLY hint, SHIELD ON hint after enable, READ-ONLY after disable; clean `dpkg -P`
+  RC 0 with package/unit/state/nft/pins removed and guest resolver hash unchanged. VM powered
+  off; baseline unchanged; host resolver unchanged.
+- Harness note: the first smoke used `axiomd doctor` (missing `--`), which starts a second
+  foreground daemon and caused generation churn. The retained old artifact reproduced the same
+  churn; after a clean guest reboot the correct `--doctor` passed. Not a product change.
+
+Evidence root: `/tmp/opencode/axiom-dpi-wpf-fixes-20261115/` (`REPORT.md`, `PROVENANCE.txt`,
+`SHA256SUMS.txt`, test/build logs, guest logs, `gui/*.png`). Remaining gates unchanged: fresh
+independent review, Windows WPF runtime, E2E WPF behaviour, lintian, full-solution locked
+Windows restore, Fedora/RPM, arm64, signing, real Wayland/tray, polkit denial UX, OS DNS
+redirect/restore (unchanged code, not retested). Not production readiness; no broad Windows
+parity claim.
