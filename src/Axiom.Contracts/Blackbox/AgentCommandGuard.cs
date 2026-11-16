@@ -163,7 +163,7 @@ public static class AgentCommandGuard
                      "open(", ".read(", "copy ", "cp ", "get-item", "strings ", "forfiles",
                      "findstr", "select-string", "grep", " rg ", "tar ", "compress-archive",
                      "copy-item", "move-item", "robocopy", "xcopy", "openssl", "ssh-keygen",
-                     "gpg", "age ", "makecab", "expand ", "esentutl", "ssh -i")
+                     "gpg", "age ", "makecab", "expand ", "esentutl", "ssh -i", "split ", "csplit ")
             if not any(verb in text for verb in verbs):
                 return False
             words = text.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()

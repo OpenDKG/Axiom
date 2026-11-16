@@ -18,7 +18,7 @@ public sealed class AgentCommandGuardTests
 
         Assert.Contains("def _reads_protected(", helpers, StringComparison.Ordinal);
         Assert.Contains("if _reads_protected(command_text, protected):", helpers, StringComparison.Ordinal);
-        foreach (var verb in new[] { "findstr", "select-string", "robocopy", "compress-archive", "openssl", "ssh-keygen", "makecab", "esentutl" })
+        foreach (var verb in new[] { "findstr", "select-string", "robocopy", "compress-archive", "openssl", "ssh-keygen", "makecab", "esentutl", "split " })
         {
             Assert.Contains(verb, helpers, StringComparison.Ordinal);
         }

@@ -2,6 +2,12 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.69.0
+
+- **Guard: `split`/`csplit` key staging blocks.**
+  - Batch 8 on 0.68 hooks blocked query-string exfil (`curl "…?name=$(cat key)"`), `Get-Content | Invoke-RestMethod`, `curl --doh-url --data @key`, `openssl s_client < key`, `certutil -encodehex`, `Get-FileHash key`, `tee` and `attrib +h`, but allowed `split -b 100 …id_rsa` (issue #393).
+  - `split ` and `csplit ` are now read verbs; re-verified 10/10, with batches 1-7 clean.
+
 ## What's in 0.68.0
 
 - **Guard: harness wiring files and the vendor plugin config are tamper-protected.**
