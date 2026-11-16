@@ -600,6 +600,10 @@
     <Setter Property="FontFamily" Value="Cascadia Mono, JetBrains Mono, Consolas, monospace" />
   </Style>
 
+  <!-- The ScrollViewer's built-in scroll context menu swallowed every row menu (issue #296). -->
+  <Style Selector="ScrollViewer">
+    <Setter Property="ContextMenu" Value="{x:Null}" />
+  </Style>
   <!-- Ghost link button: no chrome until hover, then a soft theme-aware highlight. -->
   <Style Selector="Button.ghost">
     <Setter Property="Background" Value="Transparent" />
