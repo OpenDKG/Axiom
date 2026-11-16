@@ -294,11 +294,10 @@ if command -v pkgbuild >/dev/null; then
   cat > "$SCRIPTS/postinstall" <<'EOF'
 #!/bin/sh
 # Installs the root daemon (launchd plist, root-owned helper copy, newsyslog rotation); idempotent.
-# Installer scripts get $2 = installation destination and $3 = target volume mountpoint; with
-# --install-location / and a root-relative payload both are the volume root, so the daemon path
-# is <destination>/Applications/Axiom.app.
-TARGET="${2:-/}"
-"$TARGET/Applications/Axiom.app/Contents/Resources/service/axiomd" --install-service || exit 1
+# Installer scripts get $2 = installation destination and $3 = target volume mountpoint; the
+# payload is root-relative (--install-location /), so resolve the app against the target volume.
+VOLUME="${3:-${2:-/}}"
+"$VOLUME/Applications/Axiom.app/Contents/Resources/service/axiomd" --install-service || exit 1
 exit 0
 EOF
   chmod 755 "$SCRIPTS/postinstall"
