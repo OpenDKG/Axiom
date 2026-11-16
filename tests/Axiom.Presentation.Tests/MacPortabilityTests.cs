@@ -59,7 +59,11 @@ public sealed class MacBundleLayoutTests
         // runner sees "/Applications/Axiom.app/Contents\Resources\service\axiomd". The bundle root
         // itself is only ever split with Path.GetDirectoryName, which keeps the '/' it was given.
         Assert.Equal(Path.Combine("/Applications/Axiom.app/Contents", "Resources", "service", "axiomd"), layout.DaemonPath);
-        Assert.Equal(Path.Combine("/Applications/Axiom.app/Contents/MacOS", "axiom-sysext"), layout.SysextHelperPath);
+        Assert.Equal("/Applications/AxiomFilterHost.app", layout.SysextHostBundlePath);
+        Assert.Equal(
+            Path.Combine("/Applications/AxiomFilterHost.app/Contents/MacOS", "axiom-sysext"),
+            layout.SysextHostExecutablePath);
+        Assert.True(layout.IsSysextHostInApplicationsFolder);
     }
 
     [Fact]
@@ -68,10 +72,15 @@ public sealed class MacBundleLayoutTests
         var downloads = new MacBundleLayout("/Users/me/Downloads/Axiom.app/Contents/MacOS");
         Assert.True(downloads.IsInsideAppBundle);
         Assert.False(downloads.IsInApplicationsFolder);
+        Assert.Equal(
+            Path.Combine(Path.GetDirectoryName(downloads.BundlePath)!, MacBundleLayout.SysextHostBundleName),
+            downloads.SysextHostBundlePath);
+        Assert.False(downloads.IsSysextHostInApplicationsFolder);
 
         var plain = new MacBundleLayout("/tmp/publish");
         Assert.False(plain.IsInsideAppBundle);
         Assert.Null(plain.BundlePath);
+        Assert.Null(plain.SysextHostBundlePath);
         Assert.Equal(Path.Combine("/tmp/publish", "service", "axiomd"), plain.DaemonPath);
     }
 

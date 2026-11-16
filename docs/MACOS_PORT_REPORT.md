@@ -20,7 +20,7 @@ plus three macOS-specific pieces:
 |---|---|---|
 | `Axiom.app` desktop host (Avalonia, menu-bar icon, native menu, Keychain, LaunchAgent autostart, single instance) | `Axiom.Desktop.Avalonia.Windows` | `src/Axiom.Desktop.Avalonia.MacOS` |
 | `axiomd` launchd root daemon (same `Axiom.Service` project, `net10.0` target) | Windows service | `src/Axiom.Service` + `src/Axiom.Service.Hosting` + `src/Axiom.Infrastructure.MacOS` |
-| `com.axiom.firewall.filter` NEFilterDataProvider system extension (Swift) + `axiom-sysext` helper + `libAxiomSysext.dylib` | Windows Firewall rules | `macos/` |
+| `com.axiom.firewall.filter` NEFilterDataProvider system extension (Swift) inside the app-like `AxiomFilterHost.app` | Windows Firewall rules | `macos/` |
 
 Verified end to end in a macOS 15.8.3 VM through the app's own UI (all PASS):
 service install via admin prompt (≈3 s), filter activation + approval, live Connections with app names,
@@ -159,24 +159,29 @@ Build, signing, distribution
   runs `axiomd --install-service`).
 - Versioning contract: `AXIOM_VERSION` / `AXIOM_BUILD` are passed to the extension; the helper replaces the
   installed extension when version/build or cdhash differ; a release build fails without a version.
+- **Activation runs in a separate app-like host**, `AxiomFilterHost.app`, installed as a sibling of
+  `Axiom.app`. macOS verifies that the extension is in the requesting app's
+  `Contents/Library/SystemExtensions` and that the requesting app is in `/Applications`; a host
+  nested in another app is not a documented layout. `FilterExtensionManager` runs the host's native
+  `axiom-sysext` over the existing JSON/exit-code contract. The JIT UI carries no restricted entitlements.
 - **Development activation needs an Apple-issued identity and profiles**; there is no ad hoc route
   (SIP-off and `systemextensionsctl developer on` skip the location and notarization checks only).
-  On macOS 26 a JIT app that claims the Network Extension entitlement is killed at launch, so the
-  in-process activation layout is not a shipping configuration (see `macos/README.md`).
-  **Ad hoc rebuilds pin the NE filter config to the old cdhash**: the filter then reports "running"
-  while allowing everything. Activation now resets the configuration on replace (one extra "Allow"
-  prompt per dev upgrade). Developer ID builds should not hit this.
+  The ad hoc host deliberately claims no restricted entitlements and answers `state=unavailable`
+  with a signed-package-required message; it never reports `running`/`Protected`/`Verified`.
 - **Release needs an Apple Developer Program team with the Network Extension capability** (self-serve in
-  the portal per reports; unverified), Developer ID Application + Installer certificates, provisioning
-  profiles for app and extension (app group becomes `<TEAMID>.com.axiom.firewall`), notarization. Env:
-  `AXIOM_SIGN_IDENTITY`, `AXIOM_TEAM_ID`, `AXIOM_APP_PROFILE`, `AXIOM_INSTALLER_IDENTITY`.
-- Recommended activation path for Developer ID is in-process via `libAxiomSysext.dylib` (entitlements live on
-  the main executable); the `axiom-sysext` helper remains a fallback. The dylib path is proven ad hoc only.
+  the portal per reports; unverified), Developer ID Application + Installer certificates, and
+  provisioning profiles for the host (`com.axiom.firewall.host`) and extension
+  (`com.axiom.firewall.filter`; app group becomes `<TEAMID>.com.axiom.firewall`), plus notarization. Env:
+  `AXIOM_SIGN_IDENTITY`, `AXIOM_TEAM_ID`, `AXIOM_HOST_PROFILE`, `AXIOM_FILTER_PROFILE`,
+  `AXIOM_INSTALLER_IDENTITY`.
+- **Signed runtime activation is unverified** without real profiles, a GUI approval and
+  Gatekeeper/enforcement evidence.
 - `publish -r osx-*` adds RID sections to `packages.lock.json`; they are reverted, not committed.
 
 Layout on an installed Mac
 ```
-/Applications/Axiom.app                                   user-owned bundle (app, dylib, helper, extension, service payload)
+/Applications/Axiom.app                                   user-owned UI bundle (Axiom + axiomd payload)
+/Applications/AxiomFilterHost.app                         native activation host (axiom-sysext + extension + profile)
 /Library/PrivilegedHelperTools/com.axiom.service/         root-owned copy of the daemon that launchd runs
 /Library/LaunchDaemons/com.axiom.service.plist            KeepAlive {SuccessfulExit:false}, ThrottleInterval 10, AXIOM_SERVICE=1
 /etc/newsyslog.d/com.axiom.service.conf                   log rotation (5 MB × 5)

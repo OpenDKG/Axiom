@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Checks the packaging script without publishing, signing, installing or touching a real system:
-# fake toolchain in a temp "repo", stub dotnet/pkgbuild/codesign/ditto, real cp/sh.
+# fake toolchain in a temp "repo", stub dotnet/pkgbuild/codesign/security/plutil/ditto, real cp/sh.
 #
 #   scripts/macos/tests/package-app-checks.sh            # from anywhere, bash 3.2 or newer
 #
-# Covers: DOTNET_WRAPPER unset/empty/populated, unsigned vs signed .pkg arguments, the generated
-# postinstall (syntax, alternate target volume, $2 fallback), and unknown-argument refusal.
+# Covers: DOTNET_WRAPPER unset/empty/populated, unsigned vs signed .pkg arguments, host/profile
+# wiring, missing/mismatched profiles, the generated postinstall (syntax, alternate target volume
+# refusal), payload ownership of the extension, and unknown-argument refusal.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -24,14 +25,30 @@ assert_file_has() { # file pattern description
 # --- fake repo -------------------------------------------------------------------------------
 REPO="$TEMP/repo"
 mkdir -p "$REPO/scripts/macos" "$REPO/macos" "$REPO/src/Axiom.UI.Avalonia/Assets" \
-         "$REPO/build/macos/osx-arm64/publish/app" "$REPO/build/macos/osx-arm64/publish/service"
+         "$REPO/build/macos/osx-arm64/publish/app" "$REPO/build/macos/osx-arm64/publish/service" \
+         "$REPO/macos/build/AxiomFilterHost.app/Contents/MacOS" \
+         "$REPO/macos/build/AxiomFilterHost.app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension/Contents"
 cp "$SRC/scripts/macos/package-app.sh" "$REPO/scripts/macos/"
-cp "$SRC/scripts/macos/Axiom.entitlements" "$SRC/scripts/macos/Axiom-adhoc.entitlements" \
-   "$SRC/scripts/macos/axiomd.entitlements" "$REPO/scripts/macos/"
+cp "$SRC/scripts/macos/Axiom.entitlements" "$SRC/scripts/macos/axiomd.entitlements" "$REPO/scripts/macos/"
+cp "$SRC/macos/AxiomSysext/axiom-sysext.entitlements" \
+   "$SRC/macos/AxiomSysext/axiom-sysext-adhoc.entitlements" "$REPO/macos/"
 cp "$SRC/Directory.Build.props" "$REPO/"
 printf '#!/bin/sh\nexit 0\n' > "$REPO/build/macos/osx-arm64/publish/app/Axiom"
 printf '#!/bin/sh\nexit 0\n' > "$REPO/build/macos/osx-arm64/publish/service/axiomd"
-chmod +x "$REPO/build/macos/osx-arm64/publish/app/Axiom" "$REPO/build/macos/osx-arm64/publish/service/axiomd"
+printf '#!/bin/sh\n' > "$REPO/macos/build/AxiomFilterHost.app/Contents/MacOS/axiom-sysext"
+printf 'fake host profile\n' > "$REPO/macos/build/AxiomFilterHost.app/Contents/embedded.provisionprofile"
+printf 'fake filter profile\n' > "$REPO/macos/build/AxiomFilterHost.app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension/Contents/embedded.provisionprofile"
+printf '#!/bin/sh\n' > "$REPO/macos/build/AxiomFilterHost.app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension/axiom-filter"
+cat > "$REPO/macos/build/AxiomFilterHost.app/Contents/Info.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>com.axiom.firewall.host</string>
+  <key>CFBundleExecutable</key><string>axiom-sysext</string>
+</dict></plist>
+EOF
+chmod +x "$REPO/build/macos/osx-arm64/publish/app/Axiom" \
+         "$REPO/build/macos/osx-arm64/publish/service/axiomd" \
+         "$REPO/macos/build/AxiomFilterHost.app/Contents/MacOS/axiom-sysext"
 
 # --- fake toolchain --------------------------------------------------------------------------
 BIN="$TEMP/bin"
@@ -43,10 +60,61 @@ exec /usr/bin/uname "$@"
 EOF
 cat > "$BIN/plutil" <<'EOF'
 #!/bin/sh
+# Enough of plutil for profile validation and lint.
+if [ "$1" = "-extract" ]; then
+  key=$2
+  file=
+  for argument; do file=$argument; done
+  case "$key" in
+    Entitlements.com.apple.application-identifier)
+      if grep -q host "$file" 2>/dev/null; then
+        printf '%s\n' "${EXPECTED_HOST_APP_ID:-ABCDE12345.com.axiom.firewall.host}"
+      elif grep -q filter "$file" 2>/dev/null; then
+        printf '%s\n' "${EXPECTED_FILTER_APP_ID:-ABCDE12345.com.axiom.firewall.filter}"
+      else
+        printf 'WRONG\n'
+      fi
+      ;;
+    Entitlements.com.apple.developer.team-identifier) printf '%s\n' "${EXPECTED_TEAM_ID:-ABCDE12345}" ;;
+    *) printf '1\n' ;;
+  esac
+  exit 0
+fi
 exit 0
+EOF
+cat > "$BIN/PlistBuddy" <<'EOF'
+#!/bin/sh
+# PlistBuddy -c "Print :Entitlements:<key>" <plist>
+key=${2#Print :Entitlements:}
+file=
+for argument; do file=$argument; done
+case "$key" in
+  com.apple.application-identifier)
+    if grep -q host "$file" 2>/dev/null; then
+      printf '%s\n' "${EXPECTED_HOST_APP_ID:-ABCDE12345.com.axiom.firewall.host}"
+    elif grep -q filter "$file" 2>/dev/null; then
+      printf '%s\n' "${EXPECTED_FILTER_APP_ID:-ABCDE12345.com.axiom.firewall.filter}"
+    else
+      printf 'WRONG\n'
+    fi
+    ;;
+  com.apple.developer.team-identifier) printf '%s\n' "${EXPECTED_TEAM_ID:-ABCDE12345}" ;;
+  *) printf '1\n' ;;
+esac
+EOF
+cat > "$BIN/security" <<'EOF'
+#!/bin/sh
+# security cms -D -i <profile>: the fake profile is already a plist.
+for argument; do profile=$argument; done
+cat "$profile"
 EOF
 cat > "$BIN/codesign" <<'EOF'
 #!/bin/sh
+if [ "$1" = "-dv" ]; then
+  printf 'Authority=%s\n' "${AXIOM_SIGN_IDENTITY:-adhoc}"
+  printf 'TeamIdentifier=%s\n' "${EXPECTED_TEAM_ID:-ABCDE12345}"
+  exit 0
+fi
 exit 0
 EOF
 cat > "$BIN/ditto" <<'EOF'
@@ -63,6 +131,9 @@ cat > "$BIN/pkgutil" <<'EOF'
 #!/bin/sh
 printf './Applications/Axiom.app\n./Applications/Axiom.app/Contents/MacOS/Axiom\n'
 printf './Applications/Axiom.app/Contents/Resources/service/axiomd\n'
+printf './Applications/AxiomFilterHost.app\n'
+printf './Applications/AxiomFilterHost.app/Contents/MacOS/axiom-sysext\n'
+printf './Applications/AxiomFilterHost.app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension\n'
 EOF
 # dotnet creates the two publish outputs its -o argument names; records every publish call.
 cat > "$BIN/dotnet" <<'EOF'
@@ -90,9 +161,14 @@ printf 'wrapped %s\n' "$1" >> "$WRAP_LOG"
 exec "$@"
 EOF
 chmod +x "$BIN"/* "$TEMP/wrap.sh"
-export PATH="$BIN:$PATH"
+export PATH="$BIN:$PATH" PLISTBUDDY="$BIN/PlistBuddy"
 export PKG_ARGS="$TEMP/pkgbuild.args" DOTNET_CALLS="$TEMP/dotnet.calls" WRAP_LOG="$TEMP/wrap.log"
 : > "$PKG_ARGS"; : > "$DOTNET_CALLS"; : > "$WRAP_LOG"
+
+HOST_PROFILE="$TEMP/host.provisionprofile"
+FILTER_PROFILE="$TEMP/filter.provisionprofile"
+printf 'fake host profile\n' > "$HOST_PROFILE"
+printf 'fake filter profile\n' > "$FILTER_PROFILE"
 
 run() { # run the packager with the fake toolchain
   bash "$REPO/scripts/macos/package-app.sh" osx-arm64 "$@"
@@ -105,9 +181,12 @@ run >/dev/null 2>&1 || fail "packaging failed with DOTNET_WRAPPER unset"
 assert_file_has "$PKG_ARGS" "install-location /" "pkgbuild payload location"
 grep -q -- "--sign" "$PKG_ARGS" && fail "unsigned build passed --sign to pkgbuild"
 ENT="$REPO/build/macos/osx-arm64/Axiom.entitlements"
-assert_file_has "$ENT" "allow-jit" "ad hoc app keeps the runtime relaxations"
-grep -q "<key>com.apple.developer" "$ENT" && fail "ad hoc app must not claim restricted entitlements"
-pass "DOTNET_WRAPPER unset: publishes twice, builds an unsigned pkg, ad hoc entitlements only"
+assert_file_has "$ENT" "allow-jit" "UI keeps the runtime relaxations"
+grep -q "<key>com.apple.developer" "$ENT" && fail "UI must not claim restricted entitlements"
+[ -d "$REPO/build/macos/osx-arm64/AxiomFilterHost.app" ] || fail "host app was not packaged"
+[ -d "$REPO/build/macos/osx-arm64/Axiom.app/Contents/Library/SystemExtensions" ] \
+  && fail "extension must live in AxiomFilterHost.app, not Axiom.app"
+pass "DOTNET_WRAPPER unset: publishes twice, unsigned pkg, UI has no restricted entitlements"
 
 # --- 2. empty DOTNET_WRAPPER (bash 3.2 must not abort on ${WRAP[@]} under set -u) -----------
 DOTNET_WRAPPER="" run >/dev/null 2>&1 || fail "packaging failed with DOTNET_WRAPPER empty"
@@ -119,25 +198,51 @@ DOTNET_WRAPPER="$TEMP/wrap.sh" run >/dev/null 2>&1 || fail "packaging failed wit
 [ "$(wc -l < "$WRAP_LOG" | tr -d ' ')" = "2" ] || fail "wrapper did not prefix both publishes"
 pass "DOTNET_WRAPPER populated: both publishes run through the wrapper"
 
-# --- 4. real identities sign the app and the package -----------------------------------------
+# --- 4. signed packaging requires both profiles ---------------------------------------------
+set +e
+AXIOM_SIGN_IDENTITY="Developer ID Application: Test (ABCDE12345)" run >/dev/null 2>&1
+code=$?
+set -e
+[ "$code" != "0" ] || fail "signed packaging succeeded without profiles"
+pass "signed packaging without profiles fails clearly"
+
+EXPECTED_HOST_APP_ID="WRONG.com.axiom.firewall.host" \
+AXIOM_SIGN_IDENTITY="Developer ID Application: Test (ABCDE12345)" \
+AXIOM_HOST_PROFILE="$HOST_PROFILE" AXIOM_FILTER_PROFILE="$FILTER_PROFILE" \
+  run >/dev/null 2>&1 && fail "mismatched profile was accepted"
+pass "mismatched profile bundle id is refused"
+
+# --- 5. real identities sign the UI and the package; the host keeps its own profile ----------
 : > "$PKG_ARGS"
 AXIOM_SIGN_IDENTITY="Developer ID Application: Test (ABCDE12345)" \
-AXIOM_INSTALLER_IDENTITY="Developer ID Installer: Test (ABCDE12345)" run >/dev/null 2>&1 \
-  || fail "packaging failed with signing identities"
+AXIOM_INSTALLER_IDENTITY="Developer ID Installer: Test (ABCDE12345)" \
+AXIOM_HOST_PROFILE="$HOST_PROFILE" AXIOM_FILTER_PROFILE="$FILTER_PROFILE" \
+  run >/dev/null 2>&1 || fail "packaging failed with signing identities and profiles"
 assert_file_has "$PKG_ARGS" -- "--sign Developer ID Installer: Test (ABCDE12345)" "pkg signature"
 assert_file_has "$PKG_ARGS" -- "--timestamp" "pkg signature timestamp"
 ENT="$REPO/build/macos/osx-arm64/Axiom.entitlements"
-assert_file_has "$ENT" "system-extension.install" "signed app requests system-extension install"
-assert_file_has "$ENT" "ABCDE12345.com.axiom.firewall" "signed app uses the team-prefixed app group"
-grep -q "<key>com.apple.developer.networking.networkextension</key>" "$ENT" \
-  && fail "a JIT app must not carry the Network Extension entitlement (macOS 26 refuses to launch it)"
-pass "identities: pkg signed/timestamped; signed app keeps only the sysext-install entitlement"
+assert_file_has "$ENT" "allow-jit" "signed UI keeps the runtime relaxations"
+grep -q "<key>com.apple.developer" "$ENT" && fail "signed UI must not claim restricted entitlements"
+[ -f "$REPO/build/macos/osx-arm64/AxiomFilterHost.app/Contents/embedded.provisionprofile" ] \
+  || fail "host profile was not shipped"
+[ -d "$REPO/build/macos/osx-arm64/AxiomFilterHost.app/Contents/Library/SystemExtensions" ] \
+  || fail "host does not own the extension"
+pass "identities: pkg signed/timestamped; UI unprivileged; host owns extension/profile"
 
-# --- 5. generated postinstall resolves the daemon on the target volume -----------------------
+# --- 6. the ad hoc host claims no restricted entitlements -----------------------------------
+ADHOC="$SRC/macos/AxiomSysext/axiom-sysext-adhoc.entitlements"
+grep -q "<key>com.apple.developer" "$ADHOC" && fail "ad hoc host must not claim restricted entitlements"
+grep -q "<key>com.apple.developer.system-extension.install</key>" \
+  "$SRC/macos/AxiomSysext/axiom-sysext.entitlements" || fail "signed host lost system-extension.install"
+pass "ad hoc host is unprivileged; signed host carries the restricted entitlement"
+
+# --- 7. generated postinstall refuses an offline target volume -------------------------------
 SCRIPTS="$REPO/build/macos/osx-arm64/pkgscripts"
 POSTINSTALL="$SCRIPTS/postinstall"
 [ -f "$POSTINSTALL" ] || fail "postinstall was not generated"
 sh -n "$POSTINSTALL" || fail "postinstall is not valid /bin/sh"
+assert_file_has "$POSTINSTALL" "/Applications/Axiom.app/Contents/Resources/service/axiomd" \
+  "postinstall runs the installed daemon"
 CALLS="$TEMP/daemon.calls"
 for volume in "$TEMP/vol-a" "$TEMP/vol-b"; do
   mkdir -p "$volume/Applications/Axiom.app/Contents/Resources/service"
@@ -146,15 +251,15 @@ for volume in "$TEMP/vol-a" "$TEMP/vol-b"; do
   chmod +x "$volume/Applications/Axiom.app/Contents/Resources/service/axiomd"
 done
 : > "$CALLS"
-# $2 = installation destination, $3 = target volume: the volume must win.
-sh "$POSTINSTALL" /tmp/Axiom.pkg /Applications "$TEMP/vol-a" || fail "postinstall failed for a volume"
-[ "$(cat "$CALLS")" = "--install-service" ] || fail "postinstall did not run the daemon with --install-service"
-# Only $2 present (older callers): fall back to the destination.
-sh "$POSTINSTALL" /tmp/Axiom.pkg "$TEMP/vol-b" || fail "postinstall failed with only \$2"
-[ "$(wc -l < "$CALLS" | tr -d ' ')" = "2" ] || fail "postinstall did not fall back to \$2"
-pass "postinstall: uses \$3 volume, falls back to \$2, passes --install-service"
+set +e
+sh "$POSTINSTALL" /tmp/Axiom.pkg /Applications "$TEMP/vol-a" >/dev/null 2>&1
+code=$?
+set -e
+[ "$code" != "0" ] || fail "postinstall accepted an alternate target volume"
+[ ! -s "$CALLS" ] || fail "postinstall started a live daemon for an offline volume"
+pass "postinstall: alternate volume is refused before the daemon runs"
 
-# --- 6. unknown argument is refused ----------------------------------------------------------
+# --- 8. unknown argument is refused ----------------------------------------------------------
 set +e
 run --not-an-option >/dev/null 2>&1
 code=$?

@@ -15,12 +15,12 @@ macos/
     FlowInspector.swift     audit token -> pid/path, endpoints, remote host name
     Info.plist              template (@VERSION@ @BUILD@ @APP_GROUP@)
     AxiomFilter.entitlements
-  AxiomSysext/            activation helper CLI
+  AxiomSysext/            app-like activation host (AxiomFilterHost.app) and CLI
     main.swift              argument parsing, JSON on stdout, exit codes
-    SysextCore.swift        OSSystemExtensionRequest / NEFilterManager logic (shared with the dylib)
-    axiom-sysext.entitlements
-  AxiomSysextLib/
-    Exports.swift           @_cdecl entry points -> libAxiomSysext.dylib (P/Invoke from Axiom)
+    SysextCore.swift        OSSystemExtensionRequest / NEFilterManager logic
+    Info.plist              host bundle template (@VERSION@ @BUILD@ @GIT@)
+    axiom-sysext.entitlements         signed host: restricted entitlements
+    axiom-sysext-adhoc.entitlements   ad hoc host: deliberately no restricted entitlements
   Tests/
     main.swift              unit tests (build.sh test): rules, loopback, paths, file identity, EventSink
     fixtures/rules-cases.json  shared rule/verdict fixtures (also used by the .NET contract tests)
@@ -36,11 +36,10 @@ Requires only the Xcode Command Line Tools (`xcode-select --install`); tested wi
 Swift 6.1 on macOS 15.8 (x86_64). Deployment target macOS 13.
 
 ```sh
-macos/build.sh                  # -> macos/build/com.axiom.firewall.filter.systemextension
-                                #    macos/build/axiom-sysext
-                                #    macos/build/libAxiomSysext.dylib
+macos/build.sh                  # -> macos/build/AxiomFilterHost.app
+                                #    Contents/MacOS/axiom-sysext
+                                #    Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension
 ARCH=universal macos/build.sh   # x86_64 | arm64 | universal (lipo), default: this Mac's arch
-macos/build.sh testapp          # also macos/build/Axiom.app (development host app)
 macos/build.sh test             # unit tests (149 checks, including Tests/fixtures/rules-cases.json)
 ```
 
@@ -50,11 +49,13 @@ deprecated: 15.0)` so they compile warning-free against the macOS 15 SDK while m
 the `nw_endpoint`-based initialisers (`remoteFlowEndpoint`, `NENetworkRule(remoteNetworkEndpoint:)`).
 
 Signing: ad hoc by default. Set `AXIOM_SIGN_IDENTITY="Developer ID Application: … (TEAMID)"` for a
-Developer ID build (hardened runtime + timestamp). The app group is
+Developer ID build (hardened runtime + timestamp); a signed build also requires
+`AXIOM_HOST_PROFILE` and `AXIOM_FILTER_PROFILE`. The app group is
 `group.com.axiom.firewall` for ad hoc builds and `<TEAMID>.com.axiom.firewall` for Developer ID
 builds (`AXIOM_TEAM_ID` overrides the team id parsed from the identity). The extension's
-`NEMachServiceName` is `<app group>.filter`, generated to match. `AXIOM_FILTER_PROFILE` /
-`AXIOM_APP_PROFILE` embed provisioning profiles.
+`NEMachServiceName` is `<app group>.filter`, generated to match. Ad hoc builds claim no
+restricted entitlements (TN3125) and the host answers `state=unavailable` with a "signed package
+required" message instead of attempting an unauthorised request.
 
 ### Versioning (contract with `scripts/macos/package-app.sh`)
 
@@ -71,111 +72,74 @@ The git-derived defaults need a git checkout; in an exported tree they fall back
 still unique per build in dev mode because of the timestamp. The extension's `Info.plist` also
 records `AxiomSourceRevision` (`git describe --always --dirty`).
 
-Upgrade rule in `axiom-sysext activate` (and `axiom_sysext_activate`): the installed extension is
+Upgrade rule in `axiom-sysext activate`: the installed extension is
 replaced when its version or build differ from the embedded one, **or** when the two code
 directory hashes (cdhash, read with `SecCodeCopySigningInformation`; the installed copy under
 `/Library/SystemExtensions` is readable on a default install) differ; `--force` replaces
 unconditionally. Only an identical version+build+cdhash is kept. `status` reports the cdhash of
 the embedded and every installed copy.
 
-Ad hoc builds only load with SIP disabled and `systemextensionsctl developer on`.
-Release builds need an Apple Developer Program team with the Network Extension and
-System Extension capabilities and Developer ID provisioning profiles for
-`com.axiom.firewall` and `com.axiom.firewall.filter` (not verified here: no team available).
+Ad hoc builds cannot activate the extension: the host deliberately carries no restricted
+entitlements. Release builds need an Apple Developer Program team with the Network Extension and
+System Extension capabilities, a Developer ID provisioning profile for the host
+(`com.axiom.firewall.host`, `AXIOM_HOST_PROFILE`) and for the extension
+(`com.axiom.firewall.filter`, `AXIOM_FILTER_PROFILE`); the host profile authorises the Team ID,
+System Extension install, Network Extension and app group, the extension profile the Team ID,
+Network Extension and app group (not verified here: no team available).
 
-## Packaging into Axiom.app
+## Packaging into `/Applications`
 
-| File in `Axiom.app` | From | Signed with |
+The JIT UI (`Axiom.app`) and the app-like activation host are **separate top-level apps**.
+OSSystemExtensionRequest verifies that the extension is in the *requesting app's*
+`Contents/Library/SystemExtensions` and that the requesting app is in an Applications directory;
+a host nested inside `Axiom.app` is therefore not a documented layout. The extension is owned by
+`AxiomFilterHost.app`, not by `Axiom.app`.
+
+| File in `AxiomFilterHost.app` | From | Signed with |
 |---|---|---|
-| `Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension` | `build/com.axiom.firewall.filter.systemextension` (copy the bundle as is) | `AxiomFilter.entitlements`: `com.apple.developer.networking.networkextension = [content-filter-provider-systemextension]`, `com.apple.security.application-groups = [<app group>]`; identifier `com.axiom.firewall.filter`; hardened runtime; not sandboxed |
-| `Contents/MacOS/axiom-sysext` | `build/axiom-sysext` | `axiom-sysext.entitlements`: `com.apple.developer.system-extension.install = true`, networkextension `[content-filter-provider-systemextension]`, app group; identifier `com.axiom.firewall`; hardened runtime |
-| `Contents/MacOS/libAxiomSysext.dylib` | `build/libAxiomSysext.dylib` | identifier `com.axiom.firewall.sysextlib`, hardened runtime, **no entitlements** (a library cannot carry them) |
-| `Contents/MacOS/Axiom` (Avalonia app) | packaging script | when it runs `axiom-sysext` as a child process: none of the above. When it calls `libAxiomSysext.dylib` instead: `axiom-sysext.entitlements` (system-extension.install, networkextension, app group) on the main executable |
-| `Contents/embedded.provisionprofile` | Developer ID profile for `com.axiom.firewall` | — |
-| extension `Contents/embedded.provisionprofile` | Developer ID profile for `com.axiom.firewall.filter` (`AXIOM_FILTER_PROFILE`) | — |
+| `Contents/MacOS/axiom-sysext` | `build/AxiomFilterHost.app/...` | `axiom-sysext.entitlements`: `com.apple.developer.system-extension.install = true`, networkextension `[content-filter-provider-systemextension]`, app group; identifier `com.axiom.firewall.host`; hardened runtime. Ad hoc builds get `axiom-sysext-adhoc.entitlements` (empty). |
+| `Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension` | the Swift extension bundle | `AxiomFilter.entitlements`: `com.apple.developer.networking.networkextension = [content-filter-provider-systemextension]`, `com.apple.security.application-groups = [<app group>]`; identifier `com.axiom.firewall.filter`; hardened runtime; not sandboxed |
+| `Contents/embedded.provisionprofile` | `AXIOM_HOST_PROFILE` | authorises the two restricted entitlements and app group on the host's main executable (`com.axiom.firewall.host`) |
+| extension `Contents/embedded.provisionprofile` | `AXIOM_FILTER_PROFILE` | authorises the extension's Network Extension entitlement (`com.axiom.firewall.filter`) |
 
-Sign inside-out: the extension bundle and `axiom-sysext` are already signed by `build.sh`; if
-the packaging script re-signs them it must pass the same entitlements, then sign the app bundle
-last (without `--deep`). `build.sh testapp` shows the exact sequence.
+| File in `Axiom.app` | Signed with |
+|---|---|
+| `Contents/MacOS/Axiom` (Avalonia/.NET UI) | `Axiom.entitlements`: only the hardened-runtime relaxations (`allow-jit`, `allow-unsigned-executable-memory`, `disable-library-validation`). No restricted entitlements, no profile, in every mode. |
+| `Contents/Resources/service/axiomd` | `axiomd.entitlements` (root daemon) |
 
-The app must be installed in `/Applications` for activation (OSSystemExtensionError 3
-otherwise).
+`package-app.sh` copies the already-signed host from `macos/build`, verifies its authority/Team ID
+against `AXIOM_SIGN_IDENTITY`/`AXIOM_TEAM_ID` for a signed release, validates both profiles
+(application identifier, Team ID, required entitlements), and refuses to produce a signed artifact
+when a profile is missing or mismatched. The UI is signed last.
 
-### Where `axiom-sysext` must live (verified)
+The host must be installed in `/Applications` for activation (OSSystemExtensionError 3
+otherwise). `Axiom.pkg` installs both apps and refuses an alternate (offline) target volume before
+starting the daemon. Uninstall removes both bundles.
 
-`OSSystemExtensionRequest` looks the extension up in the **main bundle of the calling
-process**. Foundation resolves `Bundle.main` to the enclosing `.app` for any executable in
-`Contents/MacOS`, so both layouts work and were tested on macOS 15.8:
-
-- `axiom-sysext` as `CFBundleExecutable` (`build.sh testapp`, default);
-- a different main executable (`Axiom`) with `axiom-sysext` next to it
-  (`AXIOM_TESTAPP_LAYOUT=helper build.sh testapp`): activation/upgrade succeeded from the helper.
-
-Run outside an app bundle, `axiom-sysext` refuses with exit 1 (the system never answers such
-requests). macOS names the requesting executable in its prompts ("“axiom-sysext” would like to
-use a new network extension"); the "Filter Network Content" prompt uses the app name ("Axiom").
-
-### Which activation path for Developer ID builds (review #4)
+### Why the host is a separate app (review #4)
 
 With SIP on, the restricted entitlements (`com.apple.developer.system-extension.install`,
-`com.apple.developer.networking.networkextension`) are only honoured for an executable whose
-signature is vouched for by a provisioning profile, and `Contents/embedded.provisionprofile`
-vouches for the **main executable** of the bundle.
+`com.apple.developer.networking.networkextension`) are only honoured for code whose signature is
+vouched for by a provisioning profile. Apple TN3125 ("Inside Code Signing: Provisioning
+Profiles") says a standalone executable cannot claim a restricted entitlement because there is no
+place to embed its profile; the documented workaround is an app-like bundle whose main executable
+is the daemon and whose `Contents/embedded.provisionprofile` authorises it. The same TN explains
+that `Contents/embedded.provisionprofile` vouches for the bundle's **main executable**.
 
-**Open engineering gate (macOS 26, observed 2026-11-16).** On macOS 26.6 a packaged `Axiom.app`
-whose main executable carried the Network Extension entitlement together with the .NET hardening
-relaxations (`allow-jit`, `allow-unsigned-executable-memory`, `disable-library-validation`) was
-killed at exec by AMFI: "Hardened Runtime relaxation entitlements disallowed on System
-Extensions". The entitlement-only repro is in `RUN-2026-11-15-privileged-attempt.md` §8. So the
-in-process layout described below cannot be used by the JIT app on macOS 26; `package-app.sh`
-therefore keeps the Network Extension entitlement off the app in every mode. At the same time,
-Apple's TN3125 ("Inside Code Signing: Provisioning Profiles") says a standalone executable
-"can't claim a restricted entitlement because there's no place to embed the provisioning profile
-that authorizes that claim", which applies to the bare `Contents/MacOS/axiom-sysext` helper.
-Neither host is therefore authorized as currently laid out. Before release, pick one and verify it
-with a real identity and profile:
+The earlier in-process `libAxiomSysext.dylib` path put the Network Extension entitlement on the
+JIT UI and was killed by AMFI on macOS 26.6 ("Hardened Runtime relaxation entitlements disallowed
+on System Extensions"); the dylib and the bare helper are no longer built or shipped. The host is
+native and non-JIT, owns the extension and its profile, and is the only process with the
+restricted entitlements. `FilterExtensionManager` runs it as a child process over the unchanged
+one-JSON-object NDJSON interface (`desktop.log` records `via host`).
 
-1. **In-process**: the main `Axiom` executable submits the requests itself through
-   `libAxiomSysext.dylib`, with `axiom-sysext.entitlements` on the executable and the profile in
-   `Contents/embedded.provisionprofile`. Requires an app that can run without JIT (or evidence
-   that a properly provisioned signature changes the AMFI result — untested).
-2. **Helper**: keep activation in a native process, but ship it as an app-like bundle with its own
-   embedded profile (for example an XPC service) rather than a bare executable, and have
-   `FilterExtensionManager` use that path.
+Ad hoc limitation: without an Apple identity there is no profile, so the ad hoc host claims no
+restricted entitlements. It still starts and answers `status` with `state=unavailable` and a
+clear "signed package required" message; it never reports `running`, `Protected` or `Verified`.
 
-Until one is verified, extension activation from this bundle reports an error; it is not a
-shipping configuration.
-
-#### `libAxiomSysext.dylib`
-
-```c
-char *axiom_sysext_activate(int force, int waitForApproval, int timeoutSeconds);  // force bit 1: replace, bit 2: reset filter config
-char *axiom_sysext_deactivate(int timeoutSeconds);
-char *axiom_sysext_set_filter(int enable, int timeoutSeconds);   // enable / disable
-char *axiom_sysext_status(int timeoutSeconds);                   // 0 = default 15 s
-int   axiom_sysext_exit_code(const char *json);                  // "exitCode" field, -1 if unparsable
-void  axiom_sysext_free(char *json);
-const char *axiom_sysext_version(void);                          // "1"
-```
-
-Each call is synchronous, returns a malloc'd UTF-8 JSON string with exactly the fields and
-`state`/`exitCode` values `axiom-sysext` prints (free it with `axiom_sysext_free`), and finishes
-within `timeoutSeconds` (+5 s worst case). The requests are serviced on a private queue, so the
-caller's main run loop is not required — but the call blocks, so invoke it from a worker thread.
-.NET: `[DllImport("libAxiomSysext.dylib")] static extern IntPtr axiom_sysext_activate(int force, int wait, int timeout);`
-then `Marshal.PtrToStringUTF8` and `axiom_sysext_free`. The library is loaded relative to the
-executable (`@executable_path/libAxiomSysext.dylib`).
-
-**.NET side (done):** `src/Axiom.Desktop.Avalonia.MacOS/SysextLibrary.cs` (`DylibSysextLibrary`) binds these
-entry points, resolving the library from the executable directory only (`DllImportSearchPath.AssemblyDirectory`
-+ a `NativeLibrary` resolver), and `FilterExtensionManager` prefers it over the helper: the call runs on a
-dedicated worker thread, the JSON `exitCode` field becomes the same `FilterExtensionStatus` the helper's exit
-code would, and `DllNotFoundException` / `EntryPointNotFoundException` / `BadImageFormatException` (or a missing
-dylib) fall back to `axiom-sysext`. `desktop.log` records `[sysext] <command> via dylib (…)` or `via helper (…)`.
-`scripts/macos/package-app.sh` ships and signs the dylib (identifier `com.axiom.firewall.sysextlib`) and signs
-`Contents/MacOS/Axiom` with `scripts/macos/Axiom.entitlements` (system-extension.install, networkextension, app
-group). Verified in the VM (ad hoc): activation from the main process shows the "“Axiom” Would Like to Filter
-Network Content" prompt and ends `state=activated`; Developer ID remains unverified (no team).
+Signed runtime activation, the System Settings approval, the "Filter Network Content" prompt and
+enforcement are **not verified** here: the lab has no Apple team, profiles or GUI approval. Code,
+package layout, entitlements and profile checks are implemented and build/test covered.
 
 ## `axiom-sysext`
 
@@ -205,18 +169,27 @@ copy), `filter {configured, enabled, description, dataProvider}`, `installed[]` 
 Example:
 
 ```json
-{"appBundle":"/Applications/Axiom.app","command":"status","exitCode":0,"extension":{"build":"6","path":"/Applications/Axiom.app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension","version":"1.0.0"},"extensionIdentifier":"com.axiom.firewall.filter","filter":{"configured":true,"dataProvider":"com.axiom.firewall.filter","description":"Axiom Firewall","enabled":true},"installed":[{"awaitingUserApproval":false,"build":"6","enabled":true,"path":"/Library/SystemExtensions/…/com.axiom.firewall.filter.systemextension","uninstalling":false,"version":"1.0.0"}],"ok":true,"state":"running"}
+{"appBundle":"/Applications/AxiomFilterHost.app","command":"status","exitCode":0,"extension":{"build":"6","path":"/Applications/AxiomFilterHost.app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension","version":"1.0.0"},"extensionIdentifier":"com.axiom.firewall.filter","filter":{"configured":true,"dataProvider":"com.axiom.firewall.filter","description":"Axiom Firewall","enabled":true},"installed":[{"awaitingUserApproval":false,"build":"6","enabled":true,"path":"/Library/SystemExtensions/…/com.axiom.firewall.filter.systemextension","uninstalling":false,"version":"1.0.0"}],"ok":true,"state":"running"}
 ```
 
-## Development test loop (SIP off, developer mode on)
+## Development test loop
 
 ```sh
-macos/build.sh testapp               # every dev build gets a new CFBundleVersion
-sudo rm -rf /Applications/Axiom.app && sudo cp -R macos/build/Axiom.app /Applications/
-/Applications/Axiom.app/Contents/MacOS/axiom-sysext activate
-#   first install: approve in System Settings > General > Login Items & Extensions >
-#   Network Extensions (toggle + password), then allow "Filter Network Content"
-# The e2e scripts need filter.sock: stop the real daemon while they run (if installed).
+macos/build.sh                       # ad hoc host: no restricted entitlements
+sudo rm -rf /Applications/AxiomFilterHost.app
+sudo ditto macos/build/AxiomFilterHost.app /Applications/AxiomFilterHost.app
+/Applications/AxiomFilterHost.app/Contents/MacOS/axiom-sysext status
+#   ad hoc: state=unavailable, "signed package required" - this is intentional.
+```
+
+A signed build needs `AXIOM_HOST_PROFILE` and `AXIOM_FILTER_PROFILE`; then the same executable
+submits the request. The first install shows the approval in System Settings > General > Login
+Items & Extensions > Network Extensions (toggle + password), then the "Filter Network Content"
+prompt.
+
+The e2e scripts need filter.sock; stop the real daemon while they run (if installed):
+
+```sh
 sudo launchctl bootout system/com.axiom.service
 sudo python3 macos/Tests/filter-listener.py --out /tmp/flows.jsonl --seconds 300 &
 sudo python3 macos/Tests/e2e-rules.py --events /tmp/flows.jsonl
@@ -231,19 +204,13 @@ resets TCP connections that were established while it was active** (observed wit
 flow reports, e.g. SSH sessions into the Mac drop): run upgrades from a local shell or detached
 (`nohup … &`).
 
-### Ad hoc builds and the filter configuration
+### Ad hoc builds
 
-The `NEFilterManager` configuration is bound to the code signature of the process that saved
-it. For an ad hoc signature that is the exact cdhash, so after the helper is rebuilt
-`nesessionmanager` logs `Rejecting agent com.axiom.firewall because it does not satisfy the
-code signature requirements` / `Failed to launch com.axiom.firewall`, the filter session never
-starts and all traffic is allowed although `status` says `running`. `activate` therefore
-removes and re-creates the configuration when the helper is ad hoc signed **and** it replaced
-the installed extension (reported as `"adHocSigned"`/`"filterReset": true`), which re-shows the
-"Filter Network Content" prompt once per upgrade; a repeated `activate` that keeps the
-extension does not prompt. If only the helper was rebuilt (extension unchanged) run
-`activate --reset-filter`. Developer ID signatures satisfy a stable designated requirement and
-keep their configuration across upgrades.
+The ad hoc host carries no restricted entitlements and `SysextCore` refuses every restricted
+command with `state=unavailable` before touching `OSSystemExtensionRequest` or `NEFilterManager`.
+There is no ad hoc activation route; SIP-off/`systemextensionsctl developer on` do not authorise
+the entitlements. Signed builds keep the existing upgrade/reset behaviour: `activate` re-creates
+the filter configuration when `--reset-filter` is given or when the signature changed.
 
 ## Behaviour notes (review #23)
 

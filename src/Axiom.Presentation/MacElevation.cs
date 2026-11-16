@@ -147,13 +147,31 @@ public sealed class MacBundleLayout
         ? Path.Combine(ContentsDirectory, "Resources", "service", "axiomd")
         : Path.Combine(MacOSDirectory, "service", "axiomd");
 
-    /// <summary>The system extension helper, <c>Contents/MacOS/axiom-sysext</c>.</summary>
-    public string SysextHelperPath => Path.Combine(MacOSDirectory, "axiom-sysext");
+    /// <summary>The app-like activation host, a sibling of <c>Axiom.app</c> in /Applications.</summary>
+    public const string SysextHostBundleName = "AxiomFilterHost.app";
 
-    /// <summary>The same operations as a dylib for P/Invoke, <c>Contents/MacOS/libAxiomSysext.dylib</c>.</summary>
-    public string SysextLibraryPath => Path.Combine(MacOSDirectory, SysextLibraryFileName);
+    public const string SysextHostExecutableName = "axiom-sysext";
 
-    public const string SysextLibraryFileName = "libAxiomSysext.dylib";
+    /// <summary>
+    /// <c>/Applications/AxiomFilterHost.app</c>. The host owns the system extension and carries the
+    /// restricted entitlements and provisioning profile; the JIT UI must not.
+    /// </summary>
+    public string? SysextHostBundlePath => BundlePath is null
+        ? null
+        : Path.Combine(Path.GetDirectoryName(BundlePath)!, SysextHostBundleName);
+
+    /// <summary>The activation host's main executable (also the NDJSON command-line interface).</summary>
+    public string SysextHostExecutablePath => SysextHostBundlePath is null
+        ? Path.Combine(MacOSDirectory, SysextHostBundleName, "Contents", "MacOS", SysextHostExecutableName)
+        : Path.Combine(SysextHostBundlePath, "Contents", "MacOS", SysextHostExecutableName);
+
+    /// <summary>
+    /// macOS only activates extensions whose parent app is in an <c>Applications</c> directory;
+    /// the UI may live elsewhere, but the host bundle must not.
+    /// </summary>
+    public bool IsSysextHostInApplicationsFolder =>
+        SysextHostBundlePath is not null &&
+        string.Equals(Path.GetDirectoryName(SysextHostBundlePath), "/Applications", StringComparison.Ordinal);
 
     public bool IsInApplicationsFolder =>
         BundlePath is not null &&

@@ -16,7 +16,8 @@ public enum DaemonState
 /// <summary>
 /// Replaces the Windows BundledServiceHost. On macOS the desktop never starts the daemon itself:
 /// axiomd is a launchd job (<c>com.axiom.service</c>) installed once with an administrator
-/// password, and the AxiomFilter system extension is managed through <c>axiom-sysext</c>. This class
+/// password, and the AxiomFilter system extension is managed through the app-like
+/// <c>AxiomFilterHost.app</c>. This class
 /// detects both, and runs the install/activation flows only after the user confirms.
 /// </summary>
 public sealed class MacProtectionSetup(

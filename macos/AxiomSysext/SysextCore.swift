@@ -1,15 +1,18 @@
 // AxiomSysext — installs and controls the AxiomFilter system extension.
 //
-// Shared by the `axiom-sysext` command-line helper (main.swift) and the
-// `libAxiomSysext.dylib` P/Invoke entry points (../AxiomSysextLib/Exports.swift).
+// This code is the main executable of the app-like AxiomFilterHost.app. That bundle is the
+// activation host: it lives in /Applications, owns
+// Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension, and carries the
+// restricted entitlements (system-extension.install, networkextension, app group) together with
+// its own Contents/embedded.provisionprofile. The Avalonia/.NET UI runs the executable as a
+// child process and never claims those entitlements.
+//
 // Nothing in here prints or exits: every command reports exactly one `SysextResult`
 // through a completion closure, delivered on the queue the caller supplied.
 //
 // OSSystemExtensionRequest acts on the extensions embedded in the *main bundle* of the
-// calling process (Bundle.main). The process must therefore live in
-// Axiom.app/Contents/MacOS/ (Foundation resolves Bundle.main to the enclosing .app for
-// any executable in Contents/MacOS, whether or not it is CFBundleExecutable), and it
-// needs the com.apple.developer.system-extension.install and networkextension entitlements.
+// calling process (Bundle.main), so the extension must be inside this host bundle and the host
+// must be installed in an Applications directory.
 //
 // activate/deactivate may show macOS authorization UI (System Settings approval,
 // "Filter Network Content" prompt, admin password). Run from a GUI login session;
@@ -27,6 +30,7 @@ import SystemExtensions
 
 // MARK: - Constants
 
+let hostBundleIdentifier = "com.axiom.firewall.host"
 let extensionIdentifier = "com.axiom.firewall.filter"
 let filterDescription = "Axiom Firewall"
 let defaultTimeout: TimeInterval = 120
@@ -310,7 +314,7 @@ func updateFilter(enable: Bool, remove: Bool = false, _ completion: @escaping ([
 private func activate(_ out: SysextResult, queue: DispatchQueue, wait: Bool, force: Bool, resetFilter: Bool) {
     guard let embedded = embeddedExtensionInfo() else {
         out.finish(.error, state: "error",
-                   message: "extension not found at \(embeddedExtensionURL().path); run from Axiom.app/Contents/MacOS")
+                   message: "extension not found at \(embeddedExtensionURL().path); run from AxiomFilterHost.app/Contents/MacOS")
         return
     }
     out["extension"] = embedded
@@ -449,15 +453,23 @@ func runSysextCommand(_ command: SysextCommand, queue: DispatchQueue, timeout: T
     let out = SysextResult(command: command.name, progress: progress, completion: completion)
     queue.async {
         // System extension requests resolve the extension through Bundle.main: refuse to run
-        // outside an app bundle instead of waiting for callbacks that never arrive.
+        // outside the app-like host bundle instead of waiting for callbacks that never arrive.
         switch command {
         case .activate, .deactivate, .status:
-            if Bundle.main.bundleURL.pathExtension != "app" {
+            if Bundle.main.bundleURL.pathExtension != "app" || Bundle.main.bundleIdentifier != hostBundleIdentifier {
                 out.finish(.error, state: "error",
-                           message: "must run from Axiom.app/Contents/MacOS (main bundle is \(Bundle.main.bundlePath))")
+                           message: "must run from AxiomFilterHost.app/Contents/MacOS (main bundle is \(Bundle.main.bundlePath))")
                 return
             }
         default: break
+        }
+        // Ad hoc signatures cannot authorise restricted entitlements (TN3125): the build signs
+        // this host with none, and every restricted call would fail with missingEntitlement.
+        // Refuse once with a user-actionable message instead of a retry loop.
+        if isAdHocSigned() {
+            out.finish(.error, state: "unavailable",
+                       message: "The Axiom network filter needs the signed Axiom package. This activation host is ad hoc signed, so macOS will not grant its restricted entitlements.")
+            return
         }
         switch command {
         case let .activate(force, wait, resetFilter):

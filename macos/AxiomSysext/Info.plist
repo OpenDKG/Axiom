@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- AxiomFilterHost.app: the app-like activation host. build.sh substitutes the version fields.
+     CFBundleExecutable is the native CLI; there is no UI and no Dock icon. -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>com.axiom.firewall.host</string>
+  <key>CFBundleExecutable</key><string>axiom-sysext</string>
+  <key>CFBundleName</key><string>Axiom Network Filter</string>
+  <key>CFBundleDisplayName</key><string>Axiom Network Filter</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>@VERSION@</string>
+  <key>CFBundleVersion</key><string>@BUILD@</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSUIElement</key><true/>
+  <key>AxiomSourceRevision</key><string>@GIT@</string>
+</dict>
+</plist>

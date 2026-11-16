@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
-# Build the Axiom macOS filter system extension and its activation helper with the
+# Build the Axiom macOS filter system extension inside its app-like activation host with the
 # Xcode Command Line Tools only (swiftc + codesign + lipo; no Xcode project).
 #
 #   macos/build.sh            build the artifacts:
-#                               macos/build/com.axiom.firewall.filter.systemextension
-#                               macos/build/axiom-sysext            (activation helper CLI)
-#                               macos/build/libAxiomSysext.dylib    (same, as P/Invoke entry points)
-#   macos/build.sh testapp    also assemble a minimal host app, macos/build/Axiom.app
-#                             (axiom-sysext as CFBundleExecutable) for development testing
+#                               macos/build/AxiomFilterHost.app
+#                                 Contents/MacOS/axiom-sysext      (activation host / CLI)
+#                                 Contents/Library/SystemExtensions/
+#                                   com.axiom.firewall.filter.systemextension
 #   macos/build.sh test       compile and run the filter unit tests (no signing)
 #   macos/build.sh clean      remove macos/build
 #
 # Environment:
 #   ARCH=x86_64|arm64|universal   target architecture(s) (default: this Mac's arch)
 #   AXIOM_SIGN_IDENTITY           codesign identity (e.g. "Developer ID Application: Name (TEAMID)");
-#                                 unset = ad hoc signature (needs SIP off + systemextensionsctl developer on)
+#                                 unset = ad hoc signature (activation then reports that the
+#                                 signed package is required; no restricted entitlements are claimed)
 #   AXIOM_TEAM_ID                 Apple team id; defaults to the "(TEAMID)" suffix of AXIOM_SIGN_IDENTITY.
 #                                 Used for the app group "<TEAMID>.com.axiom.firewall"
 #                                 (ad hoc builds use "group.com.axiom.firewall").
-#   AXIOM_FILTER_PROFILE          provisioning profile embedded into the extension (Developer ID builds)
-#   AXIOM_APP_PROFILE             provisioning profile embedded into the test app (Developer ID builds)
-#   AXIOM_VERSION / AXIOM_BUILD   CFBundleShortVersionString / CFBundleVersion of the extension.
+#   AXIOM_HOST_PROFILE            provisioning profile for AxiomFilterHost.app (required when signed)
+#   AXIOM_FILTER_PROFILE          provisioning profile embedded into the extension (required when signed)
+#   AXIOM_VERSION / AXIOM_BUILD   CFBundleShortVersionString / CFBundleVersion of the extension and host.
 #                                 Release mode (AXIOM_SIGN_IDENTITY set): AXIOM_VERSION is REQUIRED
 #                                 (the build fails without it); AXIOM_BUILD defaults to the git commit
 #                                 count. Dev mode: AXIOM_VERSION defaults to 0.0.<commit count> and
@@ -28,8 +28,6 @@
 #                                 differs and `activate` replaces the installed extension.
 #                                 The packaging script must pass the product version through
 #                                 these two variables (see macos/README.md "Versioning").
-#   AXIOM_TESTAPP_LAYOUT=helper   testapp variant whose main executable is a stub "Axiom" and
-#                                 axiom-sysext is a secondary executable, like the real product
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -38,10 +36,10 @@ OUT="$MACOS_DIR/build"
 OBJ="$OUT/obj"
 
 APP_ID=com.axiom.firewall
+HOST_ID=com.axiom.firewall.host
 EXT_ID=com.axiom.firewall.filter
 EXT_BUNDLE="$OUT/$EXT_ID.systemextension"
-HELPER="$OUT/axiom-sysext"
-LIBRARY="$OUT/libAxiomSysext.dylib"
+HOST_APP="$OUT/AxiomFilterHost.app"
 MIN_OS=13.0
 ARCH=${ARCH:-$(uname -m)}
 IDENTITY=${AXIOM_SIGN_IDENTITY:-}
@@ -76,6 +74,10 @@ esac
 if [[ -n "$IDENTITY" ]]; then
   TEAM_ID=${AXIOM_TEAM_ID:-$(sed -n 's/.*(\([A-Z0-9]\{10\}\)).*/\1/p' <<<"$IDENTITY")}
   [[ -n "$TEAM_ID" ]] || die "set AXIOM_TEAM_ID (could not derive it from AXIOM_SIGN_IDENTITY)"
+  [[ -n "${AXIOM_HOST_PROFILE:-}" && -f "${AXIOM_HOST_PROFILE:-}" ]] \
+    || die "AXIOM_HOST_PROFILE must point to the provisioning profile for AxiomFilterHost.app ($HOST_ID)"
+  [[ -n "${AXIOM_FILTER_PROFILE:-}" && -f "${AXIOM_FILTER_PROFILE:-}" ]] \
+    || die "AXIOM_FILTER_PROFILE must point to the provisioning profile for $EXT_ID"
   APP_GROUP="$TEAM_ID.$APP_ID"
   SIGN_ARGS=(--sign "$IDENTITY" --options runtime --timestamp)
 else
@@ -125,66 +127,30 @@ build_extension() {
   codesign --force "${SIGN_ARGS[@]}" --entitlements "$OUT/AxiomFilter.entitlements" "$EXT_BUNDLE"
 }
 
-build_helper() {
-  compile AxiomSysext "$HELPER" AxiomSysext/main.swift AxiomSysext/SysextCore.swift
-  substitute AxiomSysext/axiom-sysext.entitlements "$OUT/axiom-sysext.entitlements"
-  log "codesign axiom-sysext"
-  # Identifier = the app's bundle id: restricted entitlements of an executable inside
-  # Axiom.app are validated against the app's provisioning profile (Developer ID builds).
-  codesign --force "${SIGN_ARGS[@]}" --identifier "$APP_ID" \
-    --entitlements "$OUT/axiom-sysext.entitlements" "$HELPER"
-}
-
-# Same operations as a dylib with C entry points (axiom_sysext_activate, ...) for the .NET host.
-# No entitlements on the library: the calling executable (Axiom) must carry them.
-build_library() {
-  compile AxiomSysextLib "$LIBRARY" -emit-library \
-    -Xlinker -install_name -Xlinker "@executable_path/libAxiomSysext.dylib" \
-    AxiomSysext/SysextCore.swift AxiomSysextLib/Exports.swift
-  log "codesign libAxiomSysext.dylib"
-  codesign --force "${SIGN_ARGS[@]}" --identifier "$APP_ID.sysextlib" "$LIBRARY"
-}
-
-# Minimal host app for development: /Applications/Axiom.app with the helper and the extension.
-build_testapp() {
-  local app="$OUT/Axiom.app" layout=${AXIOM_TESTAPP_LAYOUT:-main} main_exe
-  rm -rf "$app"
-  mkdir -p "$app/Contents/MacOS" "$app/Contents/Library/SystemExtensions"
-  cp -R "$EXT_BUNDLE" "$app/Contents/Library/SystemExtensions/"
-  cp "$HELPER" "$app/Contents/MacOS/axiom-sysext"
-  if [[ "$layout" == helper ]]; then
-    # Product-like layout: a stub main executable; axiom-sysext is a secondary executable.
-    main_exe=Axiom
-    printf 'import Foundation\nprint("Axiom test host stub; use Contents/MacOS/axiom-sysext")\n' > "$OBJ/stub.swift"
-    compile AxiomStub "$app/Contents/MacOS/Axiom" "$OBJ/stub.swift"
-    # The helper keeps its own signature/entitlements (signed in build_helper).
+# The app-like activation host: a real app bundle whose main executable is the native CLI and
+# whose profile (signed builds) authorises the restricted entitlements. The extension lives in
+# this bundle, so OSSystemExtensionRequest finds it through Bundle.main.
+build_host() {
+  rm -rf "$HOST_APP"
+  mkdir -p "$HOST_APP/Contents/MacOS" "$HOST_APP/Contents/Library/SystemExtensions"
+  compile AxiomSysext "$HOST_APP/Contents/MacOS/axiom-sysext" \
+    AxiomSysext/main.swift AxiomSysext/SysextCore.swift
+  substitute AxiomSysext/Info.plist "$HOST_APP/Contents/Info.plist"
+  plutil -lint -s "$HOST_APP/Contents/Info.plist"
+  cp -R "$EXT_BUNDLE" "$HOST_APP/Contents/Library/SystemExtensions/"
+  if [[ -n "$IDENTITY" ]]; then
+    cp "$AXIOM_HOST_PROFILE" "$HOST_APP/Contents/embedded.provisionprofile"
+    substitute AxiomSysext/axiom-sysext.entitlements "$OUT/axiom-sysext.entitlements"
+    local entitlements="$OUT/axiom-sysext.entitlements"
   else
-    main_exe=axiom-sysext
+    # Ad hoc cannot authorise restricted entitlements; claim none so the host can run and
+    # report a clear "signed package required" answer instead of being killed at exec.
+    cp AxiomSysext/axiom-sysext-adhoc.entitlements "$OUT/axiom-sysext-adhoc.entitlements"
+    local entitlements="$OUT/axiom-sysext-adhoc.entitlements"
   fi
-  cat > "$app/Contents/Info.plist" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>CFBundleIdentifier</key><string>$APP_ID</string>
-  <key>CFBundleExecutable</key><string>$main_exe</string>
-  <key>CFBundleName</key><string>Axiom</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>$VERSION</string>
-  <key>CFBundleVersion</key><string>$BUILD</string>
-  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>LSMinimumSystemVersion</key><string>$MIN_OS</string>
-  <key>LSUIElement</key><true/>
-</dict></plist>
-EOF
-  if [[ -n "${AXIOM_APP_PROFILE:-}" ]]; then
-    cp "$AXIOM_APP_PROFILE" "$app/Contents/embedded.provisionprofile"
-  fi
-  log "codesign Axiom.app (layout: $layout)"
-  # Signing the bundle signs its main executable with these entitlements and seals the
-  # already-signed nested code (extension, helper).
-  codesign --force "${SIGN_ARGS[@]}" --entitlements "$OUT/axiom-sysext.entitlements" "$app"
-  codesign --verify --deep --strict "$app"
-  log "test app: $app (copy to /Applications, then run /Applications/Axiom.app/Contents/MacOS/axiom-sysext activate)"
+  log "codesign AxiomFilterHost.app"
+  codesign --force "${SIGN_ARGS[@]}" --identifier "$HOST_ID" --entitlements "$entitlements" "$HOST_APP"
+  codesign --verify --deep --strict "$HOST_APP"
 }
 
 run_tests() {
@@ -199,20 +165,15 @@ run_tests() {
 case "${1:-build}" in
   clean) rm -rf "$OUT"; exit 0 ;;
   test) run_tests; exit 0 ;;
-  build|testapp) ;;
-  *) die "usage: build.sh [build|testapp|test|clean]" ;;
+  build) ;;
+  *) die "usage: build.sh [build|test|clean]" ;;
 esac
 
 mkdir -p "$OBJ"
 log "version $VERSION build $BUILD ($GIT_REV)"
 build_extension
-build_helper
-build_library
+build_host
 codesign --verify --strict "$EXT_BUNDLE"
-codesign --verify --strict "$HELPER"
-codesign --verify --strict "$LIBRARY"
-[[ "${1:-build}" == testapp ]] && build_testapp
 log "built ($ARCH, ${IDENTITY:-ad hoc}, app group $APP_GROUP, version $VERSION build $BUILD):"
-log "  $EXT_BUNDLE"
-log "  $HELPER"
-log "  $LIBRARY"
+log "  $HOST_APP"
+log "    Contents/Library/SystemExtensions/$EXT_ID.systemextension"

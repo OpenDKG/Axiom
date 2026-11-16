@@ -6,7 +6,7 @@ using Axiom.Presentation;
 
 namespace Axiom.Desktop.Avalonia.MacOS;
 
-/// <summary>One <c>axiom-sysext</c> answer (macos/README.md: one JSON object on stdout).</summary>
+/// <summary>One activation-host answer (macos/README.md: one JSON object on stdout).</summary>
 public sealed record FilterExtensionStatus(
     string Command,
     int ExitCode,
@@ -48,7 +48,7 @@ public sealed record FilterExtensionStatus(
         "installed_filter_disabled" or "disabled" =>
             "The Axiom network filter is installed but turned off.",
         "not_installed" => "The Axiom network filter is not installed.",
-        "unavailable" => Message ?? "The Axiom network filter helper is not available.",
+        "unavailable" => Message ?? "The Axiom network filter is unavailable.",
         "timeout" => "macOS did not answer in time. Try again.",
         _ => Message ?? (Ok ? $"Network filter state: {State}." : $"Network filter error ({State})."),
     };
@@ -56,7 +56,7 @@ public sealed record FilterExtensionStatus(
     public static FilterExtensionStatus Unavailable(string command, string message) =>
         new(command, ExitError, false, "unavailable", message, false, false);
 
-    /// <summary>Parses the helper's stdout. Unknown or broken output becomes an error state.</summary>
+    /// <summary>Parses the host's stdout. Unknown or broken output becomes an error state.</summary>
     public static FilterExtensionStatus Parse(string command, int exitCode, string standardOutput)
     {
         var text = standardOutput?.Trim() ?? string.Empty;
@@ -64,7 +64,7 @@ public sealed record FilterExtensionStatus(
         var end = text.LastIndexOf('}');
         if (start < 0 || end <= start)
         {
-            return new FilterExtensionStatus(command, exitCode, false, "error", "axiom-sysext printed no status.", false, false);
+            return new FilterExtensionStatus(command, exitCode, false, "error", "The activation host printed no status.", false, false);
         }
 
         try
@@ -95,47 +95,8 @@ public sealed record FilterExtensionStatus(
         }
         catch (JsonException)
         {
-            return new FilterExtensionStatus(command, exitCode, false, "error", "axiom-sysext printed invalid JSON.", false, false);
+            return new FilterExtensionStatus(command, exitCode, false, "error", "The activation host printed invalid JSON.", false, false);
         }
-    }
-
-    /// <summary>
-    /// Parses the JSON returned by <c>libAxiomSysext.dylib</c>. The library cannot exit, so the exit
-    /// code the helper would have used travels in the <c>exitCode</c> field (0 ok, 1 error,
-    /// 2 timeout, 3 needs approval, 4 reboot required); without it <c>ok</c> decides.
-    /// </summary>
-    public static FilterExtensionStatus FromLibrary(string command, string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return new FilterExtensionStatus(command, ExitError, false, "error", "libAxiomSysext returned no status.", false, false);
-        }
-
-        var exitCode = ExitError;
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            var root = document.RootElement;
-            if (root.ValueKind == JsonValueKind.Object)
-            {
-                if (root.TryGetProperty("exitCode", out var code) &&
-                    code.ValueKind == JsonValueKind.Number &&
-                    code.TryGetInt32(out var value))
-                {
-                    exitCode = value;
-                }
-                else if (root.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True)
-                {
-                    exitCode = ExitOk;
-                }
-            }
-        }
-        catch (JsonException)
-        {
-            return new FilterExtensionStatus(command, ExitError, false, "error", "libAxiomSysext returned invalid JSON.", false, false);
-        }
-
-        return Parse(command, exitCode, json);
     }
 
     private static string? String(JsonElement element, string name) =>
@@ -152,15 +113,12 @@ public enum FilterExtensionPath
 {
     None,
 
-    /// <summary><c>libAxiomSysext.dylib</c> called in-process from the main executable.</summary>
-    Library,
-
-    /// <summary>The <c>axiom-sysext</c> child process.</summary>
-    Helper,
+    /// <summary>The signed <c>AxiomFilterHost.app/Contents/MacOS/axiom-sysext</c> child process.</summary>
+    Host,
 }
 
-/// <summary>Runs the helper executable; replaced in tests.</summary>
-public delegate Task<ToolProcessResult> SysextHelperRunner(
+/// <summary>Runs the activation host; replaced in tests.</summary>
+public delegate Task<ToolProcessResult> SysextHostRunner(
     string path,
     string[] arguments,
     TimeSpan timeout,
@@ -170,9 +128,9 @@ public delegate Task<ToolProcessResult> SysextHelperRunner(
 public sealed record FilterExtensionEnvironment(
     bool IsMacOS,
     bool IsInsideAppBundle,
-    bool IsInApplicationsFolder,
-    string HelperPath,
-    bool HelperPresent)
+    bool HostInApplicationsFolder,
+    string HostPath,
+    bool HostPresent)
 {
     public static FilterExtensionEnvironment Probe(MacBundleLayout layout)
     {
@@ -180,19 +138,19 @@ public sealed record FilterExtensionEnvironment(
         return new FilterExtensionEnvironment(
             OperatingSystem.IsMacOS(),
             layout.IsInsideAppBundle,
-            layout.IsInApplicationsFolder,
-            layout.SysextHelperPath,
-            File.Exists(layout.SysextHelperPath));
+            layout.IsSysextHostInApplicationsFolder,
+            layout.SysextHostExecutablePath,
+            File.Exists(layout.SysextHostExecutablePath));
     }
 }
 
 /// <summary>
-/// Manages the AxiomFilter system extension (activate | deactivate | enable | status …). Prefers
-/// the in-process <c>libAxiomSysext.dylib</c> (review #4: the main executable submits the
-/// <c>OSSystemExtensionRequest</c>, so Developer ID entitlements and the profile line up) and
-/// falls back to the bundled <c>Contents/MacOS/axiom-sysext</c> child process when the dylib is
-/// missing or cannot be loaded. Both must run from inside Axiom.app; outside a bundle the manager
-/// reports "unavailable". Which path ran is logged to desktop.log and exposed as <see cref="LastPath"/>.
+/// Manages the AxiomFilter system extension (activate | deactivate | enable | status …) through the
+/// separately signed <c>AxiomFilterHost.app</c>. The host is the app that owns the extension: it is
+/// in /Applications, carries the restricted entitlements and its own provisioning profile, and
+/// submits <c>OSSystemExtensionRequest</c> from its own main bundle. The Avalonia/.NET JIT process
+/// never claims those entitlements and only runs the host with a fixed argument list; the contract
+/// is the same single JSON object and exit code the Swift CLI always used.
 /// </summary>
 public sealed class FilterExtensionManager
 {
@@ -204,9 +162,7 @@ public sealed class FilterExtensionManager
 
     private readonly Func<FilterExtensionEnvironment> _environment;
 
-    private readonly ISysextLibrary? _library;
-
-    private readonly SysextHelperRunner _helper;
+    private readonly SysextHostRunner _host;
 
     private readonly Action<string> _log;
 
@@ -218,7 +174,6 @@ public sealed class FilterExtensionManager
     public FilterExtensionManager(MacBundleLayout layout)
         : this(
             () => FilterExtensionEnvironment.Probe(layout),
-            new DylibSysextLibrary((layout ?? throw new ArgumentNullException(nameof(layout))).SysextLibraryPath),
             (path, arguments, timeout, cancellationToken) => ToolProcess.RunAsync(path, arguments, timeout, cancellationToken),
             message => StartupLog.Write("sysext", message))
     {
@@ -226,13 +181,11 @@ public sealed class FilterExtensionManager
 
     public FilterExtensionManager(
         Func<FilterExtensionEnvironment> environment,
-        ISysextLibrary? library,
-        SysextHelperRunner helper,
+        SysextHostRunner host,
         Action<string> log)
     {
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
-        _library = library;
-        _helper = helper ?? throw new ArgumentNullException(nameof(helper));
+        _host = host ?? throw new ArgumentNullException(nameof(host));
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
@@ -241,8 +194,7 @@ public sealed class FilterExtensionManager
         get
         {
             var environment = _environment();
-            return environment.IsMacOS && environment.IsInsideAppBundle &&
-                   (environment.HelperPresent || _library is { IsPresent: true });
+            return environment.IsMacOS && environment.IsInsideAppBundle && environment.HostPresent;
         }
     }
 
@@ -250,22 +202,21 @@ public sealed class FilterExtensionManager
     public FilterExtensionPath LastPath { get; private set; }
 
     public Task<FilterExtensionStatus> StatusAsync(CancellationToken cancellationToken) =>
-        RunAsync("status", SysextLibraryCommand.Status, StatusTimeoutSeconds, cancellationToken);
+        RunAsync("status", StatusTimeoutSeconds, cancellationToken);
 
     /// <summary>Installs/approves the extension and turns the filter on; waits for the user up to 120 s.</summary>
     public Task<FilterExtensionStatus> ActivateAsync(CancellationToken cancellationToken) =>
-        RunAsync("activate", SysextLibraryCommand.Activate, ActivateTimeoutSeconds, cancellationToken);
+        RunAsync("activate", ActivateTimeoutSeconds, cancellationToken);
 
     /// <summary>Removes the extension (macOS asks for an administrator password).</summary>
     public Task<FilterExtensionStatus> DeactivateAsync(CancellationToken cancellationToken) =>
-        RunAsync("deactivate", SysextLibraryCommand.Deactivate, ActivateTimeoutSeconds, cancellationToken);
+        RunAsync("deactivate", ActivateTimeoutSeconds, cancellationToken);
 
     public Task<FilterExtensionStatus> EnableAsync(CancellationToken cancellationToken) =>
-        RunAsync("enable", SysextLibraryCommand.Enable, EnableTimeoutSeconds, cancellationToken);
+        RunAsync("enable", EnableTimeoutSeconds, cancellationToken);
 
     private async Task<FilterExtensionStatus> RunAsync(
         string command,
-        SysextLibraryCommand libraryCommand,
         int timeoutSeconds,
         CancellationToken cancellationToken)
     {
@@ -275,75 +226,24 @@ public sealed class FilterExtensionManager
             return FilterExtensionStatus.Unavailable(command, "The network filter exists only on macOS.");
         }
 
-        var libraryPresent = _library is { IsPresent: true };
-        if (!environment.IsInsideAppBundle || (!environment.HelperPresent && !libraryPresent))
+        if (!environment.IsInsideAppBundle || !environment.HostPresent)
         {
             return FilterExtensionStatus.Unavailable(
                 command,
-                "This Axiom build has no network filter (axiom-sysext and libAxiomSysext.dylib are missing from Axiom.app).");
+                "This Axiom installation has no network filter host (AxiomFilterHost.app). Install the signed Axiom package.");
         }
 
-        if (!environment.IsInApplicationsFolder && !string.Equals(command, "status", StringComparison.Ordinal))
+        if (!environment.HostInApplicationsFolder && !string.Equals(command, "status", StringComparison.Ordinal))
         {
             return FilterExtensionStatus.Unavailable(
                 command,
-                "Move Axiom.app to /Applications first: macOS only activates network filters from there.");
+                "Move AxiomFilterHost.app to /Applications first: macOS only activates network filters from there.");
         }
 
-        if (libraryPresent)
-        {
-            var viaLibrary = await RunLibraryAsync(command, libraryCommand, timeoutSeconds, cancellationToken).ConfigureAwait(false);
-            if (viaLibrary is not null)
-            {
-                return viaLibrary;
-            }
-
-            if (!environment.HelperPresent)
-            {
-                LastPath = FilterExtensionPath.None;
-                return FilterExtensionStatus.Unavailable(
-                    command,
-                    "libAxiomSysext.dylib could not be loaded and axiom-sysext is missing from Axiom.app.");
-            }
-        }
-
-        return await RunHelperAsync(command, timeoutSeconds, environment, cancellationToken).ConfigureAwait(false);
+        return await RunHostAsync(command, timeoutSeconds, environment, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Returns null when the dylib cannot be used and the helper should run instead.</summary>
-    private async Task<FilterExtensionStatus?> RunLibraryAsync(
-        string command,
-        SysextLibraryCommand libraryCommand,
-        int timeoutSeconds,
-        CancellationToken cancellationToken)
-    {
-        var library = _library!;
-        try
-        {
-            // The call blocks for up to timeoutSeconds (+5 s) while the Swift side waits on its
-            // semaphore; keep it off the UI thread on a dedicated thread, not a pool thread.
-            var json = await Task.Factory.StartNew(
-                () => library.Invoke(libraryCommand, timeoutSeconds),
-                cancellationToken,
-                TaskCreationOptions.LongRunning,
-                TaskScheduler.Default).ConfigureAwait(false);
-
-            var status = FilterExtensionStatus.FromLibrary(command, json);
-            LastPath = FilterExtensionPath.Library;
-            _log(string.Create(
-                CultureInfo.InvariantCulture,
-                $"{command} via dylib ({library.Path}) exit={status.ExitCode} state={status.State} enabled={status.FilterEnabled}") +
-                (status.Ok ? string.Empty : " message=" + Tail(status.Message ?? string.Empty)));
-            return status;
-        }
-        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
-        {
-            _log($"{command}: libAxiomSysext.dylib unusable ({exception.GetType().Name}: {Tail(exception.Message)}); falling back to axiom-sysext.");
-            return null;
-        }
-    }
-
-    private async Task<FilterExtensionStatus> RunHelperAsync(
+    private async Task<FilterExtensionStatus> RunHostAsync(
         string command,
         int timeoutSeconds,
         FilterExtensionEnvironment environment,
@@ -354,23 +254,23 @@ public sealed class FilterExtensionManager
             : [command];
         var processTimeout = TimeSpan.FromSeconds(timeoutSeconds + 30);
 
-        var result = await _helper(environment.HelperPath, arguments, processTimeout, cancellationToken).ConfigureAwait(false);
-        LastPath = FilterExtensionPath.Helper;
+        var result = await _host(environment.HostPath, arguments, processTimeout, cancellationToken).ConfigureAwait(false);
+        LastPath = FilterExtensionPath.Host;
         if (result.TimedOut)
         {
-            _log($"{command} via helper ({environment.HelperPath}) timed out after {processTimeout.TotalSeconds:0} s.");
+            _log($"{command} via host ({environment.HostPath}) timed out after {processTimeout.TotalSeconds:0} s.");
             return new FilterExtensionStatus(command, FilterExtensionStatus.ExitTimeout, false, "timeout", null, false, false);
         }
 
         if (result.ExitCode == ToolProcessResult.NotStartedExitCode)
         {
-            _log($"{command} via helper ({environment.HelperPath}) could not start: {Tail(result.StandardError)}");
-            return FilterExtensionStatus.Unavailable(command, "axiom-sysext could not run: " + result.StandardError);
+            _log($"{command} via host ({environment.HostPath}) could not start: {Tail(result.StandardError)}");
+            return FilterExtensionStatus.Unavailable(command, "The activation host could not run: " + result.StandardError);
         }
 
         var status = FilterExtensionStatus.Parse(command, result.ExitCode, result.StandardOutput);
         _log(
-            $"{command} via helper ({environment.HelperPath}) exit={result.ExitCode} state={status.State} enabled={status.FilterEnabled}" +
+            $"{command} via host ({environment.HostPath}) exit={result.ExitCode} state={status.State} enabled={status.FilterEnabled}" +
             (status.Ok ? string.Empty : " stderr=" + Tail(result.StandardError)));
         return status;
     }

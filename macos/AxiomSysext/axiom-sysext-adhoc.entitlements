@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Ad hoc/development AxiomFilterHost.app. Ad hoc signatures cannot authorise restricted
+     entitlements (TN3125), so this host deliberately carries none and SysextCore refuses with a
+     clear "signed package required" answer. The UI itself is unaffected. -->
+<plist version="1.0">
+<dict/>
+</plist>

@@ -6,7 +6,7 @@ Security/correctness findings live in `MACOS_REVIEW.md` (all closed). Sources: o
 
 ## Top 5
 
-1. **Native Shield alerts** at connect time via `UNUserNotificationCenter` (Swift export in `libAxiomSysext.dylib`,
+1. **Native Shield alerts** at connect time via `UNUserNotificationCenter` (Swift host/extension export,
    Allow/Block actions). Today the ask only lands on the Firewall page plus an in-house toast. Biggest perceived gap.
    Effort M.
 2. **Rules by code-signing identity + hostname rules** (`rules.json` schema v2: `signingId`/`teamId`, `remoteHosts`
