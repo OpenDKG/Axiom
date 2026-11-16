@@ -94,6 +94,9 @@ public sealed class AgentCommandGuardTests
                      "slack\\\\tokens.json",
                      "\\\\discord\\\\local storage",
                      "state.vscdb",
+                     ".kdbx",
+                     ".opvault",
+                     ".htpasswd",
                  })
         {
             Assert.Contains(marker, helpers, StringComparison.Ordinal);

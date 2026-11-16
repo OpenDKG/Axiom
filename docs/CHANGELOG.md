@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.72.0
+
+- **Guard: KeePass, 1Password and htpasswd files block by extension.**
+  - Batch 12 on 0.71 hooks blocked AWS SSO/config, Bitwarden, `.password-store` and a bidi (`U+202E`) path read, but allowed `vault.kdbx`, `backup.opvault` and `.htpasswd` copied outside their product directories (issue #399).
+  - `_sensitive_store` gains `.kdbx`, `.opvault` and `.htpasswd`; a `kdbx-notes.md` control still allows.
+  - Re-verified 10/10; batches 1-11 stay clean.
+
 ## What's in 0.71.0
 
 - **Guard: cloud/IaC and chat-app secret stores block.**
