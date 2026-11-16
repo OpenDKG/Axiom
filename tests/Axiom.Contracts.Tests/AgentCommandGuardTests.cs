@@ -18,10 +18,19 @@ public sealed class AgentCommandGuardTests
 
         Assert.Contains("def _reads_protected(", helpers, StringComparison.Ordinal);
         Assert.Contains("if _reads_protected(command_text, protected):", helpers, StringComparison.Ordinal);
-        foreach (var verb in new[] { "findstr", "select-string", "robocopy", "compress-archive", "openssl", "ssh-keygen" })
+        foreach (var verb in new[] { "findstr", "select-string", "robocopy", "compress-archive", "openssl", "ssh-keygen", "makecab", "esentutl" })
         {
             Assert.Contains(verb, helpers, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void Guard_blocks_hive_queries_and_key_authenticated_ssh()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        Assert.Contains("\"reg query\" in text", helpers, StringComparison.Ordinal);
+        Assert.Contains("\"ssh -i\"", helpers, StringComparison.Ordinal);
     }
 
     [Fact]
