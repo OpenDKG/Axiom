@@ -1,5 +1,6 @@
 ﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Agents;
@@ -236,6 +237,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         OpenExternalUrlAsync("mailto:contact@opendkg.org");
 
     [RelayCommand]
+    private Task OpenWebsiteAsync() =>
+        OpenExternalUrlAsync("https://opendkg.org/axiom");
+
+    [RelayCommand]
     private void OpenSupport() => SelectedPage = Support;
 
     public bool UpdateAvailable => _updateChecker.IsUpdateAvailable;
@@ -243,7 +248,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public string LatestVersion => _updateChecker.LatestVersion;
 
     public string UpdateTooltip => UpdateAvailable
-        ? $"Axiom {LatestVersion} is available"
+        ? $"Update to version {LatestVersion}"
         : string.Empty;
 
     public string UpdateReleaseDateText => _updateChecker.ReleaseDateText;
@@ -453,8 +458,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _statusModeText = "In-process monitor";
 
+    private static readonly IBrush ShieldOnBrush = new SolidColorBrush(Color.Parse("#4ADE80"));
+
+    private static readonly IBrush ShieldWarnBrush = new SolidColorBrush(Color.Parse("#FBBF24"));
+
+    private static readonly IBrush ShieldOffBrush = new SolidColorBrush(Color.Parse("#FB7185"));
+
     [ObservableProperty]
     private string _statusFirewallBadgeText = "READ-ONLY";
+
+    /// <summary>Lamp next to the badge: green when protection is on, red when it is off.</summary>
+    [ObservableProperty]
+    private IBrush _statusFirewallBadgeBrush = ShieldOffBrush;
 
     public bool IsServiceMode { get; }
 
@@ -737,16 +752,19 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 ? $"Protection: ON · {protection.OwnedRuleCount} rule(s) · {awaiting} awaiting decision"
                 : $"Protection: ON · {protection.OwnedRuleCount} rule(s)";
             StatusFirewallBadgeText = "SHIELD ON";
+            StatusFirewallBadgeBrush = ShieldOnBrush;
         }
         else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
         {
             StatusFirewallText = "Firewall writes: enabled for this service session";
             StatusFirewallBadgeText = "TEST VM";
+            StatusFirewallBadgeBrush = ShieldWarnBrush;
         }
         else
         {
             StatusFirewallText = "Protection: off";
             StatusFirewallBadgeText = "READ-ONLY";
+            StatusFirewallBadgeBrush = ShieldOffBrush;
         }
         StatusModeText = IsServiceMode ? "Service monitor" : "In-process monitor";
 

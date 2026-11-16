@@ -134,20 +134,6 @@
                       Padding="10,3" FontSize="11" CornerRadius="4" BorderThickness="0" />
             </StackPanel>
           </Border>
-          <Button x:Name="UpdateButton" Classes="caption" Click="OnUpdateClicked"
-                  IsVisible="{Binding UpdateAvailable}"
-                  ToolTip.Tip="{Binding UpdateTooltip}"
-                  AutomationProperties.Name="Available update"
-                  chrome:WindowDecorationProperties.ElementRole="User">
-            <Grid Width="46" Height="44">
-              <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="13"
-                         Foreground="{DynamicResource Axiom.Accent}"
-                         HorizontalAlignment="Center" VerticalAlignment="Center" />
-              <Border Background="{DynamicResource Axiom.Accent}" CornerRadius="4"
-                      Width="8" Height="8" Margin="0,7,9,0"
-                      HorizontalAlignment="Right" VerticalAlignment="Top" />
-            </Grid>
-          </Button>
           <Button x:Name="AlertsButton" Classes="caption" Click="OnAlertsClicked" ToolTip.Tip="Notifications"
                   chrome:WindowDecorationProperties.ElementRole="User">
             <Grid Width="46" Height="44">
@@ -160,6 +146,20 @@
                 <TextBlock Text="{Binding UnreadAlertCount}" FontSize="8" FontWeight="Bold"
                            Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
               </Border>
+            </Grid>
+          </Button>
+          <Button x:Name="UpdateButton" Classes="caption" Click="OnUpdateClicked"
+                  IsVisible="{Binding UpdateAvailable}"
+                  ToolTip.Tip="{Binding UpdateTooltip}"
+                  AutomationProperties.Name="Available update"
+                  chrome:WindowDecorationProperties.ElementRole="User">
+            <Grid Width="46" Height="44">
+              <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                         Foreground="{DynamicResource Axiom.Accent}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <Border Background="{DynamicResource Axiom.Accent}" CornerRadius="4"
+                      Width="8" Height="8" Margin="0,7,9,0"
+                      HorizontalAlignment="Right" VerticalAlignment="Top" />
             </Grid>
           </Button>
           <Button Classes="caption" Content="&#xE921;" ToolTip.Tip="Minimize"
@@ -299,17 +299,22 @@
 
         <StackPanel Grid.Row="2" Margin="16,0,16,10" Spacing="8">
           <Border Height="1" Background="{DynamicResource Axiom.Border}" />
-          <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-            <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png"
-                   Width="40" Height="40" Stretch="Uniform"
-                   RenderOptions.BitmapInterpolationMode="HighQuality" />
-            <StackPanel VerticalAlignment="Center" Spacing="2">
-              <TextBlock Text="Axiom" FontWeight="SemiBold" FontSize="13"
-                         Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <TextBlock Text="{Binding VersionText}" FontSize="10"
-                         Foreground="{DynamicResource Axiom.TextMuted}" />
+          <Button Command="{Binding OpenWebsiteCommand}" Background="Transparent" BorderThickness="0"
+                  Padding="0" HorizontalAlignment="Center" Cursor="Hand"
+                  ToolTip.Tip="Open opendkg.org/axiom"
+                  AutomationProperties.Name="Open the Axiom website">
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+              <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png"
+                     Width="40" Height="40" Stretch="Uniform"
+                     RenderOptions.BitmapInterpolationMode="HighQuality" />
+              <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock Text="Axiom" FontWeight="SemiBold" FontSize="13"
+                           Foreground="{DynamicResource Axiom.TextPrimary}" />
+                <TextBlock Text="{Binding VersionText}" FontSize="10"
+                           Foreground="{DynamicResource Axiom.TextMuted}" />
+              </StackPanel>
             </StackPanel>
-          </StackPanel>
+          </Button>
           <TextBlock Text="Free Open-Source Network &amp; AI Agent Security" FontSize="10"
                      Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap"
                      TextAlignment="Center" HorizontalAlignment="Center" />
@@ -370,7 +375,7 @@
             </Border>
             <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="4" Padding="7,2">
               <StackPanel Orientation="Horizontal" Spacing="5">
-                <Ellipse Width="6" Height="6" Fill="{DynamicResource Axiom.Warning}" VerticalAlignment="Center" />
+                <Ellipse Width="6" Height="6" Fill="{Binding StatusFirewallBadgeBrush}" VerticalAlignment="Center" />
                 <controls:AxiomSelectableTextBlock Text="{Binding StatusFirewallBadgeText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="9" />
               </StackPanel>
             </Border>

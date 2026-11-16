@@ -1,3 +1,11 @@
+## What's in 0.81.0
+
+- **Status bar, footer and update polish.**
+  - Shield lamp: green when protection is on, red when off, amber only for the test-VM writes state (was always amber).
+  - Axiom logo and version in the footer open https://opendkg.org/axiom.
+  - Update button moved right of notifications, tooltip "Update to version X", still shown only when GitHub has a newer release.
+  - Support keeps only GitHub Sponsors; Buy Me a Coffee and PayPal.Me removed.
+
 ## What's in 0.80.0
 
 - **SESSIONS card counts real sessions.**
