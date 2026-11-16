@@ -147,7 +147,7 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
     private bool _newRuleEnabled = true;
 
     [ObservableProperty]
-    private string _newRuleStatusText = "Writes are disabled; the rule editor is read-only until the test-VM write gate is enabled.";
+    private string _newRuleStatusText = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ApplyNewRuleCommand))]

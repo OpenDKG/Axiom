@@ -258,6 +258,39 @@ public sealed class DnsProxyTests
         Assert.Contains("encrypted with DoH", snapshot.Detail, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("https://1.1.1.1/dns-query")]
+    [InlineData("https://10.0.2.15:8443/dns-query")]
+    public async Task Snapshot_detail_does_not_name_a_fixed_doh_port(string dohUrl)
+    {
+        // GUI/TEXT-LOW: a custom DoH port must not be reported as 443.
+        await using var server = new DnsProxyServer(
+            PrivacyShieldPolicy.Create(new PrivacyShieldSettings { Categories = PrivacyCategory.None }),
+            [new DnsUpstreamTarget(PlainEndpoint: null, DohUri: new Uri(dohUrl))],
+            port: 0);
+
+        var snapshot = server.Snapshot(new PrivacyShieldSettings());
+
+        Assert.Contains("encrypted with DoH", snapshot.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("443", snapshot.Detail, StringComparison.Ordinal);
+        Assert.Contains("(DoH)", snapshot.Upstream, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Snapshot_detail_reports_plain_dns_without_a_doh_claim()
+    {
+        await using var server = new DnsProxyServer(
+            PrivacyShieldPolicy.Create(new PrivacyShieldSettings { Categories = PrivacyCategory.None }),
+            [new IPEndPoint(IPAddress.Loopback, 53)],
+            port: 0);
+
+        var snapshot = server.Snapshot(new PrivacyShieldSettings());
+
+        Assert.Contains("plain UDP/TCP DNS", snapshot.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("encrypted with DoH", snapshot.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("prefer DoH", snapshot.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task Proxy_does_not_downgrade_doh_failure_to_plaintext()
     {

@@ -112,7 +112,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction, _monitor);
         // Review #25: the Overview line follows the same state as the "SHIELD ON" badge.
         Overview.ProtectionState = () => new OverviewProtectionState(
-            FirewallWritesEnabled: Firewall.WritesEnabled,
+            // The service-reported write gate, not the UI toggle: Shield on does not imply writes.
+            FirewallWritesEnabled: _protection?.WriteGateOpen == true,
             FirewallProtectionActive: _protection is { Enabled: true },
             PrivacyShieldActive: PrivacyShield.IsResolverActive,
             Enforcement: OperatingSystem.IsWindows() ? null : Firewall.Enforcement);
@@ -628,6 +629,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         StatusMonitoringText = _monitor.LastError is null
             ? $"Monitoring: live · {_monitor.PollInterval.TotalSeconds:0} s · {_monitor.SourceName}"
             : $"Monitoring: unavailable · {_monitor.LastError}";
+
+        // The header line is visible on every page, so it must not wait for the Overview page to
+        // reactivate: recompute it from the same live state as the footer badge.
+        Overview.StatusText = _monitor.LastError is null
+            ? OverviewPageViewModel.ComposeStatus(Overview.ProtectionState?.Invoke())
+            : $"Monitor unavailable: {_monitor.LastError}";
 
         StatusSourceText = _protection is { Enabled: true }
             ? OperatingSystem.IsWindows()

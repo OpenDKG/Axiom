@@ -43,6 +43,10 @@ public sealed class SystemdAndPathsTests
         Assert.Contains("Type=notify", unit, StringComparison.Ordinal);
         Assert.Contains("ExecStart=/usr/libexec/axiom/axiomd", unit, StringComparison.Ordinal);
         Assert.Contains("Restart=on-failure", unit, StringComparison.Ordinal);
+        // A crash leaves the OS resolver on the loopback resolver; recover quickly but keep a bound.
+        Assert.Contains("RestartSec=2", unit, StringComparison.Ordinal);
+        Assert.Contains("StartLimitIntervalSec=60", unit, StringComparison.Ordinal);
+        Assert.Contains("StartLimitBurst=5", unit, StringComparison.Ordinal);
         Assert.Contains("RuntimeDirectory=axiom", unit, StringComparison.Ordinal);
         Assert.Contains("StateDirectory=axiom", unit, StringComparison.Ordinal);
         Assert.Contains("StateDirectoryMode=0700", unit, StringComparison.Ordinal);

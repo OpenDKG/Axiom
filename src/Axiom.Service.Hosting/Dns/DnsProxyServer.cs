@@ -244,10 +244,11 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
         var allDoh = _targets.All(target => target.IsDoh);
         var anyDoh = _targets.Any(target => target.IsDoh);
+        // The DoH port comes from each configured URL, so do not name one fixed port here.
         var transportNote = allDoh
-            ? "Outbound queries are encrypted with DoH (HTTPS/443)."
+            ? "Outbound queries are encrypted with DoH (HTTPS)."
             : anyDoh
-                ? "Outbound queries prefer DoH (HTTPS/443); non-DoH upstreams remain plain DNS."
+                ? "Outbound queries prefer DoH (HTTPS); non-DoH upstreams remain plain DNS."
                 : "Outbound queries use plain UDP/TCP DNS.";
 
         return new PrivacyShieldStatus

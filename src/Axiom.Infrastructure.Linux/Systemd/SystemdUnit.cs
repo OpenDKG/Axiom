@@ -12,7 +12,15 @@ public static class SystemdUnit
 {
     public const string ServiceEnvironmentVariable = "AXIOM_SERVICE";
 
-    public const int RestartDelaySeconds = 10;
+    /// <summary>
+    /// While Privacy Shield is active the OS resolver points at the loopback resolver, so a crash
+    /// must be repaired in seconds. The explicit start limit keeps a persistent crash loop bounded.
+    /// </summary>
+    public const int RestartDelaySeconds = 2;
+
+    public const int StartLimitIntervalSeconds = 60;
+
+    public const int StartLimitBurst = 5;
 
     /// <summary>
     /// Capabilities the root daemon keeps (bounding set; everything else is dropped):
@@ -57,6 +65,8 @@ public static class SystemdUnit
             Documentation=https://github.com/a-51-50/Axiom/blob/main/docs/LINUX_ARCHITECTURE.md
             After=network-pre.target nss-lookup.target systemd-resolved.service NetworkManager.service
             Wants=network-pre.target
+            StartLimitIntervalSec={StartLimitIntervalSeconds}
+            StartLimitBurst={StartLimitBurst}
 
             [Service]
             # The daemon sends READY=1 over $NOTIFY_SOCKET once the IPC socket listens (SdNotify).

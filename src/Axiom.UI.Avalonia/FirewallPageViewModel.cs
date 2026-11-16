@@ -280,7 +280,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     private bool _newRuleEnabled = true;
 
     [ObservableProperty]
-    private string _newRuleStatusText = "Writes are disabled; the rule editor is read-only until the test-VM write gate is enabled.";
+    private string _newRuleStatusText = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ApplyNewRuleCommand))]
@@ -347,13 +347,17 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         ? OperatingSystem.IsWindows()
             ? "Axiom Shield is on. Rules are read and written through the elevated local service with the documented INetFwPolicy2 COM objects. Every change is confirmed and audited."
             : $"Axiom Shield is on. Rules are written by the root axiomd service; they are {Enforcement.EnforcementClause(PlatformText.Firewall)}. Every change is confirmed and audited."
-        : $"This session is read-only for {PlatformText.Firewall} changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
+        : ShieldEnabled
+            ? $"Axiom Shield is on, but the local service did not open the {PlatformText.Firewall} write gate. This session stays read-only until it does."
+            : $"This session is read-only for {PlatformText.Firewall} changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
 
     public string NoticeBadgeText => WritesEnabled ? "SHIELD ON" : "READ-ONLY";
 
     public string NewRuleWriteHint => WritesEnabled
         ? "Axiom Shield is on. Each change is confirmed and audited; only Axiom-owned rules are touched."
-        : "Turn on Axiom Shield to enable writes. Without it the rule editor stays read-only.";
+        : ShieldEnabled
+            ? "The local service has not opened the write gate, so the rule editor stays read-only. Recheck or restart the service."
+            : "Turn on Axiom Shield to enable writes. Without it the rule editor stays read-only.";
 
     [ObservableProperty]
     private string _writePathText = "disabled";
@@ -388,6 +392,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [NotifyCanExecuteChangedFor(nameof(DismissFocusedCommand))]
     [NotifyPropertyChangedFor(nameof(ShieldBadgeText))]
     [NotifyPropertyChangedFor(nameof(ShieldActionText))]
+    [NotifyPropertyChangedFor(nameof(NoticeText))]
+    [NotifyPropertyChangedFor(nameof(NewRuleWriteHint))]
     private bool _shieldEnabled;
 
     [ObservableProperty]
