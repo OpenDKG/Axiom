@@ -165,6 +165,76 @@ public sealed class DohBypassDetectorTests : IDisposable
         Assert.DoesNotContain(DohBypassDetector.NoBypassText, text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Linux_profiles_under_config_mozilla_and_snap_are_read()
+    {
+        var home = Path.Combine(_root, "home");
+        var config = Path.Combine(home, ".config");
+        WriteFile(Path.Combine(config, "google-chrome", "Default", "Preferences"), """
+            {"dns_over_https":{"mode":"secure","templates":"https://dns.google/dns-query"}}
+            """);
+        WriteFile(Path.Combine(config, "chromium", "Profile 1", "Preferences"), """
+            {"dns_over_https":{"mode":"off"}}
+            """);
+        WriteFile(Path.Combine(home, ".mozilla", "firefox", "abcd.default-release", "prefs.js"),
+            "user_pref(\"network.trr.mode\", 3);\n");
+        WriteFile(Path.Combine(home, "snap", "firefox", "common", ".mozilla", "firefox", "x.default", "prefs.js"),
+            "user_pref(\"network.trr.mode\", 2);\n");
+
+        var findings = DohBypassDetector.DetectLinux(home, config);
+
+        Assert.Equal(["Chrome", "Firefox", "Firefox (snap)"], findings.Select(f => f.Application).ToArray());
+        Assert.Contains("https://dns.google/dns-query", findings[0].Detail, StringComparison.Ordinal);
+        Assert.Contains("abcd.default-release", findings[1].Detail, StringComparison.Ordinal);
+        Assert.Contains("network.trr.mode 3", findings[1].Detail, StringComparison.Ordinal);
+        Assert.Contains("network.trr.mode 2", findings[2].Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Linux_ignores_windows_profile_layout_and_reports_its_own_locations()
+    {
+        // A Windows-shaped tree under the home must not be read on Linux, and the no-finding text
+        // names the Linux locations instead of the Windows ones.
+        WriteChromium("Google", "Chrome", "Default", """
+            {"dns_over_https":{"mode":"secure"}}
+            """);
+
+        Assert.Empty(DohBypassDetector.DetectLinux(_root, Path.Combine(_root, ".config")));
+        var text = DohBypassDetector.BuildWarningText([], DohBypassDetector.LinuxNoBypassText);
+        Assert.Equal(DohBypassDetector.LinuxNoBypassText, text);
+        Assert.DoesNotContain("Windows", text, StringComparison.Ordinal);
+        Assert.Contains("~/.mozilla", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Current_platform_text_is_honest_about_what_was_checked()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.True(DohBypassDetector.IsCheckSupported);
+            Assert.Equal(DohBypassDetector.NoBypassText, DohBypassDetector.NoBypassTextForCurrentPlatform);
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            Assert.True(DohBypassDetector.IsCheckSupported);
+            Assert.Equal(DohBypassDetector.LinuxNoBypassText, DohBypassDetector.NoBypassTextForCurrentPlatform);
+            Assert.DoesNotContain("Windows", DohBypassDetector.NoBypassTextForCurrentPlatform, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.False(DohBypassDetector.IsCheckSupported);
+            Assert.Empty(DohBypassDetector.DetectForCurrentPlatform());
+            Assert.Equal(DohBypassDetector.UnsupportedPlatformText, DohBypassDetector.NoBypassTextForCurrentPlatform);
+            Assert.DoesNotContain("found", DohBypassDetector.NoBypassTextForCurrentPlatform, StringComparison.Ordinal);
+        }
+    }
+
+    private static void WriteFile(string path, string content)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+    }
+
     private IReadOnlyList<DohBypassFinding> Detect() =>
         DohBypassDetector.Detect(_localAppData, _appData);
 

@@ -295,7 +295,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private bool _hasDohBypass;
 
     [ObservableProperty]
-    private string _dohBypassText = DohBypassDetector.NoBypassText;
+    private string _dohBypassText = DohBypassDetector.NoBypassTextForCurrentPlatform;
 
     /// <summary>Grouped live list: one row per (domain, app), newest first, bounded.</summary>
     public ObservableCollection<RecentBlockedGroup> RecentBlockedGroups { get; } = [];
@@ -1353,10 +1353,20 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     {
         try
         {
+            if (!DohBypassDetector.IsCheckSupported)
+            {
+                // No known profile locations here: say so rather than "no override found".
+                DohBypassText = DohBypassDetector.UnsupportedPlatformText;
+                HasDohBypass = false;
+                return;
+            }
+
             var findings = await Task
-                .Run(() => DohBypassDetector.Detect())
+                .Run(DohBypassDetector.DetectForCurrentPlatform)
                 .ConfigureAwait(true);
-            DohBypassText = DohBypassDetector.BuildWarningText(findings);
+            DohBypassText = DohBypassDetector.BuildWarningText(
+                findings,
+                DohBypassDetector.NoBypassTextForCurrentPlatform);
             HasDohBypass = findings.Count > 0;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
