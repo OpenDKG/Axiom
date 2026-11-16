@@ -51,6 +51,19 @@
       </Grid>
       <Border Classes="card">
         <StackPanel Spacing="10">
+          <StackPanel Spacing="2">
+            <controls:AxiomSelectableTextBlock Text="Blocked actions by agent" Classes="section-title" />
+            <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.BlockSummaryText}"
+                       FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          </StackPanel>
+          <controls:BlockedActionsChart Bars="{Binding AgentActivity.BlockSummary.ByHarness}"
+                     TextBrush="{DynamicResource Axiom.TextSecondary}"
+                     MutedBrush="{DynamicResource Axiom.TextMuted}"
+                     BarBrush="{DynamicResource Axiom.Critical}" />
+        </StackPanel>
+      </Border>
+      <Border Classes="card">
+        <StackPanel Spacing="10">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
               <controls:AxiomSelectableTextBlock Text="Agent activity" Classes="section-title" />
