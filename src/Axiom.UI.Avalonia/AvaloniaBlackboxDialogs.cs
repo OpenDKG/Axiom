@@ -17,9 +17,9 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
 {
     private static readonly string[] Severities = ["info", "low", "medium", "high", "critical"];
 
-    private static readonly IBrush Background = new SolidColorBrush(Color.Parse("#12151C"));
-    private static readonly IBrush Foreground = new SolidColorBrush(Color.Parse("#F3F5F8"));
-    private static readonly IBrush Muted = new SolidColorBrush(Color.Parse("#9EA7B8"));
+    private static IBrush Background => AxiomDialogTheme.WindowBackground;
+    private static IBrush Foreground => AxiomDialogTheme.TextPrimary;
+    private static IBrush Muted => AxiomDialogTheme.TextMuted;
 
     public async Task ShowSettingsAsync(BlackboxDashboardClient client, CancellationToken cancellationToken)
     {
@@ -39,7 +39,16 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
         var report = new CheckBox { Content = "Signed threat sharing", Foreground = Foreground };
         var originalReport = false;
         var paths = new ObservableCollection<string>();
-        var pathList = new ListBox { ItemsSource = paths, Height = 120, Background = new SolidColorBrush(Color.Parse("#0E1116")) };
+        var pathList = new ListBox
+        {
+            ItemsSource = paths,
+            Height = 120,
+            Background = AxiomDialogTheme.SurfaceAlt,
+            BorderBrush = AxiomDialogTheme.Border,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Classes = { "data-list" },
+        };
         var pathInput = new TextBox { PlaceholderText = "Absolute file or folder path" };
         var categories = new List<CategoryControls>();
         foreach (var (key, label) in new[]

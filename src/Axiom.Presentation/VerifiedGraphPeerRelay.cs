@@ -68,29 +68,52 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
 
     private const int MaxThreats = 500;
 
+    public const string DefaultSnapshotUrl =
+        "https://github.com/a-51-50/axiom-verified-graph/releases/download/verified-graph-latest/verified-graph-snapshot.json";
+
+    /// <summary>
+    /// Curator SPKI ECDSA P-256 public key (Base64 DER) pinned for the official Tier (a)
+    /// <see cref="DefaultSnapshotUrl"/> release snapshot. Generate with
+    /// <c>scripts/publish-verified-graph-snapshot.ps1 -InitKey</c>. When empty, Tier (a)
+    /// falls back to <c>AXIOM_GRAPH_TRUST_KEY</c> / <c>AXIOM_GRAPH_CURATOR_PUBKEY</c>
+    /// and fails closed if none is configured.
+    /// </summary>
+    public const string DefaultCuratorPublicKeyDerBase64 =
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEEnBOrJ/NcP15dWlpmqUPWsGQ4WsgcUOkgEJWkO0p7XVR/R57K56oAzwMOzhlisHq6JdLlgBEsrVjRIpFE67l0g==";
+
     private const int MaxTextLength = 160;
+
+    private const int MaxSnapshotRedirects = 3;
 
     private const string DiscoveryRequest = "AXIOM_GRAPH_DISCOVER_V1";
 
     private const string DiscoveryResponsePrefix = "AXIOM_GRAPH_OFFER_V1:";
 
-    private static readonly TimeSpan FreshnessWindow = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan LanFreshnessWindow = TimeSpan.FromMinutes(15);
+
+    public static readonly TimeSpan SnapshotFreshnessWindow = TimeSpan.FromDays(7);
+
+    private static readonly TimeSpan MaxFutureClockSkew = TimeSpan.FromMinutes(15);
 
     private static readonly TimeSpan ReSignInterval = TimeSpan.FromMinutes(5);
 
     private static readonly TimeSpan NetworkTimeout = TimeSpan.FromSeconds(2);
+
+    private static readonly TimeSpan SnapshotNetworkTimeout = TimeSpan.FromSeconds(10);
+
+    private static readonly TimeSpan SnapshotRetryCooldown = TimeSpan.FromMinutes(15);
 
     private static readonly HttpClient SharedSnapshotHttpClient = new(
         new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
             AutomaticDecompression = DecompressionMethods.None,
-            ConnectTimeout = NetworkTimeout,
+            ConnectTimeout = SnapshotNetworkTimeout,
             MaxResponseHeadersLength = 16,
         },
         disposeHandler: true)
     {
-        Timeout = NetworkTimeout,
+        Timeout = SnapshotNetworkTimeout,
     };
 
     private static readonly HashSet<string> AllowedCategories = new(StringComparer.Ordinal)
@@ -126,7 +149,7 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
         RegexOptions.CultureInvariant)]
     private static partial Regex DomainRegex();
 
-    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:@/+=-]{0,159}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:@/+=*-]{0,159}$", RegexOptions.CultureInvariant)]
     private static partial Regex SafeTokenRegex();
 
     private readonly object _gate = new();
@@ -139,6 +162,8 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
     private readonly IReadOnlyList<string>? _explicitPeersOverride;
     private readonly Uri? _snapshotEndpointUri;
     private readonly bool _enableLanBroadcast;
+    private readonly bool _snapshotFetchEnabled;
+    private readonly bool _peerRelayEnabled;
     private readonly bool _optInEnabled;
     private readonly Version _clientVersion;
     private readonly string _minClientVersion;
@@ -149,6 +174,8 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
     private BlackboxVerifiedSync? _lastSync;
     private BlackboxGraphPage? _lastPage;
     private DateTimeOffset _lastSignedUtc = DateTimeOffset.MinValue;
+    private VerifiedGraphPeerSnapshot? _cachedRemoteSnapshot;
+    private DateTimeOffset _lastSnapshotFailureUtc = DateTimeOffset.MinValue;
 
     private long _highestAcceptedSequence;
     private long _highestAcceptedTicks;
@@ -161,11 +188,13 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
     private bool _disposed;
 
     /// <summary>
-    /// Creates a peer relay / signed-snapshot verifier. By default (with no arguments), networking
-    /// is disabled unless both a pinned trust key (<c>AXIOM_GRAPH_TRUST_KEY</c> or
-    /// <c>AXIOM_GRAPH_CURATOR_PUBKEY</c>) and an opt-in source (<c>AXIOM_GRAPH_SNAPSHOT_URL</c>,
-    /// <c>AXIOM_GRAPH_PEERS</c>, <c>AXIOM_GRAPH_LAN=1</c>, or <c>AXIOM_GRAPH_LAN_CACHE=1</c>) are
-    /// explicitly configured.
+    /// Creates a peer relay / signed-snapshot verifier.
+    /// Tier (a) HTTPS snapshot bootstrap is active only when a pinned trust key
+    /// (<see cref="DefaultCuratorPublicKeyDerBase64"/> or <c>AXIOM_GRAPH_TRUST_KEY</c> /
+    /// <c>AXIOM_GRAPH_CURATOR_PUBKEY</c>) and a valid snapshot URL exist and
+    /// <c>AXIOM_GRAPH_SNAPSHOT_DISABLE=1</c> is not set.
+    /// Tier (b) LAN peer relay stays disabled unless explicitly opted in via
+    /// <c>AXIOM_GRAPH_PEERS</c>, <c>AXIOM_GRAPH_LAN=1</c>, or <c>AXIOM_GRAPH_LAN_CACHE=1</c>.
     /// </summary>
     public VerifiedGraphPeerRelay(
         int listenPort = DefaultPort,
@@ -181,9 +210,14 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
     {
         _listenPort = listenPort;
         _listenAddress = listenAddress ?? IPAddress.Loopback;
-        _pinnedPublicKeyDerBase64 = string.IsNullOrWhiteSpace(pinnedPublicKeyDerBase64)
-            ? (ReadEnv("AXIOM_GRAPH_TRUST_KEY") ?? ReadEnv("AXIOM_GRAPH_CURATOR_PUBKEY"))
-            : pinnedPublicKeyDerBase64.Trim();
+        var envKey = ReadEnv("AXIOM_GRAPH_TRUST_KEY") ?? ReadEnv("AXIOM_GRAPH_CURATOR_PUBKEY");
+        _pinnedPublicKeyDerBase64 = !string.IsNullOrWhiteSpace(pinnedPublicKeyDerBase64)
+            ? pinnedPublicKeyDerBase64.Trim()
+            : !string.IsNullOrWhiteSpace(envKey)
+                ? envKey
+                : string.IsNullOrWhiteSpace(DefaultCuratorPublicKeyDerBase64)
+                    ? null
+                    : DefaultCuratorPublicKeyDerBase64.Trim();
         _explicitPeersOverride = explicitPeersOverride;
         _clientVersion = NormalizeVersion(
             clientVersion ?? typeof(VerifiedGraphPeerRelay).Assembly.GetName().Version ?? new Version(0, 17, 0));
@@ -193,18 +227,32 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
         var envLan = string.Equals(ReadEnv("AXIOM_GRAPH_LAN"), "1", StringComparison.Ordinal) ||
                      string.Equals(ReadEnv("AXIOM_GRAPH_LAN_CACHE"), "1", StringComparison.Ordinal);
         _enableLanBroadcast = enableLanBroadcast || envLan;
-        _snapshotEndpointUri = snapshotEndpointOverride is not null
-            ? (IsAllowedSnapshotUri(snapshotEndpointOverride) ? snapshotEndpointOverride : null)
-            : TryParseAllowedSnapshotUri(ReadEnv("AXIOM_GRAPH_SNAPSHOT_URL"));
 
-        // Fail closed: without an explicit opt-in or pinned trust key, never open sockets or
-        // accept peer payloads (always fall back directly to local Blackbox/DKG).
-        _optInEnabled = optInOverride ??
-                        (!string.IsNullOrWhiteSpace(_pinnedPublicKeyDerBase64) &&
-                         (_snapshotEndpointUri is not null ||
-                          !string.IsNullOrWhiteSpace(envPeers) ||
-                          _enableLanBroadcast ||
-                          _explicitPeersOverride is { Count: > 0 }));
+        var snapshotDisabled = IsSnapshotDisabledByEnv();
+        if (snapshotEndpointOverride is not null)
+        {
+            _snapshotEndpointUri = IsAllowedSnapshotUri(snapshotEndpointOverride) ? snapshotEndpointOverride : null;
+        }
+        else if (!snapshotDisabled)
+        {
+            var envSnapshot = ReadEnv("AXIOM_GRAPH_SNAPSHOT_URL");
+            _snapshotEndpointUri = !string.IsNullOrWhiteSpace(envSnapshot)
+                ? TryParseAllowedSnapshotUri(envSnapshot)
+                : !string.IsNullOrWhiteSpace(_pinnedPublicKeyDerBase64)
+                    ? TryParseAllowedSnapshotUri(DefaultSnapshotUrl)
+                    : null;
+        }
+
+        // Fail closed: without a pinned trust key, neither Tier (a) nor Tier (b) activates.
+        var hasTrustKey = !string.IsNullOrWhiteSpace(_pinnedPublicKeyDerBase64);
+        _snapshotFetchEnabled = optInOverride != false && hasTrustKey && _snapshotEndpointUri is not null;
+
+        var hasPeerSource = !string.IsNullOrWhiteSpace(envPeers) ||
+                            _enableLanBroadcast ||
+                            _explicitPeersOverride is { Count: > 0 } ||
+                            curatorSigningKey is not null;
+        _peerRelayEnabled = optInOverride ?? (hasTrustKey && hasPeerSource);
+        _optInEnabled = optInOverride ?? (_snapshotFetchEnabled || _peerRelayEnabled);
 
         if (curatorSigningKey is not null)
         {
@@ -212,7 +260,7 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
             _ownsSigningKey = false;
             _signingPublicKeyDerBase64 = Convert.ToBase64String(curatorSigningKey.ExportSubjectPublicKeyInfo());
         }
-        else if (_optInEnabled)
+        else if (_peerRelayEnabled)
         {
             _signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             _ownsSigningKey = true;
@@ -230,6 +278,10 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
 
     public bool IsEnabled => _optInEnabled;
 
+    internal bool IsSnapshotBootstrapEnabled => _snapshotFetchEnabled;
+
+    internal bool IsPeerRelayEnabled => _peerRelayEnabled;
+
     /// <summary>
     /// Stores the verified graph snapshot exclusively in RAM, signs it with the configured key,
     /// and ensures the in-memory TCP/UDP relay listeners are active. Returns true only when opt-in
@@ -240,7 +292,7 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
         ArgumentNullException.ThrowIfNull(sync);
         ArgumentNullException.ThrowIfNull(page);
 
-        if (_disposed || !_optInEnabled || _signingKey is null || sync.VerifiedRules <= 0 || page.Threats.Count == 0)
+        if (_disposed || !_peerRelayEnabled || _signingKey is null || sync.VerifiedRules <= 0 || page.Threats.Count == 0)
         {
             return false;
         }
@@ -326,10 +378,91 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
                (IPAddress.TryParse(uri.DnsSafeHost, out var ip) && IPAddress.IsLoopback(ip));
     }
 
+    private static bool IsSnapshotDisabledByEnv()
+    {
+        var disableFlag = ReadEnv("AXIOM_GRAPH_SNAPSHOT_DISABLE");
+        if (string.Equals(disableFlag, "1", StringComparison.Ordinal) ||
+            string.Equals(disableFlag, "true", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(disableFlag, "yes", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var urlFlag = ReadEnv("AXIOM_GRAPH_SNAPSHOT_URL");
+        return string.Equals(urlFlag, "off", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(urlFlag, "none", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(urlFlag, "disabled", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(urlFlag, "false", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool IsAllowedRedirectTarget(Uri initialUri, Uri nextUri)
+    {
+        ArgumentNullException.ThrowIfNull(initialUri);
+        ArgumentNullException.ThrowIfNull(nextUri);
+
+        if (!IsAllowedSnapshotUri(nextUri))
+        {
+            return false;
+        }
+
+        if (IsLoopbackSnapshotUri(initialUri))
+        {
+            return IsLoopbackSnapshotUri(nextUri);
+        }
+
+        // Public HTTPS endpoints may only redirect to non-private HTTPS destinations (never downgrade to http:// or SSRF into LAN/loopback).
+        return nextUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(nextUri.DnsSafeHost, "localhost", StringComparison.OrdinalIgnoreCase) &&
+               !(IPAddress.TryParse(nextUri.DnsSafeHost, out var ip) && IsNonPublicIpAddress(ip));
+    }
+
+    private static bool IsLoopbackSnapshotUri(Uri uri) =>
+        string.Equals(uri.DnsSafeHost, "localhost", StringComparison.OrdinalIgnoreCase) ||
+        (IPAddress.TryParse(uri.DnsSafeHost, out var ip) && IPAddress.IsLoopback(ip));
+
+    private static bool IsNonPublicIpAddress(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (IPAddress.IsLoopback(address) ||
+            address.Equals(IPAddress.Any) ||
+            address.Equals(IPAddress.IPv6Any))
+        {
+            return true;
+        }
+
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            var bytes = address.GetAddressBytes();
+            return bytes[0] == 10 ||
+                   (bytes[0] == 172 && bytes[1] is >= 16 and <= 31) ||
+                   (bytes[0] == 192 && bytes[1] == 168) ||
+                   (bytes[0] == 169 && bytes[1] == 254) ||
+                   bytes[0] == 127 ||
+                   bytes[0] == 0;
+        }
+
+        if (address.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            if (address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6Multicast)
+            {
+                return true;
+            }
+
+            var bytes = address.GetAddressBytes();
+            return (bytes[0] & 0xFE) == 0xFC; // ULA fc00::/7
+        }
+
+        return false;
+    }
+
     /// <summary>
-    /// Fetches a curator-signed manifest snapshot from Tier (a) (<c>AXIOM_GRAPH_SNAPSHOT_URL</c>)
-    /// or Tier (b) opt-in LAN / Host-VM cache peers strictly in RAM using zero-reflection
-    /// <see cref="Utf8JsonReader"/> parsing, rejecting unknown fields, enforcing the mandatory
+    /// Fetches a curator-signed manifest snapshot from Tier (a) (<see cref="DefaultSnapshotUrl"/> or
+    /// <c>AXIOM_GRAPH_SNAPSHOT_URL</c>) or Tier (b) opt-in LAN / Host-VM cache peers strictly in RAM using
+    /// zero-reflection <see cref="Utf8JsonReader"/> parsing, rejecting unknown fields, enforcing the mandatory
     /// pinned trust key, verifying payload SHA-256 + Merkle root + timestamp + monotonic sequence,
     /// and returning null on any failure so Axiom cleanly falls back to the local DKG node.
     /// </summary>
@@ -342,29 +475,76 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
             return null;
         }
 
-        // Tier (a): curator-signed snapshot endpoint (HTTPS CDN or loopback DKG gateway).
-        if (_snapshotEndpointUri is not null)
+        // Tier (a): curator-signed snapshot endpoint (HTTPS CDN / GitHub Release or loopback DKG gateway).
+        if (_snapshotFetchEnabled && _snapshotEndpointUri is not null)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var endpointBytes = await TryFetchRawSnapshotFromUriAsync(_snapshotEndpointUri, cancellationToken)
-                .ConfigureAwait(false);
-            if (endpointBytes is { Length: > 0 and <= MaxEnvelopeBytes })
+            var now = DateTimeOffset.UtcNow;
+            VerifiedGraphPeerSnapshot? cached;
+            bool inCooldown;
+            lock (_gate)
             {
-                var snapshot = VerifyIncomingEnvelopeBytes(
-                    endpointBytes,
-                    DateTimeOffset.UtcNow,
-                    _snapshotEndpointUri.GetLeftPart(UriPartial.Authority));
-                if (snapshot is not null && snapshot.Sync.VerifiedRules > currentLocalRules)
-                {
-                    if (_enableLanBroadcast)
-                    {
-                        CacheCuratorSignedEnvelopeInMemory(endpointBytes, snapshot.Sync.VerifiedRules);
-                    }
+                cached = _cachedRemoteSnapshot;
+                inCooldown = _lastSnapshotFailureUtc != DateTimeOffset.MinValue &&
+                             now - _lastSnapshotFailureUtc < SnapshotRetryCooldown;
+            }
 
-                    return snapshot;
+            if (cached is not null)
+            {
+                return cached.Sync.VerifiedRules > currentLocalRules ? cached : null;
+            }
+
+            if (!inCooldown)
+            {
+                var endpointBytes = await TryFetchRawSnapshotFromUriAsync(_snapshotEndpointUri, cancellationToken)
+                    .ConfigureAwait(false);
+                if (endpointBytes is { Length: > 0 and <= MaxEnvelopeBytes })
+                {
+                    var snapshot = VerifyIncomingEnvelopeBytes(
+                        endpointBytes,
+                        DateTimeOffset.UtcNow,
+                        _snapshotEndpointUri.GetLeftPart(UriPartial.Authority),
+                        SnapshotFreshnessWindow);
+                    if (snapshot is not null)
+                    {
+                        lock (_gate)
+                        {
+                            _cachedRemoteSnapshot = snapshot;
+                            _lastSnapshotFailureUtc = DateTimeOffset.MinValue;
+                        }
+
+                        if (_enableLanBroadcast && _peerRelayEnabled)
+                        {
+                            CacheCuratorSignedEnvelopeInMemory(endpointBytes, snapshot.Sync.VerifiedRules);
+                        }
+
+                        if (snapshot.Sync.VerifiedRules > currentLocalRules)
+                        {
+                            return snapshot;
+                        }
+                    }
+                    else
+                    {
+                        lock (_gate)
+                        {
+                            _lastSnapshotFailureUtc = DateTimeOffset.UtcNow;
+                        }
+                    }
+                }
+                else
+                {
+                    lock (_gate)
+                    {
+                        _lastSnapshotFailureUtc = DateTimeOffset.UtcNow;
+                    }
                 }
             }
+        }
+
+        if (!_peerRelayEnabled)
+        {
+            return null;
         }
 
         // Tier (b): opt-in LAN / explicit peer RAM cache.
@@ -379,7 +559,7 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
                 continue;
             }
 
-            var snapshot = VerifyIncomingEnvelopeBytes(bytes, DateTimeOffset.UtcNow, endpoint.ToString());
+            var snapshot = VerifyIncomingEnvelopeBytes(bytes, DateTimeOffset.UtcNow, endpoint.ToString(), LanFreshnessWindow);
             if (snapshot is not null && snapshot.Sync.VerifiedRules > currentLocalRules)
             {
                 return snapshot;
@@ -413,7 +593,8 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
     public VerifiedGraphPeerSnapshot? VerifyIncomingEnvelopeBytes(
         ReadOnlySpan<byte> utf8Json,
         DateTimeOffset nowUtc,
-        string peerEndpoint = "peer")
+        string peerEndpoint = "peer",
+        TimeSpan? maxAge = null)
     {
         if (_disposed || string.IsNullOrWhiteSpace(_pinnedPublicKeyDerBase64))
         {
@@ -436,7 +617,8 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
                 _clientVersion,
                 _highestAcceptedSequence,
                 _highestAcceptedTicks,
-                _highestAcceptedMerkle);
+                _highestAcceptedMerkle,
+                maxAge);
             if (snapshot is null)
             {
                 return null;
@@ -531,7 +713,8 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
         Version? clientVersion = null,
         long minSequenceNumber = 1,
         long minCreatedUtcTicks = 0,
-        string? previousMerkleAtMinSequence = null)
+        string? previousMerkleAtMinSequence = null,
+        TimeSpan? maxAge = null)
     {
         ArgumentNullException.ThrowIfNull(envelope);
 
@@ -566,8 +749,9 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
             return null;
         }
 
+        var effectiveMaxAge = maxAge.HasValue && maxAge.Value > TimeSpan.Zero ? maxAge.Value : LanFreshnessWindow;
         var createdUtc = new DateTimeOffset(envelope.CreatedUtcTicks, TimeSpan.Zero);
-        if ((nowUtc - createdUtc).Duration() > FreshnessWindow)
+        if (createdUtc > nowUtc + MaxFutureClockSkew || (nowUtc - createdUtc) > effectiveMaxAge)
         {
             return null;
         }
@@ -1240,22 +1424,48 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
     private static async Task<byte[]?> TryFetchRawSnapshotFromUriAsync(Uri uri, CancellationToken cancellationToken)
     {
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(NetworkTimeout);
+        timeoutCts.CancelAfter(SnapshotNetworkTimeout);
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-            using var response = await SharedSnapshotHttpClient
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token)
-                .ConfigureAwait(false);
-            if (response.StatusCode != HttpStatusCode.OK ||
-                response.Content.Headers.ContentLength is > MaxEnvelopeBytes)
+            var currentUri = uri;
+            for (var hop = 0; hop <= MaxSnapshotRedirects; hop++)
             {
-                return null;
+                using var request = new HttpRequestMessage(HttpMethod.Get, currentUri);
+                request.Headers.UserAgent.ParseAdd("Axiom-VerifiedGraph/1.0");
+                using var response = await SharedSnapshotHttpClient
+                    .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token)
+                    .ConfigureAwait(false);
+
+                if (IsRedirectStatusCode(response.StatusCode) &&
+                    hop < MaxSnapshotRedirects &&
+                    response.Headers.Location is { } location)
+                {
+                    var nextUri = location.IsAbsoluteUri
+                        ? location
+                        : Uri.TryCreate(currentUri, location, out var resolved)
+                            ? resolved
+                            : null;
+                    if (nextUri is null || !IsAllowedRedirectTarget(uri, nextUri))
+                    {
+                        return null;
+                    }
+
+                    currentUri = nextUri;
+                    continue;
+                }
+
+                if (response.StatusCode != HttpStatusCode.OK ||
+                    response.Content.Headers.ContentLength is > MaxEnvelopeBytes)
+                {
+                    return null;
+                }
+
+                await using var stream = await response.Content.ReadAsStreamAsync(timeoutCts.Token).ConfigureAwait(false);
+                return await ReadBoundedMemoryStreamAsync(stream, timeoutCts.Token).ConfigureAwait(false);
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(timeoutCts.Token).ConfigureAwait(false);
-            return await ReadBoundedMemoryStreamAsync(stream, timeoutCts.Token).ConfigureAwait(false);
+            return null;
         }
         catch (OperationCanceledException)
         {
@@ -1266,6 +1476,13 @@ public sealed partial class VerifiedGraphPeerRelay : IDisposable
             return null;
         }
     }
+
+    private static bool IsRedirectStatusCode(HttpStatusCode statusCode) =>
+        statusCode is HttpStatusCode.MovedPermanently
+            or HttpStatusCode.Found
+            or HttpStatusCode.SeeOther
+            or HttpStatusCode.TemporaryRedirect
+            or HttpStatusCode.PermanentRedirect;
 
     private static async Task<byte[]?> TryFetchRawEnvelopeAsync(IPEndPoint endpoint, CancellationToken cancellationToken)
     {

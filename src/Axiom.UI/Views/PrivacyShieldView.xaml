@@ -227,6 +227,12 @@
                      Style="{StaticResource Caption}"
                      TextWrapping="Wrap"
                      Margin="0,4,0,10" />
+          <CheckBox Content="Auto-point active adapter DNS to 127.0.0.1 while resolver runs (click Apply &amp; Save above)"
+                    IsChecked="{Binding AutoPointAdapterDns}"
+                    IsEnabled="{Binding IsSupported}"
+                    Foreground="{DynamicResource TextSecondaryBrush}"
+                    FontSize="12"
+                    Margin="0,0,0,8" />
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="160" />

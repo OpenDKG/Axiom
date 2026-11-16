@@ -296,7 +296,11 @@ public sealed class GeminiProtection
             try:
                 payload = json.load(sys.stdin)
                 tool = str(payload.get("tool_name", ""))
-                parsed_args = payload.get("tool_input") or {}
+                raw_args = payload.get("tool_input")
+                parsed_args = dict(raw_args) if isinstance(raw_args, dict) else {}
+                # Gemini's read_file passes absolute_path; the vendor guard reads path.
+                if not parsed_args.get("path") and isinstance(parsed_args.get("absolute_path"), str):
+                    parsed_args["path"] = parsed_args["absolute_path"]
                 safety = _check_command_safety(parsed_args, _load_protected_paths())
                 if safety is not None:
                     record(

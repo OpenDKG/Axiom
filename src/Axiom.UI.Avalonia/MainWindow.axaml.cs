@@ -96,8 +96,8 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Keeps the glass surface translucent only when a native backdrop is really composited. Without
-    /// one, the same theme falls back to an opaque graphite/pearl base so the desktop does not show
-    /// through unblurred.
+    /// one, the same theme falls back to an opaque graphite/quartz gradient so the desktop does not
+    /// show through unblurred while preserving dimensional lighting.
     /// </summary>
     private void UpdateBackdropTint(bool glass)
     {
@@ -107,10 +107,29 @@ public partial class MainWindow : Window
             return;
         }
 
-        var fallback = IsGlassLight()
-            ? Color.Parse("#F4F7FA")
-            : Color.Parse("#090C12");
-        Resources[WindowBrushKey] = new SolidColorBrush(fallback);
+        Resources[WindowBrushKey] = IsGlassLight()
+            ? new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.Parse("#EDF2F8"), 0),
+                    new GradientStop(Color.Parse("#E3E9F2"), 0.55),
+                    new GradientStop(Color.Parse("#D6DFE9"), 1)
+                }
+            }
+            : new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.Parse("#06080D"), 0),
+                    new GradientStop(Color.Parse("#0B0F17"), 0.55),
+                    new GradientStop(Color.Parse("#04060A"), 1)
+                }
+            };
     }
 
     private void ReportBackdrop(bool glass)

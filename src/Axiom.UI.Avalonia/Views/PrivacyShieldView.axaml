@@ -122,6 +122,8 @@
               <controls:AxiomSelectableTextBlock Text="{Binding DnsOutageWarningText}" FontSize="11"
                          Foreground="{DynamicResource Axiom.Warning}" TextWrapping="Wrap" />
             </Border>
+            <CheckBox Content="Auto-point active adapter DNS to 127.0.0.1 while resolver runs (click Apply &amp; Save above)"
+                      IsChecked="{Binding AutoPointAdapterDns}" FontSize="11.5" />
             <ComboBox ItemsSource="{Binding Adapters}" SelectedItem="{Binding SelectedAdapter}"
                       HorizontalAlignment="Stretch" MaxWidth="420" />
             <StackPanel Orientation="Horizontal" Spacing="8">

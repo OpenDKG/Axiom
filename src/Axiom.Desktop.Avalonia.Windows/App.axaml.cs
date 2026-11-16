@@ -154,7 +154,8 @@ public partial class App : Application
                 new Axiom.Persistence.AgentSessionReader(),
                 visualEffects,
                 networkRecovery is null ? null : networkRecovery.RestoreAsync,
-                listenerInspector);
+                listenerInspector,
+                uiModeService: new WindowsUiModeService());
 
             window = new MainWindow { DataContext = _shell };
             _window = window;

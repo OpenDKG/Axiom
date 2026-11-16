@@ -20,7 +20,7 @@ public sealed class HeadlessNavigationTests
             window.Show();
             Dispatcher.UIThread.RunJobs();
 
-            Assert.Equal(14, shell.Pages.Count);
+            Assert.Equal(12, shell.Pages.Count);
             Assert.IsType<AgentDashboardPageViewModel>(shell.Pages[0]);
             Assert.NotNull(shell.OpenContactCommand);
             var contactButton = window.GetVisualDescendants()

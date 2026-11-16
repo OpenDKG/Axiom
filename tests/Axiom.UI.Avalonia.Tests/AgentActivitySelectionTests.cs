@@ -296,15 +296,8 @@ public sealed class AgentActivitySelectionTests
             Assert.Equal("beta.exe", shell.Apps.SelectedApp?.Name);
             appsWindow.Close();
 
-            if (shell.Overview.NewConnectionEvents.Count < 2)
-            {
-                shell.Overview.NewConnectionEvents.Clear();
-                shell.Overview.NewConnectionEvents.Add(new NewConnectionMarkerEvent(
-                    1, DateTimeOffset.UtcNow.AddSeconds(-5), "alpha.exe", "93.184.216.34:443", "Outbound", "Established", 101, @"C:\Apps\alpha.exe", "TCP", "127.0.0.1:50000"));
-                shell.Overview.NewConnectionEvents.Add(new NewConnectionMarkerEvent(
-                    2, DateTimeOffset.UtcNow, "beta.exe", "1.1.1.1:443", "Outbound", "Established", 202, @"C:\Apps\beta.exe", "TCP", "127.0.0.1:50001"));
-            }
-
+            shell.Overview.SelectedMonitoringTabIndex = 0;
+            shell.Connections.IsGroupedByApp = false;
             var overviewWindow = new Window
             {
                 Width = 1280,
@@ -314,16 +307,20 @@ public sealed class AgentActivitySelectionTests
             overviewWindow.Show();
             Dispatcher.UIThread.RunJobs();
             var overviewLists = overviewWindow.GetVisualDescendants().OfType<ListBox>().ToList();
-            var markersList = overviewLists.First(list => ReferenceEquals(list.ItemsSource, shell.Overview.NewConnectionEvents));
-            var socketsList = overviewLists.First(list => ReferenceEquals(list.ItemsSource, shell.Overview.Connections));
-            var markerItem = Assert.IsType<ListBoxItem>(markersList.ContainerFromIndex(1));
-            ClickEdge(overviewWindow, markerItem, MouseButton.Left);
-            Assert.NotNull(shell.Overview.SelectedEvent);
-            Assert.Equal("beta.exe", shell.Overview.SelectedEvent!.App);
-            var socketCell = GetRowCell(socketsList, 1, "beta.exe");
-            Assert.NotNull(socketCell);
-            ClickControl(overviewWindow, socketCell!, MouseButton.Left);
-            Assert.Equal("beta.exe", shell.Overview.SelectedSocket?.AppDisplayName);
+            var embeddedSocketsList = overviewLists.First(list => ReferenceEquals(list.ItemsSource, shell.Overview.ConnectionsTab.VisibleConnections));
+            var embeddedSocketCell = GetRowCell(embeddedSocketsList, 1, "beta.exe");
+            Assert.NotNull(embeddedSocketCell);
+            ClickControl(overviewWindow, embeddedSocketCell!, MouseButton.Left);
+            Assert.Equal("beta.exe", shell.Overview.ConnectionsTab.SelectedConnection?.AppDisplayName);
+
+            shell.Overview.SelectedMonitoringTabIndex = 1;
+            Dispatcher.UIThread.RunJobs();
+            var embeddedAppsList = overviewWindow.GetVisualDescendants().OfType<ListBox>()
+                .First(list => ReferenceEquals(list.ItemsSource, shell.Overview.AppsTab.Apps));
+            var embeddedBetaAppCell = GetRowCell(embeddedAppsList, 1, "beta.exe");
+            Assert.NotNull(embeddedBetaAppCell);
+            ClickControl(overviewWindow, embeddedBetaAppCell!, MouseButton.Left);
+            Assert.Equal("beta.exe", shell.Overview.AppsTab.SelectedApp?.Name);
             overviewWindow.Close();
 
             // Also verify grouped EventsView selection via SharedSelectedItem across multiple app groups.

@@ -2,6 +2,120 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.64.0
+
+- **Guard: openssl/ssh-keygen key reads, `reg export` of SAM, `.aws` archives.**
+  - A rotated 26-probe batch on 0.63 hooks allowed `openssl rsa -in …id_rsa`, `ssh-keygen -y -f …id_rsa`, `reg export HKLM\SAM` and `Compress-Archive ~/.aws`. The read check now covers openssl/ssh-keygen/gpg/age, the hive-export check accepts `reg export`, and `.aws`/`.gnupg` are credential stores (issue #382).
+  - Re-verified 26/26 against a hook generated from the patched source; controls still allow.
+- **Setup: the DKG identity check no longer warns while the node is still starting.**
+  - `SetupInstaller` polled the node identity for 30 s and then warned "DKG node could not be initialized or verified" even though the node came up healthy moments later (issue #381). It now polls up to 90 s and reports at 30 s/60 s that the node may still be starting, so the warning only appears for a real failure.
+
+## What's in 0.63.0
+
+- **CI: the DNS proxy TCP test no longer flakes.**
+  - `DnsProxyTests.Proxy_blocks_matching_domains_over_tcp` failed on a busy runner when the proxy fell back to UDP-only because its TCP listener lost the bind race. The test now retries the bind up to five times before asserting, so it checks block behaviour instead of timing (issue #374).
+
+## What's in 0.62.0
+
+- **Simple & Advanced UI modes (`SimpleHomeView`, `SimpleHomePageViewModel`, `UiModeSettingsStore`):**
+  - Added a segmented **`Simple | Advanced`** switch directly in the top notification bar (`MainWindow.axaml`) right beside the update and notifications buttons (`UpdateButton`, `AlertsButton`), persisted locally per user via `%LOCALAPPDATA%\Axiom\ui-mode.txt` (`WindowsUiModeService`).
+  - **Simple Mode** streamlines the sidebar to 5 clear destinations (`Home`, `Network Control`, `Privacy Overview`, `Settings`, `Help & Support`) and opens **`SimpleHomeView`**: an everyday protection hero banner with 1-click Shield toggle, three summary cards (`Firewall Shield`, `Ad & Tracker Blocker`, `Internet Activity`), inline pending outbound app approvals (`Allow` / `Block`), and currently online apps without technical socket/PID/IPC jargon.
+  - **Advanced Mode** preserves the full 12-page technical dashboard, diagnostics, AI agent tools, graph analytics, and status-bar telemetry untouched, with seamless cross-mode deep links from notifications and alerts (`ShellViewModel.NavigateToPage`).
+
+## What's in 0.61.0
+
+- **Guard: protected reads through admin shares and search tools, and non-English injection.**
+  - `type \\localhost\C$\Users\me\.ssh\id_rsa` and `findstr /s /i "PRIVATE KEY" C:\Users\me\.ssh\*` were allowed on 0.59 hooks; the new `_reads_protected` check pairs a read verb with a protected token in path position (also covers `select-string`, `grep`, `tar`, `robocopy`, `copy-item`).
+  - Injection heuristics gained Serbian, German, Spanish, French, Italian, Portuguese and Russian phrasings for "ignore previous instructions".
+  - `AgentCommandGuardTests` pin both in the shared helpers (issue #377).
+- **Setup: silent second instance no longer hangs, and the Hermes plugin gets its dependencies.**
+  - A second `--silent` setup writes the busy message to stderr and exits 3 instead of opening a modal box nobody can dismiss (issue #375).
+  - After `hermes plugins enable`, both installer copies install the Blackbox plugin dependencies into the Hermes base runtime and committed environment, then verify with `hermes plugins doctor`; a vendor failure is a warning, never an install failure (issue #376).
+
+## What's in 0.60.0
+
+- **Redesigned theme-aligned `Axiom Setup` wizard (`SetupNativeWindow`, `SetupGdiPlus`, `SetupThemePalette`):**
+  - Replaced legacy Win32 controls with a double-buffered GDI+ setup window using `Axiom.Setup.Logo.png` (`Square150x150Logo.png`), DWM titlebar styling, unified `CornerRadius="6"` geometry, custom vector radio cards/checkboxes/progress bar, and dynamic synchronization with all six Axiom themes via `ThemeSettingsStore.Load()` (`GlassDark` smoked obsidian + `#E2E8F0` silver chrome by default, plus `Dark`, `DarkMidnight`, `GlassLight`, `Light`, and `LightWarm`).
+  - Replaced the single-column radio + path dump with clean side-by-side **Complete Protection (`RECOMMENDED`)** and **Core / Partial Build (`NO ADMIN`)** cards, an interactive **Write scope** view, a crisp **Development build notice** acceptance card, and a dedicated **Progress** view with live step summary, timer, animated shimmer bar, and dark/themed scrollable log.
+- **Automatic post-install / post-update launch & self-closing installer (`SetupInstaller`, `SetupNativeWindow`):**
+  - `SetupInstaller.InstallAsync` now launches `Axiom.Desktop.exe` whenever `StartAfterInstall` is enabled (`true` by default) once core installation succeeds (even when optional-module warnings occur, recording warnings to `%LOCALAPPDATA%\Axiom\logs\setup-last-warning.txt`).
+  - Interactive Install and Update (`Upgrade`) flows automatically close the installer upon completion without blocking popups, and prompt to close any already-running `Axiom.Desktop` instance so in-place updates finish cleanly.
+
+## What's in 0.59.0
+
+- **Dark folded titanium Axiom brand mark & centered sidebar chrome:**
+  - Replaced `axiom-icon.png` and `axiom-lockup.png` in both UI asset folders (`src/Axiom.UI.Avalonia/Assets` and `src/Axiom.UI/Resources`), rebuilt multi-size `axiom.ico`, and regenerated MSIX Store tiles/splash (`packaging/msix/generate-assets.ps1`): removed the stray upper-right shield notch, refined the crisp diagonal metal fold (`brushed steel` vs `dark gunmetal`), matched the folded metallic finish across the `AXIOM` letters, and added subtle `xiom` lettering below `A` inside the shield.
+  - Centered the top-left `AXIOM` lockup and `LOCAL-FIRST · NO TELEMETRY` badge in `MainWindow.axaml`, removed the redundant top-left version label, centered the bottom-left footer (`Axiom` icon, name, version, description, and action buttons), and pointed `Contact` to `mailto:contact@opendkg.org`.
+- **Network Dashboard consolidation & sidebar reorganization:**
+  - Embedded `Live Connections`, `Applications`, and `Network Events` directly as compact tabs inside `Network Dashboard`, removed the duplicate `Privacy Shield` summary card from `Network Dashboard`, renamed `PROTECTION` to `AI` (including `AI Analyst`), and grouped `Network Control`, `Privacy Shield`, and `Integrations` under `NETWORK & PRIVACY`.
+- **Theme harmonization & Glass Dark depth polish:**
+  - Removed opaque black list/scroll surfaces in `Live Connections` and `Network Events` so glass themes keep translucent frosted surfaces, deepened `Axiom Glass Dark` backdrop gradients, darkened `Axiom.Warning` in `Light`/`GlassLight` to `#B45309`, styled `CheckBox`/`NumericUpDown` spinners/`Separator`/`Button.danger` across all themes, wrapped `umanitek-logo.png` cleanly in `AgentsView.axaml`, made `ThreatGraphControl` resolve theme palette brushes dynamically, and introduced `AxiomDialogTheme` so dialogs, setup prompts, first-run windows, and toast alerts follow the active theme.
+
+## What's in 0.58.0
+
+- **Documentation screenshots refreshed for the 0.57 theme redesign.**
+  - Glass Dark and Glass Light dashboards, opaque Dark and Light themes, the Settings/About page in both glass themes, the leadership crop and the glass-vs-dark comparison were recaptured from the released 0.57.0 build.
+  - Screenshots now show the 0.56 monochrome lockup, the borderless frosted chrome and the current navigation.
+
+## What's in 0.57.0
+
+- **Redesigned Glass themes & harmonized all six Avalonia desktop themes:**
+  - Rebuilt `Axiom Glass Dark` and `Axiom Glass Light` around an open, continuous frosted canvas: removed chrome divider walls around the titlebar, navigation rail, header, and status bar (`Border.glass-chrome`), unified geometry at `CornerRadius="6"`, dropped heavy boxy card shadows in glass modes, and set `TransparencyBackgroundFallback="Transparent"` on `MainWindow`.
+  - Tuned `Glass Dark` to a deeper smoked slate-obsidian glass veil (`#780C111A -> #66131B28 -> #7D0A0F17`) with frosted white-smoke tiles (`#1FFFFFFF -> #10FFFFFF`), pure white text, and crisp silver-chrome accents matching the `0.56.0` monochrome shield + `AXIOM` lockup.
+  - Harmonized the four opaque (non-transparent) themes (`Dark`, `Light`, `Dark Midnight`, `Light Warm`) with seamless borders, dimensional opaque gradient bases, subtle `CardBorder` fades, and logo-aligned accents (`#E2E8F0`, `#2B313A`, `#A5B4FC`, `#443C35`).
+
+## What's in 0.56.0
+
+- **Correct lockup: the grayscale AXIOM wordmark.**
+  - 0.55.0 shipped an older `logo-letters.png`; this release replaces `axiom-lockup.png` in both UI asset folders with the intended 2172x724 grayscale shield + AXIOM lockup.
+  - The 2172x724 canvas matches the historical lockup exactly, so the navigation rail, WPF header and first-run window show it at the previous size with no stretching.
+  - MSIX `Wide310x150Logo.png` and `SplashScreen.png` regenerated with `packaging/msix/generate-assets.ps1`.
+
+## What's in 0.55.0
+
+- **New Axiom brand mark in the app, the icon set and the MSIX assets.**
+  - `axiom-icon.png` (1024x1024) and `axiom-lockup.png` (2172x1222) regenerated from the new `logo.png` and `logo-letters.png`, in both the WPF and Avalonia asset folders.
+  - `axiom.ico` rebuilt as a nine-size icon set (16-256 px) for the window, tray and setup icon.
+  - MSIX tiles and splash regenerated with `packaging/msix/generate-assets.ps1`.
+  - The lockup keeps the new art's 1.78:1 aspect instead of the old 3:1, so navigation and first-run render it narrower without stretching.
+
+## What's in 0.54.0
+
+- **Clean Windows 11 onboarding for Blackbox & DKG, Repair flow, and clean PowerShell uninstalls:**
+  - Promoted `ModulePrerequisites` into `Axiom.Contracts.Modules` with silent bootstrap support for `Node.js LTS`, `Python 3.12`, `Git`, and `Microsoft.VCRedist.2015+.x64` (`VC++ 2015-2022 Redistributable`), invoked automatically during `CompleteInstallation` in `Axiom.Setup` and interactive `Install`/`Repair` actions.
+  - Separated folder existence (`HasBlackboxFiles`/`HasDkgFiles`) from verified runtime readiness (`IsBlackboxRuntimeInstalled`/`IsDkgRuntimeInstalled`) across `OptionalModuleUninstaller`, `SecurityPageViewModel`, and `SecurityViewModel`, surfacing `Repair` when `venv` or `dkg.cmd` is missing instead of failing on `Start`.
+  - Fixed local loopback probes (`OptionalModuleProbe.CreateLoopbackHttpClient` with `UseProxy = false` and `1s` connect timeout) to prevent Windows WPAD proxy auto-detect stalls causing false status-check timeouts.
+  - Shared `ModuleUninstallScripts` fixing `$HOME` read-only variable collision (`$dkgHome`), `Wait-Process -Timeout 5`, `ReadOnly` attribute cleanup on `.git`, reparse-point guards, and guarded scheduled-task removal.
+- **Privacy Shield DNS `127.0.0.1` auto-pointing & resilient blocklist downloads:**
+  - Configured `PrivacyShieldSourceUpdater` with `SocketsHttpHandler { UseProxy = false }` + IPv4-first address fallback, 3-minute download timeout, up to 3 bounded retries on transient connection resets, and partial-source commit (retaining all reachable blocklists such as HaGeZi/OISD/URLhaus/Phishing Filter with a warning when individual feeds fail instead of dropping everything).
+  - Enhanced `PrivacyDnsFailSafe` with `LastError` diagnostics, PowerShell stdout/stderr capture, and `netsh interface ipv4 set dnsservers` fallback, plus a service startup 3 s retry in `PrivacyShieldWorker` and explicit `AutoPointAdapterDns` UI toggles in both Avalonia and WPF views.
+- **Service & Desktop memory footprint reduction:**
+  - Eliminated permanent dual ~1M-rule retention (`_rules`, `_policyRules`, and `_rulesTask`) in `PrivacyShieldController`, switched `PrivacyShieldPolicy` to pre-sized `PackedRule` storage with interned `SourceId` palette and `WithSettings` catalog reuse, converted `ParseList` to stream via `TextReader` and `Evaluate` to `ReadOnlySpan<char>` lookups, streamed `PrivacyShieldRuleStore.Save()` without LOH string buffers, and enabled `System.GC.ConserveMemory=7` with LOH compaction after rule loads and source updates.
+
+## What's in 0.53.0
+
+- **Service upgrades survive a crash-looping old service; failures explain themselves.**
+  - `ServiceInstaller` clears the service recovery actions before stopping the old image and restores them after the copy, so SCM can no longer restart the 0.30 image mid-upgrade and lock it (issue #367).
+  - The image copy retries for 30 s and records every blocked attempt; `sc` timeouts no longer throw `InvalidOperationException` from `ExitCode`.
+  - New `ServiceInstallLog` (`%ProgramData%\Axiom\logs\service-install.log`) records each elevated step, and Setup prints its tail when the service installer exits non-zero instead of only `exited with code 7`.
+- **Complete Setup & Optional Module fixes (issue #364):**
+  - Replaced unsupported `oxigraph-worker` fallback with `'auto'` when VC++ 2015–2022 Redistributable is missing, and added `npm` prerequisite detection before running DKG install scripts.
+  - Setup reports `"Partial Success"` cleanly when core Axiom installs and optional steps emit warnings, tracks existing installs (`Upgrade Axiom`), and adds `Open Axiom`, `Repair`, and `Uninstall` (plus `--silent --uninstall`).
+- **Dashboard usability & copyability improvements (issue #365):**
+  - Made dashboard status text and list cells selectable/copyable, added explicit `Copy row` / `Copy local` / `Copy remote` / `Copy details` / `Copy status` actions, disambiguated `End process (PID)` vs `End application`, and removed the redundant top-right `LOCAL-FIRST` chip.
+
+## What's in 0.52.0
+
+- **Live Agent Enforcement status, dedicated Privacy Overview page, and Network Dashboard DNS monitoring.**
+  - **Live Enforcement Telemetry (`Agent Protection`):** `AgentsPageViewModel.Enforcement` now polls `enforcement.status` and `enforcement.receipts` via service IPC, reads the live Blackbox `block` / `audit` mode, and counts recent local `HOST_DENY_SENT` hook events while keeping ADR 0010 cooperative honesty invariants intact.
+  - **Dedicated `Privacy Overview` Page & `Network Dashboard` DNS Monitor:** Added a new `Privacy Overview` page under `OVERVIEW` sharing the single-owner `PrivacyShieldPageViewModel` (live KPI cards for `ACTIVE RULES`, `QUERIES`, `ALLOWED`, `BLOCKED`, `ERRORS`, DoH/adapter diagnostics, recent & top blocked domains, and per-app history) plus an embedded `Privacy Shield (DNS Monitor)` summary card inside `Network Dashboard` (Avalonia and WPF).
+
+## What's in 0.51.0
+
+- **Cline, Copilot CLI and Cursor verified live; hook coverage tests.**
+  - Installed 0.30.0 hooks blocked 4/15 each; generated 0.50.x hooks block **15/15** (Cline `cancel`, Copilot `permissionDecision`, Cursor `permission`).
+  - `HarnessHookCoverageTests` assert the shared guard and each deny shape in both assemblies; main synced the WPF `Axiom.UI.Services` copies (issue #362).
+
 ## What's in 0.50.0
 
 - **Reuse installed Blackbox and recover the vendor runtime.**
@@ -647,10 +761,12 @@ o tui_gateway warnings and letting the seed-phrase and keystore detectors load.
 - **Agent tool fetches are attributed to the agent.** Agents fetch through tools (curl, git, nslookup),
   so the DNS query belongs to the tool child, not the agent process. Axiom now walks the parent chain
   (up to six levels) once per process and remembers the nearest agent ancestor, so a malware-list
-  domain fetched that way is still a truthful etched-by-tool sighting.
+  domain fetched that way is still a truthful 
+etched-by-tool sighting.
 - **Verified live.** With the adapter pointed at the resolver, a malware-list domain fetched by an agent
   tool produced a candidate, was submitted by the desktop, and the DKG accepted it: the report is in
-  the community's shared memory (ioc:domain:win.down.55kantu.com, stage eported Â· monitor).
+  the community's shared memory (ioc:domain:win.down.55kantu.com, stage 
+eported Â· monitor).
 
 ## What's in 0.10.2
 

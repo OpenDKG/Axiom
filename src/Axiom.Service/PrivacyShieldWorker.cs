@@ -24,6 +24,12 @@ public sealed class PrivacyShieldWorker(PrivacyShieldController controller) : Ba
 
         try
         {
+            await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken).ConfigureAwait(false);
+            if (controller.ShouldAutoPointAdapterDns)
+            {
+                controller.EnsureConfiguredAdapterDns();
+            }
+
             using var adapterTimer = new PeriodicTimer(TimeSpan.FromSeconds(30));
             while (await adapterTimer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
             {

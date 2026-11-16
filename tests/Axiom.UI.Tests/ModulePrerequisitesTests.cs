@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.IO;
-using Axiom.UI.Services;
+using Axiom.Contracts.Modules;
 using Xunit;
 
 namespace Axiom.UI.Tests;

@@ -59,19 +59,43 @@ public sealed class PrivacyShieldPolicy
         new("heap.io", PrivacyCategory.Analytics),
     ];
 
-    private readonly Dictionary<string, (PrivacyCategory Category, string SourceId)> _blocked =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly record struct PackedRule(PrivacyCategory Category, ushort SourceIndex);
 
-    private readonly HashSet<string> _allowed =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PackedRule> _overlayBlocked;
+    private readonly Dictionary<string, PackedRule> _catalogBlocked;
+    private readonly string[] _sourcePalette;
+    private readonly HashSet<string> _allowed;
 
-    private PrivacyShieldPolicy()
+    private PrivacyShieldPolicy(
+        Dictionary<string, PackedRule> overlayBlocked,
+        Dictionary<string, PackedRule> catalogBlocked,
+        string[] sourcePalette,
+        HashSet<string> allowed,
+        IReadOnlyList<PrivacyShieldStarterRule> starterRulesUsed)
     {
+        _overlayBlocked = overlayBlocked;
+        _catalogBlocked = catalogBlocked;
+        _sourcePalette = sourcePalette;
+        _allowed = allowed;
+        var overlap = 0;
+        if (catalogBlocked.Count > 0)
+        {
+            foreach (var key in overlayBlocked.Keys)
+            {
+                if (catalogBlocked.ContainsKey(key))
+                {
+                    overlap++;
+                }
+            }
+        }
+
+        RuleCount = Math.Min(MaxRules, overlayBlocked.Count + catalogBlocked.Count - overlap);
+        StarterRulesUsed = starterRulesUsed;
     }
 
-    public int RuleCount => _blocked.Count;
+    public int RuleCount { get; }
 
-    public IReadOnlyList<PrivacyShieldStarterRule> StarterRulesUsed { get; private set; } = [];
+    public IReadOnlyList<PrivacyShieldStarterRule> StarterRulesUsed { get; }
 
     public static IReadOnlyList<PrivacyShieldStarterRule> StarterRulesAll => StarterRules;
 
@@ -81,17 +105,81 @@ public sealed class PrivacyShieldPolicy
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        var policy = new PrivacyShieldPolicy();
+        var paletteList = new List<string> { "starter", "custom" };
+        var paletteMap = new Dictionary<string, ushort>(StringComparer.Ordinal)
+        {
+            ["starter"] = 0,
+            ["custom"] = 1,
+        };
+
+        var catalogCount = externalRules is ICollection<PrivacyShieldStoredRule> collection
+            ? Math.Min(collection.Count, MaxRules)
+            : 0;
+        var catalogBlocked = new Dictionary<string, PackedRule>(catalogCount, StringComparer.OrdinalIgnoreCase);
+
+        if (externalRules is not null)
+        {
+            foreach (var rule in externalRules)
+            {
+                if (catalogBlocked.Count >= MaxRules)
+                {
+                    break;
+                }
+
+                var normalized = NormalizeDomain(rule.Domain);
+                if (normalized is null)
+                {
+                    continue;
+                }
+
+                var sourceId = string.IsNullOrWhiteSpace(rule.SourceId) ? "custom" : rule.SourceId;
+                if (!paletteMap.TryGetValue(sourceId, out var sourceIndex))
+                {
+                    if (paletteList.Count < ushort.MaxValue)
+                    {
+                        sourceIndex = (ushort)paletteList.Count;
+                        paletteList.Add(sourceId);
+                        paletteMap[sourceId] = sourceIndex;
+                    }
+                    else
+                    {
+                        sourceIndex = 1;
+                    }
+                }
+
+                catalogBlocked.TryAdd(normalized, new PackedRule(rule.Category, sourceIndex));
+            }
+        }
+
+        return BuildOverlay(settings, catalogBlocked, [.. paletteList]);
+    }
+
+    /// <summary>
+    /// Returns a policy updated with <paramref name="settings"/> while sharing the compiled
+    /// third-party catalog dictionary so settings edits never duplicate catalog entries.
+    /// </summary>
+    public PrivacyShieldPolicy WithSettings(PrivacyShieldSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return BuildOverlay(settings, _catalogBlocked, _sourcePalette);
+    }
+
+    private static PrivacyShieldPolicy BuildOverlay(
+        PrivacyShieldSettings settings,
+        Dictionary<string, PackedRule> catalogBlocked,
+        string[] sourcePalette)
+    {
+        var overlayBlocked = new Dictionary<string, PackedRule>(StringComparer.OrdinalIgnoreCase);
         var used = new List<PrivacyShieldStarterRule>();
 
         foreach (var rule in StarterRules)
         {
-            if ((settings.Categories & rule.Category) == 0 || policy._blocked.Count >= MaxRules)
+            if ((settings.Categories & rule.Category) == 0 || overlayBlocked.Count >= MaxRules)
             {
                 continue;
             }
 
-            if (policy._blocked.TryAdd(rule.Domain, (rule.Category, "starter")))
+            if (overlayBlocked.TryAdd(rule.Domain, new PackedRule(rule.Category, 0)))
             {
                 used.Add(rule);
             }
@@ -99,7 +187,7 @@ public sealed class PrivacyShieldPolicy
 
         foreach (var domain in settings.BlockedDomains)
         {
-            if (policy._blocked.Count >= MaxRules)
+            if (overlayBlocked.Count >= MaxRules)
             {
                 break;
             }
@@ -107,38 +195,21 @@ public sealed class PrivacyShieldPolicy
             var normalized = NormalizeDomain(domain);
             if (normalized is not null)
             {
-                policy._blocked.TryAdd(normalized, (PrivacyCategory.Custom, "custom"));
+                overlayBlocked.TryAdd(normalized, new PackedRule(PrivacyCategory.Custom, 1));
             }
         }
 
-        if (externalRules is not null)
-        {
-            foreach (var rule in externalRules)
-            {
-                if (policy._blocked.Count >= MaxRules)
-                {
-                    break;
-                }
-
-                var normalized = NormalizeDomain(rule.Domain);
-                if (normalized is not null)
-                {
-                    policy._blocked.TryAdd(normalized, (rule.Category, rule.SourceId));
-                }
-            }
-        }
-
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var domain in settings.AllowedDomains)
         {
             var normalized = NormalizeDomain(domain);
             if (normalized is not null)
             {
-                policy._allowed.Add(normalized);
+                allowed.Add(normalized);
             }
         }
 
-        policy.StarterRulesUsed = used;
-        return policy;
+        return new PrivacyShieldPolicy(overlayBlocked, catalogBlocked, sourcePalette, allowed, used);
     }
 
     public DnsPolicyDecision Evaluate(string? domain)
@@ -149,22 +220,45 @@ public sealed class PrivacyShieldPolicy
             return new DnsPolicyDecision(false, PrivacyCategory.None, null, "Invalid or empty domain name.");
         }
 
-        if (MatchesSuffix(_allowed, normalized))
+        var span = normalized.AsSpan();
+        var allowedLookup = _allowed.GetAlternateLookup<ReadOnlySpan<char>>();
+        if (MatchesSuffix(allowedLookup, span))
         {
             return new DnsPolicyDecision(false, PrivacyCategory.None, normalized, "Matched an allow rule.");
         }
 
-        foreach (var candidate in Suffixes(normalized))
+        var overlayLookup = _overlayBlocked.GetAlternateLookup<ReadOnlySpan<char>>();
+        var catalogLookup = _catalogBlocked.GetAlternateLookup<ReadOnlySpan<char>>();
+        var current = span;
+        while (true)
         {
-            if (_blocked.TryGetValue(candidate, out var entry))
+            if (overlayLookup.TryGetValue(current, out var overlayEntry))
             {
                 return new DnsPolicyDecision(
                     true,
-                    entry.Category,
-                    candidate,
+                    overlayEntry.Category,
+                    current.ToString(),
                     "Matched a local block rule.",
-                    entry.SourceId);
+                    _sourcePalette[overlayEntry.SourceIndex]);
             }
+
+            if (catalogLookup.TryGetValue(current, out var catalogEntry))
+            {
+                return new DnsPolicyDecision(
+                    true,
+                    catalogEntry.Category,
+                    current.ToString(),
+                    "Matched a local block rule.",
+                    _sourcePalette[catalogEntry.SourceIndex]);
+            }
+
+            var separator = current.IndexOf('.');
+            if (separator < 0)
+            {
+                break;
+            }
+
+            current = current[(separator + 1)..];
         }
 
         return new DnsPolicyDecision(false, PrivacyCategory.None, null, "No local block rule matched.");
@@ -275,55 +369,79 @@ public sealed class PrivacyShieldPolicy
             return [];
         }
 
+        using var reader = new StringReader(text);
+        return ParseList(reader, maxEntries);
+    }
+
+    /// <summary>Streams and parses a bounded plain-domain/hosts/DNSMasq/wildcard list without full-string allocations.</summary>
+    public static IReadOnlyList<string> ParseList(TextReader reader, int maxEntries = 100_000)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+
         var limit = Math.Clamp(maxEntries, 1, MaxRules);
         var result = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var rawLine in text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        while (reader.ReadLine() is { } rawLine)
         {
             if (result.Count >= limit)
             {
                 break;
             }
 
-            var line = rawLine.Trim();
-            if (line.Length == 0 || line.StartsWith('#') || line.StartsWith('!') ||
-                line.StartsWith('['))
+            var span = rawLine.AsSpan().Trim();
+            if (span.Length == 0 || span[0] is '#' or '!' or '[')
             {
                 continue;
             }
 
-            var comment = line.IndexOf('#');
+            var comment = span.IndexOf('#');
             if (comment >= 0)
             {
-                line = line[..comment].Trim();
-            }
-
-            if (line.Length == 0)
-            {
-                continue;
+                span = span[..comment].Trim();
+                if (span.Length == 0)
+                {
+                    continue;
+                }
             }
 
             string candidate;
-            var tokens = line.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
-            if (tokens.Length >= 2 &&
-                (tokens[0] is "0.0.0.0" or "127.0.0.1" or "::1" or "::"))
+            if (span.StartsWith("address=/", StringComparison.Ordinal))
             {
-                candidate = tokens[1];
-            }
-            else if (line.StartsWith("address=/", StringComparison.Ordinal))
-            {
-                var parts = line.Split('/');
-                if (parts.Length < 3)
+                var rest = span["address=/".Length..];
+                var nextSlash = rest.IndexOf('/');
+                if (nextSlash <= 0)
                 {
                     continue;
                 }
 
-                candidate = parts[1];
+                candidate = rest[..nextSlash].ToString();
             }
             else
             {
-                candidate = tokens[0];
+                var firstSep = span.IndexOfAny(' ', '\t');
+                if (firstSep < 0)
+                {
+                    candidate = span.ToString();
+                }
+                else
+                {
+                    var firstToken = span[..firstSep];
+                    var remainder = span[(firstSep + 1)..].TrimStart(" \t");
+                    if (remainder.Length > 0 &&
+                        (firstToken.SequenceEqual("0.0.0.0") ||
+                         firstToken.SequenceEqual("127.0.0.1") ||
+                         firstToken.SequenceEqual("::1") ||
+                         firstToken.SequenceEqual("::")))
+                    {
+                        var secondSep = remainder.IndexOfAny(' ', '\t');
+                        candidate = (secondSep < 0 ? remainder : remainder[..secondSep]).ToString();
+                    }
+                    else
+                    {
+                        candidate = firstToken.ToString();
+                    }
+                }
             }
 
             var normalized = NormalizeDomain(candidate);
@@ -336,19 +454,20 @@ public sealed class PrivacyShieldPolicy
         return result;
     }
 
-    private static bool MatchesSuffix(HashSet<string> rules, string domain) =>
-        Suffixes(domain).Any(rules.Contains);
-
-    private static IEnumerable<string> Suffixes(string domain)
+    private static bool MatchesSuffix(HashSet<string>.AlternateLookup<ReadOnlySpan<char>> rules, ReadOnlySpan<char> domain)
     {
         var current = domain;
         while (true)
         {
-            yield return current;
+            if (rules.Contains(current))
+            {
+                return true;
+            }
+
             var separator = current.IndexOf('.');
             if (separator < 0)
             {
-                yield break;
+                return false;
             }
 
             current = current[(separator + 1)..];

@@ -53,13 +53,19 @@ public static class AgentBinaryLocator
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "zcode", "zcode.exe"),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "ZCode", "ZCode.exe"));
 
-    public static bool IsDeepSeekAvailable() =>
-        OnPath("dsh") ||
-        OnPath("deepseek") ||
-        Exists(
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "dsh.cmd"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "dsh", "dsh.exe"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin", "dsh.exe"));
+    /// <summary>
+    /// Detects DeepSeek Harness (<c>dsh</c>). Does not treat <c>deepseek-cli</c> (<c>deepseek</c> on
+    /// PATH) as supported because it is a plain chat CLI with no lifecycle hook surface.
+    /// </summary>
+    public static bool IsDeepSeekAvailable() => IsDeepSeekAvailable(OnPath, File.Exists);
+
+    internal static bool IsDeepSeekAvailable(
+        Func<string, bool> onPath,
+        Func<string, bool> exists) =>
+        onPath("dsh") ||
+        exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "dsh.cmd")) ||
+        exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "dsh", "dsh.exe")) ||
+        exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin", "dsh.exe"));
 
     public static bool IsClineAvailable()
     {

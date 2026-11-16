@@ -12,23 +12,43 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        var options = SetupOptions.Parse(args);
+
         // A second setup instance used to run concurrently with the first, each making its own
-        // multi-GB upgrade backup and fighting over the service. One instance only.
+        // multi-GB upgrade backup and fighting over the service. One instance only. In silent mode a
+        // modal box would hang an unattended install (there is nobody to dismiss it), so the message
+        // goes to stderr and the process exits instead of waiting.
         using var single = new Mutex(initiallyOwned: true, @"Global\AxiomSetup.SingleInstance", out var created);
         if (!created)
         {
-            _ = MessageBox(
-                nint.Zero,
-                "Axiom Setup is already running. Wait for the current installation to finish; running a second copy duplicates the upgrade backup and can freeze the machine.",
-                "Axiom Setup",
-                0x00000040);
+            const string busy = "Axiom Setup is already running. Wait for the current installation to finish; "
+                                + "running a second copy duplicates the upgrade backup and can freeze the machine.";
+            if (options.Silent)
+            {
+                Console.Error.WriteLine(busy);
+            }
+            else
+            {
+                _ = MessageBox(nint.Zero, busy, "Axiom Setup", 0x00000040);
+            }
+
             Environment.ExitCode = 3;
             return;
         }
 
-        var options = SetupOptions.Parse(args);
         if (options.Silent)
         {
+            if (options.Uninstall)
+            {
+                var uninstall = SetupInstaller
+                    .UninstallAsync(options, progress: null, CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+                Console.WriteLine(uninstall.Message);
+                Environment.ExitCode = uninstall.Success ? 0 : 1;
+                return;
+            }
+
             if (!options.AcceptRisk)
             {
                 Console.Error.WriteLine(
@@ -41,11 +61,15 @@ internal static class Program
                 .InstallAsync(options, progress: null, CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
-            if (!result.Success)
+            if (!result.Success || result.PartialSuccess)
             {
-                // Silent mode used to exit 1 with no reason at all. Write the failure and the tail
-                // of the log so the caller (and the lab log) can see what stopped the install.
-                Console.Error.WriteLine("Axiom setup failed: " + result.Message);
+                // Write the reason / partial-success warnings and the tail of the log so automated callers see what stopped optional steps.
+                Console.Error.WriteLine((result.Success ? "Axiom setup partial success: " : "Axiom setup failed: ") + result.Message);
+                if (!string.IsNullOrWhiteSpace(result.Warning))
+                {
+                    Console.Error.WriteLine(result.Warning);
+                }
+
                 foreach (var line in result.Log.TakeLast(20))
                 {
                     Console.Error.WriteLine("  " + line);
