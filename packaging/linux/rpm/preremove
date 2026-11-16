@@ -6,9 +6,9 @@
 set -e
 [ "$1" = 0 ] || exit 0
 AXIOM_IMAGE_DAEMON=/usr/libexec/axiom/axiomd
-AXIOM_BUNDLED_DAEMON=/opt/axiom/axiomd/axiomd
+AXIOM_BUNDLED_DAEMON=/usr/lib/axiom-firewall/axiomd/axiomd
 AXIOM_PIN_DIR=/sys/fs/bpf/axiom
-AXIOM_BPF_PINS_SCRIPT=/opt/axiom/bpf-pins.sh
+AXIOM_BPF_PINS_SCRIPT=/usr/lib/axiom-firewall/bpf-pins.sh
 if [ ! -r "$AXIOM_BPF_PINS_SCRIPT" ]; then
     echo "axiom %preun: $AXIOM_BPF_PINS_SCRIPT is missing; cannot verify the BPF layer, keeping $AXIOM_PIN_DIR." >&2
     exit 1

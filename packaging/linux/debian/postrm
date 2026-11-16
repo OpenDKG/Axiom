@@ -38,8 +38,15 @@ stop_confirmed() {
         return 1
     fi
     # A stop that reports failure is not trusted either way: accept it only if the state reads
-    # inactive/failed, otherwise the service may still be running.
-    systemctl disable --now axiomd.service >/dev/null 2>&1 || true
+    # inactive/failed, otherwise the service may still be running. The stop/disable go through
+    # the Debian helpers (policy-rc.d aware); the read-back below is the authority, so a quiet
+    # helper failure cannot strand the daemon without its recovery handles.
+    if command -v deb-systemd-invoke >/dev/null 2>&1; then
+        deb-systemd-invoke stop axiomd.service >/dev/null 2>&1 || true
+    fi
+    if command -v deb-systemd-helper >/dev/null 2>&1; then
+        deb-systemd-helper disable axiomd.service >/dev/null 2>&1 || true
+    fi
     service_stopped
 }
 

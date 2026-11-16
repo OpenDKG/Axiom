@@ -297,9 +297,10 @@ public sealed class ProtectionSetupTests
     [Fact]
     public void Package_prefix_marks_the_layout_as_package_managed()
     {
-        Assert.True(new LinuxDaemonLayout("/opt/axiom").IsPackageManaged);
-        Assert.True(new LinuxDaemonLayout("/opt/axiom/").IsPackageManaged);
-        Assert.False(new LinuxDaemonLayout("/opt/axiom-dev").IsPackageManaged);
+        Assert.True(new LinuxDaemonLayout("/usr/lib/axiom-firewall").IsPackageManaged);
+        Assert.True(new LinuxDaemonLayout("/usr/lib/axiom-firewall/").IsPackageManaged);
+        Assert.False(new LinuxDaemonLayout("/usr/lib/axiom-firewall-dev").IsPackageManaged);
+        Assert.False(new LinuxDaemonLayout("/opt/axiom").IsPackageManaged);
         Assert.False(new LinuxDaemonLayout("/home/user/Axiom").IsPackageManaged);
         Assert.False(LinuxDaemonLayout.IsUnderPackagePrefix("/home/user/build/linux/Axiom"));
     }
@@ -307,8 +308,8 @@ public sealed class ProtectionSetupTests
     [Fact]
     public void Pkexec_command_line_is_the_daemon_and_install_flag()
     {
-        var arguments = LinuxElevation.BuildArguments("/opt/axiom/axiomd/axiomd", "--install-service");
-        Assert.Equal(["/opt/axiom/axiomd/axiomd", "--install-service"], arguments);
+        var arguments = LinuxElevation.BuildArguments("/usr/libexec/axiom/axiomd", "--install-service");
+        Assert.Equal(["/usr/libexec/axiom/axiomd", "--install-service"], arguments);
         Assert.Equal("/usr/bin/pkexec", LinuxElevation.PkexecPath);
         Assert.Equal("/usr/share/polkit-1/actions/com.axiom.firewall.policy", LinuxElevation.PolicyFilePath);
     }

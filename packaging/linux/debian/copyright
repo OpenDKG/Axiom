@@ -24,7 +24,7 @@ License: GPL-3.0-or-later
  On Debian systems, the complete text of the GNU General Public
  License version 3 can be found in "/usr/share/common-licenses/GPL-3".
  .
- The bundle under /opt/axiom also contains the self-contained .NET runtime
+ The bundle under /usr/lib/axiom-firewall also contains the self-contained .NET runtime
  and NuGet dependencies (Avalonia, SkiaSharp, HarfBuzzSharp, Microsoft.*),
  distributed under the MIT License; see the THIRD-PARTY-NOTICES files that
  the upstream release ships next to the application.

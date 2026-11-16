@@ -337,11 +337,12 @@ Not in P4: Windows firewall profiles are hidden off Windows (shared `FirewallPag
 and there is no Wayland-native backend.
 
 **Package-installed daemon (P5, docs/LINUX_PACKAGING.md).** The `.deb`/`.rpm` installs the bundle
-under `/opt/axiom` and its `postinst` runs `/opt/axiom/axiomd/axiomd --install-service` itself, so
+under `/usr/lib/axiom-firewall` (launcher `/usr/bin/axiom-firewall`) and its `postinst` runs
+`/usr/lib/axiom-firewall/axiomd/axiomd --install-service` itself, so
 the daemon is registered before the first launch. `LinuxDaemonLayout.IsPackageManaged` (executable
-under `/opt/axiom`) makes `LinuxProtectionSetup.ShouldOfferInstallAtStartup` false: a package
+under `/usr/lib/axiom-firewall`, to which the `/usr/bin` launcher resolves) makes `LinuxProtectionSetup.ShouldOfferInstallAtStartup` false: a package
 install never shows the pkexec prompt at startup, whatever the unit state (a missing unit is then a
-damaged package, logged as `package-managed install (/opt/axiom); no startup install offer`), while
+damaged package, logged as `package-managed install (/usr/lib/axiom-firewall); no startup install offer`), while
 the Shield page's manual Install/Upgrade stays available and, because the package also installs the
 polkit action and the image path matches `exec.path`, shows the Axiom-specific polkit message. The
 desktop publish itself now always carries `axiomd/` (`PublishBundledDaemon` target), the desktop

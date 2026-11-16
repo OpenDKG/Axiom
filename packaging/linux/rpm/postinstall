@@ -1,12 +1,12 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
 # RPM %post: $1 = 1 on install, 2 on upgrade. Same action as the Debian postinst configure branch:
-# `axiomd --install-service` stages /opt/axiom/axiomd into /usr/libexec/axiom, writes the unit,
+# `axiomd --install-service` stages /usr/lib/axiom-firewall/axiomd into /usr/libexec/axiom, writes the unit,
 # `daemon-reload` and `enable --now`, replacing a running daemon in place. Tested on Fedora 45
 # with SELinux Enforcing: no restorecon needed, files inherit bin_t / systemd_unit_file_t from
 # their parent directories (docs/LINUX_PACKAGING.md §7.3).
 set -e
-AXIOM_BUNDLED_DAEMON=/opt/axiom/axiomd/axiomd
+AXIOM_BUNDLED_DAEMON=/usr/lib/axiom-firewall/axiomd/axiomd
 [ -x "$AXIOM_BUNDLED_DAEMON" ] || { echo "axiom: $AXIOM_BUNDLED_DAEMON is missing; the package is damaged." >&2; exit 1; }
 if [ ! -d /run/systemd/system ]; then
     echo "axiom: systemd is not running; skipping the service install (run '$AXIOM_BUNDLED_DAEMON --install-service' later)." >&2

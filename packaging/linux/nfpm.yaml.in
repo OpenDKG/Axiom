@@ -14,10 +14,10 @@ description: |
   Network and AI agent security (desktop app + axiomd service)
   Axiom is a free, open-source per-application firewall with connection
   monitoring, history, Privacy Shield DNS filtering and AI-agent awareness.
-  The desktop application lives under /opt/axiom; the privileged background
-  service axiomd is registered as a systemd unit (root-owned image in
-  /usr/libexec/axiom, data in /var/lib/axiom) and enforces rules with
-  nftables and, where available, a connect-time eBPF layer.
+  The desktop application lives under /usr/lib/axiom-firewall (launched through
+  /usr/bin/axiom-firewall); the privileged background service axiomd is registered
+  as a systemd unit (root-owned image in /usr/libexec/axiom, data in /var/lib/axiom)
+  and enforces rules with nftables and, where available, a connect-time eBPF layer.
 vendor: Axiom
 homepage: https://github.com/a-51-50/Axiom
 license: GPL-3.0-or-later
@@ -55,9 +55,13 @@ recommends:
   - bpftool
   - libsecret
 contents:
-  - src: "@STAGE@/opt/axiom"
-    dst: /opt/axiom
+  - src: "@STAGE@/usr/lib/axiom-firewall"
+    dst: /usr/lib/axiom-firewall
     type: tree
+  # Same stable launcher name as the .deb: /usr/bin/axiom-firewall -> the real apphost.
+  - src: /usr/lib/axiom-firewall/Axiom
+    dst: /usr/bin/axiom-firewall
+    type: symlink
   - src: "@STAGE@/usr/share/applications/com.axiom.firewall.desktop"
     dst: /usr/share/applications/com.axiom.firewall.desktop
   - src: "@STAGE@/usr/share/polkit-1/actions/com.axiom.firewall.policy"

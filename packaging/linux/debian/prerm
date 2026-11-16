@@ -9,9 +9,9 @@
 set -e
 
 AXIOM_IMAGE_DAEMON=/usr/libexec/axiom/axiomd
-AXIOM_BUNDLED_DAEMON=/opt/axiom/axiomd/axiomd
+AXIOM_BUNDLED_DAEMON=/usr/lib/axiom-firewall/axiomd/axiomd
 AXIOM_PIN_DIR=/sys/fs/bpf/axiom
-AXIOM_BPF_PINS_SCRIPT=/opt/axiom/bpf-pins.sh
+AXIOM_BPF_PINS_SCRIPT=/usr/lib/axiom-firewall/bpf-pins.sh
 
 uninstall_service() {
     if [ -x "$AXIOM_IMAGE_DAEMON" ]; then

@@ -8,6 +8,7 @@
 #
 # Usage:
 #   scripts/linux/package.sh [deb|rpm|all] [--arch x64|arm64] [--skip-publish] [--no-bpf] [--snapshot]
+#                             [--local <suffix>]
 #
 #   deb (default) / rpm / all   which package formats to produce
 #   --arch x64|arm64            .NET RID linux-<arch> (default x64; the BPF objects are CO-RE and
@@ -15,13 +16,16 @@
 #   --skip-publish              reuse build/linux/axiomd and build/linux/Axiom from a previous run
 #   --no-bpf                    do not build/ship the eBPF objects (daemon degrades to nft-only)
 #   --snapshot                  version <props>~git<yyyymmdd>.<sha> (sorts before the release)
+#   --local <suffix>            version <props>+<suffix> (an upgradable local test build; the
+#                               upstream release version stays 0.59.0 in the app and docs)
 #
 # Steps: 1. `make` the BPF objects when clang is available (otherwise reuse out/ or ship without),
 #        2. `dotnet publish` axiomd (self-contained) into build/linux/axiomd and the desktop into
 #           build/linux/Axiom (its PublishBundledDaemon target copies axiomd/ into the bundle),
-#        3. stage the package root under build/linux/root (/opt/axiom, desktop entry, icons,
-#           polkit action, docs), 4. compute Depends with dpkg-shlibdeps, 5. dpkg-deb, lintian
-#           when present, 6. nfpm for the .rpm from the same root and maintainer-script logic.
+#        3. stage the package root under build/linux/root (payload in /usr/lib/axiom-firewall,
+#           /usr/bin/axiom-firewall, desktop entry, icons, polkit action, docs), 4. compute
+#           Depends with dpkg-shlibdeps, 5. dpkg-deb, lintian when present, 6. nfpm for the .rpm
+#           from the same root and maintainer-script logic.
 #
 # Environment: DOTNET (default: dotnet on PATH, then ~/.dotnet/dotnet), DOTNET_WRAPPER (command
 # prefix for dotnet, e.g. a flock wrapper), AXIOM_DOTNET_ARGS (extra dotnet publish arguments,
@@ -36,6 +40,7 @@ ARCH=x64
 SKIP_PUBLISH=0
 NO_BPF=0
 SNAPSHOT=0
+LOCAL=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     deb|rpm|all) FORMATS=$1 ;;
@@ -43,7 +48,8 @@ while [[ $# -gt 0 ]]; do
     --skip-publish) SKIP_PUBLISH=1 ;;
     --no-bpf) NO_BPF=1 ;;
     --snapshot) SNAPSHOT=1 ;;
-    -h|--help) sed -n '3,30p' "$0"; exit 0 ;;
+    --local) LOCAL=$2; shift ;;
+    -h|--help) sed -n '3,32p' "$0"; exit 0 ;;
     *) printf 'package.sh: unknown argument %s\n' "$1" >&2; exit 64 ;;
   esac
   shift
@@ -63,6 +69,9 @@ VERSION=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$ROOT/Directory.Build.p
 [[ -n "$VERSION" ]] || die "no <Version> in Directory.Build.props"
 if [[ $SNAPSHOT -eq 1 ]]; then
   VERSION="${VERSION}~git$(date -u +%Y%m%d).$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+fi
+if [[ -n "$LOCAL" ]]; then
+  VERSION="${VERSION}+${LOCAL}"
 fi
 
 OUT="$ROOT/build/linux"
@@ -117,17 +126,21 @@ fi
 # ---------------------------------------------------------------------------------------------
 log "staging $STAGE"
 rm -rf "$STAGE"
-mkdir -p "$STAGE/opt/axiom" "$STAGE/usr/share/applications" "$STAGE/usr/share/polkit-1/actions" \
-  "$STAGE/usr/share/doc/axiom-firewall" "$STAGE/usr/share/icons/hicolor"
-cp -a "$APP/." "$STAGE/opt/axiom/"
-# Shared by prerm/%preun: verified BPF pin cleanup (see the file's header).
-install -m 0644 "$PKG/bpf-pins.sh" "$STAGE/opt/axiom/bpf-pins.sh"
-find "$STAGE/opt/axiom" -name '*.pdb' -delete
+PAYLOAD="$STAGE/usr/lib/axiom-firewall"
+mkdir -p "$PAYLOAD" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/usr/share/polkit-1/actions" \
+  "$STAGE/usr/share/doc/axiom-firewall" "$STAGE/usr/share/icons/hicolor" "$STAGE/usr/share/lintian/overrides"
+cp -a "$APP/." "$PAYLOAD/"
+# Shared by prerm/%preun: verified BPF pin cleanup (see the file's header). Executable because a
+# maintainer script may run it directly; prerm sources it.
+install -m 0755 "$PKG/bpf-pins.sh" "$PAYLOAD/bpf-pins.sh"
+find "$PAYLOAD" -name '*.pdb' -delete
 # The policy/desktop files are installed to their system locations below; the copies the desktop
-# publish carries for reference are not needed in /opt.
-rm -rf "$STAGE/opt/axiom/packaging"
+# publish carries for reference are not needed in the payload.
+rm -rf "$PAYLOAD/packaging"
 # LTTng trace provider of the runtime: optional, needs liblttng-ust (not a dependency we want).
-find "$STAGE/opt/axiom" -name 'libcoreclrtraceptprovider.so' -delete
+find "$PAYLOAD" -name 'libcoreclrtraceptprovider.so' -delete
+# The app-grid launcher uses the stable /usr/bin name; the real tree stays in /usr/lib.
+ln -s ../lib/axiom-firewall/Axiom "$STAGE/usr/bin/axiom-firewall"
 install -m 0644 "$PKG/com.axiom.firewall.desktop" "$STAGE/usr/share/applications/"
 # polkitd drops a malformed action file without a word (pkaction then lists nothing): check it.
 if command -v python3 >/dev/null 2>&1; then
@@ -142,14 +155,36 @@ cp -a "$PKG/icons/hicolor/." "$STAGE/usr/share/icons/hicolor/"
 install -m 0644 "$PKG/debian/copyright" "$STAGE/usr/share/doc/axiom-firewall/copyright"
 install -m 0644 "$ROOT/README.md" "$STAGE/usr/share/doc/axiom-firewall/README.md"
 [[ -f "$ROOT/docs/LINUX_PACKAGING.md" ]] && install -m 0644 "$ROOT/docs/LINUX_PACKAGING.md" "$STAGE/usr/share/doc/axiom-firewall/"
+# Why a local build sorts after the release it is based on, and is not claimed as one.
+printf 'axiom-firewall (%s) unstable; urgency=medium\n\n  * Local Linux build; not an upstream release.\n\n -- The Axiom contributors <51213010+a-51-50@users.noreply.github.com>  %s\n' \
+  "$VERSION" "$(LC_ALL=C date -R)" | gzip -9n >"$STAGE/usr/share/doc/axiom-firewall/changelog.gz"
+install -m 0644 "$PKG/debian/lintian-overrides" "$STAGE/usr/share/lintian/overrides/axiom-firewall"
 
-# Modes: nothing group/world-writable, directories 0755, files 0644, executables 0755. The
-# daemon tree is audited again by --install-service after it is copied to /usr/libexec/axiom.
+# Modes: nothing group/world-writable, directories 0755, files 0644, executables 0755, shared
+# libraries 0644 (Debian Policy 8.1). The daemon tree is audited again by --install-service after
+# it is copied to /usr/libexec/axiom.
 find "$STAGE" -type d -exec chmod 0755 {} +
 find "$STAGE" -type f -exec chmod 0644 {} +
-chmod 0755 "$STAGE/opt/axiom/Axiom" "$STAGE/opt/axiom/axiomd/axiomd"
-[[ -f "$STAGE/opt/axiom/axiomd/bpf/axiom-bpf-events" ]] && chmod 0755 "$STAGE/opt/axiom/axiomd/bpf/axiom-bpf-events"
-find "$STAGE/opt/axiom" -type f \( -name 'createdump' -o -name '*.so' -o -name '*.so.*' \) -exec chmod 0755 {} +
+chmod 0755 "$PAYLOAD/Axiom" "$PAYLOAD/axiomd/axiomd" "$PAYLOAD/bpf-pins.sh"
+[[ -f "$PAYLOAD/axiomd/bpf/axiom-bpf-events" ]] && chmod 0755 "$PAYLOAD/axiomd/bpf/axiom-bpf-events"
+find "$PAYLOAD" -type f -name 'createdump' -exec chmod 0755 {} +
+# The .NET publish ships these five with a symbol table lintian reports. --strip-unneeded keeps
+# .dynsym, so P/Invoke, the libbpf helper and the SQLite shim still load. Never strip
+# axiom_connect.bpf.o: that removes the BTF/CO-RE metadata the kernel needs.
+if command -v strip >/dev/null 2>&1; then
+  for elf in "$PAYLOAD/libe_sqlite3.so" "$PAYLOAD/axiomd/libe_sqlite3.so" \
+             "$PAYLOAD/libHarfBuzzSharp.so" "$PAYLOAD/libSkiaSharp.so" \
+             "$PAYLOAD/axiomd/bpf/axiom-bpf-events"; do
+    [[ -f "$elf" ]] && strip --strip-unneeded "$elf"
+  done
+fi
+# Policy self-checks that do not need lintian on the build host.
+[[ ! -e "$STAGE/opt" ]] || die "payload is staged under /opt"
+[[ -L "$STAGE/usr/bin/axiom-firewall" ]] || die "missing /usr/bin/axiom-firewall symlink"
+[[ -x "$PAYLOAD/bpf-pins.sh" ]] || die "bpf-pins.sh is not executable"
+if find "$PAYLOAD" -type f \( -name '*.so' -o -name '*.so.*' \) -perm /111 -print -quit | grep -q .; then
+  die "a shared library carries an execute bit"
+fi
 
 # ---------------------------------------------------------------------------------------------
 # 4. Dependencies: dpkg-shlibdeps for everything in NEEDED; libraries the runtime and Avalonia
@@ -162,9 +197,9 @@ if command -v dpkg-shlibdeps >/dev/null 2>&1; then
   mkdir -p "$SHLIBDEPS_DIR/debian"
   printf 'Source: axiom-firewall\n\nPackage: axiom-firewall\nArchitecture: %s\n' "$DEB_ARCH" >"$SHLIBDEPS_DIR/debian/control"
   # Every dynamic ELF object (the BPF object is ELF too but has no dynamic section).
-  mapfile -t ELF_FILES < <(find "$STAGE/opt/axiom" -type f -not -name '*.bpf.o' -exec sh -c 'head -c 4 "$1" | grep -q "^.ELF" && echo "$1"' _ {} \;)
+  mapfile -t ELF_FILES < <(find "$PAYLOAD" -type f -not -name '*.bpf.o' -exec sh -c 'head -c 4 "$1" | grep -q "^.ELF" && echo "$1"' _ {} \;)
   SHLIBS_DEPENDS=$(cd "$SHLIBDEPS_DIR" && dpkg-shlibdeps -O --ignore-missing-info --warnings=0 \
-      -l"$STAGE/opt/axiom" -l"$STAGE/opt/axiom/axiomd" "${ELF_FILES[@]}" 2>/dev/null | sed -n 's/^shlibs:Depends=//p') || true
+      -l"$PAYLOAD" -l"$PAYLOAD/axiomd" "${ELF_FILES[@]}" 2>/dev/null | sed -n 's/^shlibs:Depends=//p') || true
   rm -rf "$SHLIBDEPS_DIR"
 fi
 if [[ -z "$SHLIBS_DEPENDS" ]]; then
@@ -219,7 +254,7 @@ build_rpm() {
   fi
   local cfg="$OUT/nfpm.yaml" bpf_line='s| *# @IF_BPF@$||'
   # The libbpf.so.1 requirement only exists when the BPF helper is shipped.
-  [[ -f "$STAGE/opt/axiom/axiomd/bpf/axiom-bpf-events" ]] || bpf_line='/@IF_BPF@/d'
+  [[ -f "$PAYLOAD/axiomd/bpf/axiom-bpf-events" ]] || bpf_line='/@IF_BPF@/d'
   sed -e "s|@VERSION@|${VERSION//\~/_}|" -e "s|@ARCH@|$DEB_ARCH|" -e "s|@STAGE@|$STAGE|" -e "s|@PKG@|$PKG|" \
       -e "$bpf_line" "$PKG/nfpm.yaml.in" >"$cfg"
   for script in postinstall preremove postremove; do bash -n "$PKG/rpm/$script"; done

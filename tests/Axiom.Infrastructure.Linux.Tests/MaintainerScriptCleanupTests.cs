@@ -16,11 +16,17 @@ public sealed class MaintainerScriptCleanupTests
     private const string FakeSystemctl = """
         #!/bin/sh
         case "$1" in
-          disable) exit "$AXIOM_FAKE_DISABLE_EXIT" ;;
           is-active) printf '%s\n' "$AXIOM_FAKE_ACTIVE_STATE"; exit "$AXIOM_FAKE_ACTIVE_EXIT" ;;
           daemon-reload) exit 0 ;;
         esac
         exit 0
+        """;
+
+    // deb-systemd-invoke (stop) and deb-systemd-helper (disable) carry the exit code under test;
+    // postrm must still read the state back with systemctl before deleting anything.
+    private const string FakeSystemdHelper = """
+        #!/bin/sh
+        exit "$AXIOM_FAKE_DISABLE_EXIT"
         """;
 
     [Fact]
@@ -113,6 +119,21 @@ public sealed class MaintainerScriptCleanupTests
         Assert.False(sandbox.Exists(Sandbox.Unit));
         Assert.False(sandbox.Exists(Sandbox.Image));
         Assert.False(sandbox.Exists(Sandbox.RunDir));
+    }
+
+    [Fact]
+    public void Deb_remove_without_the_stop_helpers_still_requires_a_stopped_state()
+    {
+        using var sandbox = new Sandbox();
+        sandbox.RemoveStopHelpers();
+
+        var running = sandbox.Run(DebPostrm, "remove", disableExit: 0, state: "active", activeExit: 0);
+        Assert.NotEqual(0, running.ExitCode);
+        Assert.True(sandbox.Exists(Sandbox.Image));
+
+        var stopped = sandbox.Run(DebPostrm, "remove", disableExit: 0, state: "inactive", activeExit: 3);
+        Assert.Equal(0, stopped.ExitCode);
+        Assert.False(sandbox.Exists(Sandbox.Image));
     }
 
     [Fact]
@@ -233,9 +254,16 @@ public sealed class MaintainerScriptCleanupTests
             {
                 var systemctl = Path.Combine(Absolute("bin"), "systemctl");
                 File.WriteAllText(systemctl, FakeSystemctl.ReplaceLineEndings("\n"));
+                var invoke = Path.Combine(Absolute("bin"), "deb-systemd-invoke");
+                var helper = Path.Combine(Absolute("bin"), "deb-systemd-helper");
+                File.WriteAllText(invoke, FakeSystemdHelper.ReplaceLineEndings("\n"));
+                File.WriteAllText(helper, FakeSystemdHelper.ReplaceLineEndings("\n"));
                 if (!OperatingSystem.IsWindows())
                 {
-                    File.SetUnixFileMode(systemctl, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                    foreach (var script in new[] { systemctl, invoke, helper })
+                    {
+                        File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                    }
                 }
             }
         }
@@ -245,6 +273,12 @@ public sealed class MaintainerScriptCleanupTests
         public void Delete(string relative) => File.Delete(Absolute(relative));
 
         public void DeleteDirectory(string relative) => Directory.Delete(Absolute(relative));
+
+        public void RemoveStopHelpers()
+        {
+            Delete("bin/deb-systemd-invoke");
+            Delete("bin/deb-systemd-helper");
+        }
 
         public (int ExitCode, string StandardError) Run(
             string script, string argument, int disableExit, string state, int activeExit)

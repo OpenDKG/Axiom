@@ -84,7 +84,7 @@ public sealed class LinuxDaemonLayout
     public const string DaemonSubdirectory = "axiomd";
 
     /// <summary>Where the .deb/.rpm installs the desktop bundle (docs/LINUX_PACKAGING.md §3).</summary>
-    public const string PackagePrefix = "/opt/axiom";
+    public const string PackagePrefix = "/usr/lib/axiom-firewall";
 
     public LinuxDaemonLayout(string executableDirectory)
     {

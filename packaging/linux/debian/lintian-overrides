@@ -1,0 +1,18 @@
+# Per-file lintian overrides for axiom-firewall (installed to
+# /usr/share/lintian/overrides/axiom-firewall). Every entry names the exact file and the reason;
+# there is no package-wide tag suppression. Keep this file in sync with the staged payload.
+
+# The connect-time filter is a BPF object (ELF machine EM_BPF = 247). Lintian's architecture
+# table models executable architectures only, so it calls the object "another architecture".
+# The object is architecture-neutral CO-RE/BTF and is loaded by bpftool on the running kernel.
+axiom-firewall: binary-from-other-architecture usr/lib/axiom-firewall/axiomd/bpf/axiom_connect.bpf.o
+
+# SkiaSharp ships its own freetype, libjpeg and libpng because the .NET native binding is built
+# against that bundle; the system libraries are not ABI-compatible drop-ins. This is the upstream
+# self-contained publish, not a locally vendored copy.
+axiom-firewall: embedded-library usr/lib/axiom-firewall/libSkiaSharp.so
+
+# The .NET runtime compression shim statically links zlib in the same way (window and daemon
+# copies). Replacing it would require rebuilding the runtime's native library.
+axiom-firewall: embedded-library usr/lib/axiom-firewall/libSystem.IO.Compression.Native.so
+axiom-firewall: embedded-library usr/lib/axiom-firewall/axiomd/libSystem.IO.Compression.Native.so
