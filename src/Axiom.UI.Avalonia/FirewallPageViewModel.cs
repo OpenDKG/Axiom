@@ -343,21 +343,31 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [NotifyPropertyChangedFor(nameof(NewRuleWriteHint))]
     private bool _writesEnabled;
 
+    /// <summary>False until a rules read succeeds, so a failed probe never claims the gate is known closed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NoticeText))]
+    [NotifyPropertyChangedFor(nameof(NewRuleWriteHint))]
+    private bool _writeGateKnown;
+
     public string NoticeText => WritesEnabled
         ? OperatingSystem.IsWindows()
             ? "Axiom Shield is on. Rules are read and written through the elevated local service with the documented INetFwPolicy2 COM objects. Every change is confirmed and audited."
             : $"Axiom Shield is on. Rules are written by the root axiomd service; they are {Enforcement.EnforcementClause(PlatformText.Firewall)}. Every change is confirmed and audited."
-        : ShieldEnabled
-            ? $"Axiom Shield is on, but the local service did not open the {PlatformText.Firewall} write gate. This session stays read-only until it does."
-            : $"This session is read-only for {PlatformText.Firewall} changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
+        : !WriteGateKnown
+            ? $"The last {PlatformText.Firewall} write-gate read did not complete, so this session stays read-only. Recheck or restart the service."
+            : ShieldEnabled
+                ? $"Axiom Shield is on, but the local service did not open the {PlatformText.Firewall} write gate. This session stays read-only until it does."
+                : $"This session is read-only for {PlatformText.Firewall} changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
 
     public string NoticeBadgeText => WritesEnabled ? "SHIELD ON" : "READ-ONLY";
 
     public string NewRuleWriteHint => WritesEnabled
         ? "Axiom Shield is on. Each change is confirmed and audited; only Axiom-owned rules are touched."
-        : ShieldEnabled
-            ? "The local service has not opened the write gate, so the rule editor stays read-only. Recheck or restart the service."
-            : "Turn on Axiom Shield to enable writes. Without it the rule editor stays read-only.";
+        : WriteGateKnown
+            ? ShieldEnabled
+                ? "The local service has not opened the write gate, so the rule editor stays read-only. Recheck or restart the service."
+                : "Turn on Axiom Shield to enable writes. Without it the rule editor stays read-only."
+            : "The service write gate could not be read, so this session stays read-only. Recheck the service.";
 
     [ObservableProperty]
     private string _writePathText = "disabled";
@@ -1297,6 +1307,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         AgentLockdown = status.AgentLockdown;
         ServiceAccountText = status.AccountName;
         WritesEnabled = status.WriteGateOpen;
+        WriteGateKnown = true;
         WritePathText = status.WriteGateOpen ? "enabled (Axiom Shield)" : "read-only";
 
         Pending.Clear();
@@ -1449,6 +1460,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             OwnedRuleCountText = snapshot.Rules.Count.ToString(CultureInfo.InvariantCulture);
             IsEmpty = snapshot.Rules.Count == 0;
             WritesEnabled = snapshot.WritesEnabled;
+            WriteGateKnown = true;
             WritePathText = snapshot.WritesEnabled ? "enabled (test VM only)" : "disabled";
             HasError = snapshot.Capability.Status == FirewallCapabilityStatus.Unavailable;
             Enforcement = FilterEnforcementSummary.From(snapshot.Capability.FilterEnforcement, snapshot.Capability.ConnectTimeLayer);
@@ -1460,30 +1472,39 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         }
         catch (ServiceUnavailableException exception)
         {
-            Rules.Clear();
-            Enforcement = FilterEnforcementSummary.None;
-            CapabilityStatusText = "Service offline";
-            CapabilityDetail = exception.Message;
-            OwnedRuleCountText = "—";
-            IsEmpty = true;
-            HasError = true;
-            StatusText = exception.Message;
+            ApplyQueryFailure("Service offline", exception.Message, exception.Message);
         }
 #pragma warning disable CA1031 // The page must not stay busy on an unexpected IPC error.
         catch (Exception exception)
 #pragma warning restore CA1031
         {
-            Rules.Clear();
-            CapabilityStatusText = "Query failed";
-            CapabilityDetail = exception.Message;
-            OwnedRuleCountText = "—";
-            IsEmpty = true;
-            HasError = true;
-            StatusText = $"Firewall query failed: {exception.Message}";
+            ApplyQueryFailure(
+                "Query failed",
+                exception.Message,
+                $"Firewall query failed: {exception.Message}");
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// A failed or disconnected probe must not leave writes looking enabled, and the hint must not
+    /// claim the gate is known closed when it was simply not read.
+    /// </summary>
+    internal void ApplyQueryFailure(string capabilityStatus, string detail, string statusText)
+    {
+        Rules.Clear();
+        Enforcement = FilterEnforcementSummary.None;
+        CapabilityStatusText = capabilityStatus;
+        CapabilityDetail = detail;
+        OwnedRuleCountText = "—";
+        IsEmpty = true;
+        WritesEnabled = false;
+        WriteGateKnown = false;
+        WritePathText = "unknown";
+        HasError = true;
+        StatusText = statusText;
     }
 }

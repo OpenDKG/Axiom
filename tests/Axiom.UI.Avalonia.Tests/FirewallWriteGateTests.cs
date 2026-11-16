@@ -81,6 +81,50 @@ public sealed class FirewallWriteGateTests
         Assert.DoesNotContain("Turn on Axiom Shield", page.NewRuleWriteHint, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A failed service probe after a successful read must not keep the stale write grant (the
+    /// WPF fix mirrored here): actions turn off, the hint says the gate is unknown, and a later
+    /// successful read restores the real gate value.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Failed_probe_clears_stale_write_access_and_a_later_read_restores_it(bool serviceUnavailable)
+    {
+        var client = new StatefulClient(Enabled: true, WriteGateOpen: true);
+        var page = new FirewallPageViewModel(client, new ConfirmingInteraction());
+
+        await WaitUntilAsync(() => page.WritesEnabled);
+        Assert.True(page.ShieldEnabled);
+        Assert.Equal("SHIELD ON", page.NoticeBadgeText);
+        Assert.True(page.ApplyNewRuleCommand.CanExecute(null));
+        Assert.True(page.RemoveRuleCommand.CanExecute(null));
+
+        client.ProbeFailure = serviceUnavailable
+            ? new ServiceUnavailableException(IpcErrorCodes.ServiceUnavailable, "service offline")
+            : new InvalidOperationException("unexpected IPC fault");
+
+        await page.RefreshCommand.ExecuteAsync(null);
+
+        Assert.False(page.WritesEnabled);
+        Assert.False(page.WriteGateKnown);
+        Assert.Equal("unknown", page.WritePathText);
+        Assert.Equal("READ-ONLY", page.NoticeBadgeText);
+        Assert.False(page.ApplyNewRuleCommand.CanExecute(null));
+        Assert.False(page.RemoveRuleCommand.CanExecute(null));
+        Assert.Contains("could not be read", page.NewRuleWriteHint, StringComparison.Ordinal);
+        Assert.DoesNotContain("Axiom Shield is on", page.NoticeText, StringComparison.Ordinal);
+
+        client.ProbeFailure = null;
+        await page.RefreshCommand.ExecuteAsync(null);
+
+        Assert.True(page.WritesEnabled);
+        Assert.True(page.WriteGateKnown);
+        Assert.Equal("SHIELD ON", page.NoticeBadgeText);
+        Assert.True(page.ApplyNewRuleCommand.CanExecute(null));
+        Assert.True(page.RemoveRuleCommand.CanExecute(null));
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow.AddSeconds(5);
@@ -99,10 +143,18 @@ public sealed class FirewallWriteGateTests
 
         public Exception? EnableFailure { get; init; }
 
+        /// <summary>Faulted as a Task, like the real IPC client, so the failure is caught at the await.</summary>
+        public Exception? ProbeFailure { get; set; }
+
         public List<string> EnableCalls { get; } = [];
 
         public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
         {
+            if (command == IpcCommandTypes.RulesQuery && ProbeFailure is not null)
+            {
+                return Task.FromException<T>(ProbeFailure);
+            }
+
             object result = command switch
             {
                 IpcCommandTypes.RulesQuery => new FirewallRulesSnapshot
