@@ -960,6 +960,21 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     /// </summary>
     public DateTimeOffset LastEnforcementRefreshUtc { get; private set; }
 
+    /// <summary>
+    /// Keeps <see cref="Enforcement"/> current while another page is visible. The shell status bar
+    /// ("blocks verified" / "blocks not verified") and the Overview read it on every page, so a
+    /// summary loaded once at start-up (often while the filter was still pending after a daemon
+    /// restart) must not stay stale until the user opens this page. Same throttle as the visible
+    /// page; Windows reports no filter enforcement and keeps its refresh-on-demand behaviour.
+    /// </summary>
+    public void KeepEnforcementCurrent(DateTimeOffset now)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            RefreshEnforcementIfStale(now);
+        }
+    }
+
     /// <summary>Re-queries rules + capability when the last query is older than <see cref="EnforcementRefreshInterval"/>.</summary>
     public void RefreshEnforcementIfStale(DateTimeOffset now)
     {

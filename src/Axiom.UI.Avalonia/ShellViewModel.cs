@@ -552,6 +552,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             {
                 Firewall.UpdateProtectionStatus(_protection);
             }
+            else if (_protection is not null)
+            {
+                // The status bar and Overview show the filter's enforcement state on every page.
+                Firewall.KeepEnforcementCurrent(DateTimeOffset.UtcNow);
+            }
         }
         catch (ServiceUnavailableException)
         {

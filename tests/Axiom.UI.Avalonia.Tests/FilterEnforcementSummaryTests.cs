@@ -219,8 +219,47 @@ public sealed class FilterEnforcementSummaryTests
         page.Dispose();
     }
 
+    /// <summary>
+    /// The shell status bar read a summary loaded once at start-up: a filter that was pending then
+    /// and verified later still showed "blocks not verified" on every page but Network Control.
+    /// </summary>
+    [Fact]
+    public void Enforcement_is_kept_current_while_another_page_is_visible()
+    {
+        var client = new EnforcementClient(new FilterEnforcementReport
+        {
+            State = FilterEnforcementState.Pending,
+            Connected = true,
+            PublishedGeneration = 3,
+            AckedGeneration = 2,
+        });
+        var page = new FirewallPageViewModel(client, new NullUserInteraction());
+        Assert.False(page.Enforcement.IsEnforcementVerified);
+
+        client.Report = new FilterEnforcementReport
+        {
+            State = FilterEnforcementState.Verified,
+            Connected = true,
+            PublishedGeneration = 3,
+            AckedGeneration = 3,
+            Generation = 3,
+            LastAckUtc = DateTimeOffset.UtcNow,
+        };
+        var lastRefresh = page.LastEnforcementRefreshUtc;
+
+        page.KeepEnforcementCurrent(lastRefresh + FirewallPageViewModel.EnforcementRefreshInterval - TimeSpan.FromMilliseconds(1));
+        Assert.False(page.Enforcement.IsEnforcementVerified); // throttled like the visible page
+
+        page.KeepEnforcementCurrent(lastRefresh + FirewallPageViewModel.EnforcementRefreshInterval);
+        Assert.Equal(!OperatingSystem.IsWindows(), page.Enforcement.IsEnforcementVerified);
+
+        page.Dispose();
+    }
+
     private sealed class EnforcementClient(FilterEnforcementReport report) : IServiceRequestClient
     {
+        public FilterEnforcementReport Report { get; set; } = report;
+
         public int RulesQueries { get; private set; }
 
         public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
@@ -239,7 +278,7 @@ public sealed class FilterEnforcementSummaryTests
                         Status = FirewallCapabilityStatus.Available,
                         ManagedRulesReadable = true,
                         ManagedRuleCount = 2,
-                        FilterEnforcement = report,
+                        FilterEnforcement = Report,
                     },
                     Rules = [],
                     WritesEnabled = false,
