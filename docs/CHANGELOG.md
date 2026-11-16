@@ -1,3 +1,10 @@
+## What's in 0.82.0
+
+- **Polish and honest enforcement wording.**
+  - Shield lamp green/red/amber by real state; Axiom logo and version open opendkg.org/axiom; update button sits after notifications with "Update to version X"; Support keeps only GitHub Sponsors.
+  - Agent Protection says HOOK BLOCKING ACTIVE with the guard-hook truth instead of "detector signals are advisory"; the runner/broker is described as the E3 prototype and kernel/WFP deny as not enabled.
+  - Tests updated for the new broker wording and tooltip.
+
 ## What's in 0.81.0
 
 - **Status bar, footer and update polish.**
