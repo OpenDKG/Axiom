@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.62.0
+
+- **Simple & Advanced UI modes (`SimpleHomeView`, `SimpleHomePageViewModel`, `UiModeSettingsStore`):**
+  - Added a segmented **`Simple | Advanced`** switch directly in the top notification bar (`MainWindow.axaml`) right beside the update and notifications buttons (`UpdateButton`, `AlertsButton`), persisted locally per user via `%LOCALAPPDATA%\Axiom\ui-mode.txt` (`WindowsUiModeService`).
+  - **Simple Mode** streamlines the sidebar to 5 clear destinations (`Home`, `Network Control`, `Privacy Overview`, `Settings`, `Help & Support`) and opens **`SimpleHomeView`**: an everyday protection hero banner with 1-click Shield toggle, three summary cards (`Firewall Shield`, `Ad & Tracker Blocker`, `Internet Activity`), inline pending outbound app approvals (`Allow` / `Block`), and currently online apps without technical socket/PID/IPC jargon.
+  - **Advanced Mode** preserves the full 12-page technical dashboard, diagnostics, AI agent tools, graph analytics, and status-bar telemetry untouched, with seamless cross-mode deep links from notifications and alerts (`ShellViewModel.NavigateToPage`).
+
 ## What's in 0.61.0
 
 - **Guard: protected reads through admin shares and search tools, and non-English injection.**
