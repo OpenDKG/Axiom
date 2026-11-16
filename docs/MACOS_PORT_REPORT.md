@@ -159,10 +159,13 @@ Build, signing, distribution
   runs `axiomd --install-service`).
 - Versioning contract: `AXIOM_VERSION` / `AXIOM_BUILD` are passed to the extension; the helper replaces the
   installed extension when version/build or cdhash differ; a release build fails without a version.
-- **Development machines need SIP off + `systemextensionsctl developer on`** for ad hoc signed extensions.
-  **Ad hoc rebuilds pin the NE filter config to the old cdhash**: the filter then reports "running" while
-  allowing everything. Activation now resets the configuration on replace (one extra "Allow" prompt per dev
-  upgrade). Developer ID builds should not hit this.
+- **Development activation needs an Apple-issued identity and profiles**; there is no ad hoc route
+  (SIP-off and `systemextensionsctl developer on` skip the location and notarization checks only).
+  On macOS 26 a JIT app that claims the Network Extension entitlement is killed at launch, so the
+  in-process activation layout is not a shipping configuration (see `macos/README.md`).
+  **Ad hoc rebuilds pin the NE filter config to the old cdhash**: the filter then reports "running"
+  while allowing everything. Activation now resets the configuration on replace (one extra "Allow"
+  prompt per dev upgrade). Developer ID builds should not hit this.
 - **Release needs an Apple Developer Program team with the Network Extension capability** (self-serve in
   the portal per reports; unverified), Developer ID Application + Installer certificates, provisioning
   profiles for app and extension (app group becomes `<TEAMID>.com.axiom.firewall`), notarization. Env:

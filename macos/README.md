@@ -41,7 +41,7 @@ macos/build.sh                  # -> macos/build/com.axiom.firewall.filter.syste
                                 #    macos/build/libAxiomSysext.dylib
 ARCH=universal macos/build.sh   # x86_64 | arm64 | universal (lipo), default: this Mac's arch
 macos/build.sh testapp          # also macos/build/Axiom.app (development host app)
-macos/build.sh test             # unit tests (147 checks + Tests/fixtures/rules-cases.json)
+macos/build.sh test             # unit tests (149 checks, including Tests/fixtures/rules-cases.json)
 ```
 
 All Swift is compiled with `-warnings-as-errors`; the macOS 13/14 code paths (`NWHostEndpoint`,
@@ -120,16 +120,31 @@ use a new network extension"); the "Filter Network Content" prompt uses the app 
 With SIP on, the restricted entitlements (`com.apple.developer.system-extension.install`,
 `com.apple.developer.networking.networkextension`) are only honoured for an executable whose
 signature is vouched for by a provisioning profile, and `Contents/embedded.provisionprofile`
-vouches for the **main executable** of the bundle. Two layouts satisfy this:
+vouches for the **main executable** of the bundle.
 
-1. **Recommended: the main `Axiom` executable submits the requests itself** through
-   `libAxiomSysext.dylib` (P/Invoke, see below). Then `Bundle.main`, the entitlements and the
-   profile all belong to the one executable Apple checks, the prompts show "Axiom", and no
-   secondary executable needs restricted entitlements. `package-app.sh` must then sign
-   `Contents/MacOS/Axiom` with `axiom-sysext.entitlements` (the same file the helper uses).
-2. Development / fallback: `axiom-sysext` as a secondary executable in `Contents/MacOS`. Works ad
-   hoc with SIP off (verified) and may work for Developer ID when the profile's entitlements cover
-   it, but that is unproven; keep it for the dev loop and as a CLI for diagnostics.
+**Open engineering gate (macOS 26, observed 2026-11-16).** On macOS 26.6 a packaged `Axiom.app`
+whose main executable carried the Network Extension entitlement together with the .NET hardening
+relaxations (`allow-jit`, `allow-unsigned-executable-memory`, `disable-library-validation`) was
+killed at exec by AMFI: "Hardened Runtime relaxation entitlements disallowed on System
+Extensions". The entitlement-only repro is in `RUN-2026-11-15-privileged-attempt.md` §8. So the
+in-process layout described below cannot be used by the JIT app on macOS 26; `package-app.sh`
+therefore keeps the Network Extension entitlement off the app in every mode. At the same time,
+Apple's TN3125 ("Inside Code Signing: Provisioning Profiles") says a standalone executable
+"can't claim a restricted entitlement because there's no place to embed the provisioning profile
+that authorizes that claim", which applies to the bare `Contents/MacOS/axiom-sysext` helper.
+Neither host is therefore authorized as currently laid out. Before release, pick one and verify it
+with a real identity and profile:
+
+1. **In-process**: the main `Axiom` executable submits the requests itself through
+   `libAxiomSysext.dylib`, with `axiom-sysext.entitlements` on the executable and the profile in
+   `Contents/embedded.provisionprofile`. Requires an app that can run without JIT (or evidence
+   that a properly provisioned signature changes the AMFI result — untested).
+2. **Helper**: keep activation in a native process, but ship it as an app-like bundle with its own
+   embedded profile (for example an XPC service) rather than a bare executable, and have
+   `FilterExtensionManager` use that path.
+
+Until one is verified, extension activation from this bundle reports an error; it is not a
+shipping configuration.
 
 #### `libAxiomSysext.dylib`
 

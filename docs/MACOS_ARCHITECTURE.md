@@ -126,9 +126,9 @@ Verified end to end on macOS 15.8.3 (x86_64 VM, ad hoc signed); see `macos/READM
 
 - .NET: `dotnet publish -r osx-arm64|osx-x64 --self-contained` for `Axiom.Desktop.Avalonia.MacOS` and `Axiom.Service` (builds on Linux).
 - Swift: `macos/AxiomFilter` built with Xcode Command Line Tools (`macos/build.sh`), on a Mac or the macOS CI runner.
-- `scripts/macos/package-app.sh` copies `macos/build/libAxiomSysext.dylib` into `Contents/MacOS` when `build.sh` produced it (next to `axiom-sysext`, which stays as the fallback and diagnostics CLI), signs it with the same identity as the runtime libraries (identifier `com.axiom.firewall.sysextlib`, no entitlements — a library cannot carry them) and verifies it; the main executable is signed with `scripts/macos/Axiom.entitlements` (`system-extension.install`, `networkextension` `content-filter-provider-systemextension`, the app group, plus the .NET JIT entitlements) so the in-process `OSSystemExtensionRequest` is honoured.
+- `scripts/macos/package-app.sh` copies `macos/build/libAxiomSysext.dylib` into `Contents/MacOS` when `build.sh` produced it (next to `axiom-sysext`, which stays as the fallback and diagnostics CLI), signs it with the same identity as the runtime libraries (identifier `com.axiom.firewall.sysextlib`, no entitlements — a library cannot carry them). The main executable is signed with `scripts/macos/Axiom.entitlements` (`system-extension.install` and the app group, plus the .NET JIT entitlements) **only when `AXIOM_SIGN_IDENTITY` is set**; ad hoc builds get `Axiom-adhoc.entitlements` (JIT relaxations only). The Network Extension entitlement is not on the app: macOS 26.6 kills a JIT binary that claims it (AMFI "Hardened Runtime relaxation entitlements disallowed on System Extensions"), and the in-process request is therefore not a shipping path until the activation host is decided (see `macos/README.md`).
 - `scripts/macos/package-app.sh` assembles `Axiom.app`, signs inside-out (Mach-O files only, detected by magic bytes; Developer ID with hardened runtime and secure timestamp when `AXIOM_SIGN_IDENTITY` is set, ad hoc otherwise — ad hoc has no timestamp), writes dSYMs for the Swift extension/helper with a Developer ID identity (`build/macos/<rid>/dSYMs`; .NET has no dSYM, its portable `.pdb`s stay in `publish/`), and builds `build/macos/<rid>/Axiom.pkg` with `pkgbuild` (root `/Applications/Axiom.app`, postinstall runs `axiomd --install-service`; signed with `AXIOM_INSTALLER_IDENTITY` when set).
-- Release signing/notarization needs an Apple Developer Program team with the Network Extension capability. Development builds run ad hoc signed on a Mac with SIP disabled and `systemextensionsctl developer on`.
+- Release signing/notarization needs an Apple Developer Program team with the Network Extension capability. Development *activation* also needs an Apple-issued identity and profiles: there is no ad hoc route (SIP-off and `systemextensionsctl developer on` skip only the location and notarization checks), and on macOS 26 a JIT app that claims the Network Extension entitlement is killed at launch, so the activation host is an open decision in `macos/README.md`.
 
 ## 5. As built
 
@@ -377,7 +377,15 @@ split (`PrivacyDnsFailSafe` marker vs. `network-recovery.txt`).
 1. **Publish on Linux:** `scripts/macos/package-app.sh osx-x64 --no-sign` (or `osx-arm64`) publishes the desktop app and `axiomd` self-contained and assembles an unsigned `build/macos/<rid>/Axiom.app`. Run `git checkout -- '*.lock.json'` afterwards (publishing adds RID sections to the lock files).
 2. **Sign on a Mac/VM:** copy the tree and run `scripts/macos/package-app.sh osx-x64 --skip-publish --build-filter`. This builds the Swift filter and `axiom-sysext` with the Command Line Tools (`macos/build.sh`), embeds them and signs inside-out (ad hoc unless `AXIOM_SIGN_IDENTITY` is set).
 3. **Dev loop:** `scripts/macos/deploy-to-vm.sh` does steps 1–2 against the VM over SSH, installs to `/Applications/Axiom.app`, and re-runs `axiomd --install-service` (upgrade of the root-owned helper copy) when `com.axiom.service` is installed.
-4. **Dev machine requirements:** SIP disabled and `systemextensionsctl developer on` (both need the GUI session and a password), so an ad hoc signed system extension can be activated. First activation still needs approval in System Settings > General > Login Items & Extensions > Network Extensions and the "Filter Network Content" prompt.
+4. **Dev-loop requirements:** a development build can only activate the extension when the
+   requesting executable is authorized by a provisioning profile (Apple Development or Developer
+   ID identity + profiles). There is no ad hoc activation route: SIP-off and
+   `systemextensionsctl developer on` skip the location and notarization checks only, not the
+   signature/entitlement check, and on macOS 26 an ad hoc app that claims the Network Extension
+   entitlement is killed by AMFI at launch. See `macos/README.md` "Which activation path" for the
+   open in-process-vs-helper decision. First activation still needs approval in System Settings >
+   General > Login Items & Extensions > Network Extensions and the "Filter Network Content"
+   prompt.
 5. **Tests on Linux:** `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true`, then `dotnet test` the `tests/Axiom.*.Tests` projects. `Axiom.Infrastructure.MacOS.Tests` covers the DNS configurator, rules/events, socket peer checks and libproc layouts with fakes (SO_PEERCRED on Linux).
 
 ### 6.2 Release
@@ -386,4 +394,5 @@ split (`PrivacyDnsFailSafe` marker vs. `network-recovery.txt`).
 - **Developer ID signing:** `AXIOM_SIGN_IDENTITY="Developer ID Application: … (TEAMID)"` and `AXIOM_TEAM_ID` (derived from the identity if unset) for `package-app.sh` (signs with hardened runtime and a secure timestamp).
 - **Provisioning profiles:** Developer ID profiles for the app (`AXIOM_APP_PROFILE`, embedded as `Contents/embedded.provisionprofile`) and for the filter extension (`AXIOM_FILTER_PROFILE`, used by `macos/build.sh`), both carrying the Network Extension entitlement (`content-filter-provider-systemextension`).
 - **Notarization:** submit the signed app/pkg with `xcrun notarytool submit --wait` and staple (`xcrun stapler staple`). Notarized releases run with SIP on and without developer mode.
-- Apple-silicon builds (`osx-arm64`) must be validated on real hardware; the VM is Intel only.
+- Apple-silicon builds (`osx-arm64`) must be validated on real hardware or an Apple-silicon VM; the
+  lab guest is arm64 macOS 26.6.2 with SIP on.
