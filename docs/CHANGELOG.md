@@ -2,6 +2,13 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.65.0
+
+- **Guard self-protection: stopping, killing, disabling or blinding Axiom now blocks.**
+  - A 20-probe tamper batch on 0.64 hooks allowed `Stop-Service Axiom`, `sc stop Axiom`, `taskkill /f /im Axiom.Service.exe` (and the desktop), deleting `agent-evidence.jsonl`, `icacls` on the Axiom tree, `schtasks /change ... /disable`, `auditpol /clear` and `wmic shadowcopy delete` (issue #384).
+  - New `_disables_guard`: a stop/disable/overwrite verb against an Axiom target blocks as `tamper`, and audit-policy or shadow-copy wipes block outright.
+  - Verified 20/20 on the new batch while the previous batches stay clean (24/24 and 26/26).
+
 ## What's in 0.64.0
 
 - **Guard: openssl/ssh-keygen key reads, `reg export` of SAM, `.aws` archives.**
