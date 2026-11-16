@@ -110,7 +110,7 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
     }
 
     public string AgentsBlockedCountText =>
-        Math.Max(Agents.BlockedFindingCount, BlockedAgents.Count).ToString(CultureInfo.InvariantCulture) + " blocked";
+        Math.Max(Agents.BlockSummary.Blocked, BlockedAgents.Count).ToString("N0", CultureInfo.InvariantCulture) + " blocked";
 
     public string PrivacyBlockedCountText => PrivacyShield.BlockedCountText + " blocked";
 

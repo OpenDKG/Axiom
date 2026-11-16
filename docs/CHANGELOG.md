@@ -1,3 +1,8 @@
+## What's in 0.84.0
+
+- **Mini mode shows the real block count.**
+  - `AGENTS BLOCKED` used audit findings (63) while the Agent Dashboard chart counted 3,178 `GUARD_BLOCKED` tool calls; it now reads `Agents.BlockSummary.Blocked` with the audit count only as an empty-store fallback.
+
 ## What's in 0.83.0
 
 - **Mini mode (`Mini | Simple | Advanced`) — compact blocked-activity window.**
