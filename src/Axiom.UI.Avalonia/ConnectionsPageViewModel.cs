@@ -253,6 +253,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
                 (!OnlyLoopback || row.IsLoopback))
             .ToList();
 
+        _rebuilding = true;
         CollectionSync.SyncInPlace(VisibleConnections, filtered);
 
         var traffic = _monitor.AppTraffic.ToDictionary(

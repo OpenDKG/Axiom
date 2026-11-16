@@ -88,7 +88,7 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXIT
 Write-Host "Publishing Axiom service $Version (win-x64, self-contained)..." -ForegroundColor Cyan
 $serviceOutput = Join-Path $root "artifacts\publish\service"
 Remove-Item $serviceOutput -Recurse -Force -ErrorAction SilentlyContinue
-& $dotnet publish $serviceProject -f net10.0-windows -c Release -r win-x64 --self-contained true `
+& $dotnet publish $serviceProject -c Release -f net10.0-windows -r win-x64 --self-contained true `
     -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `

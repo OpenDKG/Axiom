@@ -28,6 +28,9 @@ public sealed record LinuxDoctorTargets(
     /// <summary>mountinfo read by the "bpf exe key" check (the doctor's own mount namespace).</summary>
     public string MountInfoPath { get; init; } = "/proc/self/mountinfo";
 
+    /// <summary>cgroup root whose attached Axiom programs the "bpf layer" check counts (<c>bpftool cgroup show</c>).</summary>
+    public string CgroupRoot { get; init; } = "/sys/fs/cgroup";
+
     /// <summary>Binary whose BPF exe key the "bpf exe key" check derives.</summary>
     public string ExeKeyProbePath { get; init; } = "/usr/bin/env";
 
@@ -304,9 +307,39 @@ public sealed class LinuxDoctor
         }
     }
 
+    /// <summary>
+    /// Axiom programs attached at the cgroup root as the kernel reports them (<c>bpftool -j cgroup show</c>),
+    /// or null when that cannot be read (PR #276 review, finding 4: pins and the daemon's belief alone
+    /// missed 16–44 attached programs).
+    /// </summary>
+    private int? KernelAttachedAxiomPrograms(out string unreadable)
+    {
+        var show = _runner.Run(Bpf.BpfCapabilityProbe.Bpftool, ["-j", "cgroup", "show", _targets.CgroupRoot], ToolTimeout);
+        if (!show.Succeeded)
+        {
+            unreadable = string.Create(CultureInfo.InvariantCulture, $"bpftool cgroup show {_targets.CgroupRoot} exited {show.ExitCode}");
+            return null;
+        }
+
+        if (Bpf.BpfMapDump.ParseAttached(show.StandardOutput) is not { } attached)
+        {
+            unreadable = $"bpftool cgroup show {_targets.CgroupRoot} printed unreadable output";
+            return null;
+        }
+
+        unreadable = string.Empty;
+        var names = Bpf.BpfLayout.Programs.Select(program => program.Program).ToHashSet(StringComparer.Ordinal);
+        return attached.Count(program => names.Contains(program.Name));
+    }
+
     private DoctorCheck BpfLayerFromLiveState(string version, int pinned, string pinDirectory)
     {
-        var pins = string.Create(CultureInfo.InvariantCulture, $"{pinned}/{Bpf.BpfLayout.Programs.Count} program pins at {pinDirectory}");
+        var expected = Bpf.BpfLayout.Programs.Count;
+        var kernel = KernelAttachedAxiomPrograms(out var unreadable);
+        var kernelText = kernel is { } count
+            ? string.Create(CultureInfo.InvariantCulture, $"{count} Axiom program(s) attached at {_targets.CgroupRoot}")
+            : $"cannot confirm how many Axiom programs are attached at {_targets.CgroupRoot} ({unreadable})";
+        var pins = string.Create(CultureInfo.InvariantCulture, $"{kernelText}; {pinned}/{expected} program pins at {pinDirectory}{(kernel is null ? " (pin files alone do not prove the layer is attached)" : string.Empty)}");
         var live = LiveState();
         if (live.Capability is not { } capability)
         {
@@ -319,9 +352,23 @@ public sealed class LinuxDoctor
         }
 
         var problems = new List<string>();
-        if (!string.Equals(layer.State, "active", StringComparison.Ordinal))
+        if (kernel is null)
+        {
+            problems.Add("cannot confirm the attachment state: " + unreadable);
+        }
+
+        if (string.Equals(layer.State, "unknown", StringComparison.Ordinal))
+        {
+            problems.Add($"the daemon cannot confirm whether its programs are attached ({layer.Status})");
+        }
+        else if (!string.Equals(layer.State, "active", StringComparison.Ordinal))
         {
             problems.Add($"live layer {layer.State} ({layer.Status})");
+        }
+
+        if (kernel is { } attachedNow && string.Equals(layer.State, "active", StringComparison.Ordinal) && attachedNow != expected)
+        {
+            problems.Add(string.Create(CultureInfo.InvariantCulture, $"the daemon reports an active layer but the kernel has {attachedNow} Axiom program(s) attached (one set is {expected})"));
         }
 
         if (layer.PendingRemovals.Count > 0)

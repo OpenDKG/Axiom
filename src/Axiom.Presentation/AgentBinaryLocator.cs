@@ -64,8 +64,7 @@ public static class AgentBinaryLocator
     /// Detects DeepSeek Harness (<c>dsh</c>). Does not treat <c>deepseek-cli</c> (<c>deepseek</c> on
     /// PATH) as supported because it is a plain chat CLI with no lifecycle hook surface.
     /// </summary>
-    public static bool IsDeepSeekAvailable() =>
-        IsDeepSeekAvailable(OnPath, File.Exists) || MacTools("dsh");
+    public static bool IsDeepSeekAvailable() => IsDeepSeekAvailable(OnPath, File.Exists) || MacTools("dsh");
 
     internal static bool IsDeepSeekAvailable(
         Func<string, bool> onPath,

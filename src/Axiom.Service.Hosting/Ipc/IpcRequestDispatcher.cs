@@ -127,17 +127,9 @@ public sealed class IpcRequestDispatcher
     /// <summary>
     /// Serves one authenticated connection until the client closes it, idles out, exceeds the
     /// message bound or the rate limit, or <paramref name="cancellationToken"/> fires.
-    /// </summary>
-    public Task HandleConnectionAsync(Stream stream, string actor, CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(actor);
-        return HandleConnectionAsync(stream, IpcCaller.FullAccess(actor), cancellationToken);
-    }
-
-    /// <summary>
-    /// Same loop for a caller whose write permission was decided by the transport: commands in
-    /// <see cref="IpcCommandAccess.WriteCommands"/> are refused with <see cref="IpcErrorCodes.Unauthorized"/>
-    /// when <see cref="IpcCaller.CanWrite"/> is false.
+    /// The transport must say who the caller is and what it may do: there is deliberately no
+    /// overload that takes a bare actor string. Commands outside the caller's classes
+    /// (<see cref="IpcCaller.Permits"/>) are refused with <see cref="IpcErrorCodes.Unauthorized"/>.
     /// </summary>
     public async Task HandleConnectionAsync(Stream stream, IpcCaller caller, CancellationToken cancellationToken)
     {

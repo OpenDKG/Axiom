@@ -216,6 +216,7 @@ public sealed class NftEnforcementSupervisor
     public async Task<bool> WatchOnceAsync(CancellationToken ct)
     {
         var republished = await WatchTableAsync(ct).ConfigureAwait(false);
+        var wasUnknown = _layer is { AttachmentUnknown: true };
         _layer?.CheckAttached();
         if (_layer is { Active: true } && _adapter.StaleExeKeyRules() is { Count: > 0 } replaced)
         {
@@ -224,10 +225,13 @@ public sealed class NftEnforcementSupervisor
             _log($"BPF exe key(s) re-resolved: the executable of rule(s) {string.Join(", ", replaced)} changed identity since the last sync; resyncing the maps.");
             await _adapter.ResyncLayerAsync(ct).ConfigureAwait(false);
         }
-        if (_layer is { Neutralised: true } or { StaleProgramsAttached: true })
+        if (_layer is { Neutralised: true } or { StaleProgramsAttached: true } or { AttachmentUnknown: true, Active: false })
         {
+            // Unknown at start (no set loaded): StartAsync loads only after a readable zero, so retrying is safe.
             _log(_layer.StaleProgramsAttached
                 ? "BPF layer: a previous daemon's programs are still attached; retrying detach, then re-attaching and resyncing from managed-rules.json."
+                : _layer.AttachmentUnknown
+                ? "BPF layer: attachment state unknown at start; retrying (a new set is loaded only after bpftool confirms none is attached)."
                 : "BPF layer is neutralised; re-attaching and resyncing from managed-rules.json.");
             await StartLayerAsync(ct).ConfigureAwait(false);
             if (_layer.Active)
@@ -235,6 +239,12 @@ public sealed class NftEnforcementSupervisor
                 Interlocked.Increment(ref _layerReattachments);
                 _log("BPF layer re-attached; enforcement " + (_adapter.Enforcement?.State.ToString().ToLowerInvariant() ?? "unknown") + ".");
             }
+        }
+        else if (wasUnknown && _layer is { AttachmentUnknown: false, Active: true })
+        {
+            // Readable again: resync so pending removals are confirmed (or kept) by a real read-back.
+            _log("BPF layer: attachment confirmed again; resyncing the maps from managed-rules.json.");
+            await _adapter.ResyncLayerAsync(ct).ConfigureAwait(false);
         }
 
         return republished;

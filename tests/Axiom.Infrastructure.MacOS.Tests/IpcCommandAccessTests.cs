@@ -83,7 +83,7 @@ public sealed class IpcCommandAccessTests
         Assert.False(readOnly.Permits(IpcCommandClass.Write));
         Assert.Equal("Command 'rule.apply' is not allowed for uid:503.", readOnly.DenialMessage(IpcCommandClass.Write, "rule.apply"));
 
-        var full = IpcCaller.FullAccess("S-1-5-21-1");
+        var full = new IpcCaller("S-1-5-21-1", CanWrite: true);
         Assert.True(full.Permits(IpcCommandClass.Write));
         Assert.True(full.Permits(IpcCommandClass.PrivateRead));
     }
@@ -142,7 +142,7 @@ public sealed class IpcCommandAccessTests
     {
         var commandClass = IpcCommandAccess.Classify(command);
 
-        Assert.Equal(root, IpcCaller.FullAccess("uid:0").Permits(commandClass));
+        Assert.Equal(root, new IpcCaller("uid:0", CanWrite: true).Permits(commandClass));
         Assert.Equal(owner, new IpcCaller("uid:501", true, null, true).Permits(commandClass));
         Assert.Equal(readOnly, new IpcCaller("uid:503", false, "no writes", true).Permits(commandClass));
         Assert.Equal(other, new IpcCaller("uid:502", false, "no writes", false, "no private reads").Permits(commandClass));
@@ -201,7 +201,7 @@ public sealed class IpcCommandAccessTests
 
         var replies = await SendAsync(
             probe.Dispatcher(),
-            IpcCaller.FullAccess("S-1-5-21-1"),
+            new IpcCaller("S-1-5-21-1", CanWrite: true),
             Envelope(IpcCommandTypes.EnforcementStatus),
             Envelope(IpcCommandTypes.EnforcementReceipts),
             Envelope(IpcCommandTypes.EnforcementEvaluate, EvaluatePayload()),
@@ -234,7 +234,7 @@ public sealed class IpcCommandAccessTests
 
         var replies = await SendAsync(
             dispatcher,
-            IpcCaller.FullAccess("uid:0"),
+            new IpcCaller("uid:0", CanWrite: true),
             Envelope(IpcCommandTypes.EnforcementStatus),
             Envelope(IpcCommandTypes.EnforcementEvaluate, EvaluatePayload()),
             Envelope(IpcCommandTypes.EnforcementReceipts));

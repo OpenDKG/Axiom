@@ -104,11 +104,8 @@ internal static class ServicePlatform
         builder.Services.AddSingleton(provider => new AgentFirewallEnforcer(
             provider.GetRequiredService<FirewallRuleCoordinator>(),
             provider.GetRequiredService<EnforcementController>().ReceiptJournal));
-    }
 
-    /// <summary>Process-start audit (upstream F-19 part B): the WMI feed, Windows only.</summary>
-    public static void ConfigureProcessSpawnAudit(HostApplicationBuilder builder)
-    {
+        // Upstream v0.54 F-19 part B: WMI process-start audit (registered in Program.cs upstream).
         builder.Services.AddHostedService<ProcessSpawnAuditWorker>();
     }
 

@@ -34,6 +34,13 @@ public interface IVerdictLayer
     bool StaleProgramsAttached => false;
 
     /// <summary>
+    /// True while the layer cannot confirm whether its programs are attached (<c>bpftool cgroup show</c>
+    /// failed or printed something unreadable). Unknown is never "not attached": the layer keeps its pins,
+    /// loads no second set, and removals stay pending until a readable read-back confirms them.
+    /// </summary>
+    bool AttachmentUnknown => false;
+
+    /// <summary>
     /// Rules whose executable identity changed since the last sync (the file at the rule's path was
     /// replaced, e.g. by a package upgrade's rename(2)): the written exe key no longer matches it.
     /// </summary>
@@ -101,6 +108,9 @@ public sealed record LayerSyncResult
     /// <summary>The layer detached its own programs because a stale entry could not be removed.</summary>
     public bool Neutralised { get; init; }
 
+    /// <summary>Whether the programs are attached could not be read (see <see cref="IVerdictLayer.AttachmentUnknown"/>).</summary>
+    public bool AttachmentUnknown { get; init; }
+
     /// <summary>Write passes made (1 = no retry).</summary>
     public int Attempts { get; init; }
 
@@ -116,8 +126,11 @@ public sealed record LayerSyncResult
 
     public string Status { get; init; } = string.Empty;
 
-    /// <summary>A verdict the plan no longer wants is still in an attached map: it can block traffic the rule set does not block.</summary>
-    public bool StaleEntriesCanBlock => Attached && FailedDeletes.Count > 0;
+    /// <summary>
+    /// A verdict the plan no longer wants is still in an attached map (or one whose attachment cannot be
+    /// confirmed): it can block traffic the rule set does not block.
+    /// </summary>
+    public bool StaleEntriesCanBlock => (Attached || AttachmentUnknown) && FailedDeletes.Count > 0;
 
     /// <summary>Layer inactive: nothing written, nothing enforced by it.</summary>
     public static LayerSyncResult Inactive(long generation, string status, bool pinned = false, bool neutralised = false) => new()

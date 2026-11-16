@@ -163,6 +163,12 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             reason = reason is null ? note : reason + " " + note;
         }
 
+        if (VerdictLayer is { AttachmentUnknown: true } unknownLayer)
+        {
+            var note = $"BPF attachment state unknown: {unknownLayer.Status}. The daemon keeps its pins, loads no second program set and keeps removals pending until bpftool reads again.";
+            reason = reason is null ? note : reason + " " + note;
+        }
+
         if (state.PendingRemovals.Count > 0)
         {
             var note = string.Create(CultureInfo.InvariantCulture, $"{state.PendingRemovals.Count} rule removal(s) whose BPF verdict cleanup is not confirmed ({string.Join(", ", state.PendingRemovals.Select(removal => $"{removal.RuleId:D} {removal.AppPath}: {removal.Reason}"))}).");
@@ -184,7 +190,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             var note = string.Create(CultureInfo.InvariantCulture, $"BPF map sync for generation {layerSync.Generation} is incomplete ({layerSync.FailedUpdates.Count} update(s) failed after {layerSync.Attempts} pass(es)); affected rules are enforced by nftables alone until the next publish succeeds.");
             reason = reason is null ? note : reason + " " + note;
         }
-        else if (VerdictLayer is { Active: false } layer && enforcement.State != FilterEnforcementState.Unavailable)
+        else if (VerdictLayer is { Active: false, AttachmentUnknown: false } layer && enforcement.State != FilterEnforcementState.Unavailable)
         {
             // Still Available: nftables enforces every rule; only the exec-time race window is open.
             var note = $"Connect-time BPF layer {layer.Status}; a process that connects within ~1 s of exec is not blocked until herded.";
@@ -212,7 +218,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
     /// Whether a connect-time verdict layer (docs/LINUX_EBPF.md) is attached right now; false =
     /// nftables is the only boundary and the exec race is open.
     /// </summary>
-    public bool ConnectTimeLayerActive => VerdictLayer is { Active: true };
+    public bool ConnectTimeLayerActive => VerdictLayer is { Active: true, AttachmentUnknown: false };
 
     /// <summary>Outcome of the last BPF map sync (null before the first or without a layer); part of the effective state.</summary>
     public LayerSyncResult? LayerSync
@@ -239,7 +245,9 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         else if (VerdictLayer is { } layer)
         {
             lines.Add(ExecRaceLimitation);
-            lines.Add(layer.Neutralised
+            lines.Add(layer.AttachmentUnknown
+                ? $"BPF layer attachment state unknown ({layer.Status}): connect-time enforcement can be neither confirmed nor ruled out; nftables (socket cgroupv2) still enforces every rule."
+                : layer.Neutralised
                 ? $"BPF layer neutralised ({layer.Status}): the daemon detached its own programs after a stale verdict could not be deleted; nftables (socket cgroupv2) is the only boundary until it re-attaches."
                 : $"BPF layer inactive ({layer.Status}): connect-time verdicts are not enforced; nftables (socket cgroupv2) is the only boundary.");
         }
@@ -434,7 +442,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             return state;
         }
 
-        if (layer.StaleEntriesCanBlock || layer.Neutralised)
+        if (layer.StaleEntriesCanBlock || layer.Neutralised || layer.AttachmentUnknown)
         {
             return FilterEnforcementState.Degraded;
         }
@@ -450,7 +458,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             var fileRejected = previous?.FileError is { Length: > 0 };
             var state = Evaluate(_published, readback.Generation, readback.NftError is null, fileRejected, _layerSync);
             if (state is FilterEnforcementState.Verified or FilterEnforcementState.Pending
-                && (VerdictLayer is { StaleProgramsAttached: true } || LoadState().PendingRemovals.Count > 0))
+                && (VerdictLayer is { StaleProgramsAttached: true } or { AttachmentUnknown: true } || LoadState().PendingRemovals.Count > 0))
             {
                 // A stale program set or an unconfirmed BPF removal can still block what nft no longer does.
                 state = FilterEnforcementState.Degraded;
@@ -649,7 +657,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             pendingCode = "bpf.neutralised";
             pendingWhy = "the BPF layer detached itself after a stale verdict could not be deleted; nftables enforces this rule alone until the daemon re-attaches the layer";
         }
-        else if (layer is { Attached: true, Applied: false } && spec.Enabled && (layer.FailedUpdates.Any(failure => failure.RuleId == spec.ManagedRuleId || failure.RuleId is null) || layer.CoveredRules.Contains(spec.ManagedRuleId)))
+        else if (layer is { Applied: false } && (layer.Attached || layer.AttachmentUnknown) && spec.Enabled && (layer.FailedUpdates.Any(failure => failure.RuleId == spec.ManagedRuleId || failure.RuleId is null) || layer.CoveredRules.Contains(spec.ManagedRuleId)))
         {
             var mine = layer.FailedUpdates.Where(failure => failure.RuleId == spec.ManagedRuleId || failure.RuleId is null).ToList();
             if (mine.Count > 0)
@@ -696,7 +704,8 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
     /// </summary>
     private void ClearPendingRemovalsIfConfirmed(LayerSyncResult sync)
     {
-        if (sync is not { Attached: true, Applied: true, Verified: true } || VerdictLayer is { StaleProgramsAttached: true })
+        // A removal is confirmed only by a readable attachment state (PR #276 review, finding 4).
+        if (sync is not { Attached: true, Applied: true, Verified: true, AttachmentUnknown: false } || VerdictLayer is { StaleProgramsAttached: true } or { AttachmentUnknown: true })
         {
             return;
         }
@@ -736,6 +745,10 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         else if (layer.StaleProgramsAttached)
         {
             why = "the BPF layer is not loaded: a previous daemon's programs could not be detached";
+        }
+        else if (layer.AttachmentUnknown)
+        {
+            why = $"the BPF layer's attachment state is unknown ({layer.Status})";
         }
         else if (layer.Neutralised)
         {
@@ -803,6 +816,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         }
 
         var state = layer.StaleProgramsAttached ? "stale_programs"
+            : layer.AttachmentUnknown ? "unknown"
             : sync is { StaleEntriesCanBlock: true } ? "degraded"
             : layer.Neutralised ? "neutralised"
             : layer.Active ? "active"
@@ -812,7 +826,8 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         {
             State = state,
             Healthy = healthy,
-            Attached = layer.Active || layer.StaleProgramsAttached || sync is { StaleEntriesCanBlock: true },
+            // Unknown is reported as possibly attached (the programs may still enforce), never as attached:false.
+            Attached = layer.Active || layer.StaleProgramsAttached || layer.AttachmentUnknown || sync is { StaleEntriesCanBlock: true },
             Status = layer.Status,
             Generation = sync?.Generation,
             MapsVerified = sync is { Verified: true },
@@ -856,6 +871,24 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             var report = Rebuild(readback);
             var layer = LayerSync;
             var nftVerified = Evaluate(_published, readback.Generation, readback.NftError is null, report.FileError is { Length: > 0 }) == FilterEnforcementState.Verified && readback.Counters.All(counter => counter.RuleId != managedRuleId);
+            if (layer is { AttachmentUnknown: true } || VerdictLayer is { AttachmentUnknown: true })
+            {
+                // PR #276 review, finding 4: without a readable attachment state nothing proves the BPF
+                // verdict is gone (an older set may still enforce it). Keep the removal pending.
+                var why = VerdictLayer?.Status ?? layer!.Status;
+                var stale = layer is { FailedDeletes.Count: > 0 } ? " The map delete also failed (" + string.Join("; ", layer.FailedDeletes) + ")." : string.Empty;
+                RecordPendingRemoval(existing, managedRuleId, outcome.Compilation.Generation, "bpf.attachment_unknown: " + why);
+                return new RuleApplyResult
+                {
+                    Success = false,
+                    ManagedRuleId = managedRuleId,
+                    State = RuleState.Pending,
+                    OsRuleName = existing?.OsRuleName,
+                    ErrorCode = "bpf.attachment_unknown",
+                    ErrorMessage = string.Create(CultureInfo.InvariantCulture, $"removed from nftables (generation {outcome.Compilation.Generation}), but the daemon cannot confirm whether its BPF programs are still attached ({why}).{stale} A connect-time verdict may still block the app. The removal stays pending and is confirmed only after bpftool reads the attachment state again (watch tick)."),
+                };
+            }
+
             if (layer is { StaleEntriesCanBlock: true } || layer is { Neutralised: true, FailedDeletes.Count: > 0 })
             {
                 var stale = layer.FailedDeletes.Count > 0 ? string.Join("; ", layer.FailedDeletes) : "(no detail)";

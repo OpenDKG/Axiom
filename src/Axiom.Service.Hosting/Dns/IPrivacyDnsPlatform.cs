@@ -55,9 +55,10 @@ public interface IPrivacyDnsPlatform
     /// (<c>PreferredAdapterAlias</c>, <c>AutoPointAdapterDns</c>). The default does nothing: on other
     /// platforms these two settings are not implemented and never change system DNS, whatever
     /// their value; the platform's own redirect is <see cref="OnResolverStarted"/>.
-    /// Returns the platform's last adapter-DNS error, if any, for honest diagnostics.
     /// </summary>
-    string? EnsureConfiguredAdapterDns(bool resolverRunning, PrivacyShieldSettings settings) => null;
+    void EnsureConfiguredAdapterDns(bool resolverRunning, PrivacyShieldSettings settings)
+    {
+    }
 
     /// <summary>
     /// Whether <see cref="EnsureConfiguredAdapterDns"/> is implemented on this platform. False
@@ -65,6 +66,13 @@ public interface IPrivacyDnsPlatform
     /// have no effect, and a client must not present them as active.
     /// </summary>
     bool SupportsAdapterDnsPersistence => false;
+
+    /// <summary>
+    /// Error of the last <see cref="EnsureConfiguredAdapterDns"/> that tried to point an adapter at
+    /// the resolver (upstream v0.54: surfaced as the shield's last error when none is set). Null
+    /// when that call succeeded, did nothing, or on platforms without adapter DNS persistence.
+    /// </summary>
+    string? AdapterDnsError => null;
 }
 
 /// <summary>No redirect, no attribution, no discovery (tests and unsupported hosts).</summary>

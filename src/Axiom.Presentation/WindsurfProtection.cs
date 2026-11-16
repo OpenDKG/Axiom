@@ -258,7 +258,7 @@ public sealed class WindsurfProtection
         return true;
     }
 
-    private static string BuildHookScript() => AgentPlatform.AdaptHookScript(("""
+    private static string BuildHookScript() => AgentPlatform.AdaptHookScript("""
         # Managed by Axiom. Calls the local Blackbox guard for Windsurf Cascade pre-hooks.
         import datetime
         import contextlib
@@ -357,5 +357,5 @@ public sealed class WindsurfProtection
 
         if __name__ == "__main__":
             main()
-        """).Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal));
+        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal));
 }

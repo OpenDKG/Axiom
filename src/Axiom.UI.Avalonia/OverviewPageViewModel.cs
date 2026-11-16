@@ -74,6 +74,15 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         QueuePrivacyRefresh(force: false);
     }
 
+    public ConnectionsPageViewModel ConnectionsTab { get; }
+
+    public AppsPageViewModel AppsTab { get; }
+
+    public EventsPageViewModel EventsTab { get; }
+
+    [ObservableProperty]
+    private int _selectedMonitoringTabIndex;
+
     /// <summary>
     /// Which protections are on (firewall write gate, firewall protection, Privacy Shield resolver,
     /// filter enforcement report); null keeps upstream's read-only wording. Set by the shell; polled
@@ -120,15 +129,6 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         active.Add(state.FirewallWritesEnabled ? "firewall writes enabled" : "no firewall write");
         return "Protection active: " + string.Join("; ", active) + ". No telemetry.";
     }
-
-    public ConnectionsPageViewModel ConnectionsTab { get; }
-
-    public AppsPageViewModel AppsTab { get; }
-
-    public EventsPageViewModel EventsTab { get; }
-
-    [ObservableProperty]
-    private int _selectedMonitoringTabIndex;
 
     public PrivacyShieldPageViewModel? PrivacyShield { get; }
 

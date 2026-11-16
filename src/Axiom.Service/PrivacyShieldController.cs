@@ -29,7 +29,6 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    /// <summary>Wakes the background source updater when a source was re-enabled (upstream 0.25).</summary>
     private readonly SemaphoreSlim _sourceSyncSignal = new(0, 1);
 
     private readonly object _rulesGate = new();
@@ -77,10 +76,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     /// <summary>Whether the loopback resolver is listening right now.</summary>
     public bool IsResolverRunning => Volatile.Read(ref _server) is not null;
 
-    /// <summary>
-    /// Whether adapter DNS should be kept pointed at the resolver (upstream v0.23.3). The platform
-    /// decides what that means; on Windows the service does the work, elsewhere it is a no-op.
-    /// </summary>
+    /// <summary>Whether automatic adapter DNS pointing is requested for port 53.</summary>
     public bool ShouldAutoPointAdapterDns =>
         _settings.Enabled &&
         _settings.Port == 53 &&
@@ -103,7 +99,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_settings.Enabled)
+            if (_settings.Enabled && _server is null)
             {
                 await StartServerLockedAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -278,7 +274,6 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         return false;
     }
 
-    /// <summary>Wakes the background source updater now (a source was re-enabled).</summary>
     internal void SignalSourceSync()
     {
         if (_sourceSyncSignal.CurrentCount == 0)
@@ -293,7 +288,6 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         }
     }
 
-    /// <summary>Waits for a source-sync signal, or <paramref name="delay"/>, whichever comes first.</summary>
     internal async Task WaitForSourceSyncOrDelayAsync(TimeSpan delay, CancellationToken cancellationToken) =>
         await _sourceSyncSignal.WaitAsync(delay, cancellationToken).ConfigureAwait(false);
 
@@ -305,10 +299,11 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     /// </summary>
     public void EnsureConfiguredAdapterDns()
     {
-        var error = _dns.EnsureConfiguredAdapterDns(_server is not null, _settings);
-        if (!string.IsNullOrWhiteSpace(error) && string.IsNullOrWhiteSpace(_lastError))
+        _dns.EnsureConfiguredAdapterDns(_server is not null, _settings);
+        if (!string.IsNullOrWhiteSpace(_dns.AdapterDnsError) &&
+            string.IsNullOrWhiteSpace(_lastError))
         {
-            _lastError = error;
+            _lastError = _dns.AdapterDnsError;
         }
     }
 
@@ -733,6 +728,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                                                 PrivacyCategory.Tracking |
                                                 PrivacyCategory.Analytics |
                                                 PrivacyCategory.Malware |
+                                                PrivacyCategory.Phishing |
                                                 PrivacyCategory.Custom);
 
         return settings with

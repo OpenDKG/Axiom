@@ -17,8 +17,10 @@ public sealed class WindowsPrivacyDnsPlatform(
     Func<bool> restoreIfNeeded,
     Func<bool>? isRunningAsSystem = null,
     Func<string?, bool>? ensureAdapterPointed = null,
-    Func<string?>? lastAdapterError = null) : IPrivacyDnsPlatform
+    Func<string?>? adapterDnsLastError = null) : IPrivacyDnsPlatform
 {
+    private string? _adapterDnsError;
+
     public IDnsAppAttributor? Attributor { get; } = new ProcessDnsAppAttributor(new WindowsDnsProcessLookup());
 
     public string NoUpstreamWarning =>
@@ -31,6 +33,8 @@ public sealed class WindowsPrivacyDnsPlatform(
 
     public bool RestoreIfNeeded() => restoreIfNeeded();
 
+    public string? AdapterDnsError => _adapterDnsError;
+
     public bool SupportsAdapterDnsPersistence => isRunningAsSystem is not null && ensureAdapterPointed is not null;
 
     /// <summary>
@@ -38,12 +42,13 @@ public sealed class WindowsPrivacyDnsPlatform(
     /// unchanged: <c>_server is not null</c> is <paramref name="resolverRunning"/>,
     /// <c>_settings</c> is <paramref name="settings"/>.
     /// </summary>
-    public string? EnsureConfiguredAdapterDns(bool resolverRunning, PrivacyShieldSettings settings)
+    public void EnsureConfiguredAdapterDns(bool resolverRunning, PrivacyShieldSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        _adapterDnsError = null;
         if (isRunningAsSystem is null || ensureAdapterPointed is null || !isRunningAsSystem())
         {
-            return null;
+            return;
         }
 
         if (resolverRunning &&
@@ -52,14 +57,13 @@ public sealed class WindowsPrivacyDnsPlatform(
             (settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(settings.PreferredAdapterAlias)))
         {
             ensureAdapterPointed(settings.PreferredAdapterAlias);
-            return lastAdapterError?.Invoke();
+            _adapterDnsError = adapterDnsLastError?.Invoke();
+            return;
         }
 
         if (!settings.Enabled || !settings.AutoPointAdapterDns)
         {
             restoreIfNeeded();
         }
-
-        return null;
     }
 }

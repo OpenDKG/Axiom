@@ -633,3 +633,66 @@ user who is a member of one of those groups.
 
 Not verified by this round: Debian, Wayland / KDE, the rollback / upgrade / uninstall matrix, arm64, package
 signing, Fedora at this head (the last Fedora VM run is `788c709`).
+
+## Upstream `main` `e904bf8` (v0.68.0) merged (2026-11-16, merge `5d756ab`)
+
+Pinned `main` = `e904bf8a6c1615608cce5a121b0050f5988b6594` (v0.68.0). The range since the previous base `25bfcc1`
+(v0.64.0) is 9 commits / 9 files: the agent command-guard rules (`src/Axiom.Contracts/Blackbox/AgentCommandGuard.cs`,
+a Python helper string, plus its tests), release notes and the version bump. The merge had no conflicts. Nothing in
+the range touches IPC, platform seams, file paths or Windows APIs, so no port change was needed.
+
+Tested head: `5d756ab` (the merge commit; this section is the only later change).
+
+### Windows 11 VM (author-run, SDK 10.0.403, fresh `NUGET_PACKAGES` per tree)
+
+| Check | `main` `e904bf8` | branch `5d756ab` |
+|---|---|---|
+| `dotnet restore Axiom.Portable.slnx --locked-mode` | exit 0 | exit 0 |
+| `dotnet restore Axiom.sln --locked-mode` | exit 0 | exit 0 |
+| per-project `--locked-mode` restore | 21/21 PASS | 33/33 PASS |
+| clean restore (`--no-http-cache`, empty package folder) | 88 packages | 88 packages |
+| `dotnet build Axiom.sln -c Release` | 0 warnings / 0 errors | 0 warnings / 0 errors |
+
+Lock files: all locked restores pass on Windows, so none was regenerated or committed. A `--force-evaluate` run on
+Windows, kept out of the branch, changes only the in-repo project version ranges (`[0.54.0, )` -> `[0.68.0, )`);
+pristine `main` drifts the same way. No package version, content hash or target-framework/RID section changes, and
+no NuGet package version differs from `main`.
+
+Windows suites (`dotnet test --no-build`, interactive scheduled task), failing tests by name versus `main`:
+
+| Suite | `main` passed/total (failed) | branch passed/total (failed, skipped) | failing only on branch | failing only on `main` |
+|---|---|---|---|---|
+| Axiom.Contracts.Tests | 164/164 (0) | 173/173 (0) | none | none |
+| Axiom.Core.Tests | 184/184 (0) | 184/184 (0) | none | none |
+| Axiom.Infrastructure.Windows.Tests | 86/86 (0) | 152/153 (1) | `WindowsFirewallPolicyAdapterTests.Capabilities_are_available` (known RCW flake `InvalidComObjectException`; `WindowsFirewallPolicyAdapterTests` re-run rate: branch 2/16 (1 in the full suite + 1/15 re-runs; `Capabilities_are_available`, `Owned_rules_all_follow_the_naming_contract`), `main` 0/16, unexplained) | none |
+| Axiom.McpServer.Tests | 34/34 (0) | 34/34 (0) | none | none |
+| Axiom.Persistence.Tests | 21/21 (0) | 21/21 (0) | none | none |
+| Axiom.Presentation.Tests | 287/287 (0) | 301/302 (0, 1 skipped) | none | none |
+| Axiom.Service.Tests | 101/101 (0) | 120/120 (0) | none | none |
+| Axiom.UI.Avalonia.Tests | 62/62 (0) | 82/82 (0) | none | none |
+| Axiom.UI.Tests | 194/198 (4) | 194/198 (4) | none | none |
+
+On `main` and the branch the same 4 `AgentHookScriptTests` fail (no `python` on the VM). Branch tests skipped on Windows are the macOS-only ones (`MacBundleLayoutTests`, POSIX venv/provisioning gates); the Unix/Linux/macOS test projects are excluded from `dotnet test` on Windows by their `IsTestProject` condition.
+
+### This host (Ubuntu, Release, `HOME`/`XDG_*` redirected to a scratch dir, `~/.hermes/config.yaml` SHA-256 unchanged)
+
+| Suite | `main` passed/total (failed) | branch passed/total (failed, skipped) | failing only on branch | failing only on `main` |
+|---|---|---|---|---|
+| Axiom.Contracts.Tests | 164/164 (0) | 173/173 (0) | none | none |
+| Axiom.Core.Tests | 170/184 (14) | 170/184 (14) | none | none |
+| Axiom.Desktop.Avalonia.Linux.Tests | not in tree | 51/51 (0) | none | none |
+| Axiom.Desktop.Avalonia.MacOS.Tests | not in tree | 35/35 (0) | none | none |
+| Axiom.Infrastructure.Linux.Nft.Tests | not in tree | 182/182 (0) | none | none |
+| Axiom.Infrastructure.Linux.Tests | not in tree | 37/37 (0) | none | none |
+| Axiom.Infrastructure.MacOS.Tests | not in tree | 248/248 (0) | none | none |
+| Axiom.Infrastructure.Unix.Tests | not in tree | 47/47 (0) | none | none |
+| Axiom.McpServer.Tests | 34/34 (0) | 34/34 (0) | none | none |
+| Axiom.Persistence.Tests | 21/21 (0) | 21/21 (0) | none | none |
+| Axiom.Presentation.Tests | 280/287 (7) | 295/302 (7) | none | none |
+| Axiom.Service.Tests | 86/101 (15) | 105/120 (15) | `FirewallRuleCoordinatorTests.Apply_pending_is_stored_as_pending_not_applied` | `PrivacyShieldTests.Failed_reconfiguration_keeps_previous_resolver_and_persisted_settings` |
+| Axiom.UI.Avalonia.Tests | 62/62 (0) | 82/82 (0) | none | none |
+
+Builds: `Axiom.Portable.slnx`, `Axiom.Service` (`-p:EnableWindowsTargeting=true`), the port's desktop and test projects, Release: 0 warnings / 0 errors. Linux-side `--locked-mode` restore: both solutions and every project with a lock file give the same result as pristine `main`; on Linux `Axiom.Desktop` (NU1102 `System.CodeDom`) and `Axiom.Setup` (NU1004 RIDs) fail on `main` too (Windows-only WPF projects). The Service.Tests difference is the same as at the previous base: `FirewallRuleCoordinatorTests.Apply_pending_is_stored_as_pending_not_applied` is a port test, `PrivacyShieldTests.Failed_reconfiguration_keeps_previous_resolver_and_persisted_settings` fails on `main` only on this host. The other Core/Presentation/Service failures on this host are Windows-only tests and fail identically on `main`.
+
+Not tested in this round: the installed service/daemon (no runtime or service differential), Privacy Shield on
+Windows, a second-user IPC run, packaging, Fedora/Debian, the `.deb`/`.rpm` upgrade paths, the live nft/eBPF canary at this head.

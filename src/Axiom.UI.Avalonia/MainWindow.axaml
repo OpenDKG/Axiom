@@ -50,6 +50,9 @@
     </Style>
   </Window.Styles>
   <Window.DataTemplates>
+    <DataTemplate DataType="local:SimpleHomePageViewModel">
+      <views:SimpleHomeView />
+    </DataTemplate>
     <DataTemplate DataType="local:AgentDashboardPageViewModel">
       <views:AgentDashboardView />
     </DataTemplate>
@@ -114,6 +117,23 @@
                      Foreground="{DynamicResource Axiom.TextMuted}" />
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0" VerticalAlignment="Stretch">
+          <Border Background="{DynamicResource Axiom.SurfaceAlt}"
+                  BorderBrush="{DynamicResource Axiom.Border}"
+                  BorderThickness="1" CornerRadius="6" Padding="2"
+                  Margin="0,0,10,0" VerticalAlignment="Center"
+                  chrome:WindowDecorationProperties.ElementRole="User"
+                  ToolTip.Tip="Switch between Simple (everyday) and Advanced (full technical) views">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <Button x:Name="SimpleModeButton" Content="Simple"
+                      Command="{Binding SwitchToSimpleModeCommand}"
+                      Classes.primary="{Binding IsSimpleMode}"
+                      Padding="10,3" FontSize="11" CornerRadius="4" BorderThickness="0" />
+              <Button x:Name="AdvancedModeButton" Content="Advanced"
+                      Command="{Binding SwitchToAdvancedModeCommand}"
+                      Classes.primary="{Binding IsAdvancedMode}"
+                      Padding="10,3" FontSize="11" CornerRadius="4" BorderThickness="0" />
+            </StackPanel>
+          </Border>
           <Button x:Name="UpdateButton" Classes="caption" Click="OnUpdateClicked"
                   IsVisible="{Binding UpdateAvailable}"
                   ToolTip.Tip="{Binding UpdateTooltip}"
@@ -258,7 +278,7 @@
           </Border>
         </StackPanel>
 
-        <ListBox Grid.Row="1" Classes="nav-list" ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
+        <ListBox Grid.Row="1" Classes="nav-list" ItemsSource="{Binding NavigationPages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
                  Background="Transparent" BorderThickness="0" Margin="10,0">
           <ListBox.ItemTemplate>
             <DataTemplate>
@@ -319,7 +339,7 @@
             <controls:AxiomSelectableTextBlock x:Name="HeaderPageSubtitle" Text="{Binding SelectedPage.Subtitle}" Classes="page-subtitle" TextWrapping="Wrap" />
           </StackPanel>
           <Grid Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="10" VerticalAlignment="Center"
-                MaxWidth="420">
+                MaxWidth="420" IsVisible="{Binding IsAdvancedMode}">
             <Border Grid.Column="0" Width="3" MinHeight="28" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}" />
             <StackPanel Grid.Column="1" Spacing="2">
               <controls:AxiomSelectableTextBlock Text="SYSTEM STATUS" Classes="kpi-label" />
@@ -342,12 +362,12 @@
           <WrapPanel VerticalAlignment="Center" ItemHeight="13"
                      ClipToBounds="False">
             <controls:AxiomSelectableTextBlock Text="{Binding StatusMonitoringText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
-            <controls:AxiomSelectableTextBlock Text="{Binding StatusStorageText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Text="{Binding StatusStorageText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" IsVisible="{Binding IsAdvancedMode}" />
             <controls:AxiomSelectableTextBlock Text="{Binding StatusFirewallText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
-            <controls:AxiomSelectableTextBlock Text="{Binding StatusSourceText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" />
+            <controls:AxiomSelectableTextBlock Text="{Binding StatusSourceText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" IsVisible="{Binding IsAdvancedMode}" />
           </WrapPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="4" Padding="7,2">
+            <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="4" Padding="7,2" IsVisible="{Binding IsAdvancedMode}">
               <StackPanel Orientation="Horizontal" Spacing="5">
                 <Ellipse Width="6" Height="6" Fill="{DynamicResource Axiom.Accent}" VerticalAlignment="Center" />
                 <controls:AxiomSelectableTextBlock Text="{Binding StatusModeText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="9" />
@@ -359,7 +379,7 @@
                 <controls:AxiomSelectableTextBlock Text="{Binding StatusFirewallBadgeText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="9" />
               </StackPanel>
             </Border>
-            <controls:AxiomSelectableTextBlock Text="{Binding StatusIpcText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" VerticalAlignment="Center" />
+            <controls:AxiomSelectableTextBlock Text="{Binding StatusIpcText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" VerticalAlignment="Center" IsVisible="{Binding IsAdvancedMode}" />
           </StackPanel>
         </Grid>
       </Border>

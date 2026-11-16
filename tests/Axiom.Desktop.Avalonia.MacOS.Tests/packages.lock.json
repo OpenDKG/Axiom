@@ -285,10 +285,10 @@
         "type": "Project",
         "dependencies": {
           "Avalonia.Desktop": "[12.1.5, )",
-          "Axiom.Contracts": "[0.10.6, )",
-          "Axiom.Persistence": "[0.10.6, )",
-          "Axiom.Presentation": "[0.10.6, )",
-          "Axiom.UI.Avalonia": "[0.10.6, )"
+          "Axiom.Contracts": "[0.68.0, )",
+          "Axiom.Persistence": "[0.68.0, )",
+          "Axiom.Presentation": "[0.68.0, )",
+          "Axiom.UI.Avalonia": "[0.68.0, )"
         }
       },
       "axiom.contracts": {
@@ -297,14 +297,14 @@
       "axiom.persistence": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )",
+          "Axiom.Contracts": "[0.68.0, )",
           "Microsoft.Data.Sqlite": "[10.0.14, )"
         }
       },
       "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )",
+          "Axiom.Contracts": "[0.68.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
@@ -313,8 +313,8 @@
         "dependencies": {
           "Avalonia": "[12.1.5, )",
           "Avalonia.Themes.Fluent": "[12.1.5, )",
-          "Axiom.Contracts": "[0.10.6, )",
-          "Axiom.Presentation": "[0.10.6, )"
+          "Axiom.Contracts": "[0.68.0, )",
+          "Axiom.Presentation": "[0.68.0, )"
         }
       },
       "Avalonia": {

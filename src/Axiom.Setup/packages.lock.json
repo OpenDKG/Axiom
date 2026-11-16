@@ -14,7 +14,7 @@
       "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.34.0, )",
+          "Axiom.Contracts": "[0.68.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
@@ -25,6 +25,7 @@
         "contentHash": "WadCzGEc2U+3e20avRLng4qNtt4zoOGWrdUISqJWrHe3/FSnrYjuM5Sb4yQb09LhkBXrrI4Zt3dLKgRMbItsrg=="
       }
     },
+    "net10.0-windows7.0/linux-x64": {},
     "net10.0-windows7.0/win-x64": {}
   }
 }

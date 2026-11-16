@@ -250,7 +250,7 @@ public sealed class GeminiProtection
         return true;
     }
 
-    private static string BuildHookScript() => AgentPlatform.AdaptHookScript(("""
+    private static string BuildHookScript() => AgentPlatform.AdaptHookScript("""
         # Managed by Axiom. Calls the local Blackbox guard for Gemini CLI BeforeTool hooks.
         import contextlib
         import datetime
@@ -344,5 +344,5 @@ public sealed class GeminiProtection
 
         if __name__ == "__main__":
             main()
-        """).Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal));
+        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal));
 }

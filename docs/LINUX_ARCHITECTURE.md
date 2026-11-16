@@ -77,7 +77,7 @@ StateDirectory=axiom     ; /var/lib/axiom, StateDirectoryMode=0700
 LogsDirectory=axiom
 Environment=AXIOM_SERVICE=1
 ProtectSystem=strict
-ReadWritePaths=/var/lib/axiom /run/axiom /sys/fs/cgroup /etc/resolv.conf /run/systemd/resolve /run/NetworkManager
+ReadWritePaths=/var/lib/axiom /run/axiom /sys/fs/cgroup /sys/fs/bpf -/etc/resolv.conf -/run/systemd/resolve -/run/NetworkManager
 ProtectHome=read-only
 PrivateTmp=yes
 NoNewPrivileges=yes
@@ -293,8 +293,9 @@ upgrade (LINUX_TEST_REPORT.md, "PR #276 review").
 (`/proc/<pid>/{exe,fd}` of other users), `CAP_DAC_OVERRIDE` (resolv.conf / resolved runtime
 files), `CAP_CHOWN CAP_FOWNER` (0700/0600 enforcement), `CAP_KILL`, `CAP_NET_BIND_SERVICE`
 (Privacy Shield resolver on 127.0.0.1:53 — missing in P1, found by the e2e run). `ProtectSystem=strict`
-with `ReadWritePaths=/var/lib/axiom /run/axiom /sys/fs/cgroup /sys/fs/bpf /etc/resolv.conf
-/run/systemd/resolve /run/NetworkManager`, `ProtectControlGroups=no` (the daemon writes cgroups),
+with `ReadWritePaths=/var/lib/axiom /run/axiom /sys/fs/cgroup /sys/fs/bpf -/etc/resolv.conf
+-/run/systemd/resolve -/run/NetworkManager` (the resolver paths are optional, `-`, so a host without
+NetworkManager or systemd-resolved starts; Axiom's own paths stay mandatory), `ProtectControlGroups=no` (the daemon writes cgroups),
 `NoNewPrivileges=yes`, `CAP_BPF CAP_PERFMON` for the BPF layer. `ProtectKernelTunables=no` with the
 equivalent `ReadOnlyPaths=-/proc/sys … -/sys/kernel …` spelled out by hand: `ProtectKernelTunables=yes`
 mounts `/sys/fs/bpf` read-only and neither `ReadWritePaths` nor `BindPaths` can undo it (systemd 255:
