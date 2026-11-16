@@ -523,3 +523,42 @@ Windows WPF/locked restore, T7 Linux process audit (deferred, not parity).
 `protection.disable` removes managed rules; the canary script calls it on cleanup, so rules
 applied before a canary run are gone afterwards. Re-enable protection and re-apply. This is
 consistent with the existing protection lifecycle, not with a silent claim of rule persistence.
+
+Revision 5 (2026-11-16T03:2xZ UTC, single builder): the T21 review approved the local
+`126de46` artifact for what it tested but left four live findings. They are fixed in local commit
+`cbff83a` and rebuilt as `axiom-firewall_0.59.0_amd64.deb` sha256
+`fc78a518e686c19eae7a9340344d12cc240bea426c2cdb3e63e7cdfcd71bfac0` (64,323,164 bytes).
+The old `a09a88d9…` artifact is **superseded for new testing**, not "bad"; its approval stays
+scoped to `126de46`. Fresh independent review of `cbff83a`/`fc78a518` is required before any new
+approval claim. No push/merge/tag/release/upload/signing; host DNS/network/firewall untouched.
+
+## 14. Revision 5 — four finding fixes and live re-test
+
+Evidence root: `/tmp/opencode/axiom-e2e-fixes-20261115/` (`REPORT.md`, `PROVENANCE.txt`,
+`SHA256SUMS.txt`, test/build logs, guest logs, `gui/*.png`).
+
+| # | Finding | Fix | Fresh test evidence |
+|---|---|---|---|
+| 1 | GUI-LOW stale "Writes are disabled…" after shield enable, at `FirewallPageViewModel.cs:283` | The result line starts empty; the live hint derives from the service write gate (`WritesEnabled`) and `ShieldEnabled`. A shield-on/closed-gate state gets its own "has not opened the write gate" hint. Same stale initial string removed from the WPF `FirewallRulesViewModel`. Adjacent header bug: `ShellViewModel.RefreshStatus` now recomputes `Overview.StatusText` from `_protection.WriteGateOpen`, so the global header cannot stay "Read-only inventory" while the footer says SHIELD ON | UI.Avalonia 90/90, including enable/disable/auth-failure transitions, enabled-but-gate-closed, and PropertyChanged notifications; live 1280x800 screenshots `gui/nc-shield-on-final.png`, `gui/nc-final2.png` |
+| 2 | GUI-MEDIUM default 1460x900 at -90,-50 on 1280x800 | `MainWindow` clamps the preferred size to the current screen working area at its DPI scale, centers inside it, and uses `ScreenFromWindow` after open (the X11 screen list is not available in the constructor) | Layout theory (1280x800, 1024x768, 800x600, 1920x1080, 2x HiDPI) + headless fit test; live Xvfb: 1280x800 at +0+0, `gui/small-default-1280x800.png` |
+| 3 | TEXT-LOW hardcoded DoH port 443 at `PrivacyShieldView.axaml:57` / `DnsProxyServer.cs:248` | Both Avalonia and WPF copy say HTTPS and that the port comes from the DoH URL; resolver detail drops the fixed port. No functional DNS change | Service.Hosting 34/34 (default 443, custom 8443, plain DNS); live custom 8443 status `UPSTREAM …:8443…`, detail "encrypted with DoH (HTTPS)", TLS1.3 answer, `gui/privacy-active-8443.png`, `guest-doh-config.txt` |
+| 4 | DNS-MEDIUM 10 s resolver outage after SIGKILL | `RestartSec=10` -> `2`; explicit `StartLimitIntervalSec=60`, `StartLimitBurst=5`; no resolver reset hook, no plaintext fallback, backup/pending untouched | Linux 102/102 with unit restart/start-limit assertions; live single SIGKILL: process dead 0.007 s, 22 raw UDP queries failed during the gap, first recovered answer 2.692 s after death, stable 2.724 s, backup still 10.0.2.3, `guest-crash-definitive.txt` |
+
+Other revision-5 results: Linux.Nft **160/160 fresh** and Desktop.Avalonia.Linux **51/51 fresh**
+(they were carried forward at `126de46`); Contracts 157, Core 184, Persistence 21, Unix 47,
+MacOS 249, MCP 34, Presentation 299, Hosting 34, UI.Avalonia 90. Windows cross-builds (WPF UI,
+Avalonia Windows desktop, Windows service) 0 errors. Packaged maintainer scripts and
+`bpf-pins.sh` are byte-identical to the approved baseline; only binaries changed.
+
+Guest acceptance against `fc78a518`: normal `dpkg -i` (RC 0), doctor all pass, 4/4 BPF pins,
+`table inet axiom generation 1`; GUI 1280x800 on-screen; shield-on hint and header truthful;
+Privacy Shield custom 8443 E2E; UI disable restore; clean stop/start restore and re-redirect;
+`dpkg -P` while redirected restored 10.0.2.3 then removed package/unit/opt/state/run/nft
+table/BPF pins/backup; test CA/drop-in/server removed; guest pre/post resolver state equals
+(`ebdf5602…`, modes 777, only `127.0.0.53/.54:53`, `bccfe813…`). Authorized GUI tools remain. A second clean boot re-installed the final artifact, re-checked shield enable and the 1280x800 window (`gui/nc-shield-on-final-artifact.png`), then purged it and left the guest resolver untouched.
+
+Residual: a persistent crash loop still ends in a fail-closed outage once the start limit trips
+(systemd stops retrying; manual repair needed). The measured 2.69 s applies to a single crash on
+this VM, not to every host. This is not production readiness: real Wayland/tray, polkit denial,
+public-DoH egress, Windows runtime, Fedora/RPM, arm64, signing, lintian and locked restore remain
+open, and no broad Windows parity is claimed.
