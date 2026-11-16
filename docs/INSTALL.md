@@ -14,10 +14,11 @@ with separate prerequisites, terms, prompts and network access. Later enabling *
 requires an explicit administrator approval to install the privileged Windows service.
 
 The recommended GitHub release asset is `Axiom-Setup.exe`: a single self-contained setup
-executable with the desktop and service payload embedded. Double-click it, keep or change the two
-options, and click **Install Axiom**. It installs for the current user, creates a Start Menu
-shortcut, and starts the application. No .NET runtime, administrator rights, service registration or
-firewall change is required.
+executable with the desktop and service payload embedded and a theme-aware interface matching the
+selected Axiom theme. Double-click it, choose **Complete** or **Partial**, and click
+**Install Axiom** (or **Update Axiom**). It installs for the current user, creates a Start Menu
+shortcut, automatically launches Axiom upon completion, and exits the installer cleanly. No .NET
+runtime, administrator rights, service registration or firewall change is required for core setup.
 
 Where a Microsoft Store edition is available, it contains the core features but excludes optional
 DKG/Blackbox installers and AI-agent hooks.
@@ -111,11 +112,17 @@ so cleanup cannot recurse into user data outside the installation.
 
 ## Upgrading from an earlier build
 
-The public product name changed to Axiom. On first start, Axiom runs a one-time local migration:
-it moves legacy data into `%LOCALAPPDATA%\Axiom`, renames the database to `axiom.db`, migrates the
-starter-feed URL and removes legacy startup/shortcut entries. Existing legacy firewall rules are
-still recognized as Axiom-owned so they can be migrated when the write gate is enabled. Stop the
-old build before starting Axiom.
+When upgrading with `Axiom-Setup.exe` (via UI or `--silent`), Setup automatically closes running
+`Axiom.Desktop` processes cleanly without blocking prompts, preserves existing configuration and
+local state while updating binaries in place, automatically launches the updated Axiom build, and
+closes the installer. (If overwriting manually via the portable ZIP scripts instead of Setup, stop
+any running Axiom instance first.)
+
+The public product name changed to Axiom. On first start from pre-Axiom builds, Axiom runs a
+one-time local migration: it moves legacy data into `%LOCALAPPDATA%\Axiom`, renames the database
+to `axiom.db`, migrates the starter-feed URL and removes legacy startup/shortcut entries. Existing
+legacy firewall rules are still recognized as Axiom-owned so they can be migrated when the write
+gate is enabled.
 
 ## Code signing and SmartScreen
 
