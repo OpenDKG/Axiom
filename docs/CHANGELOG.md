@@ -1,3 +1,10 @@
+## What's in 0.86.0
+
+- **Mini compact overview restored.**
+  - Network card: active sockets, processes, loopback and one Throughput value; throughput card keeps Down/Up rates in its header.
+  - Agent activity list (four most recent actions) under the chart; window 1040x720 (min 900x600).
+  - Glass Dark buttons: dark grey with white text; selected/primary buttons lighter grey with green text.
+
 ## What's in 0.85.0
 
 - **Mini is a one-row overview.**

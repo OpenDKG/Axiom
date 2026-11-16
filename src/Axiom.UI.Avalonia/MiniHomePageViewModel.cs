@@ -19,6 +19,8 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
 {
     private const int MaxItemsPerSection = 8;
 
+    private const int MaxRecentAgentEntries = 4;
+
     private readonly Action _openFirewall;
     private readonly Action _openPrivacy;
     private readonly Action _openAgents;
@@ -68,6 +70,7 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
         SyncBlockedNetwork();
         SyncBlockedAgents();
         SyncBlockedPrivacy();
+        SyncRecentAgentActivity();
     }
 
     public FirewallPageViewModel Firewall { get; }
@@ -83,6 +86,11 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
     public ObservableCollection<MiniBlockedNetworkItem> BlockedNetwork { get; } = [];
 
     public ObservableCollection<BlackboxAuditEntry> BlockedAgents { get; } = [];
+
+    /// <summary>The last few guard-observed actions, shown under the throughput chart.</summary>
+    public ObservableCollection<BlackboxAuditEntry> RecentAgentActivity { get; } = [];
+
+    public bool HasAgentActivity => RecentAgentActivity.Count > 0;
 
     public ObservableCollection<RecentBlockedGroup> BlockedPrivacy { get; } = [];
 
@@ -205,7 +213,20 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
     private void OnAgentsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         SyncBlockedAgents();
+        SyncRecentAgentActivity();
         OnPropertyChanged(nameof(AgentsBlockedCountText));
+    }
+
+    private void SyncRecentAgentActivity()
+    {
+        RecentAgentActivity.Clear();
+        var count = Math.Min(MaxRecentAgentEntries, Agents.Activity.Count);
+        for (var i = 0; i < count; i++)
+        {
+            RecentAgentActivity.Add(Agents.Activity[i]);
+        }
+
+        OnPropertyChanged(nameof(HasAgentActivity));
     }
 
     private void OnPrivacyCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)

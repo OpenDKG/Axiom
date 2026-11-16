@@ -15,9 +15,9 @@ public partial class MainWindow : Window
     private const string WindowBrushKey = "Axiom.Window";
     private const double SidebarExpandedWidth = 252;
     private const double MiniWindowMinWidth = 900;
-    private const double MiniWindowMinHeight = 560;
+    private const double MiniWindowMinHeight = 600;
     private const double MiniWindowDefaultWidth = 1040;
-    private const double MiniWindowDefaultHeight = 660;
+    private const double MiniWindowDefaultHeight = 720;
     private const double FullWindowMinWidth = 900;
     private const double FullWindowMinHeight = 600;
 
