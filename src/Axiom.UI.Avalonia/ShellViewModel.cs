@@ -458,18 +458,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _statusModeText = "In-process monitor";
 
-    private static readonly IBrush ShieldOnBrush = new SolidColorBrush(Color.Parse("#4ADE80"));
 
-    private static readonly IBrush ShieldWarnBrush = new SolidColorBrush(Color.Parse("#FBBF24"));
 
-    private static readonly IBrush ShieldOffBrush = new SolidColorBrush(Color.Parse("#FB7185"));
+
+
+
 
     [ObservableProperty]
     private string _statusFirewallBadgeText = "READ-ONLY";
 
     /// <summary>Lamp next to the badge: green when protection is on, red when it is off.</summary>
     [ObservableProperty]
-    private IBrush _statusFirewallBadgeBrush = ShieldOffBrush;
+    private IBrush _statusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FB7185"));
 
     public bool IsServiceMode { get; }
 
@@ -752,19 +752,19 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 ? $"Protection: ON · {protection.OwnedRuleCount} rule(s) · {awaiting} awaiting decision"
                 : $"Protection: ON · {protection.OwnedRuleCount} rule(s)";
             StatusFirewallBadgeText = "SHIELD ON";
-            StatusFirewallBadgeBrush = ShieldOnBrush;
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#4ADE80"));
         }
         else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
         {
             StatusFirewallText = "Firewall writes: enabled for this service session";
             StatusFirewallBadgeText = "TEST VM";
-            StatusFirewallBadgeBrush = ShieldWarnBrush;
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FBBF24"));
         }
         else
         {
             StatusFirewallText = "Protection: off";
             StatusFirewallBadgeText = "READ-ONLY";
-            StatusFirewallBadgeBrush = ShieldOffBrush;
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FB7185"));
         }
         StatusModeText = IsServiceMode ? "Service monitor" : "In-process monitor";
 
