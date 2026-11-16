@@ -120,7 +120,7 @@ public sealed class LiveStateAndCoverageTests
         mark = h.Log.Count;
         await next.Engine.StopAsync();
         Assert.DoesNotContain(h.Log.Skip(mark), line => line.Contains("detached and", StringComparison.Ordinal));
-        Assert.Contains(h.Log.Skip(mark), line => line.Contains("stopped with 4 Axiom program(s) still attached", StringComparison.Ordinal));
+        Assert.Contains(h.Log.Skip(mark), line => line.Contains("detach not confirmed: 4 Axiom program(s) still attached", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public sealed class LiveStateAndCoverageTests
 
         Assert.Equal(4, AxiomAttachments(h.Bpftool)); // the fake kernel kept every program
         Assert.DoesNotContain(h.Log.Skip(mark), line => line.Contains("detached and", StringComparison.Ordinal));
-        Assert.Contains(h.Log.Skip(mark), line => line.Contains("could not be read", StringComparison.Ordinal));
+        Assert.Contains(h.Log.Skip(mark), line => line.Contains("cannot confirm", StringComparison.Ordinal));
 
         // Fault cleared: a confirmed zero still reports the clean result.
         h.Bpftool.FailPrefixes.Clear();
@@ -215,7 +215,7 @@ public sealed class LiveStateAndCoverageTests
         var removal = await h.Adapter.RemoveOwnedRuleAsync(RuleA, CancellationToken.None); // must not throw
 
         Assert.False(removal.Success);
-        Assert.Equal("bpf.stale_entry", removal.ErrorCode);
+        Assert.Equal("bpf.attachment_unknown", removal.ErrorCode);
         Assert.Contains(h.Adapter.PendingRemovals, pending => pending.RuleId == RuleA);
         Assert.False(h.Engine.Neutralised);
         Assert.Equal(4, AxiomAttachments(h.Bpftool));
@@ -244,11 +244,11 @@ public sealed class LiveStateAndCoverageTests
         Assert.True(next.Engine.StaleProgramsAttached);
         Assert.Equal(4, AxiomAttachments(h.Bpftool)); // no second set loaded on top of the unread state
         Assert.True(Directory.Exists(h.BpfPaths.PinDirectory)); // the only handles a later detach can use
-        Assert.Contains(h.Log.Skip(mark), line => line.Contains("could not be read", StringComparison.Ordinal));
+        Assert.Contains(h.Log.Skip(mark), line => line.Contains("cannot confirm", StringComparison.Ordinal));
         var capabilities = await next.Adapter.GetCapabilitiesAsync(CancellationToken.None);
         Assert.Equal("stale_programs", capabilities.ConnectTimeLayer!.State);
         Assert.False(capabilities.ConnectTimeLayer.Healthy);
-        Assert.Contains("could not be read", capabilities.Reason, StringComparison.Ordinal);
+        Assert.Contains("cannot confirm", capabilities.Reason, StringComparison.Ordinal);
 
         // The state becomes readable again: the next watch tick detaches, unpins and loads one fresh set.
         h.Bpftool.FailPrefixes.Clear();
@@ -277,7 +277,7 @@ public sealed class LiveStateAndCoverageTests
         Assert.True(Directory.Exists(h.BpfPaths.PinDirectory)); // retry evidence is not erased
         Assert.False(removal.Success);
         Assert.DoesNotContain("detached its own BPF programs", removal.ErrorMessage ?? string.Empty, StringComparison.Ordinal);
-        Assert.Contains(h.Log.Skip(mark), line => line.Contains("could not be read", StringComparison.Ordinal));
+        Assert.Contains(h.Log.Skip(mark), line => line.Contains("cannot confirm", StringComparison.Ordinal));
 
         // Both faults clear: the retried removal deletes the stale verdicts and confirms the removal.
         h.Bpftool.FailPrefixes.Clear();

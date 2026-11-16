@@ -364,7 +364,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 lock (_stateGate)
                 {
                     _attachmentUnknown = true;
-                    _staleProgramsAttached = false;
+                    _staleProgramsAttached = true;
                     _neutralised = false;
                     _applied.Clear();
                     _generation = -1;
