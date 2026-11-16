@@ -956,6 +956,7 @@ runtime claim.
 | `007c060` | Merge `bfc5553` (main v0.73.0): guard wildcard-path, password-manager/DPAPI/cloud-secret, split/csplit staging and DeepSeek DSH pairing fixes. All are shared guard/detection code; the Windows-only enforcement surfaces stay Windows-only. |
 | `076b341` | Keep startup "BPF attachment unreadable" conservatively `StaleProgramsAttached=true` (plus `AttachmentUnknown=true`) because the reviewed branch closed writes on that state; align the local-only log/error-code assertions with upstream's stricter parser (`bpf.attachment_unknown`, "detach not confirmed"). |
 | `01fc9a3` | Regenerated `packages.lock.json` for the 0.73.0 project graph; removed a publish-time RID graph so portable `--locked-mode` restore is green again (34 lock files hashed in the evidence dir). |
+| `919fcc0`, `12edd8e`, `ed08b15` | Plan revision 11, wording correction and the corrected upgrade-evidence record. Docs only; no packaged source. |
 
 ### 18.4 Source-commit matrix
 
@@ -992,8 +993,7 @@ is empty. The guest-tested file is preserved unchanged.
 
 ### 18.6 Status and residual gates
 
-- Review: **fresh independent review of `0214fc2`/`007c060`/`076b341`/`01fc9a3` and the
-  `0.73.0+linux.6` artifact is PENDING**. The integration branch was **not pushed** before that
+- Review: **fresh independent review of `0214fc2`/`007c060`/`076b341`/`01fc9a3` (tip of the branch; docs-only commits after `ed08b15`) and the `0.73.0+linux.6` artifact is PENDING**. The integration branch was **not pushed** before that
   review; only the approved `recon/linux-main-0.59.0` source branch is on the canonical remote.
 - Windows runtime/WPF/PipeServerTests/locked restore + Setup RID: **owner runs the tests** per the
   earlier decision; no credentials, no retry to `192.168.7.190`.
