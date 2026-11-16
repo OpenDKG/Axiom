@@ -56,31 +56,41 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
 
     public bool HasOnlineApps => TopApps.Count > 0;
 
-    public bool IsShieldActive => Firewall.ShieldEnabled;
+    public bool IsShieldActive => Firewall.ProtectionKnown && Firewall.ShieldEnabled;
 
-    public bool IsFullyProtected => Firewall.ShieldEnabled && PrivacyShield.Enabled;
+    public bool IsFullyProtected => Firewall.ProtectionKnown && Firewall.ShieldEnabled && PrivacyShield.Enabled;
 
-    public string HeroBadgeText => Firewall.ShieldEnabled
-        ? (PrivacyShield.Enabled ? "PROTECTED" : "SHIELD ACTIVE")
-        : "MONITORING ONLY";
+    public string HeroBadgeText => !Firewall.ProtectionKnown
+        ? "STATUS UNKNOWN"
+        : Firewall.ShieldEnabled
+            ? (PrivacyShield.Enabled ? "PROTECTED" : "SHIELD ACTIVE")
+            : "MONITORING ONLY";
 
-    public string HeroHeadlineText => Firewall.ShieldEnabled
-        ? (PrivacyShield.Enabled ? "Your computer is protected" : "Firewall Shield is protecting your apps")
-        : "Firewall protection is off";
+    public string HeroHeadlineText => !Firewall.ProtectionKnown
+        ? "Protection status is unknown"
+        : Firewall.ShieldEnabled
+            ? (PrivacyShield.Enabled ? "Your computer is protected" : "Firewall Shield is protecting your apps")
+            : "Firewall protection is off";
 
-    public string HeroSummaryText => Firewall.ShieldEnabled
-        ? (PrivacyShield.Enabled
-            ? "Axiom Shield checks new outbound apps and Privacy Shield is actively filtering ads and trackers."
-            : "Axiom Shield asks before unfamiliar apps connect to the internet. You can also turn on the Ad & Tracker Blocker below.")
-        : "Axiom is monitoring internet usage in read-only mode. Turn on Firewall Shield to control which apps may connect.";
+    public string HeroSummaryText => !Firewall.ProtectionKnown
+        ? "Axiom could not read the local service, so it cannot confirm whether Shield is on. Open Firewall to check."
+        : Firewall.ShieldEnabled
+            ? (PrivacyShield.Enabled
+                ? "Axiom Shield checks new outbound apps and Privacy Shield is actively filtering ads and trackers."
+                : "Axiom Shield asks before unfamiliar apps connect to the internet. You can also turn on the Ad & Tracker Blocker below.")
+            : "Axiom is monitoring internet usage in read-only mode. Turn on Firewall Shield to control which apps may connect.";
 
-    public string ShieldButtonText => Firewall.ShieldEnabled ? "Turn Shield Off" : "Turn Shield On";
+    public string ShieldButtonText => !Firewall.ProtectionKnown
+        ? "Check Firewall"
+        : Firewall.ShieldEnabled ? "Turn Shield Off" : "Turn Shield On";
 
-    public string FirewallStatusText => Firewall.ShieldEnabled
-        ? (Firewall.PendingCount > 0
-            ? $"Active — {Firewall.PendingCount} app(s) waiting for your decision"
-            : "Active — monitoring and guarding outbound apps")
-        : Firewall.ShieldStatusText;
+    public string FirewallStatusText => !Firewall.ProtectionKnown
+        ? "Unknown — the local service did not answer"
+        : Firewall.ShieldEnabled
+            ? (Firewall.PendingCount > 0
+                ? $"Active — {Firewall.PendingCount} app(s) waiting for your decision"
+                : "Active — monitoring and guarding outbound apps")
+            : Firewall.ShieldStatusText;
 
     public string PrivacyStatusText => PrivacyShield.Enabled
         ? $"Blocking {PrivacyShield.BlockedCountText} trackers & ads ({PrivacyShield.QueriesCountText} checks)"
@@ -112,6 +122,12 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
     [RelayCommand]
     private void ToggleShield()
     {
+        if (!Firewall.ProtectionKnown)
+        {
+            _openFirewall();
+            return;
+        }
+
         if (Firewall.ToggleShieldCommand.CanExecute(null))
         {
             Firewall.ToggleShieldCommand.Execute(null);

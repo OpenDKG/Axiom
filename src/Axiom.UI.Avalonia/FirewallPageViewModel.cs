@@ -406,6 +406,15 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [NotifyPropertyChangedFor(nameof(NewRuleWriteHint))]
     private bool _shieldEnabled;
 
+    /// <summary>
+    /// False until the service protection status was read and after any failed probe. A stale
+    /// "on" must never survive a lost service; the UI then says unknown, not off or protected.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShieldBadgeText))]
+    [NotifyPropertyChangedFor(nameof(ShieldActionText))]
+    private bool _protectionKnown;
+
     [ObservableProperty]
     private bool _shieldAvailable;
 
@@ -452,9 +461,11 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [ObservableProperty]
     private string _agentLockdownHintText = "No agent executable is connected right now.";
 
-    public string ShieldBadgeText => ShieldEnabled ? "ON" : "OFF";
+    public string ShieldBadgeText => !ProtectionKnown ? "UNKNOWN" : ShieldEnabled ? "ON" : "OFF";
 
-    public string ShieldActionText => ShieldEnabled ? "Disable protection" : "Enable protection";
+    public string ShieldActionText => !ProtectionKnown
+        ? "Check protection"
+        : ShieldEnabled ? "Disable protection" : "Enable protection";
 
     public string AgentLockdownActionText => AgentLockdown ? "Remove agent lockdown" : "Lock agents to localhost";
 
@@ -1303,6 +1314,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     {
         ShieldAvailable = true;
         ShieldEnabled = status.Enabled;
+        ProtectionKnown = true;
         ServiceElevated = status.ServiceElevated;
         AgentLockdown = status.AgentLockdown;
         ServiceAccountText = status.AccountName;
@@ -1490,11 +1502,26 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     }
 
     /// <summary>
+    /// A failed or disconnected probe must not leave protection or writes looking enabled. Unknown
+    /// is not "off": callers render it as unknown until a later read succeeds.
+    /// </summary>
+    internal void ApplyProtectionUnavailable(string statusText)
+    {
+        ProtectionKnown = false;
+        ShieldEnabled = false;
+        WritesEnabled = false;
+        WriteGateKnown = false;
+        WritePathText = "unknown";
+        ShieldStatusText = statusText;
+    }
+
+    /// <summary>
     /// A failed or disconnected probe must not leave writes looking enabled, and the hint must not
     /// claim the gate is known closed when it was simply not read.
     /// </summary>
     internal void ApplyQueryFailure(string capabilityStatus, string detail, string statusText)
     {
+        ApplyProtectionUnavailable("Protection status unknown: the local service did not answer.");
         Rules.Clear();
         Enforcement = FilterEnforcementSummary.None;
         CapabilityStatusText = capabilityStatus;

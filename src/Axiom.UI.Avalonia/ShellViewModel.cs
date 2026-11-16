@@ -527,14 +527,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _ = ProbeProtectionAsync();
     }
 
-    private async Task ProbeProtectionAsync()
+    internal async Task ProbeProtectionAsync(bool force = false)
     {
         if (_serviceClient is null || _isProbingProtection)
         {
             return;
         }
 
-        if (DateTimeOffset.UtcNow - _lastProtectionProbeUtc < TimeSpan.FromSeconds(5))
+        if (!force && DateTimeOffset.UtcNow - _lastProtectionProbeUtc < TimeSpan.FromSeconds(5))
         {
             return;
         }
@@ -549,7 +549,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 .ConfigureAwait(true);
             RefreshStatus();
             NotifyNewPendingApps(_protection);
-            if (_protection is not null && ReferenceEquals(SelectedPage, Firewall))
+            // The Home page and the global header read the same service authority; the cache must
+            // be fed even when another page is selected, or a change made by another client sticks.
+            if (_protection is not null)
             {
                 Firewall.UpdateProtectionStatus(_protection);
             }
@@ -557,12 +559,16 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         catch (ServiceUnavailableException)
         {
             _protection = null;
+            Firewall.ApplyProtectionUnavailable("Protection status unknown: the local service did not answer.");
+            RefreshStatus();
         }
 #pragma warning disable CA1031 // An older service build simply does not expose the shield yet.
         catch (Exception)
 #pragma warning restore CA1031
         {
             _protection = null;
+            Firewall.ApplyProtectionUnavailable("Protection status unknown: the local service did not answer.");
+            RefreshStatus();
         }
         finally
         {
@@ -744,6 +750,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 : $"Protection: ON · {protection.OwnedRuleCount} rule(s)";
             StatusFirewallBadgeText = "SHIELD ON";
         }
+        else if (IsServiceMode && (ServiceStatus is { IsConnected: false } || _protection is null))
+        {
+            StatusFirewallText = "Protection: unknown · the local service did not answer";
+            StatusFirewallBadgeText = "UNKNOWN";
+        }
         else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
         {
             StatusFirewallText = "Firewall writes: enabled for this service session";
@@ -772,6 +783,38 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             ? "Local service · no driver · no telemetry · no remote access."
             : "In-process monitor · no service · no driver · no telemetry.";
         OnPropertyChanged(nameof(FooterText));
+        RefreshHeaderStatus();
+    }
+
+    /// <summary>
+    /// The global header is bound to Overview.StatusText while other pages are shown. Update that
+    /// one line from the service authority without activating the dashboard or its polling.
+    /// </summary>
+    private void RefreshHeaderStatus()
+    {
+        if (_monitor.LastError is not null)
+        {
+            Overview.SetHeaderStatus($"Monitor unavailable: {_monitor.LastError}");
+            return;
+        }
+
+        if (IsServiceMode && ServiceStatus is { IsConnected: false })
+        {
+            Overview.SetHeaderStatus("Protection status unknown: the local service is offline.");
+            return;
+        }
+
+        if (IsServiceMode && _protection is null)
+        {
+            Overview.SetHeaderStatus("Protection status unknown: waiting for the local service.");
+            return;
+        }
+
+        Overview.SetHeaderStatus(OverviewPageViewModel.ComposeStatus(new OverviewProtectionState(
+            FirewallWritesEnabled: _protection?.WriteGateOpen == true,
+            FirewallProtectionActive: _protection is { Enabled: true },
+            PrivacyShieldActive: PrivacyShield.IsResolverActive,
+            Enforcement: OperatingSystem.IsWindows() ? null : Firewall.Enforcement)));
     }
 
     private async Task ProbeServiceAsync(bool force = false)
