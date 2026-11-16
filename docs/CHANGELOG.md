@@ -2,6 +2,15 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.73.0
+
+- **Guard: wildcard spellings of protected and credential paths block.**
+  - Batch 13 on 0.72 hooks allowed `type C:\Users\<u>\.ss?\id_rsa`, `.ss*`, `[.]ssh`, `.aws\credential?`, `.kube\conf?g`, `vault.kdb?` and `...\Chrome\User Data\*\Login Data` (issue #401).
+  - `_glob_hits` matches the wildcard window against the literal protected token or store marker; `_reads_protected`, `_hits_protected` and `_sensitive_store` all use it.
+  - Re-verified 10/10; controls (`dir C:\Lab\*.md`, notes reads) still allow and batches 1-12 stay clean.
+- **DeepSeek: bridge/runtime pairing and Node engine are checked.**
+  - `DeepSeekProtection` no longer reports DSH protected from the bridge package alone; it compares the bridge and runtime versions that `dsh plugin add` enforces and warns when Node is below `engines.node` (issue #369).
+
 ## What's in 0.72.0
 
 - **Guard: KeePass, 1Password and htpasswd files block by extension.**

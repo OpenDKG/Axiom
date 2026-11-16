@@ -1576,11 +1576,15 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             ? "DeepSeek Harness home detected; the Axiom hook file or bridge mount is missing."
             : !_deepSeekProtection.IsBridgeInstalled
                 ? "Axiom hooks are prepared, but DeepSeek's dsh-hooks-claude-code bridge is not installed in a DSH profile."
-                : evidence is null
-                    ? "Hook config and bridge mount detected; runtime not verified. Restart DSH."
-                    : evidence.IsFailure
-                        ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
-                        : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
+                : _deepSeekProtection.BridgeVersionMismatch is { } bridgeMismatch
+                    ? $"Axiom hooks are prepared, but the hook bridge does not match the DSH runtime ({bridgeMismatch}). Install @deepseek-ai/dsh-hooks-claude-code at the runtime's version."
+                    : !_deepSeekProtection.NodeRequirementMet
+                        ? $"Hook bridge installed, but Node {_deepSeekProtection.NodeVersion} is below the DSH engine requirement ({_deepSeekProtection.NodeRequirement}); dsh may refuse to start."
+                        : evidence is null
+                            ? "Hook config and bridge mount detected; runtime not verified. Restart DSH."
+                            : evidence.IsFailure
+                                ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                                : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
             "deepseek",
