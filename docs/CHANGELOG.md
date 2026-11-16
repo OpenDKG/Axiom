@@ -2,6 +2,16 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.61.0
+
+- **Guard: protected reads through admin shares and search tools, and non-English injection.**
+  - `type \\localhost\C$\Users\me\.ssh\id_rsa` and `findstr /s /i "PRIVATE KEY" C:\Users\me\.ssh\*` were allowed on 0.59 hooks; the new `_reads_protected` check pairs a read verb with a protected token in path position (also covers `select-string`, `grep`, `tar`, `robocopy`, `copy-item`).
+  - Injection heuristics gained Serbian, German, Spanish, French, Italian, Portuguese and Russian phrasings for "ignore previous instructions".
+  - `AgentCommandGuardTests` pin both in the shared helpers (issue #377).
+- **Setup: silent second instance no longer hangs, and the Hermes plugin gets its dependencies.**
+  - A second `--silent` setup writes the busy message to stderr and exits 3 instead of opening a modal box nobody can dismiss (issue #375).
+  - After `hermes plugins enable`, both installer copies install the Blackbox plugin dependencies into the Hermes base runtime and committed environment, then verify with `hermes plugins doctor`; a vendor failure is a warning, never an install failure (issue #376).
+
 ## What's in 0.60.0
 
 - **Redesigned theme-aligned `Axiom Setup` wizard (`SetupNativeWindow`, `SetupGdiPlus`, `SetupThemePalette`):**
@@ -731,10 +741,12 @@ o tui_gateway warnings and letting the seed-phrase and keystore detectors load.
 - **Agent tool fetches are attributed to the agent.** Agents fetch through tools (curl, git, nslookup),
   so the DNS query belongs to the tool child, not the agent process. Axiom now walks the parent chain
   (up to six levels) once per process and remembers the nearest agent ancestor, so a malware-list
-  domain fetched that way is still a truthful etched-by-tool sighting.
+  domain fetched that way is still a truthful 
+etched-by-tool sighting.
 - **Verified live.** With the adapter pointed at the resolver, a malware-list domain fetched by an agent
   tool produced a candidate, was submitted by the desktop, and the DKG accepted it: the report is in
-  the community's shared memory (ioc:domain:win.down.55kantu.com, stage eported Â· monitor).
+  the community's shared memory (ioc:domain:win.down.55kantu.com, stage 
+eported Â· monitor).
 
 ## What's in 0.10.2
 
