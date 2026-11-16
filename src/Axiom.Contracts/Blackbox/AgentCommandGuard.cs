@@ -325,6 +325,12 @@ public static class AgentCommandGuard
                 return "shadow-copy creation"
             if "ntdsutil" in text:
                 return "NTDS dump"
+            if "fsutil" in text and "deletejournal" in text:
+                return "USN journal deletion"
+            if "cipher /w" in text:
+                return "free-space wipe"
+            if "wmic" in text and ("commandlineeventconsumer" in text or "\\root\\subscription" in text):
+                return "WMI event-consumer persistence"
             if "lsass" in text and any(tool in text for tool in ("procdump", "comsvcs", "minidump", "rundll32")):
                 return "LSASS memory dump"
             if ("wevtutil" in text and (" cl " in text or "clear-log" in text)) or "clear-eventlog" in text:

@@ -59,6 +59,16 @@ public sealed class AgentCommandGuardTests
     }
 
     [Fact]
+    public void Guard_blocks_anti_forensics_and_wmi_persistence()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        Assert.Contains("deletejournal", helpers, StringComparison.Ordinal);
+        Assert.Contains("cipher /w", helpers, StringComparison.Ordinal);
+        Assert.Contains("commandlineeventconsumer", helpers, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Injection_heuristic_covers_non_english_instructions()
     {
         var helpers = AgentCommandGuard.PythonHelpers;
