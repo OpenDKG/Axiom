@@ -1031,3 +1031,93 @@ Evidence: `guest/retry-20261116/` (`README.md`, `evidence/`, labelled partial at
 `cleanup.log`). The superseded first-pass log remains at `guest/upgrade-old-to-new.log`.
 Result: `HARNESS_OK`, ssh rc 0. The guest run remains one Ubuntu 24.04 x64 VM; Windows runtime, RPM,
 arm64, signing and independent review are still open.
+
+---
+
+## 19. Revision 12 — owner Linux-only scope, review-rejection fixes, 0.73.0+linux.7
+
+Date: 2026-11-16 (UTC). Single builder, coupled UI work, no DKG/parallel workers.
+
+### 19.1 Owner scope clarification (overrides historical Windows gates)
+
+The owner clarified that the deliverable is the **Linux version only**: "Why windows runtime? This
+is supposed to be the axiom Linux version only, shouldn't have windows on it."
+
+- Windows runtime, WPF, PipeServer, Setup RID and Windows host restore are **out of scope, not
+  blockers** for Linux approval or push. The Windows worker/handoff is historical and was not run.
+- Shared upstream Windows commits remain reference material: their shared guard/detection code is
+  applied only where it runs on Linux. No Windows-only fix was added, and the Windows projects were
+  not removed from the shared repository.
+- Package inspection confirms the Linux payload ships no `.exe`/`.msi`/`.ps1`, no WPF
+  `PresentationFramework`/`PresentationCore`/`WindowsDesktop`, and deps targets only
+  `.NETCoreApp,Version=v10.0/linux-x64`. `Avalonia.Win32*` is the unused Avalonia Windows backend
+  from the Avalonia.Desktop metapackage; `Microsoft.Win32.*`, `System.Windows.dll` and
+  `WindowsBase.dll` come from `Microsoft.NETCore.App.Runtime.linux-x64` (cross-platform runtime
+  facades), not WPF.
+
+### 19.2 Rejected review and fixes
+
+Reviewer `ses_e1b9caa12ffeZSWaCKZf3V6oLS` rejected exact `7019b10` / `0.73.0+linux.6`; its message
+was concise. The fixes are in `f0a6f7a`:
+
+1. **P1 Simple Home false protected.** `SimpleHomePageViewModel` derived PROTECTED from
+   `Firewall.ShieldEnabled`, but the shell only fed `FirewallPageViewModel` while the Firewall page
+   was selected, and failed probes never invalidated it. The shell now always pushes the protection
+   status into the shared page cache and marks it unknown on failure. `ProtectionKnown` drives the
+   Home badge/headline/summary/button/footer: enabled, disabled and unknown are distinct; a stale
+   green claim cannot survive a disable by another client or a lost service.
+2. **P2 stale global header.** The advanced header binds `Overview.StatusText` while other pages are
+   shown, and the baseline explicit `ComposeStatus` refresh was lost in `0214fc2`. `RefreshStatus`
+   now updates that one line from the service authority without activating the dashboard or its
+   polling, and the footer says unknown (not off) when the service is unreachable.
+3. **Evidence correction.** The full-solution locked-restore failure predated `01fc9a3`; the
+   reviewer's command
+   `/opt/dotnet/dotnet restore Axiom.sln --locked-mode -p:EnableWindowsTargeting=true --source /root/.nuget/packages --verbosity minimal`
+   succeeds (rc 0, all projects up to date). The old log is labelled historical. The corrected
+   upgrade repeat's raw IPC/doctor/data assertions are retained (§18.7).
+
+Regressions: `tests/Axiom.UI.Avalonia.Tests/ProtectionAuthorityTests.cs` (3 cases) covers
+enabled -> disabled -> unavailable while Home is selected, the advanced header with Overview
+inactive, generic/service-unavailable probe failures, and recovery.
+
+### 19.3 Artifact and tests
+
+| Item | Value |
+|---|---|
+| Code commit | `f0a6f7a` (`SimpleHomePageViewModel`, `FirewallPageViewModel`, `ShellViewModel`, `OverviewPageViewModel`, `ProtectionAuthorityTests`) |
+| Artifact | `axiom-firewall_0.73.0+linux.7_amd64.deb`, 63,851,192 bytes, 515 entries, sha256 `a2ccc826f1fee51e4a72cd655123b4be7285710f4d6c562ea25979c4d0087b00` |
+| Build | full `Axiom.sln` (Windows TFMs compile only; runtime out of scope) |
+| Tests | portable **1296/1296** (UI.Avalonia 101, +3); Linux NFT **189/189**; Desktop Linux **51/51**; exact full-solution locked restore rc 0 |
+| Lintian | guest Ubuntu 24.04 lintian 2.117.0ubuntu1.6 on the exact `.deb`: **0 E / 0 W**, rc 0 (known duplicate-hint stderr note only) |
+| Package identity | maintainer scripts `postinst`/`postrm`/`prerm` byte-identical to `linux.5`; BPF object, `axiom-bpf-events` and both apphosts byte-identical; 14 managed assemblies and `changelog.gz` rebuilt; no path added/removed |
+
+### 19.4 Guest evidence (Ubuntu 24.04.5, existing restricted overlay)
+
+- **Upgrade check (UI-only payload):** install exact `0.73.0+linux.6`, enable protection and seed
+  the exact rule, then upgrade to exact `0.73.0+linux.7`. `rules.query` after the upgrade still reports the
+  exact id/spec/state `applied`/`connectTimeBlockingProven=true`; doctor 13 PASS before and after;
+  `Axiom.UI.Avalonia.dll` changes from the linux.6 hash to the linux.7 hash. The previous
+  `0.59.0+linux.5 -> 0.73.0+linux.6` proof remains valid for the unchanged backend and is carried,
+  not counted as new-candidate proof.
+- **Fresh install:** exact linux.7 `dpkg -i` rc 0, unit active, doctor 13 PASS/0 FAIL, purge clean.
+- **Live GUI (Xvfb, exact linux.7):** Advanced mode starts on Agent Dashboard (Overview inactive).
+  Header shows `Protection active: Axiom rules apply`; after IPC disable it shows
+  `Read-only inventory`; after `systemctl stop axiomd` it shows `Monitor unavailable` with footer
+  `Protection: unknown`/`UNKNOWN`; restart restores the active header. Simple Home: `SHIELD ACTIVE`
+  -> `MONITORING ONLY` after disable -> `STATUS UNKNOWN` with `Check Firewall` after service loss ->
+  `SHIELD ACTIVE` after restart. Raw screenshots and the app startup log are retained.
+- **Cleanup:** exact sole rule removed after re-query, protection disabled, package purged; package/
+  unit/image/data/logs/pins/nft/socket gone; guest resolver hash `ebdf5602…`, symlink mode and routes
+  unchanged; VM off; baseline `ee941cef…` unchanged; host resolver/network/firewall unchanged.
+
+Evidence: `/tmp/opencode/axiom-latest-reconciliation-20261116/guest/linux7-20261116/`
+(`gui-*.png`, `adv-*.png`, `home-*.png`, `install-upgrade.log`, `guest-evidence/`, `lintian.txt`,
+`linux-only-payload.txt`, `fresh-install-purge.log`).
+
+### 19.5 Status and residual gates
+
+- Independent review of `f0a6f7a` / `0.73.0+linux.7` is **pending**; the integration branch is not
+  pushed. No approval is claimed.
+- Still untested/deferred: native Wayland (GUI proof is Xvfb/X11), RPM, arm64, signing, release
+  assets. Windows runtime/WPF/locked restore/Setup RID are out of scope for this Linux deliverable.
+- No `main` merge, PR merge, force-push, tag, release/asset or deployment.
