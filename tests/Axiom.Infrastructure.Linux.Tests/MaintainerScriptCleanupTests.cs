@@ -137,6 +137,18 @@ public sealed class MaintainerScriptCleanupTests
     }
 
     [Fact]
+    public void Deb_remove_with_a_confirmed_stop_removes_a_leftover_enablement_symlink()
+    {
+        using var sandbox = new Sandbox();
+        sandbox.CreateEnablementLink();
+
+        var result = sandbox.Run(DebPostrm, "remove", disableExit: 0, state: "inactive", activeExit: 3);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.False(sandbox.Exists("etc/systemd/system/multi-user.target.wants/axiomd.service"));
+    }
+
+    [Fact]
     public void Deb_remove_without_a_unit_removes_the_leftover_image()
     {
         using var sandbox = new Sandbox();
@@ -249,6 +261,7 @@ public sealed class MaintainerScriptCleanupTests
             File.WriteAllText(Path.Combine(Absolute(Data), "axiom.db"), "data");
             File.WriteAllText(Path.Combine(Absolute(Log), "axiomd.log"), "log");
             File.CreateSymbolicLink(Path.Combine(Absolute("bin"), "rm"), "/bin/rm");
+            File.CreateSymbolicLink(Path.Combine(Absolute("bin"), "find"), "/usr/bin/find");
 
             if (installSystemctl)
             {
@@ -273,6 +286,13 @@ public sealed class MaintainerScriptCleanupTests
         public void Delete(string relative) => File.Delete(Absolute(relative));
 
         public void DeleteDirectory(string relative) => Directory.Delete(Absolute(relative));
+
+        public void CreateEnablementLink()
+        {
+            var directory = Absolute("etc/systemd/system/multi-user.target.wants");
+            Directory.CreateDirectory(directory);
+            File.CreateSymbolicLink(Path.Combine(directory, "axiomd.service"), "../../axiomd.service");
+        }
 
         public void RemoveStopHelpers()
         {
