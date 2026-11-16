@@ -2,6 +2,11 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.64.0
+
+- **Setup: the DKG identity check no longer warns while the node is still starting.**
+  - `SetupInstaller` polled the node identity for 30 s and then warned "DKG node could not be initialized or verified" even though the node came up healthy moments later (issue #381). It now polls up to 90 s and reports at 30 s/60 s that the node may still be starting, so the warning only appears for a real failure.
+
 ## What's in 0.63.0
 
 - **CI: the DNS proxy TCP test no longer flakes.**
