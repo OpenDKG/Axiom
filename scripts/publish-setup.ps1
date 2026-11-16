@@ -8,7 +8,8 @@
     The resulting setup EXE needs no .NET runtime and installs the application per user.
 #>
 param(
-    [string]$OutputDir = ""
+    [string]$OutputDir = "",
+    [switch]$ReusePayload
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,18 +46,24 @@ $serviceOut = Join-Path $root "artifacts\publish\service"
 $payloadOut = Join-Path $root "artifacts\publish\setup-payload"
 $setupProject = Join-Path $root "src\Axiom.Setup\Axiom.Setup.csproj"
 
-Write-Host "Publishing desktop payload..." -ForegroundColor Cyan
-& $dotnet publish (Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj") `
-    -c Release -p:PublishProfile=win-x64-selfcontained
-if ($LASTEXITCODE -ne 0) { throw "Desktop publish failed." }
+if (-not $ReusePayload) {
+    Write-Host "Publishing desktop payload..." -ForegroundColor Cyan
+    & $dotnet publish (Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj") `
+        -c Release -p:PublishProfile=win-x64-selfcontained `
+        -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json
+    if ($LASTEXITCODE -ne 0) { throw "Desktop publish failed." }
 
-Write-Host "Publishing service payload..." -ForegroundColor Cyan
-Remove-Item $serviceOut -Recurse -Force -ErrorAction SilentlyContinue
-& $dotnet publish (Join-Path $root "src\Axiom.Service\Axiom.Service.csproj") `
-    -c Release -r win-x64 --self-contained true `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-    -p:DebugType=None -o $serviceOut
-if ($LASTEXITCODE -ne 0) { throw "Service publish failed." }
+    Write-Host "Publishing service payload..." -ForegroundColor Cyan
+    Remove-Item $serviceOut -Recurse -Force -ErrorAction SilentlyContinue
+    & $dotnet publish (Join-Path $root "src\Axiom.Service\Axiom.Service.csproj") `
+        -c Release -r win-x64 --self-contained true `
+        -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json `
+        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+        -p:EnableCompressionInSingleFile=true `
+        -p:DebugType=None -p:DebugSymbols=false `
+        -p:AllowedReferenceRelatedFileExtensions=none -o $serviceOut
+    if ($LASTEXITCODE -ne 0) { throw "Service publish failed." }
+}
 
 Remove-Item $payloadOut -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $payloadOut | Out-Null
@@ -64,13 +71,26 @@ Copy-Item (Join-Path $desktopOut "Axiom.Desktop.exe") $payloadOut -Force
 Copy-Item (Join-Path $serviceOut "Axiom.Service.exe") $payloadOut -Force
 Copy-Item (Join-Path $desktopOut "community") $payloadOut -Recurse -Force
 
+$payloadZip = Join-Path $root "artifacts\publish\setup-payload.zip"
+Remove-Item $payloadZip -Force -ErrorAction SilentlyContinue
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory(
+    $payloadOut,
+    $payloadZip,
+    [System.IO.Compression.CompressionLevel]::Optimal,
+    $false)
+$zipSize = [math]::Round((Get-Item $payloadZip).Length / 1MB, 1)
+Write-Host "Compressed payload archive: $payloadZip ($zipSize MB)" -ForegroundColor Cyan
+
 Remove-Item $OutputDir -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "Publishing setup EXE..." -ForegroundColor Cyan
 & $dotnet publish $setupProject `
     -c Release -r win-x64 --self-contained true `
+    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-    -p:EnableCompressionInSingleFile=true -p:DebugType=None `
-    -p:AxiomPayloadDir="$payloadOut" -o $OutputDir
+    -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
+    -p:AllowedReferenceRelatedFileExtensions=none `
+    -p:AxiomPayloadZip="$payloadZip" -o $OutputDir
 if ($LASTEXITCODE -ne 0) { throw "Setup publish failed." }
 
 $setupExe = Join-Path $OutputDir "Axiom.Setup.exe"

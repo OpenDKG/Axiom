@@ -14,9 +14,9 @@ namespace Axiom.UI.Avalonia;
 /// </summary>
 public sealed class AvaloniaSecurityDialogs(Func<Window?> ownerProvider) : ISecurityDialogService
 {
-    private static readonly IBrush Background = new SolidColorBrush(Color.Parse("#12151C"));
-    private static readonly IBrush Foreground = new SolidColorBrush(Color.Parse("#F3F5F8"));
-    private static readonly IBrush Muted = new SolidColorBrush(Color.Parse("#9EA7B8"));
+    private static IBrush Background => AxiomDialogTheme.WindowBackground;
+    private static IBrush Foreground => AxiomDialogTheme.TextPrimary;
+    private static IBrush Muted => AxiomDialogTheme.TextMuted;
 
     public async Task<ReputationSettings?> EditReputationAsync(
         ReputationSettings current,

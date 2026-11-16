@@ -402,40 +402,48 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.11.0, )"
+          "Axiom.Contracts": "[0.50.0, )"
         }
       },
       "axiom.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.11.0, )",
-          "Axiom.Core": "[0.11.0, )",
-          "Axiom.Presentation": "[0.11.0, )",
+          "Axiom.Contracts": "[0.50.0, )",
+          "Axiom.Core": "[0.50.0, )",
+          "Axiom.Presentation": "[0.50.0, )",
+          "Axiom.Service.Hosting": "[0.50.0, )",
           "System.Management": "[10.0.14, )"
         }
       },
       "axiom.persistence": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.11.0, )",
+          "Axiom.Contracts": "[0.50.0, )",
           "Microsoft.Data.Sqlite": "[10.0.14, )"
         }
       },
       "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.11.0, )",
+          "Axiom.Contracts": "[0.50.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
       "axiom.service": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.11.0, )",
-          "Axiom.Core": "[0.11.0, )",
-          "Axiom.Infrastructure.Windows": "[0.11.0, )",
-          "Axiom.Persistence": "[0.11.0, )",
+          "Axiom.Contracts": "[0.50.0, )",
+          "Axiom.Core": "[0.50.0, )",
+          "Axiom.Infrastructure.Windows": "[0.50.0, )",
+          "Axiom.Persistence": "[0.50.0, )",
           "Microsoft.Extensions.Hosting.WindowsServices": "[10.0.14, )"
+        }
+      },
+      "axiom.service.hosting": {
+        "type": "Project",
+        "dependencies": {
+          "Axiom.Contracts": "[0.50.0, )",
+          "Axiom.Core": "[0.50.0, )"
         }
       },
       "CommunityToolkit.Mvvm": {

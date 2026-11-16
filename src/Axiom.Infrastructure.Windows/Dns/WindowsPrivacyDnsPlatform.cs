@@ -9,14 +9,16 @@ namespace Axiom.Infrastructure.Windows.Dns;
 /// Windows behaviour of Privacy Shield DNS: upstreams from the adapters, IP Helper attribution,
 /// the supplied fail-safe restore and, since upstream v0.23.3, adapter DNS persistence when the
 /// service runs as LocalSystem (<see cref="EnsureConfiguredAdapterDns"/>). The desktop app can
-/// still change adapter DNS behind a UAC prompt. The three delegates are the service's own
+/// still change adapter DNS behind a UAC prompt. The delegates are the service's own
 /// Windows helpers (<c>PrivacyDnsFailSafe.RestoreIfNeeded</c>,
-/// <c>MachineStateSecurity.IsRunningAsSystem</c>, <c>PrivacyDnsFailSafe.EnsureAdapterPointed</c>).
+/// <c>MachineStateSecurity.IsRunningAsSystem</c>, <c>PrivacyDnsFailSafe.EnsureAdapterPointed</c>,
+/// <c>PrivacyDnsFailSafe.LastError</c>).
 /// </summary>
 public sealed class WindowsPrivacyDnsPlatform(
     Func<bool> restoreIfNeeded,
     Func<bool>? isRunningAsSystem = null,
-    Func<string?, bool>? ensureAdapterPointed = null) : IPrivacyDnsPlatform
+    Func<string?, bool>? ensureAdapterPointed = null,
+    Func<string?>? adapterError = null) : IPrivacyDnsPlatform
 {
     public IDnsAppAttributor? Attributor { get; } = new ProcessDnsAppAttributor(new WindowsDnsProcessLookup());
 
@@ -35,14 +37,17 @@ public sealed class WindowsPrivacyDnsPlatform(
     /// <summary>
     /// Upstream's <c>PrivacyShieldController.EnsureConfiguredAdapterDns</c> (v0.23.3), moved here
     /// unchanged: <c>_server is not null</c> is <paramref name="resolverRunning"/>,
-    /// <c>_settings</c> is <paramref name="settings"/>.
+    /// <c>_settings</c> is <paramref name="settings"/>. Since v0.64.0 upstream copies
+    /// <c>PrivacyDnsFailSafe.LastError</c> into the status error right after pointing the adapter;
+    /// that value is returned here (<paramref name="settings"/> branch only) and the controller
+    /// applies it exactly as upstream does.
     /// </summary>
-    public void EnsureConfiguredAdapterDns(bool resolverRunning, PrivacyShieldSettings settings)
+    public string? EnsureConfiguredAdapterDns(bool resolverRunning, PrivacyShieldSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         if (isRunningAsSystem is null || ensureAdapterPointed is null || !isRunningAsSystem())
         {
-            return;
+            return null;
         }
 
         if (resolverRunning &&
@@ -51,12 +56,14 @@ public sealed class WindowsPrivacyDnsPlatform(
             (settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(settings.PreferredAdapterAlias)))
         {
             ensureAdapterPointed(settings.PreferredAdapterAlias);
-            return;
+            return adapterError?.Invoke();
         }
 
         if (!settings.Enabled || !settings.AutoPointAdapterDns)
         {
             restoreIfNeeded();
         }
+
+        return null;
     }
 }

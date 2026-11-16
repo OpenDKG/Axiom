@@ -11,6 +11,7 @@
     <TargetFrameworks>net10.0-windows;net10.0</TargetFrameworks>
     <RootNamespace>Axiom.Service</RootNamespace>
     <AssemblyTitle>Axiom Service</AssemblyTitle>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
@@ -22,6 +23,10 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>axiomd</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />

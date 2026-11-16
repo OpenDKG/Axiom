@@ -19,11 +19,18 @@ public sealed class BlackboxModeStore
         """;
 
     public BlackboxModeStore(string? userProfile = null, string? localAppData = null)
+        : this(userProfile, localAppData, environmentHome: null)
+    {
+    }
+
+    internal BlackboxModeStore(string? userProfile, string? localAppData, string? environmentHome)
     {
         var profile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var local = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         BlackboxRoot = Path.Combine(local, "Axiom", "modules", "blackbox", "agent-blackbox");
-        ConfigPath = Path.Combine(profile, ".hermes", "config.yaml");
+        ConfigPath = Path.Combine(
+            BlackboxPaths.ResolveHermesHome(profile, local, environmentHome),
+            "config.yaml");
     }
 
     public string BlackboxRoot { get; }

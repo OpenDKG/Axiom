@@ -153,6 +153,9 @@ public static class ProtectionProvisioner
             return null;
         }
 
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        BlackboxWordlistNormalizer.NormalizeAll(root, userProfile);
+
         var agentRoot = Path.Combine(root, "Axiom", "modules", "blackbox", "agent-blackbox");
         var runner = CreateBridgeRunner(agentRoot);
 
@@ -172,7 +175,7 @@ public static class ProtectionProvisioner
 
         var result = Provision(
             root,
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            userProfile,
             File.Exists,
             path => File.Exists(path) ? File.ReadAllText(path) : null,
             (path, text) =>
@@ -197,6 +200,30 @@ public static class ProtectionProvisioner
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Repairs the BIP-39 wordlist line endings if needed and executes the Trader Shield self-test
+    /// checks (seed-phrase write -> block, wallet keystore read -> block) through the installed bridge.
+    /// </summary>
+    public static IReadOnlyList<ProtectionCheckResult> RunTraderShieldSelfTest(
+        string? localAppData = null,
+        string? userProfile = null)
+    {
+        var local = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var profile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        BlackboxWordlistNormalizer.NormalizeAll(local, profile);
+
+        var agentRoot = Path.Combine(local, "Axiom", "modules", "blackbox", "agent-blackbox");
+        var runner = CreateBridgeRunner(agentRoot);
+        if (runner is null)
+        {
+            return AgentProtectionSelfTest.TraderShieldChecks()
+                .Select(check => new ProtectionCheckResult(check.Name, check.ExpectBlock, false, "bridge-unavailable"))
+                .ToArray();
+        }
+
+        return AgentProtectionSelfTest.TraderShieldChecks().Select(check => runner(check)).ToArray();
     }
 
     /// <summary>A runner backed by the installed venv Python and the guard bridge, or null.</summary>

@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Axiom.Contracts.Blackbox;
 
 namespace Axiom.Presentation;
 
@@ -196,6 +197,9 @@ public sealed class CopilotProtection
         EVIDENCE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Axiom" / "agent-evidence.jsonl"
 
 
+        # <<AXIOM_COMMAND_GUARD>>
+
+
         def record(event_type, tool, decision, guard_status, duration_ms, error_code=""):
             try:
                 EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
@@ -224,12 +228,27 @@ public sealed class CopilotProtection
             try:
                 payload = json.load(sys.stdin)
                 tool = str(payload.get("toolName") or payload.get("tool_name") or "")
+                parsed_args = payload.get("toolArgs") or payload.get("tool_input") or {}
+                safety = _check_command_safety(parsed_args, _load_protected_paths())
+                if safety is not None:
+                    record(
+                        "GUARD_BLOCKED",
+                        tool,
+                        "block",
+                        "blocked",
+                        int((time.monotonic() - started) * 1000),
+                        error_code=safety[0])
+                    print(json.dumps({
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": safety[1],
+                    }))
+                    return
                 with contextlib.redirect_stdout(sys.stderr):
                     from plugins.blackbox.guard.hooks import on_pre_tool_call
 
                     decision = on_pre_tool_call(
                         tool_name=tool,
-                        args=payload.get("toolArgs") or payload.get("tool_input") or {},
+                        args=parsed_args,
                         session_id=str(payload.get("sessionId") or payload.get("session_id") or ""),
                         tool_call_id=str(payload.get("toolCallId") or payload.get("tool_use_id") or ""),
                     )
@@ -256,5 +275,5 @@ public sealed class CopilotProtection
 
         if __name__ == "__main__":
             main()
-        """);
+        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal));
 }

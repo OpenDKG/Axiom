@@ -72,6 +72,29 @@ public sealed class DnsProxyTests
         Assert.Contains(recorded, item => item.Domain == "ads.blocked.example");
     }
 
+    /// <summary>
+    /// The proxy falls back to UDP-only when its TCP listener cannot bind, which made this test flaky
+    /// on a busy CI runner (issue #374). Retry the bind so the assertion checks behaviour, not timing.
+    /// </summary>
+    private static async Task<DnsProxyServer> CreateTcpCapableServerAsync(PrivacyShieldPolicy policy)
+    {
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            var server = new DnsProxyServer(policy, [new IPEndPoint(IPAddress.Loopback, 9)], port: 0);
+            if (!server.BindAddress.Contains("UDP only", StringComparison.Ordinal))
+            {
+                return server;
+            }
+
+            await server.DisposeAsync();
+            if (attempt < 5)
+            {
+                await Task.Delay(50);
+            }
+        }
+
+        throw new InvalidOperationException("The DNS proxy could not bind a TCP listener after 5 attempts.");
+    }
     [Fact]
     public async Task Proxy_blocks_matching_domains_over_tcp()
     {
@@ -81,10 +104,7 @@ public sealed class DnsProxyTests
             BlockedDomains = ["blocked.example"],
         };
         var policy = PrivacyShieldPolicy.Create(settings);
-        await using var server = new DnsProxyServer(
-            policy,
-            [new IPEndPoint(IPAddress.Loopback, 9)],
-            port: 0);
+        await using var server = await CreateTcpCapableServerAsync(policy);
 
         Assert.DoesNotContain("UDP only", server.BindAddress, StringComparison.Ordinal);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));

@@ -37,6 +37,9 @@ public static class ThreatSharePreflight
         "ngrok.io", "ngrok-free.app", "trycloudflare.com", "duckdns.org", "no-ip.org", "ddns.net",
         "dynu.net", "hopto.org", "zapto.org", "serveo.net", "localtunnel.me", "telebit.io",
         "jsdelivr.net", "unpkg.com", "cdnjs.cloudflare.com",
+        "github.com", "githubusercontent.com", "raw.githubusercontent.com",
+        "azureedge.net", "blob.core.windows.net", "googleusercontent.com",
+        "storage.googleapis.com", "edgesuite.net", "edgekey.net",
     ];
 
     /// <summary>Advertising, analytics and error-reporting hosts: a block there is noise, not a threat.</summary>

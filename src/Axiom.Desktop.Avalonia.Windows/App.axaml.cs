@@ -11,6 +11,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Axiom.Contracts.Monitoring;
 using Axiom.Contracts.NetworkRecovery;
+using Axiom.Infrastructure.Windows;
 using Axiom.Infrastructure.Windows.IpHelper;
 using Axiom.Infrastructure.Windows.Modules;
 using Axiom.Presentation;
@@ -21,17 +22,14 @@ namespace Axiom.Desktop.Avalonia.Windows;
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The Avalonia application lifetime owns shutdown.")]
 public partial class App : Application
 {
-    private const string SingleInstanceMutexName = @"Local\Axiom.Desktop.SingleInstance";
-    private const string ShowWindowEventName = @"Local\Axiom.Desktop.Show";
+    internal static SingleInstanceGuard? SingleInstance { get; set; }
 
     private ShellViewModel? _shell;
     private BundledServiceHost? _serviceHost;
     private MainWindow? _window;
     private TrayIcon? _tray;
     private ModuleWindowHider? _moduleWindowHider;
-    private Mutex? _singleInstanceMutex;
-    private EventWaitHandle? _showWindowEvent;
-    private Thread? _showWindowThread;
+    private SingleInstanceGuard? _ownedFallbackInstance;
     private volatile bool _exiting;
     private volatile bool _allowExit;
 
@@ -43,11 +41,15 @@ public partial class App : Application
         {
             var arguments = desktop.Args ?? [];
 
-            if (!TryAcquireSingleInstance())
+            // Program.Main acquires SingleInstance before starting Avalonia so a second launch never
+            // enters the dispatcher lifetime; this guard also protects direct test/host launches.
+            if (SingleInstance is null)
             {
-                SignalExistingInstance();
-                desktop.Shutdown();
-                return;
+                _ownedFallbackInstance = SingleInstanceGuard.AcquireOrSignalExisting();
+                if (_ownedFallbackInstance is null)
+                {
+                    return;
+                }
             }
 
             // Provision Axiom-managed hooks for detected harnesses without a second setup dialog.
@@ -71,8 +73,12 @@ public partial class App : Application
                     if (protection is not null)
                     {
                         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                        PrivacyShieldProvisioner.WriteSettings(localAppData);
-                        PrivacyShieldProvisioner.ApplyAsync(CancellationToken.None).GetAwaiter().GetResult();
+                        var privacyConfigPath = Path.Combine(localAppData, "Axiom", "privacy-shield.json");
+                        if (!File.Exists(privacyConfigPath))
+                        {
+                            PrivacyShieldProvisioner.WriteSettings(localAppData);
+                            PrivacyShieldProvisioner.ApplyAsync(CancellationToken.None).GetAwaiter().GetResult();
+                        }
                         TraderShieldProvisioner.ApplyToFile(Path.Combine(localAppData, "hermes", "config.yaml"));
                         HermesPluginSettings.ApplyToFile(Path.Combine(localAppData, "hermes", "config.yaml"));
                     }
@@ -148,7 +154,8 @@ public partial class App : Application
                 new Axiom.Persistence.AgentSessionReader(),
                 visualEffects,
                 networkRecovery is null ? null : networkRecovery.RestoreAsync,
-                listenerInspector);
+                listenerInspector,
+                uiModeService: new WindowsUiModeService());
 
             window = new MainWindow { DataContext = _shell };
             _window = window;
@@ -180,6 +187,7 @@ public partial class App : Application
 
             window.Show();
             CreateTrayIcon(desktop);
+            (SingleInstance ?? _ownedFallbackInstance)?.StartListening(ShowWindow);
             _moduleWindowHider = new ModuleWindowHider();
             _moduleWindowHider.Start();
 
@@ -267,86 +275,18 @@ public partial class App : Application
         arguments.Any(argument =>
             string.Equals(argument, expected, StringComparison.OrdinalIgnoreCase));
 
-    private bool TryAcquireSingleInstance()
-    {
-        _singleInstanceMutex = new Mutex(
-            initiallyOwned: true,
-            name: SingleInstanceMutexName,
-            createdNew: out var createdNew);
-        if (!createdNew)
-        {
-            _singleInstanceMutex.Dispose();
-            _singleInstanceMutex = null;
-            return false;
-        }
-
-        _showWindowEvent = new EventWaitHandle(
-            initialState: false,
-            mode: EventResetMode.AutoReset,
-            name: ShowWindowEventName);
-        _showWindowThread = new Thread(ShowWindowLoop)
-        {
-            IsBackground = true,
-            Name = "Axiom show-window signal",
-        };
-        _showWindowThread.Start();
-        return true;
-    }
-
-    private static void SignalExistingInstance()
-    {
-        try
-        {
-            if (EventWaitHandle.TryOpenExisting(ShowWindowEventName, out var existing))
-            {
-                using (existing)
-                {
-                    existing.Set();
-                }
-            }
-        }
-        catch (Exception exception) when (exception is
-                     UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)
-        {
-        }
-    }
-
-    private void ShowWindowLoop()
-    {
-        var signal = _showWindowEvent;
-        if (signal is null)
-        {
-            return;
-        }
-
-        while (!_exiting)
-        {
-            try
-            {
-                signal.WaitOne();
-            }
-            catch (ObjectDisposedException)
-            {
-                return;
-            }
-
-            if (_exiting)
-            {
-                return;
-            }
-
-            ShowWindow();
-        }
-    }
-
     private void ShowWindow() => Dispatcher.UIThread.Post(() =>
     {
-        if (_window is null)
+        if (_window is null || _exiting)
         {
             return;
         }
 
-        _window.Show();
+        if (!_window.IsVisible)
+        {
+            _window.Show();
+        }
+
         _window.WindowState = WindowState.Normal;
         _window.Activate();
     });
@@ -419,12 +359,9 @@ public partial class App : Application
     private void Cleanup()
     {
         _exiting = true;
-        _showWindowEvent?.Set();
-        _showWindowThread?.Join(TimeSpan.FromMilliseconds(500));
-        _showWindowEvent?.Dispose();
-        _showWindowEvent = null;
-        _singleInstanceMutex?.Dispose();
-        _singleInstanceMutex = null;
+        SingleInstance?.Dispose();
+        _ownedFallbackInstance?.Dispose();
+        _ownedFallbackInstance = null;
 
         if (_tray is not null)
         {

@@ -7,7 +7,8 @@
         x:Class="Axiom.UI.Avalonia.MainWindow"
         Title="Axiom — Free Open-Source Network &amp; AI Agent Security"
         Width="1460" Height="900" MinWidth="900" MinHeight="600"
-        Background="Transparent" Foreground="{DynamicResource Axiom.TextPrimary}"
+        Background="Transparent" TransparencyBackgroundFallback="Transparent"
+        Foreground="{DynamicResource Axiom.TextPrimary}"
         FontFamily="Segoe UI Variable Text, Segoe UI, Inter, Noto Sans"
         UseLayoutRounding="True"
         WindowDecorations="BorderOnly"
@@ -35,12 +36,23 @@
     </Style>
     <Style Selector="Button.caption.close:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="#C42B1C" />
+      <Setter Property="TextElement.Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.caption.close:pointerover">
+      <Setter Property="Foreground" Value="#FFFFFF" />
     </Style>
     <Style Selector="Button.caption.close:pressed /template/ ContentPresenter">
       <Setter Property="Background" Value="#9F1D14" />
+      <Setter Property="TextElement.Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.caption.close:pressed">
+      <Setter Property="Foreground" Value="#FFFFFF" />
     </Style>
   </Window.Styles>
   <Window.DataTemplates>
+    <DataTemplate DataType="local:SimpleHomePageViewModel">
+      <views:SimpleHomeView />
+    </DataTemplate>
     <DataTemplate DataType="local:AgentDashboardPageViewModel">
       <views:AgentDashboardView />
     </DataTemplate>
@@ -49,6 +61,9 @@
     </DataTemplate>
     <DataTemplate DataType="local:OverviewPageViewModel">
       <views:OverviewView />
+    </DataTemplate>
+    <DataTemplate DataType="local:PrivacyOverviewPageViewModel">
+      <views:PrivacyOverviewView />
     </DataTemplate>
     <DataTemplate DataType="local:ConnectionsPageViewModel">
       <views:ConnectionsView />
@@ -91,7 +106,7 @@
     <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Window}" />
     <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.AmbientGlow}" />
     <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.AmbientWash}" />
-    <Border Grid.Row="0" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}"
+    <Border Classes="glass-chrome" Grid.Row="0" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}"
             BorderThickness="0,0,0,1" chrome:WindowDecorationProperties.ElementRole="TitleBar">
       <Grid ColumnDefinitions="*,Auto" Margin="18,0,4,0">
         <StackPanel x:Name="TitleContent" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
@@ -102,6 +117,37 @@
                      Foreground="{DynamicResource Axiom.TextMuted}" />
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0" VerticalAlignment="Stretch">
+          <Border Background="{DynamicResource Axiom.SurfaceAlt}"
+                  BorderBrush="{DynamicResource Axiom.Border}"
+                  BorderThickness="1" CornerRadius="6" Padding="2"
+                  Margin="0,0,10,0" VerticalAlignment="Center"
+                  chrome:WindowDecorationProperties.ElementRole="User"
+                  ToolTip.Tip="Switch between Simple (everyday) and Advanced (full technical) views">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <Button x:Name="SimpleModeButton" Content="Simple"
+                      Command="{Binding SwitchToSimpleModeCommand}"
+                      Classes.primary="{Binding IsSimpleMode}"
+                      Padding="10,3" FontSize="11" CornerRadius="4" BorderThickness="0" />
+              <Button x:Name="AdvancedModeButton" Content="Advanced"
+                      Command="{Binding SwitchToAdvancedModeCommand}"
+                      Classes.primary="{Binding IsAdvancedMode}"
+                      Padding="10,3" FontSize="11" CornerRadius="4" BorderThickness="0" />
+            </StackPanel>
+          </Border>
+          <Button x:Name="UpdateButton" Classes="caption" Click="OnUpdateClicked"
+                  IsVisible="{Binding UpdateAvailable}"
+                  ToolTip.Tip="{Binding UpdateTooltip}"
+                  AutomationProperties.Name="Available update"
+                  chrome:WindowDecorationProperties.ElementRole="User">
+            <Grid Width="46" Height="44">
+              <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                         Foreground="{DynamicResource Axiom.Accent}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <Border Background="{DynamicResource Axiom.Accent}" CornerRadius="4"
+                      Width="8" Height="8" Margin="0,7,9,0"
+                      HorizontalAlignment="Right" VerticalAlignment="Top" />
+            </Grid>
+          </Button>
           <Button x:Name="AlertsButton" Classes="caption" Click="OnAlertsClicked" ToolTip.Tip="Notifications"
                   chrome:WindowDecorationProperties.ElementRole="User">
             <Grid Width="46" Height="44">
@@ -134,12 +180,45 @@
       </Grid>
     </Border>
 
+    <Popup x:Name="UpdatePopup"
+           PlacementTarget="{Binding #UpdateButton}"
+           Placement="BottomEdgeAlignedRight"
+           IsLightDismissEnabled="True"
+           HorizontalOffset="0" VerticalOffset="4">
+      <Border Classes="card" Background="{DynamicResource Axiom.PopupSurface}" Width="340" Padding="14">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="Update available" FontSize="13" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
+            <Border Grid.Column="1" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,2">
+              <TextBlock Text="{Binding LatestVersion, StringFormat=v{0}}" FontSize="10" FontWeight="SemiBold"
+                         Foreground="{DynamicResource Axiom.Accent}" />
+            </Border>
+          </Grid>
+          <TextBlock Text="{Binding UpdateReleaseDateText, StringFormat=Released {0}}"
+                     IsVisible="{Binding HasUpdateReleaseDate}"
+                     FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+          <TextBlock Text="{Binding UpdateSummaryText}"
+                     IsVisible="{Binding HasUpdateSummary}"
+                     FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+            <Button Content="Download" Classes="primary" Command="{Binding OpenUpdateCommand}"
+                    Click="OnUpdateDownloadClicked" Padding="12,5" FontSize="11" />
+            <Button Content="Dismiss" Command="{Binding DismissUpdateCommand}"
+                    Click="OnUpdateDismissClicked" Padding="12,5" FontSize="11" />
+          </StackPanel>
+          <TextBlock Text="Notification only. Axiom never downloads or installs updates automatically."
+                     FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </Popup>
+
     <Popup x:Name="AlertsPopup"
            PlacementTarget="{Binding #AlertsButton}"
            Placement="BottomEdgeAlignedRight"
            IsLightDismissEnabled="True"
            HorizontalOffset="0" VerticalOffset="4">
-      <Border Classes="card" Width="430" MaxHeight="470" Padding="12">
+      <Border Classes="card" Background="{DynamicResource Axiom.PopupSurface}" Width="430" MaxHeight="470" Padding="12">
         <Grid RowDefinitions="Auto,*,Auto">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -187,20 +266,19 @@
       </Border>
     </Popup>
 
-    <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,1,0">
+    <Border Classes="glass-chrome" Grid.Row="1" Grid.Column="0" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,*,Auto">
         <StackPanel Grid.Row="0" Margin="20,18,20,14" Spacing="9">
           <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-lockup.png" Height="56" Stretch="Uniform"
-                 HorizontalAlignment="Left" RenderOptions.BitmapInterpolationMode="HighQuality" />
-          <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="6" Padding="8,3"
-                  HorizontalAlignment="Left">
+                 HorizontalAlignment="Center" RenderOptions.BitmapInterpolationMode="HighQuality" />
+          <Border Classes="glass-pill" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="6" Padding="8,3"
+                  HorizontalAlignment="Center">
             <TextBlock Text="LOCAL-FIRST · NO TELEMETRY" Foreground="{DynamicResource Axiom.Accent}"
                        FontSize="9" FontWeight="SemiBold" />
           </Border>
-          <TextBlock Text="{Binding VersionText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10.5" />
         </StackPanel>
 
-        <ListBox Grid.Row="1" Classes="nav-list" ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
+        <ListBox Grid.Row="1" Classes="nav-list" ItemsSource="{Binding NavigationPages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
                  Background="Transparent" BorderThickness="0" Margin="10,0">
           <ListBox.ItemTemplate>
             <DataTemplate>
@@ -226,80 +304,82 @@
 
         <StackPanel Grid.Row="2" Margin="16,0,16,10" Spacing="8">
           <Border Height="1" Background="{DynamicResource Axiom.Border}" />
-          <Grid ColumnDefinitions="Auto,*">
-            <Image Grid.Column="0" Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png"
+          <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+            <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png"
                    Width="40" Height="40" Stretch="Uniform"
                    RenderOptions.BitmapInterpolationMode="HighQuality" />
-            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center" Spacing="2">
+            <StackPanel VerticalAlignment="Center" Spacing="2">
               <TextBlock Text="Axiom" FontWeight="SemiBold" FontSize="13"
                          Foreground="{DynamicResource Axiom.TextPrimary}" />
               <TextBlock Text="{Binding VersionText}" FontSize="10"
                          Foreground="{DynamicResource Axiom.TextMuted}" />
             </StackPanel>
-          </Grid>
+          </StackPanel>
           <TextBlock Text="Free Open-Source Network &amp; AI Agent Security" FontSize="10"
-                     Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <Button Content="GitHub" Command="{Binding OpenGitHubCommand}" Padding="10,4" FontSize="11" />
-            <Button Command="{Binding OpenSupportCommand}" Padding="9,4" FontSize="11">
+                     Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap"
+                     TextAlignment="Center" HorizontalAlignment="Center" />
+          <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+            <Button Content="GitHub" Command="{Binding OpenGitHubCommand}" Padding="9,4" FontSize="11" />
+            <Button Command="{Binding OpenSupportCommand}" Padding="8,4" FontSize="11">
               <TextBlock Text="♥ Donate" Foreground="{DynamicResource Axiom.Accent}" FontSize="12" />
             </Button>
+            <Button Content="Contact" Command="{Binding OpenContactCommand}" Padding="8,4" FontSize="11"
+                    AutomationProperties.Name="Contact Axiom"
+                    ToolTip.Tip="Email contact@opendkg.org" />
           </StackPanel>
         </StackPanel>
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="74,*,34">
-      <Border Grid.Row="0" Background="{DynamicResource Axiom.Window}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
-        <Grid Margin="28,0,22,0" ColumnDefinitions="*,Auto,Auto">
-          <StackPanel VerticalAlignment="Center" Spacing="2">
-            <TextBlock Text="{Binding SelectedPage.Title}" Classes="page-title" />
-            <TextBlock Text="{Binding SelectedPage.Subtitle}" Classes="page-subtitle" />
+    <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*,Auto">
+      <Border Classes="glass-chrome" Grid.Row="0" MinHeight="74" Background="{DynamicResource Axiom.Header}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
+        <Grid Margin="24,8,20,8" ColumnDefinitions="*,0.95*,Auto" ColumnSpacing="14">
+          <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+            <controls:AxiomSelectableTextBlock x:Name="HeaderPageTitle" Text="{Binding SelectedPage.Title}" Classes="page-title" TextTrimming="CharacterEllipsis" />
+            <controls:AxiomSelectableTextBlock x:Name="HeaderPageSubtitle" Text="{Binding SelectedPage.Subtitle}" Classes="page-subtitle" TextWrapping="Wrap" />
           </StackPanel>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"
-                      Margin="24,0,20,0" MaxWidth="520">
-            <Border Width="3" Height="28" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}" />
-            <StackPanel Spacing="2">
-              <TextBlock Text="SYSTEM STATUS" Classes="kpi-label" />
+          <Grid Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="10" VerticalAlignment="Center"
+                MaxWidth="420" IsVisible="{Binding IsAdvancedMode}">
+            <Border Grid.Column="0" Width="3" MinHeight="28" CornerRadius="1.5" Background="{DynamicResource Axiom.Accent}" />
+            <StackPanel Grid.Column="1" Spacing="2">
+              <controls:AxiomSelectableTextBlock Text="SYSTEM STATUS" Classes="kpi-label" />
               <controls:AxiomSelectableTextBlock Text="{Binding Overview.StatusText}" FontSize="10.5"
                                                  Foreground="{DynamicResource Axiom.TextSecondary}"
-                                                 TextWrapping="Wrap" MaxWidth="460" />
+                                                 TextWrapping="Wrap" />
             </StackPanel>
-          </StackPanel>
-          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-            <ComboBox Width="170" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
+          </Grid>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <ComboBox Width="156" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
                       ToolTip.Tip="Choose a theme. Axiom Glass is the new visual system." />
-            <TextBlock Text="LOCAL-FIRST" Foreground="{DynamicResource Axiom.TextMuted}"
-                       FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
           </StackPanel>
         </Grid>
       </Border>
 
       <ContentControl Grid.Row="1" Content="{Binding SelectedPage}" />
 
-      <Border Grid.Row="2" Background="{DynamicResource Axiom.SurfaceAlt}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
+      <Border Classes="glass-chrome" Grid.Row="2" MinHeight="34" Background="{DynamicResource Axiom.StatusBar}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
         <Grid Margin="28,0,22,0" ColumnDefinitions="*,Auto">
           <WrapPanel VerticalAlignment="Center" ItemHeight="13"
                      ClipToBounds="False">
-            <TextBlock Text="{Binding StatusMonitoringText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
-            <TextBlock Text="{Binding StatusStorageText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
-            <TextBlock Text="{Binding StatusFirewallText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
-            <TextBlock Text="{Binding StatusSourceText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" />
+            <controls:AxiomSelectableTextBlock Text="{Binding StatusMonitoringText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Text="{Binding StatusStorageText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" IsVisible="{Binding IsAdvancedMode}" />
+            <controls:AxiomSelectableTextBlock Text="{Binding StatusFirewallText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" Margin="0,0,16,0" />
+            <controls:AxiomSelectableTextBlock Text="{Binding StatusSourceText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" IsVisible="{Binding IsAdvancedMode}" />
           </WrapPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="4" Padding="7,2">
+            <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="4" Padding="7,2" IsVisible="{Binding IsAdvancedMode}">
               <StackPanel Orientation="Horizontal" Spacing="5">
                 <Ellipse Width="6" Height="6" Fill="{DynamicResource Axiom.Accent}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding StatusModeText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="9" />
+                <controls:AxiomSelectableTextBlock Text="{Binding StatusModeText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="9" />
               </StackPanel>
             </Border>
             <Border Background="{DynamicResource Axiom.Surface}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="4" Padding="7,2">
               <StackPanel Orientation="Horizontal" Spacing="5">
                 <Ellipse Width="6" Height="6" Fill="{DynamicResource Axiom.Warning}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding StatusFirewallBadgeText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="9" />
+                <controls:AxiomSelectableTextBlock Text="{Binding StatusFirewallBadgeText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="9" />
               </StackPanel>
             </Border>
-            <TextBlock Text="{Binding StatusIpcText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" VerticalAlignment="Center" />
+            <controls:AxiomSelectableTextBlock Text="{Binding StatusIpcText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10" VerticalAlignment="Center" IsVisible="{Binding IsAdvancedMode}" />
           </StackPanel>
         </Grid>
       </Border>

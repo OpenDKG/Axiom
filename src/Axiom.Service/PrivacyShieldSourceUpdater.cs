@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Text;
 using Axiom.Contracts.Privacy;
 
@@ -13,12 +15,13 @@ public sealed record PrivacyShieldSourceUpdateResult(
 
 /// <summary>
 /// Downloads only catalogued HTTPS lists, applies hard size/entry limits, normalizes domains and
-/// returns a complete new ruleset. The caller atomically swaps it only when every selected source
-/// succeeded.
+/// returns a new ruleset built from all reachable selected sources.
 /// </summary>
 public sealed class PrivacyShieldSourceUpdater : IDisposable
 {
     private const int MaxBytes = 20 * 1024 * 1024;
+
+    private const int MaxDownloadAttempts = 3;
 
     // Keep room for every selected source so large ad/tracking lists cannot consume the cap before
     // threat-intelligence, phishing, or telemetry feeds are imported.
@@ -28,11 +31,75 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
 
     public PrivacyShieldSourceUpdater(HttpClient? httpClient = null)
     {
-        _http = httpClient ?? new HttpClient
+        _http = httpClient ?? CreateDefaultHttpClient();
+        if (_http.DefaultRequestHeaders.UserAgent.Count == 0)
         {
-            Timeout = TimeSpan.FromSeconds(45),
+            _http.DefaultRequestHeaders.UserAgent.ParseAdd("Axiom-PrivacyShield/0.1");
+        }
+    }
+
+    private static HttpClient CreateDefaultHttpClient()
+    {
+        var handler = new SocketsHttpHandler
+        {
+            UseProxy = false,
+            ConnectTimeout = TimeSpan.FromSeconds(10),
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+            AutomaticDecompression = DecompressionMethods.All,
+            ConnectCallback = ConnectWithAddressFallbackAsync,
         };
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("Axiom-PrivacyShield/0.1");
+        return new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromMinutes(3),
+        };
+    }
+
+    private static async ValueTask<Stream> ConnectWithAddressFallbackAsync(
+        SocketsHttpConnectionContext context,
+        CancellationToken cancellationToken)
+    {
+        var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken)
+            .ConfigureAwait(false);
+        if (addresses.Length == 0)
+        {
+            throw new SocketException((int)SocketError.HostNotFound);
+        }
+
+        // Prefer IPv4 first on networks where IPv6 routes or local resolvers refuse/reset TLS feeds,
+        // while still trying every resolved address if the first family fails.
+        var ordered = addresses
+            .OrderBy(address => address.AddressFamily == AddressFamily.InterNetwork ? 0 : 1)
+            .ToArray();
+
+        Exception? lastException = null;
+        foreach (var address in ordered)
+        {
+            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+            {
+                NoDelay = true,
+            };
+            try
+            {
+                using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                connectCts.CancelAfter(TimeSpan.FromSeconds(8));
+                await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), connectCts.Token)
+                    .ConfigureAwait(false);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (Exception exception) when (exception is SocketException or OperationCanceledException &&
+                                              !cancellationToken.IsCancellationRequested)
+            {
+                lastException = exception;
+                socket.Dispose();
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
+
+        throw lastException ?? new SocketException((int)SocketError.ConnectionRefused);
     }
 
     public async Task<PrivacyShieldSourceUpdateResult> UpdateAsync(
@@ -50,13 +117,14 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
 
         // Import threat-intelligence and phishing feeds first so they never lose priority to bulk lists.
         var orderedSources = sources
-            .OrderBy(source => (source.Category & PrivacyCategory.Malware) != 0 ? 0 : 1)
+            .OrderBy(source => (source.Category & (PrivacyCategory.Malware | PrivacyCategory.Phishing)) != 0 ? 0 : 1)
             .ToArray();
 
         var rules = new List<PrivacyShieldStoredRule>();
         var statuses = new List<PrivacyShieldSourceStatus>();
         var index = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var success = true;
+        var succeededCount = 0;
+        var failedSources = new List<string>();
 
         for (var sourceIndex = 0; sourceIndex < orderedSources.Length; sourceIndex++)
         {
@@ -80,24 +148,13 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
                     Entries: 0,
                     UpdatedUtc: null,
                     Error: "The combined ruleset reached the local rule limit."));
-                success = false;
+                failedSources.Add(source.Id);
                 continue;
             }
 
             try
             {
-                var bytes = await DownloadAsync(source.Url, cancellationToken).ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(source.Sha256))
-                {
-                    var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
-                    if (!string.Equals(digest, source.Sha256, StringComparison.OrdinalIgnoreCase))
-                    {
-                        throw new InvalidDataException("The source content does not match its pinned SHA-256.");
-                    }
-                }
-
-                var body = System.Text.Encoding.UTF8.GetString(bytes);
-                var domains = PrivacyShieldPolicy.ParseList(body, PrivacyShieldPolicy.MaxRules);
+                var domains = await DownloadAndParseAsync(source, cancellationToken).ConfigureAwait(false);
                 if (domains.Count == 0)
                 {
                     throw new InvalidDataException("The source contained no valid domains.");
@@ -142,12 +199,13 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
                     Entries: added + upgraded,
                     UpdatedUtc: now,
                     Error: null));
+                succeededCount++;
             }
             catch (Exception exception) when (exception is
                          HttpRequestException or IOException or InvalidDataException or
                          TaskCanceledException or ArgumentException)
             {
-                success = false;
+                failedSources.Add(source.Id);
                 statuses.Add(new PrivacyShieldSourceStatus(
                     source.Id,
                     source.Name,
@@ -155,20 +213,109 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
                     Enabled: true,
                     Entries: 0,
                     UpdatedUtc: null,
-                    Error: exception.Message));
+                    Error: FormatErrorMessage(exception)));
             }
         }
 
+        if (succeededCount == 0)
+        {
+            return new PrivacyShieldSourceUpdateResult(
+                false,
+                [],
+                statuses,
+                "All selected blocklist sources failed; the previous ruleset was kept.");
+        }
+
+        var warning = failedSources.Count == 0
+            ? null
+            : $"Updated from {succeededCount} of {orderedSources.Length} sources; {failedSources.Count} failed ({string.Join(", ", failedSources)}).";
+
         return new PrivacyShieldSourceUpdateResult(
-            success,
+            true,
             rules,
             statuses,
-            success ? null : "One or more sources failed; the previous ruleset was kept.");
+            warning);
     }
 
     public void Dispose() => _http.Dispose();
 
-    private async Task<byte[]> DownloadAsync(string url, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> DownloadAndParseAsync(
+        PrivacyShieldSourceInfo source,
+        CancellationToken cancellationToken)
+    {
+        using var buffer = await DownloadWithRetriesAsync(source.Url, cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(source.Sha256))
+        {
+            var digest = buffer.TryGetBuffer(out var segment)
+                ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(segment))
+                : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(buffer.ToArray()));
+            if (!string.Equals(digest, source.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException("The source content does not match its pinned SHA-256.");
+            }
+        }
+
+        buffer.Position = 0;
+        using var reader = new StreamReader(buffer, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 16 * 1024, leaveOpen: true);
+        return PrivacyShieldPolicy.ParseList(reader, PrivacyShieldPolicy.MaxRules);
+    }
+
+    private async Task<MemoryStream> DownloadWithRetriesAsync(string url, CancellationToken cancellationToken)
+    {
+        Exception? lastException = null;
+        for (var attempt = 1; attempt <= MaxDownloadAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return await DownloadAsync(url, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (IsTransient(exception, cancellationToken) && attempt < MaxDownloadAttempts)
+            {
+                lastException = exception;
+                await Task.Delay(TimeSpan.FromMilliseconds(400 * attempt), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        if (lastException is not null)
+        {
+            throw lastException;
+        }
+
+        return await DownloadAsync(url, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool IsTransient(Exception exception, CancellationToken callerToken)
+    {
+        if (callerToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        if (exception is HttpRequestException httpException)
+        {
+            return httpException.StatusCode is null
+                or >= HttpStatusCode.InternalServerError
+                or HttpStatusCode.RequestTimeout
+                or HttpStatusCode.TooManyRequests;
+        }
+
+        return exception is IOException or TaskCanceledException;
+    }
+
+    private static string FormatErrorMessage(Exception exception)
+    {
+        if (exception.InnerException is { Message.Length: > 0 } inner &&
+            !exception.Message.Contains(inner.Message, StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{exception.Message} ({inner.Message})";
+        }
+
+        return exception.Message;
+    }
+
+    private async Task<MemoryStream> DownloadAsync(string url, CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps)
@@ -184,19 +331,27 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
         await using var stream = await response.Content
             .ReadAsStreamAsync(cancellationToken)
             .ConfigureAwait(false);
-        using var buffer = new MemoryStream();
-        var chunk = new byte[16 * 1024];
-        int read;
-        while ((read = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
+        var buffer = new MemoryStream();
+        try
         {
-            if (buffer.Length + read > MaxBytes)
+            var chunk = new byte[16 * 1024];
+            int read;
+            while ((read = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
             {
-                throw new InvalidDataException("The blocklist exceeded the 20 MB import limit.");
+                if (buffer.Length + read > MaxBytes)
+                {
+                    throw new InvalidDataException("The blocklist exceeded the 20 MB import limit.");
+                }
+
+                buffer.Write(chunk, 0, read);
             }
 
-            buffer.Write(chunk, 0, read);
+            return buffer;
         }
-
-        return buffer.ToArray();
+        catch
+        {
+            await buffer.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 }

@@ -29,6 +29,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    private readonly SemaphoreSlim _sourceSyncSignal = new(0, 1);
+
     private readonly object _rulesGate = new();
 
     private readonly Dictionary<string, string> _sourceErrors =
@@ -36,18 +38,18 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private PrivacyShieldSettings _settings;
 
-    private IReadOnlyList<PrivacyShieldStoredRule> _rules = [];
-
     private IReadOnlyDictionary<string, (int Entries, DateTimeOffset? Updated)> _sourceTotals =
         new Dictionary<string, (int, DateTimeOffset?)>(StringComparer.OrdinalIgnoreCase);
 
-    private Task<IReadOnlyList<PrivacyShieldStoredRule>>? _rulesTask;
+    private Task? _rulesTask;
+
+    private bool _rulesLoaded;
+
+    private bool _rulesUpdated;
 
     private PrivacyShieldPolicy? _policy;
 
     private PrivacyShieldSettings? _policySettings;
-
-    private IReadOnlyList<PrivacyShieldStoredRule>? _policyRules;
 
     private DnsProxyServer? _server;
 
@@ -74,10 +76,16 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     /// <summary>Whether the loopback resolver is listening right now.</summary>
     public bool IsResolverRunning => Volatile.Read(ref _server) is not null;
 
+    /// <summary>Whether automatic adapter DNS pointing is requested for port 53.</summary>
+    public bool ShouldAutoPointAdapterDns =>
+        _settings.Enabled &&
+        _settings.Port == 53 &&
+        (_settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(_settings.PreferredAdapterAlias));
+
     public async Task<PrivacyShieldStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        SetRules(await EnsureRulesLoadedAsync().ConfigureAwait(false));
+        await EnsureRulesLoadedAsync().ConfigureAwait(false);
         return CreateStatus();
     }
 
@@ -85,13 +93,13 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     {
         if (_settings.Enabled)
         {
-            SetRules(await EnsureRulesLoadedAsync().ConfigureAwait(false));
+            await EnsureRulesLoadedAsync().ConfigureAwait(false);
         }
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_settings.Enabled)
+            if (_settings.Enabled && _server is null)
             {
                 await StartServerLockedAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -108,7 +116,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(requested);
 
-        SetRules(await EnsureRulesLoadedAsync().ConfigureAwait(false));
+        await EnsureRulesLoadedAsync().ConfigureAwait(false);
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -205,6 +213,11 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             _settings = normalized;
             _lastError = CombineWarnings(startWarning, NotifyResolverStarted(candidate));
             EnsureConfiguredAdapterDns();
+            if (ShouldAutoUpdateSources())
+            {
+                SignalSourceSync();
+            }
+
             return CreateStatus();
         }
         finally
@@ -261,14 +274,39 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         return false;
     }
 
+    internal void SignalSourceSync()
+    {
+        if (_sourceSyncSignal.CurrentCount == 0)
+        {
+            try
+            {
+                _sourceSyncSignal.Release();
+            }
+            catch (SemaphoreFullException)
+            {
+            }
+        }
+    }
+
+    internal async Task WaitForSourceSyncOrDelayAsync(TimeSpan delay, CancellationToken cancellationToken) =>
+        await _sourceSyncSignal.WaitAsync(delay, cancellationToken).ConfigureAwait(false);
+
     /// <summary>
     /// Keeps the configured or active default-route adapter pointed at the local resolver while the
     /// elevated Windows service is running Privacy Shield on port 53. No-op in non-SYSTEM processes.
     /// The decision and the adapter work are Windows code behind the DNS seam
     /// (<c>WindowsPrivacyDnsPlatform.EnsureConfiguredAdapterDns</c>); other platforms do nothing here.
+    /// An adapter error the platform reports is surfaced as the status error when no other error is
+    /// set (upstream v0.64.0 behaviour).
     /// </summary>
-    public void EnsureConfiguredAdapterDns() =>
-        _dns.EnsureConfiguredAdapterDns(_server is not null, _settings);
+    public void EnsureConfiguredAdapterDns()
+    {
+        var adapterError = _dns.EnsureConfiguredAdapterDns(_server is not null, _settings);
+        if (!string.IsNullOrWhiteSpace(adapterError) && string.IsNullOrWhiteSpace(_lastError))
+        {
+            _lastError = adapterError;
+        }
+    }
 
     public async Task<PrivacyShieldStatus> ClearHistoryAsync(CancellationToken cancellationToken)
     {
@@ -311,7 +349,9 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 else
                 {
                     SetRules(result.Rules);
-                    _lastError = null;
+                    _lastError = result.Error;
+                    result = null;
+                    CompactMemory();
                     if (_settings.Enabled)
                     {
                         await StartServerLockedAsync(cancellationToken).ConfigureAwait(false);
@@ -500,37 +540,59 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         watch.Dispose();
     }
 
-    private Task<IReadOnlyList<PrivacyShieldStoredRule>> EnsureRulesLoadedAsync()
+    private Task EnsureRulesLoadedAsync()
     {
         lock (_rulesGate)
         {
-            // The 43 MB compiled ruleset is loaded off the service-startup thread so the pipe,
-            // firewall consent and monitor are available before optional filtering is ready.
+            if (_rulesLoaded)
+            {
+                return Task.CompletedTask;
+            }
+
+            // Load and compile the ruleset off the service-startup thread so the pipe, firewall
+            // consent, and monitor are ready immediately, then drop the raw list and compact LOH.
             return _rulesTask ??= Task.Run(() =>
             {
                 var rules = _ruleStore.Load();
+                lock (_rulesGate)
+                {
+                    if (!_rulesUpdated)
+                    {
+                        AdoptRulesLocked(rules, _settings);
+                    }
 
-                // Parsing the ruleset leaves large temporary buffers on the large object heap.
-                // Compact once here so that space is returned instead of staying reserved for the
-                // whole service lifetime; a single startup pass costs far less than the retention.
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
-                return rules;
+                    _rulesLoaded = true;
+                }
+
+                rules = [];
+                CompactMemory();
             });
         }
     }
 
+    private static void CompactMemory()
+    {
+        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+    }
+
     /// <summary>
-    /// Adopts a loaded ruleset once. Re-assigning the same instance is a no-op so a status poll
-    /// does not rebuild the per-source index.
+    /// Compiles and adopts a new ruleset from an explicit update, releasing the temporary list.
     /// </summary>
     private void SetRules(IReadOnlyList<PrivacyShieldStoredRule> rules)
     {
-        if (ReferenceEquals(_rules, rules))
+        lock (_rulesGate)
         {
-            return;
+            _rulesUpdated = true;
+            _rulesLoaded = true;
+            AdoptRulesLocked(rules, _settings);
         }
+    }
 
+    private void AdoptRulesLocked(
+        IReadOnlyList<PrivacyShieldStoredRule> rules,
+        PrivacyShieldSettings settings)
+    {
         var totals = new Dictionary<string, (int Entries, DateTimeOffset? Updated)>(
             StringComparer.OrdinalIgnoreCase);
         foreach (var rule in rules)
@@ -547,28 +609,31 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         }
 
         _sourceTotals = totals;
-        _rules = rules;
+        _policy = PrivacyShieldPolicy.Create(settings, rules);
+        _policySettings = settings;
     }
 
     /// <summary>
-    /// Builds the compiled policy at most once per (settings, ruleset) pair. The policy holds an
-    /// index of every blocked domain, so rebuilding it for a status poll costs hundreds of MB.
+    /// Returns the compiled policy for <paramref name="settings"/>, reusing the compiled catalog
+    /// index across settings changes without holding the raw rule list in memory.
     /// </summary>
     private PrivacyShieldPolicy GetPolicy(PrivacyShieldSettings settings)
     {
-        var policy = _policy;
-        if (policy is not null &&
-            ReferenceEquals(_policySettings, settings) &&
-            ReferenceEquals(_policyRules, _rules))
+        lock (_rulesGate)
         {
+            var policy = _policy;
+            if (policy is not null && ReferenceEquals(_policySettings, settings))
+            {
+                return policy;
+            }
+
+            policy = policy is null
+                ? PrivacyShieldPolicy.Create(settings)
+                : policy.WithSettings(settings);
+            _policy = policy;
+            _policySettings = settings;
             return policy;
         }
-
-        policy = PrivacyShieldPolicy.Create(settings, _rules);
-        _policy = policy;
-        _policySettings = settings;
-        _policyRules = _rules;
-        return policy;
     }
 
     private PrivacyShieldBlockedEvent EnrichProvenance(PrivacyShieldBlockedEvent blocked)
@@ -664,6 +729,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                                                 PrivacyCategory.Tracking |
                                                 PrivacyCategory.Analytics |
                                                 PrivacyCategory.Malware |
+                                                PrivacyCategory.Phishing |
                                                 PrivacyCategory.Custom);
 
         return settings with

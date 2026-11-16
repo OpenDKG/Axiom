@@ -48,13 +48,27 @@ public sealed class OptionalModuleProbe : IDisposable
 
     private readonly ILoopbackListenerInspector? _listenerInspector;
 
+    /// <summary>
+    /// Creates an HTTP client configured for fast loopback-only requests so Windows auto-proxy
+    /// (WPAD) detection cannot stall localhost health probes past their short timeout.
+    /// </summary>
+    public static HttpClient CreateLoopbackHttpClient(TimeSpan timeout)
+    {
+        var handler = new SocketsHttpHandler
+        {
+            UseProxy = false,
+            ConnectTimeout = TimeSpan.FromSeconds(1),
+        };
+        return new HttpClient(handler, disposeHandler: true) { Timeout = timeout };
+    }
+
     public OptionalModuleProbe(
         HttpClient? httpClient = null,
         string? dkgUrl = null,
         string? blackboxUrl = null,
         ILoopbackListenerInspector? listenerInspector = null)
     {
-        _http = httpClient ?? new HttpClient { Timeout = DefaultTimeout };
+        _http = httpClient ?? CreateLoopbackHttpClient(DefaultTimeout);
         _ownsHttpClient = httpClient is null;
         _listenerInspector = listenerInspector;
         _dkgUrl = dkgUrl

@@ -113,6 +113,64 @@ public sealed class ActivityFreshnessTests
     }
 
     [Fact]
+    public void Antigravity_protection_wraps_and_repairs_hook_paths_with_spaces_on_windows()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var root = CreateLinkFreeTempRoot("axiom-agy-spaces");
+        var userProfile = Path.Combine(root, "Jane (Work) & Co");
+        var localAppData = Path.Combine(userProfile, "AppData", "Local");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(userProfile, ".gemini"));
+            var scriptsDir = Path.Combine(localAppData, "Axiom", "modules", "blackbox", "agent-blackbox", "venv", "Scripts");
+            Directory.CreateDirectory(scriptsDir);
+            var pythonExe = Path.Combine(scriptsDir, "python.exe");
+            File.WriteAllText(pythonExe, "stub");
+
+            var protection = new AntigravityProtection(userProfile, localAppData);
+            Assert.True(protection.EnsureInstalled());
+            Assert.True(protection.IsInstalled);
+            Assert.True(File.Exists(protection.HookCmdPath));
+
+            var hooksJson = File.ReadAllText(protection.HooksPath);
+            Assert.DoesNotContain("\\\"", hooksJson, StringComparison.Ordinal);
+
+            var rootNode = System.Text.Json.Nodes.JsonNode.Parse(hooksJson)!.AsObject();
+            var cmd = rootNode["axiom-guard"]!["PreToolUse"]![0]!["hooks"]![0]!["command"]!.GetValue<string>();
+            Assert.DoesNotContain("\"", cmd, StringComparison.Ordinal);
+            Assert.Contains("axiom-antigravity-hook.cmd", cmd, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Jane^ ^(Work^)^ ^&^ Co", cmd, StringComparison.Ordinal);
+
+            var cmdBytes = File.ReadAllBytes(protection.HookCmdPath);
+            Assert.False(cmdBytes.Length >= 3 && cmdBytes[0] == 0xEF && cmdBytes[1] == 0xBB && cmdBytes[2] == 0xBF);
+            var cmdText = File.ReadAllText(protection.HookCmdPath);
+            Assert.Contains("\"%~dp0venv\\Scripts\\python.exe\" \"%~dp0axiom-antigravity-hook.py\" %*", cmdText, StringComparison.Ordinal);
+
+            // Simulate a legacy unquoted space-broken hooks.json entry; IsInstalled must report false and repair cleanly.
+            rootNode["axiom-guard"]!["PreToolUse"]![0]!["hooks"]![0]!["command"] = $"{pythonExe} {protection.HookScriptPath}";
+            File.WriteAllText(protection.HooksPath, rootNode.ToJsonString(), new UTF8Encoding(false));
+            Assert.False(protection.IsInstalled);
+            Assert.True(protection.EnsureInstalled());
+            Assert.True(protection.IsInstalled);
+
+            protection.Remove();
+            Assert.False(File.Exists(protection.HookScriptPath));
+            Assert.False(File.Exists(protection.HookCmdPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void Agent_evidence_store_expands_tail_window_for_records_exceeding_512_bytes()
     {
         var path = Path.Combine(Path.GetTempPath(), $"axiom-evidence-{Guid.NewGuid():N}.jsonl");

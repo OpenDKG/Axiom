@@ -416,6 +416,27 @@ public sealed class PrivacyShieldTests
         }
     }
 
+    [Fact]
+    public void Dns_failsafe_prefers_ipv4_gateway_or_dhcp_when_saved_backup_is_loopback_or_ipv6_site_local()
+    {
+        var candidates = PrivacyDnsFailSafe.BuildFallbackCandidates(
+            savedAddresses: ["127.0.0.1", "fec0:0:0:ffff::1"],
+            currentAddresses: ["127.0.0.1", "::1"],
+            gatewayAndDhcpAddresses: ["192.168.1.1"]);
+
+        Assert.Contains("192.168.1.1", candidates);
+        Assert.DoesNotContain("127.0.0.1", candidates);
+        Assert.DoesNotContain("::1", candidates);
+    }
+
+    [Fact]
+    public void Dns_failsafe_identifies_virtual_interfaces()
+    {
+        Assert.True(PrivacyDnsFailSafe.IsVirtualInterface("vEthernet (Default Switch)", "Hyper-V Virtual Ethernet Adapter"));
+        Assert.True(PrivacyDnsFailSafe.IsVirtualInterface("vEthernet (WSL)", "Hyper-V Virtual Ethernet Adapter"));
+        Assert.False(PrivacyDnsFailSafe.IsVirtualInterface("Wi-Fi", "Intel(R) Wi-Fi 6E AX211 160MHz"));
+    }
+
     private static PrivacyShieldSettings EnabledSettings(int port) => new()
     {
         Enabled = true,

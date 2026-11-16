@@ -1,0 +1,204 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Axiom.UI.Avalonia.Controls"
+             x:Class="Axiom.UI.Avalonia.Views.SimpleHomeView">
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="26,18,26,26" Spacing="14">
+
+      <!-- Hero overall status card -->
+      <Border Classes="card" Padding="20">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="18">
+          <StackPanel Grid.Column="0" Spacing="6">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="5" Padding="9,3" VerticalAlignment="Center">
+                <controls:AxiomSelectableTextBlock Text="{Binding HeroBadgeText}"
+                                                   Foreground="{DynamicResource Axiom.Accent}"
+                                                   FontSize="10" FontWeight="Bold" />
+              </Border>
+              <controls:AxiomSelectableTextBlock Text="Simple Mode"
+                                                 Foreground="{DynamicResource Axiom.TextMuted}"
+                                                 FontSize="11" VerticalAlignment="Center" />
+            </StackPanel>
+            <controls:AxiomSelectableTextBlock Text="{Binding HeroHeadlineText}"
+                                               FontSize="20" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <controls:AxiomSelectableTextBlock Text="{Binding HeroSummaryText}"
+                                               FontSize="12" Foreground="{DynamicResource Axiom.TextSecondary}"
+                                               TextWrapping="Wrap" MaxWidth="680" HorizontalAlignment="Left" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
+            <Button Content="{Binding ShieldButtonText}" Command="{Binding ToggleShieldCommand}"
+                    Classes="primary" Padding="18,8" FontSize="12.5" HorizontalAlignment="Stretch" />
+            <Button Content="Switch to Advanced view" Command="{Binding SwitchToAdvancedCommand}"
+                    Padding="14,5" FontSize="11" HorizontalAlignment="Stretch" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- Three clean summary cards -->
+      <Grid ColumnDefinitions="*,14,*,14,*">
+        <Border Grid.Column="0" Classes="card" Padding="16">
+          <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="2">
+                <controls:AxiomSelectableTextBlock Text="FIREWALL SHIELD" Classes="kpi-label" />
+                <controls:AxiomSelectableTextBlock Text="{Binding Firewall.ShieldBadgeText}"
+                                                   FontSize="20" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Axiom.TextPrimary}" />
+              </StackPanel>
+              <Border Grid.Column="1" Width="3" Height="28" CornerRadius="1.5"
+                      Background="{DynamicResource Axiom.Accent}" VerticalAlignment="Top" />
+            </Grid>
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Text="{Binding FirewallStatusText}"
+                                               FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}"
+                                               TextWrapping="Wrap" />
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+              <Button Content="Open Firewall" Command="{Binding OpenFirewallCommand}" Padding="12,5" FontSize="11" />
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <Border Grid.Column="2" Classes="card" Padding="16">
+          <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="2">
+                <controls:AxiomSelectableTextBlock Text="AD &amp; TRACKER BLOCKER" Classes="kpi-label" />
+                <controls:AxiomSelectableTextBlock Text="{Binding PrivacyShield.StatusBadge}"
+                                                   FontSize="20" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Axiom.TextPrimary}" />
+              </StackPanel>
+              <Border Grid.Column="1" Width="3" Height="28" CornerRadius="1.5"
+                      Background="{DynamicResource Axiom.Success}" VerticalAlignment="Top" />
+            </Grid>
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Text="{Binding PrivacyStatusText}"
+                                               FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}"
+                                               TextWrapping="Wrap" />
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+              <Button Content="{Binding PrivacyActionText}" Command="{Binding TogglePrivacyCommand}"
+                      IsEnabled="{Binding CanTogglePrivacy}" Classes="primary" Padding="12,5" FontSize="11" />
+              <Button Content="Details" Command="{Binding OpenPrivacyCommand}" Padding="12,5" FontSize="11" />
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <Border Grid.Column="4" Classes="card" Padding="16">
+          <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="2">
+                <controls:AxiomSelectableTextBlock Text="INTERNET ACTIVITY" Classes="kpi-label" />
+                <controls:AxiomSelectableTextBlock Text="{Binding Overview.DownloadText}"
+                                                   FontSize="20" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Axiom.TextPrimary}" />
+              </StackPanel>
+              <Border Grid.Column="1" Width="3" Height="28" CornerRadius="1.5"
+                      Background="{DynamicResource Axiom.Download}" VerticalAlignment="Top" />
+            </Grid>
+            <StackPanel Grid.Row="1" Spacing="3">
+              <controls:AxiomSelectableTextBlock Text="{Binding Overview.UploadText, StringFormat=Upload: {0}}"
+                                                 FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
+              <controls:AxiomSelectableTextBlock Text="{Binding Overview.ProcessesText, StringFormat={}{0} apps online}"
+                                                 FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+            </StackPanel>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+              <Button Content="Full Network Monitor" Command="{Binding OpenNetworkAdvancedCommand}" Padding="12,5" FontSize="11" />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
+
+      <!-- Pending outbound app approvals (shown only when apps are waiting) -->
+      <Border Classes="card" Padding="16" IsVisible="{Binding Firewall.HasPending}">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="2">
+              <controls:AxiomSelectableTextBlock Text="Apps waiting for permission" Classes="section-title" />
+              <controls:AxiomSelectableTextBlock Text="Choose Allow or Block for new applications trying to access the internet."
+                                                 FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+            </StackPanel>
+            <Border Grid.Column="1" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="5" Padding="8,3" VerticalAlignment="Center">
+              <controls:AxiomSelectableTextBlock Text="{Binding Firewall.PendingCount, StringFormat={}{0} waiting}"
+                                                 FontSize="10.5" FontWeight="SemiBold"
+                                                 Foreground="{DynamicResource Axiom.Accent}" />
+            </Border>
+          </Grid>
+
+          <ItemsControl ItemsSource="{Binding Firewall.Pending}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Padding="10,8" Margin="0,2" CornerRadius="6"
+                        Background="{DynamicResource Axiom.SurfaceAlt}"
+                        BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1">
+                  <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                      <controls:AxiomSelectableTextBlock Text="{Binding AppName}" FontSize="13" FontWeight="SemiBold"
+                                                         Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                      <controls:AxiomSelectableTextBlock Text="{Binding RemoteText}" FontSize="11"
+                                                         Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Block" Classes="danger" Padding="14,5" VerticalAlignment="Center"
+                            Command="{Binding $parent[ItemsControl].DataContext.Firewall.BlockPendingCommand}"
+                            CommandParameter="{Binding}" />
+                    <Button Grid.Column="2" Content="Allow" Classes="primary" Padding="14,5" VerticalAlignment="Center"
+                            Command="{Binding $parent[ItemsControl].DataContext.Firewall.AllowPendingCommand}"
+                            CommandParameter="{Binding}" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!-- Apps currently online -->
+      <Border Classes="card" Padding="16">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="2">
+              <controls:AxiomSelectableTextBlock Text="Apps using the internet right now" Classes="section-title" />
+              <controls:AxiomSelectableTextBlock Text="{Binding AiGuardSummaryText}"
+                                                 FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+            </StackPanel>
+            <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Overview.ProcessesText, StringFormat={}{0} active}"
+                                               FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+          </Grid>
+
+          <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding TopApps}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Padding="10,8" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
+                      <Border Grid.Column="0" Width="30" Height="30" CornerRadius="6"
+                              Background="{DynamicResource Axiom.AccentSoft}">
+                        <TextBlock Text="{Binding Initial}" FontSize="12" FontWeight="Bold"
+                                   Foreground="{DynamicResource Axiom.Accent}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                      </Border>
+                      <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                        <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                        <controls:AxiomSelectableTextBlock Text="{Binding PathText}" FontSize="10.5"
+                                                           Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding SocketsText}"
+                                                         FontSize="11.5" Foreground="{DynamicResource Axiom.TextSecondary}"
+                                                         VerticalAlignment="Center" />
+                      <Button Grid.Column="3" Content="Block" Classes="danger" Padding="12,4" FontSize="11"
+                              Command="{Binding $parent[ItemsControl].DataContext.Overview.BlockTopAppOutboundCommand}"
+                              CommandParameter="{Binding}" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+
+          <TextBlock Text="No apps are currently opening network connections."
+                     IsVisible="{Binding !HasOnlineApps}"
+                     FontSize="12" Foreground="{DynamicResource Axiom.TextMuted}"
+                     HorizontalAlignment="Center" Margin="0,12" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -289,4 +289,218 @@ public sealed class VerifiedGraphPeerRelayTests
         Assert.Equal("cdn-threat.example", loaded.Graph.Threats[0].Identifier);
         Assert.Equal($"http://127.0.0.1:{port}", loaded.PeerEndpoint);
     }
+
+    [Fact]
+    public void TierA_SnapshotFreshnessWindow_AcceptsSixDayOldCuratorSnapshot_AndRejectsFutureOrExpired()
+    {
+        using var curatorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var pinnedKey = Convert.ToBase64String(curatorKey.ExportSubjectPublicKeyInfo());
+        var now = DateTimeOffset.UtcNow;
+
+        var sixDaysOld = VerifiedGraphPeerRelay.CreateSignedEnvelope(
+            SampleSync(300),
+            SamplePage(),
+            curatorKey,
+            pinnedKey,
+            now.AddDays(-6),
+            sequenceNumber: 1)!;
+
+        // Tier (b) LAN rejects 6-day-old snapshot (> 15 min window), while Tier (a) accepts within 7 days.
+        Assert.Null(VerifiedGraphPeerRelay.TryVerifyAndSanitize(sixDaysOld, now, pinnedKey));
+        var tierASnapshot = VerifiedGraphPeerRelay.TryVerifyAndSanitize(
+            sixDaysOld,
+            now,
+            pinnedKey,
+            maxAge: VerifiedGraphPeerRelay.SnapshotFreshnessWindow);
+        Assert.NotNull(tierASnapshot);
+
+        // Expired (> 7 days) or future-dated (> 15 min) curator snapshots must still fail closed.
+        var eightDaysOld = VerifiedGraphPeerRelay.CreateSignedEnvelope(
+            SampleSync(300),
+            SamplePage(),
+            curatorKey,
+            pinnedKey,
+            now.AddDays(-8),
+            sequenceNumber: 2)!;
+        Assert.Null(VerifiedGraphPeerRelay.TryVerifyAndSanitize(
+            eightDaysOld,
+            now,
+            pinnedKey,
+            maxAge: VerifiedGraphPeerRelay.SnapshotFreshnessWindow));
+
+        var farFuture = VerifiedGraphPeerRelay.CreateSignedEnvelope(
+            SampleSync(300),
+            SamplePage(),
+            curatorKey,
+            pinnedKey,
+            now.AddHours(1),
+            sequenceNumber: 3)!;
+        Assert.Null(VerifiedGraphPeerRelay.TryVerifyAndSanitize(
+            farFuture,
+            now,
+            pinnedKey,
+            maxAge: VerifiedGraphPeerRelay.SnapshotFreshnessWindow));
+    }
+
+    [Fact]
+    public void TierA_SnapshotOnlyConfig_DoesNotEnablePeerRelayOrOpenListeners()
+    {
+        using var curatorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var pinnedKey = Convert.ToBase64String(curatorKey.ExportSubjectPublicKeyInfo());
+
+        using var relay = new VerifiedGraphPeerRelay(
+            pinnedPublicKeyDerBase64: pinnedKey,
+            snapshotEndpointOverride: new Uri(VerifiedGraphPeerRelay.DefaultSnapshotUrl));
+
+        Assert.True(relay.IsEnabled);
+        Assert.True(relay.IsSnapshotBootstrapEnabled);
+        Assert.False(relay.IsPeerRelayEnabled);
+        Assert.False(relay.PublishInMemory(SampleSync(100), SamplePage()));
+        Assert.Equal(0, relay.ListeningPort);
+    }
+
+    [Fact]
+    public void RedirectPolicy_AllowsHttpsToHttps_AndRejectsDowngradeUserInfoOrPrivateIps()
+    {
+        var initialHttps = new Uri(VerifiedGraphPeerRelay.DefaultSnapshotUrl);
+
+        Assert.True(VerifiedGraphPeerRelay.IsAllowedRedirectTarget(
+            initialHttps,
+            new Uri("https://objects.githubusercontent.com/github-production-release-asset/12345")));
+        Assert.False(VerifiedGraphPeerRelay.IsAllowedRedirectTarget(
+            initialHttps,
+            new Uri("http://objects.githubusercontent.com/insecure")));
+        Assert.False(VerifiedGraphPeerRelay.IsAllowedRedirectTarget(
+            initialHttps,
+            new Uri("https://127.0.0.1:9700/status")));
+        Assert.False(VerifiedGraphPeerRelay.IsAllowedRedirectTarget(
+            initialHttps,
+            new Uri("https://localhost/internal")));
+        Assert.False(VerifiedGraphPeerRelay.IsAllowedRedirectTarget(
+            initialHttps,
+            new Uri("https://169.254.10.20/internal")));
+        Assert.False(VerifiedGraphPeerRelay.IsAllowedRedirectTarget(
+            initialHttps,
+            new Uri("https://192.168.1.10/admin")));
+        Assert.False(VerifiedGraphPeerRelay.IsAllowedRedirectTarget(
+            initialHttps,
+            new Uri("https://user:pass@cdn.example/snapshot.json")));
+    }
+
+    [Fact]
+    public async Task SnapshotEndpoint_FollowsSafeLoopbackRedirect_AndCachesVerifiedSnapshotInRam()
+    {
+        using var curatorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var pinnedKey = Convert.ToBase64String(curatorKey.ExportSubjectPublicKeyInfo());
+        var now = DateTimeOffset.UtcNow;
+
+        var signedEnvelope = VerifiedGraphPeerRelay.CreateSignedEnvelope(
+            SampleSync(310),
+            SamplePage("release-asset.example", "ioc"),
+            curatorKey,
+            pinnedKey,
+            now.AddHours(-12),
+            sequenceNumber: 12)!;
+        var bodyBytes = VerifiedGraphPeerRelay.WriteEnvelopeUtf8(signedEnvelope);
+
+        using var targetServer = new TcpListener(IPAddress.Loopback, 0);
+        targetServer.Start();
+        var targetPort = ((IPEndPoint)targetServer.LocalEndpoint).Port;
+
+        using var redirectServer = new TcpListener(IPAddress.Loopback, 0);
+        redirectServer.Start();
+        var redirectPort = ((IPEndPoint)redirectServer.LocalEndpoint).Port;
+
+        var httpHits = 0;
+        var redirectTask = Task.Run(async () =>
+        {
+            using var client = await redirectServer.AcceptTcpClientAsync();
+            Interlocked.Increment(ref httpHits);
+            using var stream = client.GetStream();
+            _ = await stream.ReadAsync(new byte[1024]);
+            var response = Encoding.ASCII.GetBytes(
+                $"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{targetPort}/cdn/verified-graph-snapshot.json\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(response);
+            await stream.FlushAsync();
+        });
+
+        var targetTask = Task.Run(async () =>
+        {
+            using var client = await targetServer.AcceptTcpClientAsync();
+            using var stream = client.GetStream();
+            _ = await stream.ReadAsync(new byte[1024]);
+            var headers = Encoding.ASCII.GetBytes(
+                $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {bodyBytes.Length}\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(headers);
+            await stream.WriteAsync(bodyBytes);
+            await stream.FlushAsync();
+        });
+
+        using var relay = new VerifiedGraphPeerRelay(
+            pinnedPublicKeyDerBase64: pinnedKey,
+            clientVersion: new Version(0, 54, 0),
+            snapshotEndpointOverride: new Uri($"http://127.0.0.1:{redirectPort}/releases/download/verified-graph-latest/verified-graph-snapshot.json"));
+
+        var first = await relay.TryFetchFromPeersAsync(currentLocalRules: 0, CancellationToken.None);
+        await Task.WhenAll(redirectTask, targetTask);
+
+        // Second call hits RAM cache cleanly without making another HTTP request.
+        var second = await relay.TryFetchFromPeersAsync(currentLocalRules: 0, CancellationToken.None);
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.Equal(310, first.Sync.VerifiedRules);
+        Assert.Equal(12, first.SequenceNumber);
+        Assert.Equal(1, Volatile.Read(ref httpHits));
+        Assert.Equal("release-asset.example", second.Graph.Threats[0].Identifier);
+
+        // Once local DKG exceeds snapshot rules, peer relay defers cleanly to local DKG.
+        Assert.Null(await relay.TryFetchFromPeersAsync(currentLocalRules: 500, CancellationToken.None));
+    }
+
+    [Fact]
+    public void RealBlackboxFormats_DependencyWildcardsInjectionAndSkillIds_AreAccepted()
+    {
+        using var curatorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var pinnedKey = Convert.ToBase64String(curatorKey.ExportSubjectPublicKeyInfo());
+        var now = DateTimeOffset.UtcNow;
+
+        var page = new BlackboxGraphPage(
+            [
+                new BlackboxGraphThreat("injection:0250b88aa25cd7f84ac8735a", "Instruction override", "injection", "high", string.Empty, "public"),
+                new BlackboxGraphThreat("skill:0a0f825ecd735dec32e0589e", "Unrestricted shell-execution MCP", "skill", "critical", string.Empty, "public"),
+                new BlackboxGraphThreat("dep:npm:@zalastax/nolb-react-rk@*", "Malicious code in @zalastax/nolb-react-rk (npm)", "dependency", "high", "npm", "public"),
+                new BlackboxGraphThreat("dep:pypi:mcgrand@*", "Malicious code in mcgrand (PyPI)", "dependency", "medium", "pypi", "public"),
+            ],
+            1306960,
+            Partial: true)
+        {
+            CategoryTotals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["injection"] = 103,
+                ["skill"] = 32,
+                ["dependency"] = 252860,
+                ["ioc"] = 1053965,
+            },
+        };
+
+        var envelope = VerifiedGraphPeerRelay.CreateSignedEnvelope(
+            SampleSync(1306960),
+            page,
+            curatorKey,
+            pinnedKey,
+            now,
+            sequenceNumber: 1,
+            minClientVersion: "0.54.0");
+
+        Assert.NotNull(envelope);
+        var verified = VerifiedGraphPeerRelay.TryVerifyAndSanitize(
+            envelope,
+            now,
+            pinnedKey,
+            maxAge: VerifiedGraphPeerRelay.SnapshotFreshnessWindow);
+        Assert.NotNull(verified);
+        Assert.Equal(4, verified.Graph.Threats.Count);
+        Assert.Equal("dep:npm:@zalastax/nolb-react-rk@*", verified.Graph.Threats[2].Identifier);
+    }
 }

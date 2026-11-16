@@ -101,8 +101,8 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Keeps the glass surface translucent only when a native backdrop is really composited. Without
-    /// one, the same theme falls back to an opaque graphite/pearl base so the desktop does not show
-    /// through unblurred.
+    /// one, the same theme falls back to an opaque graphite/quartz gradient so the desktop does not
+    /// show through unblurred while preserving dimensional lighting.
     /// </summary>
     private void UpdateBackdropTint(bool glass)
     {
@@ -112,10 +112,29 @@ public partial class MainWindow : Window
             return;
         }
 
-        var fallback = IsGlassLight()
-            ? Color.Parse("#F4F7FA")
-            : Color.Parse("#090C12");
-        Resources[WindowBrushKey] = new SolidColorBrush(fallback);
+        Resources[WindowBrushKey] = IsGlassLight()
+            ? new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.Parse("#EDF2F8"), 0),
+                    new GradientStop(Color.Parse("#E3E9F2"), 0.55),
+                    new GradientStop(Color.Parse("#D6DFE9"), 1)
+                }
+            }
+            : new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.Parse("#06080D"), 0),
+                    new GradientStop(Color.Parse("#0B0F17"), 0.55),
+                    new GradientStop(Color.Parse("#04060A"), 1)
+                }
+            };
     }
 
     private void ReportBackdrop(bool glass)
@@ -156,7 +175,9 @@ public partial class MainWindow : Window
 
         // Selectable text handles the pointer before the row does. Keep row selection working when
         // the user left-clicks or right-clicks text inside a ListBox item.
-        SelectContainingListItem(e.Source as Visual);
+        Controls.DataListSelection.SelectContainingListItem(
+            e.Source as Visual,
+            focusItem: true);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -197,8 +218,23 @@ public partial class MainWindow : Window
     private void OnMinimizeClicked(object? sender, RoutedEventArgs e) =>
         WindowState = WindowState.Minimized;
 
-    private void OnAlertsClicked(object? sender, RoutedEventArgs e) =>
+    private void OnUpdateClicked(object? sender, RoutedEventArgs e)
+    {
+        AlertsPopup.IsOpen = false;
+        UpdatePopup.IsOpen = !UpdatePopup.IsOpen;
+    }
+
+    private void OnUpdateDownloadClicked(object? sender, RoutedEventArgs e) =>
+        UpdatePopup.IsOpen = false;
+
+    private void OnUpdateDismissClicked(object? sender, RoutedEventArgs e) =>
+        UpdatePopup.IsOpen = false;
+
+    private void OnAlertsClicked(object? sender, RoutedEventArgs e)
+    {
+        UpdatePopup.IsOpen = false;
         AlertsPopup.IsOpen = !AlertsPopup.IsOpen;
+    }
 
     private void OnAlertItemClicked(object? sender, RoutedEventArgs e)
     {
@@ -230,19 +266,5 @@ public partial class MainWindow : Window
         ToolTip.SetTip(
             MaximizeButton,
             WindowState == WindowState.Maximized ? "Restore" : "Maximize");
-    }
-
-    private static void SelectContainingListItem(Visual? visual)
-    {
-        while (visual is not null)
-        {
-            if (visual is ListBoxItem item && item.GetVisualParent() is ListBox list)
-            {
-                list.SelectedItem = item.DataContext;
-                return;
-            }
-
-            visual = visual.GetVisualParent();
-        }
     }
 }

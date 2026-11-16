@@ -41,3 +41,28 @@ public sealed class WindowsThemeService : IThemeService
         _ => ThemeVariant.Dark,
     };
 }
+
+/// <summary>Persists and broadcasts the user's Simple / Advanced shell mode preference.</summary>
+public sealed class WindowsUiModeService : IUiModeService
+{
+    public WindowsUiModeService()
+    {
+        Current = UiModeSettingsStore.Load();
+    }
+
+    public UiMode Current { get; private set; }
+
+    public event EventHandler? Changed;
+
+    public void Apply(UiMode mode)
+    {
+        if (Current == mode)
+        {
+            return;
+        }
+
+        Current = mode;
+        UiModeSettingsStore.Save(mode);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+}

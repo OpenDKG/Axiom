@@ -7,10 +7,11 @@ using System.Text.Json.Nodes;
 namespace Axiom.Presentation;
 
 /// <summary>
-/// Prepares the Axiom lifecycle hook file for DeepSeek Harness (DSH) and mounts DeepSeek's
-/// Claude Code hook bridge in the user-level <c>cordis.patch.yml</c>. DSH does not read a
-/// hooks.json by itself, so the bridge package must be installed for the hook file to run. Axiom
-/// never claims DSH is protected until both pieces are present.
+/// Prepares the Axiom lifecycle hook file for DeepSeek Harness (DSH, <c>dsh</c> / <c>~/.dsh</c>)
+/// and mounts DeepSeek's Claude Code hook bridge in the user-level <c>cordis.patch.yml</c>. DSH
+/// does not read a hooks.json by itself, so the bridge package must be installed for the hook file
+/// to run. Axiom never claims DSH is protected until both pieces are present, and skips plain
+/// <c>deepseek-cli</c> installs that expose no lifecycle hook surface.
 /// </summary>
 public sealed class DeepSeekProtection
 {

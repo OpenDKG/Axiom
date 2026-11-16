@@ -67,12 +67,12 @@ public static class PrivacyShieldProvisioner
     {
         try
         {
-            var client = new IpcPipeClient();
+            var client = new IpcPipeClient(requestTimeout: TimeSpan.FromSeconds(60));
             await client.SendAsync<PrivacyShieldStatus>(
                 IpcCommandTypes.PrivacyConfigure,
                 CompleteProfileSettings(),
                 cancellationToken).ConfigureAwait(false);
-            var updateClient = new IpcPipeClient(requestTimeout: TimeSpan.FromMinutes(3));
+            var updateClient = new IpcPipeClient(requestTimeout: TimeSpan.FromMinutes(5));
             await updateClient.SendAsync<PrivacyShieldStatus>(
                 IpcCommandTypes.PrivacySourcesUpdate,
                 new { },

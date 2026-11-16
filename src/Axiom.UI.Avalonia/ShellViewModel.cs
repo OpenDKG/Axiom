@@ -24,7 +24,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly IServiceRequestClient? _serviceClient;
     private readonly IUserInteraction _ui;
     private readonly IThemeService _theme;
+    private readonly IUiModeService _uiMode;
     private readonly IVisualEffectsService _visualEffects;
+    private readonly UpdateCheckService _updateChecker;
+    private readonly bool _ownsUpdateChecker;
+    private readonly IUiTimer _updateTimer;
     private readonly CancellationTokenSource _cancellation = new();
     private DateTimeOffset _lastProbeUtc = DateTimeOffset.MinValue;
     private DateTimeOffset _lastProtectionProbeUtc = DateTimeOffset.MinValue;
@@ -51,7 +55,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         IAgentSessionSource? agentSessions = null,
         IVisualEffectsService? visualEffects = null,
         Func<CancellationToken, Task<NetworkRecoveryRestoreResult>>? restoreNetwork = null,
-        ILoopbackListenerInspector? listenerInspector = null)
+        ILoopbackListenerInspector? listenerInspector = null,
+        UpdateCheckService? updateChecker = null,
+        IUiModeService? uiModeService = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(timers);
@@ -63,14 +69,21 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         var interaction = userInteraction ?? new NullUserInteraction();
         _ui = interaction;
         _theme = themeService ?? new FixedThemeService();
+        _uiMode = uiModeService ?? new FixedUiModeService();
         _visualEffects = visualEffects ?? new FixedVisualEffectsService();
+        _ownsUpdateChecker = updateChecker is null;
+        _updateChecker = updateChecker ?? new UpdateCheckService(
+            typeof(ShellViewModel).Assembly.GetName().Version ?? new Version(0, 0, 0));
+        _updateTimer = timers.Create(UpdateCheckService.MinimumCheckInterval);
         var processes = processActions ?? new UnsupportedProcessActions();
-        Overview = new OverviewPageViewModel(
-            _monitor,
-            _traffic,
-            interaction,
+        PrivacyShield = new PrivacyShieldPageViewModel(
             IsServiceMode ? serviceClient : null,
-            processes);
+            interaction,
+            dnsAdapterHelper ?? new UnsupportedDnsAdapterHelper(),
+            timers);
+        PrivacyOverview = new PrivacyOverviewPageViewModel(
+            PrivacyShield,
+            openSettings: () => SelectedPage = PrivacyShield);
         Connections = new ConnectionsPageViewModel(
             _monitor,
             interaction,
@@ -86,12 +99,20 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             timers,
             interaction,
             processes);
-        Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction, _monitor);
-        PrivacyShield = new PrivacyShieldPageViewModel(
-            IsServiceMode ? serviceClient : null,
+        Overview = new OverviewPageViewModel(
+            _monitor,
+            _traffic,
             interaction,
-            dnsAdapterHelper ?? new UnsupportedDnsAdapterHelper(),
-            timers);
+            IsServiceMode ? serviceClient : null,
+            processes,
+            PrivacyShield,
+            openPrivacyOverview: () => SelectedPage = PrivacyOverview,
+            openPrivacySettings: () => SelectedPage = PrivacyShield,
+            connectionsTab: Connections,
+            appsTab: Apps,
+            eventsTab: Events,
+            timers: timers);
+        Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction, _monitor);
         // Review #25: the Overview line follows the same state as the "SHIELD ON" badge.
         Overview.ProtectionState = () => new OverviewProtectionState(
             FirewallWritesEnabled: Firewall.WritesEnabled,
@@ -128,41 +149,50 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             Firewall,
             interaction,
             _visualEffects,
-            restoreNetwork);
+            restoreNetwork,
+            _updateChecker);
         AgentStats = new AgentStatsPageViewModel(Agents);
         AgentDashboard = new AgentDashboardPageViewModel(Agents);
         AgentHealth = new AgentHealthPageViewModel(Agents, Security);
+        SimpleHome = new SimpleHomePageViewModel(
+            Overview,
+            Firewall,
+            PrivacyShield,
+            Agents,
+            openFirewall: () => SelectedPage = Firewall,
+            openPrivacyOverview: () => SelectedPage = PrivacyOverview,
+            openNetworkAdvanced: () =>
+            {
+                _uiMode.Apply(UiMode.Advanced);
+                SelectedPage = Overview;
+            },
+            switchToAdvanced: () => _uiMode.Apply(UiMode.Advanced));
         Pages =
         [
             AgentDashboard,
             Overview,
-            Connections,
-            Apps,
-            Events,
+            PrivacyOverview,
             Agents,
             AgentStats,
             AgentHealth,
+            AiAnalyst,
             Firewall,
             PrivacyShield,
-            AiAnalyst,
             Security,
             Settings,
             Support,
         ];
 
-        // Navigation groups follow the UI terminology audit; only the first page of a group
-        // carries the header so the nav list keeps one selection model.
-        AgentDashboard.GroupLabel = "OVERVIEW";
-        Connections.GroupLabel = "MONITORING";
-        Agents.GroupLabel = "PROTECTION";
-        AiAnalyst.GroupLabel = "INTELLIGENCE";
-        Settings.GroupLabel = "GENERAL";
-        _selectedPage = AgentDashboard;
-        _activePage = AgentDashboard;
+        ApplyNavigationMode(_uiMode.Current, initialSetup: true);
+        _selectedPage = NavigationPages[0];
+        _activePage = NavigationPages[0];
         _selectedTheme = ThemeLabel(_theme.Current);
         _theme.Changed += OnThemeChanged;
+        _uiMode.Changed += OnUiModeChanged;
         _monitor.Updated += OnMonitorUpdated;
         AlertCenter.Changed += OnAlertCenterChanged;
+        _updateChecker.Changed += OnUpdateCheckerChanged;
+        _updateTimer.Tick += OnUpdateTimerTick;
     }
 
     public IReadOnlyList<string> Themes { get; } =
@@ -199,11 +229,41 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private async Task OpenGitHubAsync()
+    private Task OpenGitHubAsync() =>
+        OpenExternalUrlAsync("https://github.com/a-51-50/Axiom");
+
+    [RelayCommand]
+    private Task OpenContactAsync() =>
+        OpenExternalUrlAsync("mailto:contact@opendkg.org");
+
+    [RelayCommand]
+    private void OpenSupport() => SelectedPage = Support;
+
+    public bool UpdateAvailable => _updateChecker.IsUpdateAvailable;
+
+    public string LatestVersion => _updateChecker.LatestVersion;
+
+    public string UpdateTooltip => UpdateAvailable
+        ? $"Axiom {LatestVersion} is available"
+        : string.Empty;
+
+    public string UpdateReleaseDateText => _updateChecker.ReleaseDateText;
+
+    public string UpdateSummaryText => _updateChecker.SummaryText;
+
+    public bool HasUpdateReleaseDate => !string.IsNullOrWhiteSpace(UpdateReleaseDateText);
+
+    public bool HasUpdateSummary => !string.IsNullOrWhiteSpace(UpdateSummaryText);
+
+    [RelayCommand]
+    private Task OpenUpdateAsync() =>
+        OpenExternalUrlAsync(_updateChecker.ReleaseUrl);
+
+    private async Task OpenExternalUrlAsync(string url)
     {
         try
         {
-            await _ui.OpenExternalAsync("https://github.com/a-51-50/Axiom", CancellationToken.None)
+            await _ui.OpenExternalAsync(url, CancellationToken.None)
                 .ConfigureAwait(true);
         }
         catch (Exception exception) when (exception is
@@ -214,7 +274,97 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void OpenSupport() => SelectedPage = Support;
+    private void DismissUpdate() => _updateChecker.Dismiss();
+
+    /// <summary>Runs a silent update check if opted in and the 6-hour cooldown has elapsed.</summary>
+    public Task<bool> CheckForUpdatesAsync() =>
+        _updateChecker.CheckIfDueAsync(_cancellation.Token);
+
+    private void OnUpdateTimerTick(object? sender, EventArgs e) =>
+        _ = CheckForUpdatesAsync();
+
+    private void OnUpdateCheckerChanged(object? sender, EventArgs e)
+    {
+        if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            RaiseUpdatePropertiesChanged();
+        }
+        else
+        {
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(RaiseUpdatePropertiesChanged);
+        }
+    }
+
+    private void RaiseUpdatePropertiesChanged()
+    {
+        OnPropertyChanged(nameof(UpdateAvailable));
+        OnPropertyChanged(nameof(LatestVersion));
+        OnPropertyChanged(nameof(UpdateTooltip));
+        OnPropertyChanged(nameof(UpdateReleaseDateText));
+        OnPropertyChanged(nameof(UpdateSummaryText));
+        OnPropertyChanged(nameof(HasUpdateReleaseDate));
+        OnPropertyChanged(nameof(HasUpdateSummary));
+    }
+
+    public UiMode CurrentUiMode => _uiMode.Current;
+
+    public bool IsSimpleMode => _uiMode.Current == UiMode.Simple;
+
+    public bool IsAdvancedMode => _uiMode.Current == UiMode.Advanced;
+
+    [RelayCommand]
+    private void SwitchToSimpleMode() => _uiMode.Apply(UiMode.Simple);
+
+    [RelayCommand]
+    private void SwitchToAdvancedMode() => _uiMode.Apply(UiMode.Advanced);
+
+    private void OnUiModeChanged(object? sender, EventArgs e)
+    {
+        ApplyNavigationMode(_uiMode.Current, initialSetup: false);
+        OnPropertyChanged(nameof(CurrentUiMode));
+        OnPropertyChanged(nameof(IsSimpleMode));
+        OnPropertyChanged(nameof(IsAdvancedMode));
+    }
+
+    private void ApplyNavigationMode(UiMode mode, bool initialSetup)
+    {
+        var previous = initialSetup ? null : SelectedPage;
+
+        foreach (var page in Pages)
+        {
+            page.GroupLabel = null;
+        }
+        SimpleHome.GroupLabel = null;
+
+        NavigationPages.Clear();
+        if (mode == UiMode.Simple)
+        {
+            SimpleHome.GroupLabel = "HOME";
+            Firewall.GroupLabel = "PROTECTION";
+            Settings.GroupLabel = "GENERAL";
+            NavigationPages.Add(SimpleHome);
+            NavigationPages.Add(Firewall);
+            NavigationPages.Add(PrivacyOverview);
+            NavigationPages.Add(Settings);
+            NavigationPages.Add(Support);
+        }
+        else
+        {
+            AgentDashboard.GroupLabel = "OVERVIEW";
+            Agents.GroupLabel = "AI";
+            Firewall.GroupLabel = "NETWORK & PRIVACY";
+            Settings.GroupLabel = "GENERAL";
+            foreach (var page in Pages)
+            {
+                NavigationPages.Add(page);
+            }
+        }
+
+        if (!initialSetup && (previous is null || !NavigationPages.Contains(previous)))
+        {
+            SelectedPage = NavigationPages[0];
+        }
+    }
 
     private void OnThemeChanged(object? sender, EventArgs e)
     {
@@ -235,9 +385,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _ => "Dark",
     };
 
+    public SimpleHomePageViewModel SimpleHome { get; }
+
     public AgentDashboardPageViewModel AgentDashboard { get; }
 
     public OverviewPageViewModel Overview { get; }
+
+    public PrivacyOverviewPageViewModel PrivacyOverview { get; }
 
     public ConnectionsPageViewModel Connections { get; }
 
@@ -264,6 +418,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public SettingsPageViewModel Settings { get; }
 
     public ObservableCollection<PageViewModel> Pages { get; }
+
+    public ObservableCollection<PageViewModel> NavigationPages { get; } = [];
 
     [ObservableProperty]
     private PageViewModel _selectedPage;
@@ -313,6 +469,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _monitor.Start();
         _traffic.Start();
         Overview.Refresh();
+        if (!ReferenceEquals(SimpleHome, SelectedPage))
+        {
+            (SimpleHome as IActivatablePage).Deactivate();
+        }
         foreach (var page in Pages)
         {
             if (!ReferenceEquals(page, SelectedPage))
@@ -324,16 +484,27 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _activePage = SelectedPage;
         (SelectedPage as IActivatablePage)?.Activate();
         RefreshStatus();
+        _updateTimer.Start();
         _ = ProbeServiceAsync(force: true);
+        _ = CheckForUpdatesAsync();
     }
 
     public void Dispose()
     {
+        _updateTimer.StopTimer();
+        _updateTimer.Tick -= OnUpdateTimerTick;
+        _updateChecker.Changed -= OnUpdateCheckerChanged;
         _monitor.Updated -= OnMonitorUpdated;
         _theme.Changed -= OnThemeChanged;
+        _uiMode.Changed -= OnUiModeChanged;
         AlertCenter.Changed -= OnAlertCenterChanged;
         _cancellation.Cancel();
         _cancellation.Dispose();
+        if (_ownsUpdateChecker)
+        {
+            _updateChecker.Dispose();
+        }
+        SimpleHome.Dispose();
         Overview.Dispose();
         Connections.Dispose();
         Apps.Dispose();
@@ -464,11 +635,46 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public void NavigateToPage(Type pageViewModelType, IReadOnlyList<string>? focusApps = null)
     {
         ArgumentNullException.ThrowIfNull(pageViewModelType);
+        if (pageViewModelType == typeof(SimpleHomePageViewModel))
+        {
+            SelectedPage = SimpleHome;
+            return;
+        }
+
+        if (pageViewModelType == typeof(ConnectionsPageViewModel))
+        {
+            _uiMode.Apply(UiMode.Advanced);
+            Overview.SelectedMonitoringTabIndex = 0;
+            SelectedPage = Overview;
+            return;
+        }
+
+        if (pageViewModelType == typeof(AppsPageViewModel))
+        {
+            _uiMode.Apply(UiMode.Advanced);
+            Overview.SelectedMonitoringTabIndex = 1;
+            SelectedPage = Overview;
+            return;
+        }
+
+        if (pageViewModelType == typeof(EventsPageViewModel))
+        {
+            _uiMode.Apply(UiMode.Advanced);
+            Overview.SelectedMonitoringTabIndex = 2;
+            SelectedPage = Overview;
+            return;
+        }
+
         foreach (var page in Pages)
         {
             if (!pageViewModelType.IsInstanceOfType(page))
             {
                 continue;
+            }
+
+            if (!NavigationPages.Contains(page))
+            {
+                _uiMode.Apply(UiMode.Advanced);
             }
 
             SelectedPage = page;
@@ -523,7 +729,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             ? OperatingSystem.IsWindows()
                 ? "Data source: local service · traffic not filtered"
                 : Firewall.Enforcement.IsEnforcementVerified
-                    ? $"Data source: local service · Axiom Shield on · blocks verified {Firewall.Enforcement.VerifiedAtText}"
+                    ? $"Data source: local service · Axiom Shield on · {Firewall.Enforcement.VerifiedStatusText}"
                     : "Data source: local service · Axiom Shield on · blocks not verified"
             : IsServiceMode
                 ? "Data source: local service (read-only)"

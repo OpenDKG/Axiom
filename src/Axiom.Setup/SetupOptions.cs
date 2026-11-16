@@ -9,7 +9,8 @@ public sealed record SetupOptions(
     bool StartAfterInstall,
     bool CompleteInstallation,
     bool Silent = false,
-    bool AcceptRisk = false)
+    bool AcceptRisk = false,
+    bool Uninstall = false)
 {
     public static SetupOptions Parse(string[] args)
     {
@@ -23,6 +24,7 @@ public sealed record SetupOptions(
         var completeInstallation = true;
         var silent = false;
         var acceptRisk = false;
+        var uninstall = false;
 
         for (var index = 0; index < args.Length; index++)
         {
@@ -47,6 +49,9 @@ public sealed record SetupOptions(
                 case "--accept-risk":
                     acceptRisk = true;
                     break;
+                case "--uninstall":
+                    uninstall = true;
+                    break;
             }
         }
 
@@ -56,6 +61,7 @@ public sealed record SetupOptions(
             startAfterInstall,
             completeInstallation,
             silent,
-            acceptRisk);
+            acceptRisk,
+            uninstall);
     }
 }

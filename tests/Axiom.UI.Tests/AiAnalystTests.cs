@@ -259,6 +259,55 @@ public sealed class AiAnalystTests
         }
     }
 
+    private static readonly string[] SampleObservations = ["Outbound beacon"];
+    private static readonly string[] SampleEvidenceRefs = ["conn-1"];
+    private static readonly string[] SampleRecommendedActions = ["Inspect manually"];
+
+    [Fact]
+    public async Task Client_parses_and_bounds_structured_indicators()
+    {
+        var indicators = Enumerable.Range(0, 14)
+            .Select(i => new { type = "DOMAIN", value = $"c2-{i}.example.test", role = "malicious" })
+            .ToArray();
+        var structuredJson = JsonSerializer.Serialize(new
+        {
+            status = "SUSPICIOUS",
+            severity = "high",
+            confidence = "medium",
+            summary = "Bounded indicator parity test.",
+            observations = SampleObservations,
+            evidenceReferences = SampleEvidenceRefs,
+            alternativeExplanations = Array.Empty<string>(),
+            missingEvidence = Array.Empty<string>(),
+            recommendedActions = SampleRecommendedActions,
+            indicators,
+        });
+        var chatResponse = JsonSerializer.Serialize(new
+        {
+            choices = new[] { new { message = new { content = structuredJson } } },
+        });
+
+        using var http = new HttpClient(new StubHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(chatResponse, System.Text.Encoding.UTF8, "application/json"),
+            }));
+        using var client = new AiAnalystClient(http);
+        var finding = await client.AnalyzeAsync(
+            NewSettings(),
+            "test-key",
+            new AiEvidencePackage("2", DateTimeOffset.UtcNow, "test", "redacted", [], []),
+            CancellationToken.None);
+
+        Assert.Null(finding.Error);
+        Assert.Equal(10, finding.Indicators.Count);
+        Assert.All(finding.Indicators, ind =>
+        {
+            Assert.Equal("domain", ind.Type);
+            Assert.Equal("malicious", ind.Role);
+        });
+    }
+
     private static AiAnalystSettings NewSettings() => new()
     {
         Enabled = true,

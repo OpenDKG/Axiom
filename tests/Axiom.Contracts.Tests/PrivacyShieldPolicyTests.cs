@@ -140,16 +140,27 @@ public sealed class PrivacyShieldPolicyTests
             source.License));
         Assert.All(sources, source => Assert.StartsWith("https://", source.Url, StringComparison.Ordinal));
 
-        // Only dedicated malware/phishing lists may claim the malware category, so a shared
-        // indicator is never an ad or tracker mislabelled as malware.
+        // Only dedicated malware/phishing lists may claim the malware or phishing categories, so a
+        // shared indicator is never an ad or tracker mislabelled as malware or phishing.
         var malware = sources
             .Where(source => source.Category.HasFlag(PrivacyCategory.Malware))
             .Select(source => (source.Id, source.Category))
             .ToArray();
-        Assert.Equal(3, malware.Length);
+        Assert.Equal(2, malware.Length);
         Assert.Contains(("urlhaus-domains", PrivacyCategory.Malware), malware);
-        Assert.Contains(("hagezi-tif", PrivacyCategory.Malware), malware);
-        Assert.Contains(("phishing-filter", PrivacyCategory.Malware), malware);
+        Assert.Contains(("hagezi-tif", PrivacyCategory.Malware | PrivacyCategory.Phishing), malware);
+
+        var phishing = sources
+            .Where(source => source.Category.HasFlag(PrivacyCategory.Phishing))
+            .Select(source => (source.Id, source.Category))
+            .ToArray();
+        Assert.Equal(2, phishing.Length);
+        Assert.Contains(("hagezi-tif", PrivacyCategory.Malware | PrivacyCategory.Phishing), phishing);
+        Assert.Contains(("phishing-filter", PrivacyCategory.Phishing), phishing);
+
+        Assert.True(PrivacyShieldCategories.ForProfile(PrivacyShieldProfile.Strict)
+            .HasFlag(PrivacyCategory.Phishing));
+        Assert.Equal("Phishing", PrivacyShieldCategories.Label(PrivacyCategory.Phishing));
     }
 
     [Fact]
@@ -163,5 +174,32 @@ public sealed class PrivacyShieldPolicyTests
         Assert.Equal(24, defaults.AutoUpdateIntervalHours);
         Assert.Equal(string.Empty, defaults.PreferredAdapterAlias);
         Assert.False(defaults.AutoPointAdapterDns);
+    }
+
+    [Fact]
+    public void With_settings_preserves_compiled_catalog_rules_across_category_and_allow_updates()
+    {
+        var initial = PrivacyShieldPolicy.Create(
+            new PrivacyShieldSettings { Categories = PrivacyCategory.Ads },
+            [
+                new PrivacyShieldStoredRule("catalog.example", "hagezi-pro", PrivacyCategory.Ads, DateTimeOffset.UtcNow),
+            ]);
+
+        var updated = initial.WithSettings(new PrivacyShieldSettings
+        {
+            Categories = PrivacyCategory.None,
+            AllowedDomains = ["sub.catalog.example"],
+            BlockedDomains = ["custom-only.example"],
+        });
+
+        Assert.True(updated.Evaluate("catalog.example").Blocked);
+        Assert.Equal("hagezi-pro", updated.Evaluate("catalog.example").SourceId);
+        Assert.False(updated.Evaluate("sub.catalog.example").Blocked);
+        Assert.True(updated.Evaluate("custom-only.example").Blocked);
+        Assert.Equal(2, updated.RuleCount);
+
+        using var reader = new StringReader("0.0.0.0 stream-a.example\nstream-b.example\n");
+        var streamed = PrivacyShieldPolicy.ParseList(reader, 100);
+        Assert.Equal(["stream-a.example", "stream-b.example"], streamed);
     }
 }

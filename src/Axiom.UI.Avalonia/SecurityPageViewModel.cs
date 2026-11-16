@@ -70,6 +70,7 @@ public sealed partial class FileScanRow : ObservableObject
         SizeBytes = entry.SizeBytes;
         Sha256 = entry.Sha256;
         SkippedReason = entry.SkippedReason;
+        _verdictText = entry.Sha256 is null ? "Skipped" : "VT: Not checked";
     }
 
     public string Path { get; }
@@ -91,7 +92,7 @@ public sealed partial class FileScanRow : ObservableObject
     public string StatusText => Sha256 is null ? "SKIPPED" : "HASHED";
 
     [ObservableProperty]
-    private string _verdictText = "Not checked";
+    private string _verdictText;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanBlockFromCommunity))]
@@ -206,7 +207,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     private readonly CommunityFeedClient _communityClient = new();
 
-    private readonly HttpClient _blackboxClient = new() { Timeout = TimeSpan.FromSeconds(4) };
+    private readonly HttpClient _blackboxClient = OptionalModuleProbe.CreateLoopbackHttpClient(TimeSpan.FromSeconds(4));
 
     private readonly OpenCodeProtection _openCodeProtection = new();
 
@@ -253,6 +254,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     private CommunityFeedSettings _communitySettings = new(false, string.Empty, string.Empty);
 
     private bool _communityConnected;
+    private Task? _communityLoadTask;
     private readonly HashSet<string> _notifiedCommunityHashes = new(StringComparer.OrdinalIgnoreCase);
     private bool _dkgAutoStartAttempted;
     private bool _blackboxAutoStartAttempted;
@@ -348,6 +350,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     public ObservableCollection<ProtectedAgent> ProtectedAgents { get; } = [];
 
+    public TraderShieldSectionViewModel TraderShield { get; } = new();
+
     public bool IsAgentProtectionAvailable => !DistributionContext.IsStorePackage;
 
     [ObservableProperty]
@@ -355,6 +359,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private bool _hasCommunityMatches;
+
+    [ObservableProperty]
+    private bool _hasScanCommunityNotice;
 
     [ObservableProperty]
     private string _communityMatchesText = "No community feed matches in the scanned files.";
@@ -592,7 +599,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         }
 
         _blackboxAutoStartAttempted = true;
-        if (DistributionContext.IsStorePackage || !_uninstaller.IsBlackboxInstalled)
+        if (DistributionContext.IsStorePackage || !_uninstaller.IsBlackboxRuntimeInstalled)
         {
             return;
         }
@@ -744,6 +751,48 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         return false;
     }
 
+    private async Task<bool> EnsureModulePrerequisitesAsync(bool includeVcRedist)
+    {
+        var report = ModulePrerequisites.Probe();
+        var missingVc = includeVcRedist && !OptionalModuleInstaller.HasVcRuntime();
+        if (report.IsSatisfied && !missingVc)
+        {
+            return true;
+        }
+
+        var missingParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(report.MissingSummary))
+        {
+            missingParts.Add(report.MissingSummary);
+        }
+
+        if (missingVc)
+        {
+            missingParts.Add("Visual C++ 2015-2022 Redistributable");
+        }
+
+        var summary = string.Join(", ", missingParts);
+        InstallStatusText = $"Missing prerequisites: {summary}.";
+
+        var installNow = await _ui.ConfirmAsync(
+            "Install prerequisites",
+            $"The optional module installers need: {summary}.\n\n" +
+            "Install them now? A PowerShell window shows every winget command.",
+            "Install prerequisites",
+            destructive: false,
+            CancellationToken.None).ConfigureAwait(true);
+        if (!installNow)
+        {
+            InstallStatusText = $"Install {summary} manually, then click Check again.";
+            return false;
+        }
+
+        _installer.InstallPrerequisites(report, missingVc);
+        InstallStatusText = _installer.LastError
+            ?? $"Prerequisite installer opened in PowerShell for {summary}. Complete it, then click Check again.";
+        return false;
+    }
+
     [RelayCommand]
     private async Task ActOnModuleAsync(string? module)
     {
@@ -780,15 +829,15 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
         if (module.Equals("Blackbox", StringComparison.Ordinal))
         {
-            if (_uninstaller.IsBlackboxInstalled)
+            if (_uninstaller.IsBlackboxRuntimeInstalled)
             {
                 SetModuleActionLabel(module, "Starting...");
                 InstallStatusText = "Starting the Blackbox dashboard...";
                 var started = _installer.StartBlackboxDashboard();
                 if (!started)
                 {
-                    SetModuleActionLabel(module, "Start");
-                    InstallStatusText = "Blackbox venv is missing. Reinstall Blackbox to repair it.";
+                    SetModuleActionLabel(module, _uninstaller.HasBlackboxFiles ? "Repair" : "Install");
+                    InstallStatusText = "Blackbox venv is missing. Click Repair to reinstall it.";
                     return;
                 }
 
@@ -807,12 +856,18 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 return;
             }
 
+            if (!await EnsureModulePrerequisitesAsync(includeVcRedist: true).ConfigureAwait(true))
+            {
+                return;
+            }
+
+            var isRepair = _uninstaller.HasBlackboxFiles;
             var confirmed = await _ui.ConfirmAsync(
-                "Install Blackbox",
-                "This downloads and runs Umanitek's official Windows installer with the Oxigraph " +
+                isRepair ? "Repair Blackbox" : "Install Blackbox",
+                "This downloads and runs Umanitek's official Windows installer with the Oxigraph/auto " +
                 "backend (no Docker).\n\nIt installs Python packages, clones the repository and may " +
                 "register a scheduled task. Review the installer; continue only if you trust it.",
-                "Open installer",
+                isRepair ? "Repair" : "Open installer",
                 destructive: true,
                 CancellationToken.None).ConfigureAwait(true);
 
@@ -822,21 +877,28 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             }
 
             _installer.InstallBlackbox();
+            if (_installer.LastError is { } blackboxError)
+            {
+                SetModuleActionLabel(module, isRepair ? "Repair" : "Install");
+                InstallStatusText = blackboxError;
+                return;
+            }
+
             InstallStatusText = "Blackbox installer opened in PowerShell. Complete it, then click Check again.";
             return;
         }
 
         if (module.StartsWith("OriginTrail", StringComparison.Ordinal))
         {
-            if (_uninstaller.IsDkgInstalled)
+            if (_installer.IsDkgAvailable)
             {
                 SetModuleActionLabel(module, "Starting...");
                 InstallStatusText = "Starting the DKG node...";
                 var started = _installer.StartDkg();
                 if (!started)
                 {
-                    SetModuleActionLabel(module, "Start");
-                    InstallStatusText = "DKG CLI is missing. Reinstall DKG to repair it.";
+                    SetModuleActionLabel(module, _uninstaller.HasDkgFiles ? "Repair" : "Install");
+                    InstallStatusText = "DKG CLI is missing. Click Repair to reinstall it.";
                     return;
                 }
 
@@ -855,11 +917,17 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 return;
             }
 
+            if (!await EnsureModulePrerequisitesAsync(includeVcRedist: false).ConfigureAwait(true))
+            {
+                return;
+            }
+
+            var isRepair = _uninstaller.HasDkgFiles;
             var confirmed = await _ui.ConfirmAsync(
-                "Install OriginTrail DKG",
+                isRepair ? "Repair OriginTrail DKG" : "Install OriginTrail DKG",
                 "This installs @origintrail-official/dkg into %LOCALAPPDATA%\\Axiom\\modules, " +
-                "opens the official testnet setup and starts the node.\n\nIt needs Node.js/npm. Continue?",
-                "Open installer",
+                "configures testnet and starts the node.\n\nIt needs Node.js/npm. Continue?",
+                isRepair ? "Repair" : "Open installer",
                 destructive: true,
                 CancellationToken.None).ConfigureAwait(true);
 
@@ -869,7 +937,14 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             }
 
             _installer.InstallDkg();
-            InstallStatusText = "DKG installer opened in PowerShell. Complete the prompts, then click Check again.";
+            if (_installer.LastError is { } dkgError)
+            {
+                SetModuleActionLabel(module, isRepair ? "Repair" : "Install");
+                InstallStatusText = dkgError;
+                return;
+            }
+
+            InstallStatusText = "DKG installer opened in PowerShell. Complete it, then click Check again.";
         }
     }
 
@@ -1045,10 +1120,52 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
         _notifiedCommunityHashes.IntersectWith(matchedHashes);
 
-        HasCommunityMatches = matches > 0;
-        CommunityMatchesText = matches == 0
-            ? "No community feed matches in the scanned files."
-            : $"{matches} scanned file(s) match the community feed. Review before running; blocking is optional and never automatic.";
+        var hashedCount = FileScanResults.Count(row => row.HasHash);
+        if (FileScanResults.Count == 0)
+        {
+            HasCommunityMatches = false;
+            HasScanCommunityNotice = false;
+            CommunityMatchesText = "No community feed matches in the scanned files.";
+        }
+        else if (matches > 0)
+        {
+            HasCommunityMatches = true;
+            HasScanCommunityNotice = false;
+            CommunityMatchesText =
+                $"{matches} of {hashedCount} hashed file(s) match the community feed ({CommunityEntries.Count} hashes loaded). " +
+                "Review before running; blocking is optional and never automatic.";
+            FileScanStatus =
+                $"{FileScanResults.Count} file(s) scanned · {matches} match(es) in {CommunityEntries.Count} community hashes. Hashes are not uploaded.";
+        }
+        else if (CommunityEntries.Count > 0)
+        {
+            HasCommunityMatches = false;
+            HasScanCommunityNotice = true;
+            CommunityMatchesText =
+                $"Checked {hashedCount} hashed file(s) locally against {CommunityEntries.Count} community feed hashes: 0 matches. " +
+                "Use VT Check on a row only if you want an online VirusTotal lookup (API key required).";
+            FileScanStatus =
+                $"{FileScanResults.Count} file(s) scanned · 0 matches in {CommunityEntries.Count} community hashes. Hashes are not uploaded.";
+        }
+        else if (IsCommunityConfigured)
+        {
+            HasCommunityMatches = false;
+            HasScanCommunityNotice = true;
+            CommunityMatchesText =
+                "Community feed is enabled, but 0 hashes are loaded. Click Refresh feed below to download hashes and re-check these files.";
+            FileScanStatus =
+                $"{FileScanResults.Count} file(s) scanned locally · community feed not loaded. Hashes are not uploaded.";
+        }
+        else
+        {
+            HasCommunityMatches = false;
+            HasScanCommunityNotice = true;
+            CommunityMatchesText =
+                "Community feed is off, so files were only hashed locally (0 lookups). " +
+                "Enable Community feed (no API key needed) or click VT Check with a VirusTotal API key.";
+            FileScanStatus =
+                $"{FileScanResults.Count} file(s) scanned locally · community feed off. Hashes are not uploaded.";
+        }
 
         if (newlyMatched.Count > 0)
         {
@@ -1086,11 +1203,14 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         if (!_reputationSettings.Enabled || string.IsNullOrWhiteSpace(_reputationSettings.ApiKey))
         {
             await SetupReputationAsync().ConfigureAwait(true);
-            return;
+            if (!_reputationSettings.Enabled || string.IsNullOrWhiteSpace(_reputationSettings.ApiKey))
+            {
+                return;
+            }
         }
 
         IsCheckingHash = true;
-        row.VerdictText = "Checking…";
+        row.VerdictText = "VT: Checking…";
 
         try
         {
@@ -1160,7 +1280,11 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     }
 
     [RelayCommand]
-    private Task RefreshCommunityAsync() => LoadCommunityAsync(updateEntries: true);
+    private Task RefreshCommunityAsync()
+    {
+        _communityLoadTask = LoadCommunityAsync(updateEntries: true);
+        return _communityLoadTask;
+    }
 
     [RelayCommand]
     private Task TestCommunityAsync() => LoadCommunityAsync(updateEntries: false);
@@ -1238,6 +1362,18 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
         try
         {
+            if (IsCommunityConfigured && CommunityEntries.Count == 0)
+            {
+                if (_communityLoadTask is { IsCompleted: false } inFlight)
+                {
+                    await inFlight.ConfigureAwait(true);
+                }
+                else if (!IsFetchingCommunity)
+                {
+                    await RefreshCommunityAsync().ConfigureAwait(true);
+                }
+            }
+
             var entries = await FileScanner.ScanAsync(folder).ConfigureAwait(true);
             foreach (var entry in entries)
             {
@@ -1245,8 +1381,10 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             }
 
             ApplyCommunityMatches();
-
-            FileScanStatus = $"{entries.Count} file(s) scanned locally. Hashes are not uploaded.";
+            if (entries.Count == 0)
+            {
+                FileScanStatus = "0 file(s) scanned locally. Hashes are not uploaded.";
+            }
         }
 #pragma warning disable CA1031 // The UI must show a scan failure instead of crashing.
         catch (Exception exception)
@@ -1525,48 +1663,60 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     private void SeedCheckingState()
     {
-        Modules.Add(new SecurityModule(
-            "Reputation provider",
-            ReputationStatus,
-            ReputationDetail,
-            "\uE9D9",
-            false,
-            true,
-            "Setup",
-            _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)));
+        Modules.Add(CreateReputationModule());
         if (!DistributionContext.IsStorePackage)
         {
+            var blackboxRuntime = _uninstaller.IsBlackboxRuntimeInstalled;
+            var blackboxFiles = _uninstaller.HasBlackboxFiles;
             Modules.Add(new SecurityModule(
                 "Blackbox",
                 "CHECKING",
                 "Looking for a local Blackbox dashboard on 127.0.0.1:9700.",
                 "\uE7BA",
                 false,
-                !_uninstaller.IsBlackboxInstalled,
-                "Install",
-                _uninstaller.IsBlackboxInstalled,
+                true,
+                blackboxRuntime ? "Start" : blackboxFiles ? "Repair" : "Install",
+                blackboxFiles,
                 _blackboxMode.IsAvailable));
+            var dkgAvailable = _installer.IsDkgAvailable;
+            var dkgFiles = _uninstaller.HasDkgFiles;
             Modules.Add(new SecurityModule(
                 "OriginTrail DKG",
                 "CHECKING",
                 "Looking for a local DKG node on 127.0.0.1:9200.",
                 "\uE968",
                 false,
-                !_uninstaller.IsDkgInstalled,
-                "Install",
-                _uninstaller.IsDkgInstalled));
+                true,
+                dkgAvailable ? "Start" : dkgFiles ? "Repair" : "Install",
+                dkgFiles));
         }
 
         Modules.Add(CreateCommunityModule());
-        Modules.Add(new SecurityModule(
-            "File scanning",
-            "NOT ENABLED",
-            "No file is scanned, uploaded, quarantined or deleted.",
-            "\uE8A5",
-            false,
-            true,
-            "Scan"));
+        Modules.Add(CreateFileScanningModule());
     }
+
+    private SecurityModule CreateReputationModule()
+    {
+        var configured = _reputationSettings.Enabled && !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey);
+        return new SecurityModule(
+            "Reputation provider",
+            ReputationStatus,
+            ReputationDetail,
+            "\uE9D9",
+            configured,
+            true,
+            "Setup",
+            _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey));
+    }
+
+    private SecurityModule CreateFileScanningModule() => new(
+        "File scanning",
+        "ON DEMAND",
+        "Hashes folders locally (SHA-256) and checks them against your Community feed; VirusTotal VT Check is optional.",
+        "\uE8A5",
+        false,
+        true,
+        "Scan");
 
     private SecurityModule CreateCommunityModule() => new(
         "Community feed",
@@ -2111,48 +2261,41 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     {
         ApplyBrandLabels(dkg.IsConnected, blackbox.IsConnected);
         Modules.Clear();
-        Modules.Add(new SecurityModule(
-            "Reputation provider",
-            ReputationStatus,
-            ReputationDetail,
-            "\uE9D9",
-            false,
-            true,
-            "Setup",
-            _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)));
+        Modules.Add(CreateReputationModule());
         if (!DistributionContext.IsStorePackage)
         {
-            var blackboxInstalled = _uninstaller.IsBlackboxInstalled;
+            var blackboxRuntime = _uninstaller.IsBlackboxRuntimeInstalled;
+            var blackboxFiles = _uninstaller.HasBlackboxFiles;
+            var blackboxDetail = !blackbox.IsConnected && !blackboxRuntime && blackboxFiles
+                ? $"{blackbox.Detail} Incomplete Blackbox installation detected (venv is missing) — click Repair to reinstall."
+                : blackbox.Detail;
             Modules.Add(new SecurityModule(
                 "Blackbox",
                 blackbox.Status,
-                blackbox.Detail,
+                blackboxDetail,
                 "\uE7BA",
                 blackbox.IsConnected,
-                !blackboxInstalled || !blackbox.IsConnected,
-                blackboxInstalled ? "Start" : "Install",
-                blackboxInstalled,
+                !blackbox.IsConnected,
+                blackboxRuntime ? "Start" : blackboxFiles ? "Repair" : "Install",
+                blackboxFiles,
                 _blackboxMode.IsAvailable));
-            var dkgInstalled = _installer.IsDkgAvailable;
+            var dkgAvailable = _installer.IsDkgAvailable;
+            var dkgFiles = _uninstaller.HasDkgFiles;
+            var dkgDetail = !dkg.IsConnected && !dkgAvailable && dkgFiles
+                ? $"{dkg.Detail} Incomplete DKG installation detected (DKG CLI is missing) — click Repair to reinstall."
+                : dkg.Detail;
             Modules.Add(new SecurityModule(
                 "OriginTrail DKG",
                 dkg.Status,
-                dkg.Detail,
+                dkgDetail,
                 "\uE968",
                 dkg.IsConnected,
-                !dkgInstalled || !dkg.IsConnected,
-                dkgInstalled ? "Start" : "Install",
-                _uninstaller.IsDkgInstalled));
+                !dkg.IsConnected,
+                dkgAvailable ? "Start" : dkgFiles ? "Repair" : "Install",
+                dkgFiles));
         }
 
         Modules.Add(CreateCommunityModule());
-        Modules.Add(new SecurityModule(
-            "File scanning",
-            "NOT ENABLED",
-            "No file is scanned, uploaded, quarantined or deleted.",
-            "\uE8A5",
-            false,
-            true,
-            "Scan"));
+        Modules.Add(CreateFileScanningModule());
     }
 }

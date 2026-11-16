@@ -22,6 +22,23 @@ public interface IThemeService
     void Apply(UiTheme theme);
 }
 
+/// <summary>User-facing shell complexity mode.</summary>
+public enum UiMode
+{
+    Simple,
+    Advanced,
+}
+
+/// <summary>Host shell complexity preference and persistence.</summary>
+public interface IUiModeService
+{
+    UiMode Current { get; }
+
+    event EventHandler? Changed;
+
+    void Apply(UiMode mode);
+}
+
 /// <summary>Per-user HKCU Run autostart. Implementations must only touch the Axiom value.</summary>
 public interface IAutostartService
 {

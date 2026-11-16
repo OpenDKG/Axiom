@@ -1,28 +1,30 @@
-# Test matrix — Axiom (FND-005)
+# Test matrix — Axiom (`v0.50.0` Baseline + Historical `FND-005` Scenario Matrix)
 
-Date: 2026-11-06. Host: Windows 10 IoT Enterprise LTSC 2021, 10.0.19044, x64.
-SDK: 10.0.403. Configuration: `Release`.
+Date: 2026-11-15 (`v0.50.0` / `9e070ed`; original `FND-005` baseline: 2026-11-06 on Windows 10 IoT Enterprise LTSC 2021, 10.0.19044, x64).
+SDK: `10.0` (`global.json`). Configuration: `Release`.
 
-## 1. Automated checks (executed)
+> For current 1.0 release blockers, Python 3.12 bypass proofs, and VM acceptance gates see [RELEASE_READINESS_MATRIX.md](validation/RELEASE_READINESS_MATRIX.md).
+
+## 1. Automated checks (executed on `v0.50.0` / `9e070ed`)
 
 | Command | Result |
 |---|---|
-| `dotnet restore Axiom.sln --locked-mode` | passed (also after standalone publish) |
-| `dotnet build Axiom.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** |
-| `dotnet test Axiom.sln -c Release --no-build` | **375/375 passed** |
-| `dotnet publish src\Axiom.Desktop -p:PublishProfile=win-x64-selfcontained` | passed, 70.1 MB single EXE |
+| `dotnet restore Axiom.sln --locked-mode` & `Axiom.Portable.slnx --locked-mode` | passed (enforced in `windows-ci.yml`) |
+| `dotnet build Axiom.sln -c Release --no-restore` | **0 warning(s), 0 error(s)** across all 21 projects |
+| `dotnet test Axiom.sln -c Release -m:1 --nologo` | **1,089/1,089 passed** (`0` failed, `0` skipped) |
+| GitHub Actions `Windows CI` (`43713621875` / `43715943949`) | **passed** (`Build, Analyze & Test` + `Setup Packaging & Safe CLI Check` on `axiom-d-runner`) |
 
 | Test project | Count | Notes |
 |---|---|---|
-| Core | 66 | deterministic rule identity, spec and CIDR/port validation |
-| Contracts | 55 | IPC contract, limits, optional-module probe, bounded history, local file hashing, VirusTotal and community feed |
-| Persistence | 14 | schema v2, history, firewall state and audit |
-| Infrastructure.Windows | 40 | IP Helper, pipe, COM read-only adapter |
-| Service | 16 | coordinator with a fake adapter, Privacy Shield rollback and persistence |
-| MCP server | 33 | endpoint parsing, private IPv4/IPv6, indicator type, invalid-input handling, truthful unavailable states |
-| UI | 140 | view models, settings stores, lifecycle hook contracts, Codex trust hashes, session readers, OpenCode lifecycle generation, ZCode/DeepSeek hook generation, firewall defaults and display status |
-| Presentation | 6 | portable monitor, formatting, service probe and offline service states |
-| UI.Avalonia | 5 | navigation inventory, service-required/offline page states and no-invented-data checks |
+| Contracts | 152 | IPC contract, limits, optional-module probe, bounded history, local file hashing, VirusTotal, community feed, `UpgradeDataGuard` |
+| Core | 184 | deterministic rule identity, spec, CIDR/port validation, F-19 process-spawn audit concurrency |
+| Infrastructure.Windows | 86 | IP Helper, pipe, COM read-only adapter |
+| Persistence | 21 | schema v2, history, firewall state and audit |
+| Service | 98 | coordinator with fake/canary gates, Privacy Shield DNS/DoH rollback, threat share preflight, F-19 worker paths |
+| UI | 183 | view models, settings stores, lifecycle hook contracts, Codex/Claude/Gemini/DeepSeek/ZCode hooks, `UpdateCheckService`, `OptionalModuleInstaller` reuse marker, firewall defaults |
+| MCP server | 34 | 9 read-only tools, endpoint parsing, private IPv4/IPv6, invalid-input handling, truthful unavailable states, `McpAuditLog` |
+| Presentation | 275 | portable monitor, formatting, service probe, offline continuity, Python 3.12 runtime hook bypass proofs (11 hosts), AI prompt-injection/bounds |
+| UI.Avalonia | 56 | headless navigation inventory, `1024x768` bounds, service-required/offline states, `VT Check`, Contact/update badge |
 
 ### History coverage
 

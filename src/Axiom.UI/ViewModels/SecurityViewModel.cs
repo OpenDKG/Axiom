@@ -146,7 +146,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     private readonly CommunityFeedClient _communityClient = new();
 
-    private readonly HttpClient _blackboxClient = new() { Timeout = TimeSpan.FromSeconds(4) };
+    private readonly HttpClient _blackboxClient = OptionalModuleProbe.CreateLoopbackHttpClient(TimeSpan.FromSeconds(4));
 
     private readonly OpenCodeProtection _openCodeProtection = new();
 
@@ -533,7 +533,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (module.Equals("Blackbox", StringComparison.Ordinal))
         {
-            if (_uninstaller.IsBlackboxInstalled)
+            if (_uninstaller.IsBlackboxRuntimeInstalled)
             {
                 SetModuleActionLabel(module, "Starting...");
                 InstallStatusText = "Starting the Blackbox dashboard...";
@@ -586,7 +586,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
         if (module.StartsWith("OriginTrail", StringComparison.Ordinal))
         {
-            if (_uninstaller.IsDkgInstalled)
+            if (_uninstaller.IsDkgRuntimeInstalled)
             {
                 SetModuleActionLabel(module, "Starting...");
                 InstallStatusText = "Starting the DKG node...";
@@ -1111,9 +1111,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 "Looking for a local Blackbox dashboard on 127.0.0.1:9700.",
                 "\uE7BA",
                 false,
-                !_uninstaller.IsBlackboxInstalled,
+                !_uninstaller.IsBlackboxRuntimeInstalled,
                 "Install",
-                _uninstaller.IsBlackboxInstalled,
+                _uninstaller.IsBlackboxRuntimeInstalled,
                 _blackboxMode.IsAvailable));
             Modules.Add(new SecurityModule(
                 "OriginTrail DKG",
@@ -1121,9 +1121,9 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 "Looking for a local DKG node on 127.0.0.1:9200.",
                 "\uE968",
                 false,
-                !_uninstaller.IsDkgInstalled,
+                !_uninstaller.IsDkgRuntimeInstalled,
                 "Install",
-                _uninstaller.IsDkgInstalled));
+                _uninstaller.IsDkgRuntimeInstalled));
         }
 
         Modules.Add(CreateCommunityModule());
@@ -1641,7 +1641,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
             _reputationSettings.Enabled || !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)));
         if (!DistributionContext.IsStorePackage)
         {
-            var blackboxInstalled = _uninstaller.IsBlackboxInstalled;
+            var blackboxInstalled = _uninstaller.IsBlackboxRuntimeInstalled;
             Modules.Add(new SecurityModule(
                 "Blackbox",
                 blackbox.Status,
@@ -1652,7 +1652,7 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 blackboxInstalled ? "Start" : "Install",
                 blackboxInstalled,
                 _blackboxMode.IsAvailable));
-            var dkgInstalled = _uninstaller.IsDkgInstalled;
+            var dkgInstalled = _uninstaller.IsDkgRuntimeInstalled;
             Modules.Add(new SecurityModule(
                 "OriginTrail DKG",
                 dkg.Status,

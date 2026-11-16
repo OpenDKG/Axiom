@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
+             xmlns:views="using:Axiom.UI.Avalonia.Views"
              x:Class="Axiom.UI.Avalonia.Views.AgentsView">
   <UserControl.Styles>
     <Style Selector="Ellipse.tone-ok">
@@ -63,48 +64,56 @@
         </StackPanel>
       </Border>
 
-      <Grid ColumnDefinitions="*,14,*">
-        <Border Grid.Column="0" Classes="card" Padding="14">
-          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-            <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
-              <Image Source="avares://Axiom.UI.Avalonia/Assets/origintrail-logo.png"
-                     Width="104" Height="23" Stretch="Uniform" />
-            </Border>
-            <StackPanel Grid.Column="1" Spacing="4">
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
+      <Grid x:Name="ModuleCardsGrid" ColumnDefinitions="*,14,*">
+        <Border x:Name="DkgModuleCard" Grid.Column="0" Classes="card" Padding="14">
+          <StackPanel Spacing="10">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+              <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Center">
+                <Image Source="avares://Axiom.UI.Avalonia/Assets/origintrail-logo.png"
+                       Width="92" Height="20" Stretch="Uniform" />
+              </Border>
+              <controls:AxiomSelectableTextBlock Grid.Column="1" Text="origintrail.io" FontSize="10"
+                         Foreground="{DynamicResource Axiom.TextMuted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+            <StackPanel Spacing="4">
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <Border Grid.Column="0" Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
                         Classes.sq-on="{Binding Security.DkgConnected}"
                         Classes.sq-off="{Binding !Security.DkgConnected}"
                         ToolTip.Tip="{Binding Security.DkgHealthLabel}" />
-                <controls:AxiomSelectableTextBlock Text="{Binding Security.DkgBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              </StackPanel>
+                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Security.DkgBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              </Grid>
               <controls:AxiomSelectableTextBlock Text="Decentralized Knowledge Graph (DKG): optional local knowledge infrastructure and provenance. This status reflects a local node probe."
                          FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <controls:AxiomSelectableTextBlock Text="origintrail.io" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
             </StackPanel>
-          </Grid>
+          </StackPanel>
         </Border>
-        <Border Grid.Column="2" Classes="card" Padding="14">
-          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-            <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
-              <Image Source="avares://Axiom.UI.Avalonia/Assets/blackbox-logo.png"
-                     Width="104" Height="18" Stretch="Uniform" />
-            </Border>
-            <StackPanel Grid.Column="1" Spacing="4">
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
+        <Border x:Name="BlackboxModuleCard" Grid.Column="2" Classes="card" Padding="14">
+          <StackPanel Spacing="10">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+              <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Center">
+                <Image Source="avares://Axiom.UI.Avalonia/Assets/blackbox-logo.png"
+                       Width="92" Height="16" Stretch="Uniform" />
+              </Border>
+              <Border Grid.Column="1" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,5"
+                      HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Image Source="avares://Axiom.UI.Avalonia/Assets/umanitek-logo.png"
+                       Width="82" Height="18" Stretch="Uniform"
+                       ToolTip.Tip="Umanitek" />
+              </Border>
+            </Grid>
+            <StackPanel Spacing="4">
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <Border Grid.Column="0" Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
                         Classes.sq-on="{Binding Security.BlackboxConnected}"
                         Classes.sq-off="{Binding !Security.BlackboxConnected}"
                         ToolTip.Tip="{Binding Security.BlackboxHealthLabel}" />
-                <controls:AxiomSelectableTextBlock Text="{Binding Security.BlackboxBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-              </StackPanel>
+                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Security.BlackboxBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+              </Grid>
               <controls:AxiomSelectableTextBlock Text="Guardian Agent Blackbox by Umanitek: optional local agent-safety module. Connection alone does not prove every agent is protected."
                          FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <Image Source="avares://Axiom.UI.Avalonia/Assets/umanitek-logo.png"
-                     Width="92" Height="20" Stretch="Uniform" HorizontalAlignment="Left"
-                     ToolTip.Tip="Umanitek" />
             </StackPanel>
-          </Grid>
+          </StackPanel>
         </Border>
       </Grid>
 
@@ -125,7 +134,7 @@
             </StackPanel>
           </Grid>
           <controls:AxiomSelectableTextBlock
-                     Text="Axiom only proposes evidence-bound AI Analyst indicators: a malicious-role value must match a remote endpoint Axiom observed. Public blocklist matches stay local and are never reported Ã¢â‚¬â€ they would echo the same list from every install. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
+                     Text="Axiom only proposes evidence-bound AI Analyst indicators: a malicious-role value must match a remote endpoint Axiom observed. Public blocklist matches stay local and are never reported — they would echo the same list from every install. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
                      FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <Border Background="{DynamicResource Axiom.SurfaceAlt}"
                   BorderBrush="{DynamicResource Axiom.Border}"
@@ -217,6 +226,9 @@
         </StackPanel>
       </Border>
 
+      <views:TraderShieldSectionView DataContext="{Binding Security.TraderShield}"
+                                     IsVisible="{Binding IsAvailable}" />
+
       <Border Classes="card" Padding="0">
         <ItemsControl ItemsSource="{Binding Security.Modules}">
           <ItemsControl.ItemTemplate>
@@ -299,7 +311,9 @@
                                      TextBrush="{DynamicResource Axiom.TextPrimary}"
                                      MutedBrush="{DynamicResource Axiom.TextMuted}"
                                      SurfaceBrush="{DynamicResource Axiom.Surface}"
-                                     BorderBrush="{DynamicResource Axiom.Border}" />
+                                     BorderBrush="{DynamicResource Axiom.Border}"
+                                     AccentBrush="{DynamicResource Axiom.Accent}"
+                                     HubFillBrush="{DynamicResource Axiom.AccentSoft}" />
       </Border>
 
       <Border Classes="card" Padding="16">
@@ -313,11 +327,11 @@
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
               <ListBox.ItemTemplate>
                 <DataTemplate>
-                  <Grid ColumnDefinitions="*,110,80,90" Margin="0,2">
-                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding CategoryLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding SeverityLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
-                    <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding Source}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
+                  <Grid ColumnDefinitions="*,110,80,90" Margin="0,2" Background="Transparent">
+                    <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Text="{Binding CategoryLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
+                    <TextBlock Grid.Column="2" Text="{Binding SeverityLabel}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
+                    <TextBlock Grid.Column="3" Text="{Binding Source}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
                   </Grid>
                 </DataTemplate>
               </ListBox.ItemTemplate>

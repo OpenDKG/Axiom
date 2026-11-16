@@ -2,6 +2,309 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.64.0
+
+- **Guard: openssl/ssh-keygen key reads, `reg export` of SAM, `.aws` archives.**
+  - A rotated 26-probe batch on 0.63 hooks allowed `openssl rsa -in …id_rsa`, `ssh-keygen -y -f …id_rsa`, `reg export HKLM\SAM` and `Compress-Archive ~/.aws`. The read check now covers openssl/ssh-keygen/gpg/age, the hive-export check accepts `reg export`, and `.aws`/`.gnupg` are credential stores (issue #382).
+  - Re-verified 26/26 against a hook generated from the patched source; controls still allow.
+- **Setup: the DKG identity check no longer warns while the node is still starting.**
+  - `SetupInstaller` polled the node identity for 30 s and then warned "DKG node could not be initialized or verified" even though the node came up healthy moments later (issue #381). It now polls up to 90 s and reports at 30 s/60 s that the node may still be starting, so the warning only appears for a real failure.
+
+## What's in 0.63.0
+
+- **CI: the DNS proxy TCP test no longer flakes.**
+  - `DnsProxyTests.Proxy_blocks_matching_domains_over_tcp` failed on a busy runner when the proxy fell back to UDP-only because its TCP listener lost the bind race. The test now retries the bind up to five times before asserting, so it checks block behaviour instead of timing (issue #374).
+
+## What's in 0.62.0
+
+- **Simple & Advanced UI modes (`SimpleHomeView`, `SimpleHomePageViewModel`, `UiModeSettingsStore`):**
+  - Added a segmented **`Simple | Advanced`** switch directly in the top notification bar (`MainWindow.axaml`) right beside the update and notifications buttons (`UpdateButton`, `AlertsButton`), persisted locally per user via `%LOCALAPPDATA%\Axiom\ui-mode.txt` (`WindowsUiModeService`).
+  - **Simple Mode** streamlines the sidebar to 5 clear destinations (`Home`, `Network Control`, `Privacy Overview`, `Settings`, `Help & Support`) and opens **`SimpleHomeView`**: an everyday protection hero banner with 1-click Shield toggle, three summary cards (`Firewall Shield`, `Ad & Tracker Blocker`, `Internet Activity`), inline pending outbound app approvals (`Allow` / `Block`), and currently online apps without technical socket/PID/IPC jargon.
+  - **Advanced Mode** preserves the full 12-page technical dashboard, diagnostics, AI agent tools, graph analytics, and status-bar telemetry untouched, with seamless cross-mode deep links from notifications and alerts (`ShellViewModel.NavigateToPage`).
+
+## What's in 0.61.0
+
+- **Guard: protected reads through admin shares and search tools, and non-English injection.**
+  - `type \\localhost\C$\Users\me\.ssh\id_rsa` and `findstr /s /i "PRIVATE KEY" C:\Users\me\.ssh\*` were allowed on 0.59 hooks; the new `_reads_protected` check pairs a read verb with a protected token in path position (also covers `select-string`, `grep`, `tar`, `robocopy`, `copy-item`).
+  - Injection heuristics gained Serbian, German, Spanish, French, Italian, Portuguese and Russian phrasings for "ignore previous instructions".
+  - `AgentCommandGuardTests` pin both in the shared helpers (issue #377).
+- **Setup: silent second instance no longer hangs, and the Hermes plugin gets its dependencies.**
+  - A second `--silent` setup writes the busy message to stderr and exits 3 instead of opening a modal box nobody can dismiss (issue #375).
+  - After `hermes plugins enable`, both installer copies install the Blackbox plugin dependencies into the Hermes base runtime and committed environment, then verify with `hermes plugins doctor`; a vendor failure is a warning, never an install failure (issue #376).
+
+## What's in 0.60.0
+
+- **Redesigned theme-aligned `Axiom Setup` wizard (`SetupNativeWindow`, `SetupGdiPlus`, `SetupThemePalette`):**
+  - Replaced legacy Win32 controls with a double-buffered GDI+ setup window using `Axiom.Setup.Logo.png` (`Square150x150Logo.png`), DWM titlebar styling, unified `CornerRadius="6"` geometry, custom vector radio cards/checkboxes/progress bar, and dynamic synchronization with all six Axiom themes via `ThemeSettingsStore.Load()` (`GlassDark` smoked obsidian + `#E2E8F0` silver chrome by default, plus `Dark`, `DarkMidnight`, `GlassLight`, `Light`, and `LightWarm`).
+  - Replaced the single-column radio + path dump with clean side-by-side **Complete Protection (`RECOMMENDED`)** and **Core / Partial Build (`NO ADMIN`)** cards, an interactive **Write scope** view, a crisp **Development build notice** acceptance card, and a dedicated **Progress** view with live step summary, timer, animated shimmer bar, and dark/themed scrollable log.
+- **Automatic post-install / post-update launch & self-closing installer (`SetupInstaller`, `SetupNativeWindow`):**
+  - `SetupInstaller.InstallAsync` now launches `Axiom.Desktop.exe` whenever `StartAfterInstall` is enabled (`true` by default) once core installation succeeds (even when optional-module warnings occur, recording warnings to `%LOCALAPPDATA%\Axiom\logs\setup-last-warning.txt`).
+  - Interactive Install and Update (`Upgrade`) flows automatically close the installer upon completion without blocking popups, and prompt to close any already-running `Axiom.Desktop` instance so in-place updates finish cleanly.
+
+## What's in 0.59.0
+
+- **Dark folded titanium Axiom brand mark & centered sidebar chrome:**
+  - Replaced `axiom-icon.png` and `axiom-lockup.png` in both UI asset folders (`src/Axiom.UI.Avalonia/Assets` and `src/Axiom.UI/Resources`), rebuilt multi-size `axiom.ico`, and regenerated MSIX Store tiles/splash (`packaging/msix/generate-assets.ps1`): removed the stray upper-right shield notch, refined the crisp diagonal metal fold (`brushed steel` vs `dark gunmetal`), matched the folded metallic finish across the `AXIOM` letters, and added subtle `xiom` lettering below `A` inside the shield.
+  - Centered the top-left `AXIOM` lockup and `LOCAL-FIRST · NO TELEMETRY` badge in `MainWindow.axaml`, removed the redundant top-left version label, centered the bottom-left footer (`Axiom` icon, name, version, description, and action buttons), and pointed `Contact` to `mailto:contact@opendkg.org`.
+- **Network Dashboard consolidation & sidebar reorganization:**
+  - Embedded `Live Connections`, `Applications`, and `Network Events` directly as compact tabs inside `Network Dashboard`, removed the duplicate `Privacy Shield` summary card from `Network Dashboard`, renamed `PROTECTION` to `AI` (including `AI Analyst`), and grouped `Network Control`, `Privacy Shield`, and `Integrations` under `NETWORK & PRIVACY`.
+- **Theme harmonization & Glass Dark depth polish:**
+  - Removed opaque black list/scroll surfaces in `Live Connections` and `Network Events` so glass themes keep translucent frosted surfaces, deepened `Axiom Glass Dark` backdrop gradients, darkened `Axiom.Warning` in `Light`/`GlassLight` to `#B45309`, styled `CheckBox`/`NumericUpDown` spinners/`Separator`/`Button.danger` across all themes, wrapped `umanitek-logo.png` cleanly in `AgentsView.axaml`, made `ThreatGraphControl` resolve theme palette brushes dynamically, and introduced `AxiomDialogTheme` so dialogs, setup prompts, first-run windows, and toast alerts follow the active theme.
+
+## What's in 0.58.0
+
+- **Documentation screenshots refreshed for the 0.57 theme redesign.**
+  - Glass Dark and Glass Light dashboards, opaque Dark and Light themes, the Settings/About page in both glass themes, the leadership crop and the glass-vs-dark comparison were recaptured from the released 0.57.0 build.
+  - Screenshots now show the 0.56 monochrome lockup, the borderless frosted chrome and the current navigation.
+
+## What's in 0.57.0
+
+- **Redesigned Glass themes & harmonized all six Avalonia desktop themes:**
+  - Rebuilt `Axiom Glass Dark` and `Axiom Glass Light` around an open, continuous frosted canvas: removed chrome divider walls around the titlebar, navigation rail, header, and status bar (`Border.glass-chrome`), unified geometry at `CornerRadius="6"`, dropped heavy boxy card shadows in glass modes, and set `TransparencyBackgroundFallback="Transparent"` on `MainWindow`.
+  - Tuned `Glass Dark` to a deeper smoked slate-obsidian glass veil (`#780C111A -> #66131B28 -> #7D0A0F17`) with frosted white-smoke tiles (`#1FFFFFFF -> #10FFFFFF`), pure white text, and crisp silver-chrome accents matching the `0.56.0` monochrome shield + `AXIOM` lockup.
+  - Harmonized the four opaque (non-transparent) themes (`Dark`, `Light`, `Dark Midnight`, `Light Warm`) with seamless borders, dimensional opaque gradient bases, subtle `CardBorder` fades, and logo-aligned accents (`#E2E8F0`, `#2B313A`, `#A5B4FC`, `#443C35`).
+
+## What's in 0.56.0
+
+- **Correct lockup: the grayscale AXIOM wordmark.**
+  - 0.55.0 shipped an older `logo-letters.png`; this release replaces `axiom-lockup.png` in both UI asset folders with the intended 2172x724 grayscale shield + AXIOM lockup.
+  - The 2172x724 canvas matches the historical lockup exactly, so the navigation rail, WPF header and first-run window show it at the previous size with no stretching.
+  - MSIX `Wide310x150Logo.png` and `SplashScreen.png` regenerated with `packaging/msix/generate-assets.ps1`.
+
+## What's in 0.55.0
+
+- **New Axiom brand mark in the app, the icon set and the MSIX assets.**
+  - `axiom-icon.png` (1024x1024) and `axiom-lockup.png` (2172x1222) regenerated from the new `logo.png` and `logo-letters.png`, in both the WPF and Avalonia asset folders.
+  - `axiom.ico` rebuilt as a nine-size icon set (16-256 px) for the window, tray and setup icon.
+  - MSIX tiles and splash regenerated with `packaging/msix/generate-assets.ps1`.
+  - The lockup keeps the new art's 1.78:1 aspect instead of the old 3:1, so navigation and first-run render it narrower without stretching.
+
+## What's in 0.54.0
+
+- **Clean Windows 11 onboarding for Blackbox & DKG, Repair flow, and clean PowerShell uninstalls:**
+  - Promoted `ModulePrerequisites` into `Axiom.Contracts.Modules` with silent bootstrap support for `Node.js LTS`, `Python 3.12`, `Git`, and `Microsoft.VCRedist.2015+.x64` (`VC++ 2015-2022 Redistributable`), invoked automatically during `CompleteInstallation` in `Axiom.Setup` and interactive `Install`/`Repair` actions.
+  - Separated folder existence (`HasBlackboxFiles`/`HasDkgFiles`) from verified runtime readiness (`IsBlackboxRuntimeInstalled`/`IsDkgRuntimeInstalled`) across `OptionalModuleUninstaller`, `SecurityPageViewModel`, and `SecurityViewModel`, surfacing `Repair` when `venv` or `dkg.cmd` is missing instead of failing on `Start`.
+  - Fixed local loopback probes (`OptionalModuleProbe.CreateLoopbackHttpClient` with `UseProxy = false` and `1s` connect timeout) to prevent Windows WPAD proxy auto-detect stalls causing false status-check timeouts.
+  - Shared `ModuleUninstallScripts` fixing `$HOME` read-only variable collision (`$dkgHome`), `Wait-Process -Timeout 5`, `ReadOnly` attribute cleanup on `.git`, reparse-point guards, and guarded scheduled-task removal.
+- **Privacy Shield DNS `127.0.0.1` auto-pointing & resilient blocklist downloads:**
+  - Configured `PrivacyShieldSourceUpdater` with `SocketsHttpHandler { UseProxy = false }` + IPv4-first address fallback, 3-minute download timeout, up to 3 bounded retries on transient connection resets, and partial-source commit (retaining all reachable blocklists such as HaGeZi/OISD/URLhaus/Phishing Filter with a warning when individual feeds fail instead of dropping everything).
+  - Enhanced `PrivacyDnsFailSafe` with `LastError` diagnostics, PowerShell stdout/stderr capture, and `netsh interface ipv4 set dnsservers` fallback, plus a service startup 3 s retry in `PrivacyShieldWorker` and explicit `AutoPointAdapterDns` UI toggles in both Avalonia and WPF views.
+- **Service & Desktop memory footprint reduction:**
+  - Eliminated permanent dual ~1M-rule retention (`_rules`, `_policyRules`, and `_rulesTask`) in `PrivacyShieldController`, switched `PrivacyShieldPolicy` to pre-sized `PackedRule` storage with interned `SourceId` palette and `WithSettings` catalog reuse, converted `ParseList` to stream via `TextReader` and `Evaluate` to `ReadOnlySpan<char>` lookups, streamed `PrivacyShieldRuleStore.Save()` without LOH string buffers, and enabled `System.GC.ConserveMemory=7` with LOH compaction after rule loads and source updates.
+
+## What's in 0.53.0
+
+- **Service upgrades survive a crash-looping old service; failures explain themselves.**
+  - `ServiceInstaller` clears the service recovery actions before stopping the old image and restores them after the copy, so SCM can no longer restart the 0.30 image mid-upgrade and lock it (issue #367).
+  - The image copy retries for 30 s and records every blocked attempt; `sc` timeouts no longer throw `InvalidOperationException` from `ExitCode`.
+  - New `ServiceInstallLog` (`%ProgramData%\Axiom\logs\service-install.log`) records each elevated step, and Setup prints its tail when the service installer exits non-zero instead of only `exited with code 7`.
+- **Complete Setup & Optional Module fixes (issue #364):**
+  - Replaced unsupported `oxigraph-worker` fallback with `'auto'` when VC++ 2015–2022 Redistributable is missing, and added `npm` prerequisite detection before running DKG install scripts.
+  - Setup reports `"Partial Success"` cleanly when core Axiom installs and optional steps emit warnings, tracks existing installs (`Upgrade Axiom`), and adds `Open Axiom`, `Repair`, and `Uninstall` (plus `--silent --uninstall`).
+- **Dashboard usability & copyability improvements (issue #365):**
+  - Made dashboard status text and list cells selectable/copyable, added explicit `Copy row` / `Copy local` / `Copy remote` / `Copy details` / `Copy status` actions, disambiguated `End process (PID)` vs `End application`, and removed the redundant top-right `LOCAL-FIRST` chip.
+
+## What's in 0.52.0
+
+- **Live Agent Enforcement status, dedicated Privacy Overview page, and Network Dashboard DNS monitoring.**
+  - **Live Enforcement Telemetry (`Agent Protection`):** `AgentsPageViewModel.Enforcement` now polls `enforcement.status` and `enforcement.receipts` via service IPC, reads the live Blackbox `block` / `audit` mode, and counts recent local `HOST_DENY_SENT` hook events while keeping ADR 0010 cooperative honesty invariants intact.
+  - **Dedicated `Privacy Overview` Page & `Network Dashboard` DNS Monitor:** Added a new `Privacy Overview` page under `OVERVIEW` sharing the single-owner `PrivacyShieldPageViewModel` (live KPI cards for `ACTIVE RULES`, `QUERIES`, `ALLOWED`, `BLOCKED`, `ERRORS`, DoH/adapter diagnostics, recent & top blocked domains, and per-app history) plus an embedded `Privacy Shield (DNS Monitor)` summary card inside `Network Dashboard` (Avalonia and WPF).
+
+## What's in 0.51.0
+
+- **Cline, Copilot CLI and Cursor verified live; hook coverage tests.**
+  - Installed 0.30.0 hooks blocked 4/15 each; generated 0.50.x hooks block **15/15** (Cline `cancel`, Copilot `permissionDecision`, Cursor `permission`).
+  - `HarnessHookCoverageTests` assert the shared guard and each deny shape in both assemblies; main synced the WPF `Axiom.UI.Services` copies (issue #362).
+
+## What's in 0.50.0
+
+- **Reuse installed Blackbox and recover the vendor runtime.**
+  - A pinned-build marker plus a working vendor venv makes later Complete installs skip the vendor download/install entirely; a new pinned digest still reinstalls.
+  - A non-zero vendor exit triggers one `hermes pm repair` automatically; the install succeeds when the vendor venv exists and fails only when it is missing.
+  - Node and DKG were already reused (probe, skip standalone DKG, start the configured home).
+
+## What's in 0.49.0
+
+- **Upgrade install speed and honesty.**
+  - `UpgradeDataGuard` skips `oxigraph-data`, `node_modules`, `venv`, `.git`, caches, logs and files above 32 MB, so the backup is megabytes instead of the 8.3 GB / 116,903 files that froze the machine.
+  - Setup refuses a second concurrent instance (named mutex) instead of duplicating the backup.
+  - Protected user-state restore failures are warnings, not a failed install, with a clear review note.
+  - The Complete option states 10-20 minutes and what it installs; every step carries elapsed time.
+
+## What's in 0.48.0
+
+- **Live Gemini CLI sweep fix.**
+  - Installed Gemini CLI 0.68.0 and provisioned its hook: 0.30.0 blocked 2/15 vectors, 0.47.0 2/15, 0.48.0 **15/15**.
+  - Fixed three Gemini-specific defects: `BeforeTool` event name was not matched, the deny shape was Claude's, and `absolute_path` was not mapped to `path` for the vendor rule or the Axiom store check.
+  - Template test asserts the event names, the Gemini deny shape and the `absolute_path` mapping.
+
+## What's in 0.47.0
+
+- **Live Claude Code sweep fix.**
+  - Installed Claude Code 2.1.325 and provisioned its hook: 0.30.0 blocked 4/15 vectors, 0.46.0 14/15, 0.47.0 **15/15**.
+  - Claude's `Read`/`Write` pass `file_path`; the store check only knew `path`/`filePath`, so `.git-credentials` was readable. `_arg_path` now covers all three names in the shared guard and the OpenCode bridge.
+  - Behavioural test adds a `file_path` store case.
+
+## What's in 0.46.0
+
+- **Live Codex sweep fix.**
+  - Installed Codex CLI 0.169.0 in the lab VM and provisioned its hook: installed 0.30.0 blocked 4/15 vectors, the 0.45.0 template 14/15, 0.46.0 **15/15**.
+  - Fixed `_check_command_safety` returning before the credential-store check when a tool call had no command string, so `read_file` on `.git-credentials` passed; the store check now runs before the early return and covers `path`/`filePath`.
+  - Behavioural test asserts store-path blocking and benign path/command cases.
+
+## What's in 0.45.0
+
+- **F-19 service wiring.**
+  - `ProcessSpawnAuditWorker` runs the WMI feed -> policy/dedupe -> JSONL sink for the service lifetime, writing `%LOCALAPPDATA%\Axiom\process-spawn-audit.jsonl`.
+  - `ProcessSpawnAuditRuntime` is the testable subscription binding; 3 unit tests. WMI failure is logged and non-fatal.
+
+## What's in 0.44.0
+
+- **F-19 Windows process-start feed.**
+  - `IProcessStartSource` + `WmiProcessStartSource` subscribe to `Win32_ProcessStartTrace`, resolve executable paths through an injected resolver (name fallback), and publish `ProcessSpawnEvent`.
+  - `Map` is pure and unit-tested (5 cases); the service host wiring is next.
+
+## What's in 0.43.0
+
+- **F-19 audit sink.**
+  - `JsonLinesProcessSpawnSink` writes one compact JSON line per Record/Block row (timestamp, pid, parentPid, image, parentImage, verdict, reason) to an injected writer.
+  - 2 unit tests; the service still needs the OS subscription and the file wiring.
+
+## What's in 0.42.0
+
+- **F-19 service wiring seam.**
+  - `IProcessSpawnAuditSink` + `ProcessSpawnAuditHandler`: the process-start subscription calls the handler, which applies policy/de-duplication and forwards only Record/Block rows; exposes `Recorded`.
+  - 4 unit tests; the ETW/WMI event source is still to come.
+
+## What's in 0.41.0
+
+- **F-19 part C: per-process egress block planning.**
+  - `BuildProcessEgressBlockSpec` emits an outbound any-destination block for one executable, requires explicit user authorization, refuses Windows system binaries, and reuses the existing rule validator/identity.
+  - 6 unit tests; not yet wired to the service, no rule written.
+
+## What's in 0.40.0
+
+- **F-19 observation de-duplication.**
+  - `AgentProcessSpawnMonitor` drops Allow verdicts and returns one audit row per distinct (image, pid, parent), capped at 256 with oldest eviction.
+  - Pairs the raw event with the Record/Block decision for the future ETW/WMI subscription.
+  - 6 unit tests; not yet wired to the service.
+
+## What's in 0.39.0
+
+- **F-19 part B decision layer.**
+  - `AgentProcessSpawnPolicy` returns Allow/Record/Block for a process-creation event: agent children from download/staging folders are blocked, other agent children recorded, allowlisted images allowed, risky binaries outside agent sessions recorded.
+  - Pure and unit-tested (8 cases); the ETW/WMI subscription is the next step.
+
+## What's in 0.38.0
+
+- **Behavioural test for the shared guard helpers.**
+  - Executes the extracted `AgentCommandGuard` Python block and asserts 15 vectors across `_sensitive_store`, `_hidden_path_read`, `_tampers_with_protected`, `_escalation_risk` and `_axiom_injection`.
+  - Skips when Python is unavailable; CI provisions Python 3.12.
+- Adds the F-19 containment design document (process audit + per-process egress).
+
+## What's in 0.37.0
+
+- **Extended credential-store coverage.**
+  - Adds `.netrc`, `.pgpass`, `.vault-token`, gcloud/Azure config, `pass`, Firefox `key4.db`/`logins.json`, browser `Web Data`/`Local State`, 1Password, Bitwarden and KeePass to `_sensitive_store`.
+  - OpenCode bridge and `_check_command_safety` apply the check to commands and `path`/`filePath` arguments; slash normalization preserved.
+  - Live VM verification pending the owner's install (lab stays on 0.30.0).
+
+## What's in 0.36.0
+
+- **Prompt-injection phrase heuristics.**
+  - `_flatten_args` + `_axiom_injection` match "ignore previous instructions", "before answering, run", "system override:" and strip zero-width/BOM characters before matching.
+  - The OpenCode bridge blocks with a named `injection-heuristic`, and `_check_command_safety` applies the same check to every other host adapter.
+  - Live VM verification pending the owner's install (lab stays on 0.30.0).
+
+## What's in 0.35.0
+
+- **Sensitive credential stores and credential enumeration detectors.**
+  - `_sensitive_store` blocks `.git-credentials`, `.npmrc`, `.kube\config`, `.docker\config.json`, GitHub CLI `hosts.yml`, browser `Login Data`/`Cookies`/extension storage, Firefox profiles and `wallet.dat`, including `$HOME`/`%VAR%`/`\\?\` variants and `read_file` paths.
+  - `_escalation_risk` adds `credential enumeration (cmdkey)`, `credential enumeration (vaultcmd)`, `Wi-Fi key extraction` and `certificate export`.
+  - Live VM verification pending the owner's install (lab stays on 0.30.0).
+
+## What's in 0.34.0
+
+- **Credential, evasion, persistence and execution detectors (attack-vector sweep, part 2).**
+  - `_escalation_risk` now names `credential hive export`, `shadow-copy creation`, `NTDS dump`, `LSASS memory dump`, `event log clearing`, `Defender tampering`/`Defender exclusion`, `firewall tampering`, PowerShell scheduled-task and run-key persistence, `service creation`, `startup folder persistence`, `WMI process creation`, `download-and-execute`, `in-memory compile`, `script host execution` and `mshta vbscript`.
+  - All checks run before the vendor guard; controls (`git status`, `dotnet build`, plain HTTPS GET, allowed self-test write) still pass.
+
+## What's in 0.33.0
+
+- **Guard hardening from the attack-vector sweep (0.30.0/0.32.0 lab tests).**
+  - Protected-path checks normalize shell variables (`$HOME`, `%USERPROFILE%`, `%APPDATA%`, `~`) and strip `\\?\`/`//?/`/`\\.\` prefixes; hidden-path reads are blocked.
+  - `move`/`rename` and ownership/ACL changes (`takeown`, `icacls`, `attrib`, `Set-Acl`) on protected paths are blocked.
+  - Extra upload shapes (`--data-binary`, `-T`, `--post-file`, Python `requests.post`) count as exfiltration of a protected file.
+
+## What's in 0.32.0
+
+- **Clearer Community feed vs. VirusTotal (`VT Check`) feedback in Integrations.**
+  - Renamed the per-file row action button from `Check` to `VT Check` (with explanatory tooltip) and the context menu item to `Check hash on VirusTotal`, and initialized hashed rows to `VT: Not checked` (`Skipped` for unhashed entries) in `SecurityView.axaml` and `SecurityPageViewModel.cs`.
+  - `ScanFilesAsync` now awaits any in-flight or unpopulated configured Community feed before comparing scanned SHA-256 hashes, and `ApplyCommunityMatches` surfaces an explicit neutral notice (`HasScanCommunityNotice`) even when 0 matches occur so users can see how many community hashes were checked locally.
+  - Entering a VirusTotal API key from `VT Check` immediately runs the hash lookup on that row instead of requiring a second click, and `CreateReputationModule` reflects `IsConnected = true` when configured.
+
+## What's in 0.31.0
+
+- **Reliable row-click selection and container-preserving refreshes across all tabs.**
+  - Styled `ListBox.data-list > ListBoxItem` and its template `ContentPresenter` with `Background="Transparent"`, `HorizontalContentAlignment="Stretch"`, and zero item-gap dead zones in `AxiomControls.axaml`, plus `DataListSelection.SelectOnPointerPress="True"` on the style and left-click focus handling in `DataListSelection.cs`.
+  - Replaced `AxiomSelectableTextBlock` table cells with `TextBlock` and added `Background="Transparent"` on row templates across `ConnectionsView`, `EventsView`, `AppsView`, `OverviewView`, `AgentsView`, `AiAnalystView`, and `FirewallView` (preserving copy context menus and selectable detail panes).
+  - Added `DataListSelection.SharedSelectedItem` for grouped `ListBox` views (`ConnectionsView`, `EventsView`) so multiple app groups share one ViewModel selection without sibling groups clearing it to `null`.
+  - Added `CollectionSync.SyncInPlace` across `AgentsPageViewModel`, `ConnectionsPageViewModel`, `ConnectionAppGroup`, and `EventsPageViewModel` (and fixed `OnSelectedActivityChanged` when `HasSelectedActivity` is false plus `SelectedEvent` preservation in `EventsPageViewModel`) so background polls no longer destroy row containers mid-click.
+- **Smaller `Axiom-Setup.exe` (`~149.7 MB` -> `91.0 MB`).**
+  - Moved `UpgradeDataGuard` to `Axiom.Contracts.Blackbox`, decoupled `Axiom.Setup` from `Axiom.UI` and WPF (`UseWPF=true`), and replaced the WPF window with a DPI-aware dark-mode Win32 UI (`SetupNativeWindow.cs` + `app.manifest`).
+  - Compressed the embedded Desktop/Service payload and community feed into a single `Axiom.Setup.Payload.zip` resource in `scripts/publish-setup.ps1` (extracted in `SetupInstaller.cs`) and enabled partial IL trimming (`PublishTrimmed=true`).
+
+## What's in 0.30.0
+
+- **One DKG home and an identity assertion (#307).**
+  - Moved `DkgHomeResolver` to `Axiom.Contracts` so Setup, the desktop and the tests agree on the candidate homes, the `api.port` and the token line the node writes under a comment.
+  - Setup now starts the CLI/home the Hermes config names instead of initializing a second home, and `UpgradeDataGuard` backs up every candidate DKG home.
+  - New `DkgIdentityProbe` calls `GET /api/agent/identity` with the resolved home's own port and token; a 401 is reported as a home/token mismatch instead of a connected node.
+
+## What's in 0.29.0
+
+- **Single Trader Shield location in UI.**
+  - Removed the duplicate `TraderShieldSectionView` from the Integrations view (`SecurityView.axaml`), keeping Trader Shield exclusively under Agent Protection (`AgentsView.axaml`).
+  - Added headless Avalonia regression test `Trader_shield_appears_only_on_agent_protection_and_not_on_integrations` in `TraderShieldSectionViewModelTests`.
+- **Smaller single-file service binary and portable release archive.**
+  - Enabled `EnableCompressionInSingleFile=true`, `DebugSymbols=false`, and `AllowedReferenceRelatedFileExtensions=none` when publishing `Axiom.Service.exe` in `scripts/publish-setup.ps1` and `scripts/build-release.ps1` (`76.74 MB` -> `38.59 MB`).
+  - Removed the redundant embedded `Axiom-Setup.exe` from `Axiom-<version>-win-x64.zip` and added `-ReusePayload` to avoid double-publishing Desktop and Service (`210.52 MB` -> `78.22 MB` portable ZIP).
+
+## What's in 0.28.0
+
+- **Firewall host-mask normalization on WFP/firewall readback (#282).**
+  - Normalized IPv4 `/32` and IPv6 `/128` CIDR suffixes in `FirewallPolicy` / `NetshFirewallRuleManager` readback verification so bare host scopes verify and apply reliably without `rule.verify_failed`.
+- **Single-instance mutex enforcement before Avalonia dispatcher startup (#283).**
+  - Enforced the single-instance check in `Program.cs` before `BuildAvaloniaApp().StartWithClassicDesktopLifetime` so launching a second `Axiom.Desktop` instance exits cleanly with a user-friendly dialog instead of throwing an unhandled Avalonia Dispatcher exception.
+- **Privacy Shield `Phishing` category, 8-source toggles, and Setup/service auto-DNS reliability.**
+  - Added `PrivacyCategory.Phishing`, included it in `Strict`, reclassified `phishing-filter` (`Phishing`) and `hagezi-tif` (`Malware | Phishing`), prioritized `Malware | Phishing` downloads in `PrivacyShieldSourceUpdater`, and added `Phishing` category checkboxes to both Avalonia and WPF Privacy Shield views.
+  - Optimized `PrivacyShieldPolicy.NormalizeDomain` with thread-static `IdnMapping` and ASCII fast-path scanning for ~700k+ rule rebuilds.
+  - Increased `PrivacyConfigure` IPC timeout (`5s -> 60s`) and `PrivacySourcesUpdate` timeout (`3m -> 5m`), added `Mode=TwoWay` binding for source toggles, surfaced a warning if an older running service drops unknown source IDs, and woke `PrivacyShieldWorker` immediately after `ConfigureAsync`.
+  - Updated `PrivacyDnsFailSafe.BuildFallbackCandidates` and `SelectTargetAdapter` (filtering loopback/site-local entries, falling back through saved -> current -> gateway/DHCP IPv4, preferring physical adapters over virtual ones, 45s PS timeout with kill), added a 30s reconciliation loop in `PrivacyShieldWorker`, registered `Axiom.Service.exe` early during Complete setup, and preserved existing user `privacy-shield.json` across desktop restarts.
+
+## What's in 0.27.0
+
+- **Reliable row selection, right-click copy, and refresh preservation in Agent Activity, Findings & Hook Evidence (#296).**
+  - Replaced cell-level `AxiomSelectableTextBlock` inside `ListBox` row templates in `AgentDashboardView.axaml` and `AgentStatsView.axaml` with `TextBlock` (keeping `AxiomSelectableTextBlock` in the right-hand details panes), added `Background="Transparent"` on row grids, and wired `DataListSelection.SelectOnPointerPress` plus fixed `MainWindow.SelectContainingListItem` to walk visual ancestors past the `ItemsPresenter`/`VirtualizingStackPanel` container to the owning `ListBox`.
+  - Passed `PlacementTarget.DataContext` as `CommandParameter` from row context menus (`Copy event`, `Copy details`, `Copy raw event JSON`, `Copy finding`, `Copy hook evidence`) and updated `AgentsPageViewModel` copy commands so actions always target the right-clicked row and keep selection and details panes in sync.
+  - Guarded `ApplyFindings` with `_preservingFindingSelection` and `ApplyHookEvidence` with change detection and identity preservation so periodic background refreshes never drop or flash the user's selected row.
+  - Added headless UI and ViewModel regression tests in `AgentActivitySelectionTests` using a single dedicated Avalonia UI thread (`TestAppBuilder.RunOnUiThread`).
+- **Complete UTF-8 / cp1252 / CP437 mojibake cleanup & regression test (#299).**
+  - Fixed all corrupted punctuation across `AgentHealthView.axaml` (`hooksâ€¦`), `AgentsView.axaml` (`â€”`), `AgentDashboardView.axaml` (`Â·`), `BlackboxDashboardClient.cs` (`â€”`), both `OpenCodeProtection.cs` guard scripts (`â€¦`), `README.md`, `docs/CHANGELOG.md`, and `docs/RELEASES/0.26.0.md`.
+  - Added `SourceEncodingRegressionTests` to fail builds if any `*.cs`, `*.axaml`, or `*.xaml` source file under `src/` reintroduces mojibake sequences.
+
+## What's in 0.26.0
+
+- **Guard bridge under the committed interpreter.** The bridge re-execs the interpreter that matches the committed dependency environment before reading stdin, removing the per-call pydantic_core/
+o tui_gateway warnings and letting the seed-phrase and keystore detectors load.
+
+## What's in 0.25.0
+
+- **Trader Shield UI, Wallet/Address Persistence & BIP-39 Seed-Phrase Runtime Repair (#320, #324).**
+  - Added `BlackboxWordlistNormalizer` to repair Windows CRLF line endings back to LF (`2f5eed53â€¦`) across all installed Blackbox wordlist locations (`agent-blackbox`, `%LOCALAPPDATA%\hermes`, and `~/.hermes`) during install, startup provisioning, dashboard start, and Trader Shield self-test so seed-phrase detection stays active without requiring reinstallation.
+  - Added `AgentProtectionSelfTest.TraderShieldChecks()` (synthetic non-uniform labelled BIP-39 seed-phrase write -> `secret:seed-phrase` block and Exodus keystore read -> `fileaccess:read_file:crypto-wallet` block), fixed `AgentProtectionSelfTest.Identifier` regex for underscore tool names and `secret:*` identifiers, and extended `TraderShieldProvisioner` with `Read` / wallet selection persistence across all 11 supported wallets.
+  - Added `TraderShieldSectionViewModel` and `TraderShieldSectionView` (enable toggle, 11 wallet checkboxes, local-only validated `0x...` EVM address list, Save button, and live self-test button) embedded on both the Security (Integrations) and Agents views.
+
 ## What's in 0.24.0
 
 - **Default ISP-blind encrypted DoH (`443`) for Complete install & auto-upstream mode.** Added `EncryptDnsViaDoh` (default `true`) on `PrivacyShieldSettings` and `PrivacyShieldPolicy.DefaultDohUpstream` (`"1.1.1.1, 9.9.9.9"`), added multi-target `SystemDnsResolver.TryParseUpstreamTargets` and `DefaultDohTargets()`, updated `PrivacyShieldController.TryCreateServer` so empty/automatic `UpstreamDns` never silently forwards plain UDP port `53` queries to a LAN router or ISP DNS when DoH encryption is enabled, defaulted Complete setup (`SetupDefaults` and `PrivacyShieldProvisioner`) to `"1.1.1.1, 9.9.9.9"` over HTTPS/2 TLS port `443`, and exposed the `Encrypt upstream DNS via DoH` toggle in both Avalonia and WPF Privacy Shield views.
@@ -458,10 +761,12 @@ This is the original feature-by-feature release history extracted from the long 
 - **Agent tool fetches are attributed to the agent.** Agents fetch through tools (curl, git, nslookup),
   so the DNS query belongs to the tool child, not the agent process. Axiom now walks the parent chain
   (up to six levels) once per process and remembers the nearest agent ancestor, so a malware-list
-  domain fetched that way is still a truthful etched-by-tool sighting.
+  domain fetched that way is still a truthful 
+etched-by-tool sighting.
 - **Verified live.** With the adapter pointed at the resolver, a malware-list domain fetched by an agent
   tool produced a candidate, was submitted by the desktop, and the DKG accepted it: the report is in
-  the community's shared memory (ioc:domain:win.down.55kantu.com, stage eported Â· monitor).
+  the community's shared memory (ioc:domain:win.down.55kantu.com, stage 
+eported Â· monitor).
 
 ## What's in 0.10.2
 

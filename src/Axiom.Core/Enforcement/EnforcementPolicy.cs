@@ -192,7 +192,72 @@ internal static class EnforcementScopeMatcher
         return normalizedCandidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string NormalizePath(string value) => value.Replace('\\', '/').TrimEnd('/');
+    private static string NormalizePath(string value)
+    {
+        var normalized = value.Trim().Trim('"', '\'').Replace('\\', '/');
+        if (normalized.StartsWith("file:///", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized["file:///".Length..];
+        }
+        else if (normalized.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "//" + normalized["file://".Length..];
+        }
+
+        if (normalized.StartsWith("//?/UNC/", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "//" + normalized["//?/UNC/".Length..];
+        }
+        else if (normalized.StartsWith("//?/", StringComparison.Ordinal) ||
+                 normalized.StartsWith("//./", StringComparison.Ordinal))
+        {
+            normalized = normalized[4..];
+        }
+
+        var isUnc = normalized.StartsWith("//", StringComparison.Ordinal);
+        var isUnixRoot = !isUnc && normalized.StartsWith('/');
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return isUnixRoot ? "/" : string.Empty;
+        }
+
+        var isDriveRoot = !isUnc && !isUnixRoot && parts[0].Length == 2 && parts[0][1] == ':';
+        var anchorCount = isDriveRoot ? 1 : 0;
+        var resolved = new List<string>(parts.Length);
+
+        foreach (var part in parts)
+        {
+            if (part == ".")
+            {
+                continue;
+            }
+
+            if (part == "..")
+            {
+                if (resolved.Count > anchorCount && resolved[^1] != "..")
+                {
+                    resolved.RemoveAt(resolved.Count - 1);
+                }
+                else if (!isDriveRoot && !isUnixRoot && !isUnc)
+                {
+                    resolved.Add(part);
+                }
+
+                continue;
+            }
+
+            resolved.Add(part);
+        }
+
+        var joined = string.Join('/', resolved);
+        if (isUnc)
+        {
+            return "//" + joined;
+        }
+
+        return isUnixRoot ? "/" + joined : joined;
+    }
 
     private static bool MatchesHost(string scope, string candidate)
     {

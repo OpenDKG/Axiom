@@ -152,7 +152,7 @@ public sealed class AiAnalystClient : IDisposable
             return finding;
         }
         catch (Exception exception) when (exception is
-                     HttpRequestException or TaskCanceledException or IOException or JsonException)
+                     HttpRequestException or TaskCanceledException or IOException or InvalidDataException or JsonException)
         {
             return ErrorFinding("AI request failed: " + exception.Message);
         }
@@ -649,7 +649,7 @@ public sealed class AiAnalystClient : IDisposable
                 : ParseFinding(content, settings.VerifierModel);
         }
         catch (Exception exception) when (exception is
-                     HttpRequestException or TaskCanceledException or IOException or JsonException)
+                     HttpRequestException or TaskCanceledException or IOException or InvalidDataException or JsonException)
         {
             return ErrorFinding("Verifier request failed: " + exception.Message);
         }
