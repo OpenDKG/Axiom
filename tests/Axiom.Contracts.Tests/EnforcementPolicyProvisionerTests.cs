@@ -122,4 +122,20 @@ public sealed class EnforcementPolicyProvisionerTests
             }
         }
     }
+
+    [Fact]
+    public void Defaults_write_nothing_off_windows()
+    {
+        // Off Windows the defaults would be /usr/share and the runner's real home; the provisioner
+        // must refuse them. On Windows this would write ProgramData, so the check stops there.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Assert.Null(EnforcementPolicyProvisioner.EnsureDefault());
+        Assert.Null(EnforcementPolicyProvisioner.EnsureDefault(userProfile: "/home/lab"));
+        Assert.Null(EnforcementPolicyProvisioner.EnsureMachineDefault());
+        Assert.False(File.Exists(EnforcementPolicyProvisioner.ResolvePath()));
+    }
 }

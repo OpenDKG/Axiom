@@ -48,7 +48,7 @@ public sealed class EnforcementController
     /// <summary>Current policy state and receipt summary. Missing file means disabled, not an error.</summary>
     public EnforcementStatusDto GetStatus()
     {
-        if (_provisionDefaultIfMissing)
+        if (_provisionDefaultIfMissing && OperatingSystem.IsWindows())
         {
             // The service runs as LocalSystem, so it can write the machine-scope policy even when
             // the desktop or installer could not. Provision once, then report the real state.
