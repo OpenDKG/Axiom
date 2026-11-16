@@ -18,6 +18,9 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private readonly IServiceRequestClient? _serviceClient;
     private readonly Action? _openPrivacyOverview;
     private readonly Action? _openPrivacySettings;
+    private readonly bool _ownsConnectionsTab;
+    private readonly bool _ownsAppsTab;
+    private readonly bool _ownsEventsTab;
     private readonly List<NewConnectionMarkerEvent> _sessionEvents = [];
     private readonly HashSet<string> _seenEventKeys = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AppRow> _topAppRows = new(StringComparer.OrdinalIgnoreCase);
@@ -36,25 +39,49 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         IProcessActions? processActions = null,
         PrivacyShieldPageViewModel? privacyShield = null,
         Action? openPrivacyOverview = null,
-        Action? openPrivacySettings = null)
-        : base("Network Dashboard", "Live sockets, throughput and recent network activity", "O")
+        Action? openPrivacySettings = null,
+        ConnectionsPageViewModel? connectionsTab = null,
+        AppsPageViewModel? appsTab = null,
+        EventsPageViewModel? eventsTab = null,
+        IUiTimerFactory? timers = null)
+        : base("Network Dashboard", "Throughput, live connections, applications and network events", "O")
     {
         _monitor = monitor;
         _traffic = traffic;
         _ui = ui ?? new NullUserInteraction();
         _serviceClient = serviceClient;
+        var resolvedProcesses = processActions ?? new UnsupportedProcessActions();
         PrivacyShield = privacyShield;
         _openPrivacyOverview = openPrivacyOverview;
         _openPrivacySettings = openPrivacySettings;
+        _ownsConnectionsTab = connectionsTab is null;
+        _ownsAppsTab = appsTab is null;
+        _ownsEventsTab = eventsTab is null;
+        ConnectionsTab = connectionsTab ?? new ConnectionsPageViewModel(_monitor, _ui, serviceClient, resolvedProcesses);
+        AppsTab = appsTab ?? new AppsPageViewModel(_monitor, serviceClient, _ui, resolvedProcesses);
+        EventsTab = eventsTab ?? new EventsPageViewModel(
+            serviceClient,
+            timers ?? FallbackTimerFactory.Instance,
+            _ui,
+            resolvedProcesses);
         _actions = new ConnectionActionService(
             serviceClient,
             _ui,
-            processActions ?? new UnsupportedProcessActions());
+            resolvedProcesses);
         _monitor.Updated += OnMonitorUpdated;
         _traffic.Updated += OnTrafficUpdated;
         Refresh();
         QueuePrivacyRefresh(force: false);
     }
+
+    public ConnectionsPageViewModel ConnectionsTab { get; }
+
+    public AppsPageViewModel AppsTab { get; }
+
+    public EventsPageViewModel EventsTab { get; }
+
+    [ObservableProperty]
+    private int _selectedMonitoringTabIndex;
 
     /// <summary>
     /// Which protections are on (firewall write gate, firewall protection, Privacy Shield resolver,
@@ -122,6 +149,9 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
             Refresh();
         }
 
+        (ConnectionsTab as IActivatablePage)?.Activate();
+        (AppsTab as IActivatablePage)?.Activate();
+        (EventsTab as IActivatablePage)?.Activate();
         QueuePrivacyRefresh(force: true);
     }
 
@@ -145,6 +175,9 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     public void Deactivate()
     {
         _isActive = false;
+        (ConnectionsTab as IActivatablePage)?.Deactivate();
+        (AppsTab as IActivatablePage)?.Deactivate();
+        (EventsTab as IActivatablePage)?.Deactivate();
     }
 
     public ObservableCollection<ConnectionRow> Connections => _monitor.Connections;
@@ -732,6 +765,48 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     {
         _monitor.Updated -= OnMonitorUpdated;
         _traffic.Updated -= OnTrafficUpdated;
+        if (_ownsConnectionsTab)
+        {
+            ConnectionsTab.Dispose();
+        }
+
+        if (_ownsAppsTab)
+        {
+            AppsTab.Dispose();
+        }
+
+        if (_ownsEventsTab)
+        {
+            EventsTab.Dispose();
+        }
+    }
+
+    private sealed class FallbackTimerFactory : IUiTimerFactory
+    {
+        public static FallbackTimerFactory Instance { get; } = new();
+
+        public IUiTimer Create(TimeSpan interval) => new FallbackTimer(interval);
+
+        private sealed class FallbackTimer(TimeSpan interval) : IUiTimer
+        {
+            public TimeSpan Interval { get; set; } = interval;
+
+            public bool IsEnabled { get; private set; }
+
+            public event EventHandler? Tick
+            {
+                add { }
+                remove { }
+            }
+
+            public void Start() => IsEnabled = true;
+
+            public void StopTimer() => IsEnabled = false;
+
+            public void Dispose()
+            {
+            }
+        }
     }
 
     private void OnMonitorUpdated(object? sender, EventArgs e)

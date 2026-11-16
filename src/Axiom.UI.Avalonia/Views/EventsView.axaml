@@ -49,8 +49,7 @@
           </Grid>
         </Border>
 
-        <Border Grid.Row="1" Padding="16,10" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1"
-                Background="{DynamicResource Axiom.SurfaceAlt}">
+        <Border Grid.Row="1" Padding="16,10" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,0,0,1">
           <StackPanel Spacing="6">
             <WrapPanel Orientation="Horizontal">
               <Button Content="Inspect event" Command="{Binding InspectEventCommand}"
@@ -239,7 +238,7 @@
             </ItemsControl>
           </ScrollViewer>
 
-          <Border IsVisible="{Binding IsEmpty}" Background="{DynamicResource Axiom.Surface}">
+          <Border IsVisible="{Binding IsEmpty}" Background="Transparent">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520" Spacing="6">
               <controls:AxiomSelectableTextBlock Text="No events in this view." FontSize="15" FontWeight="SemiBold"
                          Foreground="{DynamicResource Axiom.TextPrimary}" HorizontalAlignment="Center" />

@@ -309,7 +309,7 @@ internal static class SetupInstaller
                         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                         ReadConfigOrNull,
                         Directory.Exists);
-                    var dkgIdentity = await WaitForDkgIdentityAsync(dkgHome, cancellationToken)
+                    var dkgIdentity = await WaitForDkgIdentityAsync(dkgHome, Report, cancellationToken)
                         .ConfigureAwait(false);
                     dkgInstalled = dkgIdentity.Verified;
 
@@ -478,7 +478,8 @@ internal static class SetupInstaller
                 }
 
                 var partialSuccess = partialIssues.Count > 0;
-                if (options.StartAfterInstall && !partialSuccess)
+                SaveLastSetupWarning(warning);
+                if (options.StartAfterInstall)
                 {
                     Process.Start(new ProcessStartInfo(desktopTarget)
                     {
@@ -883,16 +884,27 @@ internal static class SetupInstaller
     /// </summary>
     private static async Task<DkgIdentity> WaitForDkgIdentityAsync(
         string home,
+        Action<string>? report,
         CancellationToken cancellationToken)
     {
         DkgIdentity? last = null;
-        for (var attempt = 0; attempt < 30; attempt++)
+        // The node's first start initialises its store before the identity endpoint answers; the lab
+        // took well over 30 s, so give it up to 90 s and say what is happening instead of failing
+        // with "could not be initialized" while the node is still coming up (issue #381).
+        const int attempts = 90;
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
             last = await DkgIdentityProbe.CheckAsync(home, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             if (last.Verified || last.StatusCode is 401)
             {
                 return last;
+            }
+
+            if (report is not null && attempt is 29 or 59)
+            {
+                report($"DKG identity not verified after {attempt + 1}s; the node may still be starting " +
+                       $"({last.Summary}).");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
@@ -1081,6 +1093,33 @@ internal static class SetupInstaller
             {
                 Marshal.FinalReleaseComObject(shell);
             }
+        }
+    }
+
+    private static void SaveLastSetupWarning(string? warning)
+    {
+        try
+        {
+            var logDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Axiom",
+                "logs");
+            var path = Path.Combine(logDir, "setup-last-warning.txt");
+            if (string.IsNullOrWhiteSpace(warning))
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+
+                return;
+            }
+
+            Directory.CreateDirectory(logDir);
+            File.WriteAllText(path, warning);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
         }
     }
 

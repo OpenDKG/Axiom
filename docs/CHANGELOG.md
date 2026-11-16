@@ -2,6 +2,83 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.64.0
+
+- **Guard: openssl/ssh-keygen key reads, `reg export` of SAM, `.aws` archives.**
+  - A rotated 26-probe batch on 0.63 hooks allowed `openssl rsa -in …id_rsa`, `ssh-keygen -y -f …id_rsa`, `reg export HKLM\SAM` and `Compress-Archive ~/.aws`. The read check now covers openssl/ssh-keygen/gpg/age, the hive-export check accepts `reg export`, and `.aws`/`.gnupg` are credential stores (issue #382).
+  - Re-verified 26/26 against a hook generated from the patched source; controls still allow.
+- **Setup: the DKG identity check no longer warns while the node is still starting.**
+  - `SetupInstaller` polled the node identity for 30 s and then warned "DKG node could not be initialized or verified" even though the node came up healthy moments later (issue #381). It now polls up to 90 s and reports at 30 s/60 s that the node may still be starting, so the warning only appears for a real failure.
+
+## What's in 0.63.0
+
+- **CI: the DNS proxy TCP test no longer flakes.**
+  - `DnsProxyTests.Proxy_blocks_matching_domains_over_tcp` failed on a busy runner when the proxy fell back to UDP-only because its TCP listener lost the bind race. The test now retries the bind up to five times before asserting, so it checks block behaviour instead of timing (issue #374).
+
+## What's in 0.62.0
+
+- **Simple & Advanced UI modes (`SimpleHomeView`, `SimpleHomePageViewModel`, `UiModeSettingsStore`):**
+  - Added a segmented **`Simple | Advanced`** switch directly in the top notification bar (`MainWindow.axaml`) right beside the update and notifications buttons (`UpdateButton`, `AlertsButton`), persisted locally per user via `%LOCALAPPDATA%\Axiom\ui-mode.txt` (`WindowsUiModeService`).
+  - **Simple Mode** streamlines the sidebar to 5 clear destinations (`Home`, `Network Control`, `Privacy Overview`, `Settings`, `Help & Support`) and opens **`SimpleHomeView`**: an everyday protection hero banner with 1-click Shield toggle, three summary cards (`Firewall Shield`, `Ad & Tracker Blocker`, `Internet Activity`), inline pending outbound app approvals (`Allow` / `Block`), and currently online apps without technical socket/PID/IPC jargon.
+  - **Advanced Mode** preserves the full 12-page technical dashboard, diagnostics, AI agent tools, graph analytics, and status-bar telemetry untouched, with seamless cross-mode deep links from notifications and alerts (`ShellViewModel.NavigateToPage`).
+
+## What's in 0.61.0
+
+- **Guard: protected reads through admin shares and search tools, and non-English injection.**
+  - `type \\localhost\C$\Users\me\.ssh\id_rsa` and `findstr /s /i "PRIVATE KEY" C:\Users\me\.ssh\*` were allowed on 0.59 hooks; the new `_reads_protected` check pairs a read verb with a protected token in path position (also covers `select-string`, `grep`, `tar`, `robocopy`, `copy-item`).
+  - Injection heuristics gained Serbian, German, Spanish, French, Italian, Portuguese and Russian phrasings for "ignore previous instructions".
+  - `AgentCommandGuardTests` pin both in the shared helpers (issue #377).
+- **Setup: silent second instance no longer hangs, and the Hermes plugin gets its dependencies.**
+  - A second `--silent` setup writes the busy message to stderr and exits 3 instead of opening a modal box nobody can dismiss (issue #375).
+  - After `hermes plugins enable`, both installer copies install the Blackbox plugin dependencies into the Hermes base runtime and committed environment, then verify with `hermes plugins doctor`; a vendor failure is a warning, never an install failure (issue #376).
+
+## What's in 0.60.0
+
+- **Redesigned theme-aligned `Axiom Setup` wizard (`SetupNativeWindow`, `SetupGdiPlus`, `SetupThemePalette`):**
+  - Replaced legacy Win32 controls with a double-buffered GDI+ setup window using `Axiom.Setup.Logo.png` (`Square150x150Logo.png`), DWM titlebar styling, unified `CornerRadius="6"` geometry, custom vector radio cards/checkboxes/progress bar, and dynamic synchronization with all six Axiom themes via `ThemeSettingsStore.Load()` (`GlassDark` smoked obsidian + `#E2E8F0` silver chrome by default, plus `Dark`, `DarkMidnight`, `GlassLight`, `Light`, and `LightWarm`).
+  - Replaced the single-column radio + path dump with clean side-by-side **Complete Protection (`RECOMMENDED`)** and **Core / Partial Build (`NO ADMIN`)** cards, an interactive **Write scope** view, a crisp **Development build notice** acceptance card, and a dedicated **Progress** view with live step summary, timer, animated shimmer bar, and dark/themed scrollable log.
+- **Automatic post-install / post-update launch & self-closing installer (`SetupInstaller`, `SetupNativeWindow`):**
+  - `SetupInstaller.InstallAsync` now launches `Axiom.Desktop.exe` whenever `StartAfterInstall` is enabled (`true` by default) once core installation succeeds (even when optional-module warnings occur, recording warnings to `%LOCALAPPDATA%\Axiom\logs\setup-last-warning.txt`).
+  - Interactive Install and Update (`Upgrade`) flows automatically close the installer upon completion without blocking popups, and prompt to close any already-running `Axiom.Desktop` instance so in-place updates finish cleanly.
+
+## What's in 0.59.0
+
+- **Dark folded titanium Axiom brand mark & centered sidebar chrome:**
+  - Replaced `axiom-icon.png` and `axiom-lockup.png` in both UI asset folders (`src/Axiom.UI.Avalonia/Assets` and `src/Axiom.UI/Resources`), rebuilt multi-size `axiom.ico`, and regenerated MSIX Store tiles/splash (`packaging/msix/generate-assets.ps1`): removed the stray upper-right shield notch, refined the crisp diagonal metal fold (`brushed steel` vs `dark gunmetal`), matched the folded metallic finish across the `AXIOM` letters, and added subtle `xiom` lettering below `A` inside the shield.
+  - Centered the top-left `AXIOM` lockup and `LOCAL-FIRST · NO TELEMETRY` badge in `MainWindow.axaml`, removed the redundant top-left version label, centered the bottom-left footer (`Axiom` icon, name, version, description, and action buttons), and pointed `Contact` to `mailto:contact@opendkg.org`.
+- **Network Dashboard consolidation & sidebar reorganization:**
+  - Embedded `Live Connections`, `Applications`, and `Network Events` directly as compact tabs inside `Network Dashboard`, removed the duplicate `Privacy Shield` summary card from `Network Dashboard`, renamed `PROTECTION` to `AI` (including `AI Analyst`), and grouped `Network Control`, `Privacy Shield`, and `Integrations` under `NETWORK & PRIVACY`.
+- **Theme harmonization & Glass Dark depth polish:**
+  - Removed opaque black list/scroll surfaces in `Live Connections` and `Network Events` so glass themes keep translucent frosted surfaces, deepened `Axiom Glass Dark` backdrop gradients, darkened `Axiom.Warning` in `Light`/`GlassLight` to `#B45309`, styled `CheckBox`/`NumericUpDown` spinners/`Separator`/`Button.danger` across all themes, wrapped `umanitek-logo.png` cleanly in `AgentsView.axaml`, made `ThreatGraphControl` resolve theme palette brushes dynamically, and introduced `AxiomDialogTheme` so dialogs, setup prompts, first-run windows, and toast alerts follow the active theme.
+
+## What's in 0.58.0
+
+- **Documentation screenshots refreshed for the 0.57 theme redesign.**
+  - Glass Dark and Glass Light dashboards, opaque Dark and Light themes, the Settings/About page in both glass themes, the leadership crop and the glass-vs-dark comparison were recaptured from the released 0.57.0 build.
+  - Screenshots now show the 0.56 monochrome lockup, the borderless frosted chrome and the current navigation.
+
+## What's in 0.57.0
+
+- **Redesigned Glass themes & harmonized all six Avalonia desktop themes:**
+  - Rebuilt `Axiom Glass Dark` and `Axiom Glass Light` around an open, continuous frosted canvas: removed chrome divider walls around the titlebar, navigation rail, header, and status bar (`Border.glass-chrome`), unified geometry at `CornerRadius="6"`, dropped heavy boxy card shadows in glass modes, and set `TransparencyBackgroundFallback="Transparent"` on `MainWindow`.
+  - Tuned `Glass Dark` to a deeper smoked slate-obsidian glass veil (`#780C111A -> #66131B28 -> #7D0A0F17`) with frosted white-smoke tiles (`#1FFFFFFF -> #10FFFFFF`), pure white text, and crisp silver-chrome accents matching the `0.56.0` monochrome shield + `AXIOM` lockup.
+  - Harmonized the four opaque (non-transparent) themes (`Dark`, `Light`, `Dark Midnight`, `Light Warm`) with seamless borders, dimensional opaque gradient bases, subtle `CardBorder` fades, and logo-aligned accents (`#E2E8F0`, `#2B313A`, `#A5B4FC`, `#443C35`).
+
+## What's in 0.56.0
+
+- **Correct lockup: the grayscale AXIOM wordmark.**
+  - 0.55.0 shipped an older `logo-letters.png`; this release replaces `axiom-lockup.png` in both UI asset folders with the intended 2172x724 grayscale shield + AXIOM lockup.
+  - The 2172x724 canvas matches the historical lockup exactly, so the navigation rail, WPF header and first-run window show it at the previous size with no stretching.
+  - MSIX `Wide310x150Logo.png` and `SplashScreen.png` regenerated with `packaging/msix/generate-assets.ps1`.
+
+## What's in 0.55.0
+
+- **New Axiom brand mark in the app, the icon set and the MSIX assets.**
+  - `axiom-icon.png` (1024x1024) and `axiom-lockup.png` (2172x1222) regenerated from the new `logo.png` and `logo-letters.png`, in both the WPF and Avalonia asset folders.
+  - `axiom.ico` rebuilt as a nine-size icon set (16-256 px) for the window, tray and setup icon.
+  - MSIX tiles and splash regenerated with `packaging/msix/generate-assets.ps1`.
+  - The lockup keeps the new art's 1.78:1 aspect instead of the old 3:1, so navigation and first-run render it narrower without stretching.
+
 ## What's in 0.54.0
 
 - **Clean Windows 11 onboarding for Blackbox & DKG, Repair flow, and clean PowerShell uninstalls:**
@@ -684,10 +761,12 @@ o tui_gateway warnings and letting the seed-phrase and keystore detectors load.
 - **Agent tool fetches are attributed to the agent.** Agents fetch through tools (curl, git, nslookup),
   so the DNS query belongs to the tool child, not the agent process. Axiom now walks the parent chain
   (up to six levels) once per process and remembers the nearest agent ancestor, so a malware-list
-  domain fetched that way is still a truthful etched-by-tool sighting.
+  domain fetched that way is still a truthful 
+etched-by-tool sighting.
 - **Verified live.** With the adapter pointed at the resolver, a malware-list domain fetched by an agent
   tool produced a candidate, was submitted by the desktop, and the DKG accepted it: the report is in
-  the community's shared memory (ioc:domain:win.down.55kantu.com, stage eported Â· monitor).
+  the community's shared memory (ioc:domain:win.down.55kantu.com, stage 
+eported Â· monitor).
 
 ## What's in 0.10.2
 
