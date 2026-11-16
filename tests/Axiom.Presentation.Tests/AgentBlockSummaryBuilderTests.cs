@@ -32,7 +32,8 @@ public sealed class AgentBlockSummaryBuilderTests
         Assert.Equal(1, summary.Failed);
         Assert.True(summary.HasBlocks);
 
-        Assert.Equal(2, summary.ByHarness.Count);
+        Assert.Equal(2, summary.HarnessCount);
+        Assert.Equal(3, summary.ReasonCount);
         Assert.Equal("claude", summary.ByHarness[0].Label);
         Assert.Equal(3, summary.ByHarness[0].Count);
 
@@ -56,6 +57,8 @@ public sealed class AgentBlockSummaryBuilderTests
         Assert.Equal(2, summary.Blocked);
         Assert.Contains(summary.ByHarness, bar => bar.Label == "unknown");
         Assert.Contains(summary.ByReason, bar => bar.Label == "other" && bar.Count == 2);
+        Assert.Equal(2, summary.HarnessCount);
+        Assert.Equal(1, summary.ReasonCount);
         Assert.True(summary.HasBlocks);
     }
 }

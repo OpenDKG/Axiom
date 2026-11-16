@@ -1,3 +1,11 @@
+## What's in 0.79.0
+
+- **Blocked actions are visible in the Simple view too.**
+  - `SimpleHomeView` gains a compact *Blocked actions by agent* card (top five agents, **Details** opens the Agents dashboard), bound to the same `AgentBlockSummary` as the Advanced chart.
+  - `AgentBlockSummary` now reports `HarnessCount`/`ReasonCount`, so the subtitle shows the real 11 agents instead of the number of drawn bars.
+  - The Advanced KPI is labelled **BLOCKED FINDINGS** and the chart says *blocked tool calls* so audit findings and guard evidence are not conflated.
+  - `BlockedActionsChart` gained `MaxRows` for compact layouts.
+
 ## What's in 0.78.0
 
 - **Setup: automatic desktop shutdown & relaunch for every Install, Update, and Repair.**

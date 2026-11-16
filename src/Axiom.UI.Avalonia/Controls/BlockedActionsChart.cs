@@ -29,10 +29,14 @@ public sealed class BlockedActionsChart : Control
         AvaloniaProperty.Register<BlockedActionsChart, IBrush>(
             nameof(BarBrush), new SolidColorBrush(Color.FromRgb(0xFF, 0x6A, 0x3D)));
 
+    public static readonly StyledProperty<int> MaxRowsProperty =
+        AvaloniaProperty.Register<BlockedActionsChart, int>(nameof(MaxRows), int.MaxValue);
+
     static BlockedActionsChart()
     {
-        AffectsRender<BlockedActionsChart>(BarsProperty, TextBrushProperty, MutedBrushProperty, BarBrushProperty);
-        AffectsMeasure<BlockedActionsChart>(BarsProperty);
+        AffectsRender<BlockedActionsChart>(
+            BarsProperty, TextBrushProperty, MutedBrushProperty, BarBrushProperty, MaxRowsProperty);
+        AffectsMeasure<BlockedActionsChart>(BarsProperty, MaxRowsProperty);
     }
 
     public IReadOnlyList<AgentBlockBar>? Bars
@@ -59,32 +63,40 @@ public sealed class BlockedActionsChart : Control
         set => SetValue(BarBrushProperty, value);
     }
 
+    /// <summary>Rows to draw; the remaining bars stay out of the compact views.</summary>
+    public int MaxRows
+    {
+        get => GetValue(MaxRowsProperty);
+        set => SetValue(MaxRowsProperty, value);
+    }
+
     private const double RowHeight = 26;
     private const double LabelWidth = 104;
     private const double ValueWidth = 52;
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        var rows = Bars?.Count ?? 0;
+        var rows = Math.Min(Bars?.Count ?? 0, Math.Max(1, MaxRows));
         var width = double.IsInfinity(availableSize.Width) ? 420 : availableSize.Width;
         return new Size(width, Math.Max(48, rows * RowHeight + 6));
     }
 
     public override void Render(DrawingContext context)
     {
-        var bars = Bars;
-        if (bars is null || bars.Count == 0)
+        var all = Bars;
+        if (all is null || all.Count == 0)
         {
             DrawText(context, "No blocked actions recorded yet.", 4, 6, 12, MutedBrush);
             return;
         }
 
+        var bars = all.Take(Math.Max(1, MaxRows)).ToArray();
         var width = Math.Max(240, Bounds.Width);
         var maximum = Math.Max(1, bars.Max(bar => bar.Count));
         var barArea = Math.Max(40, width - LabelWidth - ValueWidth);
         var typeface = new Typeface("Segoe UI");
 
-        for (var index = 0; index < bars.Count; index++)
+        for (var index = 0; index < bars.Length; index++)
         {
             var bar = bars[index];
             var y = index * RowHeight;

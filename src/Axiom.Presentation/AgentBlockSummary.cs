@@ -10,10 +10,12 @@ public sealed record AgentBlockSummary(
     int Blocked,
     int Allowed,
     int Failed,
+    int HarnessCount,
+    int ReasonCount,
     IReadOnlyList<AgentBlockBar> ByHarness,
     IReadOnlyList<AgentBlockBar> ByReason)
 {
-    public static AgentBlockSummary Empty { get; } = new(0, 0, 0, 0, [], []);
+    public static AgentBlockSummary Empty { get; } = new(0, 0, 0, 0, 0, 0, [], []);
 
     public bool HasBlocks => Blocked > 0;
 }
@@ -81,6 +83,8 @@ public static class AgentBlockSummaryBuilder
             blocked,
             allowed,
             failed,
+            byHarness.Count,
+            byReason.Count,
             Top(byHarness, maxBars),
             Top(byReason, maxBars));
     }
