@@ -26,26 +26,52 @@ public static class DohBypassDetector
         "under ~/.config, ~/.mozilla and their snap locations. Flatpak browsers and browser policies " +
         "under /etc are not checked.";
 
+    /// <summary>Text for macOS when no profile turns secure DNS on.</summary>
+    public const string MacOSNoBypassText =
+        "No browser secure-DNS (DoH) override found in the Chrome, Chromium, Edge or Firefox profiles " +
+        "under ~/Library/Application Support. Safari, browser configuration profiles (MDM) and " +
+        "managed preferences are not checked.";
+
     /// <summary>Text for a platform whose browser profile locations this detector does not know.</summary>
     public const string UnsupportedPlatformText =
         "Browser secure-DNS (DoH) settings are not checked on this platform, so a browser may still " +
         "resolve names past the Axiom resolver without this page showing it. Check each browser's " +
         "secure-DNS setting by hand.";
 
-    /// <summary>True where this detector knows the browser profile locations (Windows, Linux).</summary>
-    public static bool IsCheckSupported => OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
+    /// <summary>True where this detector knows the browser profile locations (Windows, Linux, macOS).</summary>
+    public static bool IsCheckSupported =>
+        OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS();
 
     /// <summary>What to show when nothing was found, honest about what was looked at on this platform.</summary>
     public static string NoBypassTextForCurrentPlatform =>
         OperatingSystem.IsWindows() ? NoBypassText
         : OperatingSystem.IsLinux() ? LinuxNoBypassText
+        : OperatingSystem.IsMacOS() ? MacOSNoBypassText
         : UnsupportedPlatformText;
 
     /// <summary>Runs the scan for this platform; empty where <see cref="IsCheckSupported"/> is false.</summary>
     public static IReadOnlyList<DohBypassFinding> DetectForCurrentPlatform() =>
         OperatingSystem.IsWindows() ? Detect()
         : OperatingSystem.IsLinux() ? DetectLinux()
+        : OperatingSystem.IsMacOS() ? DetectMacOS()
         : [];
+
+    /// <summary>
+    /// macOS profile locations under <c>~/Library/Application Support</c>: Google/Chrome, Chromium,
+    /// Microsoft Edge and Firefox/Profiles. Read-only, like <see cref="Detect"/>. Safari has no
+    /// per-browser DoH setting to read here.
+    /// </summary>
+    public static IReadOnlyList<DohBypassFinding> DetectMacOS(string? home = null)
+    {
+        home ??= Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var support = Path.Combine(home, "Library", "Application Support");
+        var findings = new List<DohBypassFinding>();
+        AddChromium(findings, "Chrome", Path.Combine(support, "Google", "Chrome"));
+        AddChromium(findings, "Chromium", Path.Combine(support, "Chromium"));
+        AddChromium(findings, "Edge", Path.Combine(support, "Microsoft Edge"));
+        AddFirefox(findings, "Firefox", Path.Combine(support, "Firefox", "Profiles"));
+        return findings;
+    }
 
     /// <summary>
     /// Linux profile locations: Chrome, Chromium and Edge under <c>$XDG_CONFIG_HOME</c> (default

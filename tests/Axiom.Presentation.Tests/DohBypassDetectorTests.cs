@@ -191,6 +191,29 @@ public sealed class DohBypassDetectorTests : IDisposable
     }
 
     [Fact]
+    public void MacOS_profiles_under_application_support_are_read()
+    {
+        var home = Path.Combine(_root, "machome");
+        var support = Path.Combine(home, "Library", "Application Support");
+        WriteFile(Path.Combine(support, "Google", "Chrome", "Default", "Preferences"), """
+            {"dns_over_https":{"mode":"secure","templates":"https://dns.google/dns-query"}}
+            """);
+        WriteFile(Path.Combine(support, "Microsoft Edge", "Default", "Preferences"), """
+            {"dns_over_https":{"mode":"off"}}
+            """);
+        WriteFile(Path.Combine(support, "Firefox", "Profiles", "abcd.default-release", "prefs.js"),
+            "user_pref(\"network.trr.mode\", 3);\n");
+
+        var findings = DohBypassDetector.DetectMacOS(home);
+
+        Assert.Equal(["Chrome", "Firefox"], findings.Select(f => f.Application).ToArray());
+        Assert.Contains("https://dns.google/dns-query", findings[0].Detail, StringComparison.Ordinal);
+        Assert.Contains("network.trr.mode 3", findings[1].Detail, StringComparison.Ordinal);
+        Assert.Empty(DohBypassDetector.DetectMacOS(Path.Combine(_root, "empty")));
+        Assert.DoesNotContain("Windows", DohBypassDetector.MacOSNoBypassText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Linux_ignores_windows_profile_layout_and_reports_its_own_locations()
     {
         // A Windows-shaped tree under the home must not be read on Linux, and the no-finding text
