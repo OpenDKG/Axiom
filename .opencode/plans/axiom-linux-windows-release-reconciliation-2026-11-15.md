@@ -851,9 +851,12 @@ wrong-password denial; pure-Wayland backend. The supported deliverable remains U
 ## 17. Revision 10 — confirmed postrm symlinked-enablement-dir nit fixed; 0.59.0+linux.5
 
 Date: 2026-11-16 (UTC). Single local builder. The independent review of revision 9 confirmed one
-narrow packaging nit and approved the rest; no other code changed. Local and **unpublished**: the
-new artifact needs a fresh independent review and is not a release. No backend, BPF, Windows or
-spec behavior was touched.
+narrow packaging nit and approved the rest; no other code changed. **Post-review update:** the
+independent reviewer approved `856cef8` / `axiom-firewall_0.59.0+linux.5` as a bounded Ubuntu
+24.04 x86_64 local candidate (hash recomputed, scripts matched, new regression failed before the
+fix and passed after, application/native/BPF payload unchanged from the reviewed `linux.4`). That
+approval is local only: not a release, not Windows parity. The exact approved artifact is preserved
+in `/tmp/opencode/axiom-cleanup-boundary-20261116/`.
 
 | Item | Value |
 |---|---|
@@ -896,19 +899,103 @@ approved `linux.4`" is impossible by construction: the packaged `changelog.gz` e
 timestamp (`date -R`), so every rebuild differs. A control rebuild from the reviewed tree `c4a8529`
 (unchanged payload, `--local linux.4`) produced `e1022de0…`, not `1ae47cec…`. Extracting both showed
 all 479 payload paths identical **except** `usr/share/doc/axiom-firewall/changelog.gz`, whose only
-difference is the timestamp line; the control archive was byte-identical. The `linux.5` artifact
-differs from the approved `linux.4` in exactly `DEBIAN/control` (Version), `DEBIAN/postrm` and the
-`md5sums` line for the regenerated changelog — no payload drift. The approved `linux.4` binary in
+difference is the timestamp line. The control archive was **not** byte-identical: the `md5sums`
+line for the regenerated changelog differs. This is a measured control rebuild, not a claim that
+every rebuild necessarily differs or that any two builds match. The `linux.5` artifact differs from
+the approved `linux.4` in exactly `DEBIAN/control` (Version), `DEBIAN/postrm` and the `md5sums` line
+for the regenerated changelog — no payload drift. The approved `linux.4` binary in
 the revision-9 directory is untouched.
 
 ### 17.3 Status and residual gates
 
 - Linux `.deb`: Ubuntu 24.04 x86_64 **supported candidate** at best — not "all Linux production".
-- Review: **fresh independent review of `856cef8` / `linux.5` is PENDING**. This revision is not a
-  review result.
+- Review: `856cef8` / `linux.5` was **independently reviewed and approved locally** as a bounded
+  Ubuntu 24.04 x86_64 candidate after revision 10 was written. See `§18` for the new 0.73.0 build,
+  which is a different artifact and needs its own review.
 - Unchanged residual gates: Windows runtime/WPF/locked restore and Setup RID (**owner runs the
   tests**; nothing uploaded, no credentials requested), runtime signing, release-write approval,
   RPM build/runtime (nfpm absent), arm64, polkit wrong-password denial, pure-Wayland backend.
-- Baseline drift: owner reports upstream `main` is now **0.65**. This branch remains deliberately
-  based on `v0.59.0` (upstream `28918945…`); it is **not** a sync-with-latest claim. Moving the
-  baseline is an owner decision; this run does not chase it.
+- Baseline drift: this branch **was** based on `v0.59.0` (`28918945…`). Revision 11 moves it to
+  `v0.73.0` (`bfc5553…`) and the current `feature/linux-port` (`8beaa43…`); see `§18`. No further
+  upstream chasing after that snapshot.
+
+---
+
+## 18. Revision 11 — reviewed linux.5 published as a source branch; reconciled onto main v0.73.0 and feature/linux-port 8beaa43
+
+Date: 2026-11-16 (UTC). Single builder, no parallel/DKG workers. The user authorised an ordinary
+non-force push of the already-approved source commits and a bounded reconciliation with the newest
+Linux/Windows upstream work. Nothing here is a release, tag, asset, merge to `main` or Windows
+runtime claim.
+
+### 18.1 Initial authorised push (approved source only)
+
+| Item | Value |
+|---|---|
+| Remote | `https://github.com/a-51-50/Axiom` (canonical; the local `/root/Axiom` `brxtrac` fork was not pushed) |
+| Branch | `recon/linux-main-0.59.0` (new branch, no force, no collision) |
+| Commit | `a688fe2fb897f5e31098cf0cb464dacee572dd3d` (= reviewed `856cef8` + plan-only `a688fe2`) |
+| Verification | `git ls-remote` returned the same full SHA after the push |
+| Pre-push audit | no secret material, private keys, binaries, `.deb`/RPM, VM images or evidence archives in the pushed history; only PNG assets already present on public upstream. `/root/Axiom` stayed at `6991fb9…`, clean |
+
+### 18.2 Upstream snapshot (fixed once, not chased)
+
+| Item | Value |
+|---|---|
+| Canonical `main` | `bfc555372caba134d1ea1fae0c755e55bfafbf3e` — v0.73.0, "wildcard path bypasses + DSH bridge pairing" |
+| Windows release | `v0.73.0`; assets still built by upstream workflow, not touched here |
+| Linux PR | `#276 feature/linux-port` head `8beaa434561d7f5fe39809d85bce2357d757e0b3`; still draft, `CHANGES_REQUESTED`, `CONFLICTING` with its macOS base; it already merged `main` `e904bf8` (v0.68.0) |
+| macOS base | `feature/macos-port` `b592ae49…` (not merged here) |
+| Integration branch | `recon/linux-main-0.73.0` from `a688fe2` (local only until reviewed) |
+
+### 18.3 Integration commits
+
+| Commit | What |
+|---|---|
+| `0214fc2` | Merge `8beaa43` (upstream Linux port + main v0.68.0) into the reviewed branch. Kept the reviewed DEB payload/scripts, `bpf-pins.sh`, man page, lintian overrides, optional resolver paths, `RestartSec=2` + 60 s/5-burst start limit, strict bpftool JSON parsing and the local DoH-port copy. Took upstream's `AdapterDnsError` seam, `ProcessSpawnAuditWorker` registration inside `ConfigureAgentEnforcement`, Simple/Advanced UI modes, `DetachOutcome`, and the local test move to `Axiom.Service.Hosting.Tests`. |
+| `007c060` | Merge `bfc5553` (main v0.73.0): guard wildcard-path, password-manager/DPAPI/cloud-secret, split/csplit staging and DeepSeek DSH pairing fixes. All are shared guard/detection code; the Windows-only enforcement surfaces stay Windows-only. |
+| `076b341` | Keep startup "BPF attachment unreadable" conservatively `StaleProgramsAttached=true` (plus `AttachmentUnknown=true`) because the reviewed branch closed writes on that state; align the local-only log/error-code assertions with upstream's stricter parser (`bpf.attachment_unknown`, "detach not confirmed"). |
+| `01fc9a3` | Regenerated `packages.lock.json` for the 0.73.0 project graph; removed a publish-time RID graph so portable `--locked-mode` restore is green again (34 lock files hashed in the evidence dir). |
+
+### 18.4 Source-commit matrix
+
+| Upstream commit(s) | Disposition | Why |
+|---|---|---|
+| `1e76851` browser DoH check reads Linux profiles | already contained/merged | shared macOS/Linux DNS work, tests pass in `Axiom.Service.Hosting.Tests` |
+| `e475d2c` Windows service explicit target framework; `8beaa43` POSIX tests return early | applied | build/script and test-only portability fixes; `-f net10.0-windows` kept explicit |
+| `5d756ab` merge `main` v0.68.0; `0.60`–`0.68` shared fixes | applied via `0214fc2` | conflict-free except the files resolved above |
+| `a318797`, `f8b2d9b`, `9844acd`, `479b997`, `c89906f`, `f4f5f40` (0.69–0.73 guards) | applied via `007c060` | `AgentCommandGuard`/hook templates are shared and run on Linux; no WMI/WPF port attempted |
+| Upstream `/opt` packaging and older `0.13.2` docs | not applied | local `/usr/lib/axiom-firewall` layout, `bpf-pins.sh`, lintian 0E/0W and migration records are the reviewed Linux packaging |
+| RPM build/runtime, arm64, Windows runtime/WPF, signing, release assets | deferred | environment/owner gates unchanged |
+
+### 18.5 New artifact and verification
+
+| Gate | Result |
+|---|---|
+| Package | `axiom-firewall_0.73.0+linux.6_amd64.deb`, 63,828,804 bytes, 515 entries, sha256 `333950bb3ee769fe579bf0a957565f53b9f8a3feefccec587df77e2146cef4b6` |
+| Full build | `dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true` succeeded (includes WPF/Windows service/Avalonia-Windows/Setup cross-build on Linux) |
+| Portable tests | **1293/1293** (Core 184, Contracts 176, Presentation 302, UI.Avalonia 98, Service.Hosting 34, Infrastructure.MacOS 249, Infrastructure.Linux 113, Unix 47, McpServer 34, Persistence 21, Desktop.Avalonia.MacOS 35) |
+| Linux NFT tests | **189/189** |
+| Desktop Linux tests | **51/51** |
+| Locked restore | `dotnet restore Axiom.Portable.slnx --locked-mode` → rc 0 after the lock refresh; `Axiom.sln --locked-mode` still reports NU1004 for RID graphs on this Linux host (pre-existing, recorded in the evidence log) |
+| Lintian | guest Ubuntu 24.04 lintian 2.117.0ubuntu1.6 on the exact `.deb`: **0 E / 0 W**, rc 0; only the known duplicate-hint stderr note, no tag |
+| Guest upgrade | approved `0.59.0+linux.5` + `protection.enable` + applied `/usr/bin/curl` rule + dark theme → `dpkg -i` `0.73.0+linux.6`: rc 0, unit active, `/var/lib/axiom` rule count 1 and state `applied`, nft table still carries the rule id, theme preserved, `/opt` absent; quick `--doctor` 13 PASS, 0 FAIL |
+| Guest fresh install | `dpkg -i` rc 0, unit active, 13 PASS, 0 FAIL; canary unscoped `--count 10`: curl/python × IPv4/IPv6 `slipped 0/10 blocked 10/10`, all rules `connectTimeBlockingProven=True` |
+| Guest remove/purge | remove rc 0, unit inactive, `/usr/libexec/axiom` and `/usr/lib/axiom-firewall` gone; purge rc 0, package absent, `/var/lib/axiom`, `/sys/fs/bpf/axiom` and nft tables gone |
+| Host/VM hygiene | disposable run overlay only; baseline `ee941cef…` hash checked before the run; VM powered off after; no host DNS/firewall/package changes |
+
+Evidence: `/tmp/opencode/axiom-latest-reconciliation-20261116/` (`REPORT.md`, `PROVENANCE.txt`,
+`SHA256SUMS`, build/test/lintian/guest logs, lock hashes, source patch, `WINDOWS-WORKER.md`).
+The artifact was built from the merged tree containing `076b341`'s engine change; only the later
+lock refresh (`01fc9a3`) is outside the payload. The guest-tested file is preserved unchanged.
+
+### 18.6 Status and residual gates
+
+- Review: **fresh independent review of `0214fc2`/`007c060`/`076b341`/`01fc9a3` and the
+  `0.73.0+linux.6` artifact is PENDING**. The integration branch was **not pushed** before that
+  review; only the approved `recon/linux-main-0.59.0` source branch is on the canonical remote.
+- Windows runtime/WPF/PipeServerTests/locked restore + Setup RID: **owner runs the tests** per the
+  earlier decision; no credentials, no retry to `192.168.7.190`.
+- Still deferred: RPM build/runtime (nfpm absent), arm64, Fedora, polkit wrong-password denial,
+  pure-Wayland backend, runtime signing, release-write approval.
+- No `main` merge, no PR merge, no force-push, no tag/release/asset, no deployment.
