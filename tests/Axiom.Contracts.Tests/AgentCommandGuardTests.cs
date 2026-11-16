@@ -12,6 +12,19 @@ namespace Axiom.Contracts.Tests;
 public sealed class AgentCommandGuardTests
 {
     [Fact]
+    public void Guard_blocks_wildcard_spellings_of_protected_and_credential_paths()
+    {
+        // Batch 13: `.ss?`, `.ss*`, `[.]ssh`, `vault.kdb?` and `...\*\Login Data` allowed because
+        // every check compared literal text.
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        Assert.Contains("def _glob_hits(", helpers, StringComparison.Ordinal);
+        Assert.Contains("def _glob_fullmatch(", helpers, StringComparison.Ordinal);
+        Assert.Contains("or _glob_hits(text, tokens)", helpers, StringComparison.Ordinal);
+        Assert.Contains("if _glob_hits(value, [marker for marker, _ in stores]):", helpers, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Guard_blocks_protected_reads_spelled_as_admin_shares_or_search_tools()
     {
         var helpers = AgentCommandGuard.PythonHelpers;
