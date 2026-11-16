@@ -2,6 +2,34 @@
 
 This is the original feature-by-feature release history extracted from the long README. Entries describe the version **at the time of release**, and earlier claims may have been corrected or superseded in later versions. For current architecture, safety and privacy behaviour see [Architecture](ARCHITECTURE.md), [Security model](SECURITY_MODEL.md), [Threat intelligence](THREAT_INTELLIGENCE.md) and [Privacy Shield](PRIVACY_SHIELD.md). Per-release build/test evidence is in [RELEASES](RELEASES/).
 
+## What's in 0.68.0
+
+- **Guard: harness wiring files and the vendor plugin config are tamper-protected.**
+  - Batch 6 on 0.67 hooks blocked `hermes plugins disable/remove blackbox` and every hooks file except two: rewriting `hermes\config.yaml` and deleting `~/.zcode/cli/config.json` were allowed (issue #391).
+  - The tamper markers now include `hermes\config.yaml`, `.hermes\config.yaml` and `.zcode\cli\config.json` (both separators).
+  - Re-verified 12/12; batches 1-5 and the per-harness tamper set stay clean.
+
+## What's in 0.67.0
+
+- **Guard: forensic and WMI persistence shapes now block.**
+  - Probe batch 5 on 0.66 hooks blocked every upload channel but allowed `fsutil usn deletejournal`, `cipher /w:` free-space wipes and a WMI `CommandLineEventConsumer` subscription (issue #389).
+  - `_escalation_risk` now reports USN-journal deletion, `cipher /w` and WMI event-consumer persistence.
+  - Re-verified 15/15; batches 1-4 and the per-harness tamper set stay clean.
+
+## What's in 0.66.0
+
+- **Guard: cabinet/ESE staging, key-authenticated SSH and SAM hive queries now block.**
+  - Probe batch 4 on 0.65 hooks allowed `makecab`/`expand` of a private key, `esentutl /y` copies, `ssh -i <key>` and `reg query HKLM\SAM` (issue #386).
+  - `_reads_protected` covers `makecab`, `expand`, `esentutl` and `ssh -i`; the credential-hive check accepts `reg query`.
+  - Re-verified 15/15 on the new batch, with batches 1-3 still clean.
+
+## What's in 0.65.0
+
+- **Guard self-protection: stopping, killing, disabling or blinding Axiom now blocks.**
+  - A 20-probe tamper batch on 0.64 hooks allowed `Stop-Service Axiom`, `sc stop Axiom`, `taskkill /f /im Axiom.Service.exe` (and the desktop), deleting `agent-evidence.jsonl`, `icacls` on the Axiom tree, `schtasks /change ... /disable`, `auditpol /clear` and `wmic shadowcopy delete` (issue #384).
+  - New `_disables_guard`: a stop/disable/overwrite verb against an Axiom target blocks as `tamper`, and audit-policy or shadow-copy wipes block outright.
+  - Verified 20/20 on the new batch while the previous batches stay clean (24/24 and 26/26).
+
 ## What's in 0.64.0
 
 - **Guard: openssl/ssh-keygen key reads, `reg export` of SAM, `.aws` archives.**
