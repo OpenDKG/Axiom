@@ -33,6 +33,12 @@ public static class AgentCommandGuard
                 "hermes/blackbox",
                 "axiom\\modules\\blackbox",
                 "axiom/modules/blackbox",
+                "hermes\\config.yaml",
+                "hermes/config.yaml",
+                ".hermes\\config.yaml",
+                ".hermes/config.yaml",
+                ".zcode\\cli\\config.json",
+                ".zcode/cli/config.json",
                 "hooks.json",
             )
             verbs = (
@@ -62,6 +68,51 @@ public static class AgentCommandGuard
             if not any(marker in text for marker in markers):
                 return False
             return any(verb in text for verb in verbs)
+
+
+        def _disables_guard(command: str) -> bool:
+            # Stopping, killing, disabling or re-ACLing the guard is tampering even when the command
+            # names no hook file: `sc stop Axiom`, `taskkill /im Axiom.Service.exe`,
+            # `Stop-Service Axiom`, `schtasks /change ... /disable`, `icacls ...\\Axiom` and deleting
+            # the evidence log all passed the sweep. So did audit-trail and shadow-copy wipes.
+            text = " ".join((command or "").lower().split())
+            if not text:
+                return False
+            targets = (
+                "axiom",
+                "axiom.service",
+                "axiom.desktop",
+                "axiom\\modules",
+                "axiom/modules",
+                "\\local\\axiom",
+                "/local/axiom",
+                "agent-evidence",
+                "agent blackbox",
+                "hermes\\blackbox",
+                "hermes/blackbox",
+            )
+            verbs = (
+                "sc stop",
+                "sc delete",
+                "stop-service",
+                "restart-service",
+                "set-service",
+                "net stop",
+                "taskkill",
+                "schtasks /change",
+                "schtasks /delete",
+                "disable-scheduledtask",
+                "unregister-scheduledtask",
+                "icacls",
+                "del ",
+                "erase ",
+                "rm ",
+                "rmdir",
+                "remove-item",
+            )
+            if any(verb in text for verb in verbs) and any(target in text for target in targets):
+                return True
+            return "auditpol /clear" in text or "shadowcopy delete" in text or "wmic shadowcopy" in text
 
 
         def _normalize_command(command: str) -> str:
@@ -112,7 +163,7 @@ public static class AgentCommandGuard
                      "open(", ".read(", "copy ", "cp ", "get-item", "strings ", "forfiles",
                      "findstr", "select-string", "grep", " rg ", "tar ", "compress-archive",
                      "copy-item", "move-item", "robocopy", "xcopy", "openssl", "ssh-keygen",
-                     "gpg", "age ")
+                     "gpg", "age ", "makecab", "expand ", "esentutl", "ssh -i")
             if not any(verb in text for verb in verbs):
                 return False
             words = text.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()
@@ -274,12 +325,18 @@ public static class AgentCommandGuard
                 return "backup catalog deletion"
             if "bcdedit" in text and "recoveryenabled no" in text:
                 return "recovery disable"
-            if ("reg save" in text or "reg export" in text) and any(hive in text for hive in ("hklm\\sam", "hklm\\security", "hklm\\system")):
+            if ("reg save" in text or "reg export" in text or "reg query" in text) and any(hive in text for hive in ("hklm\\sam", "hklm\\security", "hklm\\system")):
                 return "credential hive export"
             if "vssadmin" in text and "create shadow" in text:
                 return "shadow-copy creation"
             if "ntdsutil" in text:
                 return "NTDS dump"
+            if "fsutil" in text and "deletejournal" in text:
+                return "USN journal deletion"
+            if "cipher /w" in text:
+                return "free-space wipe"
+            if "wmic" in text and ("commandlineeventconsumer" in text or "\\root\\subscription" in text):
+                return "WMI event-consumer persistence"
             if "lsass" in text and any(tool in text for tool in ("procdump", "comsvcs", "minidump", "rundll32")):
                 return "LSASS memory dump"
             if ("wevtutil" in text and (" cl " in text or "clear-log" in text)) or "clear-eventlog" in text:
@@ -434,6 +491,8 @@ public static class AgentCommandGuard
                 protected = _load_protected_paths()
             if _tampers_with_guard(command_text):
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
+            if _disables_guard(command_text):
+                return ("tamper", "Blackbox blocked this call: it stops or disables the local guard.")
             if _deletes_protected(command_text, protected):
                 return ("delete", "Blackbox blocked this call: it deletes a protected path.")
             if _reads_protected(command_text, protected):
