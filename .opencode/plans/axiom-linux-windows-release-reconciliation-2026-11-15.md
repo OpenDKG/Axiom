@@ -603,3 +603,70 @@ independent review, Windows WPF runtime, E2E WPF behaviour, lintian, full-soluti
 Windows restore, Fedora/RPM, arm64, signing, real Wayland/tray, polkit denial UX, OS DNS
 redirect/restore (unchanged code, not retested). Not production readiness; no broad Windows
 parity claim.
+
+Revision 7 (2026-11-16T04:4xZ UTC, single builder): the review observation on the Avalonia
+`RefreshAsync` failed-probe path is fixed in local `78440c6`, the Windows lock graphs are repaired
+in `79a10b4`, and the new artifact is rebuilt from that final tree. The prior approved artifact
+(`06d83201…`) and the revision-6 artifact are preserved unchanged. Fresh independent review is
+required before any approval claim. No push/merge/tag/release/upload/signing; no host DNS/network/
+firewall change.
+
+| Item | Value |
+|---|---|
+| Code commits | `78440c62f6559b8297fb02924ce269c763422f5d` (UI), `79a10b490ca13fff346a94107945391c9678077b` (locks) |
+| Artifact | `axiom-firewall_0.59.0_amd64.deb`, 64,320,168 bytes, sha256 `3815d08c9e1f5f4ecea0d03ce6ac157d797028b305e2b49b64f6105b775857c8`, 506 entries, 0.59.0/amd64 |
+| Evidence | `/tmp/opencode/axiom-authority-readiness-20261115/` (`REPORT.md`, `PROVENANCE.txt`, `SHA256SUMS.txt`, logs, guest text, `gui-nc-*.png`) |
+
+**Fix.** `FirewallPageViewModel` now has `WriteGateKnown`. A successful `RulesQuery` or
+`ProtectionStatus` sets it; a failed read calls `ApplyQueryFailure`, which clears the rules display,
+sets `WritesEnabled=false`, `WriteGateKnown=false`, `WritePathText="unknown"`, `HasError=true`, and
+keeps the service error. Hence a successful gate-open read followed by a failed probe cannot retain
+`SHIELD ON`, `enabled (test VM only)`, or executable Apply/Remove commands; a later successful read
+restores the real gate. This mirrors the WPF three-state hint from `d90c9ff`; the service write gate
+is unchanged and no privilege is granted. Residual: the page's Shield summary keeps the last
+successful protection snapshot until the next successful status read; it is not a write
+authorization and the header/footer already show read-only. The transition is tested for both
+`ServiceUnavailableException` and a generic IPC fault.
+
+**Tests (fresh, final tree `79a10b4`).** Portable build 0 warnings/0 errors; UI.Avalonia **96/96**
+(+2 transition cases); Linux.Nft **160/160**; Desktop.Avalonia.Linux **51/51**; full portable suite
+green (Contracts 157, Core 184, Persistence 21, Unix 47, Linux 102, MacOS 249, MCP 34, Presentation
+299, Hosting 34, Desktop.MacOS 35). WPF `Axiom.UI`/`Axiom.UI.Tests` cross-build 0/0; WPF runtime
+still **not executed** here.
+
+**Live guest (new artifact `3815d08c…`, Ubuntu 24.04.5, kernel 6.8.0-147, restricted overlay).**
+Normal `dpkg -i` RC 0, doctor all checks passed, 4/4 BPF pins. Xvfb 1280x800: initial `READ-ONLY` →
+Enable protection → `SHIELD ON`/gate open → `systemctl stop axiomd` + Recheck → `READ-ONLY`,
+"Service offline/unknown", "last write-gate read did not complete", "write gate could not be read";
+SSH stayed up → `systemctl start axiomd` + Recheck → `SHIELD ON` and live monitor restored. Clean
+`dpkg -P` removed package/unit/opt/state/run/nft/BPF pins; guest resolver hash unchanged
+(`ebdf5602…`), host resolver unchanged (`a77e3f44…`), VM off, baseline `ee941cef…`, `/root/Axiom`
+clean `6991fb9…`. This is an actual probe-loss exercise, not only a unit simulation.
+
+**Windows NU1004.** `79a10b4` refreshes only the four stale Windows-target lock graphs
+(0.59 project ranges, `Axiom.Infrastructure.Windows → Axiom.Service.Hosting`, `System.CodeDom` from
+`System.Management` 10.0.14; no RID changes). Locked-mode restore now passes for
+`Axiom.Infrastructure.Windows`, `Axiom.Service.Hosting`, `src/Axiom.Desktop` and
+`Axiom.Infrastructure.Windows.Tests` under `EnableWindowsTargeting`; the Linux full-solution restore
+still fails **only** `Axiom.Setup` because this host evaluates `RuntimeIdentifiers=win-x64;linux-x64`.
+Do not regenerate that lock on Linux. Windows worker: `dotnet restore Axiom.sln --force-evaluate` if
+needed, then `--locked-mode`, full build, `Axiom.UI.Tests`; `PipeServerTests` from a scheduled task
+with interactive logon (`docs/WINDOWS_REGRESSION_2026-11-12.md`).
+
+**Windows endpoint.** `192.168.7.190:2222` is TCP-reachable now (the Nov-12 unreachable note no
+longer holds) and the host key matches `known_hosts`, but SSH as `axiom` with the local
+`id_ed25519_win11` key is denied; no other user/key was guessed. Exact missing access: an authorized
+SSH user+key for that host, or push/release authorization to run `windows-ci.yml` (upstream `main`
+Windows CI runs are green, so the self-hosted runner exists for the canonical repo). No Windows
+install, system change or remote change was made.
+
+**Acceptance matrix (detail in the evidence `REPORT.md` §5).** Supported candidate: Ubuntu 24.04
+x86_64 `.deb`, with hard gates = clean install/doctor/BPF/IPC/canary/restart/remove-purge, real
+desktop GUI, independent review of the exact commit/artifact, lintian (or owner waiver), signing,
+and release authorization; gates 1–3 plus a partial GUI check are locally live-verified, the rest
+are not. Separately gated/unsupported: Fedora/RPM, arm64, Windows runtime/WPF/locked restore, macOS,
+signing, public DoH egress, real Wayland/tray, lintian. Proposed Wayland/tray packages (not
+installed): `sway` + `waybar` (+ `wayland-utils`, optional `xwayland`), with a StatusNotifierWatcher
+and the same page walk, then purge/rollback. Exact permissions still needed: Windows host/runner
+access; `lintian` install (or waiver); `sway`/`waybar` install; public DNS egress and guest resolver
+change; Fedora/arm64/signing/release infrastructure. This is not production readiness.
