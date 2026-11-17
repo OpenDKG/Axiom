@@ -2,7 +2,7 @@
 
 ## Split8 recut (current): `split8/s1b-service-seams`, stacked on S1a `a1ad18b` (main `da1987a`, v1.1.0)
 
-**Status: not yet run on Windows.** This branch is a new focused cut of S1b from the S1a head
+**Status: Windows round W1 (2026-11-18) run on `5095719`, results below.** This branch is a new focused cut of S1b from the S1a head
 `a1ad18b` (which already contains `main` `da1987a`, v1.1.0). S1a (#325) is not merged yet, so S1b is
 stacked on it and will be recut onto `main` once S1a merges. The old branch
 `feature/macos-s1b-service-seams` (`0330e4a`) is the source; the rounds below were run on that old
@@ -29,6 +29,153 @@ with no plaintext fallback, adapter DNS pointed and restored, adapter DNS error 
 restart with the shield on, disable restores adapter DNS; offline network recovery command.
 
 Host (Linux) results for this branch are in the PR text (`pr-body`), not here.
+
+
+## Round W1 (2026-11-18): S1b `5095719` vs S1a `a1ad18b` vs `main` `da1987a` on Windows 11
+
+Author-run on the project's Windows 11 test VM (not CI). Tested SHAs: S1b `50957193ea7a`, S1a
+`a1ad18b673f4`, `main` `da1987a18962`, each as a fresh `git archive` expanded into an empty directory.
+
+| Item | Value |
+|---|---|
+| Guest | Windows 11, build 10.0.26300.9457, QEMU/KVM, 4 vCPU, 3 GB, restored from the clean snapshot before the round |
+| SDK | .NET SDK 10.0.403 (zip, sha512 checked against the official value) |
+| Package cache | a fresh, empty `NUGET_PACKAGES` per tree; no warm cache |
+| Logon | build/test/service steps in an elevated Interactive scheduled task as the install owner; NETWORK probe over SSH |
+| Deviation | Defender real-time scanning made the fresh guest CPU-bound, so Defender path/process exclusions were added in the guest for `C:\src`, `C:\nugetclean`, `C:\dotnet*`, `C:\logs`, `C:\axiom-pub-*` and `dotnet`/`MSBuild`/`testhost` (the same for all three trees; undone by the snapshot restore) |
+
+### W1.1 Lock files
+
+`dotnet restore Axiom.sln --force-evaluate` on Windows, compared with the committed lock files as JSON per TFM
+and package (not by bytes):
+
+| Tree | Entries that differ | Kind |
+|---|---|---|
+| S1b `5095719` (22 lock files) | 15 | all in-repo project version-range refresh (`[0.x.0, )` -> `[1.1.0, )`) |
+| `main` `da1987a` (21 lock files) | 38 | the same range refresh |
+
+No package entry is added, removed or changed on S1b, so **no lock-file commit**. (S1b's only build-file change
+against S1a is a comment in `Axiom.Service.Hosting.csproj`.)
+
+### W1.2 Locked restore, build, CI gates
+
+Each tree with an empty package folder, the steps of `windows-ci.yml`:
+
+| Step | S1b | S1a | main |
+|---|---|---|---|
+| `restore Axiom.Portable.slnx --locked-mode` | exit 0 | exit 0 | exit 0 |
+| `restore Axiom.sln --locked-mode` | exit 0 | exit 0 | exit 0 |
+| per project `--locked-mode` (projects with a lock file) | 22/22 pass | 22/22 pass | 21/21 pass |
+| `build Axiom.sln -c Release --no-restore` | 0 W / 0 E | 0 W / 0 E | 0 W / 0 E |
+| `list package --vulnerable --include-transitive` | none | none | none |
+| legal files / community feed | present / 1 entry | present / 1 entry | present / 1 entry |
+| `scripts/publish-setup.ps1` | exit 0, 95,991,167 B | exit 0, 95,973,141 B | exit 0, 95,948,457 B |
+| `Axiom.Setup.exe --silent` (non-admin CLI check) | exit 2 | exit 2 | exit 2 |
+
+### W1.3 Suites (`dotnet test Axiom.sln -c Release --no-build -m:1`, trx counters, passed/executed)
+
+| Suite | S1b `5095719` | S1a `a1ad18b` | main `da1987a` |
+|---|---|---|---|
+| Axiom.Contracts.Tests | 180/180, skip 0 | 170/170, skip 0 | 170/170, skip 0 |
+| Axiom.Core.Tests | 191/191, skip 0 | 184/184, skip 0 | 184/184, skip 0 |
+| Axiom.Infrastructure.Windows.Tests | 169/170, skip 0 | 153/153, skip 0 | 86/86, skip 0 |
+| Axiom.McpServer.Tests | 34/34, skip 0 | 34/34, skip 0 | 34/34, skip 0 |
+| Axiom.Persistence.Tests | 22/22, skip 0 | 21/21, skip 0 | 21/21, skip 0 |
+| Axiom.Presentation.Tests | 316/316, skip 0 | 315/315, skip 0 | 315/315, skip 0 |
+| Axiom.Service.Tests | 128/128, skip 0 | 101/101, skip 0 | 101/101, skip 0 |
+| Axiom.UI.Avalonia.Tests | 66/66, skip 0 | 66/66, skip 0 | 66/66, skip 0 |
+| Axiom.UI.Tests | 197/201, skip 0 | 197/201, skip 0 | 197/201, skip 0 |
+| **total** | **1303/1308, skip 0** | **1241/1245, skip 0** | **1174/1178, skip 0** |
+
+Failing names:
+
+- All three trees: the 4 `Axiom.UI.Tests.AgentHookScriptTests` that need a Python interpreter (the guest has
+  only the Store alias: `Apply_patch_path_extraction_and_host_deny_shapes_match_each_host`,
+  `Guard_helpers_block_vectors_in_a_real_python_run`, `Lifecycle_bridge_is_valid_python_when_python_is_available`,
+  `OpenCode_bridge_compiles_when_python_is_available`).
+- S1b gate run only: `WindowsFirewallPolicyAdapterTests.Owned_rules_all_follow_the_naming_contract`
+  (`InvalidComObjectException`, RCW separated): the known COM flake. Flake runs on the same builds, alternating
+  S1b/S1a: full `Axiom.Infrastructure.Windows.Tests` assembly S1b 1/3 failed (`Capabilities_are_available`),
+  S1a 1/3 failed (`Owned_rules_all_follow_the_naming_contract`); the class alone 0/5 on each, plus 0/3 on each
+  in the gate. With the gate run counted, assembly runs fail 2/4 on S1b and 1/4 on S1a; the flake hits S1a too and
+  moves between tests of the class, so it is not attributed to S1b (sample too small to compare rates).
+- **No test that passes on S1a fails on S1b apart from that flake; no S1a test is missing on S1b; 0 skipped on every
+  tree.** S1b adds 63 results (Contracts +10, Core +7, Infrastructure.Windows +17, Persistence +1, Presentation +1,
+  Service +27), all passed.
+
+### W1.4 Runtime differential, S1b vs S1a
+
+Same VM state for both builds: publish `Axiom.Service` single-file from the gate tree, install with
+`--install-service --allowed-sid <owner>`, run the same scripts, then uninstall and delete
+`C:\ProgramData\Axiom`, the SYSTEM profile's `Axiom` folder and `C:\Program Files\Axiom` (asserted absent before
+the next install). Installed exe = published exe (SHA-256 S1b `0B8B3AFD…`, S1a `763D4337…`). The check lines are
+compared after normalising ids, timestamps and uptime.
+
+**164 checks per build: 151 identical after normalisation; the 13 others differ only in live values**
+(connection and socket counts in `serviceHealth`/`snapshot`/`pending`, capture times in the recovery text, one
+Windows telemetry lookup (`svchost` -> `v20.events.data.microsoft.com`, blocked by a starter rule) that reached
+the resolver right after the restart on S1b only, and 5 s vs 2 s until the start-time DNS restore was seen).
+**JSON key paths of all 62 IPC replies are identical** except where an array was empty on one build (the
+telemetry entry above, same record shape as S1a's `blockedHistory` entries): **no new reply field.**
+
+(a) Service and IPC
+
+| Check | S1b = S1a |
+|---|---|
+| install, alive, health at 60 s / 180 s, restart (`Restart-Service`) alive, `--uninstall-service` exit 0, service absent, 0 Axiom firewall rules left | yes |
+| event 2001 (service environment `Logging__EventLog__LogLevel__Default=Information` set for this check only; at the default level no Information event reaches the Application log on either build) | yes: provider `Axiom.Service`, id 2001, `Pipe Axiom.Service.v1 allows SID <install owner SID>` |
+| owner: `protection.enable` (write gate open), `rule.apply` block `curl.exe` -> 1 rule `Outbound/Block`, curl rc 7; `rule.verify` `presentInOs`/`matchesSpec`/`effectiveAction:block`; `rule.remove` -> 0 rules, curl 200; `protection.disable`; bad enum -> `invalid_request` | yes |
+| `enforcement.status`/`evaluate`/`receipts` with the gate closed and open; `enforcement-policy.json` written by the first status call | yes |
+| NETWORK logon (SSH): 10 commands (public, private reads, writes) | `CONNECT_FAIL Access to the path is denied` for all 10 |
+| second local user: temporary standard account (random password generated in the guest, not in Administrators), `Start-Process -Credential` | `CONNECT_FAIL Access to the path is denied` for all 10; account, profile and staged secret removed and checked |
+
+(b) Privacy Shield
+
+| Check | S1b = S1a |
+|---|---|
+| enable (`1.1.1.1, 9.9.9.9`, DoH on, auto-point on): `Active`, bind `127.0.0.1, ::1` :53, upstream `https://1.1.1.1/dns-query (DoH), https://9.9.9.9/dns-query (DoH)`; adapter `127.0.0.1,10.0.2.3`; DNS backup written; listeners on loopback only | yes |
+| allowed names resolve; custom blocked name and subdomain NXDOMAIN; counters `queries=5 allowed=3 blocked=2 errors=0` | yes |
+| attribution: blocked name queried by `nslookup.exe` -> `recentBlocked` `appName nslookup.exe`, `appPath C:\Windows\System32\nslookup.exe`; queried by `curl.exe` through the system resolver -> `svchost.exe` (DNS Client service) | yes |
+| automatic upstream (`upstreamDns:""`) -> DoH 1.1.1.1 + 9.9.9.9, resolves | yes |
+| unreachable DoH (`https://192.0.2.1/dns-query`): stays `Active`, upstream unchanged, lookups `DNS server failure` (SERVFAIL), error counter rises, no plaintext answer; blocked name still NXDOMAIN | yes |
+| `1.1.1.1` with DoH off -> still `https://1.1.1.1/dns-query (DoH)` | yes |
+| adapter DNS error: IPv4 default route removed, enable -> `lastError` `No active default-route network adapter was found for automatic 127.0.0.1 DNS setup.` in the configure reply and in `privacy.status`, state `Active` | yes |
+| route restored: the worker re-points the adapter (`127.0.0.1,10.0.2.3`) and resolution works, but `lastError` still holds the adapter message after 75 s | yes (same on S1a, so not from S1b) |
+| service restart with the shield on: `Active`, same settings and DoH upstream, adapter still pointed, allowed resolves, blocked NXDOMAIN | yes |
+| `privacy.sources.update` (`windowsspyblocker`, `blocklistproject-ads`): 236,174 rules, no source error, listed names NXDOMAIN | yes |
+| disable: adapter back to `10.0.2.3`, equal to the value before enabling; system resolution works | yes |
+| service start with the shield off, adapter left on `127.0.0.1,10.0.2.3` with a machine backup: adapter restored to `10.0.2.3` (= baseline) within the first poll after start; state `Disabled` | yes |
+| guest adapter DNS at the end of every phase equals the baseline; no safety reset was needed | yes |
+
+(c) Offline recovery (`Axiom.Service.exe --recover-network`, elevated)
+
+| Check | S1b = S1a |
+|---|---|
+| no snapshot: exit 2, "No saved network state is available" | yes |
+| `networkRecovery.capture` over IPC: `succeeded`, 1 adapter, `network-recovery.txt` written | yes |
+| dry run: exit 1, plan printed (`Adapter Ethernet: IPv4 static 10.0.2.3, IPv6 automatic (DHCP)`), "Dry run: no change was made" | yes |
+| `--apply` with the service running: exit 6, refused | yes |
+| `--apply` with the service stopped: exit 5, `Result: Failed; verified: no`, `dns_verify_missing: Adapter 'Ethernet' is no longer present after the DNS restore`; adapter DNS afterwards `10.0.2.3`, service starts again | yes (same failure on S1a, so not from S1b; cause not investigated in this round) |
+
+### W1.5 The places where Windows could differ (PR text, plus the two "known differences" of its compatibility table)
+
+| # | Point | Result |
+|---|---|---|
+| 1 | `DnsProxyServer.ResolveApp` through `IDnsAppAttributor` | checked identical (nslookup.exe name + path, svchost.exe for system-resolver queries). The exception-to-`Unknown` path was not exercised |
+| 2 | `UpstreamFailureStreak` / `UpdateTargets` | checked identical as far as observable: an unreachable DoH upstream keeps the configured upstream, SERVFAIL, no swap and no plaintext fallback; the streak itself is not visible over IPC |
+| 3 | start warning combined with `OnResolverStarted` | checked identical for the null-warning case (all status/configure replies and `detail` texts equal); the NoUpstream warning case was not exercised |
+| 4 | endpoint log line from parts, event 2001 | checked identical: `Pipe Axiom.Service.v1 allows SID <sid>`, provider `Axiom.Service`, id 2001 (template name not visible in the event) |
+| 5 | `RuleSpecValidator` UNC/absolute order | runtime not exercised with a UNC path; the valid path and the bad-enum payload behave identically, and `RuleSpecValidatorTests` pass on Windows |
+| 6 | DI registration order; `ProtectionController` reads `FirewallWriteGate.IsOpen` | checked identical (`protection.*`, `writeGateOpen`, rule apply/verify/remove, event ids at start) |
+| 7 | `EnforcementController` optional in the transport | checked identical (`enforcement.status`/`evaluate`/`receipts`, gate closed and open; no `not_supported`) |
+
+### W1.6 Not run, limits
+
+- The 4 Python-dependent tests cannot pass on this guest (no interpreter); CI has Python.
+- The stored second test account `tester` does not exist in the clean snapshot, so the second-user probe used a
+  temporary standard account (same probe script).
+- Desktop UI, installer upgrade path and MSIX were not run. Event 2001 needed a test-only log level (see (a)).
+- Not CI: a self-hosted CI run on this head does not exist yet.
 
 ---
 
