@@ -131,7 +131,7 @@ public sealed class TraderShieldSectionViewModelTests
     }
 
     [Fact]
-    public void Trader_shield_appears_only_on_agent_protection_and_not_on_integrations()
+    public void Trader_shield_appears_only_on_integrations_and_not_on_agent_protection()
     {
         TestAppBuilder.RunOnUiThread(() =>
         {
