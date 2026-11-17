@@ -25,7 +25,6 @@
 
   <ItemGroup>
     <!-- Required for a single-file self-contained setup under central package management. -->
-    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

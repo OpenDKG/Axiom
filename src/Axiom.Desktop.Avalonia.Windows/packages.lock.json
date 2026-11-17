@@ -16,12 +16,6 @@
           "Avalonia.X11": "12.1.5"
         }
       },
-      "Microsoft.NET.ILLink.Tasks": {
-        "type": "Direct",
-        "requested": "[10.0.14, )",
-        "resolved": "10.0.14",
-        "contentHash": "YlTamXppEQls6DYWt7RdUuwWDb0lyw/vXCaGeQpLCpsLmfwGuCkOz/vIGgMTV7ECsJcavkCOkxZXv9s8rdAHkQ=="
-      },
       "System.Management": {
         "type": "Direct",
         "requested": "[10.0.14, )",
@@ -236,29 +230,29 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.34.0, )"
+          "Axiom.Contracts": "[0.94.0, )"
         }
       },
       "axiom.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.34.0, )",
-          "Axiom.Core": "[0.34.0, )",
-          "Axiom.Presentation": "[0.34.0, )",
+          "Axiom.Contracts": "[0.94.0, )",
+          "Axiom.Core": "[0.94.0, )",
+          "Axiom.Presentation": "[0.94.0, )",
           "System.Management": "[10.0.14, )"
         }
       },
       "axiom.persistence": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.34.0, )",
+          "Axiom.Contracts": "[0.94.0, )",
           "Microsoft.Data.Sqlite": "[10.0.14, )"
         }
       },
       "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.34.0, )",
+          "Axiom.Contracts": "[0.94.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
@@ -267,8 +261,8 @@
         "dependencies": {
           "Avalonia": "[12.1.5, )",
           "Avalonia.Themes.Fluent": "[12.1.5, )",
-          "Axiom.Contracts": "[0.34.0, )",
-          "Axiom.Presentation": "[0.34.0, )"
+          "Axiom.Contracts": "[0.94.0, )",
+          "Axiom.Presentation": "[0.94.0, )"
         }
       },
       "Avalonia": {

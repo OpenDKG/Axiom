@@ -2,12 +2,6 @@
   "version": 2,
   "dependencies": {
     "net10.0-windows7.0": {
-      "Microsoft.NET.ILLink.Tasks": {
-        "type": "Direct",
-        "requested": "[10.0.14, )",
-        "resolved": "10.0.14",
-        "contentHash": "YlTamXppEQls6DYWt7RdUuwWDb0lyw/vXCaGeQpLCpsLmfwGuCkOz/vIGgMTV7ECsJcavkCOkxZXv9s8rdAHkQ=="
-      },
       "System.Management": {
         "type": "Direct",
         "requested": "[10.0.14, )",
@@ -28,13 +22,13 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.34.0, )"
+          "Axiom.Contracts": "[0.94.0, )"
         }
       },
       "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.34.0, )",
+          "Axiom.Contracts": "[0.94.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },

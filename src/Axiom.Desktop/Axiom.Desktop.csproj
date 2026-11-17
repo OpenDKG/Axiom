@@ -30,12 +30,5 @@
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!--
-      PublishSingleFile adds the ILLink task package during publish restore. Referencing it here
-      keeps packages.lock.json identical for normal restore and standalone publish.
-    -->
-    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
-  </ItemGroup>
 
 </Project>

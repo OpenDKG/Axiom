@@ -1,3 +1,8 @@
+## What's in 0.95.0
+
+- **NU1009 publish warning fixed.** The .NET 10 SDK adds `Microsoft.NET.ILLink.Tasks` for trimmed publishes; nine projects still referenced it explicitly and CPM pinned it. The explicit references and the pin are removed, lock files refreshed, and trimming still works.
+- **Pentesting evidence updated.** The pinned DKG node came up and stayed stable on 0.93/0.94 after the documented workaround; docs/PENTESTING.md records the sync evidence and keeps the offline fallback honest.
+
 ## What's in 0.94.0
 
 - **DNS resolver choice (#366).** Privacy Shield offers Automatic (Axiom's encrypted resolver), Security-focused (Cloudflare 1.1.1.1 over DoH) and Custom upstream, each with a plain-language description and the same note about adapter changes.
