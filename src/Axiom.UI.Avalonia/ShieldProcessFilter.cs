@@ -133,15 +133,15 @@ internal static class ShieldProcessFilter
 
     /// <summary>
     /// Linux counterpart of the Program Files roots: the package payload (desktop and its bundled
-    /// axiomd under /usr/lib/axiom-firewall, <see cref="Axiom.Presentation.LinuxElevation.PackagePrefix"/>)
+    /// axiomd under /usr/lib/axiom-firewall, <see cref="Axiom.Presentation.LinuxDaemonLayout.PackagePrefix"/>)
     /// and the root-owned daemon image the service stages into /usr/libexec/axiom
-    /// (<see cref="Axiom.Presentation.LinuxElevation.ImageDirectory"/>). Matched case-sensitively.
+    /// (<see cref="Axiom.Presentation.LinuxDaemonLayout.ImageDirectory"/>). Matched case-sensitively.
     /// </summary>
     internal static bool IsLinuxOwnPath(string path) =>
         LinuxOwnRoots.Any(root => path.StartsWith(root + "/", StringComparison.Ordinal));
 
     private static readonly string[] LinuxOwnRoots =
-        [Axiom.Presentation.LinuxElevation.PackagePrefix, Axiom.Presentation.LinuxElevation.ImageDirectory];
+        [Axiom.Presentation.LinuxDaemonLayout.PackagePrefix, Axiom.Presentation.LinuxDaemonLayout.ImageDirectory];
 
     private static readonly string[] MacSystemRoots =
         ["/System", "/usr/libexec", "/usr/sbin", "/usr/bin", "/sbin", "/bin"];
