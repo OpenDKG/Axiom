@@ -1706,6 +1706,30 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         WriteGateKnown = false;
         WritePathText = "unknown";
         ShieldStatusText = statusText;
+        MarkFilterStateUnknown();
+    }
+
+    /// <summary>
+    /// Off Windows the page body follows the same shield model as the footer lamp: once the
+    /// daemon stops answering, the filter/enforcement lines (nft read-back, BPF coverage, macOS
+    /// filter acknowledgement) and every "verified" are unknown, not the last answer. They are read
+    /// again on the next enforcement re-read after the service answers (every
+    /// <see cref="EnforcementRefreshInterval"/>); until then the shield is at most Degraded.
+    /// Windows Firewall reports no filter enforcement and keeps its behaviour.
+    /// </summary>
+    private void MarkFilterStateUnknown()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Enforcement = FilterEnforcementSummary.None;
+        CapabilityStatusText = "Unknown";
+        CapabilityDetail = "The local service did not answer, so the filter state is unknown. It is read again when the service answers.";
+        Pending.Clear();
+        PendingCount = 0;
+        HasPending = false;
     }
 
     /// <summary>
