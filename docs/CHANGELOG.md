@@ -1,3 +1,8 @@
+## What's in 0.94.0
+
+- **DNS resolver choice (#366).** Privacy Shield offers Automatic (Axiom's encrypted resolver), Security-focused (Cloudflare 1.1.1.1 over DoH) and Custom upstream, each with a plain-language description and the same note about adapter changes.
+- **AI Analyst setup prompt (#366).** A Copy setup prompt button gives a one-line instruction for an already signed-in local agent, reusing the OpenChamber/OpenCode login instead of a second API key.
+
 ## What's in 0.93.0
 
 - **Setup survives an inaccessible single-instance guard.** If the global setup mutex exists with an ACL this account cannot open, the installer now uses a session-local guard and reports it, instead of crashing with an unhandled UnauthorizedAccessException (the main-push packaging check hit this on the shared runner).
