@@ -27,7 +27,21 @@ internal static class Program
             Console.Error.WriteLine(
                 "Axiom Setup: the global single-instance guard is not accessible from this account; " +
                 "continuing with a session-local guard.");
-            return new Mutex(initiallyOwned: true, @"Local\AxiomSetup.SingleInstance", out created);
+            try
+            {
+                return new Mutex(initiallyOwned: true, @"Local\AxiomSetup.SingleInstance", out created);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // A setup instance in this session owns the local mutex with an ACL this account
+                // cannot open (seen when the CI runner starts two setup checks at once). Losing the
+                // guard is better than aborting the check with an unhandled exception.
+                Console.Error.WriteLine(
+                    "Axiom Setup: the session guard is not accessible either; continuing without a " +
+                    "single-instance guard.");
+                created = true;
+                return new Mutex();
+            }
         }
     }
 
