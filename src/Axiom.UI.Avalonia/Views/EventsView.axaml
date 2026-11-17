@@ -23,8 +23,12 @@
           </StackPanel>
           <Button Grid.Column="7" Content="Refresh" Command="{Binding RefreshCommand}"
                   VerticalAlignment="Bottom" Padding="12,6" />
-          <Button Grid.Column="8" Content="Export CSV" Command="{Binding ExportCsvCommand}"
-                  IsEnabled="{Binding CanExport}" Classes="primary" VerticalAlignment="Bottom" Padding="12,6" />
+          <StackPanel Grid.Column="8" Orientation="Horizontal" Spacing="6" VerticalAlignment="Bottom">
+            <Button Content="Export CSV" Command="{Binding ExportCsvCommand}"
+                    IsEnabled="{Binding CanExport}" Classes="primary" Padding="12,6" />
+            <Button Content="Export JSON" Command="{Binding ExportJsonCommand}"
+                    IsEnabled="{Binding CanExport}" Padding="12,6" />
+          </StackPanel>
         </Grid>
         <controls:AxiomSelectableTextBlock Text="Times are stored in UTC and shown in local time. Byte counts are not stored yet."
                    Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" TextWrapping="Wrap" />

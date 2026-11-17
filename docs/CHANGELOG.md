@@ -1,3 +1,7 @@
+## What's in 0.102.0
+
+- **Export event history as JSON (FND-005).** The Events page gains Export JSON next to CSV: same fields, schema `axiom.network-events.v1`, UTC timestamps, 5,000-row limit with a truncation note. Read-only; bytes are still not stored.
+
 ## What's in 0.101.0
 
 - **Axiom's own binaries are not prompted as outbound applications.** ShieldProcessFilter trusts the Axiom install roots (`%LOCALAPPDATA%\Programs\Axiom`, `%LOCALAPPDATA%\Axiom`, `%ProgramFiles%\Axiom`, x86) so the desktop, service, modules and their runtimes never land in the ask list; the wording now says trusted processes rather than only Microsoft-signed.
