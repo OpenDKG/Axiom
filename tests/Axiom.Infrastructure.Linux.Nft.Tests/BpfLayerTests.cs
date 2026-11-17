@@ -111,19 +111,37 @@ internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
 
         if (line.StartsWith("bpftool prog loadall", StringComparison.Ordinal))
         {
-            Directory.CreateDirectory(Path.Combine(pinDirectory, "maps"));
+            // Pins carry the kernel object's identity in their content, so a rename(2) of the pin
+            // directory (make-before-break hand-over) keeps pointing at the same program set and maps.
+            var target = args.Count >= 4 ? args[3] : pinDirectory;
+            if (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
+            {
+                return new ProcessResult(255, string.Empty, $"Error: failed to pin program: File exists ({target})\n");
+            }
+
+            var set = _nextSet++;
+            Directory.CreateDirectory(Path.Combine(target, "maps"));
             foreach (var (_, program) in BpfLayout.Programs)
             {
-                File.WriteAllText(Path.Combine(pinDirectory, program), string.Empty);
+                File.WriteAllText(Path.Combine(target, program), $"prog:{set}");
             }
 
             foreach (var map in new[] { BpfLayout.ExeMap, BpfLayout.CgroupMap, BpfLayout.EventsMap, BpfLayout.StatsMap, BpfLayout.SelfCheckMap })
             {
-                var pin = Path.Combine(pinDirectory, "maps", map);
-                File.WriteAllText(pin, string.Empty);
-                Maps[pin] = new Dictionary<string, string>(StringComparer.Ordinal);
+                var pin = Path.Combine(target, "maps", map);
+                var objectId = _nextObject++;
+                var contents = new Dictionary<string, string>(StringComparer.Ordinal);
+                _objects[objectId] = contents;
+                if (map == BpfLayout.ExeMap)
+                {
+                    _setExeMap[set] = objectId;
+                }
+
+                File.WriteAllText(pin, $"obj:{objectId}");
+                Maps[pin] = contents;
             }
 
+            Loads++;
             return Ok();
         }
 
@@ -132,18 +150,30 @@ internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
             switch (args[1])
             {
                 case "attach" when args.Count >= 6:
-                    Attached[_nextId++] = (Path.GetFileName(args[5]), args[3]);
+                    var attachedId = _nextId++;
+                    Attached[attachedId] = (Path.GetFileName(args[5]), args[3]);
+                    if (SetOfPin(args[5]) is { } attachedSet)
+                    {
+                        AttachedSet[attachedId] = attachedSet;
+                    }
+
+                    MaxAxiomAttached = Math.Max(MaxAxiomAttached, Attached.Values.Count(program => program.Name.StartsWith("axiom_", StringComparison.Ordinal)));
+                    AfterChange?.Invoke(line);
                     return Ok();
                 case "detach" when args.Count >= 6 && args[4] == "pinned":
                     var name = Path.GetFileName(args[5]);
-                    foreach (var id in Attached.Where(pair => pair.Value.Name == name && pair.Value.Hook == args[3]).Select(pair => pair.Key).ToList())
+                    var pinSet = SetOfPin(args[5]);
+                    foreach (var id in Attached.Where(pair => pair.Value.Name == name && pair.Value.Hook == args[3] && (pinSet is null || !AttachedSet.TryGetValue(pair.Key, out var s) || s == pinSet)).Select(pair => pair.Key).ToList())
                     {
                         Attached.Remove(id);
                     }
 
+                    AfterChange?.Invoke(line);
                     return Ok();
                 case "detach" when args.Count >= 6 && args[4] == "id":
-                    return Attached.Remove(long.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture)) ? Ok() : new ProcessResult(1, string.Empty, "Error: failed to detach program\n");
+                    var removed = Attached.Remove(long.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture));
+                    AfterChange?.Invoke(line);
+                    return removed ? Ok() : new ProcessResult(1, string.Empty, "Error: failed to detach program\n");
                 case "show" when CgroupShowOutput is not null:
                     return Ok(CgroupShowOutput);
                 case "show":
@@ -153,7 +183,7 @@ internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
 
         if (args.Count >= 4 && args[0] == "map" && args[2] == "pinned")
         {
-            if (!Maps.TryGetValue(args[3], out var contents) || !File.Exists(args[3]))
+            if (ResolveMap(args[3]) is not { } contents)
             {
                 return new ProcessResult(255, string.Empty, $"Error: bpf obj get ({args[3]}): No such file or directory\n");
             }
@@ -179,7 +209,68 @@ internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
         return Ok();
     }
 
-    public IReadOnlyDictionary<string, string> Map(string pin) => Maps.TryGetValue(pin, out var contents) ? contents : new Dictionary<string, string>();
+    public IReadOnlyDictionary<string, string> Map(string pin) => ResolveMap(pin) ?? (Maps.TryGetValue(pin, out var contents) ? contents : new Dictionary<string, string>());
+
+    private long _nextSet = 1;
+    private int _nextObject = 1;
+    private readonly Dictionary<int, Dictionary<string, string>> _objects = [];
+    private readonly Dictionary<long, int> _setExeMap = [];
+
+    /// <summary>Program set (one <c>prog loadall</c>) each attached program id came from, when attached by pin.</summary>
+    public Dictionary<long, long> AttachedSet { get; } = [];
+
+    /// <summary>Number of <c>prog loadall</c> calls that loaded a set.</summary>
+    public int Loads { get; private set; }
+
+    /// <summary>Highest number of Axiom programs attached at once.</summary>
+    public int MaxAxiomAttached { get; private set; }
+
+    /// <summary>Called after every attach/detach (the test samples the enforcement oracle there).</summary>
+    public Action<string>? AfterChange { get; set; }
+
+    /// <summary>
+    /// The kernel's answer for a fresh exec: true when an attached <c>axiom_connect4</c> program's exe
+    /// map holds a block verdict for <paramref name="exeKeyHex"/>.
+    /// </summary>
+    public bool Blocks(string exeKeyHex) =>
+        Attached.Where(pair => pair.Value.Name == "axiom_connect4")
+            .Any(pair => AttachedSet.TryGetValue(pair.Key, out var set)
+                && _setExeMap.TryGetValue(set, out var exe)
+                && _objects[exe].TryGetValue(exeKeyHex, out var value)
+                && value.StartsWith("02", StringComparison.Ordinal));
+
+    /// <summary>Distinct program sets with at least one attached program.</summary>
+    public int AttachedSets => AttachedSet.Where(pair => Attached.ContainsKey(pair.Key)).Select(pair => pair.Value).Distinct().Count();
+
+    private static long? SetOfPin(string pin)
+    {
+        try
+        {
+            var text = File.Exists(pin) ? File.ReadAllText(pin) : string.Empty;
+            return text.StartsWith("prog:", StringComparison.Ordinal) ? long.Parse(text.AsSpan(5), System.Globalization.CultureInfo.InvariantCulture) : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    private Dictionary<string, string>? ResolveMap(string pin)
+    {
+        if (!File.Exists(pin))
+        {
+            return null;
+        }
+
+        var text = File.ReadAllText(pin);
+        if (text.StartsWith("obj:", StringComparison.Ordinal) && _objects.TryGetValue(int.Parse(text.AsSpan(4), System.Globalization.CultureInfo.InvariantCulture), out var byIdentity))
+        {
+            Maps[pin] = byIdentity;
+            return byIdentity;
+        }
+
+        return Maps.TryGetValue(pin, out var contents) ? contents : null;
+    }
 
     private static string Bytes(string hex) => string.Join(',', Enumerable.Range(0, hex.Length / 2).Select(index => string.Concat("\"0x", hex.AsSpan(index * 2, 2), "\"")));
 

@@ -253,6 +253,12 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     }
 
     /// <inheritdoc />
+    public bool Pending => false;
+
+    /// <inheritdoc />
+    public Task HandOverAsync() => StopAsync();
+
+    /// <inheritdoc />
     public bool AttachmentUnknown
     {
         get

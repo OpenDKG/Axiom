@@ -79,6 +79,12 @@ public sealed class NftEnforcementSupervisor
 
     public TimeSpan TeardownStepTimeout { get; init; } = DefaultTeardownStepTimeout;
 
+    /// <summary>
+    /// Asked on a normal stop: true = the stop is a restart/upgrade (or cannot be told apart), so the
+    /// connect-time layer is handed over instead of detached (docs/LINUX_EBPF.md §11). Null = detach.
+    /// </summary>
+    public Func<bool>? KeepLayerOnStop { get; init; }
+
     /// <summary>Generation published at start (or -1 when the first publish failed).</summary>
     public long StartGeneration { get; private set; } = -1;
 
