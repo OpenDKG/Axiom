@@ -113,6 +113,65 @@ public static class LocalModuleRuntime
         return RunHiddenPowerShell(script, log, TimeSpan.FromSeconds(timeoutSeconds));
     }
 
+    /// <summary>Runs a short hidden process and mirrors its output to the caller's log.</summary>
+    public static bool RunProcess(
+        string fileName,
+        string arguments,
+        Action<string>? log,
+        TimeSpan timeout)
+    {
+        var startInfo = new ProcessStartInfo(fileName, arguments)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        try
+        {
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                log?.Invoke($"Could not start {Path.GetFileName(fileName)}.");
+                return false;
+            }
+
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            if (!process.WaitForExit((int)timeout.TotalMilliseconds))
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                }
+
+                log?.Invoke($"{Path.GetFileName(fileName)} timed out.");
+                return false;
+            }
+
+            foreach (var line in (output + "\n" + error)
+                         .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                         .TakeLast(12))
+            {
+                log?.Invoke(line);
+            }
+
+            return process.ExitCode == 0;
+        }
+        catch (Exception exception) when (exception is
+                     System.ComponentModel.Win32Exception or InvalidOperationException or
+                     IOException or UnauthorizedAccessException)
+        {
+            log?.Invoke($"{Path.GetFileName(fileName)} failed: {exception.Message}");
+            return false;
+        }
+    }
+
     /// <summary>Runs a short hidden PowerShell script and mirrors its output to the caller's log.</summary>
     public static bool RunHiddenPowerShell(string script, Action<string>? log, TimeSpan timeout)
     {

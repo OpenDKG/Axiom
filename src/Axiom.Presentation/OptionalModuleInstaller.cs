@@ -441,6 +441,10 @@ public sealed class OptionalModuleInstaller
             $env:BLACKBOX_USE_EXISTING_HERMES = '0'
             & $installer -StoreBackend $storeBackend
             $vendorExit = $LASTEXITCODE
+            # Everything below is best-effort repair. Native tools write progress and warnings to
+            # stderr; with ErrorActionPreference=Stop Windows PowerShell 5.1 turns that into a
+            # terminating NativeCommandError and aborts before the dashboard is started.
+            $ErrorActionPreference = 'Continue'
             if ($vendorExit -ne 0) {
               # The pinned vendor build can fail its own "dependency environment committed" check.
               # Repair it once with the vendor CLI; a usable venv is what Axiom actually needs.
@@ -836,6 +840,7 @@ public sealed class OptionalModuleInstaller
                     WaitForPortToClose(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(10));
                 }
 
+                EnsureBlackboxDependencies(log);
                 if (!StartBlackboxDashboard())
                 {
                     LastError = "The Blackbox virtual environment is missing or unusable; reinstall Blackbox.";
@@ -845,6 +850,40 @@ public sealed class OptionalModuleInstaller
         }
 
         return ok;
+    }
+
+    /// <summary>
+    /// Installs the dashboard's runtime dependencies when the venv lost them (a vendor update can
+    /// leave the editable install without them). The check keeps a healthy venv untouched.
+    /// </summary>
+    private void EnsureBlackboxDependencies(Action<string>? log = null)
+    {
+        if (ResolveBlackboxAgentRoot() is not { } agent)
+        {
+            return;
+        }
+
+        var python = Path.Combine(agent, "venv", "Scripts", "python.exe");
+        if (!File.Exists(python))
+        {
+            return;
+        }
+
+        if (LocalModuleRuntime.RunProcess(
+                python,
+                "-c \"import cryptography, fastapi, uvicorn, aiohttp, psutil, ruamel.yaml, yaml, rich\"",
+                log: null,
+                TimeSpan.FromSeconds(30)))
+        {
+            return;
+        }
+
+        log?.Invoke("Repair: installing the missing Blackbox dashboard dependencies...");
+        LocalModuleRuntime.RunProcess(
+            python,
+            "-m pip install --disable-pip-version-check --quiet cryptography cffi psutil fastapi uvicorn ruamel.yaml pyyaml python-dotenv rich aiohttp",
+            log,
+            TimeSpan.FromMinutes(10));
     }
 
     private bool IsBlackboxRuntimeInstalled
