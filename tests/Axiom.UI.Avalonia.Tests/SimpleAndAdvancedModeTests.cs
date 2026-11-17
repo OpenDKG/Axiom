@@ -100,7 +100,7 @@ public sealed class SimpleAndAdvancedModeTests : IDisposable
                 "Blocked credential read"));
             Dispatcher.UIThread.RunJobs();
             Assert.True(shell.SimpleHome.HasAgentActivity);
-            Assert.Single(shell.SimpleHome.RecentAgentActivity);
+            Assert.Contains(shell.SimpleHome.RecentAgentActivity, entry => entry.Agent == "Codex");
 
             shell.SimpleHome.OpenAgentsCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
@@ -114,7 +114,7 @@ public sealed class SimpleAndAdvancedModeTests : IDisposable
             Assert.Same(shell.MiniHome, shell.SelectedPage);
             Assert.Contains(window.GetVisualDescendants(), v => v is MiniHomeView);
             Assert.True(shell.MiniHome.HasBlockedAgents);
-            Assert.Single(shell.MiniHome.BlockedAgents);
+            Assert.Contains(shell.MiniHome.BlockedAgents, entry => entry.Agent == "Codex");
             Assert.Equal(760, window.MinWidth);
             Assert.Equal(820, window.Width);
 

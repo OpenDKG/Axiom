@@ -1,3 +1,7 @@
+## What's in 0.92.0
+
+- **Windows CI green again.** The Simple/Mini mode test assumed an empty local audit store; it now asserts that the blocked agent it adds reaches both views, so main push runs stop failing on runner state.
+
 ## What's in 0.91.0
 
 - **Row context menus copy again (#296).** Avalonia 12 leaves ContextMenu.PlacementTarget null for pointer-opened menus, so `PlacementTarget.Tag...` command bindings resolved to null and every menu item did nothing. A class handler restores the owner control on the menu for every view; the dashboard and activity menus also sit on the ListBox and copy its selected row.
