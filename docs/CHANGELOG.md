@@ -1,3 +1,7 @@
+## What's in 0.91.0
+
+- **Row context menus copy again (#296).** Avalonia 12 leaves ContextMenu.PlacementTarget null for pointer-opened menus, so `PlacementTarget.Tag...` command bindings resolved to null and every menu item did nothing. A class handler restores the owner control on the menu for every view; the dashboard and activity menus also sit on the ListBox and copy its selected row.
+
 ## What's in 0.90.0
 
 - **Right-click row menus work (#296).** The ScrollViewer scroll menu swallowed the row menu; ScrollViewer.ContextMenu is now null, so Copy event / details / JSON open on every list page.
