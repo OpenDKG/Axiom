@@ -247,6 +247,8 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             lines.Add(ExecRaceLimitation);
             lines.Add(layer.AttachmentUnknown
                 ? $"BPF layer attachment state unknown ({layer.Status}): connect-time enforcement can be neither confirmed nor ruled out; nftables (socket cgroupv2) still enforces every rule."
+                : layer.Pending
+                ? $"BPF layer starting ({layer.Status}): connect-time verdicts are not verified until the new program set is populated and read back."
                 : layer.Neutralised
                 ? $"BPF layer neutralised ({layer.Status}): the daemon detached its own programs after a stale verdict could not be deleted; nftables (socket cgroupv2) is the only boundary until it re-attaches."
                 : $"BPF layer inactive ({layer.Status}): connect-time verdicts are not enforced; nftables (socket cgroupv2) is the only boundary.");
@@ -457,6 +459,12 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             var previous = _enforcement;
             var fileRejected = previous?.FileError is { Length: > 0 };
             var state = Evaluate(_published, readback.Generation, readback.NftError is null, fileRejected, _layerSync);
+            if (state == FilterEnforcementState.Verified && VerdictLayer is { Pending: true })
+            {
+                // Starting (docs/LINUX_EBPF.md §11): the connect-time layer is not populated and read back
+                // yet, so the enforcement is not verified, whatever nftables already holds.
+                state = FilterEnforcementState.Pending;
+            }
             if (state is FilterEnforcementState.Verified or FilterEnforcementState.Pending
                 && (VerdictLayer is { StaleProgramsAttached: true } or { AttachmentUnknown: true } || LoadState().PendingRemovals.Count > 0))
             {
@@ -754,6 +762,10 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
         {
             why = $"the BPF layer is neutralised ({layer.Status})";
         }
+        else if (layer.Pending)
+        {
+            why = $"the BPF layer is starting and not verified yet ({layer.Status})";
+        }
         else if (!layer.Active)
         {
             why = $"the BPF layer is inactive ({layer.Status})";
@@ -820,6 +832,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             : sync is { StaleEntriesCanBlock: true } ? "degraded"
             : layer.Neutralised ? "neutralised"
             : layer.Active ? "active"
+            : layer.Pending ? "pending"
             : "inactive";
         var healthy = state == "active" && pending.Count == 0 && (sync is null || (sync.Applied && sync.Verified && sync.FailedDeletes.Count == 0 && sync.FailedUpdates.Count == 0));
         return new ConnectTimeLayerReport

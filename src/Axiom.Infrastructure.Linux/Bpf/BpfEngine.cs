@@ -47,7 +47,11 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<string, BpfMapEntry> _applied = new(StringComparer.Ordinal);
     private readonly object _stateGate = new();
-    private string _status = "not started";
+    private string _status = "pending: not started yet; connect-time blocking is not verified";
+    private bool _pending = true;
+    private BpfEnginePaths _pins;
+    private Handover? _handover;
+    private List<(string Hook, long Id, string Name)> _retire = [];
     private bool _active;
     private bool _neutralised;
     private bool _staleProgramsAttached;
@@ -79,7 +83,14 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         _sink = sink ?? throw new ArgumentNullException(nameof(sink));
         _privileged = privileged;
         _time = time ?? throw new ArgumentNullException(nameof(time));
+        _pins = paths;
     }
+
+    /// <summary>Where a new program set is staged while a previous daemon's set still enforces (§11).</summary>
+    public string StagingDirectory => _paths.PinDirectory + ".next";
+
+    /// <summary>A new set attached next to a previous daemon's set, not yet populated (make-before-break).</summary>
+    private sealed record Handover(IReadOnlyList<(string Hook, long Id, string Name)> Old, IReadOnlyList<long> NewIds);
 
     /// <summary>Journal sink; set by the hosted service.</summary>
     public Action<string> Log { get; set; } = _ => { };
@@ -253,10 +264,80 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     }
 
     /// <inheritdoc />
-    public bool Pending => false;
+    public bool Pending
+    {
+        get
+        {
+            lock (_stateGate)
+            {
+                return _pending;
+            }
+        }
+    }
 
     /// <inheritdoc />
-    public Task HandOverAsync() => StopAsync();
+    public async Task HandOverAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            Handover? handover;
+            lock (_stateGate)
+            {
+                handover = _handover;
+            }
+
+            if (handover is not null)
+            {
+                // Stopped before the new set took over: drop the unpopulated new set, the old one keeps enforcing.
+                RollBackNewSet(handover, "the daemon stopped before the new set took over", markStale: false);
+            }
+
+            bool anything;
+            lock (_stateGate)
+            {
+                anything = _active || _staleProgramsAttached || _attachmentUnknown || _neutralised || handover is not null;
+                _active = false;
+                _pending = false;
+                _handover = null;
+                _status = anything
+                    ? $"handed over: Axiom's programs and pinned maps at {_pins.PinDirectory} are left attached for the next daemon, which replaces them make-before-break"
+                    : "stopped";
+            }
+
+            if (anything)
+            {
+                Log($"BPF layer: programs and pinned maps at {_pins.PinDirectory} left attached for the next daemon (restart or upgrade): connect-time verdicts keep enforcing while the daemon is down; the next start replaces them make-before-break.");
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task AbortStartAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            Handover? handover;
+            lock (_stateGate)
+            {
+                handover = _handover;
+            }
+
+            if (handover is not null)
+            {
+                RollBackNewSet(handover, "its maps could not be populated from managed-rules.json (no published table yet)", markStale: true);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
 
     /// <inheritdoc />
     public bool AttachmentUnknown
@@ -341,44 +422,58 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var probe = BpfCapabilityProbe.Probe(_runner, _paths, _privileged);
+            lock (_stateGate)
+            {
+                _pending = true;
+            }
+
+            BpfProbeResult probe;
+            try
+            {
+                probe = BpfCapabilityProbe.Probe(_runner, _paths, _privileged);
+            }
+            catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or IOException or InvalidOperationException or UnauthorizedAccessException)
+            {
+                probe = new BpfProbeResult(false, "bpftool could not be run: " + exception.Message, null);
+            }
+
             if (!probe.Usable)
             {
-                SetState(false, "inactive: " + probe.Reason);
+                Settle(false, "inactive: " + probe.Reason);
                 Log($"BPF layer inactive: {probe.Reason}. nftables only; the exec-time race window stays open.");
                 return;
             }
 
-            // Startup reconciliation (LNX-2): a previous daemon that crashed leaves its programs attached
-            // (pinned or not) with maps the new daemon cannot trust. Detach by pin and by name, unpin,
-            // then load fresh so the maps start empty and are rebuilt from managed-rules.json.
-            var orphans = DetachAndUnpin().Found;
-            if (orphans.Count > 0)
+            Handover? unfinished;
+            lock (_stateGate)
             {
-                Log($"BPF layer: reconciled orphaned state from a previous daemon: {string.Join(", ", orphans)}.");
+                unfinished = _handover;
             }
 
-            // Restart while a removal was pending (PR #276 round 3): if the previous programs are still
-            // attached, their (now possibly unpinned) maps can hold verdicts of removed rules. Loading a
-            // second set on top would report a clean layer while the stale one keeps blocking. Refuse,
-            // keep the pins so a later pass can still detach/delete through them, and say so.
-            var stale = ListAttachedAxiomPrograms(out var unreadable);
-            if (stale is null)
+            if (unfinished is not null)
+            {
+                // A retry while an earlier start's new set is still attached unpopulated: drop that set first.
+                RollBackNewSet(unfinished, "a new start attempt replaces it", markStale: false);
+            }
+
+            if (Active && _retire.Count > 0)
+            {
+                // The new set enforces; only the previous daemon's leftovers still need detaching. Never
+                // load another set for that (no growth beyond old + new).
+                RetireLeftovers();
+                return;
+            }
+
+            // Startup ordering (docs/LINUX_EBPF.md §11, make-before-break): a previous daemon that crashed
+            // or was restarted leaves its programs attached and pinned, and they keep refusing blocked
+            // programs. They are NOT detached first: a new set is loaded next to them, populated from
+            // managed-rules.json and read back (SyncAsync), and only then are the old programs detached.
+            var attached = ListAttachedAxiomPrograms(out var unreadable);
+            if (attached is null)
             {
                 // Unknown is not "nothing attached" (PR #276 review, finding 4): loading now could put a
                 // second set next to one that still enforces. Keep the pins, load nothing, retry.
-                lock (_stateGate)
-                {
-                    _attachmentUnknown = true;
-                    _staleProgramsAttached = true;
-                    _neutralised = false;
-                    _applied.Clear();
-                    _generation = -1;
-                }
-
-                var reason = UnknownStatus(unreadable, $"pins at {_paths.PinDirectory} kept and no new program set loaded");
-                SetState(false, reason);
-                Log("BPF layer " + reason + ". Retrying on the next watch tick.");
+                MarkUnknownAtStart(unreadable);
                 return;
             }
 
@@ -387,20 +482,24 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 _attachmentUnknown = false;
             }
 
-            if (stale.Count > 0)
+            if (attached.Count > BpfLayout.Programs.Count)
             {
-                lock (_stateGate)
+                // More than one set is attached already (an earlier failure): never stack a third. Fall back
+                // to detach-then-load; the window this opens is logged and documented.
+                var cleared = DetachAndUnpin();
+                Log($"BPF layer: {attached.Count} Axiom programs (more than one set) were attached at start; detached them before loading ({string.Join(", ", cleared.Found)}). Connect-time verdicts were not enforced until the new set was populated.");
+                attached = cleared.Remaining;
+                if (attached is null)
                 {
-                    _staleProgramsAttached = true;
-                    _neutralised = false;
-                    _applied.Clear();
-                    _generation = -1;
+                    MarkUnknownAtStart(cleared.Unreadable);
+                    return;
                 }
 
-                var reason = string.Create(CultureInfo.InvariantCulture, $"degraded: {stale.Count} Axiom BPF program(s) of a previous daemon are still attached at {_paths.CgroupRoot} and could not be detached ({string.Join(", ", stale.Select(program => $"{program.Name} id {program.Id}"))}); their maps may still hold verdicts of removed rules, so no new set was loaded");
-                SetState(false, reason);
-                Log("BPF layer " + reason + ". Retrying on the next watch tick.");
-                return;
+                if (attached.Count > 0)
+                {
+                    MarkStaleAtStart(attached);
+                    return;
+                }
             }
 
             lock (_stateGate)
@@ -408,40 +507,76 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 _staleProgramsAttached = false;
             }
 
-            var load = Run("prog", "loadall", _paths.ObjectFile, _paths.PinDirectory, "pinmaps", _paths.MapDirectory);
-            if (!load.Succeeded)
+            if (attached.Count == 0)
             {
-                DetachAndUnpin();
-                var reason = "inactive: bpftool prog loadall failed: " + Trim(load.StandardError);
-                SetState(false, reason);
-                Log("BPF layer " + reason);
-                return;
-            }
-
-            // ABI 2 (24-byte exe key with the btrfs subvolume): an object built for another layout would
-            // silently never match (or reject every update); refuse it and leave no pins behind.
-            if (LayoutProblem() is { } layout)
-            {
-                DetachAndUnpin();
-                var reason = "inactive: " + layout;
-                SetState(false, reason);
-                Log("BPF layer " + reason);
-                return;
-            }
-
-            foreach (var (hook, program) in BpfLayout.Programs)
-            {
-                var attach = Run("cgroup", "attach", _paths.CgroupRoot, hook, "pinned", _paths.ProgramPin(program), "multi");
-                if (!attach.Succeeded)
+                // Nothing enforces: no hand-over needed. Clear leftover pins (a readable zero is required).
+                var orphans = DetachAndUnpin();
+                if (orphans.Found.Count > 0)
                 {
-                    DetachAndUnpin();
-                    var reason = $"inactive: attaching {program} at {_paths.CgroupRoot} ({hook}) failed: {Trim(attach.StandardError)}";
-                    SetState(false, reason);
-                    Log("BPF layer " + reason);
+                    Log($"BPF layer: reconciled orphaned state from a previous daemon: {string.Join(", ", orphans.Found)}.");
+                }
+
+                if (orphans.Remaining is not { Count: 0 })
+                {
+                    if (orphans.Remaining is null)
+                    {
+                        MarkUnknownAtStart(orphans.Unreadable);
+                    }
+                    else
+                    {
+                        MarkStaleAtStart(orphans.Remaining);
+                    }
+
                     return;
                 }
+
+                if (LoadAndAttach(_paths) is { } problem)
+                {
+                    DetachAndUnpin();
+                    Settle(false, "inactive: " + problem);
+                    Log("BPF layer inactive: " + problem);
+                    return;
+                }
+
+                var key = RunSelfCheck();
+                lock (_stateGate)
+                {
+                    _applied.Clear();
+                    _generation = -1;
+                    _neutralised = false;
+                    _kernelKey = key;
+                    _activeStatus = $"active ({probe.BpftoolVersion}; programs pinned at {_paths.PinDirectory})";
+                }
+
+                Log($"BPF exe key self-check {key.State.ToString().ToLowerInvariant()}: {key.Detail}.");
+                Settle(true, _activeStatus);
+                Log($"BPF layer attached: connect4/connect6/sendmsg4/sendmsg6 at {_paths.CgroupRoot} (multi), pinned at {_paths.PinDirectory}.");
+                return;
             }
 
+            // Make-before-break: the previous set keeps enforcing while the new one is staged.
+            var staging = _paths with { PinDirectory = StagingDirectory };
+            RemovePinTree(staging.PinDirectory);
+            if (LoadAndAttach(staging) is { } stagedProblem)
+            {
+                // The new object cannot be loaded or attached: as before the hand-over existed, the layer
+                // goes inactive (nft-only) and every Axiom program is detached, so removed rules stop
+                // blocking. Reported as inactive; no connect-time claim is made.
+                DetachAndUnpin();
+                Settle(false, "inactive: " + stagedProblem);
+                Log("BPF layer inactive: " + stagedProblem + "; the previous daemon's programs were detached as well (nftables only).");
+                return;
+            }
+
+            var now = ListAttachedAxiomPrograms(out unreadable);
+            if (now is null)
+            {
+                MarkUnknownAtStart(unreadable);
+                return;
+            }
+
+            var oldIds = attached.Select(program => program.Id).ToHashSet();
+            var handover = new Handover(attached, now.Where(program => !oldIds.Contains(program.Id)).Select(program => program.Id).ToList());
             var kernelKey = RunSelfCheck();
             lock (_stateGate)
             {
@@ -449,21 +584,246 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 _generation = -1;
                 _neutralised = false;
                 _kernelKey = kernelKey;
+                _handover = handover;
+                _active = false;
+                _pending = true;
+                _activeStatus = $"active ({probe.BpftoolVersion}; programs pinned at {_paths.PinDirectory})";
+                _status = string.Create(CultureInfo.InvariantCulture, $"pending: a new program set is attached next to {attached.Count} program(s) of a previous daemon, which keep enforcing until the new maps are populated from the stored rules and read back; connect-time blocking is not verified yet");
             }
 
             Log($"BPF exe key self-check {kernelKey.State.ToString().ToLowerInvariant()}: {kernelKey.Detail}.");
-            var activeStatus = $"active ({probe.BpftoolVersion}; programs pinned at {_paths.PinDirectory})";
-            lock (_stateGate)
-            {
-                _activeStatus = activeStatus;
-            }
-
-            SetState(true, activeStatus);
-            Log($"BPF layer attached: connect4/connect6/sendmsg4/sendmsg6 at {_paths.CgroupRoot} (multi), pinned at {_paths.PinDirectory}.");
+            Log(string.Create(CultureInfo.InvariantCulture, $"BPF layer: new program set staged at {staging.PinDirectory} and attached at {_paths.CgroupRoot} next to {attached.Count} program(s) of a previous daemon ({string.Join(", ", attached.Select(program => $"{program.Name} id {program.Id}"))}); they keep enforcing until the new maps are populated and read back (make-before-break)."));
         }
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>Loads the object into <paramref name="target"/> (makes it the live pin tree) and attaches its four programs; null on success.</summary>
+    private string? LoadAndAttach(BpfEnginePaths target)
+    {
+        var load = Run("prog", "loadall", _paths.ObjectFile, target.PinDirectory, "pinmaps", target.MapDirectory);
+        if (!load.Succeeded)
+        {
+            return "bpftool prog loadall failed: " + Trim(load.StandardError);
+        }
+
+        _pins = target;
+
+        // ABI 2 (24-byte exe key with the btrfs subvolume): an object built for another layout would
+        // silently never match (or reject every update); refuse it and leave no pins behind.
+        if (LayoutProblem() is { } layout)
+        {
+            return layout;
+        }
+
+        foreach (var (hook, program) in BpfLayout.Programs)
+        {
+            var attach = Run("cgroup", "attach", _paths.CgroupRoot, hook, "pinned", target.ProgramPin(program), "multi");
+            if (!attach.Succeeded)
+            {
+                return $"attaching {program} at {_paths.CgroupRoot} ({hook}) failed: {Trim(attach.StandardError)}";
+            }
+        }
+
+        return null;
+    }
+
+    private void MarkUnknownAtStart(string unreadable)
+    {
+        lock (_stateGate)
+        {
+            _attachmentUnknown = true;
+            _staleProgramsAttached = true;
+            _neutralised = false;
+            _applied.Clear();
+            _generation = -1;
+        }
+
+        var reason = UnknownStatus(unreadable, $"pins at {_paths.PinDirectory} kept and no new program set loaded");
+        Settle(false, reason);
+        Log("BPF layer " + reason + ". Retrying on the next watch tick.");
+    }
+
+    private void MarkStaleAtStart(List<(string Hook, long Id, string Name)> stale)
+    {
+        lock (_stateGate)
+        {
+            _staleProgramsAttached = true;
+            _neutralised = false;
+            _applied.Clear();
+            _generation = -1;
+        }
+
+        var reason = string.Create(CultureInfo.InvariantCulture, $"degraded: {stale.Count} Axiom BPF program(s) of a previous daemon are still attached at {_paths.CgroupRoot} and could not be detached ({string.Join(", ", stale.Select(program => $"{program.Name} id {program.Id}"))}); their maps may still hold verdicts of removed rules, so no new set was loaded");
+        Settle(false, reason);
+        Log("BPF layer " + reason + ". Retrying on the next watch tick.");
+    }
+
+    /// <summary>Sets active/status and ends the starting phase.</summary>
+    private void Settle(bool active, string status)
+    {
+        lock (_stateGate)
+        {
+            _active = active;
+            _status = status;
+            _pending = false;
+        }
+    }
+
+    /// <summary>
+    /// Detaches the new (staged) set and drops its pins; the previous daemon's set keeps enforcing.
+    /// With <paramref name="markStale"/> the layer reports the old set as stale (degraded) and the
+    /// watch tick retries the hand-over.
+    /// </summary>
+    private void RollBackNewSet(Handover handover, string why, bool markStale)
+    {
+        var staging = _paths with { PinDirectory = StagingDirectory };
+        foreach (var (hook, program) in BpfLayout.Programs)
+        {
+            var pin = staging.ProgramPin(program);
+            if (File.Exists(pin))
+            {
+                Run("cgroup", "detach", _paths.CgroupRoot, hook, "pinned", pin);
+            }
+        }
+
+        var left = ListAttachedAxiomPrograms(out _);
+        foreach (var (hook, id, _) in left?.Where(program => handover.NewIds.Contains(program.Id)) ?? [])
+        {
+            Run("cgroup", "detach", _paths.CgroupRoot, hook, "id", id.ToString(CultureInfo.InvariantCulture));
+        }
+
+        left = ListAttachedAxiomPrograms(out _);
+        if (left is not null && !left.Any(program => handover.NewIds.Contains(program.Id)))
+        {
+            RemovePinTree(staging.PinDirectory);
+        }
+
+        _pins = _paths;
+        lock (_stateGate)
+        {
+            _handover = null;
+            _active = false;
+            _pending = false;
+            _applied.Clear();
+            _generation = -1;
+            if (markStale)
+            {
+                _staleProgramsAttached = true;
+                _status = string.Create(CultureInfo.InvariantCulture, $"degraded: {handover.Old.Count} program(s) of a previous daemon keep enforcing their own maps at {_paths.CgroupRoot}; the new set was rolled back because {why}; removals stay pending and the hand-over is retried on the next watch tick");
+            }
+        }
+
+        Log(string.Create(CultureInfo.InvariantCulture, $"BPF layer: rolled the new program set back ({why}); {handover.Old.Count} program(s) of the previous daemon stay attached and keep enforcing."));
+    }
+
+    private enum HandoverOutcome
+    {
+        Done,
+        Unknown,
+        OldRemain,
+    }
+
+    /// <summary>The new maps are populated and read back: detach the previous set by id, then move the pins.</summary>
+    private HandoverOutcome CompleteHandover(Handover handover, out string unreadable)
+    {
+        foreach (var (hook, id, _) in handover.Old)
+        {
+            Run("cgroup", "detach", _paths.CgroupRoot, hook, "id", id.ToString(CultureInfo.InvariantCulture));
+        }
+
+        var now = ListAttachedAxiomPrograms(out unreadable);
+        if (now is null)
+        {
+            return HandoverOutcome.Unknown;
+        }
+
+        var oldIds = handover.Old.Select(program => program.Id).ToHashSet();
+        var left = now.Where(program => oldIds.Contains(program.Id)).ToList();
+        if (left.Count > 0)
+        {
+            _retire = left;
+            Log(string.Create(CultureInfo.InvariantCulture, $"BPF layer: {left.Count} Axiom program(s) of the previous daemon still attached after detach ({string.Join(", ", left.Select(program => $"{program.Name} id {program.Id}"))}); the new set stays attached and enforcing; keeping {_paths.PinDirectory} as their handle and retrying on the next watch tick."));
+            return HandoverOutcome.OldRemain;
+        }
+
+        // The old programs are gone from the kernel: their pins are only handles to dead objects now.
+        try
+        {
+            RemovePinTree(_paths.PinDirectory);
+            Directory.Move(StagingDirectory, _paths.PinDirectory);
+            _pins = _paths;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Log($"BPF layer: could not move {StagingDirectory} to {_paths.PinDirectory} ({exception.Message}); the live set stays pinned at {StagingDirectory}.");
+        }
+
+        Log(string.Create(CultureInfo.InvariantCulture, $"BPF layer: reconciled orphaned state from a previous daemon: detached {handover.Old.Count} of its program(s) ({string.Join(", ", handover.Old.Select(program => $"{program.Name} id {program.Id}"))}) only after the new set was attached and its maps were populated and read back (make-before-break); pinned at {_pins.PinDirectory}."));
+        return HandoverOutcome.Done;
+    }
+
+    /// <summary>Retries detaching a previous daemon's leftover programs; finishes the pin move once they are gone.</summary>
+    private void RetireLeftovers()
+    {
+        foreach (var (hook, id, _) in _retire)
+        {
+            Run("cgroup", "detach", _paths.CgroupRoot, hook, "id", id.ToString(CultureInfo.InvariantCulture));
+        }
+
+        var now = ListAttachedAxiomPrograms(out var unreadable);
+        if (now is null)
+        {
+            Log($"BPF layer: cannot confirm the previous daemon's leftovers are detached ({unreadable}); retrying on the next watch tick.");
+            return;
+        }
+
+        var ids = _retire.Select(program => program.Id).ToHashSet();
+        _retire = now.Where(program => ids.Contains(program.Id)).ToList();
+        if (_retire.Count > 0)
+        {
+            Log(string.Create(CultureInfo.InvariantCulture, $"BPF layer: {_retire.Count} program(s) of the previous daemon still attached after detach; retrying on the next watch tick."));
+            return;
+        }
+
+        try
+        {
+            if (Directory.Exists(StagingDirectory))
+            {
+                RemovePinTree(_paths.PinDirectory);
+                Directory.Move(StagingDirectory, _paths.PinDirectory);
+            }
+
+            _pins = _paths;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Log($"BPF layer: could not move {StagingDirectory} to {_paths.PinDirectory} ({exception.Message}); the live set stays pinned at {StagingDirectory}.");
+        }
+
+        lock (_stateGate)
+        {
+            _staleProgramsAttached = false;
+            _status = _activeStatus;
+        }
+
+        Log($"BPF layer: the previous daemon's leftover programs are detached; one program set remains, pinned at {_pins.PinDirectory}.");
+    }
+
+    private void RemovePinTree(string directory)
+    {
+        try
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Log($"BPF layer: could not remove {directory}: {exception.Message}");
         }
     }
 
@@ -473,9 +833,15 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (!Active)
+            Handover? handover;
+            lock (_stateGate)
             {
-                var inactive = LayerSyncResult.Inactive(generation, Status, Directory.Exists(_paths.PinDirectory), Neutralised) with { AttachmentUnknown = AttachmentUnknown };
+                handover = _handover;
+            }
+
+            if (!Active && handover is null)
+            {
+                var inactive = LayerSyncResult.Inactive(generation, Status, Directory.Exists(_pins.PinDirectory), Neutralised) with { AttachmentUnknown = AttachmentUnknown };
                 lock (_stateGate)
                 {
                     _lastSync = inactive;
@@ -513,6 +879,58 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                     var delay = TimeSpan.FromTicks(ReconcileBackoff.Ticks * (1L << (attempt - 1)));
                     Log(string.Create(CultureInfo.InvariantCulture, $"BPF verdicts generation {generation}: pass {attempt} left {failedDeletes.Count} stale and {failedUpdates.Count} missing entries; retrying in {delay.TotalMilliseconds:0} ms."));
                     await Task.Delay(delay, _time, ct).ConfigureAwait(false);
+                }
+            }
+
+            if (handover is not null)
+            {
+                if (failedDeletes.Count > 0 || failedUpdates.Count > 0 || !verified)
+                {
+                    RollBackNewSet(handover, string.Create(CultureInfo.InvariantCulture, $"its maps could not be populated and read back for generation {generation} ({string.Join("; ", failedDeletes.Concat(failedUpdates))})"), markStale: true);
+                    return Remember(LayerSyncResult.Inactive(generation, Status, Directory.Exists(_pins.PinDirectory)) with { Attempts = attempts, FailedUpdates = failedUpdates.ToList(), FailedDeletes = failedDeletes.ToList() });
+                }
+
+                switch (CompleteHandover(handover, out var handoverUnreadable))
+                {
+                    case HandoverOutcome.Unknown:
+                        lock (_stateGate)
+                        {
+                            _handover = null;
+                            _pending = false;
+                            _active = false;
+                            _attachmentUnknown = true;
+                            _status = UnknownStatus(handoverUnreadable, "the previous daemon's programs were asked to detach after the new set was populated; pins of both sets are kept and no further set is loaded");
+                        }
+
+                        Log($"BPF layer: cannot confirm that the previous daemon's programs were detached ({handoverUnreadable}); keeping both pin trees and retrying on the next watch tick.");
+                        return Remember(LayerSyncResult.Inactive(generation, Status, true) with { AttachmentUnknown = true, Attempts = attempts });
+                    case HandoverOutcome.OldRemain:
+                        // The new set is populated, read back and enforcing; some of the previous daemon's
+                        // programs refused to detach. Keep the new set (rolling it back would leave only the
+                        // stale one), report the leftovers as stale (degraded, removals pending), keep the old
+                        // pins as handles, and retry only their detach on the watch tick: no further load.
+                        lock (_stateGate)
+                        {
+                            _handover = null;
+                            _pending = false;
+                            _active = true;
+                            _staleProgramsAttached = true;
+                            _status = string.Create(CultureInfo.InvariantCulture, $"degraded: {_retire.Count} program(s) of a previous daemon are still attached at {_paths.CgroupRoot} next to the new set and could not be detached ({string.Join(", ", _retire.Select(program => $"{program.Name} id {program.Id}"))}); their maps may still hold verdicts of removed rules; retrying the detach on the next watch tick");
+                        }
+
+                        break;
+                    default:
+                        lock (_stateGate)
+                        {
+                            _handover = null;
+                            _pending = false;
+                            _active = true;
+                            _staleProgramsAttached = false;
+                            _status = _activeStatus;
+                        }
+
+                        Log($"BPF layer attached: connect4/connect6/sendmsg4/sendmsg6 at {_paths.CgroupRoot} (multi), pinned at {_pins.PinDirectory}.");
+                        break;
                 }
             }
 
@@ -609,7 +1027,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             {
                 Generation = generation,
                 Attached = attached,
-                Pinned = Directory.Exists(_paths.PinDirectory),
+                Pinned = Directory.Exists(_pins.PinDirectory),
                 Applied = attached && failedDeletes.Count == 0 && failedUpdates.Count == 0,
                 Verified = attached && verified && failedDeletes.Count == 0 && failedUpdates.Count == 0,
                 Neutralised = neutralised || detachedExternally,
@@ -650,12 +1068,28 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         }
     }
 
+    private LayerSyncResult Remember(LayerSyncResult result)
+    {
+        lock (_stateGate)
+        {
+            _lastSync = result;
+        }
+
+        return result;
+    }
+
     public async Task StopAsync()
     {
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (!Active && !Directory.Exists(_paths.PinDirectory))
+            lock (_stateGate)
+            {
+                _handover = null;
+                _pending = false;
+            }
+
+            if (!Active && !Directory.Exists(_paths.PinDirectory) && !Directory.Exists(StagingDirectory))
             {
                 // Still detach by name: a crashed daemon's programs may be attached without pins.
                 DetachAndUnpin();
@@ -766,7 +1200,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         var consistent = true;
         foreach (var map in new[] { BpfLayout.ExeMap, BpfLayout.CgroupMap })
         {
-            var dump = Run("-j", "map", "dump", "pinned", _paths.MapPin(map));
+            var dump = Run("-j", "map", "dump", "pinned", _pins.MapPin(map));
             if (!dump.Succeeded)
             {
                 Log($"BPF layer: read-back of {map} failed: {Trim(dump.StandardError)}");
@@ -838,14 +1272,14 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
 
     private bool TryDelete(BpfMapEntry entry, out string error)
     {
-        if (!File.Exists(_paths.MapPin(entry.Map)))
+        if (!File.Exists(_pins.MapPin(entry.Map)))
         {
             // ENOENT from a missing pin is not "key already gone": the map may still be attached, unpinned.
-            error = $"map pin {_paths.MapPin(entry.Map)} is missing; the entry cannot be deleted or confirmed absent";
+            error = $"map pin {_pins.MapPin(entry.Map)} is missing; the entry cannot be deleted or confirmed absent";
             return false;
         }
 
-        var delete = Run(["map", "delete", "pinned", _paths.MapPin(entry.Map), "key", "hex", .. BpfLayout.HexTokens(entry.Key)]);
+        var delete = Run(["map", "delete", "pinned", _pins.MapPin(entry.Map), "key", "hex", .. BpfLayout.HexTokens(entry.Key)]);
         if (delete.Succeeded || (delete.StandardError.Contains("No such", StringComparison.OrdinalIgnoreCase) && !delete.StandardError.Contains("obj get", StringComparison.OrdinalIgnoreCase)))
         {
             error = string.Empty;
@@ -858,7 +1292,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
 
     private bool TryUpdate(BpfMapEntry entry, out string error)
     {
-        var update = Run(["map", "update", "pinned", _paths.MapPin(entry.Map), "key", "hex", .. BpfLayout.HexTokens(entry.Key), "value", "hex", .. BpfLayout.HexTokens(entry.Value), "any"]);
+        var update = Run(["map", "update", "pinned", _pins.MapPin(entry.Map), "key", "hex", .. BpfLayout.HexTokens(entry.Key), "value", "hex", .. BpfLayout.HexTokens(entry.Value), "any"]);
         error = update.Succeeded ? string.Empty : Trim(update.StandardError);
         return update.Succeeded;
     }
@@ -886,20 +1320,25 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     private DetachOutcome DetachAndUnpin()
     {
         var found = new List<string>();
-        foreach (var (hook, program) in BpfLayout.Programs)
+        var trees = new[] { _paths.PinDirectory, StagingDirectory };
+        foreach (var tree in trees)
         {
-            var pin = _paths.ProgramPin(program);
-            if (File.Exists(pin) && Run("cgroup", "detach", _paths.CgroupRoot, hook, "pinned", pin).Succeeded)
+            foreach (var (hook, program) in BpfLayout.Programs)
             {
-                found.Add($"pinned {program}");
+                var pin = Path.Combine(tree, program);
+                if (File.Exists(pin) && Run("cgroup", "detach", _paths.CgroupRoot, hook, "pinned", pin).Succeeded)
+                {
+                    found.Add(tree == _paths.PinDirectory ? $"pinned {program}" : $"pinned {program} ({tree})");
+                }
             }
         }
 
+        bool PinsGone() => trees.All(tree => !Directory.Exists(tree));
         var listed = ListAttachedAxiomPrograms(out var unreadable);
         if (listed is null)
         {
             Log($"BPF layer: cannot confirm the detach ({unreadable}); keeping {_paths.PinDirectory}.");
-            return new DetachOutcome(found, null, unreadable, !Directory.Exists(_paths.PinDirectory));
+            return new DetachOutcome(found, null, unreadable, PinsGone());
         }
 
         foreach (var (hook, id, name) in listed)
@@ -915,7 +1354,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         if (remaining is null)
         {
             Log($"BPF layer: cannot confirm the detach ({unreadable}); keeping {_paths.PinDirectory}.");
-            return new DetachOutcome(found, null, unreadable, !Directory.Exists(_paths.PinDirectory));
+            return new DetachOutcome(found, null, unreadable, PinsGone());
         }
 
         if (remaining.Count > 0)
@@ -923,23 +1362,28 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             // Unlinking the pins would not detach anything; it would only take away the handles a
             // later delete/detach needs. Keep them while any Axiom program is still attached.
             Log($"BPF layer: {remaining.Count} Axiom program(s) still attached after detach; keeping {_paths.PinDirectory}.");
-            return new DetachOutcome(found, remaining, string.Empty, !Directory.Exists(_paths.PinDirectory));
+            return new DetachOutcome(found, remaining, string.Empty, PinsGone());
         }
 
-        try
+        foreach (var tree in trees)
         {
-            if (Directory.Exists(_paths.PinDirectory))
+            try
             {
-                Directory.Delete(_paths.PinDirectory, recursive: true);
-                found.Add("pins " + _paths.PinDirectory);
+                if (Directory.Exists(tree))
+                {
+                    Directory.Delete(tree, recursive: true);
+                    found.Add("pins " + tree);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                Log($"BPF layer: could not remove {tree}: {exception.Message}");
             }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            Log($"BPF layer: could not remove {_paths.PinDirectory}: {exception.Message}");
-        }
 
-        return new DetachOutcome(found, remaining, string.Empty, !Directory.Exists(_paths.PinDirectory));
+        _pins = _paths;
+        _retire = [];
+        return new DetachOutcome(found, remaining, string.Empty, PinsGone());
     }
 
     /// <summary>
@@ -952,7 +1396,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     /// <summary>Null when the loaded exe map has this daemon's key size (ABI <see cref="BpfLayout.Abi"/>), else why not.</summary>
     private string? LayoutProblem()
     {
-        var show = Run("-j", "map", "show", "pinned", _paths.MapPin(BpfLayout.ExeMap));
+        var show = Run("-j", "map", "show", "pinned", _pins.MapPin(BpfLayout.ExeMap));
         int? bytes = null;
         if (show.Succeeded)
         {
@@ -980,7 +1424,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
     /// </summary>
     private BpfKernelKeyCheck RunSelfCheck()
     {
-        var pin = _paths.MapPin(BpfLayout.SelfCheckMap);
+        var pin = _pins.MapPin(BpfLayout.SelfCheckMap);
         string[] zero = ["00", "00", "00", "00"];
         var arm = Run(["map", "update", "pinned", pin, "key", "hex", .. zero, "value", "hex", .. BpfLayout.HexTokens(BpfLayout.SelfCheckRequest(SelfPid)), "any"]);
         if (!arm.Succeeded)

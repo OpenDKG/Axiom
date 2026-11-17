@@ -76,9 +76,15 @@ public sealed class LiveStateAndCoverageTests
         using var next = new Restarted(h);
         await next.StartAsync();
 
-        Assert.False(next.Engine.Active);
+        // Make-before-break (docs/LINUX_EBPF.md §11): the new set is populated and attached, the old set
+        // refuses to detach. Both stay (bounded at one old + one new set), the layer reports the stale
+        // programs, and a watch tick retries only their detach: never a further load.
         Assert.True(next.Engine.StaleProgramsAttached);
-        Assert.Equal(4, AxiomAttachments(h.Bpftool)); // no second set loaded on top of the stale one
+        Assert.Equal(8, AxiomAttachments(h.Bpftool));
+        var loads = h.Bpftool.Loads;
+        await next.Supervisor.WatchOnceAsync(CancellationToken.None);
+        Assert.Equal(loads, h.Bpftool.Loads);
+        Assert.Equal(8, AxiomAttachments(h.Bpftool));
         var capabilities = await next.Adapter.GetCapabilitiesAsync(CancellationToken.None);
         Assert.Equal(FirewallCapabilityStatus.Degraded, capabilities.Status);
         Assert.Equal(FilterEnforcementState.Degraded, capabilities.FilterEnforcement!.State);
@@ -120,7 +126,7 @@ public sealed class LiveStateAndCoverageTests
         mark = h.Log.Count;
         await next.Engine.StopAsync();
         Assert.DoesNotContain(h.Log.Skip(mark), line => line.Contains("detached and", StringComparison.Ordinal));
-        Assert.Contains(h.Log.Skip(mark), line => line.Contains("detach not confirmed: 4 Axiom program(s) still attached", StringComparison.Ordinal));
+        Assert.Contains(h.Log.Skip(mark), line => line.Contains("detach not confirmed: 8 Axiom program(s) still attached", StringComparison.Ordinal)); // old + new set (§11)
     }
 
     [Fact]

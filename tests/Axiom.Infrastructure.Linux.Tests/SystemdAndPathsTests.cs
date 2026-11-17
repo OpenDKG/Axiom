@@ -167,6 +167,41 @@ public sealed class SystemdAndPathsTests
     }
 
     [Fact]
+    public void InstallerAsksTheRunningDaemonForABpfHandOverBeforeTheUpgradeStop()
+    {
+        using var temp = new TempDirectory();
+        var options = Options(temp);
+        Directory.CreateDirectory(options.RunDirectory); // a daemon is running (systemd RuntimeDirectory)
+        var publish = Path.Combine(temp.Path, "publish");
+        Directory.CreateDirectory(Path.Combine(publish, "lib"));
+        var daemon = Path.Combine(publish, "axiomd");
+        File.WriteAllText(daemon, "#!/bin/sh\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(daemon, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        }
+
+        File.WriteAllText(Path.Combine(publish, "lib", "Axiom.Core.dll"), "dll");
+
+        var activeChecks = 0;
+        var runner = new FakeRunner()
+            .On("stat -c", arguments => new ProcessResult(0, string.Join('\n', arguments.Skip(2).Select(path =>
+                $"0 0 {(Directory.Exists(path) ? "41ed" : path.EndsWith("axiomd", StringComparison.Ordinal) ? "81ed" : "81a4")} {path}")), string.Empty))
+            .On("systemctl is-active", _ => new ProcessResult(++activeChecks < 3 ? 0 : 3, activeChecks < 3 ? "deactivating\n" : "inactive\n", string.Empty))
+            .On("systemctl enable --now", _ => new ProcessResult(0, string.Empty, string.Empty));
+        var installer = new SystemdServiceInstaller(runner, options, () => true, () => 1000, _ => true);
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        Assert.Equal(0, installer.Install(daemon, output, error));
+
+        // docs/LINUX_EBPF.md §11: the one-shot marker tells a running daemon that this stop is an
+        // upgrade, so it leaves its BPF programs attached for the new daemon (make-before-break).
+        Assert.Equal("upgrade\n", File.ReadAllText(Path.Combine(options.RunDirectory, Axiom.Infrastructure.Linux.Systemd.SystemdStopIntent.MarkerFileName)));
+        Assert.Contains("hand-over", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InstallerCopiesVerifiesWaitsForStopWritesUnitAndStarts()
     {
         using var temp = new TempDirectory();

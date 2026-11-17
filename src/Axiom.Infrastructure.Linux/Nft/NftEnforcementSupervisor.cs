@@ -411,9 +411,16 @@ public sealed class NftEnforcementSupervisor
         try
         {
             await _layer.StartAsync(ct).ConfigureAwait(false);
-            if (_layer.Active)
+            if (_layer.Active || _layer.Pending)
             {
+                // Pending = a new set is attached next to a previous daemon's set (make-before-break,
+                // docs/LINUX_EBPF.md §11): this sync populates it and only then retires the old set.
                 await _adapter.ResyncLayerAsync(ct).ConfigureAwait(false);
+            }
+
+            if (_layer.Pending)
+            {
+                await _layer.AbortStartAsync().ConfigureAwait(false);
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
@@ -433,7 +440,17 @@ public sealed class NftEnforcementSupervisor
         var errors = new List<string>();
         if (_layer is not null)
         {
-            await StepAsync("BPF layer stop", () => _layer.StopAsync(), errors).ConfigureAwait(false);
+            // A restart, an upgrade or a loop fault (systemd restarts the unit) hands the connect-time
+            // layer over: its programs keep refusing blocked programs until the next daemon replaced them
+            // make-before-break (docs/LINUX_EBPF.md §11). Only a real stop detaches.
+            if (KeepLayer())
+            {
+                await StepAsync("BPF layer hand-over", () => _layer.HandOverAsync(), errors).ConfigureAwait(false);
+            }
+            else
+            {
+                await StepAsync("BPF layer stop", () => _layer.StopAsync(), errors).ConfigureAwait(false);
+            }
         }
 
         await StepAsync("delete table inet axiom", () => _adapter.DeleteTableAsync(CancellationToken.None), errors).ConfigureAwait(false);
@@ -443,6 +460,30 @@ public sealed class NftEnforcementSupervisor
         _log(errors.Count == 0
             ? "Removed table inet axiom and the Axiom cgroups; herded processes returned."
             : $"Teardown finished with {errors.Count} error(s): {string.Join("; ", errors)}");
+    }
+
+    private bool KeepLayer()
+    {
+        if (LastFault is not null)
+        {
+            _log("Teardown after a loop fault: the connect-time BPF layer stays attached for the daemon systemd restarts.");
+            return true;
+        }
+
+        if (KeepLayerOnStop is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return KeepLayerOnStop();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            _log($"Cannot tell a restart from a stop ({exception.Message}); leaving the connect-time BPF layer attached (fail closed).");
+            return true;
+        }
     }
 
     private async Task StepAsync(string name, Func<Task> step, List<string> errors)

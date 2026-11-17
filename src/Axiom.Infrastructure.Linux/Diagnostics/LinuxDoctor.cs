@@ -438,6 +438,14 @@ public sealed class LinuxDoctor
             return;
         }
 
+        // Starting (docs/LINUX_EBPF.md §11): a new program set is attached next to a previous daemon's set
+        // and not populated and read back yet. Not a fault, but nothing connect-time is verified.
+        if (capability.ConnectTimeLayer is { State: "pending" } starting)
+        {
+            checks.Add(new DoctorCheck(DoctorCheck.Warn, "live enforcement", $"capability {capability.Status.ToString().ToLowerInvariant()}, enforcement {state}: the connect-time BPF layer is pending ({starting.Status}); connect-time blocking is not verified yet. Run --doctor again in a few seconds."));
+            return;
+        }
+
         checks.Add(capability.Status == Axiom.Contracts.Firewall.FirewallCapabilityStatus.Available && capability.FilterEnforcement?.State is not (Axiom.Contracts.Firewall.FilterEnforcementState.Degraded or Axiom.Contracts.Firewall.FilterEnforcementState.Unavailable)
             ? new DoctorCheck(DoctorCheck.Pass, "live enforcement", $"capability available, enforcement {state}{(capability.Reason is { Length: > 0 } note ? "; " + note : string.Empty)}")
             : new DoctorCheck(DoctorCheck.Warn, "live enforcement", $"capability {capability.Status.ToString().ToLowerInvariant()}, enforcement {state}: {capability.Reason ?? "no reason given"}"));

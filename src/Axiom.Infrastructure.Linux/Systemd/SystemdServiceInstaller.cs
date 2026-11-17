@@ -146,6 +146,10 @@ public sealed class SystemdServiceInstaller
             // Stop the running instance (upgrade); "not loaded" is expected on first install. Like
             // the Windows and macOS installers, the stop is confirmed before the image is replaced:
             // a failed or unreadable stop must never overwrite a daemon that may still be running.
+            // Upgrade hand-over (docs/LINUX_EBPF.md §11): a running daemon that understands the marker keeps
+            // its connect-time BPF programs attached through this stop, and the new daemon replaces them
+            // make-before-break. A daemon from before the marker existed detaches them on stop.
+            RequestBpfHandover(output);
             var stop = _runner.Run(Systemctl, ["stop", ServiceTarget], ToolTimeout);
             if (!WaitForStop())
             {
@@ -436,6 +440,25 @@ public sealed class SystemdServiceInstaller
         output.WriteLine(ownerUid is { } uid
             ? $"IPC write commands are allowed for uid {uid.ToString(CultureInfo.InvariantCulture)} (installing user), root and members of the axiom, sudo or wheel groups."
             : "No installing user was detected; IPC write commands are allowed for root and members of the axiom, sudo or wheel groups only.");
+    }
+
+    /// <summary>Leaves the one-shot upgrade hand-over marker for a running daemon (best effort; no daemon, no marker).</summary>
+    private void RequestBpfHandover(TextWriter output)
+    {
+        if (!Directory.Exists(_options.RunDirectory))
+        {
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(Path.Combine(_options.RunDirectory, SystemdStopIntent.MarkerFileName), "upgrade\n");
+            output.WriteLine("Asked the running daemon to leave its BPF programs attached for the new one (make-before-break hand-over).");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            output.WriteLine($"Could not leave the BPF hand-over marker in {_options.RunDirectory} ({exception.Message}); the running daemon detaches its BPF programs on stop.");
+        }
     }
 
     /// <summary>

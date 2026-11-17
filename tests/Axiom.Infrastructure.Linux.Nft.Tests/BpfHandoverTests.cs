@@ -216,11 +216,50 @@ public sealed class BpfHandoverTests
     }
 
     [Fact]
-    public async Task Old_set_that_cannot_be_detached_keeps_enforcing_and_the_new_set_is_rolled_back_every_time()
+    public async Task Old_set_that_cannot_be_fully_detached_keeps_the_new_set_and_never_loads_a_third()
     {
         using var h = await BlockedCurlAsync();
         var root = h.BpfPaths.CgroupRoot;
         h.Bpftool.FailPrefixes.Add($"bpftool cgroup detach {root} connect4 id ");
+        var gaps = WatchForGaps(h.Bpftool);
+        using var next = new NextDaemon(h);
+        await next.Adapter.PublishAsync(CancellationToken.None);
+        var supervisor = Supervise(h, next.Adapter, next.Engine);
+
+        await supervisor.StartLayerAsync(CancellationToken.None);
+        var loads = h.Bpftool.Loads;
+        for (var tick = 0; tick < 3; tick++)
+        {
+            Assert.True(next.Engine.Active); // the new, populated set enforces
+            Assert.True(next.Engine.StaleProgramsAttached); // the old connect4 refused to detach
+            Assert.Equal(5, AxiomAttachments(h.Bpftool));
+            Assert.True(h.Bpftool.Blocks(CurlKey));
+            var report = await next.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+            Assert.Equal(FilterEnforcementState.Degraded, report.FilterEnforcement!.State);
+            Assert.Equal("stale_programs", report.ConnectTimeLayer!.State);
+            await supervisor.WatchOnceAsync(CancellationToken.None);
+            Assert.Equal(loads, h.Bpftool.Loads); // retries the detach only
+        }
+
+        h.Bpftool.FailPrefixes.Clear();
+        await supervisor.WatchOnceAsync(CancellationToken.None);
+        Assert.False(next.Engine.StaleProgramsAttached);
+        Assert.Equal(4, AxiomAttachments(h.Bpftool));
+        Assert.Equal(1, h.Bpftool.AttachedSets);
+        Assert.False(Directory.Exists(h.BpfPaths.PinDirectory + ".next"));
+        Assert.True(File.Exists(h.BpfPaths.MapPin(BpfLayout.ExeMap)));
+        Assert.Empty(gaps);
+        Assert.InRange(h.Bpftool.MaxAxiomAttached, 4, 8);
+        var healed = await next.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.Equal("active", healed.ConnectTimeLayer!.State);
+    }
+
+    [Fact]
+    public async Task New_set_whose_maps_cannot_be_populated_is_rolled_back_and_the_old_set_keeps_enforcing()
+    {
+        using var h = await BlockedCurlAsync();
+        var staging = h.BpfPaths.PinDirectory + ".next";
+        h.Bpftool.FailPrefixes.Add($"bpftool map update pinned {Path.Combine(staging, "maps", BpfLayout.ExeMap)}");
         var gaps = WatchForGaps(h.Bpftool);
         using var next = new NextDaemon(h);
         await next.Adapter.PublishAsync(CancellationToken.None);
@@ -240,7 +279,7 @@ public sealed class BpfHandoverTests
             Assert.False(next.Engine.Active);
             Assert.True(next.Engine.StaleProgramsAttached);
             Assert.Equal(4, AxiomAttachments(h.Bpftool)); // the previous daemon's set only
-            Assert.False(Directory.Exists(h.BpfPaths.PinDirectory + ".next"));
+            Assert.False(Directory.Exists(staging));
             Assert.True(h.Bpftool.Blocks(CurlKey));
         }
 
@@ -359,6 +398,36 @@ public sealed class BpfHandoverTests
         File.WriteAllText(marker, "upgrade\n");
         Assert.True(intent.KeepEnforcementAcrossStop());
         Assert.False(File.Exists(marker)); // one-shot
+    }
+
+    [Fact]
+    public void Doctor_does_not_pass_live_enforcement_while_the_connect_time_layer_is_still_pending()
+    {
+        using var temp = new TempDirectory();
+        var targets = new Axiom.Infrastructure.Linux.Diagnostics.LinuxDoctorTargets(
+            Path.Combine(temp.Path, "axiomd.service"),
+            Path.Combine(temp.Path, "image"),
+            Path.Combine(temp.Path, "data"),
+            Path.Combine(temp.Path, "axiom.sock"),
+            Path.Combine(temp.Path, "backup.json"),
+            Path.Combine(temp.Path, "protection.json"),
+            Path.Combine(temp.Path, "vmlinux"),
+            Path.Combine(temp.Path, "pins"));
+        var live = new FirewallCapabilityReport
+        {
+            Status = FirewallCapabilityStatus.Available,
+            FilterEnforcement = new FilterEnforcementReport { State = FilterEnforcementState.Pending },
+            ConnectTimeLayer = new ConnectTimeLayerReport { State = "pending", Healthy = false, Attached = false, Status = "pending: a new program set is attached next to 4 program(s) of a previous daemon" },
+        };
+        var doctor = new Axiom.Infrastructure.Linux.Diagnostics.LinuxDoctor(new LiveStateAndCoverageTests.ActiveUnitRunner(new FakeBpftool(Path.Combine(temp.Path, "pins"))), targets, isRoot: true, () => new Axiom.Infrastructure.Linux.Diagnostics.DoctorLiveState(live, null));
+
+        var checks = doctor.Collect();
+
+        var enforcement = checks.Single(check => check.Name == "live enforcement");
+        Assert.Equal(Axiom.Infrastructure.Unix.Diagnostics.DoctorCheck.Warn, enforcement.Status);
+        Assert.Contains("pending", enforcement.Detail, StringComparison.Ordinal);
+        Assert.Contains("not verified", enforcement.Detail, StringComparison.Ordinal);
+        Assert.Equal(Axiom.Infrastructure.Unix.Diagnostics.DoctorCheck.Warn, checks.Single(check => check.Name == "bpf layer").Status);
     }
 
     private sealed class ScriptedRunner(Func<string, Axiom.Infrastructure.Unix.Interop.ProcessResult> answer) : Axiom.Infrastructure.Unix.Interop.IProcessRunner

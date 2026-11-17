@@ -83,6 +83,13 @@ public interface IEnforcementLayer : IVerdictLayer
     /// </summary>
     Task HandOverAsync() => StopAsync();
 
+    /// <summary>
+    /// Called when <see cref="StartAsync"/> left the layer <see cref="IVerdictLayer.Pending"/> and no sync
+    /// could populate it (no published table): drops the unpopulated new set so two program sets never
+    /// stay attached; the previous one keeps enforcing and the hand-over is retried on the watch tick.
+    /// </summary>
+    Task AbortStartAsync() => Task.CompletedTask;
+
     /// <summary>Streams the layer's flow events into the sink until cancelled (restarting its source on exit).</summary>
     Task RunEventsAsync(CancellationToken ct);
 }

@@ -114,6 +114,9 @@ public static class LinuxEnforcement
             () => CreateTraceMonitor(adapter, sink),
             bpf,
             log,
-            TimeProvider.System);
+            TimeProvider.System)
+        {
+            KeepLayerOnStop = new Systemd.SystemdStopIntent(ProcessRunner.Instance, Systemd.SystemdStopIntent.DefaultMarkerPath(), log).KeepEnforcementAcrossStop,
+        };
     }
 }

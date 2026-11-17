@@ -314,6 +314,19 @@ internal sealed class RecordingLayer : IEnforcementLayer
         return StopHangs ? Task.Delay(Timeout.Infinite) : Task.CompletedTask;
     }
 
+    public bool HandedOver { get; private set; }
+
+    public Task HandOverAsync()
+    {
+        HandedOver = true;
+        if (StopFailure is { } failure)
+        {
+            throw failure;
+        }
+
+        return Task.CompletedTask;
+    }
+
     public async Task RunEventsAsync(CancellationToken ct)
     {
         if (EventsFailure is { } failure)
