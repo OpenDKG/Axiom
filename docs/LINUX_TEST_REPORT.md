@@ -772,3 +772,33 @@ head only.
   file listing and the kept rule were checked.
 - Not tested: Windows build/tests of this tree (lock files' Windows sections are provisional), DNS
   fail-safe/Privacy Shield, reboot, arm64, Mini mode, RPM upgrade/erase.
+
+## Addendum 2026-11-18: UI truthfulness fixes, VM look (author-run, not CI)
+
+Tested SHA `ed47c9a` (fixes 7461f1f, 81244c0, e6820fc, b1ad705 + Windows-regenerated lock files on top of the
+v1.1.0 merge). Package `axiom-firewall_1.1.0+linux.rc2_amd64.deb`, 62,839,096 bytes, sha256
+`661615905f4bfd0005b9383defe38a034d63ebf79fad75a196f7b43ff098d9f9` (unsigned dev candidate).
+
+Fresh disposable Ubuntu 24.04.5 overlay (6.8.0-147):
+- Install rc=0, doctor 13 PASS / 0 WARN / 0 FAIL, 4 Axiom BPF programs attached.
+- Block canary (copy of curl blocked, system python3 as allowed control, veth target): before the rule 0/10
+  refused; with the rule 20/20 refused while python3 connected 20/20; after one `systemctl restart`
+  20/20 refused. Probe loop across the restart: 634 fresh execs after the action, 0 slipped; control 50/50.
+  After unblock 0/10 refused, 10/10 connected. Doctor after the smoke 13 PASS.
+- Purge: no unit, no `inet axiom` table, 0 Axiom BPF programs, data and image dirs gone.
+
+GUI under Xvfb (1600x1000), what the screen showed:
+- Simple home, daemon running: AI AGENT GUARD **NOT VERIFIED**, "Unsupported on Linux for now: Blackbox host
+  hooks are not verified here, so AI agents are not protected". Same text with the daemon stopped (firewall tile
+  UNKNOWN, heading "Protection status is unknown", lamp UNKNOWN) and after restart. Never READY.
+- Network Control, verified rule on curl: "Axiom Shield ON", "nftables firewall · Axiom-owned rules SHIELD ON",
+  "Filter: connected · generation 6 verified ... 1 connect-time proven"; footer "Protection: ON · 1 rule(s)".
+- Daemon stopped: "Axiom Shield UNKNOWN", "Protection status unknown: the local service did not answer.",
+  firewall section READ-ONLY / Unknown, no filter or "verified" line, no pending rows; lamp UNKNOWN. The owned-rules
+  table still lists the last read ("1 owned rules read at 21:09:07", row curl "Applied") under the note "The local
+  service did not answer, so the filter state is unknown."
+- 10 s after the daemon was started again: page back to Shield ON with "generation 7 verified"; at the same
+  moment the header and footer still read "not acknowledged rules generation 7" / "1 rule(s) · blocks not
+  verified" (one poll behind).
+- Rule removed: page "0 owned rules", count 0, footer "Protection: ON · 0 rule(s)". No stale "1 rule(s)".
+- Fix 3 (macOS own-path prompts) does not apply to Linux; not checked here.
