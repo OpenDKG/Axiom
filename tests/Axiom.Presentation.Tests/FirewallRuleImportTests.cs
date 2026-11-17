@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System;
+using System.Globalization;
 using System.Linq;
 using Axiom.Contracts.Firewall;
 using Axiom.Presentation;
@@ -77,6 +78,44 @@ public sealed class FirewallRuleImportTests
         Assert.False(FirewallRuleImport.Preview(null).SchemaValid);
         Assert.Contains("empty", FirewallRuleImport.Preview("   ").FileError, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("JSON", FirewallRuleImport.Preview("{").FileError);
+    }
+
+    [Fact]
+    public void Apply_plan_uses_one_identity_per_application_and_direction()
+    {
+        var block = MakeRule(@"C:\Apps\agent.exe", FirewallAction.Block, "443").Spec;
+        var duplicate = MakeRule(@"c:\apps\AGENT.EXE", FirewallAction.Block, "8443").Spec;
+        var inbound = new RuleSpec
+        {
+            ManagedRuleId = Guid.NewGuid(),
+            AppPath = @"C:\Apps\agent.exe",
+            Direction = FirewallDirection.Inbound,
+            Action = FirewallAction.Block,
+            Profiles = FirewallProfile.All,
+            CreatedBy = "file",
+        };
+
+        var plan = FirewallRuleImport.PlanApply([block, duplicate, inbound], "lab", "rules.json");
+
+        Assert.Empty(plan.Conflicts);
+        Assert.Equal(2, plan.Rules.Count);
+        Assert.Equal(RuleIdentity.ForApp(@"C:\Apps\agent.exe", FirewallDirection.Outbound), plan.Rules[0].ManagedRuleId);
+        Assert.Equal("lab", plan.Rules[0].CreatedBy);
+        Assert.Contains("rules.json", plan.Rules[0].Description);
+        Assert.Equal(443, int.Parse(plan.Rules[0].RemotePorts!, CultureInfo.InvariantCulture)); // first scope wins for the same identity
+    }
+
+    [Fact]
+    public void Apply_plan_reports_conflicting_actions_and_skips_the_second()
+    {
+        var block = MakeRule(@"C:\Apps\agent.exe", FirewallAction.Block, "443").Spec;
+        var allow = MakeRule(@"C:\Apps\agent.exe", FirewallAction.Allow, "443").Spec;
+
+        var plan = FirewallRuleImport.PlanApply([block, allow], "lab", "rules.json");
+
+        Assert.Single(plan.Rules);
+        Assert.Single(plan.Conflicts);
+        Assert.Contains("both Block and Allow", plan.Conflicts[0]);
     }
 
     private static ManagedRule MakeRule(string appPath, FirewallAction action, string ports)

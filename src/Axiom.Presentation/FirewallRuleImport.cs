@@ -5,6 +5,10 @@ using Axiom.Core.Firewall;
 
 namespace Axiom.Presentation;
 
+public sealed record FirewallRuleImportApplyPlan(
+    IReadOnlyList<RuleSpec> Rules,
+    IReadOnlyList<string> Conflicts);
+
 public sealed record FirewallRuleImportError(int Index, string Message);
 
 /// <summary>
@@ -114,6 +118,66 @@ public static class FirewallRuleImport
 
             return new FirewallRuleImportResult(true, null, rules, errors);
         }
+    }
+
+    /// <summary>
+    /// Builds the write plan for the valid rules: one Axiom identity per (path, direction), the
+    /// imported scope, and this operator as the creator. Rules that would collapse onto the same
+    /// identity with different actions are reported as conflicts and left out.
+    /// </summary>
+    public static FirewallRuleImportApplyPlan PlanApply(
+        IReadOnlyList<RuleSpec> rules,
+        string createdBy,
+        string sourceLabel)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        if (string.IsNullOrWhiteSpace(createdBy))
+        {
+            throw new ArgumentException("A creator identity is required.", nameof(createdBy));
+        }
+
+        var planned = new List<RuleSpec>();
+        var conflicts = new List<string>();
+        var byIdentity = new Dictionary<(string Path, FirewallDirection Direction), RuleSpec>();
+
+        foreach (var rule in rules)
+        {
+            var path = rule.AppPath.Trim();
+            var key = (path.ToUpperInvariant(), rule.Direction);
+            if (byIdentity.TryGetValue(key, out var existing))
+            {
+                if (existing.Action != rule.Action)
+                {
+                    conflicts.Add(
+                        $"{path} ({rule.Direction}) appears with both {existing.Action} and {rule.Action}; only one action per application and direction is possible.");
+                    continue;
+                }
+
+                continue;
+            }
+
+            var spec = new RuleSpec
+            {
+                ManagedRuleId = RuleIdentity.ForApp(path, rule.Direction),
+                AppPath = path,
+                Direction = rule.Direction,
+                Action = rule.Action,
+                Profiles = rule.Profiles,
+                Protocol = rule.Protocol,
+                RemoteAddresses = rule.RemoteAddresses,
+                RemotePorts = rule.RemotePorts,
+                Enabled = rule.Enabled,
+                Description = string.IsNullOrWhiteSpace(sourceLabel)
+                    ? "Imported Axiom rule"
+                    : $"Imported Axiom rule from {sourceLabel}",
+                CreatedBy = createdBy,
+            };
+
+            byIdentity[key] = spec;
+            planned.Add(spec);
+        }
+
+        return new FirewallRuleImportApplyPlan(planned, conflicts);
     }
 
     private static FirewallRuleImportResult Invalid(string message) =>

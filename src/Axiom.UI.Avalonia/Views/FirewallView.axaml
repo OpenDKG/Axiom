@@ -231,6 +231,9 @@
               <controls:AxiomSelectableTextBlock Text="{Binding CapabilityDetail}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+              <Button Content="Apply imported" Command="{Binding ApplyImportedRulesCommand}" Padding="10,4"
+                      IsVisible="{Binding CanApplyImportedRules}"
+                      ToolTip.Tip="Create the validated imported rules through the write gate, after one confirmation." />
               <Button Content="Import preview" Command="{Binding PreviewImportRulesCommand}" Padding="10,4"
                       ToolTip.Tip="Check an exported rule file with the same validator. Nothing is applied or changed." />
               <Button Content="Export rules" Command="{Binding ExportRulesCommand}" Padding="10,4"
