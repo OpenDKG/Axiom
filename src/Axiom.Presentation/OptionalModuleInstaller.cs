@@ -394,37 +394,21 @@ public sealed class OptionalModuleInstaller
             Set-Location $dir
             $installer = Join-Path $dir 'blackbox-install.ps1'
 
-            # The vendor installer calls 'py -3.12'. Blackbox supports Python 3.11-3.13 only, so a
-            # 3.15 path must never become the fallback: the vendor then dies with a Python traceback.
-            # Validate first, and only build a shim from a compatible interpreter.
-            function Get-PythonVersion($exe) {
-              try {
-                $value = (& $exe -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null)
-                if ($LASTEXITCODE -eq 0) { return ([string]$value).Trim() }
-              } catch { }
-              return $null
-            }
-            $pyOk = $false
-            if (Get-Command py -ErrorAction SilentlyContinue) {
-              foreach ($minor in 13..11) {
-                & py "-3.$minor" -c "import sys; raise SystemExit(0 if (3,11)<=sys.version_info[:2]<=(3,13) else 1)" 2>$null
-                if ($LASTEXITCODE -eq 0) { $pyOk = $true; break }
-              }
-            }
+            # Blackbox supports Python 3.11-3.13 only, so a 3.15 path must never become the fallback:
+            # the vendor then dies with a Python traceback. Axiom's PATH preamble puts a compatible
+            # interpreter first. Do not probe `py -3.x` here: a missing minor prints a red
+            # "No runtime installed" error from the launcher before the installer even starts.
             $python = Get-Command python -ErrorAction SilentlyContinue
-            $pythonVersion = if ($python) { Get-PythonVersion $python.Source } else { $null }
-            $pythonOk = $pythonVersion -match '^3\.(11|12|13)$'
-            if (-not $pyOk -and -not $pythonOk) {
-              Remove-Item (Join-Path $dir 'py.cmd') -Force -ErrorAction SilentlyContinue
-              throw "Blackbox requires Python 3.11-3.13, but Axiom found $(if ($pythonVersion) { "Python $pythonVersion" } else { 'no usable Python' }). Axiom setup installs Python 3.12: accept the prerequisite install and retry."
+            $pythonVersion = if ($python) {
+              $value = (& $python.Source -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null)
+              if ($LASTEXITCODE -eq 0) { ([string]$value).Trim() } else { $null }
+            } else { $null }
+            if ($pythonVersion -notmatch '^3\.(11|12|13)$') {
+              throw "Blackbox requires Python 3.11-3.13, but Axiom found $(if ($pythonVersion) { "Python $pythonVersion" } else { 'no usable Python' }). Run Setup's prerequisite install (Python 3.12) and retry Repair."
             }
-            if (-not $pyOk -and $pythonOk) {
-              $shim = Join-Path $dir 'py.cmd'
-              $shimText = "@echo off`r`nsetlocal`r`nset `"ARGS=%*`"`r`nset `"ARGS=%ARGS:-3.13=%`"`r`nset `"ARGS=%ARGS:-3.12=%`"`r`nset `"ARGS=%ARGS:-3.11=%`"`r`nset `"ARGS=%ARGS:-3=%`"`r`n`"$($python.Source)`" %ARGS%`r`n"
-              Set-Content -Path $shim -Value $shimText -Encoding Ascii
-              $env:PATH = $dir + ';' + $env:PATH
-              Write-Host "Provided a py launcher shim for the vendor installer (Python $pythonVersion)." -ForegroundColor Yellow
-            }
+
+            # Older builds left a py.cmd shim here that could point at an incompatible interpreter.
+            Remove-Item (Join-Path $dir 'py.cmd') -Force -ErrorAction SilentlyContinue
 
             Write-Host 'Downloading the official Umanitek Blackbox installer...' -ForegroundColor Cyan
             if (-not (Test-Path $installer) -or (Get-Item $installer).Length -eq 0) {

@@ -3,6 +3,14 @@
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              xmlns:views="using:Axiom.UI.Avalonia.Views"
              x:Class="Axiom.UI.Avalonia.Views.SecurityView">
+  <UserControl.Styles>
+    <Style Selector=":is(TextBlock).tone-ok">
+      <Setter Property="Foreground" Value="{DynamicResource Axiom.Success}" />
+    </Style>
+    <Style Selector=":is(TextBlock).tone-idle">
+      <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+    </Style>
+  </UserControl.Styles>
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24,18,24,24" Spacing="14">
 
@@ -43,7 +51,10 @@
                             Command="{Binding $parent[ItemsControl].DataContext.UninstallModuleCommand}"
                             CommandParameter="{Binding Name}" />
                     <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="5" Padding="8,3" VerticalAlignment="Center">
-                      <controls:AxiomSelectableTextBlock Text="{Binding Status}" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+                      <controls:AxiomSelectableTextBlock Text="{Binding Status}" FontSize="10" FontWeight="SemiBold"
+                                 Foreground="{DynamicResource Axiom.TextPrimary}"
+                                 Classes.tone-ok="{Binding IsConnected}"
+                                 Classes.tone-idle="{Binding !IsConnected}" />
                     </Border>
                   </StackPanel>
                 </Grid>

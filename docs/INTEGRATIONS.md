@@ -75,8 +75,9 @@ as "not running" while the dashboard is down.
 Blackbox's vendor installer accepts **Python 3.11-3.13** only (3.12 is the pinned choice), plus
 Node.js/npm and Git. Axiom validates the interpreter version before an install; an unrelated
 `python.exe` such as 3.15 is reported as missing and Setup installs 3.12 through winget. The
-compatible interpreter is put first on the installer PATH, and the `py.cmd` shim is only created
-from a validated interpreter. If the prerequisites still cannot be satisfied, a Complete install
+compatible interpreter is put first on the installer PATH. Axiom validates `python` directly and no
+longer creates a `py.cmd` shim that could fall back to an incompatible interpreter. If the
+prerequisites still cannot be satisfied, a Complete install
 skips the vendor step with a clear message instead of running it into a Python traceback.
 
 ### Uninstall

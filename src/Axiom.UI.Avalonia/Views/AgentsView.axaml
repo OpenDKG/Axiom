@@ -255,6 +255,7 @@
             </StackPanel>
             <Button Grid.Column="1" Content="Start local modules" Padding="12,5" FontSize="11"
                     VerticalAlignment="Center"
+                    IsVisible="{Binding IsAgentProtectionAvailable}"
                     ToolTip.Tip="Starts the DKG node first, then the Blackbox dashboard."
                     Command="{Binding Security.StartAllModulesCommand}" />
           </Grid>
@@ -276,7 +277,8 @@
                                      Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
                           <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2">
                             <controls:AxiomSelectableTextBlock Text="{Binding Status}" FontSize="9"
-                                       Foreground="{DynamicResource Axiom.TextSecondary}" />
+                                       Classes.tone-ok="{Binding IsConnected}"
+                                       Classes.tone-idle="{Binding !IsConnected}" />
                           </Border>
                         </StackPanel>
                         <controls:AxiomSelectableTextBlock Text="{Binding Detail}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}"
