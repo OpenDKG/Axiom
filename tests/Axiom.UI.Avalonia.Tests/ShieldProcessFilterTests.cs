@@ -63,4 +63,28 @@ public sealed class ShieldProcessFilterTests
         Assert.False(ShieldProcessFilter.IsIgnored(null));
         Assert.False(ShieldProcessFilter.IsIgnored(string.Empty));
     }
+
+    [Fact]
+    public void MacOS_daemon_app_bundle_and_filter_extension_are_never_prompted()
+    {
+        // The root daemon copy launchd runs (PrivilegedHelperLayout.DaemonPath on the Mac).
+        Assert.True(ShieldProcessFilter.IsMacOwnPath("/Library/PrivilegedHelperTools/com.axiom.service/axiomd", null));
+        // The installed bundle, also when another copy of the app is the one running.
+        Assert.True(ShieldProcessFilter.IsMacOwnPath("/Applications/Axiom.app/Contents/MacOS/Axiom", null));
+        Assert.True(ShieldProcessFilter.IsMacOwnPath("/Applications/Axiom.app/Contents/Resources/service/axiomd", null));
+        // The running bundle wherever it lives.
+        Assert.True(ShieldProcessFilter.IsMacOwnPath("/Users/a/Downloads/Axiom.app/Contents/MacOS/Axiom", "/Users/a/Downloads/Axiom.app"));
+        // The activated content-filter system extension.
+        Assert.True(ShieldProcessFilter.IsMacOwnPath(
+            "/Library/SystemExtensions/0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0/com.axiom.firewall.filter.systemextension/Contents/MacOS/com.axiom.firewall.filter",
+            null));
+
+        Assert.False(ShieldProcessFilter.IsMacOwnPath("/Library/PrivilegedHelperTools/com.other.helper/tool", null));
+        Assert.False(ShieldProcessFilter.IsMacOwnPath("/Library/PrivilegedHelperTools/com.axiom.service.evil/axiomd", null));
+        Assert.False(ShieldProcessFilter.IsMacOwnPath("/Applications/Axiom.app.evil/Contents/MacOS/x", null));
+        Assert.False(ShieldProcessFilter.IsMacOwnPath("/Applications/AxiomHelper.app/Contents/MacOS/x", null));
+        Assert.False(ShieldProcessFilter.IsMacOwnPath("/Users/a/com.axiom.firewall.filter.systemextension/Contents/MacOS/x", null));
+        Assert.False(ShieldProcessFilter.IsMacOwnPath("/Library/SystemExtensions/X/com.other.filter.systemextension/Contents/MacOS/x", null));
+        Assert.False(ShieldProcessFilter.IsMacOwnPath("/usr/local/bin/curl", null));
+    }
 }
