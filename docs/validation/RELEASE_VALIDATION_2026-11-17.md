@@ -71,8 +71,7 @@ open until signed artifacts are published.
 
 ## 4. Cross-platform status
 
-- macOS (#274, #388, #325) and Linux (#276, #150, #175, #290) remain open ports with their own
-  backends (Network Extension, nftables/eBPF). They have no CI gate on the Windows-only runner and
-  cannot be validated from this VM. Do not claim platform parity.
-- The Windows work in this cycle did not change platform-specific code paths; the IPC split and
-  portable contracts stay untouched.
+See [CROSS_PLATFORM_STATUS_2026-11-17.md](CROSS_PLATFORM_STATUS_2026-11-17.md): macOS (#274, #388,
+#325) and Linux (#276, #150, #175, #290) remain open, with their blockers (platform CI, review,
+signing, base drift) recorded per item. The Windows work in this cycle did not change
+platform-specific code paths; the IPC split and portable contracts stay untouched.
