@@ -536,14 +536,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     /// <summary>Lamp next to the badge: green when protection is on, red when it is off.</summary>
     /// <summary>Neutral lamp while the service has not reported the protection state (non-Windows).</summary>
-    internal const string UnknownLampColor = ProtectionLamp.UnknownColor;
+    internal const string UnknownLampColor = "#94A3B8";
 
     /// <summary>Amber lamp: shield on, but the network filter has not verified the rules (non-Windows).</summary>
-    internal const string UnverifiedLampColor = ProtectionLamp.DegradedColor;
-
-    /// <summary>The header lamp in the shared enforcement vocabulary (see <see cref="ProtectionLamp"/>).</summary>
-    [ObservableProperty]
-    private EnforcementLevel _statusFirewallLevel = EnforcementLevel.Unprotected;
+    internal const string UnverifiedLampColor = "#FBBF24";
 
     [ObservableProperty]
     private IBrush _statusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FB7185"));
@@ -866,8 +862,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             // unknown, never the previous green and never a claimed "off".
             StatusFirewallText = "Protection: unknown · the local service did not answer";
             StatusFirewallBadgeText = "UNKNOWN";
-            StatusFirewallLevel = ProtectionLamp.ForNetwork(answered: false, shieldOn: false, rulesConfirmed: false);
-            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(ProtectionLamp.ColorFor(StatusFirewallLevel)));
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(UnknownLampColor));
         }
         else if (_protection is { Enabled: true } protection)
         {
@@ -883,22 +878,19 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 StatusFirewallText += " · blocks not verified";
             }
 
-            StatusFirewallLevel = ProtectionLamp.ForNetwork(answered: true, shieldOn: true, rulesConfirmed: !unverified);
-            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(ProtectionLamp.ColorFor(StatusFirewallLevel)));
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(unverified ? UnverifiedLampColor : "#4ADE80"));
         }
         else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
         {
             StatusFirewallText = "Firewall writes: enabled for this service session";
             StatusFirewallBadgeText = "TEST VM";
-            StatusFirewallLevel = EnforcementLevel.Degraded;
-            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(ProtectionLamp.DegradedColor));
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FBBF24"));
         }
         else
         {
             StatusFirewallText = "Protection: off";
             StatusFirewallBadgeText = "READ-ONLY";
-            StatusFirewallLevel = ProtectionLamp.ForNetwork(answered: true, shieldOn: false, rulesConfirmed: false);
-            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(ProtectionLamp.ColorFor(StatusFirewallLevel)));
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FB7185"));
         }
         StatusModeText = IsServiceMode ? "Service monitor" : "In-process monitor";
 
