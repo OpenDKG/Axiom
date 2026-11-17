@@ -39,4 +39,50 @@ public static class RuleApplyResultText
             null => $"{subject} applied; verified at {at}.",
         };
     }
+
+    /// <summary>
+    /// Status line for a batch (rule import). Counts only successful results as applied and splits
+    /// them the same way <see cref="Describe"/> words one rule: published but not acknowledged
+    /// (Pending, not enforced yet), installed but not race-free (Linux nft-only), connect-time
+    /// proven (Linux BPF). With no such results the text is upstream's plain "Applied N" line, so
+    /// Windows output is unchanged.
+    /// </summary>
+    public static string DescribeBatch(
+        IReadOnlyList<RuleApplyResult> results,
+        IReadOnlyList<string> failures,
+        string subject)
+    {
+        ArgumentNullException.ThrowIfNull(results);
+        ArgumentNullException.ThrowIfNull(failures);
+        ArgumentException.ThrowIfNullOrWhiteSpace(subject);
+
+        var succeeded = results.Where(result => result.Success).ToList();
+        var pending = succeeded.Count(result => result.State == RuleState.Pending);
+        var notRaceFree = succeeded.Count(result =>
+            result.State != RuleState.Pending && result.ConnectTimeBlockingProven == false);
+        var proven = succeeded.Count(result =>
+            result.State != RuleState.Pending && result.ConnectTimeBlockingProven == true);
+
+        var parts = new List<string>();
+        if (proven > 0)
+        {
+            parts.Add($"{proven} connect-time blocking proven");
+        }
+
+        if (notRaceFree > 0)
+        {
+            parts.Add($"{notRaceFree} installed in {PlatformText.FilterName} but not race-free");
+        }
+
+        if (pending > 0)
+        {
+            parts.Add($"{pending} published, waiting for {PlatformText.FilterName} to acknowledge (not enforced yet)");
+        }
+
+        var applied = $"Applied {succeeded.Count} {subject}(s)" +
+                      (parts.Count == 0 ? "." : ": " + string.Join("; ", parts) + ".");
+        return failures.Count == 0
+            ? applied
+            : $"{applied.TrimEnd('.')}; {failures.Count} failed: {string.Join("; ", failures.Take(3))}";
+    }
 }

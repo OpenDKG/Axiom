@@ -1537,7 +1537,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             "Apply imported Axiom rules",
             $"Create or update {plan.Rules.Count} Axiom-owned firewall rule(s) from {_importedFileName}?\n\n" +
             $"{preview}{more}\n\n" +
-            "Only these Axiom-owned rules are changed. Other Windows Firewall rules are not touched. " +
+            $"Only these Axiom-owned rules are changed. Other {PlatformText.Firewall} rules are not touched. " +
             "Continue only on a machine you control.",
             "Apply imported rules",
             destructive: true,
@@ -1549,7 +1549,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             return;
         }
 
-        var applied = 0;
+        var results = new List<RuleApplyResult>();
         var failures = new List<string>();
         foreach (var spec in plan.Rules)
         {
@@ -1558,11 +1558,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
                 var result = await _client
                     .SendAsync<RuleApplyResult>(IpcCommandTypes.RuleApply, spec, CancellationToken.None)
                     .ConfigureAwait(true);
-                if (result.Success)
-                {
-                    applied++;
-                }
-                else
+                results.Add(result);
+                if (!result.Success)
                 {
                     failures.Add($"{Path.GetFileName(spec.AppPath)}: {result.ErrorCode}");
                 }
@@ -1583,9 +1580,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         _importedRules = Array.Empty<RuleSpec>();
         CanApplyImportedRules = false;
         await RefreshAsync().ConfigureAwait(true);
-        StatusText = failures.Count == 0
-            ? $"Applied {applied} imported rule(s)."
-            : $"Applied {applied} imported rule(s); {failures.Count} failed: {string.Join("; ", failures.Take(3))}";
+        // A Pending or not race-free result is not "applied" protection: word it like the editor does.
+        StatusText = RuleApplyResultText.DescribeBatch(results, failures, "imported rule");
     }
 
     /// <summary>
