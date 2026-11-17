@@ -16,7 +16,7 @@ public sealed partial class PrivacyOverviewPageViewModel : PageViewModel, IActiv
     public PrivacyOverviewPageViewModel(
         PrivacyShieldPageViewModel privacyShield,
         Action? openSettings = null)
-        : base("Privacy Overview", "Live DNS filtering metrics, blocked activity and resolver health", "\uE72E")
+        : base("Privacy Dashboard", "Live DNS filtering metrics, blocked activity and resolver health", "\uE72E")
     {
         PrivacyShield = privacyShield ?? throw new ArgumentNullException(nameof(privacyShield));
         _openSettings = openSettings;

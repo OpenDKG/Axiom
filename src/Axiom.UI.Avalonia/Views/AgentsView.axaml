@@ -28,6 +28,15 @@
     <Style Selector=":is(TextBlock).tone-idle">
       <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
     </Style>
+    <Style Selector="Border.enforcement-ok">
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Success}" />
+    </Style>
+    <Style Selector="Border.enforcement-warn">
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Warning}" />
+    </Style>
+    <Style Selector="Border.enforcement-fail">
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Critical}" />
+    </Style>
     <Style Selector="Border.sq-on">
       <Setter Property="Background" Value="{DynamicResource Axiom.Success}" />
     </Style>
@@ -43,14 +52,20 @@
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24,18,24,24" Spacing="14">
 
-      <Border Classes="card" BorderBrush="{DynamicResource Axiom.Warning}" Padding="14">
+      <Border Classes="card" Padding="14"
+              Classes.enforcement-ok="{Binding Enforcement.IsProtected}"
+              Classes.enforcement-warn="{Binding Enforcement.IsDegraded}"
+              Classes.enforcement-fail="{Binding Enforcement.IsUnprotected}">
         <StackPanel Spacing="5">
           <Grid ColumnDefinitions="*,Auto">
             <controls:AxiomSelectableTextBlock Grid.Column="0" Text="ENFORCEMENT" FontSize="10" FontWeight="SemiBold"
                                                Foreground="{DynamicResource Axiom.TextMuted}" />
             <Border Grid.Column="1" Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="6" Padding="8,3">
               <controls:AxiomSelectableTextBlock Text="{Binding Enforcement.VerificationLabel}" FontSize="9"
-                                                 FontWeight="SemiBold" Foreground="{DynamicResource Axiom.Warning}" />
+                                                 FontWeight="SemiBold"
+                                                 Classes.tone-ok="{Binding Enforcement.IsProtected}"
+                                                 Classes.tone-warn="{Binding Enforcement.IsDegraded}"
+                                                 Classes.tone-fail="{Binding Enforcement.IsUnprotected}" />
             </Border>
           </Grid>
           <controls:AxiomSelectableTextBlock Text="{Binding Enforcement.Summary}" FontSize="11" FontWeight="SemiBold"
@@ -135,6 +150,9 @@
           </Grid>
           <controls:AxiomSelectableTextBlock
                      Text="Axiom only proposes evidence-bound AI Analyst indicators: a malicious-role value must match a remote endpoint Axiom observed. Public blocklist matches stay local and are never reported — they would echo the same list from every install. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
+                     FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+                     <controls:AxiomSelectableTextBlock
+                     Text="A Complete installation turns sharing on with your consent at install time. Only signed, redacted indicators leave the machine - never prompts, commands, paths, credentials, model content or session ids. It strengthens the verified graph for everyone (help me help you), and you can turn it off here at any time."
                      FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           <Border Background="{DynamicResource Axiom.SurfaceAlt}"
                   BorderBrush="{DynamicResource Axiom.Border}"
@@ -225,9 +243,6 @@
           <controls:AxiomSelectableTextBlock Text="{Binding Security.InstallStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
-
-      <views:TraderShieldSectionView DataContext="{Binding Security.TraderShield}"
-                                     IsVisible="{Binding IsAvailable}" />
 
       <Border Classes="card" Padding="0">
         <ItemsControl ItemsSource="{Binding Security.Modules}">

@@ -1,3 +1,7 @@
+## What's in 1.0.0
+
+- **First 1.x release.** Privacy Overview renamed Privacy Dashboard; enforcement panel green/orange/red with one warning per level change; Trader Shield moved to Integrations; Mini Module Health strip and a throughput chart that shrinks with the window; threat sharing on with the Complete install consent (signed, redacted indicators only, never prompts/commands/paths/credentials/model content/session ids; help me help you).
+
 ## What's in 0.106.0
 
 - **New titanium Axiom icon and lockup** replace the old artwork in the window/taskbar icon, title bar, Mini header, toasts, first-run dialog, WPF fallback resources and a regenerated multi-size `axiom.ico` for the desktop/setup shortcuts.

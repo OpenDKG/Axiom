@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
+             xmlns:views="using:Axiom.UI.Avalonia.Views"
              x:Class="Axiom.UI.Avalonia.Views.SecurityView">
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24,18,24,24" Spacing="14">
@@ -187,6 +188,9 @@
                      FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
+
+      <views:TraderShieldSectionView DataContext="{Binding TraderShield}"
+                                     IsVisible="{Binding IsAvailable}" />
     </StackPanel>
   </ScrollViewer>
 </UserControl>

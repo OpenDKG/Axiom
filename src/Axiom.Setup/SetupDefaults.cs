@@ -56,6 +56,8 @@ internal static class SetupDefaults
             ["serviceInstalled"] = false,
             ["shieldEnabled"] = false,
             ["privacyEnabled"] = false,
+            ["threatSharingConsent"] = true,
+            ["threatSharingConsentUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
         };
 
         try
