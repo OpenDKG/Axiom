@@ -1,6 +1,6 @@
 ## What's in 0.95.0
 
-- **NU1009 publish warning fixed.** The .NET 10 SDK adds `Microsoft.NET.ILLink.Tasks` for trimmed publishes; nine projects still referenced it explicitly and CPM pinned it. The explicit references and the pin are removed, lock files refreshed, and trimming still works.
+- **Release validation record and signing decision.** docs/validation/RELEASE_VALIDATION_2026-11-17.md records the 0.89-0.94 in-place upgrades, what was not run, the SignPath Authenticode decision, and the cross-platform status. The ILLink pin stays: removing it breaks locked restore across SDK patches for a cosmetic warning.
 - **Pentesting evidence updated.** The pinned DKG node came up and stayed stable on 0.93/0.94 after the documented workaround; docs/PENTESTING.md records the sync evidence and keeps the offline fallback honest.
 
 ## What's in 0.94.0
