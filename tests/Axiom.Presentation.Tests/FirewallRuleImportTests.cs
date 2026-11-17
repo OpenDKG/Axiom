@@ -28,6 +28,33 @@ public sealed class FirewallRuleImportTests
         Assert.Empty(result.RuleErrors);
     }
 
+    [Theory]
+    [InlineData("/Applications/Example Agent.app/Contents/MacOS/Example Agent")]
+    [InlineData("/usr/bin/curl")]
+    [InlineData("/usr/local/bin/node")]
+    public void Posix_and_app_bundle_paths_round_trip_and_plan_one_rule_each(string appPath)
+    {
+        // An export taken on macOS or Linux carries POSIX paths (including .app bundle
+        // executables with spaces); the shared validator and the apply plan must accept them
+        // unchanged so the daemon's normal rule.apply path receives the same path.
+        var rule = MakeRule(appPath, FirewallAction.Block, "443");
+        var json = FirewallRuleExport.ToJson([rule], DateTimeOffset.UnixEpoch);
+
+        var result = FirewallRuleImport.Preview(json);
+
+        Assert.Null(result.FileError);
+        Assert.Empty(result.RuleErrors);
+        var spec = Assert.Single(result.Rules);
+        Assert.Equal(appPath, spec.AppPath);
+
+        var plan = FirewallRuleImport.PlanApply(result.Rules, "tester", "rules.json");
+        Assert.Empty(plan.Conflicts);
+        var planned = Assert.Single(plan.Rules);
+        Assert.Equal(appPath, planned.AppPath);
+        Assert.Equal(FirewallAction.Block, planned.Action);
+        Assert.Equal("tester", planned.CreatedBy);
+    }
+
     [Fact]
     public void Unsupported_schema_is_rejected_without_touching_rules()
     {
