@@ -114,6 +114,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             eventsTab: Events,
             timers: timers);
         Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction, _monitor);
+        // "Check protection" re-reads through the shell probe, so every surface takes the same answer.
+        Firewall.RecheckProtection = () => ProbeProtectionAsync(force: true);
         // Review #25: the Overview line follows the same state as the "SHIELD ON" badge.
         Overview.ProtectionState = () => new OverviewProtectionState(
             // The service-reported write gate, not the UI toggle: Shield on does not imply writes.
