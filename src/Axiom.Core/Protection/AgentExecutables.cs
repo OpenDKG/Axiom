@@ -44,12 +44,9 @@ public static class AgentExecutables
             return false;
         }
 
-        // Windows paths reach this on Linux too (shared history/UI); Path.GetFileName does not
-        // split backslashes off Windows, so take the last segment under either separator.
-        var trimmed = path.TrimEnd('\\', '/');
-        var separator = trimmed.LastIndexOfAny(['\\', '/']);
-        var file = separator >= 0 ? trimmed[(separator + 1)..] : trimmed;
-        var name = System.IO.Path.GetFileNameWithoutExtension(file);
+        // Native separators only (upstream behaviour): off Windows a backslash is part of a file
+        // name, so a Windows-style path is not an agent executable on Linux/macOS.
+        var name = System.IO.Path.GetFileNameWithoutExtension(path);
         if (name.Length > 0 &&
             Names.Contains(name, StringComparer.OrdinalIgnoreCase))
         {

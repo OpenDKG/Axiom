@@ -47,9 +47,11 @@ public sealed class AgentNetworkAndBrokerTests
     [Fact]
     public void Planner_builds_valid_scoped_rule_for_authorized_local_policy()
     {
+        // Native path per OS: Windows-style rule paths are rejected off Windows (#441).
+        var agent = OperatingSystem.IsWindows() ? @"C:\Agents\claude.exe" : "/opt/agents/claude";
         var plan = AgentFirewallRulePlanner.BuildScopedBlockSpec(new AgentFirewallRuleIntent
         {
-            ExecutablePath = @"C:\Agents\claude.exe",
+            ExecutablePath = agent,
             RemoteAddressOrCidr = "203.0.113.0/24",
             RemotePorts = "8443",
             Origin = AgentNetworkPolicyOrigin.LocalUserPolicy,
