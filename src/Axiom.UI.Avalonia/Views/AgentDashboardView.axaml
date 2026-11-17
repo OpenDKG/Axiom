@@ -134,14 +134,11 @@
                 <ListBox.ContextMenu>
                   <ContextMenu>
                     <MenuItem Header="Copy event"
-                              Command="{Binding $parent[ContextMenu].PlacementTarget.DataContext.AgentActivity.CopyActivityEventCommand}"
-                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.SelectedItem}" />
+                              Command="{Binding AgentActivity.CopyActivityEventCommand}" />
                     <MenuItem Header="Copy details"
-                              Command="{Binding $parent[ContextMenu].PlacementTarget.DataContext.AgentActivity.CopyActivityDetailsCommand}"
-                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.SelectedItem}" />
+                              Command="{Binding AgentActivity.CopyActivityDetailsCommand}" />
                     <MenuItem Header="Copy raw event JSON"
-                              Command="{Binding $parent[ContextMenu].PlacementTarget.DataContext.AgentActivity.CopyActivityJsonCommand}"
-                              CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.SelectedItem}" />
+                              Command="{Binding AgentActivity.CopyActivityJsonCommand}" />
                   </ContextMenu>
                 </ListBox.ContextMenu>
                 <ListBox.ItemTemplate>
@@ -240,8 +237,7 @@
                     <ListBox.ContextMenu>
                       <ContextMenu>
                         <MenuItem Header="Copy finding"
-                                  Command="{Binding $parent[ContextMenu].PlacementTarget.DataContext.AgentActivity.CopyFindingCommand}"
-                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.SelectedItem}" />
+                                  Command="{Binding AgentActivity.CopyFindingCommand}" />
                       </ContextMenu>
                     </ListBox.ContextMenu>
                     <ListBox.ItemTemplate>

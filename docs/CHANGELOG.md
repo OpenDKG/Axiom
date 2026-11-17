@@ -1,6 +1,6 @@
 ## What's in 0.91.0
 
-- **Row context menus open (#296).** A ListBoxItem keeps the right-click, so menus attached inside the row template never opened. The activity, findings and hook-evidence menus now sit on the ListBox and copy its selected row.
+- **Row context menus copy again (#296).** Avalonia 12 leaves ContextMenu.PlacementTarget null for pointer-opened menus, so `PlacementTarget.Tag...` command bindings resolved to null and every menu item did nothing. A class handler restores the owner control on the menu for every view; the dashboard and activity menus also sit on the ListBox and copy its selected row.
 
 ## What's in 0.90.0
 

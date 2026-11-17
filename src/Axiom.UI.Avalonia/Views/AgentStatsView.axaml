@@ -93,14 +93,11 @@
               <ListBox.ContextMenu>
                 <ContextMenu>
                   <MenuItem Header="Copy event"
-                            Command="{Binding $parent[ContextMenu].PlacementTarget.DataContext.CopyActivityEventCommand}"
-                            CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.SelectedItem}" />
+                            Command="{Binding CopyActivityEventCommand}" />
                   <MenuItem Header="Copy details"
-                            Command="{Binding $parent[ContextMenu].PlacementTarget.DataContext.CopyActivityDetailsCommand}"
-                            CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.SelectedItem}" />
+                            Command="{Binding CopyActivityDetailsCommand}" />
                   <MenuItem Header="Copy raw event JSON"
-                            Command="{Binding $parent[ContextMenu].PlacementTarget.DataContext.CopyActivityJsonCommand}"
-                            CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.SelectedItem}" />
+                            Command="{Binding CopyActivityJsonCommand}" />
                 </ContextMenu>
               </ListBox.ContextMenu>
               <ListBox.ItemTemplate>
@@ -209,8 +206,7 @@
             <ListBox.ContextMenu>
               <ContextMenu>
                 <MenuItem Header="Copy hook evidence"
-                          Command="{Binding $parent[ContextMenu].PlacementTarget.DataContext.CopyHookEvidenceCommand}"
-                          CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.SelectedItem}" />
+                          Command="{Binding CopyHookEvidenceCommand}" />
               </ContextMenu>
             </ListBox.ContextMenu>
             <ListBox.ItemTemplate>
@@ -240,8 +236,7 @@
             <ListBox.ContextMenu>
               <ContextMenu>
                 <MenuItem Header="Copy finding"
-                          Command="{Binding $parent[ContextMenu].PlacementTarget.DataContext.CopyFindingCommand}"
-                          CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.SelectedItem}" />
+                          Command="{Binding CopyFindingCommand}" />
               </ContextMenu>
             </ListBox.ContextMenu>
             <ListBox.ItemTemplate>

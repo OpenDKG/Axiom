@@ -119,9 +119,11 @@ public sealed class AgentActivitySelectionTests
             Dispatcher.UIThread.RunJobs();
             Assert.True(activityMenu.IsOpen);
             var copyEvent = Assert.IsType<MenuItem>(activityMenu.Items[0]);
-            Assert.Equal(entry2, copyEvent.CommandParameter);
+            // ContextMenu.PlacementTarget is null for a pointer-opened menu (Avalonia sets it
+            // on the popup, not on the menu), so the menu binds to the list DataContext and
+            // copies the selection rather than a PlacementTarget row.
             Assert.NotNull(copyEvent.Command);
-            copyEvent.Command!.Execute(copyEvent.CommandParameter);
+            copyEvent.Command!.Execute(null);
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("write_file", ui.LastClipboardText);
             activityMenu.Close();
@@ -137,8 +139,8 @@ public sealed class AgentActivitySelectionTests
             Dispatcher.UIThread.RunJobs();
             Assert.True(findingsMenu.IsOpen);
             var copyFinding = Assert.IsType<MenuItem>(findingsMenu.Items[0]);
-            Assert.Equal(finding2, copyFinding.CommandParameter);
-            copyFinding.Command!.Execute(copyFinding.CommandParameter);
+            Assert.NotNull(copyFinding.Command);
+            copyFinding.Command!.Execute(null);
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("fileaccess:wallet", ui.LastClipboardText);
 
