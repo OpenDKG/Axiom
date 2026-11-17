@@ -70,7 +70,7 @@
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
               <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Center">
                 <Image Source="avares://Axiom.UI.Avalonia/Assets/origintrail-logo.png"
-                       Width="124" Height="28" Stretch="Uniform" />
+                       Width="170" Height="48" Stretch="Uniform" />
               </Border>
               <controls:AxiomSelectableTextBlock Grid.Column="1" Text="origintrail.io" FontSize="10"
                          Foreground="{DynamicResource Axiom.TextMuted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
@@ -93,12 +93,12 @@
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
               <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Center">
                 <Image Source="avares://Axiom.UI.Avalonia/Assets/blackbox-logo.png"
-                       Width="118" Height="22" Stretch="Uniform" />
+                       Width="160" Height="28" Stretch="Uniform" />
               </Border>
               <Border Grid.Column="1" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,5"
                       HorizontalAlignment="Right" VerticalAlignment="Center">
                 <Image Source="avares://Axiom.UI.Avalonia/Assets/umanitek-logo.png"
-                       Width="108" Height="26" Stretch="Uniform"
+                       Width="144" Height="40" Stretch="Uniform"
                        ToolTip.Tip="Umanitek" />
               </Border>
             </Grid>
