@@ -53,6 +53,35 @@ Limits:
   this pass; they need a snapshot and a reboot window.
 - The Privacy Shield page continues to state that it is a DNS filter, not a VPN or traffic proxy.
 
+## 2b. Reboot recovery on the installed VM (17 November 2026)
+
+Tested on `Axiom-Win11` with 0.97.0 installed, after a forced reboot (`shutdown /r /f`) at 06:53.
+
+Recovered automatically:
+
+| Item | Result |
+| --- | --- |
+| Axiom service | `Running` without manual action |
+| Axiom desktop | process started from the Run key (`--autostart`) at logon; it starts hidden to the tray by design, and a normal launch shows the window |
+| Privacy Shield adapter DNS | still pointed at 127.0.0.1 on `Ethernet 2`; the resolver kept serving |
+| Enforcement policy | still enabled (11 agents / 88 rules / 8 protected resources); compiled ruleset still loaded and enforcing |
+| Audit and sessions | intact; the Agent Dashboard loaded the same recorded sessions |
+
+Did not recover:
+
+- **OriginTrail DKG node.** No listener on 9320 after the reboot. Two competing `dkg start`
+  processes were present (the logon helper and Axiom's module manager), neither listening, and
+  `daemon.log` stopped at the reboot. Killing both and starting one fresh still produced a silent
+  process with no listener after more than ten minutes. The Agent Protection page correctly showed
+  **"OriginTrail DKG - not connected"** while Blackbox reported the dashboard connected, and the
+  enforcement panel kept saying hook-level with zero OS-deny receipts. This is the vendor runtime
+  defect tracked as #315, plus a duplicate-start race in the lab logon helper; the compiled ruleset
+  stayed loaded, so enforcement did not silently disappear.
+- The desktop window is not shown after an `--autostart` logon. That is the tray-first design of
+  "start with Windows", not a crash; the process stays running and the window opens on demand.
+
+Evidence: `F:\Pen Testing\Logs\reboot-recovery-097.png`.
+
 ## 3. Signing decision (issues #119 and #289)
 
 **Decision: sign release artifacts with Authenticode through SignPath Foundation, using its
