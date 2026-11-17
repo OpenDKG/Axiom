@@ -484,3 +484,34 @@ By name, no test fails on the branch that passes on `main`. All 19 branch failur
 **Not tested in this round:** rule export/import through the app, Apple silicon, SIP enabled, Developer ID signing and notarization, upgrade from a signed build, Windows runtime suites.
 
 **Artifact:** `Axiom-1.1.0-14-osx-x64-adhoc.zip` (the tested `/Applications/Axiom.app`, `ditto -c -k --keepParent`), 89,030,687 bytes, sha256 `124a8af8125bec4770ab7294729168dfb4f5be54c153a324467245550d93023a`. Ad-hoc signed, not notarized.
+
+## Addendum 2026-11-18: UI truthfulness fixes, VM look (author-run, not CI, not release evidence)
+
+Tested SHA `4229cb7` (fixes 63722e9, f8cfb50, 9111439, 026953e + Windows-regenerated lock files on top of the
+v1.1.0 merge), build 1.1.0 (15). Intel VM (x86_64), macOS 15.8.3, SIP disabled (picker toggle, `csrutil status`:
+disabled), app and filter ad-hoc signed (`Signature=adhoc`, `codesign --verify --deep --strict` ok), not
+notarized. `Axiom.UI.Avalonia.dll` in the guest bundle has the same sha256 as the Linux publish output
+(`e160abb4…253099`).
+
+- Extension 1.1.0/15 activated enabled (1.1.0/14 terminated, waiting to uninstall on reboot); daemon running
+  under launchd; `--doctor` 23 PASS / 1 WARN / 0 FAIL, the WARN being the old 14 copy, exit 1 for that WARN.
+- Live block through the filter: rule on `/usr/bin/curl` applied and `rule.verify` enforcementVerified=true;
+  curl to example.com refused 10/10 (rc 7) while python got HTTP 200 5/5 from the same host; after removal
+  curl 200 5/5.
+- Simple home: AI AGENT GUARD **NOT VERIFIED**, "Unsupported on macOS for now: Blackbox host hooks are not
+  verified here, so AI agents are not protected".
+- Network Control, verified rule: "Axiom Shield ON", "Filter: connected · generation … verified", footer
+  "Protection: ON · 1 rule(s) · 1 awaiting decision", "blocks verified".
+- Daemon stopped (`launchctl bootout`): "Axiom Shield UNKNOWN", "Protection status unknown: the local service did
+  not answer.", no pending rows, filter section READ-ONLY / Unknown with no "verified" line, lamp UNKNOWN, footer
+  "Protection: unknown · the local service did not answer". Still stale on that screen: the SYSTEM STATUS header
+  kept "Protection active: Axiom rules apply; firewall writes enabled. No telemetry.", the "Disable protection"
+  button stayed, and the owned-rules table kept the last read (curl "Applied") under an "unknown" note.
+- About 10 s after `launchctl bootstrap`: back to Shield ON, filter verified (new generation), footer "1 rule(s)".
+- New outbound applications after traffic (Privacy Shield on/off, so the daemon made its upstream DNS
+  connections; python and nc to example.com): only "Python" (CommandLineTools Python.app) was listed, 1 pending.
+  axiomd, Axiom.app and the filter extension were not listed.
+- Rule removed: "Protection is on · 0 Axiom rule(s)", footer "Protection: ON · 0 rule(s) · 1 awaiting decision".
+- Guest left with shield off, 0 rules, Privacy Shield disabled, DNS automatic; VM shut down.
+- Artifact: `Axiom-1.1.0-15-osx-x64-adhoc.zip` (tested `/Applications/Axiom.app`, `ditto -c -k --keepParent`),
+  89,036,424 bytes, sha256 `e932f0e69ee0a58a7167e4758a4ba34643465b81eb19cbb4c1fe251f69acce27`.
