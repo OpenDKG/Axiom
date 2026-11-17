@@ -12,9 +12,18 @@ using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
 
-/// <summary>One owned Windows Firewall rule, read-only.</summary>
-public sealed class FirewallRuleRow(ManagedRule rule)
+/// <summary>
+/// One owned Windows Firewall rule, read-only. <paramref name="lastKnown"/> marks a row kept from
+/// the last rules read after the daemon stopped answering: it stays visible, but its state is
+/// unknown, never the last "Applied" (off Windows only; Windows never builds such a row).
+/// </summary>
+public sealed class FirewallRuleRow(ManagedRule rule, bool lastKnown = false)
 {
+    /// <summary>State shown for a last-known row while the daemon does not answer (RuleState.Unknown).</summary>
+    public const string LastKnownStateText = "Unknown (last known)";
+
+    public bool IsLastKnown => lastKnown;
+
     public Guid ManagedRuleId => rule.ManagedRuleId;
 
     public string OsRuleName => rule.OsRuleName;
@@ -50,7 +59,8 @@ public sealed class FirewallRuleRow(ManagedRule rule)
 
     public string EnabledText => rule.Spec.Enabled ? "yes" : "no";
 
-    public string StateText => rule.State.ToString();
+    /// <summary>State as reported by the daemon; "Unknown (last known)" for a row kept after it stopped answering.</summary>
+    public string StateText => lastKnown ? LastKnownStateText : rule.State.ToString();
 
     public string Tooltip =>
         $"{rule.Spec.AppPath}\nRule: {rule.OsRuleName}\nCreated by: {rule.Spec.CreatedBy}";
@@ -190,6 +200,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     public ObservableCollection<FirewallRuleRow> Rules { get; } = [];
 
     private readonly List<ManagedRule> _ownedRules = [];
+
+    /// <summary>Local time of the last successful rules read; shown with last-known rows.</summary>
+    private DateTimeOffset? _rulesReadLocal;
     private IReadOnlyList<RuleSpec> _importedRules = [];
     private string _importedFileName = string.Empty;
 
@@ -1704,6 +1717,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             CapabilityDetail = snapshot.Capability.Reason
                 ?? $"{(OperatingSystem.IsWindows() ? "Windows Firewall COM policy" : PlatformText.Firewall + " policy")} is readable. No rule is changed by this page.";
             OwnedRuleCountText = snapshot.Rules.Count.ToString(CultureInfo.InvariantCulture);
+            _rulesReadLocal = DateTimeOffset.Now;
             QueriedRuleCount = snapshot.Rules.Count;
             IsEmpty = snapshot.Rules.Count == 0;
             WritesEnabled = snapshot.WritesEnabled;
@@ -1766,8 +1780,36 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         QueriedRuleCount = null;
         CapabilityStatusText = "Unknown";
         CapabilityDetail = "The local service did not answer, so the filter state is unknown. It is read again when the service answers.";
+        MarkRulesLastKnown();
         Pending.Clear();
         PendingCount = 0;
         HasPending = false;
+    }
+
+    /// <summary>
+    /// Keeps the last-read owned rules visible as last-known data, but never with their last
+    /// "Applied"/verified state or a current-looking count: the state is unknown until the next
+    /// rules read after the service answers, which rebuilds the rows.
+    /// </summary>
+    private void MarkRulesLastKnown()
+    {
+        if (_ownedRules.Count == 0 || Rules.Count == 0)
+        {
+            return;
+        }
+
+        Rules.Clear();
+        foreach (var rule in _ownedRules)
+        {
+            Rules.Add(new FirewallRuleRow(rule, lastKnown: true));
+        }
+
+        OwnedRuleCountText = "—";
+        var readAt = _rulesReadLocal is { } at
+            ? $" (last read {at.ToString("HH:mm:ss", CultureInfo.InvariantCulture)})"
+            : string.Empty;
+        StatusText = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{_ownedRules.Count} owned rule(s) shown as last known{readAt}; their state is unknown until the local service answers.");
     }
 }

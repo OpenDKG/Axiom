@@ -80,6 +80,60 @@ public sealed class DaemonStoppedStaleStateTests
         }
     }
 
+    [Fact]
+    public async Task Owned_rules_stay_visible_as_last_known_but_never_applied_while_the_daemon_is_down()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var client = new DaemonClient();
+        var shell = NewShell(client);
+        try
+        {
+            shell.SelectedPage = shell.Firewall;
+            var page = shell.Firewall;
+            await shell.ProbeProtectionAsync(force: true);
+            var row = Assert.Single(page.Rules);
+            Assert.StartsWith("Applied", row.StateText, StringComparison.Ordinal);
+            Assert.Equal("1", page.OwnedRuleCountText);
+
+            client.Failure = new ServiceUnavailableException(IpcErrorCodes.ServiceUnavailable, "service offline");
+            await shell.ProbeProtectionAsync(force: true);
+
+            // The last-read row stays visible, its state is not presented as current.
+            row = Assert.Single(page.Rules);
+            Assert.Equal("/usr/bin/curl", row.AppPath);
+            Assert.Equal(FirewallRuleRow.LastKnownStateText, row.StateText);
+            Assert.Equal("Unknown (last known)", row.StateText);
+            Assert.DoesNotContain("Applied", row.StateText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("verified", row.StateText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("proven", row.StateText, StringComparison.OrdinalIgnoreCase);
+
+            // Count texts: no current-looking "N owned rules read at"; the note explains why.
+            Assert.Equal("—", page.OwnedRuleCountText);
+            Assert.Contains("last known", page.StatusText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("unknown", page.StatusText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("owned rules read at", page.StatusText, StringComparison.Ordinal);
+            Assert.Contains("did not answer", page.CapabilityDetail, StringComparison.Ordinal);
+            Assert.DoesNotContain("rule(s)", shell.StatusFirewallText, StringComparison.Ordinal);
+
+            // Daemon back: the next rules read replaces the last-known rows with the live state.
+            client.Failure = null;
+            await shell.ProbeProtectionAsync(force: true);
+            page.RefreshEnforcementIfStale(page.LastEnforcementRefreshUtc + FirewallPageViewModel.EnforcementRefreshInterval);
+            row = Assert.Single(page.Rules);
+            Assert.StartsWith("Applied", row.StateText, StringComparison.Ordinal);
+            Assert.Equal("1", page.OwnedRuleCountText);
+            Assert.Contains("owned rules read at", page.StatusText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            shell.Dispose();
+        }
+    }
+
     private static ShellViewModel NewShell(DaemonClient client, IUserInteraction? ui = null) => new(
         new ServiceSnapshotSource(client),
         new NoopTimerFactory(),
