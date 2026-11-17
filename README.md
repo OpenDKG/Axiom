@@ -354,6 +354,7 @@ For installation and recovery details, see [Installing Axiom](docs/INSTALL.md). 
 - [Firewall recovery](docs/FIREWALL_RECOVERY.md)
 - [AI Analyst](docs/AI_ANALYST.md)
 - [Release readiness & security validation](docs/validation/RELEASE_READINESS_MATRIX.md)
+- [Pentesting and guard evidence](docs/PENTESTING.md)
 - [Historical changelog](docs/CHANGELOG.md)
 - [Licensing](docs/LICENSING.md)
 
