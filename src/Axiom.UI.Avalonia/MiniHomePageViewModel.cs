@@ -103,7 +103,10 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
 
     public bool HasBlockedPrivacy => BlockedPrivacy.Count > 0;
 
-    public string ShieldButtonText => Firewall.ShieldEnabled ? "Shield: ON" : "Shield: OFF";
+    // While the service has not answered the shield state is unknown, not OFF (non-Windows).
+    public string ShieldButtonText => !Firewall.ProtectionKnown
+        ? "Shield: unknown"
+        : Firewall.ShieldEnabled ? "Shield: ON" : "Shield: OFF";
 
     public string PrivacyButtonText => PrivacyShield.Enabled ? "Privacy: ON" : "Privacy: OFF";
 

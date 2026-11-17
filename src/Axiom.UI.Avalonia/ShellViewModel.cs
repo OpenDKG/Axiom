@@ -114,6 +114,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             eventsTab: Events,
             timers: timers);
         Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction, _monitor);
+        if (_serviceClient is null)
+        {
+            // No service to ask: the shield is simply unavailable (off), not unknown.
+            Firewall.ProtectionKnown = true;
+        }
+
         // Review #25: the Overview line follows the same state as the "SHIELD ON" badge.
         Overview.ProtectionState = () => new OverviewProtectionState(
             FirewallWritesEnabled: Firewall.WritesEnabled,
@@ -529,6 +535,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private string _statusFirewallBadgeText = "READ-ONLY";
 
     /// <summary>Lamp next to the badge: green when protection is on, red when it is off.</summary>
+    /// <summary>Neutral lamp while the service has not reported the protection state (non-Windows).</summary>
+    internal const string UnknownLampColor = "#94A3B8";
+
+    /// <summary>Amber lamp: shield on, but the network filter has not verified the rules (non-Windows).</summary>
+    internal const string UnverifiedLampColor = "#FBBF24";
+
     [ObservableProperty]
     private IBrush _statusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FB7185"));
 
@@ -602,14 +614,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _ = ProbeProtectionAsync();
     }
 
-    private async Task ProbeProtectionAsync()
+    internal async Task ProbeProtectionAsync(bool force = false)
     {
         if (_serviceClient is null || _isProbingProtection)
         {
             return;
         }
 
-        if (DateTimeOffset.UtcNow - _lastProtectionProbeUtc < TimeSpan.FromSeconds(5))
+        if (!force && DateTimeOffset.UtcNow - _lastProtectionProbeUtc < TimeSpan.FromSeconds(5))
         {
             return;
         }
@@ -637,17 +649,34 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         catch (ServiceUnavailableException)
         {
             _protection = null;
+            ShowProtectionUnknown();
         }
 #pragma warning disable CA1031 // An older service build simply does not expose the shield yet.
         catch (Exception)
 #pragma warning restore CA1031
         {
             _protection = null;
+            ShowProtectionUnknown();
         }
         finally
         {
             _isProbingProtection = false;
         }
+    }
+
+    /// <summary>
+    /// Off Windows a lost daemon makes the protection state unknown at once: the header lamp,
+    /// Home and Mini must not keep the last answer. Windows keeps its existing behaviour.
+    /// </summary>
+    private void ShowProtectionUnknown()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Firewall.MarkProtectionUnknown();
+        RefreshStatus();
     }
 
     /// <summary>
@@ -822,14 +851,29 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 ? "Data source: local service (read-only)"
                 : "Data source: in-process IP Helper (read-only)";
 
-        if (_protection is { Enabled: true } protection)
+        if (!OperatingSystem.IsWindows() && _serviceClient is not null && _protection is null)
+        {
+            // Off Windows the daemon is the only authority: without an answer the state is
+            // unknown, never the previous green and never a claimed "off".
+            StatusFirewallText = "Protection: unknown · the local service did not answer";
+            StatusFirewallBadgeText = "UNKNOWN";
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(UnknownLampColor));
+        }
+        else if (_protection is { Enabled: true } protection)
         {
             var awaiting = protection.Pending.Count(app => !ShieldProcessFilter.IsIgnored(app.AppPath));
             StatusFirewallText = awaiting > 0
                 ? $"Protection: ON · {protection.OwnedRuleCount} rule(s) · {awaiting} awaiting decision"
                 : $"Protection: ON · {protection.OwnedRuleCount} rule(s)";
             StatusFirewallBadgeText = "SHIELD ON";
-            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#4ADE80"));
+            var unverified = !OperatingSystem.IsWindows() && !Firewall.Enforcement.IsEnforcementVerified;
+            if (unverified)
+            {
+                // Shield is on but the network filter has not confirmed the rules: amber, not green.
+                StatusFirewallText += " · blocks not verified";
+            }
+
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(unverified ? UnverifiedLampColor : "#4ADE80"));
         }
         else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
         {

@@ -384,6 +384,23 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [ObservableProperty]
     private bool _shieldAvailable;
 
+    /// <summary>
+    /// False off Windows until the service has answered protection.status, and again as soon as it
+    /// stops answering, so ShieldEnabled is never shown as current when it is stale. Always true on
+    /// Windows (unchanged behaviour).
+    /// </summary>
+    [ObservableProperty]
+    private bool _protectionKnown = OperatingSystem.IsWindows();
+
+    /// <summary>Marks the shield state unknown after the service stopped answering (no-op on Windows).</summary>
+    public void MarkProtectionUnknown()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            ProtectionKnown = false;
+        }
+    }
+
     [ObservableProperty]
     private bool _serviceElevated;
 
@@ -1288,6 +1305,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     {
         ShieldAvailable = true;
         ShieldEnabled = status.Enabled;
+        ProtectionKnown = true;
         ServiceElevated = status.ServiceElevated;
         AgentLockdown = status.AgentLockdown;
         ServiceAccountText = status.AccountName;
