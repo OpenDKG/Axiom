@@ -43,6 +43,11 @@
               <CheckBox Content="Malware" IsChecked="{Binding Malware}" Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,0,14,0" />
               <CheckBox Content="Phishing" IsChecked="{Binding Phishing}" Foreground="{DynamicResource Axiom.TextPrimary}" />
             </WrapPanel>
+            <controls:AxiomSelectableTextBlock Text="Resolver choice" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <ComboBox ItemsSource="{Binding ResolverOptions}" SelectedItem="{Binding SelectedResolverOption}"
+                      HorizontalAlignment="Stretch" />
+            <controls:AxiomSelectableTextBlock Text="{Binding SelectedResolverOption.Description}"
+                       FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             <Grid ColumnDefinitions="*,10,*">
               <StackPanel Grid.Column="0" Spacing="4">
                 <controls:AxiomSelectableTextBlock Text="Resolver port" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
