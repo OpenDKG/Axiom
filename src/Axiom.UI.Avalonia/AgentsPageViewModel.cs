@@ -162,7 +162,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private bool _enforcementReported;
 
-    private bool _threatSharingConsentChecked;
+    private bool _threatSharingConsentEnabling;
 
     public IReadOnlyList<string> ActivityFilters { get; } =
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
@@ -1095,6 +1095,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     {
         if (_client is null)
         {
+            _threatSharingConsentEnabling = false;
             return;
         }
 
@@ -1133,6 +1134,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                      InvalidDataException or System.Text.Json.JsonException)
         {
             ThreatSharingStatusText = "off - install consent pending (" + exception.Message + ")";
+        }
+        finally
+        {
+            _threatSharingConsentEnabling = false;
         }
     }
 
@@ -2100,13 +2105,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         var mode = ReadString(settings, "mode") ?? "unknown";
         var report = ReadBool(settings, "report", false);
 
-        if (!report && !_threatSharingConsentChecked)
+        if (!report && !_threatSharingConsentEnabling &&
+            ThreatSharingConsent.HasConsent() && !ThreatSharingConsent.WasApplied())
         {
-            _threatSharingConsentChecked = true;
-            if (ThreatSharingConsent.HasConsent() && !ThreatSharingConsent.WasApplied())
-            {
-                _ = EnableThreatSharingFromInstallConsentAsync();
-            }
+            _threatSharingConsentEnabling = true;
+            _ = EnableThreatSharingFromInstallConsentAsync();
         }
         BlackboxHealthText = $"Dashboard online · mode {mode} · community sharing {(report ? "ON" : "off")}";
         ThreatSharingEnabled = report;

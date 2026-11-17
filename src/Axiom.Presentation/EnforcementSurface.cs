@@ -182,6 +182,30 @@ public sealed record EnforcementSurfaceState
 
         if (status?.Enabled == true)
         {
+            if (string.Equals(hostHookMode, "audit", StringComparison.OrdinalIgnoreCase))
+            {
+                return Current with
+                {
+                    VerificationLabel = "AUDIT MODE - NOT PROTECTED",
+                    Summary =
+                        "Blackbox hooks are in audit mode: agent actions are recorded but not blocked. Switch Blackbox to Block.",
+                    DetectorDetail = detectorDetail,
+                    PolicyDetail = FormatPolicyDetail(status),
+                };
+            }
+
+            if (!string.Equals(hostHookMode, "block", StringComparison.OrdinalIgnoreCase))
+            {
+                return Current with
+                {
+                    VerificationLabel = "HOOK MODE UNKNOWN - NOT VERIFIED",
+                    Summary =
+                        "The enforcement policy is loaded, but the guard hook mode could not be read; blocking is not proven.",
+                    DetectorDetail = detectorDetail,
+                    PolicyDetail = FormatPolicyDetail(status),
+                };
+            }
+
             // The policy is loaded and the guard hooks return block verdicts; the missing piece is
             // a host/OS deny receipt, not the blocking itself. Say that instead of "advisory".
             return Current with
