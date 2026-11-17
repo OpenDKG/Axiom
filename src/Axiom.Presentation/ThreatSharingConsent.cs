@@ -21,19 +21,8 @@ public static class ThreatSharingConsent
         "threat-sharing-consent-applied");
 
     /// <summary>True when the installer recorded the Complete threat-sharing consent.</summary>
-    /// <remarks>
-    /// Only the Windows installer records this consent. Off Windows there is no installer that
-    /// writes the default profile, so the default path is never read and the app never turns
-    /// sharing on by itself; the user turns it on with the Agent Protection toggle. An explicit
-    /// path (tests) is honoured on every platform.
-    /// </remarks>
     public static bool HasConsent(string? profilePath = null)
     {
-        if (profilePath is null && !OperatingSystem.IsWindows())
-        {
-            return false;
-        }
-
         var path = profilePath ?? DefaultProfilePath;
         try
         {
