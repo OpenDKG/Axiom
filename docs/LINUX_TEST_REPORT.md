@@ -696,3 +696,79 @@ Builds: `Axiom.Portable.slnx`, `Axiom.Service` (`-p:EnableWindowsTargeting=true`
 
 Not tested in this round: the installed service/daemon (no runtime or service differential), Privacy Shield on
 Windows, a second-user IPC run, packaging, Fedora/Debian, the `.deb`/`.rpm` upgrade paths, the live nft/eBPF canary at this head.
+
+## v1.1.0 merge candidate (branch `buba/linux-recon80`, 2026-11-17)
+
+Author-run on a project machine, not CI. Pinned upstream: main v1.1.0 `da1987a1896275f0127eb8fe176c1a780471ebe9`,
+merged (no rebase) as `44cdb26`. Packages built from `44cdb26`; host gate on `b01a0a8` (later commits
+`d231e11` tests only, `b01a0a8`/`1c7e9dd` lock files only; locked restore re-checked on `1c7e9dd`).
+SDK 10.0.403.
+
+### Host (Ubuntu host, kernel 7.0, HOME/XDG_* redirected to a scratch dir; `~/.hermes/config.yaml` sha256 unchanged)
+
+- Linux locked restore with `--force` (re-evaluates; without it a no-op restore hid NU1004): Axiom.Portable.slnx,
+  Axiom.Service, Desktop.Avalonia.Linux, Linux test projects: all rc=0.
+- Release build with `EnableWindowsTargeting`: Axiom.Portable.slnx, Service, Desktop.Avalonia.Linux and the two
+  Linux test projects: 0 warnings, 0 errors.
+
+| suite | head | pristine da1987a, same script |
+|---|---|---|
+| Infrastructure.Linux.Tests | 115/115 | n/a |
+| Infrastructure.Linux.Nft.Tests | 203/203 | n/a |
+| Infrastructure.Unix.Tests | 47/47 | n/a |
+| Contracts.Tests | 180/180 | 169/170 |
+| Core.Tests | 190/190 | 170/184 |
+| Persistence.Tests | 21/21 | 21/21 |
+| McpServer.Tests | 34/34 | 34/34 |
+| Presentation.Tests | 335/335 | 307/315 |
+| UI.Avalonia.Tests | 110/110 | 65/66 |
+| Desktop.Avalonia.Linux.Tests | 51/51 | n/a |
+| Service.Tests | 97/105 | 86/101 |
+| Infrastructure.MacOS.Tests | 249/249 | n/a |
+| Desktop.Avalonia.MacOS.Tests | 35/35 | n/a |
+
+The 8 Service.Tests failures on head (AgentFirewallEnforcer canary x3, NetworkRecoveryCommand x4,
+PrivacyShield settings-write restore x1) all fail on pristine da1987a by the same names; no test fails on
+head only.
+
+### Packages
+
+- `axiom-firewall_1.1.0+linux.rc1_amd64.deb` (`package.sh all --local linux.rc1`), 62834136 bytes,
+  sha256 `e5f48dfa7f98a24b560c3dd3f8fce220c7dfabbb0df1bad5e18a2e66d4822b1c`, Version `1.1.0+linux.rc1`.
+- `axiom-firewall-1.1.0+linux.rc1-1.x86_64.rpm`, 76261444 bytes,
+  sha256 `1f107d23e969d3f1f00191e4b085567611cc9ad85d3816905f7797786529c6d1`.
+- Unsigned development candidates, not a release.
+
+### Ubuntu 24.04.5 VM (disposable overlays; kernel 6.8.0-147-generic, bpftool v7.4.0, systemd 255.4-1ubuntu8.18)
+
+- Upgrade 0.97.0 -> 1.1.0+linux.rc1 with an applied block rule: blocked program 111 attempts before and 2505
+  after the upgrade action, 0 slipped; allowed control 173 ok, 0 failed. Rule kept, data dir kept, doctor
+  13 PASS / 0 WARN / 0 FAIL, 4 Axiom BPF programs attached.
+- 2x `systemctl restart`, 2x SIGKILL with the probe loop: 0 slipped in each run (392-530 attempts after each
+  action); control 34-44 ok, 0 failed; 4 programs attached at the end.
+- Rule removal: blocked program connects again (10/10).
+- Second local user (throwaway uid 1001): `protection.status`, `rules.query`, `snapshot`, `rule.apply`,
+  `protection.disable` all refused (`unauthorized`, journal "Denied ... for uid:1001"); `serviceHealth`
+  answered. The install user (uid 1000) is allowed.
+- Fresh install on a clean overlay: doctor all PASS, 4 programs; block canary 20/20 refused, 0 slipped; allowed
+  control 20/20; after unblock 10/10 connect.
+- GUI under Xvfb in the guest: header lamp SHIELD ON with the daemon running; with axiomd stopped the Simple
+  home reads STATUS UNKNOWN / "Protection status is unknown" and the lamp UNKNOWN.
+- Remove + purge (both overlays): no `inet axiom` table, no Axiom BPF programs, no pins, no unit, data and
+  image dirs gone, resolv.conf on the systemd stub.
+
+### Fedora 45 VM (snapshot `clean`, kernel 7.2.11-300.fc45, systemd 262, SELinux Enforcing, btrfs)
+
+- `dnf install ./axiom-firewall-1.1.0+linux.rc1-1.x86_64.rpm` rc=0 (pulled bpftool 7.7.0 as weak dep); doctor
+  13 PASS; 4 programs; block canary 20/20 refused, control 20/20; after unblock 10/10.
+- 0 AVC/USER_AVC/SELINUX_ERR records since boot; axiomd runs as `unconfined_service_t`.
+
+### Open findings / not tested
+
+- Simple home shows "AI AGENT GUARD READY" on Linux; per #441 Linux agent protection must read unsupported /
+  not verified. Not fixed in this round.
+- Integrations page has no Trader Shield entry at all (no toggle, but no "unavailable" label either).
+- Upgrade test did not compare data-file hashes (the snapshot step failed on a permission error); only the
+  file listing and the kept rule were checked.
+- Not tested: Windows build/tests of this tree (lock files' Windows sections are provisional), DNS
+  fail-safe/Privacy Shield, reboot, arm64, Mini mode, RPM upgrade/erase.
