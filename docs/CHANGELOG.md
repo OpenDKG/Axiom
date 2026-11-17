@@ -1,3 +1,7 @@
+## What's in 0.103.0
+
+- **Partner logos readable.** Uniform stretch was fitting 3:1 source logos into short boxes, so they rendered ~84 px wide. OriginTrail 170x48, Blackbox 160x28, Umanitek 144x40 keep the card layout and render at their real widths.
+
 ## What's in 0.102.0
 
 - **Export event history as JSON (FND-005).** The Events page gains Export JSON next to CSV: same fields, schema `axiom.network-events.v1`, UTC timestamps, 5,000-row limit with a truncation note. Read-only; bytes are still not stored.
