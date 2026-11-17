@@ -437,6 +437,12 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
         }
     }
 
+    /// <summary>
+    /// The global header shows this line on every page. The shell keeps it current from the shared
+    /// service state without activating the dashboard (which would start its heavier refresh).
+    /// </summary>
+    internal void SetHeaderStatus(string text) => StatusText = text;
+
     private void RecordSessionEvents()
     {
         foreach (var connection in _monitor.Connections.Where(item => item.IsNew))

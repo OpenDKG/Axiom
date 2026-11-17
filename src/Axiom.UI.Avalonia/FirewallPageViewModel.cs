@@ -398,6 +398,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShieldBadgeText))]
+    [NotifyPropertyChangedFor(nameof(ShieldActionText))]
     private bool _protectionKnown = OperatingSystem.IsWindows();
 
     /// <summary>Marks the shield state unknown after the service stopped answering (no-op on Windows).</summary>
@@ -686,12 +687,43 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
 
     private bool CanToggleShield() => _client is not null && !IsShieldBusy;
 
+    /// <summary>
+    /// Re-reads the protection state through the shell's probe, so the header, footer and this
+    /// page take the daemon's next answer together. Set by the shell; null in standalone use.
+    /// </summary>
+    internal Func<Task>? RecheckProtection { get; set; }
+
     [RelayCommand(CanExecute = nameof(CanToggleShield))]
     private async Task ToggleShieldAsync()
     {
         if (_client is null)
         {
             ShieldStatusText = "Axiom Shield needs the local service.";
+            return;
+        }
+
+        // Off Windows, while the daemon has not answered the button reads "Check protection": it
+        // only re-reads. Neither the disable nor the enable path may run on a state that is not
+        // known (a stale ShieldEnabled would otherwise send protection.disable/enable).
+        if (!OperatingSystem.IsWindows() && !ProtectionKnown)
+        {
+            IsShieldBusy = true;
+            try
+            {
+                if (RecheckProtection is { } recheck)
+                {
+                    await recheck().ConfigureAwait(true);
+                }
+                else
+                {
+                    await RefreshShieldAsync().ConfigureAwait(true);
+                }
+            }
+            finally
+            {
+                IsShieldBusy = false;
+            }
+
             return;
         }
 

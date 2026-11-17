@@ -120,6 +120,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             Firewall.ProtectionKnown = true;
         }
 
+        // "Check protection" re-reads through the shell probe, so every surface takes the same answer.
+        Firewall.RecheckProtection = () => ProbeProtectionAsync(force: true);
         // Review #25: the Overview line follows the same state as the "SHIELD ON" badge.
         Overview.ProtectionState = () => new OverviewProtectionState(
             FirewallWritesEnabled: Firewall.WritesEnabled,
@@ -917,6 +919,41 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             ? "Local service · no driver · no telemetry · no remote access."
             : "In-process monitor · no service · no driver · no telemetry.";
         OnPropertyChanged(nameof(FooterText));
+        RefreshHeaderStatus();
+    }
+
+    /// <summary>
+    /// The global header is bound to Overview.StatusText while other pages are shown, and the
+    /// dashboard only recomputes it while it is active. Off Windows the shell keeps that one line
+    /// current from the daemon's answer: unknown while the service does not answer, never the
+    /// last "Protection active … firewall writes enabled". Windows keeps its behaviour.
+    /// </summary>
+    private void RefreshHeaderStatus()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        if (_monitor.LastError is not null)
+        {
+            Overview.SetHeaderStatus($"Monitor unavailable: {_monitor.LastError}");
+            return;
+        }
+
+        if (IsServiceMode && ServiceStatus is { IsConnected: false })
+        {
+            Overview.SetHeaderStatus("Protection status unknown: the local service is offline.");
+            return;
+        }
+
+        if (IsServiceMode && _protection is null)
+        {
+            Overview.SetHeaderStatus("Protection status unknown: waiting for the local service.");
+            return;
+        }
+
+        Overview.SetHeaderStatus(OverviewPageViewModel.ComposeStatus(Overview.ProtectionState?.Invoke()));
     }
 
     private async Task ProbeServiceAsync(bool force = false)
