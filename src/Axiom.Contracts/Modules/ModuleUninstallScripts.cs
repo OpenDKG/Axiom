@@ -122,8 +122,7 @@ public static class ModuleUninstallScripts
               $blackboxHome,
               (Join-Path $root 'agent-blackbox'),
               'start-dashboard.py',
-              'hermes_cli.main blackbox',
-              'origintrail-official\dkg'
+              'hermes_cli.main blackbox'
             )
             foreach ($taskName in @('Agent Blackbox DKG node', 'Agent Blackbox dashboard', 'Axiom Blackbox dashboard', 'Axiom DKG node')) {
               Remove-ModuleTask $taskName
@@ -163,8 +162,7 @@ public static class ModuleUninstallScripts
             Write-Host 'Stopping local DKG processes...' -ForegroundColor Cyan
             $null = Stop-ModuleProcesses @(
               $dkgRoot,
-              $dkgHome,
-              'origintrail-official\dkg'
+              $dkgHome
             )
             Remove-ModuleTask 'Axiom DKG node'
             Remove-SafeDirectory $dkgRoot

@@ -31,7 +31,9 @@ public sealed class ModuleUninstallScriptsTests
 
         Assert.DoesNotContain(".Contains(", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("IndexOf([string]$needle, [System.StringComparison]::OrdinalIgnoreCase)", script, StringComparison.Ordinal);
-        Assert.Contains("origintrail-official\\dkg", script, StringComparison.OrdinalIgnoreCase);
+        // Only Axiom's own tree is matched: uninstalling it must never kill another DKG node.
+        Assert.DoesNotContain("origintrail-official", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("$dkgRoot", script, StringComparison.Ordinal);
     }
 
     [Fact]
