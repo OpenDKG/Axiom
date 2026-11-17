@@ -1,3 +1,7 @@
+## What's in 0.105.0
+
+- **New agent blocks raise one alert (FND-007 alert half).** Activity poll additions that are blocks produce at most one toast per five minutes with the accumulated count and a sample; startup history is a quiet baseline; the AlertCenter keeps it and Open goes to Agent Activity. Policy covered by tests.
+
 ## What's in 0.104.0
 
 - **Apply a validated rule file (FND-008 complete).** After an import preview, Apply imported creates the rules through the write gate after one destructive confirmation that lists them; file GUIDs are not trusted (identity from app path + direction), conflicting actions refuse the whole import, duplicates collapse, failures are reported per rule.
