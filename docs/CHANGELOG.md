@@ -1,3 +1,7 @@
+## What's in 0.91.0
+
+- **Row context menus open (#296).** A ListBoxItem keeps the right-click, so menus attached inside the row template never opened. The activity, findings and hook-evidence menus now sit on the ListBox and copy its selected row.
+
 ## What's in 0.90.0
 
 - **Right-click row menus work (#296).** The ScrollViewer scroll menu swallowed the row menu; ScrollViewer.ContextMenu is now null, so Copy event / details / JSON open on every list page.

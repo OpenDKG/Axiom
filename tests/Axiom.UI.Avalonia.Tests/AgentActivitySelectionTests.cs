@@ -74,6 +74,79 @@ public sealed class AgentActivitySelectionTests
     }
 
     [Fact]
+    public void Right_clicking_a_row_opens_the_list_context_menu_for_that_row()
+    {
+        TestAppBuilder.RunOnUiThread(() =>
+        {
+            var ui = new RecordingUserInteraction();
+            using var shell = CreateShell(ui);
+            var agents = shell.Agents;
+            var entry1 = MakeEntry(1, "pre_tool_call", "read_file", "{\"id\":1}");
+            var entry2 = MakeEntry(2, "pre_tool_call", "write_file", "{\"id\":2}");
+            var finding1 = MakeFinding(1, "secret:api-key", "block");
+            var finding2 = MakeFinding(2, "fileaccess:wallet", "flag");
+
+            agents.ApplyActivity(new BlackboxAuditPage([entry1, entry2], 2));
+            agents.ApplyFindings(new BlackboxFindingPage([finding1, finding2], 2));
+
+            var window = new Window
+            {
+                Width = 1280,
+                Height = 1100,
+                Content = new AgentDashboardView { DataContext = shell.Pages[0] },
+            };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var lists = window.GetVisualDescendants().OfType<ListBox>().ToList();
+            var activityList = lists.First(list => ReferenceEquals(list.ItemsSource, agents.Activity));
+            var findingsList = lists.First(list => ReferenceEquals(list.ItemsSource, agents.Findings));
+
+            // The row template itself must not own the menu: a ListBoxItem captures the right-click,
+            // so context menus attached inside the template never open (issue #296).
+            Assert.DoesNotContain(
+                activityList.ContainerFromIndex(0)!.GetVisualDescendants().OfType<Grid>(),
+                grid => grid.ContextMenu is not null);
+            Assert.Null(Assert.IsType<ListBoxItem>(activityList.ContainerFromIndex(0)).ContextMenu);
+
+            var secondActivityCell = GetRowCell(activityList, 1, "write_file");
+            Assert.NotNull(secondActivityCell);
+            ClickControl(window, secondActivityCell!, MouseButton.Right);
+            Assert.Equal(entry2, agents.SelectedActivity);
+
+            var activityMenu = Assert.IsType<ContextMenu>(activityList.ContextMenu);
+            secondActivityCell!.RaiseEvent(new ContextRequestedEventArgs());
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(activityMenu.IsOpen);
+            var copyEvent = Assert.IsType<MenuItem>(activityMenu.Items[0]);
+            Assert.Equal(entry2, copyEvent.CommandParameter);
+            Assert.NotNull(copyEvent.Command);
+            copyEvent.Command!.Execute(copyEvent.CommandParameter);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Contains("write_file", ui.LastClipboardText);
+            activityMenu.Close();
+            Dispatcher.UIThread.RunJobs();
+
+            var topFindingCell = GetRowCell(findingsList, 0, "fileaccess:wallet");
+            Assert.NotNull(topFindingCell);
+            ClickControl(window, topFindingCell!, MouseButton.Right);
+            Assert.Equal(finding2, agents.SelectedFinding);
+
+            var findingsMenu = Assert.IsType<ContextMenu>(findingsList.ContextMenu);
+            topFindingCell!.RaiseEvent(new ContextRequestedEventArgs());
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(findingsMenu.IsOpen);
+            var copyFinding = Assert.IsType<MenuItem>(findingsMenu.Items[0]);
+            Assert.Equal(finding2, copyFinding.CommandParameter);
+            copyFinding.Command!.Execute(copyFinding.CommandParameter);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Contains("fileaccess:wallet", ui.LastClipboardText);
+
+            window.Close();
+        });
+    }
+
+    [Fact]
     public void Clicking_row_cells_on_agent_stats_view_selects_activity_and_findings()
     {
         TestAppBuilder.RunOnUiThread(() =>
