@@ -529,7 +529,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _statusFirewallBadgeText = "READ-ONLY";
 
-    /// <summary>Lamp next to the badge: green when protection is on, red when it is off.</summary>
+    /// <summary>Neutral lamp colour while the service has not reported the protection state.</summary>
+    internal const string UnknownLampColor = "#94A3B8";
+
+    /// <summary>
+    /// Lamp next to the badge: green when protection is on, red when it is off, neutral while the
+    /// service state is unknown. Brushes are created on the caller's (UI) thread on every change.
+    /// </summary>
     [ObservableProperty]
     private IBrush _statusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FB7185"));
 
@@ -837,6 +843,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         {
             StatusFirewallText = "Protection: unknown · the local service did not answer";
             StatusFirewallBadgeText = "UNKNOWN";
+            // Unknown is neither on nor off: a neutral lamp, never the previous green or red.
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(UnknownLampColor));
         }
         else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
         {

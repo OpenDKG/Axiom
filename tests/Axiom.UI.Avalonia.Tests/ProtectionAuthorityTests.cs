@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Avalonia.Media;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Protection;
 using Axiom.Presentation;
@@ -80,6 +81,8 @@ public sealed class ProtectionAuthorityTests
             Assert.DoesNotContain("PROTECTED", shell.SimpleHome.HeroBadgeText, StringComparison.Ordinal);
             Assert.Contains("unknown", shell.StatusFirewallText, StringComparison.OrdinalIgnoreCase);
             Assert.Equal("UNKNOWN", shell.StatusFirewallBadgeText);
+            Assert.Equal(Color.Parse(ShellViewModel.UnknownLampColor), ((ISolidColorBrush)shell.StatusFirewallBadgeBrush).Color);
+            Assert.Equal("Shield: unknown", shell.MiniHome.ShieldButtonText);
 
             // Recovery restores the service authority and the green claim together.
             client.Failure = null;
@@ -92,6 +95,15 @@ public sealed class ProtectionAuthorityTests
             Assert.Equal("SHIELD ACTIVE", shell.SimpleHome.HeroBadgeText);
             Assert.Contains("Axiom rules", shell.Overview.StatusText, StringComparison.Ordinal);
             Assert.Equal("SHIELD ON", shell.StatusFirewallBadgeText);
+            Assert.Equal(Color.Parse("#4ADE80"), ((ISolidColorBrush)shell.StatusFirewallBadgeBrush).Color);
+            Assert.Equal("Shield: ON", shell.MiniHome.ShieldButtonText);
+
+            // Losing the service after a green state must not leave the lamp green.
+            client.Failure = new ServiceUnavailableException(IpcErrorCodes.ServiceUnavailable, "service offline");
+            await shell.ProbeProtectionAsync(force: true);
+            Assert.Equal("UNKNOWN", shell.StatusFirewallBadgeText);
+            Assert.Equal(Color.Parse(ShellViewModel.UnknownLampColor), ((ISolidColorBrush)shell.StatusFirewallBadgeBrush).Color);
+            Assert.Equal("Shield: unknown", shell.MiniHome.ShieldButtonText);
         }
         finally
         {
