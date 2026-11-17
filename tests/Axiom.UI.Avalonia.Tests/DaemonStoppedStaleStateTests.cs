@@ -81,6 +81,56 @@ public sealed class DaemonStoppedStaleStateTests
     }
 
     [Fact]
+    public async Task Header_says_unknown_when_the_monitor_fails_with_the_daemon()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var client = new DaemonClient();
+        var shell = NewShell(client);
+        try
+        {
+            shell.SelectedPage = shell.Firewall;
+            await shell.ProbeProtectionAsync(force: true);
+            await PollMonitorAsync(shell);
+            Assert.Contains("Protection active", shell.Overview.StatusText, StringComparison.Ordinal);
+
+            // In service mode the connection monitor reads the same daemon, so it fails too
+            // (VM shot lx-11: "Monitor unavailable: Service unavailable: …"). The header must still
+            // say the protection state is unknown, not only that the monitor is unavailable.
+            client.Failure = new ServiceUnavailableException(
+                IpcErrorCodes.ServiceUnavailable,
+                "Service unavailable: The service did not respond in time.");
+            await PollMonitorAsync(shell);
+            await shell.ProbeProtectionAsync(force: true);
+            Assert.Contains("Protection status unknown", shell.Overview.StatusText, StringComparison.Ordinal);
+            Assert.Contains("Monitor unavailable", shell.Overview.StatusText, StringComparison.Ordinal);
+            Assert.DoesNotContain("Protection active", shell.Overview.StatusText, StringComparison.Ordinal);
+            Assert.DoesNotContain("writes enabled", shell.Overview.StatusText, StringComparison.Ordinal);
+
+            client.Failure = null;
+            await PollMonitorAsync(shell);
+            await shell.ProbeProtectionAsync(force: true);
+            Assert.Contains("Protection active", shell.Overview.StatusText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            shell.Dispose();
+        }
+    }
+
+    /// <summary>Runs one connection-monitor poll (the shell's 1 s tick) without a real timer.</summary>
+    private static Task PollMonitorAsync(ShellViewModel shell)
+    {
+        var monitor = (ConnectionMonitor)typeof(ShellViewModel)
+            .GetField("_monitor", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(shell)!;
+        return monitor.PollAsync();
+    }
+
+    [Fact]
     public async Task Owned_rules_stay_visible_as_last_known_but_never_applied_while_the_daemon_is_down()
     {
         if (OperatingSystem.IsWindows())
@@ -274,6 +324,30 @@ public sealed class DaemonStoppedStaleStateTests
                     },
                     Rules = [OwnedRule()],
                     WritesEnabled = true,
+                },
+                IpcCommandTypes.Snapshot => new Axiom.Contracts.Monitoring.ConnectionSnapshot
+                {
+                    CapturedUtc = DateTimeOffset.UtcNow,
+                    Connections = [],
+                    ProcessCount = 0,
+                    SourceName = "fake axiomd",
+                },
+                IpcCommandTypes.Capabilities => new ServiceCapabilities
+                {
+                    ProtocolVersion = 1,
+                    Commands = [],
+                    Monitoring = true,
+                    FirewallWrites = false,
+                    Milestone = "test",
+                },
+                IpcCommandTypes.ServiceHealth => new ServiceHealth
+                {
+                    Status = "ok",
+                    UptimeSeconds = 1,
+                    SourceName = "fake axiomd",
+                    PollIntervalSeconds = 1,
+                    ConnectionCount = 0,
+                    ProcessCount = 0,
                 },
                 _ => throw new ServiceUnavailableException(IpcErrorCodes.NotSupported, "not supported"),
             };
