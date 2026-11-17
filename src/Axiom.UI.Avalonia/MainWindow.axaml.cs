@@ -129,9 +129,6 @@ public partial class MainWindow : Window
             Width = Math.Max(FullWindowMinWidth, _expandedWindowSize.Width);
             Height = Math.Max(FullWindowMinHeight, _expandedWindowSize.Height);
         }
-
-        // The restored or Mini size must still open fully inside the current screen's working area.
-        FitToWorkingArea();
     }
 
     private void OnVisualEffectsChanged(object? sender, EventArgs e) => ApplyBackdrop();
