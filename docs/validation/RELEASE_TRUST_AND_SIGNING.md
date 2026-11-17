@@ -2,6 +2,9 @@
 
 > **Baseline:** `v0.32.0` (`Axiom-Setup.exe` 90.97 MB, `Axiom-0.32.0-win-x64.zip` 78.24 MB, `SHA256SUMS.txt`)
 
+> **Update 17 Nov 2026:** signing decision, in-place upgrade evidence and the checks not run are
+> recorded in [RELEASE_VALIDATION_2026-11-17.md](RELEASE_VALIDATION_2026-11-17.md).
+
 ---
 
 ## 1. Current Packaging & Trust Posture

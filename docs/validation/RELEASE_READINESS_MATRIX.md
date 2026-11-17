@@ -5,6 +5,9 @@
 **Primary Target:** Windows desktop/service production readiness (with separate Linux/macOS gates)  
 **Principle:** Detection is not enforcement. A requested block is not a verified block. A passing unit test is not independent runtime proof.
 
+> **Update 17 Nov 2026:** signing decision, in-place upgrade evidence and the checks not run are
+> recorded in [RELEASE_VALIDATION_2026-11-17.md](RELEASE_VALIDATION_2026-11-17.md).
+
 ---
 
 ## 1. Reproduced Baseline Verification (`v0.32.0`)

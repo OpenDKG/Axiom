@@ -1,3 +1,8 @@
+## What's in 0.95.0
+
+- **Release validation record and signing decision.** docs/validation/RELEASE_VALIDATION_2026-11-17.md records the 0.89-0.94 in-place upgrades, what was not run, the SignPath Authenticode decision, and the cross-platform status. The ILLink pin stays: removing it breaks locked restore across SDK patches for a cosmetic warning.
+- **Pentesting evidence updated.** The pinned DKG node came up and stayed stable on 0.93/0.94 after the documented workaround; docs/PENTESTING.md records the sync evidence and keeps the offline fallback honest.
+
 ## What's in 0.94.0
 
 - **DNS resolver choice (#366).** Privacy Shield offers Automatic (Axiom's encrypted resolver), Security-focused (Cloudflare 1.1.1.1 over DoH) and Custom upstream, each with a plain-language description and the same note about adapter changes.
