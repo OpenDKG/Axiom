@@ -534,12 +534,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _statusFirewallBadgeText = "READ-ONLY";
 
-    /// <summary>Lamp next to the badge: green when protection is on, red when it is off.</summary>
-    /// <summary>Neutral lamp while the service has not reported the protection state (non-Windows).</summary>
-    internal const string UnknownLampColor = "#94A3B8";
+    /// <summary>Neutral lamp colour while the service has not reported the protection state.</summary>
+    internal const string UnknownLampColor = ShieldProtection.UnknownColor;
 
     /// <summary>Amber lamp: shield on, but the network filter has not verified the rules (non-Windows).</summary>
-    internal const string UnverifiedLampColor = "#FBBF24";
+    internal const string UnverifiedLampColor = ShieldProtection.DegradedColor;
 
     [ObservableProperty]
     private IBrush _statusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FB7185"));
@@ -862,7 +861,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             // unknown, never the previous green and never a claimed "off".
             StatusFirewallText = "Protection: unknown · the local service did not answer";
             StatusFirewallBadgeText = "UNKNOWN";
-            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(UnknownLampColor));
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(ShieldProtection.LampColor(null)));
         }
         else if (_protection is { Enabled: true } protection)
         {
@@ -871,14 +870,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 ? $"Protection: ON · {protection.OwnedRuleCount} rule(s) · {awaiting} awaiting decision"
                 : $"Protection: ON · {protection.OwnedRuleCount} rule(s)";
             StatusFirewallBadgeText = "SHIELD ON";
-            var unverified = !OperatingSystem.IsWindows() && !Firewall.Enforcement.IsEnforcementVerified;
-            if (unverified)
+            // Shield on is green only when the platform filter proved enforcement (Windows: not
+            // reported, upstream green); otherwise the Degraded tone, never a verified-looking lamp.
+            var level = ShieldProtection.Level(
+                known: true,
+                enabled: true,
+                OperatingSystem.IsWindows() ? null : Firewall.Enforcement.IsEnforcementVerified);
+            if (level == EnforcementLevel.Degraded)
             {
-                // Shield is on but the network filter has not confirmed the rules: amber, not green.
                 StatusFirewallText += " · blocks not verified";
             }
 
-            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(unverified ? UnverifiedLampColor : "#4ADE80"));
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(ShieldProtection.LampColor(level)));
         }
         else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
         {
