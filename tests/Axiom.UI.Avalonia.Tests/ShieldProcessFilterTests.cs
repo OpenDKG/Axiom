@@ -28,10 +28,9 @@ public sealed class ShieldProcessFilterTests
     [Fact]
     public void Unrelated_user_paths_are_still_asked_about()
     {
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-
-        Assert.False(ShieldProcessFilter.IsIgnored(
-            Path.Combine(local, "SomeVendor", "agent.exe")));
+        // Do not derive this from LocalApplicationData: on CI the workspace itself can live under
+        // %LOCALAPPDATA%\Axiom, which would make the path legitimately trusted.
+        Assert.False(ShieldProcessFilter.IsIgnored(@"C:\UnrelatedVendor\agent.exe"));
         Assert.False(ShieldProcessFilter.IsIgnored(null));
         Assert.False(ShieldProcessFilter.IsIgnored(string.Empty));
     }
