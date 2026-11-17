@@ -122,6 +122,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         // "Check protection" re-reads through the shell probe, so every surface takes the same answer.
         Firewall.RecheckProtection = () => ProbeProtectionAsync(force: true);
+        Firewall.PropertyChanged += OnFirewallStateChanged;
         // Review #25: the Overview line follows the same state as the "SHIELD ON" badge.
         Overview.ProtectionState = () => new OverviewProtectionState(
             FirewallWritesEnabled: Firewall.WritesEnabled,
@@ -583,6 +584,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _updateTimer.Tick -= OnUpdateTimerTick;
         _updateChecker.Changed -= OnUpdateCheckerChanged;
         _monitor.Updated -= OnMonitorUpdated;
+        Firewall.PropertyChanged -= OnFirewallStateChanged;
         _theme.Changed -= OnThemeChanged;
         _uiMode.Changed -= OnUiModeChanged;
         AlertCenter.Changed -= OnAlertCenterChanged;
@@ -613,6 +615,25 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         RefreshStatus();
         _ = ProbeServiceAsync();
         _ = ProbeProtectionAsync();
+    }
+
+    /// <summary>
+    /// Off Windows the header (Overview.StatusText) and the footer read the filter enforcement
+    /// summary that Network Control re-reads on its own schedule. Re-render them in the same
+    /// update as the page, so the three never state two different answers (the page saying
+    /// "generation N verified" while the header still says it is not acknowledged).
+    /// </summary>
+    private void OnFirewallStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        if (e.PropertyName is nameof(FirewallPageViewModel.Enforcement) or nameof(FirewallPageViewModel.ProtectionKnown))
+        {
+            RefreshStatus();
+        }
     }
 
     internal async Task ProbeProtectionAsync(bool force = false)

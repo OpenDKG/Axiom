@@ -134,6 +134,88 @@ public sealed class DaemonStoppedStaleStateTests
         }
     }
 
+    [Fact]
+    public async Task Header_footer_and_page_agree_on_enforcement_after_the_daemon_returns()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var client = new DaemonClient();
+        var shell = NewShell(client);
+        try
+        {
+            shell.SelectedPage = shell.Firewall;
+            var page = shell.Firewall;
+            await shell.ProbeProtectionAsync(force: true);
+            AssertOneAnswer(shell, page);
+            Assert.True(page.Enforcement.IsEnforcementVerified);
+
+            client.Failure = new ServiceUnavailableException(IpcErrorCodes.ServiceUnavailable, "service offline");
+            await shell.ProbeProtectionAsync(force: true);
+            AssertOneAnswer(shell, page);
+
+            // Daemon back, the filter has not yet acknowledged the generation it republished.
+            client.Failure = null;
+            client.FilterState = FilterEnforcementState.Pending;
+            await shell.ProbeProtectionAsync(force: true);
+            AssertOneAnswer(shell, page);
+            Assert.False(page.Enforcement.IsEnforcementVerified);
+
+            // The page's own periodic re-read sees the acknowledgement: header and footer follow
+            // in the same update, not one poll later.
+            client.FilterState = FilterEnforcementState.Verified;
+            page.RefreshEnforcementIfStale(page.LastEnforcementRefreshUtc + FirewallPageViewModel.EnforcementRefreshInterval);
+            Assert.True(page.Enforcement.IsEnforcementVerified);
+            AssertOneAnswer(shell, page);
+
+            // And back to pending (filter re-handover): no surface keeps the verified claim.
+            client.FilterState = FilterEnforcementState.Pending;
+            page.RefreshEnforcementIfStale(page.LastEnforcementRefreshUtc + FirewallPageViewModel.EnforcementRefreshInterval);
+            Assert.False(page.Enforcement.IsEnforcementVerified);
+            AssertOneAnswer(shell, page);
+        }
+        finally
+        {
+            shell.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The SYSTEM STATUS header, the footer and the Network Control filter line must state the
+    /// same enforcement answer: verified everywhere, or not verified everywhere with the page's
+    /// reason. Unknown (no answer) counts as not verified.
+    /// </summary>
+    private static void AssertOneAnswer(ShellViewModel shell, FirewallPageViewModel page)
+    {
+        var header = shell.Overview.StatusText;
+        var footer = shell.StatusFirewallText + " | " + shell.StatusSourceText;
+        if (page.ShieldLevel is null)
+        {
+            Assert.Contains("unknown", header, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Protection active", header, StringComparison.Ordinal);
+            Assert.Equal("UNKNOWN", shell.StatusFirewallBadgeText);
+            Assert.DoesNotContain("verified", page.FilterConnectionText, StringComparison.OrdinalIgnoreCase);
+            return;
+        }
+
+        if (page.Enforcement.IsEnforcementVerified)
+        {
+            Assert.Contains("verified", page.FilterConnectionText, StringComparison.Ordinal);
+            Assert.DoesNotContain("not verified", header, StringComparison.Ordinal);
+            Assert.DoesNotContain("not acknowledged", header, StringComparison.Ordinal);
+            Assert.DoesNotContain("not verified", footer, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.DoesNotContain(" verified at", page.FilterConnectionText, StringComparison.Ordinal);
+            Assert.Contains("not verified", header, StringComparison.Ordinal);
+            Assert.Contains(page.Enforcement.NotVerifiedReason, header, StringComparison.Ordinal);
+            Assert.Contains("not verified", footer, StringComparison.Ordinal);
+        }
+    }
+
     private static ShellViewModel NewShell(DaemonClient client, IUserInteraction? ui = null) => new(
         new ServiceSnapshotSource(client),
         new NoopTimerFactory(),
