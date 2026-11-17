@@ -73,6 +73,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private readonly List<BlackboxAuditEntry> _allActivity = [];
 
+    private readonly AgentBlockAlertPolicy _blockAlerts = new();
+
     private readonly List<BlackboxFinding> _allFindings = [];
 
     private bool _refreshing;
@@ -1674,6 +1676,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     internal void ApplyActivity(BlackboxAuditPage page)
     {
+        _blockAlerts.MarkInitialized();
         _allActivity.Clear();
         _allActivity.AddRange(NormalizeActivity(page.Entries, ReadFrameworkMap()));
         _activityTotal = Math.Max(page.Total, _allActivity.Count);
@@ -1694,6 +1697,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         if (added.Count > 0)
         {
+            NotifyBlockedActivity(added);
             _allActivity.AddRange(added);
             _allActivity.Sort((left, right) =>
                 (right.Timestamp ?? DateTimeOffset.MinValue)
@@ -1816,6 +1820,31 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         var now = DateTimeOffset.UtcNow;
         HasStaleAgentActivity = ActivityFreshness.IsStale(newest, now, _hasLiveSession);
         ActivityFreshnessText = ActivityFreshness.Describe(newest, now, _hasLiveSession);
+    }
+
+    /// <summary>
+    /// Alerts once per policy window when new guard blocks arrive, instead of one toast per blocked
+    /// tool call. History loaded at startup stays quiet (ApplyActivity marks the baseline).
+    /// </summary>
+    private void NotifyBlockedActivity(IReadOnlyList<BlackboxAuditEntry> added)
+    {
+        var blocked = added.Where(entry => entry.IsBlocked).ToList();
+        if (blocked.Count == 0)
+        {
+            return;
+        }
+
+        var sample = string.IsNullOrWhiteSpace(blocked[0].Agent)
+            ? blocked[0].ActionSummary
+            : $"{blocked[0].Agent} {blocked[0].ActionSummary}";
+        var alert = _blockAlerts.Observe(blocked.Count, DateTimeOffset.UtcNow, sample);
+        if (alert is not null)
+        {
+            AxiomAlertService.Show(
+                "Agent action blocked",
+                alert.Message,
+                page: typeof(AgentStatsPageViewModel));
+        }
     }
 
     internal void ApplyFindings(BlackboxFindingPage page)
