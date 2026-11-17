@@ -30,7 +30,7 @@ public sealed class EnforcementSurfaceTests
             state.PolicyDetail);
 
         Assert.DoesNotContain("VERIFIED BLOCKING", text, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("not implemented", state.BrokerDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("prototype", state.BrokerDetail, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("not wired", state.PolicyDetail, StringComparison.OrdinalIgnoreCase);
     }
 

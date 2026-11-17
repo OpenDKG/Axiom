@@ -23,10 +23,6 @@
       <WrapPanel Orientation="Horizontal">
         <Button Content="Report an issue" Command="{Binding OpenGitHubIssuesCommand}" Margin="0,0,8,8" Padding="12,6" />
         <Button Content="Open repository" Command="{Binding OpenGitHubRepositoryCommand}" Margin="0,0,8,8" Padding="12,6" />
-        <Button Content="Buy Me a Coffee" Command="{Binding OpenDonationPageCommand}" CommandParameter="coffee"
-                IsEnabled="{Binding HasBuyMeACoffee}" Margin="0,0,8,8" Padding="12,6" />
-        <Button Content="PayPal.Me" Command="{Binding OpenDonationPageCommand}" CommandParameter="paypal"
-                IsEnabled="{Binding HasPayPal}" Margin="0,0,8,8" Padding="12,6" />
         <Button Content="GitHub Sponsors" Command="{Binding OpenDonationPageCommand}" CommandParameter="github"
                 IsEnabled="{Binding HasGitHubSponsors}" Margin="0,0,8,8" Padding="12,6" />
       </WrapPanel>

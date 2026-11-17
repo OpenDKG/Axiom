@@ -131,24 +131,20 @@
                        Background="Transparent" BorderThickness="0"
                        controls:DataListSelection.SelectOnPointerPress="True"
                        ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Copy event"
+                              Command="{Binding AgentActivity.CopyActivityEventCommand}" />
+                    <MenuItem Header="Copy details"
+                              Command="{Binding AgentActivity.CopyActivityDetailsCommand}" />
+                    <MenuItem Header="Copy raw event JSON"
+                              Command="{Binding AgentActivity.CopyActivityJsonCommand}" />
+                  </ContextMenu>
+                </ListBox.ContextMenu>
                 <ListBox.ItemTemplate>
                   <DataTemplate>
                     <Grid ColumnDefinitions="64,90,110,*,70,76" Margin="0,1"
-                          Background="Transparent"
-                          Tag="{Binding $parent[ListBox].DataContext}">
-                      <Grid.ContextMenu>
-                        <ContextMenu>
-                          <MenuItem Header="Copy event"
-                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityEventCommand}"
-                                    CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
-                          <MenuItem Header="Copy details"
-                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityDetailsCommand}"
-                                    CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
-                          <MenuItem Header="Copy raw event JSON"
-                                    Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyActivityJsonCommand}"
-                                    CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
-                        </ContextMenu>
-                      </Grid.ContextMenu>
+                          Background="Transparent">
                       <TextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
                                  Foreground="{DynamicResource Axiom.TextMuted}" />
                       <TextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11"
@@ -238,18 +234,16 @@
                            Background="Transparent" BorderThickness="0"
                            controls:DataListSelection.SelectOnPointerPress="True"
                            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="Copy finding"
+                                  Command="{Binding AgentActivity.CopyFindingCommand}" />
+                      </ContextMenu>
+                    </ListBox.ContextMenu>
                     <ListBox.ItemTemplate>
                       <DataTemplate>
                         <Grid ColumnDefinitions="64,90,94,70,*,84" Margin="0,1"
-                              Background="Transparent"
-                              Tag="{Binding $parent[ListBox].DataContext}">
-                          <Grid.ContextMenu>
-                            <ContextMenu>
-                              <MenuItem Header="Copy finding"
-                                        Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.AgentActivity.CopyFindingCommand}"
-                                        CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
-                            </ContextMenu>
-                          </Grid.ContextMenu>
+                              Background="Transparent">
                           <TextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextMuted}" />
                           <TextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11"

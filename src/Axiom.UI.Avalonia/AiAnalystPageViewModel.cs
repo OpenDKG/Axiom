@@ -325,6 +325,20 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
         StatusText = "Local AI finding history cleared.";
     }
 
+    /// <summary>
+    /// Prompt the user can send to an agent that is already signed in, so that agent can configure
+    /// Axiom's AI Analyst for monitoring without a second API key (issue #366).
+    /// </summary>
+    public string AgentSetupPrompt =>
+        "Configure Axiom's AI Analyst to use this agent's own local login instead of a separate API key: " +
+        "open Axiom > AI Analyst, set Provider to OpenChamber Local, keep the local endpoint " +
+        "(opencode://local), choose this session's model, save the settings, then run one test analysis " +
+        "and report the exact settings you changed. Do not paste an API key into this prompt.";
+
+    [RelayCommand]
+    private Task CopyAgentSetupPromptAsync() =>
+        CopyTextAsync(AgentSetupPrompt, "Agent setup prompt copied to the clipboard.");
+
     [RelayCommand]
     private Task CopyResultAsync() => SelectedFinding is { } finding
         ? CopyTextAsync(FormatFinding(finding), "Analysis result copied to the clipboard.")

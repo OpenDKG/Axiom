@@ -50,6 +50,23 @@
           </StackPanel>
         </Grid>
 
+        <Border Background="{DynamicResource Axiom.SurfaceAlt}" BorderBrush="{DynamicResource Axiom.Border}"
+                BorderThickness="1" CornerRadius="8" Padding="10">
+          <StackPanel Spacing="6">
+            <Grid ColumnDefinitions="*,Auto">
+              <controls:AxiomSelectableTextBlock Text="Configure Axiom from an agent that is already signed in"
+                         FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <Button Grid.Column="1" Content="Copy setup prompt" Padding="10,4"
+                      Command="{Binding CopyAgentSetupPromptCommand}" />
+            </Grid>
+            <TextBox Text="{Binding AgentSetupPrompt}" IsReadOnly="True" TextWrapping="Wrap"
+                     AcceptsReturn="True" MinHeight="52" />
+            <controls:AxiomSelectableTextBlock
+                       Text="OpenChamber / OpenCode reuses the agent's own local login; no separate API key is needed."
+                       FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
         <StackPanel Orientation="Horizontal" Spacing="16">
           <CheckBox Content="Redact local paths" IsChecked="{Binding RedactPaths}" Foreground="{DynamicResource Axiom.TextPrimary}" />
           <CheckBox Content="Automatic analysis" IsChecked="{Binding AutomaticAnalysis}" Foreground="{DynamicResource Axiom.TextPrimary}" />

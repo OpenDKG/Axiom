@@ -1,3 +1,94 @@
+## What's in 0.97.0
+
+- **OS enforcement canary actually validates now.** The live VM harness no longer uses loopback (Windows Firewall exempts it) or a renamed PowerShell copy. It blocks a real program by path to a remote endpoint, proves the deny, rolls the rule back and proves connectivity returns. Live result: OS_DENY_VERIFIED with zero leftover rules.
+
+## What's in 0.96.0
+
+- **Setup tolerates inaccessible single-instance guards.** When both the global and session mutex exist with ACLs the account cannot open (two CI setup checks at once), setup continues without a guard instead of crashing; the consent gate is unchanged.
+
+## What's in 0.95.0
+
+- **Release validation record and signing decision.** docs/validation/RELEASE_VALIDATION_2026-11-17.md records the 0.89-0.94 in-place upgrades, what was not run, the SignPath Authenticode decision, and the cross-platform status. The ILLink pin stays: removing it breaks locked restore across SDK patches for a cosmetic warning.
+- **Pentesting evidence updated.** The pinned DKG node came up and stayed stable on 0.93/0.94 after the documented workaround; docs/PENTESTING.md records the sync evidence and keeps the offline fallback honest.
+
+## What's in 0.94.0
+
+- **DNS resolver choice (#366).** Privacy Shield offers Automatic (Axiom's encrypted resolver), Security-focused (Cloudflare 1.1.1.1 over DoH) and Custom upstream, each with a plain-language description and the same note about adapter changes.
+- **AI Analyst setup prompt (#366).** A Copy setup prompt button gives a one-line instruction for an already signed-in local agent, reusing the OpenChamber/OpenCode login instead of a second API key.
+
+## What's in 0.93.0
+
+- **Setup survives an inaccessible single-instance guard.** If the global setup mutex exists with an ACL this account cannot open, the installer now uses a session-local guard and reports it, instead of crashing with an unhandled UnauthorizedAccessException (the main-push packaging check hit this on the shared runner).
+
+## What's in 0.92.0
+
+- **Windows CI green again.** The Simple/Mini mode test assumed an empty local audit store; it now asserts that the blocked agent it adds reaches both views, so main push runs stop failing on runner state.
+
+## What's in 0.91.0
+
+- **Row context menus copy again (#296).** Avalonia 12 leaves ContextMenu.PlacementTarget null for pointer-opened menus, so `PlacementTarget.Tag...` command bindings resolved to null and every menu item did nothing. A class handler restores the owner control on the menu for every view; the dashboard and activity menus also sit on the ListBox and copy its selected row.
+
+## What's in 0.90.0
+
+- **Right-click row menus work (#296).** The ScrollViewer scroll menu swallowed the row menu; ScrollViewer.ContextMenu is now null, so Copy event / details / JSON open on every list page.
+
+## What's in 0.89.0
+
+- **Partner logos are readable.** OriginTrail 124x28, Blackbox 118x22 and Umanitek 108x26 in the module cards (were 92x16-20).
+
+## What's in 0.88.0
+
+- **Footer link, ghost logo buttons, Mini height, new icons.**
+  - Mini opens at 820x640 so the footer is visible; the Axiom logo/version opens opendkg.org/axiom in every mode.
+  - Logo buttons are ghost links with only a soft hover highlight (no grey box).
+  - Updated axiom icon/lockup, Blackbox, OriginTrail and Umanitek logos.
+
+## What's in 0.87.0
+
+- **Compact Mini and plain selected buttons.**
+  - Mini cards size to their content (Auto row) and the window opens at 820x560 (min 760x430); chart 96 px, tighter padding.
+  - Selected glass buttons keep the lighter background but use the normal light text again; green text removed.
+
+## What's in 0.86.0
+
+- **Mini compact overview restored.**
+  - Network card: active sockets, processes, loopback and one Throughput value; throughput card keeps Down/Up rates in its header.
+  - Agent activity list (four most recent actions) under the chart; window 1040x720 (min 900x600).
+  - Glass Dark buttons: dark grey with white text; selected/primary buttons lighter grey with green text.
+
+## What's in 0.85.0
+
+- **Mini is a one-row overview.**
+  - Three cards: Agent dashboard (sessions, tool calls, blocked, flagged), Network overview (sockets, processes, loopback, down/up), Privacy overview (rules, queries, allowed, blocked, errors).
+  - Small system-throughput chart below the row; Mini window opens at 1040x660 (min 900x560).
+  - The blocked lists and waiting-permission queue stay on the full pages.
+
+## What's in 0.84.0
+
+- **Mini mode shows the real block count.**
+  - `AGENTS BLOCKED` used audit findings (63) while the Agent Dashboard chart counted 3,178 `GUARD_BLOCKED` tool calls; it now reads `Agents.BlockSummary.Blocked` with the audit count only as an empty-store fallback.
+
+## What's in 0.83.0
+
+- **Mini mode (`Mini | Simple | Advanced`) — compact blocked-activity window.**
+  - Added a third `Mini` button in the top bar (`UiMode.Mini`) that collapses the 252px navigation sidebar, header, and footer bar and resizes `MainWindow` into a compact `460×700` widget layout (`MinWidth = 420`, `MinHeight = 520`), restoring the full window geometry on switch back to `Simple` or `Advanced`.
+  - `MiniHomeView` / `MiniHomePageViewModel` shows one-click **Shield** and **Privacy** toggles, pending Allow/Block requests, compact blocked-item lists for **Network**, **AI Agents**, and **Privacy**, and a bottom action strip with the Axiom logo/version, **♥ Donate**, **GitHub**, and **Settings**.
+
+## What's in 0.82.0
+
+- **Polish and honest enforcement wording.**
+  - Shield lamp green/red/amber by real state; Axiom logo and version open opendkg.org/axiom; update button sits after notifications with "Update to version X"; Support keeps only GitHub Sponsors.
+  - Agent Protection says HOOK BLOCKING ACTIVE with the guard-hook truth instead of "detector signals are advisory"; the runner/broker is described as the E3 prototype and kernel/WFP deny as not enabled.
+  - Tests updated for the new broker wording and tooltip.
+
+## What's in 0.81.0
+
+- **Status bar, footer and update polish.**
+  - Shield lamp: green when protection is on, red when off, amber only for the test-VM writes state (was always amber).
+  - Axiom logo and version in the footer open https://opendkg.org/axiom.
+  - Update button moved right of notifications, tooltip "Update to version X", still shown only when GitHub has a newer release.
+  - Support keeps only GitHub Sponsors; Buy Me a Coffee and PayPal.Me removed.
+
 ## What's in 0.80.0
 
 - **SESSIONS card counts real sessions.**

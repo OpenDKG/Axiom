@@ -463,19 +463,19 @@
     <Setter Property="Foreground" Value="{DynamicResource Axiom.TextMuted}" />
   </Style>
   <Style Selector="Grid.glass Button.primary">
-    <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.AccentStrong}" />
-    <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
   </Style>
   <Style Selector="Grid.glass Button.primary:pointerover /template/ ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Axiom.AccentStrong}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.AccentStrong}" />
-    <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
     <Setter Property="Opacity" Value="0.94" />
   </Style>
   <Style Selector="Grid.glass Button.primary:pressed /template/ ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
-    <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    <Setter Property="Background" Value="{DynamicResource Axiom.GlassControlHover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
     <Setter Property="Opacity" Value="0.82" />
   </Style>
   <Style Selector="Grid.glass Button.primary:disabled">
@@ -598,5 +598,29 @@
   </Style>
   <Style Selector=":is(TextBlock).mono">
     <Setter Property="FontFamily" Value="Cascadia Mono, JetBrains Mono, Consolas, monospace" />
+  </Style>
+
+  <!-- The ScrollViewer's built-in scroll context menu swallowed every row menu (issue #296). -->
+  <Style Selector="ScrollViewer">
+    <Setter Property="ContextMenu" Value="{x:Null}" />
+  </Style>
+  <!-- Ghost link button: no chrome until hover, then a soft theme-aware highlight. -->
+  <Style Selector="Button.ghost">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+  </Style>
+  <Style Selector="Button.ghost /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.ghost:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
   </Style>
 </Styles>
