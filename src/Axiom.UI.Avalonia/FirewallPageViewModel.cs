@@ -1300,6 +1300,50 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     }
 
     /// <summary>
+    /// Reads an exported rule file and validates it with the same validator the write path uses.
+    /// Preview only: nothing is applied, imported or changed (FND-008).
+    /// </summary>
+    [RelayCommand]
+    private async Task PreviewImportRulesAsync()
+    {
+        var path = await _ui
+            .PickOpenFileAsync("Preview a firewall rule file (nothing is applied)", "json", "JSON", CancellationToken.None)
+            .ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        string json;
+        try
+        {
+            json = await File.ReadAllTextAsync(path).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            StatusText = "Could not read the rule file: " + exception.Message;
+            return;
+        }
+
+        var result = FirewallRuleImport.Preview(json);
+        if (result.FileError is not null)
+        {
+            StatusText = "Import preview: " + result.FileError;
+            return;
+        }
+
+        var summary = $"Import preview: {result.Rules.Count} valid rule(s), {result.InvalidRuleCount} invalid. Nothing was applied.";
+        if (result.RuleErrors.Count > 0)
+        {
+            summary += " " + string.Join(
+                " ",
+                result.RuleErrors.Take(3).Select(error => $"Rule {error.Index + 1}: {error.Message}"));
+        }
+
+        StatusText = summary;
+    }
+
+    /// <summary>
     /// Writes the Axiom-owned rules to a user-chosen JSON file. Read-only export for review or
     /// migration (FND-008); it never applies, changes or imports rules.
     /// </summary>
