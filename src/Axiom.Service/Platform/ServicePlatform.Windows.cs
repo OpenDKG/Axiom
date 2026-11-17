@@ -96,7 +96,8 @@ internal static class ServicePlatform
     /// <summary>
     /// Agent enforcement (#322 controller and receipts, #323 E4 scoped agent firewall enforcer):
     /// the registrations upstream makes in Program.cs, unchanged. They sit behind the platform
-    /// seam because the macOS/Linux daemon does not register them (see ServicePlatform.Unix).
+    /// seam so that a later macOS/Linux service slice can decide its own registration; S1b adds no
+    /// non-Windows ServicePlatform.
     /// </summary>
     public static void ConfigureAgentEnforcement(HostApplicationBuilder builder)
     {
