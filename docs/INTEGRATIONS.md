@@ -48,13 +48,43 @@ from the IP Helper TCP tables and resolves its name, path and command line witho
   even when the JSON looks right. `OptionalModuleStatus.CanReceivePrivilegedSettings` is true only
   for an observed process; no current code sends settings to these endpoints.
 
-If Blackbox or DKG is installed but not running, its action changes to **Start**; it starts the
-existing dashboard/node without reinstalling. The node/dashboard runs in the background, and child
-console windows created by third-party launchers are hidden. The button changes to **Starting...**
-and stays disabled while Axiom waits for the loopback probe; it returns to **Start** only after a
-timeout or a failed launch. Nothing is installed silently. Close the PowerShell window only after
-it reports success, then click **Check again**. **Restart Axiom** is available for a clean restart
-after installation.
+If Blackbox or DKG is installed but not running, its own action is **Start**; it starts the existing
+dashboard/node without reinstalling. **Start local modules** starts the DKG node first and then the
+Blackbox dashboard. Starting checks the port first: a runtime that already owns it is left alone, so
+the vendor login task and Axiom do not race and leave duplicate processes. The node/dashboard runs
+in the background, and child console windows created by third-party launchers are hidden. The button
+changes to **Starting...** and stays disabled while Axiom waits for the loopback probe; it returns
+to **Start** only after a timeout or a failed launch. Nothing is installed silently. Close the
+PowerShell window only after it reports success, then click **Check again**. **Restart Axiom** is
+available for a clean restart after installation.
+
+### Repair, restart and power loss
+
+**Repair** is a separate action on each module card. It stops a stale or duplicated runtime, starts
+exactly one copy, and waits for the port before reporting. A module without a usable runtime still
+goes through the normal Install/Repair path so the vendor installer can rebuild it.
+
+Axiom starts an installed module on launch and retries it (at most five times, three minutes apart)
+when it crashes later. Because the Complete installation starts Axiom with Windows, this restores
+the dashboard and node after a reboot or power loss. The DKG card accepts both the historical
+standalone port **9200** and Blackbox's bundled node on **9320**, so a healthy node is not reported
+as "not running" while the dashboard is down.
+
+### Prerequisites
+
+Blackbox's vendor installer accepts **Python 3.11-3.13** only (3.12 is the pinned choice), plus
+Node.js/npm and Git. Axiom validates the interpreter version before an install; an unrelated
+`python.exe` such as 3.15 is reported as missing and Setup installs 3.12 through winget. The
+compatible interpreter is put first on the installer PATH, and the `py.cmd` shim is only created
+from a validated interpreter. If the prerequisites still cannot be satisfied, a Complete install
+skips the vendor step with a clear message instead of running it into a Python traceback.
+
+### Uninstall
+
+Uninstall removes only Axiom-owned module files, the managed Hermes plugin, the Axiom and vendor
+login tasks and the local runtime. Other Hermes profiles, global Python/npm packages, user data and
+user-authored agent files are kept. The cleanup runs on Windows PowerShell 5.1 and reports the
+remaining path rather than pretending success when a running process still holds a file.
 The activity strip shows the last 30 loopback checks; it is a health indicator, not module event
 content. The Agents page also shows a **Threat sharing** card that reads the dashboard's `report`
 setting (`off · opt in` or `on · signed, redacted`) and can enable or disable signed, redacted
