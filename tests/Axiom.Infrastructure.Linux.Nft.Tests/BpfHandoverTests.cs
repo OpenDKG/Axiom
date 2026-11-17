@@ -105,7 +105,7 @@ public sealed class BpfHandoverTests
         Assert.Equal(1, h.Bpftool.AttachedSets);
         Assert.InRange(h.Bpftool.MaxAxiomAttached, 4, 8); // old + new overlap only, never a third set
         Assert.True(Directory.Exists(h.BpfPaths.PinDirectory));
-        Assert.False(Directory.Exists(h.BpfPaths.PinDirectory + ".next"));
+        Assert.False(Directory.Exists(h.BpfPaths.PinDirectory + "-next"));
         Assert.True(File.Exists(h.BpfPaths.MapPin(BpfLayout.ExeMap)));
         Assert.True(next.Engine.Generation >= 0);
 
@@ -118,7 +118,7 @@ public sealed class BpfHandoverTests
         await run;
         Assert.Equal(0, AxiomAttachments(h.Bpftool));
         Assert.False(Directory.Exists(h.BpfPaths.PinDirectory));
-        Assert.False(Directory.Exists(h.BpfPaths.PinDirectory + ".next"));
+        Assert.False(Directory.Exists(h.BpfPaths.PinDirectory + "-next"));
         Assert.Equal(("sd_fw_egress", "cgroup_inet_egress"), h.Bpftool.Attached[7]);
     }
 
@@ -174,7 +174,7 @@ public sealed class BpfHandoverTests
 
         Assert.Equal(0, AxiomAttachments(h.Bpftool));
         Assert.False(Directory.Exists(h.BpfPaths.PinDirectory));
-        Assert.False(Directory.Exists(h.BpfPaths.PinDirectory + ".next"));
+        Assert.False(Directory.Exists(h.BpfPaths.PinDirectory + "-next"));
         Assert.Equal("stopped", h.Engine.Status);
     }
 
@@ -246,7 +246,7 @@ public sealed class BpfHandoverTests
         Assert.False(next.Engine.StaleProgramsAttached);
         Assert.Equal(4, AxiomAttachments(h.Bpftool));
         Assert.Equal(1, h.Bpftool.AttachedSets);
-        Assert.False(Directory.Exists(h.BpfPaths.PinDirectory + ".next"));
+        Assert.False(Directory.Exists(h.BpfPaths.PinDirectory + "-next"));
         Assert.True(File.Exists(h.BpfPaths.MapPin(BpfLayout.ExeMap)));
         Assert.Empty(gaps);
         Assert.InRange(h.Bpftool.MaxAxiomAttached, 4, 8);
@@ -258,7 +258,7 @@ public sealed class BpfHandoverTests
     public async Task New_set_whose_maps_cannot_be_populated_is_rolled_back_and_the_old_set_keeps_enforcing()
     {
         using var h = await BlockedCurlAsync();
-        var staging = h.BpfPaths.PinDirectory + ".next";
+        var staging = h.BpfPaths.PinDirectory + "-next";
         h.Bpftool.FailPrefixes.Add($"bpftool map update pinned {Path.Combine(staging, "maps", BpfLayout.ExeMap)}");
         var gaps = WatchForGaps(h.Bpftool);
         using var next = new NextDaemon(h);
@@ -288,6 +288,37 @@ public sealed class BpfHandoverTests
         var report = await next.Adapter.GetCapabilitiesAsync(CancellationToken.None);
         Assert.Equal(FilterEnforcementState.Degraded, report.FilterEnforcement!.State);
         Assert.Equal("stale_programs", report.ConnectTimeLayer!.State);
+    }
+
+    [Fact]
+    public async Task New_set_that_cannot_be_loaded_keeps_the_old_set_enforcing_instead_of_detaching_it()
+    {
+        using var h = await BlockedCurlAsync();
+        h.Bpftool.FailPrefixes.Add("bpftool prog loadall");
+        var gaps = WatchForGaps(h.Bpftool);
+        using var next = new NextDaemon(h);
+        await next.Adapter.PublishAsync(CancellationToken.None);
+        var supervisor = Supervise(h, next.Adapter, next.Engine);
+
+        await supervisor.StartLayerAsync(CancellationToken.None);
+        await supervisor.WatchOnceAsync(CancellationToken.None);
+
+        // Fail closed: the previous daemon's set keeps enforcing, reported degraded (stale), retried.
+        Assert.Empty(gaps);
+        Assert.Equal(4, AxiomAttachments(h.Bpftool));
+        Assert.False(next.Engine.Active);
+        Assert.True(next.Engine.StaleProgramsAttached);
+        Assert.True(File.Exists(h.BpfPaths.ProgramPin("axiom_connect4")));
+        var report = await next.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.Equal("stale_programs", report.ConnectTimeLayer!.State);
+        Assert.Equal(FilterEnforcementState.Degraded, report.FilterEnforcement!.State);
+
+        h.Bpftool.FailPrefixes.Clear();
+        await supervisor.WatchOnceAsync(CancellationToken.None);
+        Assert.True(next.Engine.Active);
+        Assert.Equal(4, AxiomAttachments(h.Bpftool));
+        Assert.Empty(gaps);
+        Assert.InRange(h.Bpftool.MaxAxiomAttached, 4, 8);
     }
 
     [Fact]

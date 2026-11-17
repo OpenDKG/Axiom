@@ -19,14 +19,14 @@
 # Axiom program names are matched, so "axiom_connect\u0034" is still an attachment.
 
 # A daemon that starts while a previous daemon's programs are attached stages its new set in
-# "<pin-dir>.next" (make-before-break, docs/LINUX_EBPF.md section 12); a crash during that start can
+# "<pin-dir>-next" (make-before-break, docs/LINUX_EBPF.md section 12); a crash during that start can
 # leave it behind, so both trees are detached and removed together.
 #
 # Usage: axiom_bpf_pins_remove <pin-dir> <cgroup-root>
 axiom_bpf_pins_remove() {
     pin_dir=$1
     cgroup_root=$2
-    [ -d "$pin_dir" ] || [ -d "$pin_dir.next" ] || return 0
+    [ -d "$pin_dir" ] || [ -d "$pin_dir-next" ] || return 0
 
     if ! command -v bpftool >/dev/null 2>&1; then
         echo "axiom: bpftool is unavailable; cannot confirm the BPF layer is detached (keeping $pin_dir)" >&2
@@ -38,7 +38,7 @@ axiom_bpf_pins_remove() {
     fi
 
     # 1. Detach by pinned path; a stale pin (already detached) fails here and is proven absent below.
-    for tree in "$pin_dir" "$pin_dir.next"; do
+    for tree in "$pin_dir" "$pin_dir-next"; do
         for hook in connect4 connect6 sendmsg4 sendmsg6; do
             pin="$tree/axiom_$hook"
             [ -e "$pin" ] || continue
@@ -55,7 +55,7 @@ axiom_bpf_pins_remove() {
     case "$show" in
         *[![:space:]]*) ;;
         *)
-            rm -rf "$pin_dir" "$pin_dir.next"
+            rm -rf "$pin_dir" "$pin_dir-next"
             return 0
             ;;
     esac
@@ -237,6 +237,6 @@ axiom_bpf_pins_remove() {
     fi
 
     # 3. Confirmed absent. Only Axiom's own pin directory is touched.
-    rm -rf "$pin_dir" "$pin_dir.next"
+    rm -rf "$pin_dir" "$pin_dir-next"
     return 0
 }

@@ -86,8 +86,11 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
         _pins = paths;
     }
 
-    /// <summary>Where a new program set is staged while a previous daemon's set still enforces (§11).</summary>
-    public string StagingDirectory => _paths.PinDirectory + ".next";
+    /// <summary>
+    /// Where a new program set is staged while a previous daemon's set still enforces (docs/LINUX_EBPF.md §12).
+    /// No '.' in the name: bpffs refuses it in any name it creates (kernel <c>bpf_lookup</c> returns -EPERM).
+    /// </summary>
+    public string StagingDirectory => _paths.PinDirectory + "-next";
 
     /// <summary>A new set attached next to a previous daemon's set, not yet populated (make-before-break).</summary>
     private sealed record Handover(IReadOnlyList<(string Hook, long Id, string Name)> Old, IReadOnlyList<long> NewIds);
@@ -559,12 +562,12 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             RemovePinTree(staging.PinDirectory);
             if (LoadAndAttach(staging) is { } stagedProblem)
             {
-                // The new object cannot be loaded or attached: as before the hand-over existed, the layer
-                // goes inactive (nft-only) and every Axiom program is detached, so removed rules stop
-                // blocking. Reported as inactive; no connect-time claim is made.
-                DetachAndUnpin();
-                Settle(false, "inactive: " + stagedProblem);
-                Log("BPF layer inactive: " + stagedProblem + "; the previous daemon's programs were detached as well (nftables only).");
+                // The new set cannot be loaded or attached: fail closed. Drop whatever of it was attached
+                // and keep the previous daemon's set enforcing, reported as stale (degraded; its maps may
+                // still hold verdicts of removed rules), and retry on the next watch tick. Detaching it
+                // here would open the very window this ordering exists to close.
+                RollBackNewSet(new Handover(attached, []), stagedProblem, markStale: true);
+                Log("BPF layer: " + stagedProblem + "; the previous daemon's programs stay attached and keep enforcing (degraded, retried on the next watch tick).");
                 return;
             }
 
@@ -689,14 +692,17 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
             }
         }
 
+        // Anything attached that is not the previous daemon's set belongs to the new set (also when the
+        // attach half-failed and its ids were never listed).
+        var oldIds = handover.Old.Select(program => program.Id).ToHashSet();
         var left = ListAttachedAxiomPrograms(out _);
-        foreach (var (hook, id, _) in left?.Where(program => handover.NewIds.Contains(program.Id)) ?? [])
+        foreach (var (hook, id, _) in left?.Where(program => !oldIds.Contains(program.Id)) ?? [])
         {
             Run("cgroup", "detach", _paths.CgroupRoot, hook, "id", id.ToString(CultureInfo.InvariantCulture));
         }
 
         left = ListAttachedAxiomPrograms(out _);
-        if (left is not null && !left.Any(program => handover.NewIds.Contains(program.Id)))
+        if (left is not null && !left.Any(program => !oldIds.Contains(program.Id)))
         {
             RemovePinTree(staging.PinDirectory);
         }

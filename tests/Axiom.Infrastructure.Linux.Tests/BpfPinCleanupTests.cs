@@ -159,7 +159,7 @@ public sealed class BpfPinCleanupTests
 
         using var temp = new TempDirectory();
         var pins = Path.Combine(temp.Path, "axiom");
-        foreach (var tree in new[] { pins, pins + ".next" })
+        foreach (var tree in new[] { pins, pins + "-next" })
         {
             Directory.CreateDirectory(tree);
             foreach (var hook in new[] { "connect4", "connect6", "sendmsg4", "sendmsg6" })
@@ -172,7 +172,7 @@ public sealed class BpfPinCleanupTests
 
         Assert.Equal(0, result.ExitCode);
         Assert.False(Directory.Exists(pins));
-        Assert.False(Directory.Exists(pins + ".next"));
+        Assert.False(Directory.Exists(pins + "-next"));
     }
 
     [Fact]

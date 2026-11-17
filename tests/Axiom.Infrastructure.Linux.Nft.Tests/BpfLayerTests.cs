@@ -114,6 +114,15 @@ internal sealed class FakeBpftool(string pinDirectory) : IProcessRunner
             // Pins carry the kernel object's identity in their content, so a rename(2) of the pin
             // directory (make-before-break hand-over) keeps pointing at the same program set and maps.
             var target = args.Count >= 4 ? args[3] : pinDirectory;
+
+            // bpffs refuses '.' in any name it creates (kernel bpf_lookup: -EPERM); measured in the VM as
+            // "libbpf: failed to mkdir /sys/fs/bpf/axiom.next/axiom_connect4: Operation not permitted".
+            var created = Path.GetRelativePath(Path.GetDirectoryName(pinDirectory)!, target);
+            if (created.Contains('.', StringComparison.Ordinal) || (args.Count >= 6 && Path.GetFileName(args[5]).Contains('.', StringComparison.Ordinal)))
+            {
+                return new ProcessResult(255, string.Empty, $"libbpf: failed to mkdir {target}/axiom_connect4: Operation not permitted\n");
+            }
+
             if (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
             {
                 return new ProcessResult(255, string.Empty, $"Error: failed to pin program: File exists ({target})\n");
