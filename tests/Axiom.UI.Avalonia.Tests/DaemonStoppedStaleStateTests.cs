@@ -17,6 +17,7 @@ namespace Axiom.UI.Avalonia.Tests;
 /// from an active dashboard) through daemon running -> stopped -> back. Off Windows only; Windows
 /// keeps its behaviour.
 /// </summary>
+[Collection(DaemonStoppedStaleStateSerial.Name)]
 public sealed class DaemonStoppedStaleStateTests
 {
     [Fact]
@@ -418,4 +419,15 @@ public sealed class DaemonStoppedStaleStateTests
             }
         }
     }
+}
+
+/// <summary>
+/// These shell tests run alone, after the parallel classes: run alongside the headless UI thread's
+/// first initialization they raced Avalonia's static routed-event registration and crashed the
+/// test host ("An item with the same key has already been added. Key: Avalonia.Input.InputElement").
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class DaemonStoppedStaleStateSerial
+{
+    public const string Name = "Daemon stopped stale state (not parallel)";
 }
