@@ -38,7 +38,7 @@ public sealed class IpcCallerEntryPointTests
     /// <summary>
     /// No visible member of the portable hosting assembly turns a string into an
     /// <see cref="IpcCaller"/>; the only way to get one there is the record constructor, where
-    /// <c>CanWrite</c> has no default and must be written out.
+    /// <c>CanWrite</c> and <c>CanReadPrivate</c> have no default and must be written out.
     /// </summary>
     [Fact]
     public void PortableLayerHasNoCallerFactoryFromAnActorString()
@@ -58,6 +58,8 @@ public sealed class IpcCallerEntryPointTests
         var constructor = Assert.Single(typeof(IpcCaller).GetConstructors(), ctor => ctor.GetParameters().Length > 1);
         var canWrite = Assert.Single(constructor.GetParameters(), parameter => parameter.Name == nameof(IpcCaller.CanWrite));
         Assert.False(canWrite.HasDefaultValue);
+        var canReadPrivate = Assert.Single(constructor.GetParameters(), parameter => parameter.Name == nameof(IpcCaller.CanReadPrivate));
+        Assert.False(canReadPrivate.HasDefaultValue);
     }
 
     /// <summary>
@@ -74,7 +76,7 @@ public sealed class IpcCallerEntryPointTests
 
         var caller = Assert.IsType<IpcCaller>(factory!.Invoke(null, ["S-1-5-21-1"]));
 
-        Assert.Equal(new IpcCaller("S-1-5-21-1", CanWrite: true), caller);
+        Assert.Equal(new IpcCaller("S-1-5-21-1", CanWrite: true, CanReadPrivate: true), caller);
         Assert.Equal("S-1-5-21-1", caller.Actor);
         Assert.All(Enum.GetValues<IpcCommandClass>(), commandClass => Assert.True(caller.Permits(commandClass)));
         Assert.Null(caller.WriteDenialReason);

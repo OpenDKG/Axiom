@@ -73,14 +73,14 @@ public sealed class IpcCommandAccessTests
     [Fact]
     public void CallerFlagsGateTheClasses()
     {
-        var publicOnly = new IpcCaller("uid:502", false, "no writes", false, "no private reads");
+        var publicOnly = new IpcCaller("uid:502", CanWrite: false, CanReadPrivate: false, WriteDenialReason: "no writes", ReadDenialReason: "no private reads");
         Assert.True(publicOnly.Permits(IpcCommandClass.PublicRead));
         Assert.False(publicOnly.Permits(IpcCommandClass.PrivateRead));
         Assert.False(publicOnly.Permits(IpcCommandClass.Write));
         Assert.Equal("no private reads", publicOnly.DenialMessage(IpcCommandClass.PrivateRead, "snapshot"));
         Assert.Equal("no writes", publicOnly.DenialMessage(IpcCommandClass.Write, "rule.apply"));
 
-        var readOnly = new IpcCaller("uid:503", false, null, true);
+        var readOnly = new IpcCaller("uid:503", CanWrite: false, CanReadPrivate: true);
         Assert.True(readOnly.Permits(IpcCommandClass.PrivateRead));
         Assert.False(readOnly.Permits(IpcCommandClass.Write));
         Assert.Equal("Command 'rule.apply' is not allowed for uid:503.", readOnly.DenialMessage(IpcCommandClass.Write, "rule.apply"));
@@ -144,17 +144,17 @@ public sealed class IpcCommandAccessTests
     {
         var commandClass = IpcCommandAccess.Classify(command);
 
-        Assert.Equal(root, new IpcCaller("uid:0", CanWrite: true).Permits(commandClass));
-        Assert.Equal(owner, new IpcCaller("uid:501", true, null, true).Permits(commandClass));
-        Assert.Equal(readOnly, new IpcCaller("uid:503", false, "no writes", true).Permits(commandClass));
-        Assert.Equal(other, new IpcCaller("uid:502", false, "no writes", false, "no private reads").Permits(commandClass));
+        Assert.Equal(root, new IpcCaller("uid:0", CanWrite: true, CanReadPrivate: true).Permits(commandClass));
+        Assert.Equal(owner, new IpcCaller("uid:501", CanWrite: true, CanReadPrivate: true).Permits(commandClass));
+        Assert.Equal(readOnly, new IpcCaller("uid:503", CanWrite: false, CanReadPrivate: true, WriteDenialReason: "no writes").Permits(commandClass));
+        Assert.Equal(other, new IpcCaller("uid:502", CanWrite: false, CanReadPrivate: false, WriteDenialReason: "no writes", ReadDenialReason: "no private reads").Permits(commandClass));
     }
 
     [Fact]
     public async Task PublicOnlyCallerNeverReachesAnEnforcementHandler()
     {
         var probe = new EnforcementProbe();
-        var caller = new IpcCaller("uid:502", false, "no writes", false, "no private reads");
+        var caller = new IpcCaller("uid:502", CanWrite: false, CanReadPrivate: false, WriteDenialReason: "no writes", ReadDenialReason: "no private reads");
 
         var replies = await SendAsync(
             probe.Dispatcher(),
@@ -176,7 +176,7 @@ public sealed class IpcCommandAccessTests
     public async Task ReadOnlyCallerReadsStatusAndReceiptsButCannotEvaluate()
     {
         var probe = new EnforcementProbe();
-        var caller = new IpcCaller("uid:503", false, "no writes", true);
+        var caller = new IpcCaller("uid:503", CanWrite: false, CanReadPrivate: true, WriteDenialReason: "no writes");
 
         var replies = await SendAsync(
             probe.Dispatcher(),
@@ -236,7 +236,7 @@ public sealed class IpcCommandAccessTests
 
         var replies = await SendAsync(
             dispatcher,
-            new IpcCaller("uid:0", CanWrite: true),
+            new IpcCaller("uid:0", CanWrite: true, CanReadPrivate: true),
             Envelope(IpcCommandTypes.EnforcementStatus),
             Envelope(IpcCommandTypes.EnforcementEvaluate, EvaluatePayload()),
             Envelope(IpcCommandTypes.EnforcementReceipts));

@@ -21,6 +21,6 @@ public static class WindowsPipeCaller
     public static IpcCaller Authenticated(string sid)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sid);
-        return new IpcCaller(sid, CanWrite: true, WriteDenialReason: null, CanReadPrivate: true, ReadDenialReason: null);
+        return new IpcCaller(sid, CanWrite: true, CanReadPrivate: true, WriteDenialReason: null, ReadDenialReason: null);
     }
 }
