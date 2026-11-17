@@ -36,6 +36,7 @@ public sealed class ProtectionLampTests
             Assert.Equal("STATUS UNKNOWN", shell.SimpleHome.HeroBadgeText);
 
             await shell.ProbeProtectionAsync(force: true);
+            Assert.Equal(EnforcementLevel.Degraded, shell.StatusFirewallLevel);
 
             Assert.True(shell.Firewall.ProtectionKnown);
             Assert.Equal("SHIELD ON", shell.StatusFirewallBadgeText);
@@ -51,6 +52,7 @@ public sealed class ProtectionLampTests
             Assert.Equal("UNKNOWN", shell.StatusFirewallBadgeText);
             Assert.Contains("unknown", shell.StatusFirewallText, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(Color.Parse(ShellViewModel.UnknownLampColor), ((ISolidColorBrush)shell.StatusFirewallBadgeBrush).Color);
+            Assert.Equal(EnforcementLevel.Unknown, shell.StatusFirewallLevel);
             Assert.Equal("Shield: unknown", shell.MiniHome.ShieldButtonText);
             Assert.False(shell.SimpleHome.IsShieldActive);
             Assert.Equal("STATUS UNKNOWN", shell.SimpleHome.HeroBadgeText);
@@ -61,6 +63,7 @@ public sealed class ProtectionLampTests
             Assert.True(shell.Firewall.ProtectionKnown);
             Assert.Equal("Shield: OFF", shell.MiniHome.ShieldButtonText);
             Assert.Equal("Protection: off", shell.StatusFirewallText);
+            Assert.Equal(EnforcementLevel.Unprotected, shell.StatusFirewallLevel);
         }
         finally
         {

@@ -16,12 +16,16 @@ public enum EnforcementVerification
     OsBoundaryVerified = 2,
 }
 
-/// <summary>Coarse protection level: green protected, orange degraded, red unprotected.</summary>
+/// <summary>
+/// Coarse protection level: green protected, orange degraded, red unprotected, grey unknown
+/// (no authority answered, so nothing may be claimed either way).
+/// </summary>
 public enum EnforcementLevel
 {
     Protected = 0,
     Degraded = 1,
     Unprotected = 2,
+    Unknown = 3,
 }
 
 /// <summary>
@@ -75,6 +79,7 @@ public sealed record EnforcementSurfaceState
     {
         EnforcementLevel.Protected => "Protected",
         EnforcementLevel.Degraded => "Degraded",
+        EnforcementLevel.Unknown => "Unknown",
         _ => "Not protected",
     };
 
