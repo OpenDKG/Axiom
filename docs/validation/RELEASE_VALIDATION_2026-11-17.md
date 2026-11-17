@@ -53,6 +53,99 @@ Limits:
   this pass; they need a snapshot and a reboot window.
 - The Privacy Shield page continues to state that it is a DNS filter, not a VPN or traffic proxy.
 
+## 2b. Reboot recovery on the installed VM (17 November 2026)
+
+Tested on `Axiom-Win11` with 0.97.0 installed, after a forced reboot (`shutdown /r /f`) at 06:53.
+
+Recovered automatically:
+
+| Item | Result |
+| --- | --- |
+| Axiom service | `Running` without manual action |
+| Axiom desktop | process started from the Run key (`--autostart`) at logon; it starts hidden to the tray by design, and a normal launch shows the window |
+| Privacy Shield adapter DNS | still pointed at 127.0.0.1 on `Ethernet 2`; the resolver kept serving |
+| Enforcement policy | still enabled (11 agents / 88 rules / 8 protected resources); compiled ruleset still loaded and enforcing |
+| Audit and sessions | intact; the Agent Dashboard loaded the same recorded sessions |
+
+Did not recover:
+
+- **OriginTrail DKG node.** No listener on 9320 after the reboot. Two competing `dkg start`
+  processes were present (the logon helper and Axiom's module manager), neither listening, and
+  `daemon.log` stopped at the reboot. Killing both and starting one fresh still produced a silent
+  process with no listener after more than ten minutes. The Agent Protection page correctly showed
+  **"OriginTrail DKG - not connected"** while Blackbox reported the dashboard connected, and the
+  enforcement panel kept saying hook-level with zero OS-deny receipts. This is the vendor runtime
+  defect tracked as #315, plus a duplicate-start race in the lab logon helper; the compiled ruleset
+  stayed loaded, so enforcement did not silently disappear.
+- The desktop window is not shown after an `--autostart` logon. That is the tray-first design of
+  "start with Windows", not a crash; the process stays running and the window opens on demand.
+
+Evidence: `F:\Pen Testing\Logs\reboot-recovery-097.png`.
+
+## 2c. Privacy Shield resolver crash and DNS continuity (17 November 2026)
+
+On `Axiom-Win11`, 0.97.0, adapter `Ethernet 2` used `127.0.0.1, 192.168.0.1` (resolver first,
+fallback second). The Axiom service process was killed from an elevated shell to simulate a crash
+(the Windows service is configured to restart after 5 s).
+
+| Moment | Service | Resolver (TCP 53) | Adapter DNS | Name resolution |
+| --- | --- | --- | --- | --- |
+| Before | Running | up | 127.0.0.1, 192.168.0.1 | ok |
+| 2 s after kill | Stopped | down | unchanged | **ok** (fallback 192.168.0.1) |
+| 12 s after kill | Running (auto-restart) | still warming | unchanged | ok |
+| After recovery | Running | up | unchanged | ok, including a query sent to 127.0.0.1 |
+
+Findings:
+
+- The preserved fallback DNS kept name resolution working while the local resolver was down, and
+  the Windows service recovery brought Axiom back within about ten seconds. The VM was never left
+  without DNS.
+- The adapter DNS was not reverted: it still points at the resolver first with the original server
+  as fallback, which is the documented design. "Restore saved DNS" stays available for a manual
+  revert.
+- Privacy Shield counters reset when the resolver restarts (the page says so): after recovery it
+  showed "9 queries observed", not the previous totals.
+- The recovery buttons were exercised after the crash: **Restore saved DNS** asked for confirmation
+  and set the adapter to its original `192.168.0.1` only; resolution continued. **Point adapter at
+  resolver** then restored `127.0.0.1, 192.168.0.1`, the resolver came up and resolution kept
+  working. The VM was left filtered, with the fallback preserved.
+- `%LOCALAPPDATA%\Axiom\network-recovery.log` still carries an old entry
+  "Recovery baseline not saved: Unavailable ..." from 15 November, so the current baseline under
+  `%ProgramData%\Axiom` is the one that was used; it is SYSTEM-only and was not read directly. The
+  restore command itself succeeded twice (restore, then re-point).
+- Evidence: `F:\Pen Testing\Logs\dns-crash-recovery-097.png` (after recovery) and
+  `F:\Pen Testing\Logs\dns-restore-button.png` (restore confirmation).
+
+## 2d. Interactive installer: Complete vs Partial (17 November 2026)
+
+The interactive setup was opened on `Axiom-Win11` with 0.101.0 already installed, then cancelled
+without changing anything.
+
+- The wizard detected the existing install: **"Existing Axiom v0.101.0 found. Updating in place
+  preserves your settings and data."**
+- It offers two modes:
+  - **Complete Protection (Recommended)** - "Full firewall, DNS privacy & AI agent shield": Shield
+    service and ask policy (one UAC), Privacy Shield DNS blocker, Blackbox + DKG (local node and 11
+    hooks), background autostart and tray. Estimated 10-20 minutes.
+  - **Core / Partial Build (No Admin)** - "Lightweight desktop monitor & history only": live
+    monitor, local history, zero elevation, modular (enable Shield, DNS or AI later). Under 10
+    seconds.
+- It shows the install path (`%LOCALAPPDATA%\Programs\Axiom`), shortcut and launch options, the
+  development-build risk notice with its own acceptance checkbox, and Open Axiom / Repair /
+  Uninstall / Update Axiom / Cancel.
+- Closing it left the service Running and the desktop running; no files or settings were changed.
+
+Limits:
+
+- A **fresh** Partial install cannot be exercised on this VM without uninstalling Axiom first,
+  which the standing rules forbid. The silent `--partial` flag exists and would skip the service,
+  Blackbox, DKG and hooks, but applying it over an existing Complete install would leave the old
+  service in place and only prove that the flag parses. That path stays untested by design.
+- Partial mode's exit state (no service, no hooks, monitor-only) is covered by the installer's own
+  code path and tests, not by this VM.
+
+Evidence: `F:\Pen Testing\Logs\setup-wizard-0101-2.png`.
+
 ## 3. Signing decision (issues #119 and #289)
 
 **Decision: sign release artifacts with Authenticode through SignPath Foundation, using its

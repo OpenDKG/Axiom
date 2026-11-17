@@ -368,6 +368,46 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
         }
     }
 
+    /// <summary>
+    /// Writes the loaded event rows to JSON (FND-005). Read-only export of the same fields as CSV.
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportJsonAsync()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var page = await LoadAsync(ExportLimit).ConfigureAwait(true);
+            var fileName = $"axiom-events-{DateTime.Now:yyyyMMdd-HHmmss}.json";
+            var target = await _ui
+                .PickSaveFileAsync(fileName, ".json", "JSON", CancellationToken.None)
+                .ConfigureAwait(true);
+            if (target is null)
+            {
+                return;
+            }
+
+            await File
+                .WriteAllTextAsync(target, HistoryEventExport.ToJson(page.Rows, DateTimeOffset.UtcNow), new UTF8Encoding(false))
+                .ConfigureAwait(true);
+
+            var truncated = page.TotalCount > page.Rows.Count ? " (export limit reached)" : string.Empty;
+            StatusText = $"Exported {page.Rows.Count} events to {Path.GetFileName(target)}{truncated}";
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            StatusText = exception.Message;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            StatusText = $"Export failed: {exception.Message}";
+        }
+    }
+
     [RelayCommand]
     private async Task ExportCsvAsync()
     {

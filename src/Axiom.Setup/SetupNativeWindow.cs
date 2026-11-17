@@ -657,7 +657,7 @@ internal sealed class SetupNativeWindow : IDisposable
             [
                 "Axiom Shield — service + ask policy (1 UAC)",
                 "Privacy Shield — DNS blocker (53 + DoH 443)",
-                "Blackbox + DKG — local node & 11 hooks",
+                "Blackbox + DKG — node, 11 hooks, shared indicators",
                 "Background — autostart & tray protection",
             ],
             footerMeta: "10–20 min full setup",

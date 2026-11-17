@@ -16,6 +16,12 @@
       },
       "axiom.contracts": {
         "type": "Project"
+      },
+      "axiom.core": {
+        "type": "Project",
+        "dependencies": {
+          "Axiom.Contracts": "[0.98.0, )"
+        }
       }
     }
   }

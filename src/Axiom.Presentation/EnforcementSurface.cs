@@ -16,6 +16,14 @@ public enum EnforcementVerification
     OsBoundaryVerified = 2,
 }
 
+/// <summary>Coarse protection level: green protected, orange degraded, red unprotected.</summary>
+public enum EnforcementLevel
+{
+    Protected = 0,
+    Degraded = 1,
+    Unprotected = 2,
+}
+
 /// <summary>
 /// What the Agents page may say about enforcement right now. The default state is cooperative:
 /// detector signals are advisory and the UI is not allowed to advertise a verified block.
@@ -40,6 +48,41 @@ public sealed record EnforcementSurfaceState
     /// file or a unit test can never satisfy this.
     /// </summary>
     public bool CanClaimVerifiedBlocking => Verification != EnforcementVerification.Cooperative;
+
+    /// <summary>Coarse protection level used for the colour of the enforcement panel.</summary>
+    public EnforcementLevel Level
+    {
+        get
+        {
+            if (VerificationLabel.Contains("NOT PROTECTED", StringComparison.OrdinalIgnoreCase) ||
+                VerificationLabel.Contains("POLICY INVALID", StringComparison.OrdinalIgnoreCase))
+            {
+                return EnforcementLevel.Unprotected;
+            }
+
+            if (Verification != EnforcementVerification.Cooperative ||
+                VerificationLabel.Contains("HOOK BLOCKING ACTIVE", StringComparison.OrdinalIgnoreCase))
+            {
+                return EnforcementLevel.Protected;
+            }
+
+            return EnforcementLevel.Degraded;
+        }
+    }
+
+    /// <summary>Short label for compact surfaces such as Mini mode.</summary>
+    public string LevelText => Level switch
+    {
+        EnforcementLevel.Protected => "Protected",
+        EnforcementLevel.Degraded => "Degraded",
+        _ => "Not protected",
+    };
+
+    public bool IsProtected => Level == EnforcementLevel.Protected;
+
+    public bool IsDegraded => Level == EnforcementLevel.Degraded;
+
+    public bool IsUnprotected => Level == EnforcementLevel.Unprotected;
 
     /// <summary>Current, honest state of this build.</summary>
     public static EnforcementSurfaceState Current { get; } = new()
@@ -139,6 +182,30 @@ public sealed record EnforcementSurfaceState
 
         if (status?.Enabled == true)
         {
+            if (string.Equals(hostHookMode, "audit", StringComparison.OrdinalIgnoreCase))
+            {
+                return Current with
+                {
+                    VerificationLabel = "AUDIT MODE - NOT PROTECTED",
+                    Summary =
+                        "Blackbox hooks are in audit mode: agent actions are recorded but not blocked. Switch Blackbox to Block.",
+                    DetectorDetail = detectorDetail,
+                    PolicyDetail = FormatPolicyDetail(status),
+                };
+            }
+
+            if (!string.Equals(hostHookMode, "block", StringComparison.OrdinalIgnoreCase))
+            {
+                return Current with
+                {
+                    VerificationLabel = "HOOK MODE UNKNOWN - NOT VERIFIED",
+                    Summary =
+                        "The enforcement policy is loaded, but the guard hook mode could not be read; blocking is not proven.",
+                    DetectorDetail = detectorDetail,
+                    PolicyDetail = FormatPolicyDetail(status),
+                };
+            }
+
             // The policy is loaded and the guard hooks return block verdicts; the missing piece is
             // a host/OS deny receipt, not the blocking itself. Say that instead of "advisory".
             return Current with
