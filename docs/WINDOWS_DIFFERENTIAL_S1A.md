@@ -559,3 +559,101 @@ S1a `Capabilities_are_available`).
 
 - The service differential and the access probes (see R5.1 for why).
 - An enabled enforcement policy file, desktop UI, installer.
+
+# Round 6, host part (2026-11-17): `main` `da1987a` (v1.1.0) vs S1a, Linux host only
+
+**Author-run on a Linux host (SDK 10.0.403). This is not CI, and no Windows run has been made for this
+head yet.** It records what the host proves and what the Windows round still has to run.
+
+| | Commit |
+|---|---|
+| main (pinned) | `da1987a1896275f0127eb8fe176c1a780471ebe9` (v1.1.0) |
+| S1a merge | `5ec7b02` = `ec6a25d` + `Merge main da1987a`. Conflicts: 6 `packages.lock.json` only (`Axiom.Desktop`, `Axiom.Desktop.Avalonia.Windows`, `Axiom.Infrastructure.Windows`, `Axiom.Service`, `Axiom.Infrastructure.Windows.Tests`, `Axiom.Service.Tests`); `main`'s version taken |
+| lock files | `d9ad0a2`, **provisional**, generated on Linux; the Windows round regenerates them |
+| review fix | `d7ec667` red tests, `9a6dafa` fix, `7676ea0` classification table |
+
+## R6.1 What changed since round 5 (`ab7df89`)
+
+- S1a runtime code: `IpcCaller` now has `CanWrite` and `CanReadPrivate` both required, with no default.
+  The positional order is `(Actor, CanWrite, CanReadPrivate, WriteDenialReason?, ReadDenialReason?)`.
+  `WindowsPipeCaller.Authenticated` passes the same values as before, with named arguments
+  (`CanWrite: true, CanReadPrivate: true`). `Permits`, `DenialMessage`, the classification sets,
+  `IpcRequestDispatcher`, `IpcRulePolicy`, `PipeServer`, `FirewallWriteGate`, `ProtectionWriteConsent`,
+  `ProtectionWorker` and `WindowsFirewallPolicyAdapter` are byte-identical to `ab7df89`.
+- `main` `25bfcc1..da1987a` on the IPC path: no change in `src/Axiom.Contracts/Ipc` (still 32 commands,
+  none new since v0.64.0) or in `src/Axiom.Infrastructure.Windows/Ipc`. `EnforcementController`
+  changed: since v0.74/0.75 (#403), `enforcement.status` provisions the machine default policy under
+  `%ProgramData%\Axiom` when the file is missing (`EnforcementPolicyProvisioner.EnsureMachineDefault`), and
+  the policy path moved from `LocalApplicationData` to `CommonApplicationData`. S1a keeps
+  `enforcement.status` PrivateRead as asked. On Windows this makes no access difference, because the pipe
+  caller has every class. A future Unix transport should know that a private-read caller can trigger
+  that one-time provisioning.
+
+## R6.2 Host results
+
+| Step | main `da1987a` | S1a `7676ea0` |
+|---|---|---|
+| `restore Axiom.Portable.slnx --locked-mode` | exit 0 | exit 0 |
+| `restore Axiom.sln --locked-mode` | exit 1 (`Axiom.Desktop`, `Axiom.Setup`: the host adds `linux-x64` to their `win-x64` RIDs; NU1102 `System.CodeDom`) | exit 1 (same) |
+| per-project `--locked-mode` | 23 / 25 (`Axiom.Desktop`, `Axiom.Setup` fail) | 24 / 26 (same two) |
+| Release build: Portable.slnx, Infrastructure.Windows, Service, Desktop.Avalonia.Windows, Infrastructure.Windows.Tests, Service.Tests | 0 warnings, 0 errors | 0 warnings, 0 errors |
+
+Before `d9ad0a2` (main's lock files), locked restore also failed with NU1004 (missing
+`Axiom.Service.Hosting` project entry) for `Axiom.Desktop.Avalonia.Windows`, `Axiom.Infrastructure.Windows`,
+`Axiom.Service`, `Axiom.Infrastructure.Windows.Tests` and `Axiom.Service.Tests`. These are the 5 files in
+`d9ad0a2`. `Axiom.Desktop/packages.lock.json` is still `main`'s and has no Hosting entry. It cannot be
+checked on this host, and a Linux `--force-evaluate` gave a graph that differs from `main`'s
+Windows-generated file, so it is left for Windows.
+
+Suites (`dotnet test -c Release`, passed / total). Every run had `HOME` and `XDG_*` pointed at a scratch
+directory.
+
+| Suite | main `da1987a` | S1a |
+|---|---|---|
+| Contracts | 169 / 170 | 169 / 170 |
+| Core | 170 / 184 | 170 / 184 |
+| McpServer | 34 / 34 | 34 / 34 |
+| Persistence | 21 / 21 | 21 / 21 |
+| Presentation | 307 / 315 | 307 / 315 |
+| UI.Avalonia | 65 / 66 | 65 / 66 |
+| Infrastructure.Windows | 58 / 86 | 125 / 153 |
+| Service | 86 / 101 | 86 / 101 |
+
+**The failing test names are identical per suite on both trees.** They are 67 Windows-only tests
+(named pipe, WFP/COM, IP Helper, job objects, Windows paths) that cannot run on Linux. The 67 extra
+Infrastructure.Windows results all pass: `IpcCommandAccessTests` 49, `IpcCallerPermissionTests` 15,
+`IpcCallerEntryPointTests` 3. No test is skipped.
+
+New tests for this round (red on `d7ec667`: 1 failed / 70, the omission test; green on `9a6dafa`):
+`CallerConstructorHasNoOptionalPermissionParameters`, `RestrictedCallerHoldsOnlyPublicRead`,
+`PublicOnlyCallerGetsRedactedHealthAndCapabilities`, `PublicOnlyCallerIsDeniedEveryPrivateRead`,
+`CallerWithoutWriteIsDeniedEveryWrite` (2), `PrivateReaderGetsFullHealth`,
+`AuthenticatedWindowsSidCallerPassesTheCheckForEveryCommand`, `UnknownCommandIsDeniedByDefault` (4),
+`OversizedRequestClosesTheConnectionBeforeAnyHandler`, `RequestFloodHitsTheRateLimit`,
+`SilentConnectionIsClosedAfterTheIdleTimeout`, `ClassificationTableIsTheReviewedOne`.
+
+## R6.3 Authorization order and request limits (read from the code)
+
+- No handler runs before the access check. `IpcRequestDispatcher.ProcessAsync` parses the envelope
+  (`IpcRequestDispatcher.cs:216`), checks the protocol version (`:240`), then classifies the command and
+  checks `caller.Permits` (`:251-263`) before the command `switch` (`:267`). The only work before
+  the check is parsing and the version reply. Unknown commands count as Write (`IpcCommandAccess.Classify`).
+- The limits have the same values as `main`'s `PipeServer`: message size 256 KiB
+  (`IpcProtocol.cs:21`, enforced at `IpcRequestDispatcher.cs:153-166`), idle timeout 30 s (`:26`,
+  `:140-141`), 100 requests/s (`:24`, `:186-201`), 4 pipe instances (`PipeServer.cs:23`, `:179`). On
+  Windows the DACL and the client SID re-check (`PipeServer.cs:184`, `:190-195`) run before the
+  dispatcher. New dispatcher-level tests cover the first three; before this round, only the pipe tests
+  covered the size limit, and those cannot run off Windows.
+
+## R6.4 Awaiting the Windows round
+
+1. Regenerate the lock files on Windows (at least the 5 in `d9ad0a2` plus `Axiom.Desktop`), then run
+   `--locked-mode` restores of `Axiom.Portable.slnx` and `Axiom.sln`, plus per project.
+2. Release build of `Axiom.sln`, and every suite by failing name against `main` `da1987a`, including the
+   67 Windows-only names above and the new IPC tests.
+3. Windows PR CI on the exact resulting head SHA.
+4. Service differential, limited to what is touched: the caller construction changed, so re-run the access
+   part (authenticated SID gets write and private read: `protection.enable`, `rule.apply`, block /
+   unblock; NETWORK logon and a second local user denied at connect). Upstream changed the
+   `enforcement.status` handler, so re-run the `enforcement.*` part on both trees. The Privacy Shield phase
+   and restart persistence are not touched by this round.
