@@ -253,8 +253,8 @@
         <GradientStop Color="#0BFFFFFF" Offset="1" />
       </LinearGradientBrush>
       <SolidColorBrush x:Key="Axiom.SurfaceAlt" Color="#10FFFFFF" />
-      <SolidColorBrush x:Key="Axiom.GlassControl" Color="#18FFFFFF" />
-      <SolidColorBrush x:Key="Axiom.GlassControlHover" Color="#2CFFFFFF" />
+      <SolidColorBrush x:Key="Axiom.GlassControl" Color="#E62A2B30" />
+      <SolidColorBrush x:Key="Axiom.GlassControlHover" Color="#E63A3B41" />
       <SolidColorBrush x:Key="Axiom.GlassInput" Color="#13FFFFFF" />
       <SolidColorBrush x:Key="Axiom.PopupSurface" Color="#F20F141D" />
       <SolidColorBrush x:Key="Axiom.Border" Color="#14FFFFFF" />

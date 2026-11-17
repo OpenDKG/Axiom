@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 0.68.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 0.97.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -75,9 +75,9 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 ## Current release and quick links
 
-**Current development release:** [0.32.0](docs/RELEASES/0.32.0.md), 15 November 2026. Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
+**Current development release:** [0.83.0](docs/RELEASES/0.83.0.md), 16 November 2026. Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
 
-> **Version numbering:** development builds were previously numbered `0.10.x`. A short reset produced `0.2.0` and `0.3.0`, but GitHub orders releases by semantic version, which hid them below `0.10.25`. The public release line resumed at `0.11.0` and continues through `0.32.0+`; `0.2.0`/`0.3.0` remain historical snapshots. `scripts/build-release.ps1` refuses a version that is not greater than the highest existing `v*` tag.
+> **Version numbering:** development builds were previously numbered `0.10.x`. A short reset produced `0.2.0` and `0.3.0`, but GitHub orders releases by semantic version, which hid them below `0.10.25`. The public release line resumed at `0.11.0` and continues through `0.83.0+`; `0.2.0`/`0.3.0` remain historical snapshots. `scripts/build-release.ps1` refuses a version that is not greater than the highest existing `v*` tag.
 
 - [Install and first-run modes](docs/INSTALL.md) â€” core vs Complete setup and required privileges.
 - [Architecture](docs/ARCHITECTURE.md) â€” Avalonia UI, local service, Windows Firewall and optional components.
@@ -89,6 +89,17 @@ agent-level guardrails and signed threat-intelligence context respectively.
 > **Do not equate a locally connected module with fresh DKG synchronization, or a signed community report with a verified threat.** Agent hooks can fail open when their local guard is unavailable. A DNS fallback can preserve connectivity while bypassing Privacy Shield filtering.
 
 ## What it covers
+
+### Mini, Simple & Advanced interface modes
+
+- **Mini Mode** shrinks the window into a compact `460×700` monitor (`Min 420×520`) without the sidebar, showing quick Shield / Privacy toggles, pending outbound approvals, and blocked items across **Network**, **AI Agents**, and **Privacy**, plus **♥ Donate**, **GitHub**, **Settings**, and **Expand**.
+- **Simple Mode** (default for everyday users) presents a single streamlined Home dashboard with
+  four status cards (**Firewall Shield**, **Ad & Tracker Blocker**, **Internet Activity**, and
+  **AI Agent Guard**), one-click outbound Allow/Block approvals, currently online apps, and live
+  AI agent activity without technical jargon.
+- **Advanced Mode** exposes all 12 engineering pages (Traffic, Connections, Apps, Events,
+  Firewall, Privacy Shield, Agents, Agents Live, Threat Graph, Guard Health, AI Analyst, and
+  Settings). Switch instantly from the `Simple | Advanced` pill in the top bar.
 
 ### Per-application network visibility
 
@@ -319,14 +330,9 @@ Windows Service
 
 ### Installation (core per-user setup; optional modules require additional consent)
 
-The release ZIP contains **`Axiom-Setup.exe`**. Double-click it, choose the agent-hook scope
-(Complete or Partial) and click **Install Axiom**. The setup is a single self-contained
-executable with the desktop and local service payload embedded; it installs under
-`%LOCALAPPDATA%\Programs\Axiom`, creates a Start Menu shortcut and starts the app. No .NET
-runtime, Windows service registration, firewall change or elevation is involved.
+The recommended release asset is **`Axiom-Setup.exe`** (published alongside **`Axiom-<version>-win-x64.zip`** and **`SHA256SUMS.txt`**). Double-click it, choose the profile (**Complete** or **Partial**) in the theme-aware installer UI, and click **Install Axiom** (or **Update Axiom**). The setup is a single self-contained executable with the desktop and local service payload embedded; it installs under `%LOCALAPPDATA%\Programs\Axiom`, creates a Start Menu shortcut, launches Axiom automatically when done, and closes the installer. On in-place updates, Setup automatically closes running `Axiom.Desktop` instances cleanly, applies the update, and restarts Axiom. Core installation needs no .NET runtime, Windows service registration, firewall change, or elevation.
 
-The desktop starts the bundled local service automatically. VirusTotal remains optional; its API
-key is configured later on the Security page.
+The desktop starts the bundled local service automatically, while the privileged Windows service provisions the machine-scope default enforcement policy (`%ProgramData%\Axiom\enforcement-policy.json`) if no operator policy exists yet. VirusTotal remains optional; its API key is configured later on the Security page.
 
 **Complete installation** also runs the official Blackbox and DKG installers, starts their local
 services and installs agent hooks after Blackbox is ready. Those third-party installers may download
@@ -348,6 +354,7 @@ For installation and recovery details, see [Installing Axiom](docs/INSTALL.md). 
 - [Firewall recovery](docs/FIREWALL_RECOVERY.md)
 - [AI Analyst](docs/AI_ANALYST.md)
 - [Release readiness & security validation](docs/validation/RELEASE_READINESS_MATRIX.md)
+- [Pentesting and guard evidence](docs/PENTESTING.md)
 - [Historical changelog](docs/CHANGELOG.md)
 - [Licensing](docs/LICENSING.md)
 

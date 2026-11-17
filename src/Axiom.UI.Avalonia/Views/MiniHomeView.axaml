@@ -1,0 +1,171 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Axiom.UI.Avalonia.Controls"
+             x:Class="Axiom.UI.Avalonia.Views.MiniHomeView">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="12,10,12,10" RowSpacing="8">
+
+    <!-- Quick protection toggles -->
+    <Grid Grid.Row="0" ColumnDefinitions="*,8,*,8,Auto">
+      <Button Grid.Column="0" Content="{Binding ShieldButtonText}" Command="{Binding ToggleShieldCommand}"
+              Classes.primary="{Binding Firewall.ShieldEnabled}"
+              Padding="10,7" FontSize="11.5" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+      <Button Grid.Column="2" Content="{Binding PrivacyButtonText}" Command="{Binding TogglePrivacyCommand}"
+              IsEnabled="{Binding CanTogglePrivacy}"
+              Classes.primary="{Binding PrivacyShield.Enabled}"
+              Padding="10,7" FontSize="11.5" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+      <Button Grid.Column="4" Content="Expand" Command="{Binding ExpandCommand}"
+              Padding="10,7" FontSize="11" ToolTip.Tip="Open full dashboard" />
+    </Grid>
+
+    <!-- One compact row: agents, network and privacy key numbers -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,12,*,12,*">
+
+      <Border Grid.Column="0" Classes="card" Padding="10">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="AGENT DASHBOARD" Classes="kpi-label" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Content="Open" Command="{Binding OpenAgentsCommand}" Padding="8,2" FontSize="10" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
+            <TextBlock Text="Sessions" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Column="1" Text="{Binding Agents.SessionCount}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <TextBlock Grid.Row="1" Text="Tool calls" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Agents.ToolCallCount}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <TextBlock Grid.Row="2" Text="Blocked" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Agents.BlockSummary.Blocked}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.Critical}" />
+            <TextBlock Grid.Row="3" Text="Flagged" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Agents.FlaggedFindingCount}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.Warning}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="2" Classes="card" Padding="10">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="NETWORK OVERVIEW" Classes="kpi-label" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Content="Open" Command="{Binding OpenFirewallCommand}" Padding="8,2" FontSize="10" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
+            <TextBlock Text="Active sockets" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Column="1" Text="{Binding Overview.ConnectionsText}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <TextBlock Grid.Row="1" Text="Processes" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Overview.ProcessesText}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <TextBlock Grid.Row="2" Text="Loopback" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Overview.LoopbackText}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <TextBlock Grid.Row="3" Text="Throughput" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Overview.DownloadText}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.Download}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="4" Classes="card" Padding="10">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="PRIVACY OVERVIEW" Classes="kpi-label" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Content="Open" Command="{Binding OpenPrivacyCommand}" Padding="8,2" FontSize="10" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="4">
+            <TextBlock Text="Active rules" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Column="1" Text="{Binding PrivacyShield.RuleCountText}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <TextBlock Grid.Row="1" Text="Queries" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding PrivacyShield.QueriesCountText}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <TextBlock Grid.Row="2" Text="Allowed" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PrivacyShield.AllowedCountText}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.Success}" />
+            <TextBlock Grid.Row="3" Text="Blocked" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PrivacyShield.BlockedCountText}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.Critical}" />
+            <TextBlock Grid.Row="4" Text="Errors" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding PrivacyShield.ErrorsCountText}" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.Warning}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- System-wide throughput with current rates -->
+    <Border Grid.Row="2" Classes="card" Padding="10">
+      <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="SYSTEM-WIDE THROUGHPUT" Classes="kpi-label" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14">
+            <TextBlock Text="{Binding Overview.DownloadText, StringFormat=Down: {0}}" FontSize="11" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.Download}" />
+            <TextBlock Text="{Binding Overview.UploadText, StringFormat=Up: {0}}" FontSize="11" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Axiom.Upload}" />
+          </StackPanel>
+        </Grid>
+        <controls:TrafficChartControl Height="96"
+                                      UploadSeries="{Binding Overview.UploadSeries}"
+                                      DownloadSeries="{Binding Overview.DownloadSeries}"
+                                      GridLineBrush="{DynamicResource Axiom.GridLine}"
+                                      UploadBrush="{DynamicResource Axiom.Upload}"
+                                      DownloadBrush="{DynamicResource Axiom.Download}"
+                                      MutedBrush="{DynamicResource Axiom.TextMuted}" />
+      </StackPanel>
+    </Border>
+
+    <!-- Latest agent actions -->
+    <Border Grid.Row="3" Classes="card" Padding="10">
+      <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="AGENT ACTIVITY" Classes="kpi-label" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Content="Open" Command="{Binding OpenAgentsCommand}" Padding="8,2" FontSize="10" />
+        </Grid>
+        <ItemsControl ItemsSource="{Binding RecentAgentActivity}" IsVisible="{Binding HasAgentActivity}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid ColumnDefinitions="64,90,*,Auto" ColumnSpacing="8" Margin="0,1">
+                <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" FontSize="10.5"
+                                                   Foreground="{DynamicResource Axiom.TextMuted}" />
+                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
+                <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding ActionSummary}" FontSize="10.5"
+                                                   Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
+                <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding SecurityOutcome}" FontSize="9.5"
+                                                   FontWeight="Bold" Foreground="{DynamicResource Axiom.TextMuted}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="No agent actions recorded yet." IsVisible="{Binding !HasAgentActivity}"
+                   FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
+      </StackPanel>
+    </Border>
+
+    <!-- Bottom bar: Axiom logo, Donate, GitHub, Settings -->
+    <Border Grid.Row="4" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+        <Button Grid.Column="0" Command="{Binding OpenWebsiteCommand}" Classes="ghost"
+                Cursor="Hand" ToolTip.Tip="Open opendkg.org/axiom"
+                AutomationProperties.Name="Open the Axiom website">
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png" Width="26" Height="26" Stretch="Uniform"
+                   RenderOptions.BitmapInterpolationMode="HighQuality" />
+            <StackPanel VerticalAlignment="Center" Spacing="0">
+              <TextBlock Text="Axiom" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+              <TextBlock Text="{Binding VersionText}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+            </StackPanel>
+          </StackPanel>
+        </Button>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <Button Command="{Binding OpenSupportCommand}" Padding="8,4" FontSize="11">
+            <TextBlock Text="&#x2665; Donate" Foreground="{DynamicResource Axiom.Accent}" FontSize="11" FontWeight="SemiBold" />
+          </Button>
+          <Button Content="GitHub" Command="{Binding OpenGitHubCommand}" Padding="8,4" FontSize="11" />
+          <Button Content="Settings" Command="{Binding OpenSettingsCommand}" Padding="8,4" FontSize="11" />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

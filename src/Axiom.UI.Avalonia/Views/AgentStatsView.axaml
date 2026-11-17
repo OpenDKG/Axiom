@@ -90,24 +90,20 @@
                      MaxHeight="320" Background="Transparent" BorderThickness="0"
                      controls:DataListSelection.SelectOnPointerPress="True"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="Copy event"
+                            Command="{Binding CopyActivityEventCommand}" />
+                  <MenuItem Header="Copy details"
+                            Command="{Binding CopyActivityDetailsCommand}" />
+                  <MenuItem Header="Copy raw event JSON"
+                            Command="{Binding CopyActivityJsonCommand}" />
+                </ContextMenu>
+              </ListBox.ContextMenu>
               <ListBox.ItemTemplate>
                 <DataTemplate>
                   <Grid ColumnDefinitions="130,100,*,80" Margin="0,2"
-                        Background="Transparent"
-                        Tag="{Binding $parent[ListBox].DataContext}">
-                    <Grid.ContextMenu>
-                      <ContextMenu>
-                        <MenuItem Header="Copy event"
-                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyActivityEventCommand}"
-                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
-                        <MenuItem Header="Copy details"
-                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyActivityDetailsCommand}"
-                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
-                        <MenuItem Header="Copy raw event JSON"
-                                  Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyActivityJsonCommand}"
-                                  CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
-                      </ContextMenu>
-                    </Grid.ContextMenu>
+                        Background="Transparent">
                     <TextBlock Grid.Column="0" Text="{Binding DateTimeText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
                     <TextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
                     <TextBlock Grid.Column="2" Text="{Binding ActionSummary}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
@@ -207,18 +203,16 @@
                    MaxHeight="220" Background="Transparent" BorderThickness="0"
                    controls:DataListSelection.SelectOnPointerPress="True"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="Copy hook evidence"
+                          Command="{Binding CopyHookEvidenceCommand}" />
+              </ContextMenu>
+            </ListBox.ContextMenu>
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid ColumnDefinitions="150,90,*,110" Margin="0,2"
-                      Background="Transparent"
-                      Tag="{Binding $parent[ListBox].DataContext}">
-                  <Grid.ContextMenu>
-                    <ContextMenu>
-                      <MenuItem Header="Copy hook evidence"
-                                Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyHookEvidenceCommand}"
-                                CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
-                    </ContextMenu>
-                  </Grid.ContextMenu>
+                      Background="Transparent">
                   <TextBlock Grid.Column="0" Text="{Binding Timestamp}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
                   <TextBlock Grid.Column="1" Text="{Binding Framework}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
                   <TextBlock Grid.Column="2" Text="{Binding EventType}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
@@ -239,18 +233,16 @@
                    MaxHeight="220" Background="Transparent" BorderThickness="0"
                    controls:DataListSelection.SelectOnPointerPress="True"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="Copy finding"
+                          Command="{Binding CopyFindingCommand}" />
+              </ContextMenu>
+            </ListBox.ContextMenu>
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid ColumnDefinitions="130,90,*,90" Margin="0,2"
-                      Background="Transparent"
-                      Tag="{Binding $parent[ListBox].DataContext}">
-                  <Grid.ContextMenu>
-                    <ContextMenu>
-                      <MenuItem Header="Copy finding"
-                                Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyFindingCommand}"
-                                CommandParameter="{Binding $parent[ContextMenu].PlacementTarget.DataContext}" />
-                    </ContextMenu>
-                  </Grid.ContextMenu>
+                      Background="Transparent">
                   <TextBlock Grid.Column="0" Text="{Binding TimeText}" FontSize="9" Foreground="{DynamicResource Axiom.TextMuted}" />
                   <TextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="9" Foreground="{DynamicResource Axiom.TextSecondary}" />
                   <TextBlock Grid.Column="2" Text="{Binding Title}" FontSize="10" Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />

@@ -20,6 +20,16 @@ public sealed record PrivacyShieldProfileOption(PrivacyShieldProfile Value, stri
     public override string ToString() => Label;
 }
 
+public sealed record PrivacyShieldResolverOption(
+    string Key,
+    string Label,
+    string Description,
+    string UpstreamDns,
+    bool EncryptViaDoh)
+{
+    public override string ToString() => Label;
+}
+
 public sealed record PrivacyShieldAdapterOption(
     string Name,
     string Description,
@@ -254,6 +264,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             new(PrivacyShieldProfile.Strict, "Strict · all categories"),
         ];
         _selectedProfile = Profiles[1];
+        _selectedResolverOption = ResolverOptions[0];
         ApplyProfileCategories(PrivacyShieldProfile.Balanced);
         Adapters = new ObservableCollection<PrivacyShieldAdapterOption>(BuildAdapterOptions());
         _selectedAdapter = Adapters.FirstOrDefault();
@@ -275,6 +286,24 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     public bool IsSupported => _client is not null;
 
     public IReadOnlyList<PrivacyShieldProfileOption> Profiles { get; }
+
+    /// <summary>
+    /// Plain-language resolver choices (issue #366). Automatic keeps Axiom's built-in encrypted
+    /// resolver, the security preset sends queries to Cloudflare over DoH, and Custom leaves the
+    /// upstream fields below under the user's control.
+    /// </summary>
+    public IReadOnlyList<PrivacyShieldResolverOption> ResolverOptions { get; } =
+    [
+        new("automatic", "Automatic - Axiom's encrypted resolver (recommended)",
+            "Axiom forwards to its built-in encrypted DoH resolver. The network adapter is only changed when 'Auto-point adapter DNS' is enabled.",
+            string.Empty, true),
+        new("cloudflare", "Security-focused - Cloudflare 1.1.1.1",
+            "Forwards DNS to Cloudflare's public resolver over encrypted DoH, so queries leave this machine to Cloudflare. The adapter is only changed when 'Auto-point adapter DNS' is enabled.",
+            "1.1.1.1, 1.0.0.1", true),
+        new("custom", "Custom upstream",
+            "Use the upstream list and DoH switch below, for example a resolver on your own network. The adapter is only changed when 'Auto-point adapter DNS' is enabled.",
+            string.Empty, true),
+    ];
 
     public ObservableCollection<PrivacyShieldTopDomain> TopBlocked { get; } = [];
 
@@ -376,6 +405,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     [ObservableProperty]
     private PrivacyShieldProfileOption _selectedProfile;
+
+    [ObservableProperty]
+    private PrivacyShieldResolverOption _selectedResolverOption = null!;
 
     [ObservableProperty]
     private bool _enabled;
@@ -492,6 +524,17 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     [ObservableProperty]
     private bool _isBusy;
+
+    partial void OnSelectedResolverOptionChanged(PrivacyShieldResolverOption value)
+    {
+        if (_updating || value is null || value.Key == "custom")
+        {
+            return;
+        }
+
+        UpstreamText = value.UpstreamDns;
+        EncryptDnsViaDoh = value.EncryptViaDoh;
+    }
 
     partial void OnSelectedProfileChanged(PrivacyShieldProfileOption value)
     {
@@ -1114,6 +1157,10 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             PortText = settings.Port.ToString(CultureInfo.InvariantCulture);
             UpstreamText = settings.UpstreamDns;
             EncryptDnsViaDoh = settings.EncryptDnsViaDoh;
+            SelectedResolverOption = ResolverOptions.FirstOrDefault(option =>
+                (option.Key == "automatic" && string.IsNullOrWhiteSpace(settings.UpstreamDns)) ||
+                (option.Key == "cloudflare" && string.Equals(option.UpstreamDns, settings.UpstreamDns, StringComparison.OrdinalIgnoreCase)))
+                ?? ResolverOptions.First(option => option.Key == "custom");
             AllowedDomainsText = string.Join(Environment.NewLine, settings.AllowedDomains);
             BlockedDomainsText = string.Join(Environment.NewLine, settings.BlockedDomains);
             AutoUpdateSources = settings.AutoUpdateSources;
