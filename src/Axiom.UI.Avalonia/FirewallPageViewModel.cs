@@ -190,6 +190,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     public ObservableCollection<FirewallRuleRow> Rules { get; } = [];
 
     private readonly List<ManagedRule> _ownedRules = [];
+    private IReadOnlyList<RuleSpec> _importedRules = [];
+    private string _importedFileName = string.Empty;
 
     public ObservableCollection<PendingAppRow> Pending { get; } = [];
 
@@ -206,12 +208,15 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [NotifyPropertyChangedFor(nameof(HasIgnoredMicrosoft))]
     private int _ignoredMicrosoftCount;
 
+    [ObservableProperty]
+    private bool _canApplyImportedRules;
+
     /// <summary>Explanation shown when Microsoft-signed processes were removed from the ask list.</summary>
     public string IgnoredMicrosoftText => IgnoredMicrosoftCount == 0
         ? string.Empty
         : OperatingSystem.IsWindows()
-            ? $"{IgnoredMicrosoftCount} Microsoft-signed process(es) are not prompted."
-            : $"{IgnoredMicrosoftCount} macOS system process(es) are not prompted.";
+            ? $"{IgnoredMicrosoftCount} trusted process(es) are not prompted (Windows, Microsoft-signed or Axiom's own)."
+            : $"{IgnoredMicrosoftCount} trusted process(es) are not prompted (macOS system or Axiom's own).";
 
     public bool HasIgnoredMicrosoft => IgnoredMicrosoftCount > 0;
 
@@ -1427,6 +1432,150 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
 
     public void Deactivate()
     {
+    }
+
+    /// <summary>
+    /// Reads an exported rule file and validates it with the same validator the write path uses.
+    /// Preview only: nothing is applied, imported or changed (FND-008).
+    /// </summary>
+    [RelayCommand]
+    private async Task PreviewImportRulesAsync()
+    {
+        var path = await _ui
+            .PickOpenFileAsync("Preview a firewall rule file (nothing is applied)", "json", "JSON", CancellationToken.None)
+            .ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        string json;
+        try
+        {
+            json = await File.ReadAllTextAsync(path).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            StatusText = "Could not read the rule file: " + exception.Message;
+            return;
+        }
+
+        var result = FirewallRuleImport.Preview(json);
+        if (result.FileError is not null)
+        {
+            _importedRules = [];
+            CanApplyImportedRules = false;
+            StatusText = "Import preview: " + result.FileError;
+            return;
+        }
+
+        _importedRules = result.Rules;
+        _importedFileName = Path.GetFileName(path);
+        CanApplyImportedRules = result.Rules.Count > 0;
+
+        var summary = $"Import preview: {result.Rules.Count} valid rule(s), {result.InvalidRuleCount} invalid. Nothing was applied." +
+                      (CanApplyImportedRules ? " Use Apply imported to create them." : string.Empty);
+        if (result.RuleErrors.Count > 0)
+        {
+            summary += " " + string.Join(
+                " ",
+                result.RuleErrors.Take(3).Select(error => $"Rule {error.Index + 1}: {error.Message}"));
+        }
+
+        StatusText = summary;
+    }
+
+    /// <summary>
+    /// Creates the validated imported rules through the same write gate as the rule editor, after
+    /// one explicit confirmation that lists them. Nothing is applied without that confirmation.
+    /// </summary>
+    [RelayCommand]
+    private async Task ApplyImportedRulesAsync()
+    {
+        if (_client is null || !WritesEnabled)
+        {
+            StatusText = "Firewall writes are disabled. Turn on Axiom Shield to apply imported rules.";
+            return;
+        }
+
+        if (_importedRules.Count == 0)
+        {
+            StatusText = "Preview a rule file first.";
+            return;
+        }
+
+        var plan = FirewallRuleImport.PlanApply(_importedRules, Environment.UserName, _importedFileName);
+        if (plan.Conflicts.Count > 0)
+        {
+            StatusText = "Import refused: " + string.Join(" ", plan.Conflicts);
+            return;
+        }
+
+        if (plan.Rules.Count == 0)
+        {
+            StatusText = "No valid rules to apply.";
+            return;
+        }
+
+        var preview = string.Join(
+            "\n",
+            plan.Rules.Take(5).Select(rule =>
+                $"- {rule.Action} {rule.Direction}: {rule.AppPath} ({rule.RemotePorts ?? "any ports"})"));
+        var more = plan.Rules.Count > 5 ? $"\n... and {plan.Rules.Count - 5} more" : string.Empty;
+
+        var confirmed = await _ui.ConfirmAsync(
+            "Apply imported Axiom rules",
+            $"Create or update {plan.Rules.Count} Axiom-owned firewall rule(s) from {_importedFileName}?\n\n" +
+            $"{preview}{more}\n\n" +
+            $"Only these Axiom-owned rules are changed. Other {PlatformText.Firewall} rules are not touched. " +
+            "Continue only on a machine you control.",
+            "Apply imported rules",
+            destructive: true,
+            CancellationToken.None).ConfigureAwait(true);
+
+        if (!confirmed)
+        {
+            StatusText = "Imported rules were not applied.";
+            return;
+        }
+
+        var applied = 0;
+        var failures = new List<string>();
+        foreach (var spec in plan.Rules)
+        {
+            try
+            {
+                var result = await _client
+                    .SendAsync<RuleApplyResult>(IpcCommandTypes.RuleApply, spec, CancellationToken.None)
+                    .ConfigureAwait(true);
+                if (result.Success)
+                {
+                    applied++;
+                }
+                else
+                {
+                    failures.Add($"{Path.GetFileName(spec.AppPath)}: {result.ErrorCode}");
+                }
+            }
+            catch (ServiceUnavailableException exception)
+            {
+                failures.Add(exception.Message);
+                break;
+            }
+#pragma warning disable CA1031 // The UI must report a failed rule instead of crashing.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                failures.Add(exception.Message);
+            }
+        }
+
+        _importedRules = Array.Empty<RuleSpec>();
+        CanApplyImportedRules = false;
+        await RefreshAsync().ConfigureAwait(true);
+        StatusText = failures.Count == 0
+            ? $"Applied {applied} imported rule(s)."
+            : $"Applied {applied} imported rule(s); {failures.Count} failed: {string.Join("; ", failures.Take(3))}";
     }
 
     /// <summary>
