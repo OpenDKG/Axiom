@@ -146,7 +146,7 @@ public sealed class SystemdServiceInstaller
             // Stop the running instance (upgrade); "not loaded" is expected on first install. Like
             // the Windows and macOS installers, the stop is confirmed before the image is replaced:
             // a failed or unreadable stop must never overwrite a daemon that may still be running.
-            // Upgrade hand-over (docs/LINUX_EBPF.md §11): a running daemon that understands the marker keeps
+            // Upgrade hand-over (docs/LINUX_EBPF.md §12): a running daemon that understands the marker keeps
             // its connect-time BPF programs attached through this stop, and the new daemon replaces them
             // make-before-break. A daemon from before the marker existed detaches them on stop.
             RequestBpfHandover(output);

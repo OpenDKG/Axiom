@@ -76,7 +76,7 @@ public sealed class LiveStateAndCoverageTests
         using var next = new Restarted(h);
         await next.StartAsync();
 
-        // Make-before-break (docs/LINUX_EBPF.md §11): the new set is populated and attached, the old set
+        // Make-before-break (docs/LINUX_EBPF.md §12): the new set is populated and attached, the old set
         // refuses to detach. Both stay (bounded at one old + one new set), the layer reports the stale
         // programs, and a watch tick retries only their detach: never a further load.
         Assert.True(next.Engine.StaleProgramsAttached);

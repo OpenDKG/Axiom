@@ -81,7 +81,7 @@ public sealed class NftEnforcementSupervisor
 
     /// <summary>
     /// Asked on a normal stop: true = the stop is a restart/upgrade (or cannot be told apart), so the
-    /// connect-time layer is handed over instead of detached (docs/LINUX_EBPF.md §11). Null = detach.
+    /// connect-time layer is handed over instead of detached (docs/LINUX_EBPF.md §12). Null = detach.
     /// </summary>
     public Func<bool>? KeepLayerOnStop { get; init; }
 
@@ -414,7 +414,7 @@ public sealed class NftEnforcementSupervisor
             if (_layer.Active || _layer.Pending)
             {
                 // Pending = a new set is attached next to a previous daemon's set (make-before-break,
-                // docs/LINUX_EBPF.md §11): this sync populates it and only then retires the old set.
+                // docs/LINUX_EBPF.md §12): this sync populates it and only then retires the old set.
                 await _adapter.ResyncLayerAsync(ct).ConfigureAwait(false);
             }
 
@@ -442,7 +442,7 @@ public sealed class NftEnforcementSupervisor
         {
             // A restart, an upgrade or a loop fault (systemd restarts the unit) hands the connect-time
             // layer over: its programs keep refusing blocked programs until the next daemon replaced them
-            // make-before-break (docs/LINUX_EBPF.md §11). Only a real stop detaches.
+            // make-before-break (docs/LINUX_EBPF.md §12). Only a real stop detaches.
             if (KeepLayer())
             {
                 await StepAsync("BPF layer hand-over", () => _layer.HandOverAsync(), errors).ConfigureAwait(false);

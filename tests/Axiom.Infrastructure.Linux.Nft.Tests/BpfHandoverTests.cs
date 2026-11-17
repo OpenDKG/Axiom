@@ -7,7 +7,7 @@ using Axiom.Infrastructure.Linux.Systemd;
 namespace Axiom.Infrastructure.Linux.Nft.Tests;
 
 /// <summary>
-/// Startup enforcement gap (docs/LINUX_EBPF.md §11): a daemon that starts after a crash or a
+/// Startup enforcement gap (docs/LINUX_EBPF.md §12): a daemon that starts after a crash or a
 /// <c>systemctl restart</c> must not open a window in which a program blocked by a connect-time
 /// proven rule can connect. The fake bpftool models program sets by pin identity, so the oracle
 /// <see cref="FakeBpftool.Blocks"/> answers "would a fresh exec of curl be refused" after every

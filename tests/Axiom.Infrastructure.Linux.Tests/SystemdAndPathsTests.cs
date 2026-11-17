@@ -195,7 +195,7 @@ public sealed class SystemdAndPathsTests
 
         Assert.Equal(0, installer.Install(daemon, output, error));
 
-        // docs/LINUX_EBPF.md §11: the one-shot marker tells a running daemon that this stop is an
+        // docs/LINUX_EBPF.md §12: the one-shot marker tells a running daemon that this stop is an
         // upgrade, so it leaves its BPF programs attached for the new daemon (make-before-break).
         Assert.Equal("upgrade\n", File.ReadAllText(Path.Combine(options.RunDirectory, Axiom.Infrastructure.Linux.Systemd.SystemdStopIntent.MarkerFileName)));
         Assert.Contains("hand-over", output.ToString(), StringComparison.Ordinal);

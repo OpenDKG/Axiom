@@ -5,7 +5,7 @@ using Axiom.Infrastructure.Unix.Interop;
 namespace Axiom.Infrastructure.Linux.Systemd;
 
 /// <summary>
-/// Tells a restart from a stop when the daemon is asked to stop (docs/LINUX_EBPF.md §11). A restart
+/// Tells a restart from a stop when the daemon is asked to stop (docs/LINUX_EBPF.md §12). A restart
 /// (<c>systemctl restart</c>, a pending start) or a package upgrade (the installer leaves
 /// <see cref="MarkerFileName"/> in the runtime directory before it stops the unit) keeps the
 /// connect-time BPF layer attached for the next daemon; a plain <c>systemctl stop</c>,

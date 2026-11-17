@@ -210,7 +210,7 @@ public sealed class BpfUnconfirmedAttachmentTests
         h.Bpftool.FailPrefixes.Remove("bpftool cgroup detach");
         await next.StartAsync(CancellationToken.None);
 
-        // Make-before-break (docs/LINUX_EBPF.md §11): the new set is attached next to the old one and
+        // Make-before-break (docs/LINUX_EBPF.md §12): the new set is attached next to the old one and
         // only the first sync (populated + read back) retires the old set.
         Assert.True(next.Pending);
         Assert.Equal(8, h.Bpftool.Attached.Count);

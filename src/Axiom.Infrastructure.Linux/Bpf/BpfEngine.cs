@@ -464,7 +464,7 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 return;
             }
 
-            // Startup ordering (docs/LINUX_EBPF.md §11, make-before-break): a previous daemon that crashed
+            // Startup ordering (docs/LINUX_EBPF.md §12, make-before-break): a previous daemon that crashed
             // or was restarted leaves its programs attached and pinned, and they keep refusing blocked
             // programs. They are NOT detached first: a new set is loaded next to them, populated from
             // managed-rules.json and read back (SyncAsync), and only then are the old programs detached.

@@ -461,7 +461,7 @@ public sealed class NftFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRul
             var state = Evaluate(_published, readback.Generation, readback.NftError is null, fileRejected, _layerSync);
             if (state == FilterEnforcementState.Verified && VerdictLayer is { Pending: true })
             {
-                // Starting (docs/LINUX_EBPF.md §11): the connect-time layer is not populated and read back
+                // Starting (docs/LINUX_EBPF.md §12): the connect-time layer is not populated and read back
                 // yet, so the enforcement is not verified, whatever nftables already holds.
                 state = FilterEnforcementState.Pending;
             }

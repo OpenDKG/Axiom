@@ -19,7 +19,7 @@
 # Axiom program names are matched, so "axiom_connect\u0034" is still an attachment.
 
 # A daemon that starts while a previous daemon's programs are attached stages its new set in
-# "<pin-dir>.next" (make-before-break, docs/LINUX_EBPF.md section 11); a crash during that start can
+# "<pin-dir>.next" (make-before-break, docs/LINUX_EBPF.md section 12); a crash during that start can
 # leave it behind, so both trees are detached and removed together.
 #
 # Usage: axiom_bpf_pins_remove <pin-dir> <cgroup-root>

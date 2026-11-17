@@ -210,7 +210,7 @@ public sealed class NftEnforcementSupervisorTests
         var fault = await Record.ExceptionAsync(() => supervisor.RunAsync(cts.Token));
 
         Assert.False(cts.IsCancellationRequested, "the loop fault, not the timeout, must end the run");
-        // docs/LINUX_EBPF.md §11: systemd restarts a faulted daemon, so the connect-time layer is handed
+        // docs/LINUX_EBPF.md §12: systemd restarts a faulted daemon, so the connect-time layer is handed
         // over (left attached for the next daemon), not detached; the table and cgroups are torn down.
         Assert.True(layer.HandedOver, "BPF layer handed over to the restarted daemon");
         Assert.False(layer.Stopped, "BPF layer must not be detached on a fault");

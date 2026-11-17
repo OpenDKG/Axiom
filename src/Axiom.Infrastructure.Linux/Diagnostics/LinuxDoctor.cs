@@ -438,7 +438,7 @@ public sealed class LinuxDoctor
             return;
         }
 
-        // Starting (docs/LINUX_EBPF.md §11): a new program set is attached next to a previous daemon's set
+        // Starting (docs/LINUX_EBPF.md §12): a new program set is attached next to a previous daemon's set
         // and not populated and read back yet. Not a fault, but nothing connect-time is verified.
         if (capability.ConnectTimeLayer is { State: "pending" } starting)
         {

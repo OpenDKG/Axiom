@@ -41,7 +41,7 @@ public interface IVerdictLayer
     bool AttachmentUnknown => false;
 
     /// <summary>
-    /// True while the layer is starting (docs/LINUX_EBPF.md §11): not started yet, or a new program set
+    /// True while the layer is starting (docs/LINUX_EBPF.md §12): not started yet, or a new program set
     /// is attached next to a previous daemon's set and its maps are not populated and read back yet.
     /// Whatever enforces meanwhile is not verified, so nothing may be reported as connect-time proven.
     /// </summary>
@@ -77,7 +77,7 @@ public interface IEnforcementLayer : IVerdictLayer
     Task StopAsync();
 
     /// <summary>
-    /// Stop for a restart (docs/LINUX_EBPF.md §11): leaves the attached programs and their pinned maps
+    /// Stop for a restart (docs/LINUX_EBPF.md §12): leaves the attached programs and their pinned maps
     /// enforcing for the next daemon, which replaces them make-before-break. Layers without a
     /// hand-over detach like <see cref="StopAsync"/>.
     /// </summary>
