@@ -39,6 +39,62 @@ public sealed class IpcCommandAccessTests
             IpcCommandAccess.PublicReadCommands.Count + IpcCommandAccess.PrivateReadCommands.Count + IpcCommandAccess.WriteCommands.Count);
     }
 
+    /// <summary>
+    /// The reviewed table for main v1.1.0 (32 commands). Any command added to
+    /// <see cref="IpcCommandTypes"/> or moved between classes fails here until the table is reviewed
+    /// and updated with it.
+    /// </summary>
+    [Fact]
+    public void ClassificationTableIsTheReviewedOne()
+    {
+        var reviewed = new Dictionary<string, IpcCommandClass>(StringComparer.Ordinal)
+        {
+            ["capabilities"] = IpcCommandClass.PublicRead,
+            ["serviceHealth"] = IpcCommandClass.PublicRead,
+            ["snapshot"] = IpcCommandClass.PrivateRead,
+            ["live.events"] = IpcCommandClass.PrivateRead,
+            ["rule.verify"] = IpcCommandClass.PrivateRead,
+            ["rules.query"] = IpcCommandClass.PrivateRead,
+            ["history.query"] = IpcCommandClass.PrivateRead,
+            ["traffic.history"] = IpcCommandClass.PrivateRead,
+            ["privacy.status"] = IpcCommandClass.PrivateRead,
+            ["config.get"] = IpcCommandClass.PrivateRead,
+            ["diagnostics.export"] = IpcCommandClass.PrivateRead,
+            ["protection.status"] = IpcCommandClass.PrivateRead,
+            ["threatshare.status"] = IpcCommandClass.PrivateRead,
+            ["enforcement.status"] = IpcCommandClass.PrivateRead,
+            ["enforcement.receipts"] = IpcCommandClass.PrivateRead,
+            ["rule.apply"] = IpcCommandClass.Write,
+            ["rule.remove"] = IpcCommandClass.Write,
+            ["privacy.configure"] = IpcCommandClass.Write,
+            ["privacy.sources.update"] = IpcCommandClass.Write,
+            ["privacy.history.clear"] = IpcCommandClass.Write,
+            ["config.set"] = IpcCommandClass.Write,
+            ["protection.enable"] = IpcCommandClass.Write,
+            ["protection.disable"] = IpcCommandClass.Write,
+            ["protection.decide"] = IpcCommandClass.Write,
+            ["protection.dismiss"] = IpcCommandClass.Write,
+            ["protection.lockdown"] = IpcCommandClass.Write,
+            ["threatshare.enqueue"] = IpcCommandClass.Write,
+            ["threatshare.dismiss"] = IpcCommandClass.Write,
+            ["threatshare.record"] = IpcCommandClass.Write,
+            ["networkRecovery.capture"] = IpcCommandClass.Write,
+            ["networkRecovery.restore"] = IpcCommandClass.Write,
+            ["enforcement.evaluate"] = IpcCommandClass.Write,
+        };
+
+        var constants = typeof(IpcCommandTypes)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(field => field.IsLiteral && field.FieldType == typeof(string))
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(32, reviewed.Count);
+        Assert.Equal(reviewed.Keys.Order(StringComparer.Ordinal), constants);
+        Assert.All(constants, command => Assert.Equal(reviewed[command], IpcCommandAccess.Classify(command)));
+    }
+
     /// <summary>The public set is exactly the two health commands; everything that shows activity is private.</summary>
     [Theory]
     [InlineData("serviceHealth", IpcCommandClass.PublicRead)]
