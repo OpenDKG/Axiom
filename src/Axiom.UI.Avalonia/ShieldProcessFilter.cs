@@ -62,7 +62,8 @@ internal static class ShieldProcessFilter
 
         // Axiom must never ask the user to block Axiom itself: the desktop, the service, the
         // optional modules and their runtimes live under these roots.
-        if (IsUnder(path, Path.Combine(LocalAppData, "Programs", "Axiom")) ||
+        if ((OperatingSystem.IsLinux() && IsLinuxOwnPath(path)) ||
+            IsUnder(path, Path.Combine(LocalAppData, "Programs", "Axiom")) ||
             IsUnder(path, Path.Combine(LocalAppData, "Axiom")) ||
             IsUnder(path, Path.Combine(ProgramFiles, "Axiom")) ||
             IsUnder(path, Path.Combine(ProgramFilesX86, "Axiom")))
@@ -129,6 +130,16 @@ internal static class ShieldProcessFilter
 
     private static readonly string? OwnBundleRoot =
         OperatingSystem.IsMacOS() ? BundleRootOf(AppContext.BaseDirectory) : null;
+
+    /// <summary>
+    /// Linux counterpart of the Program Files roots: the packaged bundle (desktop and its bundled
+    /// axiomd under /opt/axiom) and the root-owned daemon image the service stages into
+    /// /usr/libexec/axiom. Matched case-sensitively, as the file system is.
+    /// </summary>
+    internal static bool IsLinuxOwnPath(string path) =>
+        LinuxOwnRoots.Any(root => path.StartsWith(root + "/", StringComparison.Ordinal));
+
+    private static readonly string[] LinuxOwnRoots = ["/opt/axiom", "/usr/libexec/axiom"];
 
     private static readonly string[] MacSystemRoots =
         ["/System", "/usr/libexec", "/usr/sbin", "/usr/bin", "/sbin", "/bin"];
