@@ -167,9 +167,14 @@
                   AutomationProperties.Name="Available update"
                   chrome:WindowDecorationProperties.ElementRole="User">
             <Grid Width="46" Height="44">
-              <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+              <TextBlock x:Name="UpdateGlyph" Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="13"
                          Foreground="{DynamicResource Axiom.Accent}"
                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <!-- Segoe MDL2 Assets exists only on Windows; other platforms show this vector arrow. -->
+              <PathIcon x:Name="UpdateIcon" IsVisible="False" Width="14" Height="14"
+                        Foreground="{DynamicResource Axiom.Accent}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Data="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
               <Border Background="{DynamicResource Axiom.Accent}" CornerRadius="4"
                       Width="8" Height="8" Margin="0,7,9,0"
                       HorizontalAlignment="Right" VerticalAlignment="Top" />
