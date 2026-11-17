@@ -198,6 +198,9 @@ public partial class MainWindow : Window
             Width = Math.Max(FullWindowMinWidth, _expandedWindowSize.Width);
             Height = Math.Max(FullWindowMinHeight, _expandedWindowSize.Height);
         }
+
+        // The restored or Mini size must still open fully inside the current screen's working area.
+        FitToWorkingArea();
     }
 
     private void OnVisualEffectsChanged(object? sender, EventArgs e) => ApplyBackdrop();
@@ -347,6 +350,8 @@ public partial class MainWindow : Window
         CloseButton.IsVisible = false;
         BellGlyph.IsVisible = false;
         BellIcon.IsVisible = true;
+        UpdateGlyph.IsVisible = false;
+        UpdateIcon.IsVisible = true;
         if (OperatingSystem.IsMacOS())
         {
             TitleContent.Margin = new Thickness(70, 0, 0, 0);
