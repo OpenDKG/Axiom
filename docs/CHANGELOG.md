@@ -1,3 +1,7 @@
+## What's in 0.100.0
+
+- **Preview an imported rule file (FND-008, import half).** Network Control reads an exported `axiom.firewall-rules.v1` file, validates every entry with the write path's RuleSpecValidator, and reports valid/invalid counts and messages. Preview only: nothing is applied or changed; 4 MB / 1,000 rule caps. 0.99.0 stays reserved for the release candidate.
+
 ## What's in 0.98.0
 
 - **Export Axiom-owned firewall rules (FND-008, export half).** Network Control can write the owned rules to JSON (`axiom.firewall-rules.v1`) through the native save dialog: intent plus OS state, Axiom rules only, no secrets. Read-only; import and validation stay open.

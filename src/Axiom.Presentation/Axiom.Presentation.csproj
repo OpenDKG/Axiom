@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
+    <ProjectReference Include="..\Axiom.Core\Axiom.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
