@@ -82,6 +82,40 @@ Did not recover:
 
 Evidence: `F:\Pen Testing\Logs\reboot-recovery-097.png`.
 
+## 2c. Privacy Shield resolver crash and DNS continuity (17 November 2026)
+
+On `Axiom-Win11`, 0.97.0, adapter `Ethernet 2` used `127.0.0.1, 192.168.0.1` (resolver first,
+fallback second). The Axiom service process was killed from an elevated shell to simulate a crash
+(the Windows service is configured to restart after 5 s).
+
+| Moment | Service | Resolver (TCP 53) | Adapter DNS | Name resolution |
+| --- | --- | --- | --- | --- |
+| Before | Running | up | 127.0.0.1, 192.168.0.1 | ok |
+| 2 s after kill | Stopped | down | unchanged | **ok** (fallback 192.168.0.1) |
+| 12 s after kill | Running (auto-restart) | still warming | unchanged | ok |
+| After recovery | Running | up | unchanged | ok, including a query sent to 127.0.0.1 |
+
+Findings:
+
+- The preserved fallback DNS kept name resolution working while the local resolver was down, and
+  the Windows service recovery brought Axiom back within about ten seconds. The VM was never left
+  without DNS.
+- The adapter DNS was not reverted: it still points at the resolver first with the original server
+  as fallback, which is the documented design. "Restore saved DNS" stays available for a manual
+  revert.
+- Privacy Shield counters reset when the resolver restarts (the page says so): after recovery it
+  showed "9 queries observed", not the previous totals.
+- The recovery buttons were exercised after the crash: **Restore saved DNS** asked for confirmation
+  and set the adapter to its original `192.168.0.1` only; resolution continued. **Point adapter at
+  resolver** then restored `127.0.0.1, 192.168.0.1`, the resolver came up and resolution kept
+  working. The VM was left filtered, with the fallback preserved.
+- `%LOCALAPPDATA%\Axiom\network-recovery.log` still carries an old entry
+  "Recovery baseline not saved: Unavailable ..." from 15 November, so the current baseline under
+  `%ProgramData%\Axiom` is the one that was used; it is SYSTEM-only and was not read directly. The
+  restore command itself succeeded twice (restore, then re-point).
+- Evidence: `F:\Pen Testing\Logs\dns-crash-recovery-097.png` (after recovery) and
+  `F:\Pen Testing\Logs\dns-restore-button.png` (restore confirmation).
+
 ## 3. Signing decision (issues #119 and #289)
 
 **Decision: sign release artifacts with Authenticode through SignPath Foundation, using its
