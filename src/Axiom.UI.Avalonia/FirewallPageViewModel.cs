@@ -470,6 +470,16 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
 
     public string ShieldBadgeText => !ProtectionKnown ? "UNKNOWN" : ShieldEnabled ? "ON" : "OFF";
 
+    /// <summary>
+    /// The shield's protection level for every surface (<see cref="ShieldProtection"/>): unknown
+    /// while the service has not answered; Degraded off Windows while the filter has not proven
+    /// enforcement (BPF hand-over pending, filter disconnected, nothing reported yet).
+    /// </summary>
+    public EnforcementLevel? ShieldLevel => ShieldProtection.Level(
+        ProtectionKnown,
+        ShieldEnabled,
+        OperatingSystem.IsWindows() ? null : Enforcement.IsEnforcementVerified);
+
     public string ShieldActionText => !ProtectionKnown
         ? "Check protection"
         : ShieldEnabled ? "Disable protection" : "Enable protection";

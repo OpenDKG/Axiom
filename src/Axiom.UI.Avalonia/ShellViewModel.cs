@@ -530,7 +530,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private string _statusFirewallBadgeText = "READ-ONLY";
 
     /// <summary>Neutral lamp colour while the service has not reported the protection state.</summary>
-    internal const string UnknownLampColor = "#94A3B8";
+    internal const string UnknownLampColor = ShieldProtection.UnknownColor;
 
     /// <summary>
     /// Lamp next to the badge: green when protection is on, red when it is off, neutral while the
@@ -837,14 +837,25 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 ? $"Protection: ON · {protection.OwnedRuleCount} rule(s) · {awaiting} awaiting decision"
                 : $"Protection: ON · {protection.OwnedRuleCount} rule(s)";
             StatusFirewallBadgeText = "SHIELD ON";
-            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#4ADE80"));
+            // Shield on is green only when the platform filter proved enforcement (Windows: not
+            // reported, upstream green); otherwise the Degraded tone, never a verified-looking lamp.
+            var level = ShieldProtection.Level(
+                known: true,
+                enabled: true,
+                OperatingSystem.IsWindows() ? null : Firewall.Enforcement.IsEnforcementVerified);
+            if (level == EnforcementLevel.Degraded)
+            {
+                StatusFirewallText += " · blocks not verified";
+            }
+
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(ShieldProtection.LampColor(level)));
         }
         else if (IsServiceMode && (ServiceStatus is { IsConnected: false } || _protection is null))
         {
             StatusFirewallText = "Protection: unknown · the local service did not answer";
             StatusFirewallBadgeText = "UNKNOWN";
             // Unknown is neither on nor off: a neutral lamp, never the previous green or red.
-            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(UnknownLampColor));
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(ShieldProtection.LampColor(null)));
         }
         else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
         {

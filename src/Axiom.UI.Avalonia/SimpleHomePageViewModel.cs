@@ -74,23 +74,32 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
 
     public bool IsShieldActive => Firewall.ProtectionKnown && Firewall.ShieldEnabled;
 
-    public bool IsFullyProtected => Firewall.ProtectionKnown && Firewall.ShieldEnabled && PrivacyShield.Enabled;
+    public bool IsFullyProtected => Firewall.ShieldLevel == EnforcementLevel.Protected && PrivacyShield.Enabled;
+
+    /// <summary>Shield on, but the platform filter has not proven enforcement (off Windows only).</summary>
+    public bool IsShieldUnverified => Firewall.ShieldLevel == EnforcementLevel.Degraded;
 
     public string HeroBadgeText => !Firewall.ProtectionKnown
         ? "STATUS UNKNOWN"
-        : Firewall.ShieldEnabled
+        : IsShieldUnverified
+            ? "NOT VERIFIED"
+            : Firewall.ShieldEnabled
             ? (PrivacyShield.Enabled ? "PROTECTED" : "SHIELD ACTIVE")
             : "MONITORING ONLY";
 
     public string HeroHeadlineText => !Firewall.ProtectionKnown
         ? "Protection status is unknown"
-        : Firewall.ShieldEnabled
+        : IsShieldUnverified
+            ? "Shield is on, blocking is not verified"
+            : Firewall.ShieldEnabled
             ? (PrivacyShield.Enabled ? "Your computer is protected" : "Firewall Shield is protecting your apps")
             : "Firewall protection is off";
 
     public string HeroSummaryText => !Firewall.ProtectionKnown
         ? "Axiom could not read the local service, so it cannot confirm whether Shield is on. Open Firewall to check."
-        : Firewall.ShieldEnabled
+        : IsShieldUnverified
+            ? $"Axiom Shield is on, but {PlatformText.FilterName} has not confirmed enforcement yet ({Firewall.Enforcement.NotVerifiedReason}). Open Firewall to check."
+            : Firewall.ShieldEnabled
             ? (PrivacyShield.Enabled
                 ? "Axiom Shield checks new outbound apps and Privacy Shield is actively filtering ads and trackers."
                 : "Axiom Shield asks before unfamiliar apps connect to the internet. You can also turn on the Ad & Tracker Blocker below.")
@@ -261,6 +270,7 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
     {
         OnPropertyChanged(nameof(IsShieldActive));
         OnPropertyChanged(nameof(IsFullyProtected));
+        OnPropertyChanged(nameof(IsShieldUnverified));
         OnPropertyChanged(nameof(HeroBadgeText));
         OnPropertyChanged(nameof(HeroHeadlineText));
         OnPropertyChanged(nameof(HeroSummaryText));

@@ -24,6 +24,10 @@ public sealed class ProtectionAuthorityTests
             serviceProbe: new ServiceStatusProbe(client),
             serviceClient: client,
             uiModeService: new FixedUiModeService(UiMode.Simple));
+        // The fake service reports no filter enforcement: off Windows a shield that is on but not
+        // proven by the filter is Degraded (amber, NOT VERIFIED), never the verified green.
+        var shieldOnBadge = OperatingSystem.IsWindows() ? "SHIELD ACTIVE" : "NOT VERIFIED";
+        var shieldOnLamp = OperatingSystem.IsWindows() ? ShieldProtection.ProtectedColor : ShieldProtection.DegradedColor;
         try
         {
             Assert.Same(shell.SimpleHome, shell.SelectedPage);
@@ -33,7 +37,7 @@ public sealed class ProtectionAuthorityTests
 
             Assert.True(shell.Firewall.ProtectionKnown);
             Assert.True(shell.SimpleHome.IsShieldActive);
-            Assert.Equal("SHIELD ACTIVE", shell.SimpleHome.HeroBadgeText);
+            Assert.Equal(shieldOnBadge, shell.SimpleHome.HeroBadgeText);
             Assert.Contains("Protection active", shell.Overview.StatusText, StringComparison.Ordinal);
             Assert.Contains("Axiom rules", shell.Overview.StatusText, StringComparison.Ordinal);
 
@@ -92,10 +96,10 @@ public sealed class ProtectionAuthorityTests
 
             Assert.True(shell.Firewall.ProtectionKnown);
             Assert.True(shell.SimpleHome.IsShieldActive);
-            Assert.Equal("SHIELD ACTIVE", shell.SimpleHome.HeroBadgeText);
+            Assert.Equal(shieldOnBadge, shell.SimpleHome.HeroBadgeText);
             Assert.Contains("Axiom rules", shell.Overview.StatusText, StringComparison.Ordinal);
             Assert.Equal("SHIELD ON", shell.StatusFirewallBadgeText);
-            Assert.Equal(Color.Parse("#4ADE80"), ((ISolidColorBrush)shell.StatusFirewallBadgeBrush).Color);
+            Assert.Equal(Color.Parse(shieldOnLamp), ((ISolidColorBrush)shell.StatusFirewallBadgeBrush).Color);
             Assert.Equal("Shield: ON", shell.MiniHome.ShieldButtonText);
 
             // Losing the service after a green state must not leave the lamp green.
@@ -136,6 +140,55 @@ public sealed class ProtectionAuthorityTests
             Assert.False(shell.SimpleHome.IsShieldActive);
             Assert.Equal("STATUS UNKNOWN", shell.SimpleHome.HeroBadgeText);
             Assert.DoesNotContain("Read-only inventory", shell.Overview.StatusText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            shell.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Shield_lamp_is_green_off_windows_only_when_the_filter_proved_enforcement()
+    {
+        var client = new MutableProtectionClient { Enabled = true, WriteGateOpen = true };
+        var shell = new ShellViewModel(
+            new ServiceSnapshotSource(client),
+            new NoopTimerFactory(),
+            serviceProbe: new ServiceStatusProbe(client),
+            serviceClient: client,
+            uiModeService: new FixedUiModeService(UiMode.Simple));
+        try
+        {
+            await shell.ProbeProtectionAsync(force: true);
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.Equal(EnforcementLevel.Protected, shell.Firewall.ShieldLevel);
+                return;
+            }
+
+            // Not reported (BPF hand-over pending, filter not connected): Degraded everywhere.
+            Assert.Equal(EnforcementLevel.Degraded, shell.Firewall.ShieldLevel);
+            Assert.False(shell.SimpleHome.IsFullyProtected);
+            Assert.Equal("Degraded", shell.MiniHome.ShieldLevelText);
+            Assert.True(shell.MiniHome.IsShieldToneWarn);
+            Assert.Contains("blocks not verified", shell.StatusFirewallText, StringComparison.Ordinal);
+
+            // The filter proves enforcement: the same model turns every surface green.
+            shell.Firewall.Enforcement = new FilterEnforcementSummary { IsVerified = true, NotVerifiedReason = string.Empty };
+            await shell.ProbeProtectionAsync(force: true);
+            Assert.Equal(EnforcementLevel.Protected, shell.Firewall.ShieldLevel);
+            Assert.Equal("SHIELD ACTIVE", shell.SimpleHome.HeroBadgeText);
+            Assert.Equal("Protected", shell.MiniHome.ShieldLevelText);
+            Assert.True(shell.MiniHome.IsShieldToneOk);
+            Assert.Equal(Color.Parse(ShieldProtection.ProtectedColor), ((ISolidColorBrush)shell.StatusFirewallBadgeBrush).Color);
+
+            // Service lost: unknown (idle tone), not the previous green.
+            client.Failure = new ServiceUnavailableException(IpcErrorCodes.ServiceUnavailable, "service offline");
+            await shell.ProbeProtectionAsync(force: true);
+            Assert.Null(shell.Firewall.ShieldLevel);
+            Assert.Equal("Unknown", shell.MiniHome.ShieldLevelText);
+            Assert.True(shell.MiniHome.IsShieldToneIdle);
+            Assert.False(shell.MiniHome.IsShieldToneOk);
         }
         finally
         {
