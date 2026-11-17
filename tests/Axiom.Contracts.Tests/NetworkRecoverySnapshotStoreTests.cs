@@ -178,6 +178,34 @@ public sealed class NetworkRecoverySnapshotStoreTests
             out _));
     }
 
+    /// <summary>
+    /// Gate B (#441): the machine recovery snapshot is owner-only (0600) on Unix. Windows keeps the
+    /// ProgramData ACL layout and does not change the file mode, so the check returns early there.
+    /// </summary>
+    [Fact]
+    public void Snapshot_file_is_owner_only_on_unix()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var directory = Path.Combine(Path.GetTempPath(), "axiom-net-recovery", Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(directory, NetworkRecoverySnapshotStore.FileName);
+        try
+        {
+            Assert.True(NetworkRecoverySnapshotStore.TryWrite(path, Snapshot(), out var error), error);
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
     [Fact]
     public void File_round_trip_uses_the_documented_format_and_missing_is_distinct()
     {
