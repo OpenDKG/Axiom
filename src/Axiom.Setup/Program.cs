@@ -9,6 +9,28 @@ internal static class Program
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int MessageBox(nint hWnd, string text, string caption, uint type);
 
+    /// <summary>
+    /// A global mutex keeps a second setup from running next to the first. On a shared or
+    /// non-interactive account the mutex can exist with an ACL this process cannot open (seen on
+    /// the CI runner: "Access to the path 'Global\AxiomSetup.SingleInstance' is denied"), and an
+    /// unhandled exception there would abort the installer. Fall back to a session-local guard so
+    /// setup still runs, and say so on stderr.
+    /// </summary>
+    private static Mutex CreateSingleInstanceMutex(out bool created)
+    {
+        try
+        {
+            return new Mutex(initiallyOwned: true, @"Global\AxiomSetup.SingleInstance", out created);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine(
+                "Axiom Setup: the global single-instance guard is not accessible from this account; " +
+                "continuing with a session-local guard.");
+            return new Mutex(initiallyOwned: true, @"Local\AxiomSetup.SingleInstance", out created);
+        }
+    }
+
     [STAThread]
     private static void Main(string[] args)
     {
@@ -18,7 +40,7 @@ internal static class Program
         // multi-GB upgrade backup and fighting over the service. One instance only. In silent mode a
         // modal box would hang an unattended install (there is nobody to dismiss it), so the message
         // goes to stderr and the process exits instead of waiting.
-        using var single = new Mutex(initiallyOwned: true, @"Global\AxiomSetup.SingleInstance", out var created);
+        using var single = CreateSingleInstanceMutex(out var created);
         if (!created)
         {
             const string busy = "Axiom Setup is already running. Wait for the current installation to finish; "
