@@ -439,3 +439,48 @@ Not tested in this round: second-user IPC refusal; the Windows VM (locked restor
 suites, Privacy Shield on Windows); the update button in its visible state (no update was offered); Developer ID
 signing, notarization, SIP on and Apple silicon. The Agent Dashboard subtitle "Read-only inventory. No driver, no
 firewall write" is upstream's static page text, not a protection status.
+
+## Upstream `main` `da1987a` (v1.1.0) merged (2026-11-17, merge `d65b96d`)
+
+Tested code head: `2cc62b4` (the VM bundle was published from `1f589fb`; `2cc62b4` changes tests only). Pin: `main` `da1987a1896275f0127eb8fe176c1a780471ebe9`. Author-run evidence on a project machine (Intel QEMU VM, SIP disabled, ad-hoc signing). This is not CI and not release evidence.
+
+**Changes on top of the merge (shared code, behaviour-neutral on Windows).**
+- `1f589fb` (from the Linux port's `13a7a94`): off Windows, `RuleSpecValidator` refuses drive-letter, backslash and UNC application paths with `rule.path.windows_style`; Windows unchanged. `AgentExecutables` splits on native separators only (upstream behaviour). Tests return early on the other OS; nothing is skipped.
+- `2cc62b4` (from the Linux port's `d231e11`): import and coordinator tests use a native rule path per OS.
+- Earlier in this round: `5384dbc` one shield level model in upstream's `EnforcementLevel` vocabulary (unknown is not green), `ea27fe9` filter acknowledgement is not `OS_DENY_VERIFIED`, `b76673a` DNS platform errors go through `IPrivacyDnsPlatform`.
+
+**Host (Linux, Release, scratch HOME/XDG, agent config sha256 unchanged).** Locked restore passes for every port target; build 0 warnings / 0 errors (portable solution, service, macOS desktop host, macOS test projects). No skipped tests.
+
+| suite | branch total/passed/failed | `main` da1987a |
+|---|---|---|
+| Contracts | 180/180/0 | 170/169/1 |
+| Core | 190/186/4 | 184/170/14 |
+| Persistence | 21/21/0 | 21/21/0 |
+| McpServer | 34/34/0 | 34/34/0 |
+| Presentation | 348/341/7 | 315/307/8 |
+| UI.Avalonia | 90/90/0 | 66/65/1 |
+| Service | 124/116/8 | 101/86/15 |
+| Infrastructure.MacOS | 249/249/0 | n/a |
+| Desktop.Avalonia.MacOS | 35/35/0 | n/a |
+
+By name, no test fails on the branch that passes on `main`. All 19 branch failures fail on `main` too on this Linux host (Windows-only behaviour: UNC validation, Windows system binaries, provisioning, network recovery, agent canary). The tests that fail only on `main` here are Windows-path tests the port made OS-native, the default-policy test, `ShieldProcessFilterTests.Axiom_own_install_and_module_paths_are_never_prompted` and `PrivacyShieldTests.Failed_reconfiguration_keeps_previous_resolver_and_persisted_settings`.
+
+**VM (macOS 15.8.3 24H241, x86_64, SIP disabled, build 1.1.0 (14), ad-hoc signed, TeamIdentifier not set).**
+- App entitlements: content-filter-provider-systemextension, system-extension.install, app group `group.com.axiom.firewall`, cs.allow-jit / allow-unsigned-executable-memory / disable-library-validation. Extension: content-filter-provider-systemextension plus the app group. `codesign --verify --deep --strict` passes.
+- `systemextensionsctl list`: `com.axiom.firewall.filter (1.1.0/14) [activated enabled]`; the old 0.97.0/12 copy is `terminated waiting to uninstall on reboot`.
+- The daemon runs under launchd (`system/com.axiom.service`, running). `--doctor`: every check passes except one WARN for that old extension copy, which is waiting for a reboot (exit 1).
+- Block test: `rule.apply` on `/usr/bin/curl` gives applied and verified. curl to example.com is refused (rc 7) while python3 gets HTTP 200 from the same host. `rule.verify` returns enforcementVerified true. After `launchctl kickstart -k` the rule is verified again, curl is still blocked and python is still at 200. `rule.remove` brings curl back to 200.
+- Tampered rules file (`chmod 664`): the filter rejects it, the daemon reports `degraded` / pending, and `rule.verify` returns enforcementVerified false. Restoring the mode returns it to verified.
+- Windows-style paths over IPC (`C:\...\curl.exe`, `\\server\share\x.exe`, `/usr/bin\curl`): each one is refused (`rule.invalid`) and no rule is stored.
+- Privacy Shield on: DNS is set to 127.0.0.1, the blocked name returns no answer and example.com resolves. Off: DNS is back to automatic and example.com resolves.
+- Second local user (temporary standard account, deleted afterwards): snapshot, history, diagnostics, rules.query, rule.verify, live.events, config.get and rule.apply are all refused as `unauthorized`. serviceHealth and capabilities answer. The install owner and root are allowed.
+- Desktop app: the lamp is green "SHIELD ON / blocks verified" with the filter verified, amber "blocks not verified" with the filter degraded, and grey `UNKNOWN` ("Protection: unknown", IPC offline) while the daemon is stopped. The Privacy Dashboard renders, and Integrations does not offer Trader Shield. App RSS was 168 MB after 5 minutes, with the leftover 290 MB `~/.hermes/blackbox/ruleset.json` in place.
+
+**Findings (not fixed in this round).**
+- With the daemon stopped, the Network Control page body still shows the last-known "Axiom Shield ON" and "Filter: connected … verified". Only the status bar lamp turns UNKNOWN.
+- The daemon itself (`/Library/PrivilegedHelperTools/com.axiom.service/axiomd`, DoH to 1.1.1.1/9.9.9.9) is listed as a new outbound application awaiting a decision. Axiom's own helper path is not in the never-prompt set on macOS.
+- The status bar showed "1 rule(s)" while `rules.query` returned an empty list (the count probably includes the remembered curl Allow decision). Not investigated.
+
+**Not tested in this round:** rule export/import through the app, Apple silicon, SIP enabled, Developer ID signing and notarization, upgrade from a signed build, Windows runtime suites.
+
+**Artifact:** `Axiom-1.1.0-14-osx-x64-adhoc.zip` (the tested `/Applications/Axiom.app`, `ditto -c -k --keepParent`), 89,030,687 bytes, sha256 `124a8af8125bec4770ab7294729168dfb4f5be54c153a324467245550d93023a`. Ad-hoc signed, not notarized.
