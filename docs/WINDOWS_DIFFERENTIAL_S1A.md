@@ -594,8 +594,8 @@ head yet.** It records what the host proves and what the Windows round still has
 | Step | main `da1987a` | S1a `7676ea0` |
 |---|---|---|
 | `restore Axiom.Portable.slnx --locked-mode` | exit 0 | exit 0 |
-| `restore Axiom.sln --locked-mode` | exit 1 (`Axiom.Desktop`, `Axiom.Setup`: the host adds `linux-x64` to their `win-x64` RIDs; NU1102 `System.CodeDom`) | exit 1 (same) |
-| per-project `--locked-mode` | 23 / 25 (`Axiom.Desktop`, `Axiom.Setup` fail) | 24 / 26 (same two) |
+| `restore Axiom.sln --locked-mode` | exit 1: NU1004 for `Axiom.Desktop` and `Axiom.Setup` (the host adds `linux-x64` to their `win-x64` RIDs); this run also logged NU1102 for `System.CodeDom` | exit 1: the same RID NU1004, plus NU1004 for `Axiom.Desktop`'s missing `Axiom.Service.Hosting` entry (its lock file is still `main`'s) |
+| per-project `--locked-mode` | 20 / 22 (`Axiom.Desktop`, `Axiom.Setup` fail) | 21 / 23 (same two) |
 | Release build: Portable.slnx, Infrastructure.Windows, Service, Desktop.Avalonia.Windows, Infrastructure.Windows.Tests, Service.Tests | 0 warnings, 0 errors | 0 warnings, 0 errors |
 
 Before `d9ad0a2` (main's lock files), locked restore also failed with NU1004 (missing
