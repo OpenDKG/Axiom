@@ -458,6 +458,18 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
 
     public string ShieldBadgeText => !ProtectionKnown ? "UNKNOWN" : ShieldEnabled ? "ON" : "OFF";
 
+    /// <summary>Axiom-owned rules in the daemon's last rules.query answer; null while unknown.</summary>
+    public int? QueriedRuleCount { get; private set; }
+
+    /// <summary>
+    /// Rule count to show next to the shield state. Off Windows it is the daemon's rules.query
+    /// answer (what the filter adapter lists), not protection.status's stored count, which can
+    /// still hold a rule the filter no longer lists; null (show no count) while that answer is
+    /// unknown. Windows keeps the protection.status count.
+    /// </summary>
+    public int? ShieldRuleCount(int statusRuleCount) =>
+        OperatingSystem.IsWindows() ? statusRuleCount : QueriedRuleCount;
+
     /// <summary>
     /// The shield's protection level for every surface (<see cref="ShieldProtection"/>): unknown
     /// while the service has not answered; Degraded off Windows while the filter has not proven
@@ -1372,7 +1384,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         ShieldStatusText = !string.IsNullOrWhiteSpace(status.LastError)
             ? status.LastError!
             : status.Enabled
-                ? $"Protection is on · {status.OwnedRuleCount} Axiom rule(s) · {PendingCount} new outbound application(s) with no Block/Allow decision."
+                ? $"Protection is on{(ShieldRuleCount(status.OwnedRuleCount) is { } rules ? $" · {rules} Axiom rule(s)" : string.Empty)} · {PendingCount} new outbound application(s) with no Block/Allow decision."
                 : "Protection is off. Axiom only observes.";
 
         ShieldHintText = !status.ServiceElevated
@@ -1660,6 +1672,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             CapabilityDetail = snapshot.Capability.Reason
                 ?? $"{(OperatingSystem.IsWindows() ? "Windows Firewall COM policy" : PlatformText.Firewall + " policy")} is readable. No rule is changed by this page.";
             OwnedRuleCountText = snapshot.Rules.Count.ToString(CultureInfo.InvariantCulture);
+            QueriedRuleCount = snapshot.Rules.Count;
             IsEmpty = snapshot.Rules.Count == 0;
             WritesEnabled = snapshot.WritesEnabled;
             WritePathText = snapshot.WritesEnabled ? "enabled (test VM only)" : "disabled";
@@ -1674,6 +1687,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         catch (ServiceUnavailableException exception)
         {
             Rules.Clear();
+            QueriedRuleCount = null;
             Enforcement = FilterEnforcementSummary.None;
             CapabilityStatusText = "Service offline";
             CapabilityDetail = exception.Message;
@@ -1687,6 +1701,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
 #pragma warning restore CA1031
         {
             Rules.Clear();
+            QueriedRuleCount = null;
             CapabilityStatusText = "Query failed";
             CapabilityDetail = exception.Message;
             OwnedRuleCountText = "—";
@@ -1716,6 +1731,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         }
 
         Enforcement = FilterEnforcementSummary.None;
+        QueriedRuleCount = null;
         CapabilityStatusText = "Unknown";
         CapabilityDetail = "The local service did not answer, so the filter state is unknown. It is read again when the service answers.";
         Pending.Clear();

@@ -866,9 +866,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         else if (_protection is { Enabled: true } protection)
         {
             var awaiting = protection.Pending.Count(app => !ShieldProcessFilter.IsIgnored(app.AppPath));
+            // Off Windows the count follows the daemon's rules.query answer; none while unknown.
+            var rules = Firewall.ShieldRuleCount(protection.OwnedRuleCount) is { } count
+                ? $" · {count} rule(s)"
+                : string.Empty;
             StatusFirewallText = awaiting > 0
-                ? $"Protection: ON · {protection.OwnedRuleCount} rule(s) · {awaiting} awaiting decision"
-                : $"Protection: ON · {protection.OwnedRuleCount} rule(s)";
+                ? $"Protection: ON{rules} · {awaiting} awaiting decision"
+                : $"Protection: ON{rules}";
             StatusFirewallBadgeText = "SHIELD ON";
             // Shield on is green only when the platform filter proved enforcement (Windows: not
             // reported, upstream green); otherwise the Degraded tone, never a verified-looking lamp.
