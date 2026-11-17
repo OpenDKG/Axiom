@@ -20,9 +20,21 @@ public static class ThreatSharingConsent
         "Axiom",
         "threat-sharing-consent-applied");
 
+    /// <summary>
+    /// Only the Windows installer records an install-time consent. Off Windows nothing writes the
+    /// profile, so a file at the default path (restored backup, synced home) is not a consent the
+    /// user gave on this machine: threat sharing stays a manual switch there.
+    /// </summary>
+    public static bool IsInstallConsentSupported => OperatingSystem.IsWindows();
+
     /// <summary>True when the installer recorded the Complete threat-sharing consent.</summary>
     public static bool HasConsent(string? profilePath = null)
     {
+        if (profilePath is null && !IsInstallConsentSupported)
+        {
+            return false;
+        }
+
         var path = profilePath ?? DefaultProfilePath;
         try
         {

@@ -2105,7 +2105,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         var mode = ReadString(settings, "mode") ?? "unknown";
         var report = ReadBool(settings, "report", false);
 
+        // Install-time consent exists only where the Windows installer recorded it; elsewhere
+        // threat sharing is turned on only by the user's own switch on this page.
         if (!report && !_threatSharingConsentEnabling &&
+            ThreatSharingConsent.IsInstallConsentSupported &&
             ThreatSharingConsent.HasConsent() && !ThreatSharingConsent.WasApplied())
         {
             _threatSharingConsentEnabling = true;
