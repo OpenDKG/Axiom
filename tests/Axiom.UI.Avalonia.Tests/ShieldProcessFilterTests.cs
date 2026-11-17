@@ -35,11 +35,12 @@ public sealed class ShieldProcessFilterTests
     [Fact]
     public void Linux_package_bundle_and_daemon_image_are_never_prompted()
     {
-        Assert.True(ShieldProcessFilter.IsLinuxOwnPath("/opt/axiom/Axiom.Desktop.Avalonia.Linux"));
-        Assert.True(ShieldProcessFilter.IsLinuxOwnPath("/opt/axiom/axiomd/axiomd"));
+        Assert.True(ShieldProcessFilter.IsLinuxOwnPath("/usr/lib/axiom-firewall/Axiom.Desktop.Avalonia.Linux"));
+        Assert.True(ShieldProcessFilter.IsLinuxOwnPath("/usr/lib/axiom-firewall/axiomd/axiomd"));
         Assert.True(ShieldProcessFilter.IsLinuxOwnPath("/usr/libexec/axiom/axiomd"));
-        Assert.False(ShieldProcessFilter.IsLinuxOwnPath("/opt/axiom-other/agent"));
-        Assert.False(ShieldProcessFilter.IsLinuxOwnPath("/opt/Axiom/agent"));
+        Assert.False(ShieldProcessFilter.IsLinuxOwnPath("/usr/lib/axiom-firewall-other/agent"));
+        Assert.False(ShieldProcessFilter.IsLinuxOwnPath("/usr/lib/Axiom-Firewall/agent"));
+        Assert.False(ShieldProcessFilter.IsLinuxOwnPath("/opt/axiom/agent"));
         Assert.False(ShieldProcessFilter.IsLinuxOwnPath("/usr/bin/curl"));
 
         if (!OperatingSystem.IsLinux())
@@ -47,10 +48,10 @@ public sealed class ShieldProcessFilterTests
             return;
         }
 
-        Assert.True(ShieldProcessFilter.IsIgnored("/opt/axiom/axiomd/axiomd"));
+        Assert.True(ShieldProcessFilter.IsIgnored("/usr/lib/axiom-firewall/axiomd/axiomd"));
         Assert.True(ShieldProcessFilter.IsIgnored("/usr/libexec/axiom/axiomd"));
         Assert.False(ShieldProcessFilter.IsIgnored("/usr/bin/curl"));
-        Assert.False(ShieldProcessFilter.IsIgnored("/opt/axiom-other/agent"));
+        Assert.False(ShieldProcessFilter.IsIgnored("/usr/lib/axiom-firewall-other/agent"));
     }
 
     [Fact]

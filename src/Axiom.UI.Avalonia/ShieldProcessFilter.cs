@@ -132,14 +132,16 @@ internal static class ShieldProcessFilter
         OperatingSystem.IsMacOS() ? BundleRootOf(AppContext.BaseDirectory) : null;
 
     /// <summary>
-    /// Linux counterpart of the Program Files roots: the packaged bundle (desktop and its bundled
-    /// axiomd under /opt/axiom) and the root-owned daemon image the service stages into
-    /// /usr/libexec/axiom. Matched case-sensitively, as the file system is.
+    /// Linux counterpart of the Program Files roots: the package payload (desktop and its bundled
+    /// axiomd under /usr/lib/axiom-firewall, <see cref="Axiom.Presentation.LinuxElevation.PackagePrefix"/>)
+    /// and the root-owned daemon image the service stages into /usr/libexec/axiom
+    /// (<see cref="Axiom.Presentation.LinuxElevation.ImageDirectory"/>). Matched case-sensitively.
     /// </summary>
     internal static bool IsLinuxOwnPath(string path) =>
         LinuxOwnRoots.Any(root => path.StartsWith(root + "/", StringComparison.Ordinal));
 
-    private static readonly string[] LinuxOwnRoots = ["/opt/axiom", "/usr/libexec/axiom"];
+    private static readonly string[] LinuxOwnRoots =
+        [Axiom.Presentation.LinuxElevation.PackagePrefix, Axiom.Presentation.LinuxElevation.ImageDirectory];
 
     private static readonly string[] MacSystemRoots =
         ["/System", "/usr/libexec", "/usr/sbin", "/usr/bin", "/sbin", "/bin"];
