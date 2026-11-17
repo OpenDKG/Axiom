@@ -19,7 +19,7 @@ public sealed class AvaloniaPageTests
         Assert.Equal(12, shell.Pages.Count);
         Assert.Contains(shell.Pages, page => page.Title == "Agent Dashboard");
         Assert.Contains(shell.Pages, page => page.Title == "Network Dashboard");
-        Assert.Contains(shell.Pages, page => page.Title == "Privacy Overview");
+        Assert.Contains(shell.Pages, page => page.Title == "Privacy Dashboard");
         Assert.Contains(shell.Pages, page => page.Title == "Integrations");
         Assert.Contains(shell.Pages, page => page.Title == "Agent Protection");
         Assert.Contains(shell.Pages, page => page.Title == "Agent Activity");
@@ -37,7 +37,7 @@ public sealed class AvaloniaPageTests
             [
                 "Agent Dashboard",
                 "Network Dashboard",
-                "Privacy Overview",
+                "Privacy Dashboard",
                 "Agent Protection",
                 "Agent Activity",
                 "Agent Health",

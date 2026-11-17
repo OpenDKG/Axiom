@@ -1,3 +1,40 @@
+## What's in 1.1.0
+
+- **Mini mode stays inside its fields.** The Module Health strip, throughput and activity no longer overlap at the minimum window size: Mini content scrolls when the window is too short, and the chart is a compact 72 px.
+
+## What's in 1.0.0
+
+- **First 1.x release.** Privacy Overview renamed Privacy Dashboard; enforcement panel green/orange/red with one warning per level change; Trader Shield moved to Integrations; Mini Module Health strip and a throughput chart that shrinks with the window; threat sharing on with the Complete install consent (signed, redacted indicators only, never prompts/commands/paths/credentials/model content/session ids; help me help you).
+
+## What's in 0.106.0
+
+- **New titanium Axiom icon and lockup** replace the old artwork in the window/taskbar icon, title bar, Mini header, toasts, first-run dialog, WPF fallback resources and a regenerated multi-size `axiom.ico` for the desktop/setup shortcuts.
+- **Partner logos fill their plates.** OriginTrail 56, Blackbox 34, Umanitek 44 with height-only images and 6,4 padding, so the dark background follows the logo instead of framing empty space.
+
+## What's in 0.105.0
+
+- **New agent blocks raise one alert (FND-007 alert half).** Activity poll additions that are blocks produce at most one toast per five minutes with the accumulated count and a sample; startup history is a quiet baseline; the AlertCenter keeps it and Open goes to Agent Activity. Policy covered by tests.
+
+## What's in 0.104.0
+
+- **Apply a validated rule file (FND-008 complete).** After an import preview, Apply imported creates the rules through the write gate after one destructive confirmation that lists them; file GUIDs are not trusted (identity from app path + direction), conflicting actions refuse the whole import, duplicates collapse, failures are reported per rule.
+
+## What's in 0.103.0
+
+- **Partner logos readable.** Uniform stretch was fitting 3:1 source logos into short boxes, so they rendered ~84 px wide. OriginTrail 170x48, Blackbox 160x28, Umanitek 144x40 keep the card layout and render at their real widths.
+
+## What's in 0.102.0
+
+- **Export event history as JSON (FND-005).** The Events page gains Export JSON next to CSV: same fields, schema `axiom.network-events.v1`, UTC timestamps, 5,000-row limit with a truncation note. Read-only; bytes are still not stored.
+
+## What's in 0.101.0
+
+- **Axiom's own binaries are not prompted as outbound applications.** ShieldProcessFilter trusts the Axiom install roots (`%LOCALAPPDATA%\Programs\Axiom`, `%LOCALAPPDATA%\Axiom`, `%ProgramFiles%\Axiom`, x86) so the desktop, service, modules and their runtimes never land in the ask list; the wording now says trusted processes rather than only Microsoft-signed.
+
+## What's in 0.100.0
+
+- **Preview an imported rule file (FND-008, import half).** Network Control reads an exported `axiom.firewall-rules.v1` file, validates every entry with the write path's RuleSpecValidator, and reports valid/invalid counts and messages. Preview only: nothing is applied or changed; 4 MB / 1,000 rule caps. 0.99.0 stays reserved for the release candidate.
+
 ## What's in 0.98.0
 
 - **Export Axiom-owned firewall rules (FND-008, export half).** Network Control can write the owned rules to JSON (`axiom.firewall-rules.v1`) through the native save dialog: intent plus OS state, Axiom rules only, no secrets. Read-only; import and validation stay open.
