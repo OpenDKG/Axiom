@@ -1,3 +1,8 @@
+## What's in 0.106.0
+
+- **New titanium Axiom icon and lockup** replace the old artwork in the window/taskbar icon, title bar, Mini header, toasts, first-run dialog, WPF fallback resources and a regenerated multi-size `axiom.ico` for the desktop/setup shortcuts.
+- **Partner logos fill their plates.** OriginTrail 56, Blackbox 34, Umanitek 44 with height-only images and 6,4 padding, so the dark background follows the logo instead of framing empty space.
+
 ## What's in 0.105.0
 
 - **New agent blocks raise one alert (FND-007 alert half).** Activity poll additions that are blocks produce at most one toast per five minutes with the accumulated count and a sample; startup history is a quiet baseline; the AlertCenter keeps it and Open goes to Agent Activity. Policy covered by tests.

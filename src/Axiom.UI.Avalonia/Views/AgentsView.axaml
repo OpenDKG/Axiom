@@ -68,9 +68,9 @@
         <Border x:Name="DkgModuleCard" Grid.Column="0" Classes="card" Padding="14">
           <StackPanel Spacing="10">
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-              <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Center">
+              <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="6,4" VerticalAlignment="Center">
                 <Image Source="avares://Axiom.UI.Avalonia/Assets/origintrail-logo.png"
-                       Width="170" Height="48" Stretch="Uniform" />
+                       Height="56" Stretch="Uniform" />
               </Border>
               <controls:AxiomSelectableTextBlock Grid.Column="1" Text="origintrail.io" FontSize="10"
                          Foreground="{DynamicResource Axiom.TextMuted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
@@ -91,14 +91,14 @@
         <Border x:Name="BlackboxModuleCard" Grid.Column="2" Classes="card" Padding="14">
           <StackPanel Spacing="10">
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-              <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,6" VerticalAlignment="Center">
+              <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="6,4" VerticalAlignment="Center">
                 <Image Source="avares://Axiom.UI.Avalonia/Assets/blackbox-logo.png"
-                       Width="160" Height="28" Stretch="Uniform" />
+                       Height="34" Stretch="Uniform" />
               </Border>
-              <Border Grid.Column="1" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="8,5"
+              <Border Grid.Column="1" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="6,4"
                       HorizontalAlignment="Right" VerticalAlignment="Center">
                 <Image Source="avares://Axiom.UI.Avalonia/Assets/umanitek-logo.png"
-                       Width="144" Height="40" Stretch="Uniform"
+                       Height="44" Stretch="Uniform"
                        ToolTip.Tip="Umanitek" />
               </Border>
             </Grid>
