@@ -657,3 +657,122 @@ New tests for this round (red on `d7ec667`: 1 failed / 70, the omission test; gr
    unblock; NETWORK logon and a second local user denied at connect). Upstream changed the
    `enforcement.status` handler, so re-run the `enforcement.*` part on both trees. The Privacy Shield phase
    and restart persistence are not touched by this round.
+
+## R6.5 Windows results
+
+**Author-run on the project's Windows 11 VM, not GitHub CI.** Run on 2026-11-17.
+
+| | |
+|---|---|
+| Tree tested (S1a) | `7d4dc40de1bf69c898950b734c383138a0934c3d` (`4030f62` + the Windows lock-file commit; this doc commit on top changes no code) |
+| Baseline | `main` `da1987a1896275f0127eb8fe176c1a780471ebe9` (v1.1.0), pristine `git archive` |
+| VM | Windows 11 Enterprise Evaluation 10.0.26300.9974, QEMU/KVM, 3 GB RAM, 4 vCPU |
+| SDK | .NET SDK 10.0.403 win-x64 (`global.json`) |
+
+Each tree is a `git archive` expanded into an empty directory, restored with a new, empty
+`NUGET_PACKAGES`. The gate follows `main`'s `windows-ci.yml` step by step (Python step excluded: the VM has
+no Python). It ran from a scheduled task with Interactive logon as `axiom`.
+
+### Lock files
+
+`dotnet restore Axiom.sln --force-evaluate` on `4030f62` and on `da1987a`, with no lock file deleted.
+Each forced file was compared with the committed one as JSON, per TFM and package:
+
+| File | Forced (Windows) vs committed on S1a | Taken |
+|---|---|---|
+| `Axiom.Desktop.Avalonia.Windows`, `Axiom.Infrastructure.Windows`, `Axiom.Service`, `Axiom.Infrastructure.Windows.Tests`, `Axiom.Service.Tests` (the 5 provisional files of `d9ad0a2`) | identical | nothing to change |
+| `Axiom.Desktop` | adds the `axiom.service.hosting` project entry and the `Axiom.Service.Hosting` dependency of `axiom.infrastructure.windows`; in-repo project ranges `[0.98.0, )` → `[1.1.0, )` | yes, `7d4dc40` (LF, as in the repository) |
+| the other 16 files | in-repo project-range refresh only (0 to 3 entries per file), no package entry | no (pristine `main` shows the same refresh in 15 of its own 21 files under `--force-evaluate`) |
+
+No NuGet package entry changed in any file. The range refresh `[0.98.0, )` → `[1.1.0, )` that `Axiom.Desktop`
+carries also appears when you force-evaluate `main`'s own `Axiom.Desktop` lock file. The forced restore
+cannot write the Hosting entry without it.
+
+### Restore, build, packaging (`windows-ci.yml` steps)
+
+| Step | main `da1987a` | S1a `7d4dc40` |
+|---|---|---|
+| `restore Axiom.Portable.slnx --locked-mode` | exit 0 | exit 0 |
+| `restore Axiom.sln --locked-mode` | exit 0 | exit 0 |
+| per-project `--locked-mode` | 21 / 21 | 22 / 22 |
+| `build Axiom.sln -c Release --no-restore` | 0 warnings, 0 errors | 0 warnings, 0 errors |
+| `list package --vulnerable --include-transitive` | exit 0, none | exit 0, none |
+| legal files and `community/feed.json` | present, 1 entry | present, 1 entry |
+| `scripts\publish-setup.ps1` | exit 0, `Axiom.Setup.exe` 95,948,457 bytes | exit 0, `Axiom.Setup.exe` 95,973,141 bytes |
+| `Axiom.Setup.exe --silent` without `--accept-risk` | exit 2 | exit 2 |
+
+### Suites (`dotnet test Axiom.sln -c Release --no-build -m:1`, trx)
+
+| Suite | main passed / total | S1a passed / total | Failing names |
+|---|---|---|---|
+| Contracts | 169 / 169 | 169 / 169 | none |
+| Core | 184 / 184 | 184 / 184 | none |
+| Infrastructure.Windows | 86 / 86 | 153 / 153 | none; 67 new S1a results, all pass |
+| McpServer | 34 / 34 | 34 / 34 | none |
+| Persistence | 21 / 21 | 21 / 21 | none |
+| Presentation | 315 / 315 | 315 / 315 | none |
+| Service | 101 / 101 | 101 / 101 | none |
+| UI.Avalonia | 66 / 66 | 66 / 66 | none |
+| UI | 197 / 201 | 197 / 201 | identical: 4 `AgentHookScriptTests` (no Python on the VM) |
+| **Total** | 1174 / 1178, **0 skipped** | 1241 / 1245, **0 skipped** | identical |
+
+The failing set is the same on both trees, test by test. The CI Python step makes the 4
+`AgentHookScriptTests` pass on the runner. On the VM they fail on every tree. Outside them, the strict
+gate (`failed = 0`, `skipped = 0`) holds on both trees. `WindowsFirewallPolicyAdapterTests` was run 3
+more times per tree: 0 / 3 failures on each (the known COM flake did not show).
+
+### Service differential (access and `enforcement.*`)
+
+Same scripts as round 4 (`s10diff.ps1` phases `install`, `core`, `enf`, `authprobe8`). Before each build:
+the service absent, no `ProgramData`/`Program Files`/LocalSystem `Axiom` directory, 0 Axiom firewall
+rules. After each build: product uninstall and data roots removed. Install: single-file publish,
+`--install-service --allowed-sid <axiom>`. The installed exe has the same SHA-256 as the published one
+(`main` `A249BAEB…`, S1a `45FB3574…`).
+
+**67 checks per build: 60 identical after normalisation (ids, timestamps, uptime, GUIDs), 7 differ.**
+`publish_files` differs (S1a adds `Axiom.Service.Hosting.pdb`). The other 6 differ only in live traffic:
+`serviceHealth` at 60 s, 180 s and in two later reads (`connectionCount`/`processCount`), and two
+`snapshot` replies.
+
+(a) Access
+
+| Caller | main | S1a |
+|---|---|---|
+| `axiom`, install owner, Interactive | `protection.enable` `writeGateOpen:true`; `rule.apply` blocks `curl.exe` (1 rule, Outbound/Block, curl exit 7); `rule.verify` `presentInOs:true`, `effectiveAction:"block"`; `rule.remove` → 0 rules, curl HTTP 200; private reads (`snapshot`, `history.query`, `config.get`, `privacy.status`, `enforcement.*`) answered | identical |
+| SSH (NETWORK logon) | denied at connect, 10 / 10 (`UnauthorizedAccessException`) | identical |
+| second local user `tester` (password-backed task) | denied at connect, 10 / 10 | identical |
+
+The tester secret was copied into the guest only for that call. The script deleted it in `finally`, and a
+separate SSH call checked that it was gone (`TP_PRESENT=False`, `TP_RECHECK=False`, both builds).
+
+(b) `enforcement.*` (fixed `requestId` and `utcTime`)
+
+- **New in v1.1.0, the same on both trees:** the first `enforcement.status` writes
+  `C:\ProgramData\Axiom\enforcement-policy.json` (12,906 bytes; absent before the call, present after it).
+  Enforcement is then enabled: `revision:"1"`, `agentCount:11`, `ruleCount:88`,
+  `protectedResourceCount:8`. A valid `evaluate` (`readFile`) returns `decision:"audit"`,
+  `reasonCode:"ENF-NO-RULE-MONITOR"`, `receiptResult:"AUDIT_ONLY"`, `canEnforce:true`. That replaces round 4's
+  `ENF-DISABLED`.
+- Invalid requests: an unknown kind gives `ENF-INVALID-REQUEST`. `{}`, `null`, a string, no payload, a missing
+  kind, a bad time and a wrong field type give `invalid_request`. The same on both trees.
+- The 38 `enforcement.*` and gate-open block/unblock replies are identical on both trees apart from the
+  envelope `id`. Of those, 33 are byte-identical after that. The other 5 (`protection.enable`,
+  `rule.apply`/`verify`/`remove`, `rules.query`) differ only in timestamps and the `pending` ask list.
+  The receipt chain is byte-identical: 5 receipts with the gate closed, 6 with it open, the same
+  `eventId`s, first `integrityHash` `9fd3a02e6cd9e309b8e413f61028c1a6d5a7ad57e5f822a7c40f4268a836ac8c`,
+  and `chainValid:true`.
+
+### Host re-check of `7d4dc40` (Linux, SDK 10.0.403)
+
+`restore Axiom.Portable.slnx --locked-mode`: exit 0. `Axiom.sln --locked-mode`: exit 1, only from the
+host-side RID error that pristine `main` also has (NU1004, `linux-x64;win-x64` vs `win-x64` for
+`Axiom.Desktop` and `Axiom.Setup`; NU1102 `System.CodeDom` in the same log). The `Axiom.Service.Hosting`
+NU1004 for `Axiom.Desktop` is gone. Per project: 21 / 23, with the same two projects failing.
+`git diff --stat da1987a...7d4dc40`: 27 files, all S1a (the 26 of `4030f62` plus `src/Axiom.Desktop/packages.lock.json`).
+
+### Not run in this round
+
+- Windows PR CI (the branch is local; link after push).
+- Restart persistence, the robustness matrix and the Privacy Shield phase: not touched since round 5.
+- An enabled policy with rules that block (`ENF-DENY`); only the provisioned default policy ran.
+- The CI Python step (the VM has no Python).
