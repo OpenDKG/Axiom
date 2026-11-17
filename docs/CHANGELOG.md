@@ -1,3 +1,7 @@
+## What's in 0.96.0
+
+- **Setup tolerates inaccessible single-instance guards.** When both the global and session mutex exist with ACLs the account cannot open (two CI setup checks at once), setup continues without a guard instead of crashing; the consent gate is unchanged.
+
 ## What's in 0.95.0
 
 - **Release validation record and signing decision.** docs/validation/RELEASE_VALIDATION_2026-11-17.md records the 0.89-0.94 in-place upgrades, what was not run, the SignPath Authenticode decision, and the cross-platform status. The ILLink pin stays: removing it breaks locked restore across SDK patches for a cosmetic warning.
