@@ -1,3 +1,7 @@
+## What's in 0.93.0
+
+- **Setup survives an inaccessible single-instance guard.** If the global setup mutex exists with an ACL this account cannot open, the installer now uses a session-local guard and reports it, instead of crashing with an unhandled UnauthorizedAccessException (the main-push packaging check hit this on the shared runner).
+
 ## What's in 0.92.0
 
 - **Windows CI green again.** The Simple/Mini mode test assumed an empty local audit store; it now asserts that the blocked agent it adds reaches both views, so main push runs stop failing on runner state.
