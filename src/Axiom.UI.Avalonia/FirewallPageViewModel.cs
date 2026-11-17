@@ -397,6 +397,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     /// Windows (unchanged behaviour).
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShieldBadgeText))]
     private bool _protectionKnown = OperatingSystem.IsWindows();
 
     /// <summary>Marks the shield state unknown after the service stopped answering (no-op on Windows).</summary>
@@ -405,6 +406,10 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         if (!OperatingSystem.IsWindows())
         {
             ProtectionKnown = false;
+            WritesEnabled = false;
+            WritePathText = "unknown";
+            ShieldStatusText = "Protection status unknown: the local service did not answer.";
+            MarkFilterStateUnknown();
         }
     }
 
@@ -451,7 +456,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [ObservableProperty]
     private string _agentLockdownHintText = "No agent executable is connected right now.";
 
-    public string ShieldBadgeText => ShieldEnabled ? "ON" : "OFF";
+    public string ShieldBadgeText => !ProtectionKnown ? "UNKNOWN" : ShieldEnabled ? "ON" : "OFF";
 
     /// <summary>
     /// The shield's protection level for every surface (<see cref="ShieldProtection"/>): unknown
@@ -1693,5 +1698,28 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// Off Windows the page body follows the same shield model as the footer lamp: once the
+    /// daemon stops answering, the filter/enforcement lines (nft read-back, BPF coverage, macOS
+    /// filter acknowledgement) and every "verified" are unknown, not the last answer. They are read
+    /// again on the next enforcement re-read after the service answers (every
+    /// <see cref="EnforcementRefreshInterval"/>); until then the shield is at most Degraded.
+    /// Windows Firewall reports no filter enforcement and keeps its behaviour.
+    /// </summary>
+    private void MarkFilterStateUnknown()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Enforcement = FilterEnforcementSummary.None;
+        CapabilityStatusText = "Unknown";
+        CapabilityDetail = "The local service did not answer, so the filter state is unknown. It is read again when the service answers.";
+        Pending.Clear();
+        PendingCount = 0;
+        HasPending = false;
     }
 }
