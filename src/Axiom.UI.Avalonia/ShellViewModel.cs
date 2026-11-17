@@ -640,11 +640,16 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             {
                 Firewall.UpdateProtectionStatus(_protection);
             }
-            else if (_protection is not null)
+            else if (_protection is not null && !OperatingSystem.IsWindows())
             {
-                // The status bar and Overview show the filter's enforcement state on every page.
-                Firewall.KeepEnforcementCurrent(DateTimeOffset.UtcNow);
+                // The status bar, Overview, Home and Mini show the daemon's shield state and the
+                // filter's enforcement state on every page, not the answer from the last visit to
+                // Network Control (UpdateProtectionStatus also refreshes enforcement when stale).
+                Firewall.UpdateProtectionStatus(_protection);
             }
+
+            // Re-read the lamp after the shield/enforcement state was applied above.
+            RefreshStatus();
         }
         catch (ServiceUnavailableException)
         {
