@@ -55,7 +55,7 @@ internal static class ShieldProcessFilter
             IsUnder(path, Path.Combine(ProgramFilesX86, "Microsoft")) ||
             IsUnder(path, Path.Combine(ProgramFiles, "WindowsApps")) ||
             IsUnder(path, Path.Combine(ProgramData, "Microsoft")) ||
-            (OperatingSystem.IsMacOS() && (IsMacSystemPath(path) || IsInOwnBundle(path, OwnBundleRoot))))
+            (OperatingSystem.IsMacOS() && (IsMacSystemPath(path) || IsMacOwnPath(path, OwnBundleRoot))))
         {
             return true;
         }
@@ -130,6 +130,42 @@ internal static class ShieldProcessFilter
 
     private static readonly string? OwnBundleRoot =
         OperatingSystem.IsMacOS() ? BundleRootOf(AppContext.BaseDirectory) : null;
+
+    /// <summary>
+    /// macOS counterpart of the Program Files roots: the running bundle, the installed
+    /// <c>/Applications/Axiom.app</c>, the root daemon copy launchd runs from
+    /// <c>/Library/PrivilegedHelperTools/com.axiom.service</c> (PrivilegedHelperLayout.HelperDirectory
+    /// in Axiom.Infrastructure.MacOS, which this assembly does not reference; the label is
+    /// <see cref="Axiom.Presentation.MacBundleLayout.DaemonLabel"/>) and the activated content-filter
+    /// system extension under /Library/SystemExtensions. Matched case-sensitively.
+    /// </summary>
+    internal static bool IsMacOwnPath(string path, string? runningBundleRoot) =>
+        IsInOwnBundle(path, runningBundleRoot) ||
+        MacOwnRoots.Any(root => path.StartsWith(root + "/", StringComparison.Ordinal)) ||
+        IsMacFilterExtension(path);
+
+    internal const string MacHelperDirectory =
+        "/Library/PrivilegedHelperTools/" + Axiom.Presentation.MacBundleLayout.DaemonLabel;
+
+    internal const string MacInstalledBundle = "/Applications/Axiom.app";
+
+    /// <summary>Bundle of the AxiomFilter system extension (scripts/macos/package-app.sh EXT_ID).</summary>
+    internal const string MacFilterExtensionBundle = "com.axiom.firewall.filter.systemextension";
+
+    private static readonly string[] MacOwnRoots = [MacHelperDirectory, MacInstalledBundle];
+
+    /// <summary>/Library/SystemExtensions/&lt;UUID&gt;/com.axiom.firewall.filter.systemextension/...</summary>
+    private static bool IsMacFilterExtension(string path)
+    {
+        const string root = "/Library/SystemExtensions/";
+        if (!path.StartsWith(root, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var parts = path[root.Length..].Split('/');
+        return parts.Length > 2 && string.Equals(parts[1], MacFilterExtensionBundle, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Linux counterpart of the Program Files roots: the packaged bundle (desktop and its bundled
