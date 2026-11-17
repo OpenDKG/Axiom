@@ -132,15 +132,29 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
             ? "AI Agent Guard is active and monitoring coding-assistant sessions locally."
             : "AI Agent modules are optional — switch to Advanced mode to inspect or configure them.";
 
+    /// <summary>
+    /// Off Windows no Blackbox host hook is proven yet, so agent protection is not verified: the
+    /// tile never says READY there, and it never reads the firewall or BPF state (network
+    /// enforcement is not agent protection). Only a verified host/OS deny reported by the
+    /// enforcement controller may say ACTIVE. Windows keeps its wording.
+    /// </summary>
+    private static bool AgentGuardUnproven => !OperatingSystem.IsWindows();
+
     public string AgentGuardBadgeText =>
-        Agents.Security.BlackboxConnected || Agents.Enforcement.CanClaimVerifiedBlocking
+        AgentGuardUnproven
+            ? Agents.Enforcement.CanClaimVerifiedBlocking ? "ACTIVE" : "NOT VERIFIED"
+            : Agents.Security.BlackboxConnected || Agents.Enforcement.CanClaimVerifiedBlocking
             ? "ACTIVE"
             : Agents.Security.ProtectedAgents.Count > 0
                 ? "DETECTED"
                 : "READY";
 
     public string AgentGuardStatusText =>
-        Agents.Security.BlackboxConnected
+        AgentGuardUnproven && !Agents.Enforcement.CanClaimVerifiedBlocking
+            ? Agents.Security.BlackboxConnected
+                ? $"Blackbox guard connected · {Agents.Security.ProtectedAgents.Count} AI tool(s) watched · blocking is not verified on {PlatformText.OsName}"
+                : $"Unsupported on {PlatformText.OsName} for now: Blackbox host hooks are not verified here, so AI agents are not protected"
+            : Agents.Security.BlackboxConnected
             ? $"{Agents.Security.ProtectedAgents.Count} AI tool(s) watched · {Agents.BlockedFindingCount} blocked threat(s)"
             : Agents.Security.ProtectedAgents.Count > 0
                 ? $"{Agents.Security.ProtectedAgents.Count} local AI tool(s) found · {Agents.BlockedFindingCount} blocked"
