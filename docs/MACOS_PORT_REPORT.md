@@ -372,3 +372,70 @@ Builds: `Axiom.Portable.slnx`, `Axiom.Service` (`-p:EnableWindowsTargeting=true`
 
 Not tested in this round: the installed service/daemon (no runtime or service differential), Privacy Shield on
 Windows, a second-user IPC run, packaging, anything on macOS itself (no macOS VM run at this head), including the status-bar refresh fix `e1bb085` (unit test only).
+
+## Upstream `main` `3dde6b6` (v0.97.0) merged (2026-11-17, merge `ba68e2c`)
+
+Pinned `main` = `3dde6b64c0010c46430351197ef576c3f1f8cc3a` (v0.97.0), 68 commits after the previous base `e904bf8`
+(v0.68.0). One textual conflict, `src/Axiom.UI.Avalonia/MainWindow.axaml`: upstream's new header (Mini button, update
+button after the bell, website link) is taken as is; the port keeps `x:Name="MinimizeButton"`, which the macOS
+native-window-button code uses. The resolved file is identical to the Linux branch's resolution of the same range.
+
+Tested code head: `32722a3`. Commits after the merge:
+
+| Commit | Change | Origin |
+|---|---|---|
+| `2856037` | `EnforcementPolicyProvisioner` defaults and `EnforcementController` provisioning stay Windows-only (off Windows the defaults resolved to `/usr/share` and the caller's real home) | cherry-pick of Linux `645ca97` |
+| `ce05ada` | host-shaped profile path in the default policy test | cherry-pick of Linux `9067a6c` |
+| `ad56477` | vector update icon off Windows (upstream's button uses a Segoe MDL2 glyph) | cherry-pick of Linux `8b480da` |
+| `50fb544` | drop that commit's call to `FitToWorkingArea()`, a Linux-branch-only helper that does not build here | macOS |
+| `0c2fa6f` | header lamp truthful off Windows: neutral `UNKNOWN` lamp and "Protection: unknown" when the daemon does not answer (was: stale green, then red "Protection: off"); amber lamp plus "blocks not verified" while the shield is on but the filter has not verified the rules; Home `STATUS UNKNOWN`, Mini `Shield: unknown`. `ProtectionKnown` is always true on Windows and without a service, so Windows is unchanged | same intent as Linux `fe2bc08`, re-implemented (the macOS branch has no `ProtectionKnown` state) |
+| `32722a3` | off Windows the protection probe feeds the shield state to Home, Mini and the lamp on every page, not only while Network Control is open | macOS (found by the new `ProtectionLampTests`) |
+
+Port review of the range: no new IPC commands; no skip attributes in tests; every Windows `dotnet publish` of
+`Axiom.Service` still passes `-f net10.0-windows`; the merge changed no lock file. Upstream's DeepSeek DSH
+provisioning (`Axiom.Presentation/DeepSeekProtection.cs`) is referenced only by the Windows WPF UI. No macOS code
+emits `OS_DENY_VERIFIED`. `BlackboxLocalState` still has a read-only `~/.hermes/blackbox` candidate; that predates
+this range and is unchanged.
+
+### This host (Ubuntu, Release, `HOME`/`XDG_*` redirected to a scratch dir, `~/.hermes/config.yaml` SHA-256 unchanged)
+
+Locked restore (`--locked-mode`): `Axiom.Portable.slnx`, `Axiom.Service`, the macOS desktop project and both macOS
+test projects exit 0 (pristine `main`: the solution and `Axiom.Service` exit 0). Windows-only lock sections cannot be
+checked on this host. Builds (`-p:EnableWindowsTargeting=true`): 0 warnings / 0 errors on both trees.
+
+| Suite | `main` passed/total | branch passed/total (skipped) | failing only on branch | failing only on `main` |
+|---|---|---|---|---|
+| Axiom.Contracts.Tests | 169/170 | 180/180 (0) | none | `EnforcementPolicyProvisionerTests.Default_policy_is_an_enabled_block_policy_for_every_harness` (Windows path shape; fixed by `ce05ada`) |
+| Axiom.Core.Tests | 170/184 | 170/184 (0) | none | none |
+| Axiom.Desktop.Avalonia.MacOS.Tests | not in tree | 35/35 (0) | none | none |
+| Axiom.Infrastructure.MacOS.Tests | not in tree | 249/249 (0) | none | none |
+| Axiom.McpServer.Tests | 34/34 | 34/34 (0) | none | none |
+| Axiom.Persistence.Tests | 21/21 | 21/21 (0) | none | none |
+| Axiom.Presentation.Tests | 285/292 | 308/315 (0) | none | none |
+| Axiom.Service.Tests | 86/101 | 106/121 (0) | `FirewallRuleCoordinatorTests.Apply_pending_is_stored_as_pending_not_applied` (port test, same as at the previous base) | `PrivacyShieldTests.Failed_reconfiguration_keeps_previous_resolver_and_persisted_settings` (same as at the previous base) |
+| Axiom.UI.Avalonia.Tests | 64/64 | 84/84 (0) | none | none |
+
+The other Core/Presentation/Service failures are Windows-only tests that fail identically on `main` on this host.
+
+### macOS VM (author-run; Intel macOS 15.8.3 under OSX-KVM, SIP disabled, ad hoc signing)
+
+Bundle 0.97.0 build 12 published on Linux, filter built and signed in the VM (`deploy-to-vm.sh`).
+
+| Check | Result | Evidence |
+|---|---|---|
+| Active extension | PASS: `com.axiom.firewall.filter (0.97.0/12) [activated enabled]`; build 11 `[terminated waiting to uninstall on reboot]` | `systemextensionsctl list` |
+| Daemon under launchd + `--doctor` (root) | PASS: `state = running`, 24 checks PASS, exit 0 | `axiomd --doctor` |
+| Block through the filter | PASS: `rule.apply` block `/usr/bin/curl` -> curl rc 7 while `/usr/bin/python3` reaches the same `https://example.com` (200); `rule.verify` `enforcementVerified=true`, `effectiveAction=block` | IPC + curl/python |
+| Survives `launchctl kickstart -k` | PASS: new generation acked, curl still rc 7, python 200, `rule.verify` verified | same |
+| Unblock | PASS: `rule.remove` -> curl 200 | same |
+| Tampered rules file (`chmod 664`) | PASS: `degraded`, filter `pending`, `rule.verify` `enforcementVerified=false`; `chmod 644` -> verified again | `sec-c-reject.py` |
+| Privacy Shield on/off | PASS: on -> Ethernet DNS `127.0.0.1`, `doubleclick.net` gets no answer, `example.com` resolves; off -> "There aren't any DNS Servers set on Ethernet.", `example.com` resolves | `networksetup`, `dig` |
+| Desktop app + new header | PASS: Mini/Simple/Advanced switch, bell; lamp green `SHIELD ON`, "blocks verified 00:00" | screenshot |
+| Status-bar refresh `e1bb085` live | PASS: on Agent Dashboard, `rule.apply` over IPC -> "blocks verified 00:03" and "2 rule(s)" within 12 s; `chmod 664` -> amber lamp, "blocks not verified" | screenshots |
+| Daemon stopped (`launchctl bootout`) | PASS: grey `UNKNOWN` lamp, "Protection: unknown · the local service did not answer", "IPC: service offline"; after `bootstrap` green again | screenshots |
+| Privacy Overview, Mini | PASS: resolver page renders (DISABLED after the test; `dig` listed under blocked-by-application); Mini shows `Shield: ON` / `Privacy: OFF` | screenshots |
+
+Not tested in this round: second-user IPC refusal; the Windows VM (locked restore of Windows lock sections, Windows
+suites, Privacy Shield on Windows); the update button in its visible state (no update was offered); Developer ID
+signing, notarization, SIP on and Apple silicon. The Agent Dashboard subtitle "Read-only inventory. No driver, no
+firewall write" is upstream's static page text, not a protection status.
