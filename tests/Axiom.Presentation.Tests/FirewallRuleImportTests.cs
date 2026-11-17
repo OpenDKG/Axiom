@@ -13,7 +13,9 @@ public sealed class FirewallRuleImportTests
     [Fact]
     public void Exported_rules_round_trip_through_the_import_preview()
     {
-        var rule = MakeRule(@"C:\Apps\agent.exe", FirewallAction.Block, "443");
+        // Native path per OS: Windows-style rule paths are rejected off Windows (#441).
+        var path = OperatingSystem.IsWindows() ? @"C:\Apps\agent.exe" : "/opt/apps/agent";
+        var rule = MakeRule(path, FirewallAction.Block, "443");
         var json = FirewallRuleExport.ToJson([rule], DateTimeOffset.UnixEpoch);
 
         var result = FirewallRuleImport.Preview(json);
@@ -41,7 +43,7 @@ public sealed class FirewallRuleImportTests
     [Fact]
     public void Relative_application_path_is_reported_as_an_invalid_rule()
     {
-        var rule = MakeRule(@"relative\agent.exe", FirewallAction.Block, "443");
+        var rule = MakeRule(OperatingSystem.IsWindows() ? @"relative\agent.exe" : "relative/agent", FirewallAction.Block, "443");
         var json = FirewallRuleExport.ToJson([rule], DateTimeOffset.UnixEpoch);
 
         var result = FirewallRuleImport.Preview(json);
@@ -51,6 +53,26 @@ public sealed class FirewallRuleImportTests
         var error = Assert.Single(result.RuleErrors);
         Assert.Equal(0, error.Index);
         Assert.Contains("absolute", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Windows_style_application_path_is_an_invalid_rule_off_windows()
+    {
+        var rule = MakeRule(@"C:\Apps\agent.exe", FirewallAction.Block, "443");
+        var json = FirewallRuleExport.ToJson([rule], DateTimeOffset.UnixEpoch);
+
+        var result = FirewallRuleImport.Preview(json);
+
+        Assert.True(result.SchemaValid);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Single(result.Rules);
+            return;
+        }
+
+        Assert.Empty(result.Rules);
+        var error = Assert.Single(result.RuleErrors);
+        Assert.Contains("Windows-style", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
