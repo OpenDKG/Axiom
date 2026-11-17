@@ -43,6 +43,25 @@ public sealed class ThreatSharingConsentTests : IDisposable
     }
 
     [Fact]
+    public void Install_consent_is_honoured_only_where_the_installer_records_it()
+    {
+        Assert.Equal(OperatingSystem.IsWindows(), ThreatSharingConsent.IsInstallConsentSupported);
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // Off Windows the default profile is never read (no file is created here: the real
+        // profile directory must not be touched by tests), so sharing cannot turn on by itself.
+        Assert.False(ThreatSharingConsent.HasConsent());
+
+        // An explicit path (tests, a future installer) still works on every platform.
+        var profile = Path.Combine(_directory, "install-profile.json");
+        File.WriteAllText(profile, """{"profile":"complete","threatSharingConsent":true}""");
+        Assert.True(ThreatSharingConsent.HasConsent(profile));
+    }
+
+    [Fact]
     public void Applied_marker_round_trips()
     {
         var marker = Path.Combine(_directory, "applied");
