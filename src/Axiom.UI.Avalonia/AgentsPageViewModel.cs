@@ -160,6 +160,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     [ObservableProperty]
     private EnforcementSurfaceState _enforcement = EnforcementSurfaceState.Current;
 
+    private bool _enforcementReported;
+
+    private bool _threatSharingConsentChecked;
+
     public IReadOnlyList<string> ActivityFilters { get; } =
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
 
@@ -1081,6 +1085,55 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         var output = await outputTask.ConfigureAwait(true);
         _ = await errorTask.ConfigureAwait(true);
         return JsonNode.Parse(output) as JsonObject;
+    }
+
+    /// <summary>
+    /// The Complete installation records consent for signed, redacted threat sharing. Apply it once,
+    /// with an explanation, and never override a later manual off switch.
+    /// </summary>
+    private async Task EnableThreatSharingFromInstallConsentAsync()
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await _client
+                .SaveSettingsAsync(new JsonObject { ["report"] = true }, CancellationToken.None)
+                .ConfigureAwait(true);
+            if (!result.Ok)
+            {
+                ThreatSharingStatusText = "off - install consent could not be applied";
+                return;
+            }
+
+            var settings = result.Settings ??
+                           await _client.GetSettingsAsync(CancellationToken.None).ConfigureAwait(true);
+            if (!ReadBool(settings, "report", false))
+            {
+                ThreatSharingStatusText = "off - Blackbox rejected the install consent";
+                return;
+            }
+
+            ThreatSharingEnabled = true;
+            ThreatSharingStatusText = "on - Complete install consent";
+            ThreatSharingConsent.MarkApplied();
+            AxiomAlertService.Show(
+                "Threat sharing enabled",
+                "The Complete installation consent turns on signed, redacted threat indicators only. " +
+                "Prompts, commands, file paths, credentials, model content and session ids are never sent. " +
+                "Sharing strengthens the verified graph for every Axiom install (help me help you). " +
+                "Turn it off on Agent Protection at any time.",
+                page: typeof(AgentsPageViewModel));
+        }
+        catch (Exception exception) when (exception is
+                     ServiceUnavailableException or HttpRequestException or TaskCanceledException or
+                     InvalidDataException or System.Text.Json.JsonException)
+        {
+            ThreatSharingStatusText = "off - install consent pending (" + exception.Message + ")";
+        }
     }
 
     [RelayCommand]
@@ -2046,6 +2099,15 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     {
         var mode = ReadString(settings, "mode") ?? "unknown";
         var report = ReadBool(settings, "report", false);
+
+        if (!report && !_threatSharingConsentChecked)
+        {
+            _threatSharingConsentChecked = true;
+            if (ThreatSharingConsent.HasConsent() && !ThreatSharingConsent.WasApplied())
+            {
+                _ = EnableThreatSharingFromInstallConsentAsync();
+            }
+        }
         BlackboxHealthText = $"Dashboard online · mode {mode} · community sharing {(report ? "ON" : "off")}";
         ThreatSharingEnabled = report;
         ThreatSharingStatusText = report ? "on · signed, redacted" : "off · opt in";
@@ -2205,12 +2267,29 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         var localHookDenies = HookEvidence.Count(entry =>
             string.Equals(entry.EffectiveChannel, "HOST_DENY_SENT", StringComparison.Ordinal));
 
-        Enforcement = EnforcementSurfaceState.FromReceiptsAndStatus(
+        var previousLevel = Enforcement.Level;
+        var updated = EnforcementSurfaceState.FromReceiptsAndStatus(
             status,
             receipts,
             guardAvailable,
             normalizedMode,
             localHookDenies);
+        Enforcement = updated;
+
+        if (!_enforcementReported || updated.Level != previousLevel)
+        {
+            _enforcementReported = true;
+            if (updated.Level != EnforcementLevel.Protected)
+            {
+                AxiomAlertService.Show(
+                    "Axiom protection needs attention",
+                    (updated.Level == EnforcementLevel.Unprotected
+                        ? "Enforcement is NOT protecting this host. "
+                        : "Enforcement is degraded. ") + updated.Summary +
+                    " Open Agent Protection to review.",
+                    page: typeof(AgentsPageViewModel));
+            }
+        }
     }
 
     partial void OnSelectedActivityChanged(BlackboxAuditEntry? value)
