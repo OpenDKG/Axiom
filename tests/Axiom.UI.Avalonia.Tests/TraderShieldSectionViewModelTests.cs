@@ -147,8 +147,8 @@ public sealed class TraderShieldSectionViewModelTests
 
             try
             {
-                Assert.Empty(securityView.GetVisualDescendants().OfType<TraderShieldSectionView>());
-                Assert.Single(agentsView.GetVisualDescendants().OfType<TraderShieldSectionView>());
+                Assert.Single(securityView.GetVisualDescendants().OfType<TraderShieldSectionView>());
+                Assert.Empty(agentsView.GetVisualDescendants().OfType<TraderShieldSectionView>());
             }
             finally
             {
