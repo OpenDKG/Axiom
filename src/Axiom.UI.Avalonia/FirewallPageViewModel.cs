@@ -189,6 +189,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
     public ObservableCollection<FirewallRuleRow> Rules { get; } = [];
 
+    private readonly List<ManagedRule> _ownedRules = [];
+
     public ObservableCollection<PendingAppRow> Pending { get; } = [];
 
     public ObservableCollection<ShieldDecisionRow> Decisions { get; } = [];
@@ -1297,6 +1299,40 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         NewRuleAddressesText = DefaultAddressesText;
     }
 
+    /// <summary>
+    /// Writes the Axiom-owned rules to a user-chosen JSON file. Read-only export for review or
+    /// migration (FND-008); it never applies, changes or imports rules.
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportRulesAsync()
+    {
+        if (_ownedRules.Count == 0)
+        {
+            StatusText = "No Axiom-owned rules to export.";
+            return;
+        }
+
+        var path = await _ui
+            .PickSaveFileAsync("axiom-firewall-rules.json", "json", "JSON", CancellationToken.None)
+            .ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            await File
+                .WriteAllTextAsync(path, FirewallRuleExport.ToJson(_ownedRules, DateTimeOffset.UtcNow))
+                .ConfigureAwait(true);
+            StatusText = $"Exported {_ownedRules.Count} Axiom-owned rule(s) to {Path.GetFileName(path)}.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            StatusText = "Could not write the export file: " + exception.Message;
+        }
+    }
+
     [RelayCommand]
     private async Task RefreshAsync()
     {
@@ -1314,9 +1350,11 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
                 .ConfigureAwait(true);
 
             Rules.Clear();
+            _ownedRules.Clear();
             foreach (var rule in snapshot.Rules)
             {
                 Rules.Add(new FirewallRuleRow(rule));
+                _ownedRules.Add(rule);
             }
 
             CapabilityStatusText = snapshot.Capability.Status switch

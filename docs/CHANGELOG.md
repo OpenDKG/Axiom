@@ -1,3 +1,7 @@
+## What's in 0.98.0
+
+- **Export Axiom-owned firewall rules (FND-008, export half).** Network Control can write the owned rules to JSON (`axiom.firewall-rules.v1`) through the native save dialog: intent plus OS state, Axiom rules only, no secrets. Read-only; import and validation stay open.
+
 ## What's in 0.97.0
 
 - **OS enforcement canary actually validates now.** The live VM harness no longer uses loopback (Windows Firewall exempts it) or a renamed PowerShell copy. It blocks a real program by path to a remote endpoint, proves the deny, rolls the rule back and proves connectivity returns. Live result: OS_DENY_VERIFIED with zero leftover rules.
