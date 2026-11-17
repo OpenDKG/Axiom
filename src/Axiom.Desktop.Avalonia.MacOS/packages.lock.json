@@ -213,17 +213,24 @@
       "axiom.contracts": {
         "type": "Project"
       },
+      "axiom.core": {
+        "type": "Project",
+        "dependencies": {
+          "Axiom.Contracts": "[1.1.0, )"
+        }
+      },
       "axiom.persistence": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.73.0, )",
+          "Axiom.Contracts": "[1.1.0, )",
           "Microsoft.Data.Sqlite": "[10.0.14, )"
         }
       },
       "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.73.0, )",
+          "Axiom.Contracts": "[1.1.0, )",
+          "Axiom.Core": "[1.1.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
@@ -232,8 +239,8 @@
         "dependencies": {
           "Avalonia": "[12.1.5, )",
           "Avalonia.Themes.Fluent": "[12.1.5, )",
-          "Axiom.Contracts": "[0.73.0, )",
-          "Axiom.Presentation": "[0.73.0, )"
+          "Axiom.Contracts": "[1.1.0, )",
+          "Axiom.Presentation": "[1.1.0, )"
         }
       },
       "Avalonia": {

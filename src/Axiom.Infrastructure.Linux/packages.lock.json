@@ -14,22 +14,22 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.73.0, )"
+          "Axiom.Contracts": "[1.1.0, )"
         }
       },
       "axiom.infrastructure.unix": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.73.0, )",
-          "Axiom.Core": "[0.73.0, )",
-          "Axiom.Service.Hosting": "[0.73.0, )"
+          "Axiom.Contracts": "[1.1.0, )",
+          "Axiom.Core": "[1.1.0, )",
+          "Axiom.Service.Hosting": "[1.1.0, )"
         }
       },
       "axiom.service.hosting": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.73.0, )",
-          "Axiom.Core": "[0.73.0, )"
+          "Axiom.Contracts": "[1.1.0, )",
+          "Axiom.Core": "[1.1.0, )"
         }
       }
     }
