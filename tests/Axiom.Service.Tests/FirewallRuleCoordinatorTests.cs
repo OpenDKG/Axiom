@@ -145,7 +145,8 @@ public sealed class FirewallRuleCoordinatorTests : IDisposable
     private static RuleSpec NewSpec() => new()
     {
         ManagedRuleId = Guid.NewGuid(),
-        AppPath = @"C:\Program Files\Example\example.exe",
+        // Native path per OS: Windows-style rule paths are rejected off Windows (#441).
+        AppPath = OperatingSystem.IsWindows() ? @"C:\Program Files\Example\example.exe" : "/usr/lib/example/example",
         Direction = FirewallDirection.Outbound,
         Action = FirewallAction.Block,
         Profiles = FirewallProfile.All,
