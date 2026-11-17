@@ -25,6 +25,9 @@ internal static class ShieldProcessFilter
     private static readonly string ProgramData =
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
 
+    private static readonly string LocalAppData =
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
     private static readonly ConcurrentDictionary<string, bool> Cache =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -50,6 +53,16 @@ internal static class ShieldProcessFilter
             IsUnder(path, Path.Combine(ProgramFilesX86, "Microsoft")) ||
             IsUnder(path, Path.Combine(ProgramFiles, "WindowsApps")) ||
             IsUnder(path, Path.Combine(ProgramData, "Microsoft")))
+        {
+            return true;
+        }
+
+        // Axiom must never ask the user to block Axiom itself: the desktop, the service, the
+        // optional modules and their runtimes live under these roots.
+        if (IsUnder(path, Path.Combine(LocalAppData, "Programs", "Axiom")) ||
+            IsUnder(path, Path.Combine(LocalAppData, "Axiom")) ||
+            IsUnder(path, Path.Combine(ProgramFiles, "Axiom")) ||
+            IsUnder(path, Path.Combine(ProgramFilesX86, "Axiom")))
         {
             return true;
         }

@@ -1,3 +1,7 @@
+## What's in 0.101.0
+
+- **Axiom's own binaries are not prompted as outbound applications.** ShieldProcessFilter trusts the Axiom install roots (`%LOCALAPPDATA%\Programs\Axiom`, `%LOCALAPPDATA%\Axiom`, `%ProgramFiles%\Axiom`, x86) so the desktop, service, modules and their runtimes never land in the ask list; the wording now says trusted processes rather than only Microsoft-signed.
+
 ## What's in 0.100.0
 
 - **Preview an imported rule file (FND-008, import half).** Network Control reads an exported `axiom.firewall-rules.v1` file, validates every entry with the write path's RuleSpecValidator, and reports valid/invalid counts and messages. Preview only: nothing is applied or changed; 4 MB / 1,000 rule caps. 0.99.0 stays reserved for the release candidate.
