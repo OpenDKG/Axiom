@@ -440,6 +440,27 @@ public sealed class BpfEngine : IEnforcementLayer, IDisposable
                 probe = new BpfProbeResult(false, "bpftool could not be run: " + exception.Message, null);
             }
 
+            if (!probe.Usable && (Directory.Exists(_paths.PinDirectory) || Directory.Exists(StagingDirectory)))
+            {
+                // A previous daemon's set may still be attached (it is handed over on restart, §12) and
+                // enforcing verdicts of rules removed since. Without a usable bpftool it can neither be
+                // listed nor replaced: report it as unknown/stale (degraded) and retry on the watch tick,
+                // never as a plain "inactive" layer.
+                lock (_stateGate)
+                {
+                    _attachmentUnknown = true;
+                    _staleProgramsAttached = true;
+                    _neutralised = false;
+                    _applied.Clear();
+                    _generation = -1;
+                }
+
+                var reason = $"unknown: the BPF layer cannot start ({probe.Reason}) and pins of a previous daemon remain at {_paths.PinDirectory}; its programs may still be attached and enforcing verdicts of removed rules (removals pending until the layer starts)";
+                Settle(false, reason);
+                Log("BPF layer " + reason + ". Retrying on the next watch tick.");
+                return;
+            }
+
             if (!probe.Usable)
             {
                 Settle(false, "inactive: " + probe.Reason);

@@ -322,6 +322,41 @@ public sealed class BpfHandoverTests
     }
 
     [Fact]
+    public async Task Bpftool_unavailable_at_start_with_a_previous_set_pinned_is_unknown_and_retried_not_inactive()
+    {
+        using var h = await BlockedCurlAsync();
+
+        // Rule removed while the daemon was down (its BPF cleanup never ran), and bpftool is broken at start.
+        using (var editor = new NextDaemon(h))
+        {
+            editor.Adapter.VerdictLayer = null;
+            Assert.True((await editor.Adapter.RemoveOwnedRuleAsync(RuleA, CancellationToken.None)).Success);
+        }
+
+        h.Bpftool.FailPrefixes.Add("bpftool version");
+        using var next = new NextDaemon(h);
+        await next.Adapter.PublishAsync(CancellationToken.None);
+        var supervisor = Supervise(h, next.Adapter, next.Engine);
+        await supervisor.StartLayerAsync(CancellationToken.None);
+
+        // The previous set may still enforce stale verdicts: not "inactive", but unknown/stale, degraded.
+        Assert.False(next.Engine.Active);
+        Assert.True(next.Engine.AttachmentUnknown);
+        Assert.True(next.Engine.StaleProgramsAttached);
+        Assert.StartsWith("unknown", next.Engine.Status, StringComparison.Ordinal);
+        var report = await next.Adapter.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.Equal(FilterEnforcementState.Degraded, report.FilterEnforcement!.State);
+        Assert.True(h.Bpftool.Blocks(CurlKey)); // the stale verdict, now reported
+
+        // bpftool is back: the watch tick retries and the hand-over retires the stale set.
+        h.Bpftool.FailPrefixes.Clear();
+        await supervisor.WatchOnceAsync(CancellationToken.None);
+        Assert.True(next.Engine.Active);
+        Assert.False(h.Bpftool.Blocks(CurlKey));
+        Assert.Equal(4, AxiomAttachments(h.Bpftool));
+    }
+
+    [Fact]
     public async Task Unreadable_attachment_state_at_start_loads_nothing_detaches_nothing_and_keeps_the_pins()
     {
         using var h = await BlockedCurlAsync();
