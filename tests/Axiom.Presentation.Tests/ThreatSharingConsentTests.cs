@@ -51,4 +51,17 @@ public sealed class ThreatSharingConsentTests : IDisposable
         ThreatSharingConsent.MarkApplied(marker);
         Assert.True(ThreatSharingConsent.WasApplied(marker));
     }
+
+    [Fact]
+    public void Default_install_profile_is_never_read_off_windows()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // The Windows installer writes the default profile; covered above with explicit paths.
+        }
+
+        // No installer records consent off Windows: without an explicit path the answer is always
+        // false, so the app never enables threat sharing without the user's own toggle.
+        Assert.False(ThreatSharingConsent.HasConsent());
+    }
 }
