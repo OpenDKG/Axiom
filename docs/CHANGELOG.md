@@ -1,3 +1,7 @@
+## What's in 0.104.0
+
+- **Apply a validated rule file (FND-008 complete).** After an import preview, Apply imported creates the rules through the write gate after one destructive confirmation that lists them; file GUIDs are not trusted (identity from app path + direction), conflicting actions refuse the whole import, duplicates collapse, failures are reported per rule.
+
 ## What's in 0.103.0
 
 - **Partner logos readable.** Uniform stretch was fitting 3:1 source logos into short boxes, so they rendered ~84 px wide. OriginTrail 170x48, Blackbox 160x28, Umanitek 144x40 keep the card layout and render at their real widths.
