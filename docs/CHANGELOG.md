@@ -1,3 +1,7 @@
+## What's in 1.1.0
+
+- **Mini mode stays inside its fields.** The Module Health strip, throughput and activity no longer overlap at the minimum window size: Mini content scrolls when the window is too short, and the chart is a compact 72 px.
+
 ## What's in 1.0.0
 
 - **First 1.x release.** Privacy Overview renamed Privacy Dashboard; enforcement panel green/orange/red with one warning per level change; Trader Shield moved to Integrations; Mini Module Health strip and a throughput chart that shrinks with the window; threat sharing on with the Complete install consent (signed, redacted indicators only, never prompts/commands/paths/credentials/model content/session ids; help me help you).

@@ -16,7 +16,8 @@
       <Setter Property="Fill" Value="{DynamicResource Axiom.TextMuted}" />
     </Style>
   </UserControl.Styles>
-  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="12,10,12,10" RowSpacing="8">
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="12,10,12,10" RowSpacing="8">
 
     <!-- Quick protection toggles -->
     <Grid Grid.Row="0" ColumnDefinitions="*,8,*,8,Auto">
@@ -138,7 +139,7 @@
 
     <!-- System-wide throughput with current rates -->
     <Border Grid.Row="3" Classes="card" Padding="10">
-      <Grid RowDefinitions="Auto,*" RowSpacing="6">
+      <StackPanel Spacing="6">
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Text="SYSTEM-WIDE THROUGHPUT" Classes="kpi-label" VerticalAlignment="Center" />
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14">
@@ -148,14 +149,14 @@
                        Foreground="{DynamicResource Axiom.Upload}" />
           </StackPanel>
         </Grid>
-        <controls:TrafficChartControl Grid.Row="1" MinHeight="48"
+        <controls:TrafficChartControl Height="72"
                                       UploadSeries="{Binding Overview.UploadSeries}"
                                       DownloadSeries="{Binding Overview.DownloadSeries}"
                                       GridLineBrush="{DynamicResource Axiom.GridLine}"
                                       UploadBrush="{DynamicResource Axiom.Upload}"
                                       DownloadBrush="{DynamicResource Axiom.Download}"
                                       MutedBrush="{DynamicResource Axiom.TextMuted}" />
-      </Grid>
+      </StackPanel>
     </Border>
 
     <!-- Latest agent actions -->
@@ -211,4 +212,5 @@
       </Grid>
     </Border>
   </Grid>
+</ScrollViewer>
 </UserControl>
