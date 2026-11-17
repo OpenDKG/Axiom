@@ -116,6 +116,36 @@ Findings:
 - Evidence: `F:\Pen Testing\Logs\dns-crash-recovery-097.png` (after recovery) and
   `F:\Pen Testing\Logs\dns-restore-button.png` (restore confirmation).
 
+## 2d. Interactive installer: Complete vs Partial (17 November 2026)
+
+The interactive setup was opened on `Axiom-Win11` with 0.101.0 already installed, then cancelled
+without changing anything.
+
+- The wizard detected the existing install: **"Existing Axiom v0.101.0 found. Updating in place
+  preserves your settings and data."**
+- It offers two modes:
+  - **Complete Protection (Recommended)** - "Full firewall, DNS privacy & AI agent shield": Shield
+    service and ask policy (one UAC), Privacy Shield DNS blocker, Blackbox + DKG (local node and 11
+    hooks), background autostart and tray. Estimated 10-20 minutes.
+  - **Core / Partial Build (No Admin)** - "Lightweight desktop monitor & history only": live
+    monitor, local history, zero elevation, modular (enable Shield, DNS or AI later). Under 10
+    seconds.
+- It shows the install path (`%LOCALAPPDATA%\Programs\Axiom`), shortcut and launch options, the
+  development-build risk notice with its own acceptance checkbox, and Open Axiom / Repair /
+  Uninstall / Update Axiom / Cancel.
+- Closing it left the service Running and the desktop running; no files or settings were changed.
+
+Limits:
+
+- A **fresh** Partial install cannot be exercised on this VM without uninstalling Axiom first,
+  which the standing rules forbid. The silent `--partial` flag exists and would skip the service,
+  Blackbox, DKG and hooks, but applying it over an existing Complete install would leave the old
+  service in place and only prove that the flag parses. That path stays untested by design.
+- Partial mode's exit state (no service, no hooks, monitor-only) is covered by the installer's own
+  code path and tests, not by this VM.
+
+Evidence: `F:\Pen Testing\Logs\setup-wizard-0101-2.png`.
+
 ## 3. Signing decision (issues #119 and #289)
 
 **Decision: sign release artifacts with Authenticode through SignPath Foundation, using its
