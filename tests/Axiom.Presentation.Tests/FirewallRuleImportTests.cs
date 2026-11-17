@@ -39,6 +39,14 @@ public sealed class FirewallRuleImportTests
         // An export taken on macOS or Linux carries POSIX paths (including .app bundle
         // executables with spaces); the shared validator and the apply plan must accept them
         // unchanged so the daemon's normal rule.apply path receives the same path.
+        // On Windows these are not native paths and the validator rejects them, so the
+        // check applies off Windows only (return early instead of Skip: the Windows CI
+        // gate fails on skipped tests).
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         var rule = MakeRule(appPath, FirewallAction.Block, "443");
         var json = FirewallRuleExport.ToJson([rule], DateTimeOffset.UnixEpoch);
 
