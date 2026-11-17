@@ -1,3 +1,7 @@
+## What's in 0.97.0
+
+- **OS enforcement canary actually validates now.** The live VM harness no longer uses loopback (Windows Firewall exempts it) or a renamed PowerShell copy. It blocks a real program by path to a remote endpoint, proves the deny, rolls the rule back and proves connectivity returns. Live result: OS_DENY_VERIFIED with zero leftover rules.
+
 ## What's in 0.96.0
 
 - **Setup tolerates inaccessible single-instance guards.** When both the global and session mutex exist with ACLs the account cannot open (two CI setup checks at once), setup continues without a guard instead of crashing; the consent gate is unchanged.

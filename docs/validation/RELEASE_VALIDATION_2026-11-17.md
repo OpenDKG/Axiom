@@ -36,10 +36,21 @@ Limits:
 - Hook-level enforcement is what runs by default: `enforcement.status` reports the policy, but
   `receiptCount`, `hostDenySentCount` and `hostDenyVerifiedCount` stay at 0 because the WFP/OS deny
   path is not enabled. No screenshot or log in this cycle claims an OS-level block.
-- `scripts/validate-vm-enforcement.ps1 -ExecuteInIsolatedVm` (WFP OS_DENY_VERIFIED plus rollback,
-  Privacy Shield DNS crash/restore, DKG/Blackbox offline reboot recovery) was **not executed**. It
-  changes host network enforcement and needs a disposable snapshot and an owner decision on the
-  rollback window; running it unattended would risk the lab network without a recovery check.
+- `scripts/validate-vm-enforcement.ps1 -ExecuteInIsolatedVm` was executed in the isolated VM
+  (elevated, 0.96.0 installed) and returned **OS_DENY_VERIFIED**: baseline connection to
+  1.1.1.1:443 succeeded, a temporary outbound block for `powershell.exe` was created and read back
+  (Block, enabled, Outbound), the connection was denied, the rule was removed, connectivity was
+  restored and zero rules remained.
+- The original harness used a loopback canary (127.0.0.2/127.0.0.3) with a copied
+  `pwsh-canary.exe`. That does not validate on this build: Windows Firewall exempts loopback
+  traffic, so the block rule did not deny the connection, and the renamed PowerShell copy did not
+  run reliably. The harness now uses a remote target and the real PowerShell path by default, and
+  refuses loopback targets.
+- This proves the OS firewall can deny and roll back for a program/endpoint pair. It does **not**
+  mean Axiom's own WFP path is enabled: `enforcement.status` still reports zero host/OS deny
+  receipts, and the app labels enforcement as hook-level.
+- Privacy Shield DNS crash/restore and the DKG/Blackbox offline reboot recovery were not run in
+  this pass; they need a snapshot and a reboot window.
 - The Privacy Shield page continues to state that it is a DNS filter, not a VPN or traffic proxy.
 
 ## 3. Signing decision (issues #119 and #289)

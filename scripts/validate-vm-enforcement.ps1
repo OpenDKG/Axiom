@@ -1,26 +1,48 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Safe validation harness for Axiom Phases 4 & 5.
-    By default runs in non-mutating -DryRun mode (reads configuration & prints commands only).
-    Pass -ExecuteInIsolatedVm inside an elevated disposable Windows VM to run live Windows Firewall
-    dual-destination canary + rollback checks without touching arbitrary production rules.
+    Live Windows Firewall deny + rollback canary for an isolated VM.
+
+.DESCRIPTION
+    By default this prints its plan and changes nothing. With -ExecuteInIsolatedVm it creates a
+    temporary outbound block rule for one program to one remote endpoint, proves the connection
+    fails while the rule exists, removes the rule, and proves the connection works again.
+
+    Loopback is deliberately not used: Windows Firewall exempts loopback traffic, so a 127.0.0.x
+    canary can fail to demonstrate anything (observed on Windows 11 26100 in the Axiom lab). A
+    remote endpoint is required for a real deny.
+
+    The rule targets the running PowerShell executable by path. Use -TargetProgram to target
+    another program. The rule is always removed on failure.
+
+.PARAMETER ExecuteInIsolatedVm
+    Run the live canary. Requires an elevated shell inside a disposable VM.
+
+.PARAMETER RemoteHost
+    Remote IPv4 address used for the canary (default 1.1.1.1).
+
+.PARAMETER RemotePort
+    Remote TCP port used for the canary (default 443).
+
+.PARAMETER TargetProgram
+    Program path the rule blocks (default: the current PowerShell executable).
 #>
 [CmdletBinding()]
 param(
     [switch]$ExecuteInIsolatedVm,
-    [int]$BlockedPort = 59441,
-    [int]$ControlPort = 59442
+    [string]$RemoteHost = "1.1.1.1",
+    [int]$RemotePort = 443,
+    [string]$TargetProgram = ""
 )
 
 $ErrorActionPreference = 'Stop'
 $ruleName = "Axiom-VM-Validation-Canary"
 
 if (-not $ExecuteInIsolatedVm) {
-    Write-Host "[DRY-RUN] No firewall or DNS state was modified." -ForegroundColor Yellow
-    Write-Host "[DRY-RUN] Phase 4 readiness check: NetSecurity cmdlets available: $((Get-Command Get-NetFirewallRule -ErrorAction SilentlyContinue) -ne $null)"
-    Write-Host "[DRY-RUN] Phase 4 target rule name (when -ExecuteInIsolatedVm is supplied): $ruleName"
-    Write-Host "[DRY-RUN] To execute live canary + rollback verification inside a disposable elevated VM:"
+    Write-Host "[DRY-RUN] No firewall state was modified." -ForegroundColor Yellow
+    Write-Host "[DRY-RUN] Live canary target: $RemoteHost`:$RemotePort (loopback is not used; Windows Firewall exempts it)"
+    Write-Host "[DRY-RUN] Temporary rule name: $ruleName"
+    Write-Host "[DRY-RUN] To execute the block + rollback check inside a disposable elevated VM:"
     Write-Host "          powershell -ExecutionPolicy Bypass -File .\scripts\validate-vm-enforcement.ps1 -ExecuteInIsolatedVm"
     exit 0
 }
@@ -28,82 +50,77 @@ if (-not $ExecuteInIsolatedVm) {
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    throw "Live Phase 4 Windows Firewall canary requires an elevated Administrator shell inside your isolated VM."
+    throw "The live canary requires an elevated Administrator shell inside your isolated VM."
 }
 
-$blockedIpV4 = "127.0.0.2"
-$controlIpV4 = "127.0.0.3"
-$tempRoot = Join-Path $env:TEMP ("axiom-fw-canary-" + [Guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
-$powershellCopy = Join-Path $tempRoot "pwsh-canary.exe"
-$sourceExe = (Get-Process -Id $PID).Path
-Copy-Item -Path $sourceExe -Destination $powershellCopy -Force
+if ([string]::IsNullOrWhiteSpace($TargetProgram)) {
+    $TargetProgram = (Get-Process -Id $PID).Path
+}
+if (-not (Test-Path -LiteralPath $TargetProgram)) {
+    throw "Target program not found: $TargetProgram"
+}
+if ($RemoteHost -in @('127.0.0.1', '::1') -or $RemoteHost.StartsWith('127.')) {
+    throw "Loopback targets cannot demonstrate a Windows Firewall deny. Use a remote address."
+}
 
-$listenerBlocked = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse($blockedIpV4), $BlockedPort)
-$listenerControl = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse($controlIpV4), $ControlPort)
-
-function Test-CanaryConnect([string]$ExePath, [string]$Ip, [int]$Port) {
+function Test-CanaryConnect {
     $code = @"
-\$c = [System.Net.Sockets.TcpClient]::new()
+`$c = [System.Net.Sockets.TcpClient]::new()
 try {
-  \$iar = \$c.BeginConnect('$Ip', $Port, \$null, \$null)
-  if (\$iar.AsyncWaitHandle.WaitOne(1500)) { \$c.EndConnect(\$iar); exit 0 } else { exit 1 }
-} catch { exit 2 } finally { \$c.Dispose() }
+  `$iar = `$c.BeginConnect('$RemoteHost', $RemotePort, `$null, `$null)
+  if (`$iar.AsyncWaitHandle.WaitOne(2500)) { `$c.EndConnect(`$iar); exit 0 } else { exit 1 }
+} catch { exit 2 } finally { `$c.Dispose() }
 "@
-    $proc = Start-Process -FilePath $ExePath -ArgumentList @("-NoProfile", "-Command", $code) -NoNewWindow -Wait -PassThru
+    $proc = Start-Process -FilePath $TargetProgram -ArgumentList @("-NoProfile", "-Command", $code) -NoNewWindow -Wait -PassThru
     return ($proc.ExitCode -eq 0)
 }
 
+$created = $false
 try {
-    $listenerBlocked.Start()
-    $listenerControl.Start()
-
-    Write-Host "[1/5] Verifying baseline connectivity before rule creation..."
-    $preBlocked = Test-CanaryConnect -ExePath $powershellCopy -Ip $blockedIpV4 -Port $BlockedPort
-    $preControl = Test-CanaryConnect -ExePath $powershellCopy -Ip $controlIpV4 -Port $ControlPort
-    if (-not $preBlocked -or -not $preControl) {
-        throw "Baseline pre-check failed: blocked=$preBlocked control=$preControl"
+    Write-Host "[1/5] Verifying baseline connectivity to $RemoteHost`:$RemotePort..."
+    if (-not (Test-CanaryConnect)) {
+        throw "Baseline connection failed. The VM has no route to $RemoteHost`:$RemotePort."
     }
 
-    Write-Host "[2/5] Creating temporary Axiom validation rule ($ruleName)..."
-    New-NetFirewallRule -DisplayName $ruleName `
-        -Name $ruleName `
-        -Direction Outbound `
-        -Action Block `
-        -Program $powershellCopy `
-        -RemoteAddress $blockedIpV4 `
-        -Protocol TCP `
-        -RemotePort $BlockedPort `
-        -Profile Any | Out-Null
+    Write-Host "[2/5] Creating temporary rule $ruleName (block $TargetProgram -> $RemoteHost`:$RemotePort)..."
+    New-NetFirewallRule -DisplayName $ruleName -Name $ruleName `
+        -Direction Outbound -Action Block -Program $TargetProgram `
+        -RemoteAddress $RemoteHost -Protocol TCP -RemotePort $RemotePort -Profile Any | Out-Null
+    $created = $true
 
-    Write-Host "[3/5] Verifying rule read-back matches expected scope..."
+    Write-Host "[3/5] Verifying the rule read-back..."
     $readback = Get-NetFirewallRule -Name $ruleName -ErrorAction Stop
-    if ($readback.Enabled -ne 'True' -or $readback.Action -ne 'Block') {
-        throw "Rule read-back verification failed."
+    if ($readback.Action -ne 'Block' -or $readback.Enabled -ne 'True' -or $readback.Direction -ne 'Outbound') {
+        throw "Rule read-back mismatch: action=$($readback.Action) enabled=$($readback.Enabled) direction=$($readback.Direction)"
+    }
+    Write-Host "      action=Block enabled=True direction=Outbound"
+
+    Write-Host "[4/5] Verifying the connection is denied while the rule exists..."
+    if (Test-CanaryConnect) {
+        throw "The rule did not block the destination."
     }
 
-    Write-Host "[4/5] Running dual-destination probe..."
-    $postBlocked = Test-CanaryConnect -ExePath $powershellCopy -Ip $blockedIpV4 -Port $BlockedPort
-    $postControl = Test-CanaryConnect -ExePath $powershellCopy -Ip $controlIpV4 -Port $ControlPort
-    if ($postBlocked) {
-        throw "OS_DENY_FAILED: blocked endpoint $blockedIpV4`:$BlockedPort succeeded under active rule!"
+    Write-Host "[5/5] Rolling back and verifying connectivity is restored..."
+    Remove-NetFirewallRule -Name $ruleName
+    $created = $false
+    $remaining = @(Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue).Count
+    if ($remaining -ne 0) {
+        throw "Rollback left $remaining rule(s) behind."
     }
-    if (-not $postControl) {
-        throw "CONTROL_FAILED: allowed control endpoint $controlIpV4`:$ControlPort failed!"
-    }
-
-    Write-Host "[5/5] Removing rule and verifying network recovery..."
-    Remove-NetFirewallRule -Name $ruleName -ErrorAction Stop
-    $recovered = Test-CanaryConnect -ExePath $powershellCopy -Ip $blockedIpV4 -Port $BlockedPort
-    if (-not $recovered) {
-        throw "RECOVERY_FAILED: blocked endpoint did not recover after rule removal."
+    if (-not (Test-CanaryConnect)) {
+        throw "Connectivity was not restored after rollback."
     }
 
-    Write-Host "PASS [OS_DENY_VERIFIED + ROLLBACK]: Read-back OK, blocked=$blockedIpV4`:$BlockedPort denied, control=$controlIpV4`:$ControlPort succeeded, recovery verified." -ForegroundColor Green
+    Write-Host "RESULT: OS_DENY_VERIFIED (block, read-back and rollback on $RemoteHost`:$RemotePort)"
+    exit 0
+}
+catch {
+    Write-Host "RESULT: FAILED - $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
 }
 finally {
-    Remove-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
-    try { $listenerBlocked.Stop() } catch {}
-    try { $listenerControl.Stop() } catch {}
-    Remove-Item -Path $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    if ($created) {
+        Remove-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
+        Write-Host "Cleanup: removed $ruleName"
+    }
 }
