@@ -50,7 +50,7 @@ public sealed record EnforcementSurfaceState
         DetectorDetail =
             "Blackbox guard: detector only. A block verdict is a request, not a proven side effect.",
         BrokerDetail =
-            "Managed runner and file broker: not implemented (feasibility gate in ADR 0010).",
+            "Managed runner and file broker: prototype only (ADR 0012, E3); blocking uses the host hooks, not the broker.",
         PolicyDetail =
             "Offline policy engine: available in the library, not wired to the hooks yet.",
     };
@@ -137,6 +137,21 @@ public sealed record EnforcementSurfaceState
             };
         }
 
+        if (status?.Enabled == true)
+        {
+            // The policy is loaded and the guard hooks return block verdicts; the missing piece is
+            // a host/OS deny receipt, not the blocking itself. Say that instead of "advisory".
+            return Current with
+            {
+                VerificationLabel = "HOOK BLOCKING ACTIVE",
+                Summary =
+                    "Guard hooks block protected reads, writes and credential stores; no host or OS deny receipt has been recorded yet.",
+                DetectorDetail = detectorDetail,
+                BrokerDetail = Current.BrokerDetail,
+                PolicyDetail = FormatPolicyDetail(status),
+            };
+        }
+
         return Current with
         {
             DetectorDetail = detectorDetail,
@@ -154,7 +169,7 @@ public sealed record EnforcementSurfaceState
 
         if (string.Equals(hostHookMode, "block", StringComparison.OrdinalIgnoreCase))
         {
-            return $"Blackbox hooks (mode: block): active — compliant agent hooks return a block decision{hookSuffix}; OS-level blocking remains unverified.";
+            return $"Blackbox hooks (mode: block): active — protected reads/writes are refused (self-test passes){hookSuffix}; kernel/WFP deny is not enabled on this build.";
         }
 
         if (string.Equals(hostHookMode, "audit", StringComparison.OrdinalIgnoreCase))

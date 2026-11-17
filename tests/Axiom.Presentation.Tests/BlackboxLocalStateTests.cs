@@ -181,6 +181,67 @@ public sealed class BlackboxLocalStateTests
         Assert.Contains("Curator manifest is stale", sync.PhaseText, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Streaming_parser_handles_multi_chunk_bom_ruleset_and_caches_until_file_changes()
+    {
+        using var temp = new TemporaryDirectory();
+        var syncedAt = new DateTimeOffset(2026, 11, 16, 10, 0, 0, TimeSpan.Zero);
+        var unix = syncedAt.ToUnixTimeSeconds();
+        var rulesetPath = Path.Combine(temp.Path, "ruleset.json");
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append(invariant, $"{{\"synced_at\":{unix},\"graph_threats\":[");
+        for (var i = 0; i < 1200; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append(',');
+            }
+
+            sb.Append(invariant, $"{{\"identifier\":\"ioc:{i}\",\"name\":\"Indicator {i} with padding payload to span multiple 64KB chunks\",\"category\":\"ioc\",\"severity\":\"high\",\"source\":\"public\",\"meta\":{{\"identifier\":\"ignored-nested-{i}\"}}}}");
+        }
+
+        sb.Append("],\"dependency\":{");
+        for (var i = 0; i < 200; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append(',');
+            }
+
+            sb.Append(invariant, $"\"pkg-{i}\":{{\"bad\":true}}");
+        }
+
+        sb.Append(invariant, $"}},\"verified_scope\":{{\"built_at\":{unix},\"verified_counts\":{{\"ioc\":5000,\"dependency:npm\":999}}}}}}");
+
+        File.WriteAllText(rulesetPath, sb.ToString(), new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+        Assert.True(BlackboxLocalState.HasVerifiedRulesFile(rulesetPath));
+        var report = BlackboxLocalState.EvaluateContinuity(temp.Path, guardPresent: true, dkgConnected: true, now: syncedAt.AddMinutes(5));
+        var sync = BlackboxLocalState.TryReadSync(temp.Path, syncedAt.AddMinutes(5));
+        var graph = BlackboxLocalState.TryReadGraph(temp.Path);
+
+        Assert.True(report.RulesetAvailable);
+        Assert.Equal(1400, report.CompiledRuleCount);
+        Assert.Equal(5000, report.LiveScopeRuleCount);
+        Assert.NotNull(sync);
+        Assert.Equal(6400, sync!.VerifiedRules);
+        Assert.NotNull(graph);
+        Assert.True(graph!.Threats.Count <= 256 + 12);
+        Assert.DoesNotContain(graph.Threats, t => t.Identifier.StartsWith("ignored-nested-", StringComparison.Ordinal));
+        Assert.Equal(200, graph.CategoryTotals["dependency"]);
+        Assert.Equal(5000, graph.CategoryTotals["ioc"]);
+        Assert.Equal(1, BlackboxLocalState.GetParseCountForPathForTests(rulesetPath));
+
+        // Changing the file invalidates the cache immediately.
+        File.WriteAllText(rulesetPath, """{"graph_threats":[]}""", new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        var afterChange = BlackboxLocalState.EvaluateContinuity(temp.Path, guardPresent: true, dkgConnected: true, now: syncedAt.AddMinutes(5));
+        Assert.False(afterChange.RulesetAvailable);
+        Assert.False(BlackboxLocalState.HasVerifiedRulesFile(rulesetPath));
+        Assert.Equal(2, BlackboxLocalState.GetParseCountForPathForTests(rulesetPath));
+    }
+
     private static void WriteHealthyState(string root, DateTimeOffset syncedAt, string lookupState)
     {
         var unix = syncedAt.ToUnixTimeSeconds();

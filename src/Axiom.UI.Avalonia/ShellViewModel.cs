@@ -1,5 +1,6 @@
 ﻿// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Axiom.Contracts.Agents;
@@ -160,7 +161,46 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 _uiMode.Apply(UiMode.Advanced);
                 SelectedPage = Overview;
             },
-            switchToAdvanced: () => _uiMode.Apply(UiMode.Advanced));
+            switchToAdvanced: () => _uiMode.Apply(UiMode.Advanced),
+            openAgentsAdvanced: () =>
+            {
+                _uiMode.Apply(UiMode.Advanced);
+                SelectedPage = Agents;
+            });
+        MiniHome = new MiniHomePageViewModel(
+            Overview,
+            Firewall,
+            PrivacyShield,
+            Agents,
+            VersionText,
+            openFirewall: () =>
+            {
+                _uiMode.Apply(UiMode.Simple);
+                SelectedPage = Firewall;
+            },
+            openPrivacy: () =>
+            {
+                _uiMode.Apply(UiMode.Simple);
+                SelectedPage = PrivacyOverview;
+            },
+            openAgents: () =>
+            {
+                _uiMode.Apply(UiMode.Advanced);
+                SelectedPage = Agents;
+            },
+            openSettings: () =>
+            {
+                _uiMode.Apply(UiMode.Simple);
+                SelectedPage = Settings;
+            },
+            openSupport: () =>
+            {
+                _uiMode.Apply(UiMode.Simple);
+                SelectedPage = Support;
+            },
+            openWebsite: () => OpenWebsiteCommand.Execute(null),
+            openGitHub: OpenGitHubAsync,
+            expandView: () => _uiMode.Apply(UiMode.Advanced));
         Pages =
         [
             AgentDashboard,
@@ -231,14 +271,26 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         OpenExternalUrlAsync("mailto:contact@opendkg.org");
 
     [RelayCommand]
-    private void OpenSupport() => SelectedPage = Support;
+    private Task OpenWebsiteAsync() =>
+        OpenExternalUrlAsync("https://opendkg.org/axiom");
+
+    [RelayCommand]
+    private void OpenSupport()
+    {
+        if (IsMiniMode)
+        {
+            _uiMode.Apply(UiMode.Simple);
+        }
+
+        SelectedPage = Support;
+    }
 
     public bool UpdateAvailable => _updateChecker.IsUpdateAvailable;
 
     public string LatestVersion => _updateChecker.LatestVersion;
 
     public string UpdateTooltip => UpdateAvailable
-        ? $"Axiom {LatestVersion} is available"
+        ? $"Update to version {LatestVersion}"
         : string.Empty;
 
     public string UpdateReleaseDateText => _updateChecker.ReleaseDateText;
@@ -302,9 +354,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public UiMode CurrentUiMode => _uiMode.Current;
 
+    public bool IsMiniMode => _uiMode.Current == UiMode.Mini;
+
     public bool IsSimpleMode => _uiMode.Current == UiMode.Simple;
 
     public bool IsAdvancedMode => _uiMode.Current == UiMode.Advanced;
+
+    [RelayCommand]
+    private void SwitchToMiniMode() => _uiMode.Apply(UiMode.Mini);
 
     [RelayCommand]
     private void SwitchToSimpleMode() => _uiMode.Apply(UiMode.Simple);
@@ -316,6 +373,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         ApplyNavigationMode(_uiMode.Current, initialSetup: false);
         OnPropertyChanged(nameof(CurrentUiMode));
+        OnPropertyChanged(nameof(IsMiniMode));
         OnPropertyChanged(nameof(IsSimpleMode));
         OnPropertyChanged(nameof(IsAdvancedMode));
     }
@@ -329,9 +387,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             page.GroupLabel = null;
         }
         SimpleHome.GroupLabel = null;
+        MiniHome.GroupLabel = null;
 
         NavigationPages.Clear();
-        if (mode == UiMode.Simple)
+        if (mode == UiMode.Mini)
+        {
+            NavigationPages.Add(MiniHome);
+        }
+        else if (mode == UiMode.Simple)
         {
             SimpleHome.GroupLabel = "HOME";
             Firewall.GroupLabel = "PROTECTION";
@@ -378,6 +441,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         UiTheme.GlassLight => "Axiom Glass Light",
         _ => "Dark",
     };
+
+    public MiniHomePageViewModel MiniHome { get; }
 
     public SimpleHomePageViewModel SimpleHome { get; }
 
@@ -448,8 +513,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _statusModeText = "In-process monitor";
 
+
+
+
+
+
+
     [ObservableProperty]
     private string _statusFirewallBadgeText = "READ-ONLY";
+
+    /// <summary>Lamp next to the badge: green when protection is on, red when it is off.</summary>
+    [ObservableProperty]
+    private IBrush _statusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FB7185"));
 
     public bool IsServiceMode { get; }
 
@@ -498,6 +573,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         {
             _updateChecker.Dispose();
         }
+        MiniHome.Dispose();
         SimpleHome.Dispose();
         Overview.Dispose();
         Connections.Dispose();
@@ -629,6 +705,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public void NavigateToPage(Type pageViewModelType, IReadOnlyList<string>? focusApps = null)
     {
         ArgumentNullException.ThrowIfNull(pageViewModelType);
+        if (pageViewModelType == typeof(MiniHomePageViewModel))
+        {
+            SelectedPage = MiniHome;
+            return;
+        }
+
         if (pageViewModelType == typeof(SimpleHomePageViewModel))
         {
             SelectedPage = SimpleHome;
@@ -732,16 +814,19 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 ? $"Protection: ON · {protection.OwnedRuleCount} rule(s) · {awaiting} awaiting decision"
                 : $"Protection: ON · {protection.OwnedRuleCount} rule(s)";
             StatusFirewallBadgeText = "SHIELD ON";
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#4ADE80"));
         }
         else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
         {
             StatusFirewallText = "Firewall writes: enabled for this service session";
             StatusFirewallBadgeText = "TEST VM";
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FBBF24"));
         }
         else
         {
             StatusFirewallText = "Protection: off";
             StatusFirewallBadgeText = "READ-ONLY";
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FB7185"));
         }
         StatusModeText = IsServiceMode ? "Service monitor" : "In-process monitor";
 

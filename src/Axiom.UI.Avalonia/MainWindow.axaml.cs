@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -12,9 +13,19 @@ namespace Axiom.UI.Avalonia;
 public partial class MainWindow : Window
 {
     private const string WindowBrushKey = "Axiom.Window";
+    private const double SidebarExpandedWidth = 252;
+    private const double MiniWindowMinWidth = 760;
+    private const double MiniWindowMinHeight = 430;
+    private const double MiniWindowDefaultWidth = 820;
+    private const double MiniWindowDefaultHeight = 640;
+    private const double FullWindowMinWidth = 900;
+    private const double FullWindowMinHeight = 600;
 
     private IVisualEffectsService? _effects;
+    private ShellViewModel? _shell;
     private bool _applyingBackdrop;
+    private bool _isMiniWindowLayout;
+    private Size _expandedWindowSize = new(1460, 900);
 
     public MainWindow()
     {
@@ -29,8 +40,11 @@ public partial class MainWindow : Window
 
         if (DataContext is ShellViewModel shell)
         {
+            _shell = shell;
+            _shell.PropertyChanged += OnShellPropertyChanged;
             _effects = shell.VisualEffects;
             _effects.Changed += OnVisualEffectsChanged;
+            ApplyWindowLayoutForMode(shell.IsMiniMode);
         }
 
         if (Application.Current is { } application)
@@ -43,6 +57,12 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        if (_shell is not null)
+        {
+            _shell.PropertyChanged -= OnShellPropertyChanged;
+            _shell = null;
+        }
+
         if (_effects is not null)
         {
             _effects.Changed -= OnVisualEffectsChanged;
@@ -55,6 +75,55 @@ public partial class MainWindow : Window
         }
 
         base.OnClosed(e);
+    }
+
+    private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_shell is not null && (e.PropertyName is null or nameof(ShellViewModel.IsMiniMode)))
+        {
+            ApplyWindowLayoutForMode(_shell.IsMiniMode);
+        }
+    }
+
+    private void ApplyWindowLayoutForMode(bool mini)
+    {
+        if (RootLayout?.ColumnDefinitions.Count >= 2)
+        {
+            RootLayout.ColumnDefinitions[0].Width = mini
+                ? new GridLength(0)
+                : new GridLength(SidebarExpandedWidth);
+        }
+
+        if (mini == _isMiniWindowLayout)
+        {
+            return;
+        }
+
+        _isMiniWindowLayout = mini;
+        if (mini)
+        {
+            if (WindowState == WindowState.Maximized)
+            {
+                WindowState = WindowState.Normal;
+            }
+
+            if (Width >= FullWindowMinWidth && Height >= FullWindowMinHeight)
+            {
+                _expandedWindowSize = new Size(Width, Height);
+            }
+
+            MinWidth = MiniWindowMinWidth;
+            MinHeight = MiniWindowMinHeight;
+            Width = MiniWindowDefaultWidth;
+            Height = MiniWindowDefaultHeight;
+        }
+        else
+        {
+            MinWidth = FullWindowMinWidth;
+            MinHeight = FullWindowMinHeight;
+            Width = Math.Max(FullWindowMinWidth, _expandedWindowSize.Width);
+            Height = Math.Max(FullWindowMinHeight, _expandedWindowSize.Height);
+        }
     }
 
     private void OnVisualEffectsChanged(object? sender, EventArgs e) => ApplyBackdrop();

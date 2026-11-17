@@ -34,6 +34,9 @@ public sealed class SimpleAndAdvancedModeTests : IDisposable
 
         UiModeSettingsStore.Save(UiMode.Simple, path);
         Assert.Equal(UiMode.Simple, UiModeSettingsStore.Load(path));
+
+        UiModeSettingsStore.Save(UiMode.Mini, path);
+        Assert.Equal(UiMode.Mini, UiModeSettingsStore.Load(path));
     }
 
     [Fact]
@@ -50,10 +53,13 @@ public sealed class SimpleAndAdvancedModeTests : IDisposable
             window.Show();
             Dispatcher.UIThread.RunJobs();
 
+            var miniBtn = window.FindControl<Button>("MiniModeButton");
             var simpleBtn = window.FindControl<Button>("SimpleModeButton");
             var advancedBtn = window.FindControl<Button>("AdvancedModeButton");
+            Assert.NotNull(miniBtn);
             Assert.NotNull(simpleBtn);
             Assert.NotNull(advancedBtn);
+            Assert.True(miniBtn.IsVisible);
             Assert.True(simpleBtn.IsVisible);
             Assert.True(advancedBtn.IsVisible);
 
@@ -79,6 +85,44 @@ public sealed class SimpleAndAdvancedModeTests : IDisposable
             Assert.True(shell.IsSimpleMode);
             Assert.Equal(5, shell.NavigationPages.Count);
             Assert.Same(shell.SimpleHome, shell.SelectedPage);
+
+            // SimpleHome surfaces AI agent activity cleanly and OpenAgents switches to Advanced -> Agents
+            shell.Agents.Activity.Add(new Axiom.Contracts.Blackbox.BlackboxAuditEntry(
+                DateTimeOffset.UtcNow,
+                "blocked",
+                "Codex",
+                "sess-1",
+                "bash",
+                "cat ~/.ssh/id_rsa",
+                "block",
+                "high",
+                "ssh-key",
+                "Blocked credential read"));
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(shell.SimpleHome.HasAgentActivity);
+            Assert.Contains(shell.SimpleHome.RecentAgentActivity, entry => entry.Agent == "Codex");
+
+            shell.SimpleHome.OpenAgentsCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(shell.IsAdvancedMode);
+            Assert.Same(shell.Agents, shell.SelectedPage);
+
+            // Switch to Mini mode -> compact window, collapses sidebar, renders MiniHomeView with blocked items
+            shell.SwitchToMiniModeCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(shell.IsMiniMode);
+            Assert.Same(shell.MiniHome, shell.SelectedPage);
+            Assert.Contains(window.GetVisualDescendants(), v => v is MiniHomeView);
+            Assert.True(shell.MiniHome.HasBlockedAgents);
+            Assert.Contains(shell.MiniHome.BlockedAgents, entry => entry.Agent == "Codex");
+            Assert.Equal(760, window.MinWidth);
+            Assert.Equal(820, window.Width);
+
+            // Switch back to Simple -> restores full window constraints
+            shell.SwitchToSimpleModeCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(shell.IsSimpleMode);
+            Assert.Equal(900, window.MinWidth);
 
             window.Close();
             shell.Dispose();

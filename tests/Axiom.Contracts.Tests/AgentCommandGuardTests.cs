@@ -12,16 +12,38 @@ namespace Axiom.Contracts.Tests;
 public sealed class AgentCommandGuardTests
 {
     [Fact]
+    public void Guard_blocks_wildcard_spellings_of_protected_and_credential_paths()
+    {
+        // Batch 13: `.ss?`, `.ss*`, `[.]ssh`, `vault.kdb?` and `...\*\Login Data` allowed because
+        // every check compared literal text.
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        Assert.Contains("def _glob_hits(", helpers, StringComparison.Ordinal);
+        Assert.Contains("def _glob_fullmatch(", helpers, StringComparison.Ordinal);
+        Assert.Contains("or _glob_hits(text, tokens)", helpers, StringComparison.Ordinal);
+        Assert.Contains("if _glob_hits(value, [marker for marker, _ in stores]):", helpers, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Guard_blocks_protected_reads_spelled_as_admin_shares_or_search_tools()
     {
         var helpers = AgentCommandGuard.PythonHelpers;
 
         Assert.Contains("def _reads_protected(", helpers, StringComparison.Ordinal);
         Assert.Contains("if _reads_protected(command_text, protected):", helpers, StringComparison.Ordinal);
-        foreach (var verb in new[] { "findstr", "select-string", "robocopy", "compress-archive", "openssl", "ssh-keygen" })
+        foreach (var verb in new[] { "findstr", "select-string", "robocopy", "compress-archive", "openssl", "ssh-keygen", "makecab", "esentutl", "split " })
         {
             Assert.Contains(verb, helpers, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void Guard_blocks_hive_queries_and_key_authenticated_ssh()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        Assert.Contains("\"reg query\" in text", helpers, StringComparison.Ordinal);
+        Assert.Contains("\"ssh -i\"", helpers, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -31,6 +53,77 @@ public sealed class AgentCommandGuardTests
 
         Assert.Contains("\"reg save\" in text or \"reg export\" in text", helpers, StringComparison.Ordinal);
         Assert.Contains("(\".aws\", \"AWS credential store\")", helpers, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Guard_blocks_service_level_tampering_and_audit_trail_wipes()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        Assert.Contains("def _disables_guard(", helpers, StringComparison.Ordinal);
+        Assert.Contains("if _disables_guard(command_text):", helpers, StringComparison.Ordinal);
+        foreach (var verb in new[] { "\"sc stop\"", "stop-service", "taskkill", "schtasks /change", "icacls" })
+        {
+            Assert.Contains(verb, helpers, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("auditpol /clear", helpers, StringComparison.Ordinal);
+        Assert.Contains("shadowcopy delete", helpers, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Guard_protects_the_vendor_and_zcode_wiring_files()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        Assert.Contains("hermes\\\\config.yaml", helpers, StringComparison.Ordinal);
+        Assert.Contains(".zcode\\\\cli\\\\config.json", helpers, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Guard_blocks_dpapi_cert_and_autologon_secret_sources()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        foreach (var marker in new[] { "\\\\microsoft\\\\protect", "\\\\microsoft\\\\credentials", "\\\\panther\\\\unattend", "defaultpassword" })
+        {
+            Assert.Contains(marker, helpers, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("export-pfxcertificate", helpers, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Guard_blocks_cloud_iac_and_chat_app_secret_stores()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        foreach (var marker in new[]
+                 {
+                     "terraform.tfstate",
+                     ".terraformrc",
+                     "\\\\.pulumi",
+                     "gh\\\\hosts.yml",
+                     "slack\\\\tokens.json",
+                     "\\\\discord\\\\local storage",
+                     "state.vscdb",
+                     ".kdbx",
+                     ".opvault",
+                     ".htpasswd",
+                 })
+        {
+            Assert.Contains(marker, helpers, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Guard_blocks_anti_forensics_and_wmi_persistence()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        Assert.Contains("deletejournal", helpers, StringComparison.Ordinal);
+        Assert.Contains("cipher /w", helpers, StringComparison.Ordinal);
+        Assert.Contains("commandlineeventconsumer", helpers, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -94,7 +94,7 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
 
             Assert.True(shell.UpdateAvailable);
             Assert.Equal("0.99.0", shell.LatestVersion);
-            Assert.Equal("Axiom 0.99.0 is available", shell.UpdateTooltip);
+            Assert.Equal("Update to version 0.99.0", shell.UpdateTooltip);
 
             var updateButton = window.FindControl<Button>("UpdateButton");
             Assert.NotNull(updateButton);

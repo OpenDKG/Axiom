@@ -25,6 +25,7 @@ public interface IThemeService
 /// <summary>User-facing shell complexity mode.</summary>
 public enum UiMode
 {
+    Mini,
     Simple,
     Advanced,
 }

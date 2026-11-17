@@ -125,6 +125,46 @@ public sealed class BlackboxLocalStateTests
         Assert.True(corrupted.IsUnprotected);
     }
 
+    [Fact]
+    public void Streaming_parser_caches_unchanged_ruleset_and_rejects_non_object_roots()
+    {
+        using var temp = new TemporaryDirectory();
+        var rulesetPath = Path.Combine(temp.Path, "ruleset.json");
+        var syncedAt = new DateTimeOffset(2026, 11, 16, 10, 0, 0, TimeSpan.Zero);
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append(invariant, $"{{\"synced_at\":{syncedAt.ToUnixTimeSeconds()},\"graph_threats\":[");
+        for (var i = 0; i < 600; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append(',');
+            }
+
+            sb.Append(invariant, $"{{\"identifier\":\"ioc:{i}\",\"name\":\"Threat {i} padding payload to cross 64KB chunk boundary\",\"category\":\"ioc\",\"severity\":\"high\",\"source\":\"public\"}}");
+        }
+
+        sb.Append("]}");
+        File.WriteAllText(rulesetPath, sb.ToString());
+
+        var report = BlackboxLocalState.EvaluateContinuity(temp.Path, guardPresent: true, dkgConnected: true, now: syncedAt.AddMinutes(1));
+        var sync = BlackboxLocalState.TryReadSync(temp.Path, syncedAt.AddMinutes(1));
+        var graph = BlackboxLocalState.TryReadGraph(temp.Path);
+
+        Assert.True(report.RulesetAvailable);
+        Assert.Equal(600, report.CompiledRuleCount);
+        Assert.NotNull(sync);
+        Assert.NotNull(graph);
+        Assert.True(graph!.Threats.Count <= 256);
+        Assert.Equal(1, BlackboxLocalState.GetParseCountForPathForTests(rulesetPath));
+
+        File.WriteAllText(rulesetPath, "[1,2,3]");
+        var nonObject = BlackboxLocalState.EvaluateContinuity(temp.Path, guardPresent: true);
+        Assert.True(nonObject.RulesetCorrupted);
+        Assert.Equal(2, BlackboxLocalState.GetParseCountForPathForTests(rulesetPath));
+    }
+
     private sealed class TemporaryDirectory : IDisposable
     {
         public TemporaryDirectory()
