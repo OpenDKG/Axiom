@@ -958,7 +958,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         if (_monitor.LastError is not null)
         {
-            Overview.SetHeaderStatus($"Monitor unavailable: {_monitor.LastError}");
+            // Off Windows the monitor reads the same daemon: when the protection state is not
+            // known either, the header says so first, not only that the monitor is unavailable.
+            Overview.SetHeaderStatus(!OperatingSystem.IsWindows() && IsServiceMode && _protection is null
+                ? $"Protection status unknown: the local service did not answer. Monitor unavailable: {_monitor.LastError}"
+                : $"Monitor unavailable: {_monitor.LastError}");
             return;
         }
 
