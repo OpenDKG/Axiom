@@ -209,7 +209,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     /// <summary>Explanation shown when Microsoft-signed processes were removed from the ask list.</summary>
     public string IgnoredMicrosoftText => IgnoredMicrosoftCount == 0
         ? string.Empty
-        : $"{IgnoredMicrosoftCount} Microsoft-signed process(es) are not prompted.";
+        : $"{IgnoredMicrosoftCount} trusted process(es) are not prompted (Windows, Microsoft-signed or Axiom's own).";
 
     public bool HasIgnoredMicrosoft => IgnoredMicrosoftCount > 0;
 
