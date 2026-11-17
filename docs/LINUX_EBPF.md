@@ -259,10 +259,10 @@ libbpf binding — load/attach/pin/map writes go through `bpftool`, the ring buf
   batch never touches the maps. Since the PR #276 review (LNX-1) the sync returns a `LayerSyncResult`
   that the adapter folds into the rule result, the enforcement report and the capabilities (§10); the
   nft batch itself is never rolled back for a map failure.
-- Pins survive a daemon crash/restart; `StartAsync` detaches every `axiom_*` program by pin **and** by id
-  (`bpftool -j cgroup show /sys/fs/cgroup`, so an unpinned leftover is found too), removes the pin tree,
-  then loads fresh (deterministic; the maps are rebuilt from `managed-rules.json` anyway). Proven after
-  `systemctl kill -s KILL axiomd`: 4 programs attached after the restart, not 8 (`LINUX_TEST_REPORT.md`).
+- Pins survive a daemon crash/restart and, since §12, a `systemctl restart` or package upgrade too. A
+  start that finds a previous daemon's set attached replaces it **make-before-break** (§12): the new set
+  is attached next to it and the old one is detached by id only after the new maps are populated and
+  read back. Nothing attached: clean leftovers by pin **and** by id (`bpftool -j cgroup show`), then load.
 
 Degradation (`BpfCapabilityProbe`, in this order, each a journal line `BPF layer inactive: …`):
 not root → objects not shipped → `bpftool` missing → no kernel BTF → bpffs not mounted; then runtime
@@ -525,3 +525,80 @@ long as it lasted; the watcher now compares the owned rule comments and republis
 `nft delete table inet axiom` / `nft flush ruleset`: degraded at once with `nft table inet axiom
 missing (removed externally …)`, restored by the next watch tick; the BPF layer stays attached
 meanwhile, so unscoped block rules kept blocking (0 slips). Evidence: `LINUX_TEST_REPORT.md` R5-*.
+
+## 12. Startup ordering: make-before-break hand-over (recon80 enforcement gap)
+
+**Gap (0.64.0 … 0.80.0).** `BpfEngine.StartAsync` called `DetachAndUnpin()` on whatever a previous
+daemon left attached **before** loading, attaching and populating its own set, and
+`NftEnforcementSupervisor.TeardownAsync` detached the layer on every stop, `systemctl restart` included.
+Each start after a crash or restart therefore had a window in which a fresh exec of a program blocked
+by a connect-time-proven rule connected, while IPC and `--doctor` already said `active`/`verified`.
+
+**Ordering now.**
+
+1. Stop. A plain `systemctl stop` / `disable --now` / shutdown detaches and unpins as before. A
+   restart hands the layer over and leaves programs and pinned maps attached. Restarts are detected
+   by `SystemdStopIntent`: a `restart`/`start` job for `axiomd.service` in
+   `systemctl list-jobs --no-legend --plain --full axiomd.service`, or the installer's one-shot marker
+   `/run/axiom/bpf-handover`, which `--install-service` writes before its upgrade stop. A loop fault
+   (systemd restarts the unit) also hands over, and so does a `list-jobs` answer that cannot be read
+   (fail closed). `packaging/linux/bpf-pins.sh` (prerm remove/purge) still detaches everything.
+2. Start, previous set attached (read from `bpftool -j cgroup show`). `prog loadall` stages the new
+   object in `/sys/fs/bpf/axiom-next` (new maps; no map reuse, so an upgrade with a changed object is
+   handled the same way). The four programs are attached with `multi` next to the old ones (8 attached),
+   and the layer reports **`pending`**: connect-time layer state `pending`, filter enforcement
+   `Pending`, no rule connect-time proven, and `--doctor` "live enforcement" WARN.
+3. First sync (`managed-rules.json` → maps, read back). Only if it is verified are the old programs
+   detached by id. `/sys/fs/bpf/axiom` is then replaced by a rename of `axiom-next`. The layer goes
+   `active`.
+4. Failure paths, all fail closed:
+   - New set cannot be loaded or attached, or its maps cannot be populated: the new set is rolled
+     back and the old set keeps enforcing. It is reported `stale_programs` (degraded, removals
+     pending) and retried on the watch tick.
+   - Old programs refuse to detach: the new set stays and the leftovers are reported stale. Only
+     their detach is retried; no further load.
+   - Unreadable `bpftool` output at start: unchanged (`unknown`, pins kept, nothing loaded or
+     detached).
+   - `bpftool` unusable while a previous set is pinned: `unknown`/stale and retried, never a plain
+     `inactive`.
+   - More than one set already attached at start: the old detach-then-load path, so never a third
+     set.
+
+**Kernel/tool behaviour this relies on, checked in the VM** (Ubuntu 24.04, kernel 6.8.0-147, bpftool
+7.4.0 / libbpf 1.4, systemd 255):
+- legacy `bpftool cgroup attach … multi` (BPF_F_ALLOW_MULTI) runs two Axiom sets side by side: 8
+  attached, the old set's deny keeps refusing;
+- `bpftool cgroup detach … id N` removes one program;
+- `rename(2)` of a bpffs directory works and the pins keep their objects;
+- bpffs refuses `.` in any name it creates (`bpf_lookup` → EPERM: "libbpf: failed to mkdir
+  /sys/fs/bpf/axiom.next/axiom_connect4: Operation not permitted"), hence `axiom-next`;
+- the stopping daemon can run `systemctl list-jobs` under the unit's sandbox and sees `restart`.
+
+**Measured** (VM, `recon80-gap/guest/g.sh`):
+- probes: 3 loops of fresh execs of a copied `curl` under an unscoped block rule, about 60 probes/s;
+- control: an allowed `python3` connect every 50 ms;
+- program count: sampled every 20 ms.
+
+| scenario | before (0.80.0 @ 9067a6c) | after (fixed) |
+|---|---|---|
+| SIGKILL + auto-restart (×4) | 14–20 probes connected per run, over 0.2–0.4 s, ~3 s after the kill | 0 of 2,582 |
+| `systemctl restart` (×4) | 65–68 per run, over 1.3–2.4 s from the restart | 0 of 2,392 |
+| reinstall/upgrade same build | 134 over 2.6 s | 0 of 2,978 |
+| upgrade 0.80.0 (pre-fix) → fixed | — | 126 over 2.2 s (the old daemon detaches on stop) |
+| upgrade 0.64.0 → fixed | — | 136 over 2.2 s (same reason) |
+
+After the fix, the attached count peaks at 7–8 (old + new) for about 0.2 s and settles at 4. The
+allowed control connected throughout (0 failures in any run). IPC during startup: no reply → `pending`
+/ enforcement `pending` / 0 proven for about 0.45 s → `active` / `verified`.
+
+**Limits.**
+- An upgrade **from** a package without this change still opens the window once: its daemon
+  detaches on the upgrade stop. Upgrades from this build on are covered.
+- The nft table and `axiom.slice` cgroups are still removed on every stop. Rules that are nft-only
+  (scoped, inbound, allow) are therefore not enforced while the daemon is down; that window is
+  unchanged, and only connect-time-proven rules are covered.
+- While a handed-over set enforces without a daemon (crash loop, `start-limit-hit`), it enforces
+  the verdicts it had. A rule removed in that state keeps blocking until a daemon runs again;
+  `systemctl stop` or package removal detaches it.
+- Live `--doctor` takes about 2 s and did not catch the ~0.5 s `pending` window. Its wording is
+  covered by unit tests only.

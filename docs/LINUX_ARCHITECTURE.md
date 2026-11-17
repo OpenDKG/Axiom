@@ -267,7 +267,8 @@ helper (P2b) or a proc-connector exec watcher.
 StartLayerAsync; loops (attribution 1 s, watcher, nft trace, BPF events) } finally { TeardownAsync }`.
 A loop fault cancels the sibling loops (linked token), is logged first, the teardown runs, the fault is
 rethrown and `NftEnforcementWorker` exits 70 for `Restart=on-failure`. Teardown steps are independent and
-bounded (8 s each, under `TimeoutStopSec=30`): BPF detach/unpin, `delete table inet axiom`, cgroup
+bounded (8 s each, under `TimeoutStopSec=30`): BPF detach/unpin (or, on a restart, upgrade or loop fault, a
+hand-over that leaves the programs attached: LINUX_EBPF.md §12), `delete table inet axiom`, cgroup
 release; errors aggregated in one journal line. Startup reconciliation logs and repairs what a killed
 instance left (table, `axiom.slice` cgroups, attached/pinned `axiom_*` programs) — see
 LINUX_ENFORCEMENT.md §8. Proven live with `systemctl kill -s KILL`, `systemctl stop/start` and a package
