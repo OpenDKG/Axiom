@@ -67,9 +67,6 @@ public static class ThreatShareIocExtractor
 
             if (seen.Add(type + ":" + normalized))
             {
-                var baseProofGrade = finding.HumanReviewed
-                    ? ThreatShareProofGrade.Reproduced
-                    : ThreatShareProofGrade.Observed;
                 results.Add(BuildRequest(
                     type,
                     normalized,
@@ -77,7 +74,7 @@ public static class ThreatShareIocExtractor
                     normalizedSeverity,
                     finding,
                     ThreatShareEvidenceClass.HeuristicOrAiSuspected,
-                    baseProofGrade,
+                    ThreatShareProofGrade.Observed,
                     "AI Analyst labelled this value malicious; Axiom observed it as a remote endpoint in the evidence it supplied."));
 
                 if (results.Count >= MaxCandidates)
@@ -133,22 +130,12 @@ public static class ThreatShareIocExtractor
             proofGrade,
             listDerived: false);
 
-        if (assessment.Eligibility == ThreatSharePublicationEligibility.NeedsOperatorReview &&
-            !string.Equals((finding.Confidence ?? string.Empty).Trim(), "high", StringComparison.OrdinalIgnoreCase) &&
-            !finding.HumanReviewed)
-        {
-            assessment = new(
-                ThreatSharePublicationEligibility.NeedsEvidence,
-                "AI_CONFIDENCE_BELOW_HIGH",
-                "AI finding confidence is below 'high' and has not been human-reviewed; kept local until verified.");
-        }
-
         return new ThreatShareEnqueueRequest
         {
             IndicatorType = type,
             Value = value,
             Reason = reason,
-            Context = "in-tool-output",
+            Context = ThreatShareVocabulary.ObservedNetworkContext,
             Source = ThreatShareSource.AiAnalyst,
             Detail = detail,
             ObservedUtc = finding.AnalysisTimestampUtc,

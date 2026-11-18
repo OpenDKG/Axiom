@@ -516,7 +516,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         else
         {
             Agents.SetTrayMonitoring(
-                ReferenceEquals(_activePage, Agents) || _activePage is AgentStatsPageViewModel or SimpleHomePageViewModel);
+                ReferenceEquals(_activePage, Agents) ||
+                _activePage is AgentDashboardPageViewModel or AgentStatsPageViewModel or SimpleHomePageViewModel);
             (_activePage as IActivatablePage)?.Deactivate();
             _traffic.Stop();
         }

@@ -10,7 +10,8 @@ public sealed record SetupOptions(
     bool CompleteInstallation,
     bool Silent = false,
     bool AcceptRisk = false,
-    bool Uninstall = false)
+    bool Uninstall = false,
+    bool AllowManualThreatSharing = false)
 {
     public static SetupOptions Parse(string[] args)
     {
@@ -25,6 +26,7 @@ public sealed record SetupOptions(
         var silent = false;
         var acceptRisk = false;
         var uninstall = false;
+        var allowManualThreatSharing = false;
 
         for (var index = 0; index < args.Length; index++)
         {
@@ -49,6 +51,9 @@ public sealed record SetupOptions(
                 case "--accept-risk":
                     acceptRisk = true;
                     break;
+                case "--allow-manual-threat-sharing":
+                    allowManualThreatSharing = true;
+                    break;
                 case "--uninstall":
                     uninstall = true;
                     break;
@@ -62,6 +67,7 @@ public sealed record SetupOptions(
             completeInstallation,
             silent,
             acceptRisk,
-            uninstall);
+            uninstall,
+            completeInstallation && allowManualThreatSharing);
     }
 }

@@ -70,8 +70,7 @@ public sealed class ThreatShareCli
                 "reason is 'unknown' or unsupported; classify with evidence before publishing");
         }
 
-        if (candidate.PublicationEligibility is ThreatSharePublicationEligibility.LocalOnly or
-            ThreatSharePublicationEligibility.NeedsEvidence)
+        if (!candidate.CanPublishToCommunity)
         {
             var reason = string.IsNullOrWhiteSpace(candidate.EligibilityExplanation)
                 ? "candidate is kept local until stronger evidence is available"
@@ -79,24 +78,22 @@ public sealed class ThreatShareCli
             return new(ThreatShareReportStatus.Rejected, reason);
         }
 
-        if (candidate.NoveltyStatus == ThreatShareNoveltyStatus.KnownVerified)
+        if (!ThreatSharingConsent.HasConsent())
         {
             return new(
                 ThreatShareReportStatus.Rejected,
-                "already present in local verified graph; manual community submission skipped");
+                "manual threat reporting is disabled in Axiom");
         }
 
-        var severity = ThreatShareVocabulary.NormalizeSeverity(candidate.Severity);
+        if (ThreatSharePreflight.CategoryRefusal(candidate.IndicatorType, candidate.Value, candidate.Detail) is { } category)
+        {
+            return new(ThreatShareReportStatus.Rejected, category);
+        }
+
         var execution = await ExecuteAsync(
-            [
-                "blackbox", "report",
-                "--type", "ioc",
-                "--ioc-type", candidate.IndicatorType,
-                "--value", candidate.Value,
-                "--context", candidate.Context,
-                "--severity", severity,
-            ],
-            cancellationToken).ConfigureAwait(false);
+            ThreatShareLauncher.ReportArguments(candidate),
+            cancellationToken,
+            manualReport: true).ConfigureAwait(false);
 
         return execution.ImmediateFailure ?? Classify(execution.Output, execution.ExitCode);
     }
@@ -124,15 +121,16 @@ public sealed class ThreatShareCli
 
     private async Task<CommandExecution> ExecuteAsync(
         IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool manualReport = false)
     {
-        var plans = ThreatShareLauncher.BuildPlans(
-            arguments,
-            BlackboxRoot(),
-            ThreatShareLauncher.FindRuntimePython(),
-            _resolveHermesPath(),
-            VenvPython(),
-            BlackboxPaths.ResolveHermesHome());
+        var root = BlackboxRoot();
+        var runtime = ThreatShareLauncher.FindRuntimePython();
+        var venv = VenvPython();
+        var home = BlackboxPaths.ResolveHermesHome();
+        var plans = manualReport
+            ? ThreatShareLauncher.BuildManualReportPlans(arguments, root, runtime, venv, home)
+            : ThreatShareLauncher.BuildPlans(arguments, root, runtime, _resolveHermesPath(), venv, home);
 
         if (plans.Count == 0)
         {
@@ -167,6 +165,7 @@ public sealed class ThreatShareCli
         ThreatShareLaunchPlan plan,
         CancellationToken cancellationToken)
     {
+        var started = false;
         try
         {
             var start = new ProcessStartInfo(plan.FileName)
@@ -194,6 +193,7 @@ public sealed class ThreatShareCli
                 return null;
             }
 
+            started = true;
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(PlanTimeout);
 
@@ -203,7 +203,11 @@ public sealed class ThreatShareCli
             var text = ((await stdoutTask.ConfigureAwait(false)) + "\n" +
                         (await stderrTask.ConfigureAwait(false))).Replace("\r", string.Empty);
 
-            return IsUnavailable(text) ? null : new CommandExecution(text, process.ExitCode, null);
+            var manualReporterStarted = text.Contains(ThreatShareLauncher.ManualReportStarted, StringComparison.Ordinal);
+            text = text.Replace(ThreatShareLauncher.ManualReportStarted, string.Empty, StringComparison.Ordinal);
+            return !manualReporterStarted && IsUnavailable(text)
+                ? null
+                : new CommandExecution(text, process.ExitCode, null);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -217,7 +221,10 @@ public sealed class ThreatShareCli
         catch (Exception exception) when (exception is
                      System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
-            return null;
+            return started
+                ? new(string.Empty, -1, new(ThreatShareReportStatus.UnknownOutcome,
+                    "the Blackbox reporter started but its result could not be read"))
+                : null;
         }
     }
 
@@ -245,6 +252,12 @@ public sealed class ThreatShareCli
         }
 
         var line = FirstNonEmptyLine(text, exitCode);
+
+        if (text.Contains("Queued for automatic retry", StringComparison.OrdinalIgnoreCase))
+        {
+            return new(ThreatShareReportStatus.UnknownOutcome,
+                "Blackbox did not confirm delivery; check the community graph before retrying manually");
+        }
 
         if (IsUnavailable(text))
         {
@@ -315,6 +328,7 @@ public sealed class ThreatShareCli
         text.Contains("cannot connect", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsPolicyRefusal(string text) =>
+        text.Contains("not submitted:", StringComparison.OrdinalIgnoreCase) ||
         text.Contains("invalid", StringComparison.OrdinalIgnoreCase) ||
         text.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
         text.Contains("rejected", StringComparison.OrdinalIgnoreCase) ||

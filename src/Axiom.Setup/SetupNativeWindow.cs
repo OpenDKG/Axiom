@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using Axiom.Presentation;
 
 namespace Axiom.Setup;
 
@@ -144,6 +145,7 @@ internal sealed class SetupNativeWindow : IDisposable
     private bool _createShortcut;
     private bool _startAfterInstall;
     private bool _acceptRisk;
+    private bool _allowManualThreatSharing;
     private bool _installing;
     private bool _lastOperationWasUninstall;
     private bool _lastOperationWasRepair;
@@ -166,6 +168,7 @@ internal sealed class SetupNativeWindow : IDisposable
         _createShortcut = options.CreateShortcut;
         _startAfterInstall = options.StartAfterInstall;
         _acceptRisk = options.AcceptRisk;
+        _allowManualThreatSharing = options.AllowManualThreatSharing;
         _appVersionText = ReadSetupVersion();
     }
 
@@ -657,7 +660,7 @@ internal sealed class SetupNativeWindow : IDisposable
             [
                 "Axiom Shield — service + ask policy (1 UAC)",
                 "Privacy Shield — DNS blocker (53 + DoH 443)",
-                "Blackbox + DKG — node, 11 hooks, shared indicators",
+                "Blackbox + DKG — local agent guard and known threats",
                 "Background — autostart & tray protection",
             ],
             footerMeta: "10–20 min full setup",
@@ -726,7 +729,9 @@ internal sealed class SetupNativeWindow : IDisposable
         DrawCheckRow(
             g, HitId.AgreeRow, rx, y + riskH - S(30), rw, S(24),
             _acceptRisk,
-            "I understand these risks and accept using Axiom at my own risk.");
+            _completeMode
+                ? "I accept these risks and allow manual threat reports I confirm."
+                : "I understand these risks and accept using Axiom at my own risk.");
     }
 
     private void DrawModeCard(
@@ -1196,8 +1201,7 @@ internal sealed class SetupNativeWindow : IDisposable
         }
         else if (vk == VkSpace)
         {
-            _acceptRisk = !_acceptRisk;
-            InvalidateWindow();
+            ToggleInstallationConsent();
         }
         else if (vk == VkReturn && _acceptRisk)
         {
@@ -1210,6 +1214,12 @@ internal sealed class SetupNativeWindow : IDisposable
         switch (id)
         {
             case HitId.CardComplete:
+                if (!_completeMode)
+                {
+                    _acceptRisk = false;
+                    _allowManualThreatSharing = false;
+                }
+
                 _completeMode = true;
                 InvalidateWindow();
                 break;
@@ -1244,8 +1254,7 @@ internal sealed class SetupNativeWindow : IDisposable
                 break;
 
             case HitId.AgreeRow:
-                _acceptRisk = !_acceptRisk;
-                InvalidateWindow();
+                ToggleInstallationConsent();
                 break;
 
             case HitId.OpenAxiomBtn:
@@ -1353,6 +1362,13 @@ internal sealed class SetupNativeWindow : IDisposable
         }
     }
 
+    private void ToggleInstallationConsent()
+    {
+        _acceptRisk = !_acceptRisk;
+        _allowManualThreatSharing = _acceptRisk && _completeMode;
+        InvalidateWindow();
+    }
+
     private void StartInstall(bool isRepair)
     {
         if (_installing || (!isRepair && !_acceptRisk))
@@ -1382,6 +1398,8 @@ internal sealed class SetupNativeWindow : IDisposable
             CreateShortcut = _createShortcut,
             StartAfterInstall = !isRepair || _startAfterInstall,
             CompleteInstallation = _completeMode,
+            AllowManualThreatSharing = _completeMode &&
+                (isRepair ? ThreatSharingConsent.HasConsent() : _allowManualThreatSharing),
         };
 
         var progress = new NativeLogProgress(message =>

@@ -1,65 +1,57 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using System.Text.Json;
-using System.Text.Json.Nodes;
-
 namespace Axiom.Presentation;
 
-/// <summary>
-/// Reads the Complete-installation consent that lets Axiom turn on signed, redacted threat sharing
-/// once, and remembers that it already did so. A user who later turns sharing off is not overridden.
-/// </summary>
+/// <summary>Per-user permission for Axiom's manual reporting UI, independent of the Blackbox report switch.</summary>
 public static class ThreatSharingConsent
 {
-    public static string DefaultProfilePath => Path.Combine(
+    public const string ReporterTermsUrl =
+        "https://github.com/umanitek/agent-blackbox/blob/main/plugins/blackbox/docs/REPORTER_TERMS.md";
+
+    public static string DefaultPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Axiom",
-        "install-profile.json");
+        "manual-threat-sharing");
 
-    public static string DefaultAppliedPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Axiom",
-        "threat-sharing-consent-applied");
-
-    /// <summary>True when the installer recorded the Complete threat-sharing consent.</summary>
-    public static bool HasConsent(string? profilePath = null)
+    public static bool HasConsent(string? path = null)
     {
-        var path = profilePath ?? DefaultProfilePath;
         try
         {
-            if (!File.Exists(path))
-            {
-                return false;
-            }
-
-            var root = JsonNode.Parse(File.ReadAllText(path)) as JsonObject;
-            return root?["threatSharingConsent"]?.GetValue<bool>() == true;
+            return string.Equals(File.ReadAllText(path ?? DefaultPath), "manual-v1", StringComparison.Ordinal);
         }
-        catch (Exception exception) when (exception is
-                     IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or FormatException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             return false;
         }
     }
 
-    public static bool WasApplied(string? appliedPath = null) =>
-        File.Exists(appliedPath ?? DefaultAppliedPath);
-
-    public static void MarkApplied(string? appliedPath = null)
+    public static bool TrySetPermission(bool allowed, string? path = null)
     {
-        var path = appliedPath ?? DefaultAppliedPath;
+        var target = path ?? DefaultPath;
+        var temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            var directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrWhiteSpace(directory))
+            if (Path.GetDirectoryName(target) is { Length: > 0 } directory)
             {
                 Directory.CreateDirectory(directory);
             }
 
-            File.WriteAllText(path, DateTimeOffset.UtcNow.ToString("O"));
+            File.WriteAllText(temporary, allowed ? "manual-v1" : "off");
+            File.Move(temporary, target, overwrite: true);
+            return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // Losing the marker only means the next start may try once more; it never blocks the app.
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 }
