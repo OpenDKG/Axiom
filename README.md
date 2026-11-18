@@ -2,7 +2,7 @@
 
 **Free Open-Source Network & AI Agent Security**
 
-**Version:** 1.4.0 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+**Version:** 1.4.1 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
 
 > The repository is private during active development. The source license remains
 > GPL-3.0-or-later; public source availability will be confirmed before a public release.
@@ -75,7 +75,7 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 ## Current release and quick links
 
-**Windows release notes:** [1.4.0](docs/RELEASES/1.4.0.md). Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
+**Release notes:** [1.4.1](docs/RELEASES/1.4.1.md). Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
 
 > **Version numbering:** development builds were previously numbered `0.10.x`. A short reset produced `0.2.0` and `0.3.0`, but GitHub orders releases by semantic version, which hid them below `0.10.25`. The public release line resumed at `0.11.0` and continues in the `1.x` series. `scripts/build-release.ps1` refuses a version that is not greater than the highest existing `v*` tag.
 
