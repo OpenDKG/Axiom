@@ -24,12 +24,12 @@ public sealed class ThreatSharingConsentTests : IDisposable
     }
 
     [Fact]
-    public void Complete_consent_is_read_from_the_install_profile()
+    public void Legacy_complete_consent_does_not_authorize_manual_reporting()
     {
         var profile = Path.Combine(_directory, "install-profile.json");
         File.WriteAllText(profile, """{"profile":"complete","threatSharingConsent":true}""");
 
-        Assert.True(ThreatSharingConsent.HasConsent(profile));
+        Assert.False(ThreatSharingConsent.HasConsent(profile));
     }
 
     [Fact]
@@ -43,31 +43,13 @@ public sealed class ThreatSharingConsentTests : IDisposable
     }
 
     [Fact]
-    public void Install_consent_is_honoured_only_where_the_installer_records_it()
+    public void Manual_permission_can_be_granted_and_withdrawn()
     {
-        Assert.Equal(OperatingSystem.IsWindows(), ThreatSharingConsent.IsInstallConsentSupported);
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        // Off Windows the default profile is never read (no file is created here: the real
-        // profile directory must not be touched by tests), so sharing cannot turn on by itself.
-        Assert.False(ThreatSharingConsent.HasConsent());
-
-        // An explicit path (tests, a future installer) still works on every platform.
-        var profile = Path.Combine(_directory, "install-profile.json");
-        File.WriteAllText(profile, """{"profile":"complete","threatSharingConsent":true}""");
-        Assert.True(ThreatSharingConsent.HasConsent(profile));
-    }
-
-    [Fact]
-    public void Applied_marker_round_trips()
-    {
-        var marker = Path.Combine(_directory, "applied");
-
-        Assert.False(ThreatSharingConsent.WasApplied(marker));
-        ThreatSharingConsent.MarkApplied(marker);
-        Assert.True(ThreatSharingConsent.WasApplied(marker));
+        var path = Path.Combine(_directory, "manual-threat-sharing");
+        Assert.False(ThreatSharingConsent.HasConsent(path));
+        Assert.True(ThreatSharingConsent.TrySetPermission(true, path));
+        Assert.True(ThreatSharingConsent.HasConsent(path));
+        Assert.True(ThreatSharingConsent.TrySetPermission(false, path));
+        Assert.False(ThreatSharingConsent.HasConsent(path));
     }
 }

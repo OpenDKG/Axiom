@@ -12,7 +12,7 @@ public sealed class PortablePresentationTests
     public async Task Connection_monitor_keeps_one_row_for_the_same_socket()
     {
         var source = new FakeSource();
-        var monitor = new ConnectionMonitor(source, new FakeTimerFactory());
+        using var monitor = new ConnectionMonitor(source, new FakeTimerFactory());
 
         await monitor.PollAsync();
         await monitor.PollAsync();
@@ -20,6 +20,70 @@ public sealed class PortablePresentationTests
         Assert.Single(monitor.Connections);
         Assert.Equal(1, monitor.ProcessCount);
         Assert.Equal("observed", monitor.Connections[0].QualityText);
+    }
+
+    [Fact]
+    public async Task Connection_monitor_publishes_recovery_with_the_first_successful_poll()
+    {
+        var timeout = true;
+        var source = new CallbackSource(() => timeout
+            ? Task.FromException<ConnectionSnapshot>(new TaskCanceledException("Snapshot timed out."))
+            : Task.FromResult(Snapshot(Connection("app.exe", 42, "127.0.0.1:1", "1.1.1.1:2"))));
+        using var monitor = new ConnectionMonitor(source, new FakeTimerFactory());
+        var updates = new List<(string? Error, int Sockets)>();
+        monitor.Updated += (_, _) => updates.Add((monitor.LastError, monitor.Connections.Count));
+
+        await monitor.PollAsync();
+        timeout = false;
+        await monitor.PollAsync();
+
+        Assert.Equal<(string?, int)>([("Snapshot timed out.", 0), (null, 1)], updates);
+    }
+
+    [Fact]
+    public async Task Connection_monitor_ignores_a_snapshot_that_finishes_after_disposal()
+    {
+        var pending = new TaskCompletionSource<ConnectionSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var captures = 0;
+        var monitor = new ConnectionMonitor(new CallbackSource(() =>
+        {
+            captures++;
+            return pending.Task;
+        }), new FakeTimerFactory());
+        var notifications = 0;
+        monitor.Updated += (_, _) => notifications++;
+
+        var poll = monitor.PollAsync();
+        monitor.Dispose();
+        pending.SetResult(Snapshot(Connection("app.exe", 42, "127.0.0.1:1", "1.1.1.1:2")));
+        await poll;
+        await monitor.PollAsync();
+
+        Assert.Equal(1, captures);
+        Assert.Equal(0, notifications);
+        Assert.Empty(monitor.Connections);
+    }
+
+    [Fact]
+    public void Connection_row_reuses_search_text_for_traffic_updates_and_skips_unchanged_rows()
+    {
+        var source = Connection("app.exe", 42, "127.0.0.1:1", "1.1.1.1:2");
+        var row = new ConnectionRow(source);
+        var searchText = row.SearchBlob;
+        var updates = 0;
+        row.PropertyChanged += (_, _) => updates++;
+
+        row.Update(source with { });
+        Assert.Equal(0, updates);
+
+        row.Update(source with { ObservedBytesSent = 1024 });
+        Assert.Equal(1, updates);
+        Assert.Equal(1024, row.ObservedBytesSent);
+        Assert.Same(searchText, row.SearchBlob);
+
+        row.Update(source with { AppDisplayName = "renamed.exe" });
+        Assert.Equal(2, updates);
+        Assert.Contains("renamed.exe", row.SearchBlob, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -178,6 +242,15 @@ public sealed class PortablePresentationTests
 
         public Task<ConnectionSnapshot> CaptureAsync(CancellationToken cancellationToken) =>
             Task.FromResult(Snapshot(Connection("app.exe", 42, "127.0.0.1:1", "1.1.1.1:2")));
+    }
+
+    private sealed class CallbackSource(Func<Task<ConnectionSnapshot>> capture) : IConnectionSnapshotSource
+    {
+        public string Name => "test source";
+
+        public TimeSpan PollInterval => TimeSpan.FromSeconds(1);
+
+        public Task<ConnectionSnapshot> CaptureAsync(CancellationToken cancellationToken) => capture();
     }
 
     private sealed class FakeTimerFactory : IUiTimerFactory

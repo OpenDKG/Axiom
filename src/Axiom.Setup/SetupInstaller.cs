@@ -452,7 +452,8 @@ internal static class SetupInstaller
                     }
 
                     var defaults = await SetupDefaults
-                        .ApplyCompleteAsync(options.InstallDir, Report, cancellationToken, serviceRegisteredEarly)
+                        .ApplyCompleteAsync(options.InstallDir, Report, cancellationToken, serviceRegisteredEarly,
+                            options.AllowManualThreatSharing)
                         .ConfigureAwait(false);
                     if (!string.IsNullOrWhiteSpace(defaults.Warning))
                     {

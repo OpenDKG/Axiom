@@ -28,7 +28,7 @@ public sealed class ThreatShareIocExtractorTests
         Assert.All(candidates, candidate =>
         {
             Assert.Equal(ThreatShareSource.AiAnalyst, candidate.Source);
-            Assert.Equal("in-tool-output", candidate.Context);
+            Assert.Equal(ThreatShareVocabulary.ObservedNetworkContext, candidate.Context);
             Assert.Contains("Axiom observed", candidate.Detail, StringComparison.Ordinal);
         });
     }
@@ -170,11 +170,11 @@ public sealed class ThreatShareIocExtractorTests
         var mediumConfidence = Assert.Single(candidates, c => c.Value == "drop.example.org");
         Assert.Equal("exfil-endpoint", mediumConfidence.Reason);
         Assert.Equal(ThreatSharePublicationEligibility.NeedsEvidence, mediumConfidence.PublicationEligibility);
-        Assert.Equal("AI_SUSPECTED_NEEDS_CORROBORATION", mediumConfidence.EligibilityReasonCode);
+        Assert.Equal("BEHAVIOR_NEEDS_VERIFICATION", mediumConfidence.EligibilityReasonCode);
     }
 
     [Fact]
-    public void Confirmed_process_dns_correlation_adds_correlated_domain_and_high_confidence_becomes_reviewable()
+    public void Confirmed_process_dns_correlation_adds_a_domain_but_keeps_it_local()
     {
         var observedUtc = DateTimeOffset.UtcNow;
         var finding = new AiFinding
@@ -240,7 +240,7 @@ public sealed class ThreatShareIocExtractorTests
         Assert.Equal("c2-node.example.org", domainCandidate.Value);
         Assert.Equal("command-and-control", domainCandidate.Reason);
         Assert.Equal(ThreatShareProofGrade.Correlated, domainCandidate.ProofGrade);
-        Assert.Equal(ThreatSharePublicationEligibility.NeedsOperatorReview, domainCandidate.PublicationEligibility);
+        Assert.Equal(ThreatSharePublicationEligibility.NeedsEvidence, domainCandidate.PublicationEligibility);
 
         var mediumCorrelated = ThreatShareIocExtractor.Extract(
             finding with { Confidence = "medium" },
@@ -250,7 +250,7 @@ public sealed class ThreatShareIocExtractorTests
             dnsObservations: dns);
         var mediumDomain = Assert.Single(mediumCorrelated, c => c.IndicatorType == "domain");
         Assert.Equal(ThreatSharePublicationEligibility.NeedsEvidence, mediumDomain.PublicationEligibility);
-        Assert.Equal("AI_CONFIDENCE_BELOW_HIGH", mediumDomain.EligibilityReasonCode);
+        Assert.Equal("BEHAVIOR_NEEDS_VERIFICATION", mediumDomain.EligibilityReasonCode);
     }
 
     [Fact]
