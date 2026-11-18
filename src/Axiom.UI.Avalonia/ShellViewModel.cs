@@ -507,12 +507,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _presentationVisible = visible;
         if (visible)
         {
+            Agents.SetTrayMonitoring(false);
             _traffic.Start();
             (_activePage as IActivatablePage)?.Activate();
             RefreshStatus();
         }
         else
         {
+            Agents.SetTrayMonitoring(ReferenceEquals(_activePage, Agents) || _activePage is AgentStatsPageViewModel);
             (_activePage as IActivatablePage)?.Deactivate();
             _traffic.Stop();
         }

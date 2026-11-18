@@ -30,8 +30,9 @@ public sealed class AgentsViewLogoTests
                 foreach (var logo in logos)
                 {
                     Assert.NotNull(logo.Source);
-                    Assert.InRange(logo.Bounds.Width, 140, 236);
-                    Assert.InRange(logo.Bounds.Height, 35, 41);
+                    // The allocated size can exceed the artwork's aspect-ratio-preserving bounds.
+                    Assert.InRange(logo.DesiredSize.Width, 140, 236);
+                    Assert.InRange(logo.DesiredSize.Height, 35, 41);
                 }
 
                 foreach (var theme in new[] { ThemeVariant.Light, AxiomThemeVariants.LightWarm, AxiomThemeVariants.GlassLight })
