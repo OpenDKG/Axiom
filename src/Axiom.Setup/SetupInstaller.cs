@@ -210,11 +210,27 @@ internal static class SetupInstaller
                     }
 
                     Report("Auditing official installer scope: Axiom modules, Hermes plugin config/mode and scheduled task only.");
-                    Report("Configuring the official Blackbox runtime silently in the background...");
-                    blackboxExit = await Task.Run(
-                        () => moduleInstaller.InstallBlackboxAndWait(Report),
-                        cancellationToken).ConfigureAwait(false);
-                    Report($"Blackbox installer exit code: {(blackboxExit ? "0" : "non-zero")}.");
+                    var blackboxPrereqs = Axiom.Contracts.Modules.ModulePrerequisites.Probe();
+                    if (!blackboxPrereqs.IsSatisfied)
+                    {
+                        var pythonNote = blackboxPrereqs.RejectedPythonVersions.Count == 0
+                            ? string.Empty
+                            : $" Found incompatible Python: {string.Join(", ", blackboxPrereqs.RejectedPythonVersions)}.";
+                        Report(
+                            $"Blackbox was not installed: the vendor installer requires " +
+                            $"{blackboxPrereqs.MissingSummary}.{pythonNote} " +
+                            "Axiom core is installed. Install the missing tools (Python 3.11-3.13, preferably 3.12), " +
+                            "then click Repair on the Blackbox card.");
+                        blackboxExit = false;
+                    }
+                    else
+                    {
+                        Report("Configuring the official Blackbox runtime silently in the background...");
+                        blackboxExit = await Task.Run(
+                            () => moduleInstaller.InstallBlackboxAndWait(Report),
+                            cancellationToken).ConfigureAwait(false);
+                        Report($"Blackbox installer exit code: {(blackboxExit ? "0" : "non-zero")}.");
+                    }
 
                     if (upgradeBackup is not null)
                     {

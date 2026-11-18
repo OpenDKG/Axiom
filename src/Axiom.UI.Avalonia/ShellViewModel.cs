@@ -816,6 +816,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             .ToList();
         if (pending.Count == 0)
         {
+            _notifiedPendingApps.Clear();
             return;
         }
 

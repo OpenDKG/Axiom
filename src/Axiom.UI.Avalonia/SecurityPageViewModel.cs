@@ -45,7 +45,8 @@ public sealed record SecurityModule(
     bool CanAct = false,
     string ActionLabel = "Install",
     bool CanUninstall = false,
-    bool CanSetMode = false)
+    bool CanSetMode = false,
+    bool CanRepair = false)
 {
     public bool IsAgentModule => Name is "Blackbox" or "OriginTrail DKG";
 
@@ -59,6 +60,8 @@ public sealed record SecurityModule(
         OperatingSystem.IsWindows() || Glyph.Length == 0 || Glyph[0] < '\uE000' || Glyph[0] > '\uF8FF'
             ? Glyph
             : Name.Length > 0 ? Name[..1] : string.Empty;
+
+    public bool IsBlackbox => Name == "Blackbox";
 }
 
 public sealed partial class FileScanRow : ObservableObject
@@ -256,8 +259,17 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     private bool _communityConnected;
     private Task? _communityLoadTask;
     private readonly HashSet<string> _notifiedCommunityHashes = new(StringComparer.OrdinalIgnoreCase);
-    private bool _dkgAutoStartAttempted;
-    private bool _blackboxAutoStartAttempted;
+
+    /// <summary>How often a module that is installed but down is started again this session.</summary>
+    private static readonly TimeSpan AutoStartRetryInterval = TimeSpan.FromMinutes(3);
+
+    private const int MaxAutoStartAttempts = 5;
+
+    private DateTimeOffset _lastDkgStartAttempt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastBlackboxStartAttempt = DateTimeOffset.MinValue;
+    private int _dkgStartAttempts;
+    private int _blackboxStartAttempts;
+    private bool _healthSampleRunning;
 
     private readonly IUiTimer _activityTimer;
 
@@ -417,6 +429,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     [ObservableProperty]
     private bool _isBusy;
 
+    /// <summary>One install/repair/start flow at a time, so module port checks stay meaningful.</summary>
+    private bool _moduleActionRunning;
+
     [ObservableProperty]
     private string _lastCheckedText = "Not checked yet";
 
@@ -425,6 +440,27 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private string _blackboxModeText = "audit";
+
+    /// <summary>Block is the only mode that refuses an action; the card shows it as the active one.</summary>
+    public bool BlackboxModeIsBlock => !IsAuditOnly;
+
+    public bool BlackboxModeIsAudit => IsAuditOnly;
+
+    public string BlackboxModeExplanation => IsAuditOnly
+        ? "Audit records every guarded action but blocks nothing. Switch to Block before you rely on agent protection."
+        : "Block refuses proven prompt injection, tool escalation and protected credential/file reads. Local blocking works without the DKG node.";
+
+    public string ModuleDependencyNote =>
+        "Blackbox blocks locally on its own. The DKG node adds shared-graph evidence: indicators corroborated " +
+        "by other nodes, and publishing your signed, redacted sightings. If DKG is down, local blocking keeps " +
+        "working but the graph stays offline and new verified indicators are not received.";
+
+    partial void OnBlackboxModeTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(BlackboxModeIsBlock));
+        OnPropertyChanged(nameof(BlackboxModeIsAudit));
+        OnPropertyChanged(nameof(BlackboxModeExplanation));
+    }
 
     public string StatusTitle
     {
@@ -568,17 +604,19 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     /// </summary>
     private void TryStartInstalledDkgOnLaunch(OptionalModuleStatus dkg)
     {
-        if (_dkgAutoStartAttempted || dkg.IsConnected)
+        if (dkg.IsConnected || DistributionContext.IsStorePackage || !_installer.IsDkgAvailable)
         {
             return;
         }
 
-        _dkgAutoStartAttempted = true;
-        if (DistributionContext.IsStorePackage || !_installer.IsDkgAvailable)
+        if (_dkgStartAttempts >= MaxAutoStartAttempts ||
+            DateTimeOffset.UtcNow - _lastDkgStartAttempt < AutoStartRetryInterval)
         {
             return;
         }
 
+        _lastDkgStartAttempt = DateTimeOffset.UtcNow;
+        _dkgStartAttempts++;
         if (_installer.StartDkg())
         {
             InstallStatusText = "Starting the installed DKG node...";
@@ -587,23 +625,26 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     }
 
     /// <summary>
-    /// Starts an installed local Blackbox dashboard silently once per session so agent graph
-    /// status does not stay offline after Axiom restarts. A dashboard that already answers is
-    /// left untouched.
+    /// Starts an installed local Blackbox dashboard silently once per retry window so agent graph
+    /// status does not stay offline after a restart, a crash or a power loss. A dashboard that
+    /// already answers, or a port that is still binding, is left untouched.
     /// </summary>
     private void TryStartInstalledBlackboxOnLaunch(OptionalModuleStatus blackbox)
     {
-        if (_blackboxAutoStartAttempted || blackbox.IsConnected)
+        if (blackbox.IsConnected || DistributionContext.IsStorePackage ||
+            !_uninstaller.IsBlackboxRuntimeInstalled)
         {
             return;
         }
 
-        _blackboxAutoStartAttempted = true;
-        if (DistributionContext.IsStorePackage || !_uninstaller.IsBlackboxRuntimeInstalled)
+        if (_blackboxStartAttempts >= MaxAutoStartAttempts ||
+            DateTimeOffset.UtcNow - _lastBlackboxStartAttempt < AutoStartRetryInterval)
         {
             return;
         }
 
+        _lastBlackboxStartAttempt = DateTimeOffset.UtcNow;
+        _blackboxStartAttempts++;
         if (_installer.StartBlackboxDashboard())
         {
             InstallStatusText = "Starting the installed Blackbox dashboard...";
@@ -647,7 +688,14 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     }
 
     private async Task SampleHealthAsync()
-    {        try
+    {
+        if (_healthSampleRunning)
+        {
+            return;
+        }
+
+        _healthSampleRunning = true;
+        try
         {
             var dkgTask = _probe.ProbeDkgAsync(CancellationToken.None);
             var blackboxTask = _probe.ProbeBlackboxAsync(CancellationToken.None);
@@ -660,6 +708,10 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         catch (Exception)
 #pragma warning restore CA1031
         {
+        }
+        finally
+        {
+            _healthSampleRunning = false;
         }
     }
 
@@ -774,9 +826,14 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         var summary = string.Join(", ", missingParts);
         InstallStatusText = $"Missing prerequisites: {summary}.";
 
+        var rejectedPython = report.RejectedPythonVersions.Count == 0
+            ? string.Empty
+            : $"\n\nFound Python {string.Join(", ", report.RejectedPythonVersions)}, but Blackbox supports 3.11-3.13 only. " +
+              "Axiom installs Python 3.12 and puts it first on the installer PATH.";
+
         var installNow = await _ui.ConfirmAsync(
             "Install prerequisites",
-            $"The optional module installers need: {summary}.\n\n" +
+            $"The optional module installers need: {summary}.{rejectedPython}\n\n" +
             "Install them now? A PowerShell window shows every winget command.",
             "Install prerequisites",
             destructive: false,
@@ -945,6 +1002,136 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             }
 
             InstallStatusText = "DKG installer opened in PowerShell. Complete it, then click Check again.";
+        }
+    }
+
+    /// <summary>
+    /// Repairs an installed local service without reinstalling it: one clean runtime, one port.
+    /// A module that has no runtime yet falls through to the normal Install/Repair path.
+    /// </summary>
+    [RelayCommand]
+    private async Task RepairModuleAsync(string? module)
+    {
+        if (string.IsNullOrWhiteSpace(module) || _moduleActionRunning ||
+            module is not ("Blackbox" or "OriginTrail DKG"))
+        {
+            return;
+        }
+
+        if (DistributionContext.IsStorePackage)
+        {
+            InstallStatusText = "This optional third-party module is not included in the Microsoft Store build.";
+            return;
+        }
+
+        var isBlackbox = module.Equals("Blackbox", StringComparison.Ordinal);
+        var installed = isBlackbox
+            ? _uninstaller.IsBlackboxRuntimeInstalled
+            : _installer.IsDkgAvailable;
+        if (!installed)
+        {
+            await ActOnModuleAsync(module).ConfigureAwait(true);
+            return;
+        }
+
+        _moduleActionRunning = true;
+        try
+        {
+            SetModuleActionLabel(module, "Repairing...");
+            InstallStatusText = $"Repairing {module}: stopping a stale runtime and starting one copy...";
+
+            var restart = isBlackbox ? !BlackboxConnected : !DkgConnected;
+            var ok = await Task.Run(
+                () => _installer.RepairLocalModules(
+                    blackbox: isBlackbox,
+                    dkg: !isBlackbox,
+                    restartBlackbox: isBlackbox && restart,
+                    restartDkg: !isBlackbox && restart),
+                CancellationToken.None).ConfigureAwait(true);
+
+            if (isBlackbox)
+            {
+                await LocalModuleRuntime
+                    .WaitForPortAsync(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(60), CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
+            else
+            {
+                var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(120);
+                while (DateTimeOffset.UtcNow < deadline && !LocalModuleRuntime.AnyDkgPortListening)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+                }
+            }
+
+            await RefreshAsync().ConfigureAwait(true);
+            var state = Modules.FirstOrDefault(item => item.Name == module);
+            InstallStatusText = state?.IsConnected == true
+                ? $"{module} repaired and connected{(ok ? string.Empty : "; review the local log")}."
+                : _installer.LastError
+                  ?? $"{module} did not answer after the repair. Check its local log, then try Repair again.";
+        }
+        finally
+        {
+            _moduleActionRunning = false;
+            await RefreshAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Starts both local modules in dependency order. Blackbox can block on its own; DKG adds the
+    /// shared verified graph, so it is started first and its failure does not stop Blackbox.
+    /// </summary>
+    [RelayCommand]
+    private async Task StartAllModulesAsync()
+    {
+        if (DistributionContext.IsStorePackage || _moduleActionRunning)
+        {
+            return;
+        }
+
+        _moduleActionRunning = true;
+        try
+        {
+            SetModuleActionLabel("OriginTrail DKG", "Starting...");
+            SetModuleActionLabel("Blackbox", "Starting...");
+            InstallStatusText = "Starting local modules: the DKG node first, then the Blackbox dashboard.";
+
+            var dkgUp = DkgConnected || LocalModuleRuntime.AnyDkgPortListening;
+            if (!dkgUp && _installer.IsDkgAvailable)
+            {
+                _installer.StartDkg();
+                var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(90);
+                while (DateTimeOffset.UtcNow < deadline && !LocalModuleRuntime.AnyDkgPortListening)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+                }
+
+                dkgUp = LocalModuleRuntime.AnyDkgPortListening;
+            }
+
+            var blackboxUp = BlackboxConnected || LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort);
+            if (!blackboxUp && _uninstaller.IsBlackboxRuntimeInstalled)
+            {
+                _installer.StartBlackboxDashboard();
+                blackboxUp = await LocalModuleRuntime
+                    .WaitForPortAsync(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(60), CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
+
+            await RefreshAsync().ConfigureAwait(true);
+            InstallStatusText = (dkgUp, blackboxUp) switch
+            {
+                (true, true) => "Local modules are up: DKG node and Blackbox dashboard connected.",
+                (false, true) => "Blackbox is up. DKG is still offline, so local blocking works but shared-graph evidence is unavailable.",
+                (true, false) => "DKG is up. Blackbox is still offline, so agent protection is not enforcing; use Repair on its card.",
+                _ => "Neither local module answered. Install or Repair each card, then try Start local modules again.",
+            };
+        }
+        finally
+        {
+            _moduleActionRunning = false;
+            await RefreshAsync().ConfigureAwait(true);
         }
     }
 
@@ -1417,7 +1604,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         var message = module switch
         {
             "Blackbox" =>
-                "Remove the Blackbox folder, its shortcut, .hermes\\blackbox and the Agent Blackbox DKG scheduled task? Other Hermes data and global packages are kept.",
+                "Remove Axiom's Blackbox runtime, its command, the managed Hermes plugin, .hermes\\blackbox and the Blackbox login tasks? Other Hermes data and global packages are kept.",
             "OriginTrail DKG" =>
                 "Remove the local DKG package and its testnet home? No global npm package is removed.",
             "Reputation provider" =>
@@ -1469,14 +1656,14 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                     () => _uninstaller.UninstallBlackboxAndWait()).ConfigureAwait(true);
                 InstallStatusText = uninstallSucceeded
                     ? "Blackbox uninstall finished."
-                    : "Blackbox uninstall window finished with an error; check the log.";
+                    : "Blackbox uninstall failed: " + (_uninstaller.LastError ?? "check the local log.");
                 break;
             case "OriginTrail DKG":
                 uninstallSucceeded = await Task.Run(
                     () => _uninstaller.UninstallDkgAndWait()).ConfigureAwait(true);
                 InstallStatusText = uninstallSucceeded
                     ? "DKG uninstall finished."
-                    : "DKG uninstall window finished with an error; check the log.";
+                    : "DKG uninstall failed: " + (_uninstaller.LastError ?? "check the local log.");
                 break;
             case "Reputation provider":
                 allowedChanges.Add(_uninstaller.ReputationSettingsPath);
@@ -1677,7 +1864,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 true,
                 blackboxRuntime ? "Start" : blackboxFiles ? "Repair" : "Install",
                 blackboxFiles,
-                _blackboxMode.IsAvailable));
+                _blackboxMode.IsAvailable,
+                blackboxRuntime));
             var dkgAvailable = _installer.IsDkgAvailable;
             var dkgFiles = _uninstaller.HasDkgFiles;
             Modules.Add(new SecurityModule(
@@ -1688,7 +1876,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 false,
                 true,
                 dkgAvailable ? "Start" : dkgFiles ? "Repair" : "Install",
-                dkgFiles));
+                dkgFiles,
+                false,
+                dkgAvailable));
         }
 
         Modules.Add(CreateCommunityModule());
@@ -2282,7 +2472,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 !blackbox.IsConnected,
                 blackboxRuntime ? "Start" : blackboxFiles ? "Repair" : "Install",
                 blackboxFiles,
-                _blackboxMode.IsAvailable));
+                _blackboxMode.IsAvailable,
+                blackboxRuntime));
             var dkgAvailable = _installer.IsDkgAvailable;
             var dkgFiles = _uninstaller.HasDkgFiles;
             var dkgDetail = !dkg.IsConnected && !dkgAvailable && dkgFiles
@@ -2296,7 +2487,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 dkg.IsConnected,
                 !dkg.IsConnected,
                 dkgAvailable ? "Start" : dkgFiles ? "Repair" : "Install",
-                dkgFiles));
+                dkgFiles,
+                false,
+                dkgAvailable));
         }
 
         Modules.Add(CreateCommunityModule());
