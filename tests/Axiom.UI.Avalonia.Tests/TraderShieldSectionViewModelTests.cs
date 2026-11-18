@@ -133,6 +133,12 @@ public sealed class TraderShieldSectionViewModelTests
     [Fact]
     public void Trader_shield_stays_visible_but_disabled_when_the_platform_cannot_run_it()
     {
+        // The default (no explicit config path) is supported on Windows only.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         TestAppBuilder.RunOnUiThread(() =>
         {
             var securityView = new SecurityView { DataContext = new StubIntegrationsPage() };
