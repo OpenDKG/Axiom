@@ -1126,13 +1126,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             }
 
             await RefreshAsync().ConfigureAwait(true);
-            InstallStatusText = (dkgUp, blackboxUp) switch
-            {
-                (true, true) => "Local modules are up: DKG node and Blackbox dashboard connected.",
-                (false, true) => "Blackbox is up. DKG is still offline, so local blocking works but shared-graph evidence is unavailable.",
-                (true, false) => "DKG is up. Blackbox is still offline, so agent protection is not enforcing; use Repair on its card.",
-                _ => "Neither local module answered. Install or Repair each card, then try Start local modules again.",
-            };
+            InstallStatusText = StartLocalModulesResultText(dkgUp, blackboxUp);
         }
         finally
         {
@@ -1140,6 +1134,22 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             await RefreshAsync().ConfigureAwait(true);
         }
     }
+
+    /// <summary>
+    /// Result line of "Start local modules". Off Windows the cards show no Repair and guided
+    /// installation is unsupported, so the text asks for a manual install and start instead.
+    /// </summary>
+    internal static string StartLocalModulesResultText(bool dkgUp, bool blackboxUp) => (dkgUp, blackboxUp) switch
+    {
+        (true, true) => "Local modules are up: DKG node and Blackbox dashboard connected.",
+        (false, true) => "Blackbox is up. DKG is still offline, so local blocking works but shared-graph evidence is unavailable.",
+        (true, false) when !OptionalModuleInstaller.IsInstallSupported =>
+            "DKG is up. Blackbox is still offline, so agent protection is not enforcing. Blackbox has to be installed and started manually; then click Check again.",
+        (true, false) => "DKG is up. Blackbox is still offline, so agent protection is not enforcing; use Repair on its card.",
+        _ when !OptionalModuleInstaller.IsInstallSupported =>
+            "Neither local module answered. The modules have to be installed and started manually; then click Check again.",
+        _ => "Neither local module answered. Install or Repair each card, then try Start local modules again.",
+    };
 
     [RelayCommand]
     private async Task CopyAgentDetailsAsync(ProtectedAgent? agent)
