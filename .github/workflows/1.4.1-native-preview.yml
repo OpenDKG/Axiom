@@ -1,8 +1,8 @@
-name: Axiom 1.4.0 Ubuntu amd64 preview package
+name: Axiom 1.4.1 Ubuntu amd64 preview package
 
 on:
   push:
-    branches: [codex/release-1.4.0-linux-preview]
+    branches: [codex/release-1.4.1-linux-preview]
 
 permissions:
   contents: read
@@ -32,8 +32,8 @@ jobs:
       - name: Package and verify the Debian build
         run: |
           bash scripts/linux/package.sh deb --arch x64 --local linux.preview1
-          package=build/linux/axiom-firewall_1.4.0+linux.preview1_amd64.deb
-          test "$(dpkg-deb -f "$package" Version)" = 1.4.0+linux.preview1
+          package=build/linux/axiom-firewall_1.4.1+linux.preview1_amd64.deb
+          test "$(dpkg-deb -f "$package" Version)" = 1.4.1+linux.preview1
           test "$(dpkg-deb -f "$package" Architecture)" = amd64
           dpkg-deb -c "$package" > package-contents.txt
           grep -F './usr/lib/axiom-firewall/axiomd/bpf/axiom_connect.bpf.o' package-contents.txt
@@ -45,7 +45,7 @@ jobs:
         run: git rev-parse HEAD > release-preview/SOURCE-COMMIT.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: axiom-1.4.0-linux-preview
+          name: axiom-1.4.1-linux-preview
           path: release-preview/
           if-no-files-found: error
           compression-level: 0
