@@ -105,7 +105,11 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
                 : "Axiom Shield asks before unfamiliar apps connect to the internet. You can also turn on the Ad & Tracker Blocker below.")
             : "Axiom is monitoring internet usage in read-only mode. Turn on Firewall Shield to control which apps may connect.";
 
-    public string ShieldButtonText => Firewall.ShieldEnabled ? "Turn Shield Off" : "Turn Shield On";
+    // Off Windows an unknown state offers only a check (opens Network Control), never Off/On:
+    // the toggle would send enable/disable to a daemon whose state is unknown.
+    public string ShieldButtonText => !OperatingSystem.IsWindows() && !Firewall.ProtectionKnown
+        ? "Check Firewall"
+        : Firewall.ShieldEnabled ? "Turn Shield Off" : "Turn Shield On";
 
     public string FirewallStatusText => !Firewall.ProtectionKnown
         ? "Unknown — the local service did not answer"
@@ -184,6 +188,12 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
     [RelayCommand]
     private void ToggleShield()
     {
+        if (!OperatingSystem.IsWindows() && !Firewall.ProtectionKnown)
+        {
+            _openFirewall();
+            return;
+        }
+
         if (Firewall.ToggleShieldCommand.CanExecute(null))
         {
             Firewall.ToggleShieldCommand.Execute(null);
