@@ -64,6 +64,20 @@ public sealed class PortablePresentationTests
         Assert.Null(status.Health);
         Assert.Null(status.Capabilities);
         Assert.Contains("offline", status.LastError, StringComparison.OrdinalIgnoreCase);
+        Assert.False(status.ServiceResponded);
+    }
+
+    [Fact]
+    public async Task Service_probe_tells_an_error_the_service_answered_from_an_unreachable_service()
+    {
+        var probe = new ServiceStatusProbe(new ErrorAnsweringServiceClient());
+
+        var status = await probe.ProbeAsync(CancellationToken.None);
+
+        // Not connected for the probe's purpose (no capabilities), but the service was reached.
+        Assert.False(status.IsConnected);
+        Assert.Null(status.Capabilities);
+        Assert.True(status.ServiceResponded);
     }
 
     [Fact]
@@ -198,6 +212,12 @@ public sealed class PortablePresentationTests
             throw new ServiceUnavailableException(
                 IpcErrorCodes.ServiceUnavailable,
                 "The local service is offline.");
+    }
+
+    private sealed class ErrorAnsweringServiceClient : IServiceRequestClient
+    {
+        public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken) =>
+            throw new ServiceUnavailableException(IpcErrorCodes.NotSupported, "not supported");
     }
 
     private sealed class OnlineServiceClient : IServiceRequestClient
