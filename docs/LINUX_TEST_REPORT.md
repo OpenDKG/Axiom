@@ -802,3 +802,52 @@ GUI under Xvfb (1600x1000), what the screen showed:
   verified" (one poll behind).
 - Rule removed: page "0 owned rules", count 0, footer "Protection: ON · 0 rule(s)". No stale "1 rule(s)".
 - Fix 3 (macOS own-path prompts) does not apply to Linux; not checked here.
+
+## Addendum 2026-11-18 (2): daemon-stopped UI fixes, VM look (author-run, not CI)
+
+Tested SHA `07d2daf` (UI fixes e05c7d9, f63c2e6, 37f93fd, 9772ef1 plus test-only commits). Package
+`axiom-firewall_1.1.0+linux.rc3_amd64.deb`, 62,835,072 bytes, sha256
+`c0715ef609eca7420bee403f3b2e24cdf80a8145824f15ce742c305b25cf00d5` (unsigned dev candidate).
+
+Fresh disposable Ubuntu 24.04.5 overlay (6.8.0-147):
+- Install rc=0, doctor 13 PASS / 0 WARN / 0 FAIL, 4 Axiom BPF programs attached.
+- Block canary: before the rule 0/10 refused; with the rule 20/20 refused while python3 connected 20/20;
+  one `systemctl restart` with the probe loop: 586 fresh execs after the action, 0 slipped, control 46/46;
+  after it 20/20 refused. After unblock 0/10 refused, 10/10 connected. Doctor after 13 PASS.
+- Purge: no unit, no `inet axiom` table, 0 Axiom BPF programs, data and image dirs gone.
+
+GUI under Xvfb (1600x1000), one applied verified rule on the curl copy. What the screen showed:
+- Daemon up, Network Control: header "Protection active: Axiom rules apply; firewall writes enabled. No
+  telemetry."; "Axiom Shield ON", button "Disable protection"; "Filter: connected · generation 5 verified ...
+  1 connect-time proven"; "1 owned rules read at ...", row "Applied"; footer "Protection: ON · 1 rule(s)", lamp
+  SHIELD ON. Simple home: SHIELD ACTIVE, FIREWALL SHIELD ON, AI AGENT GUARD NOT VERIFIED.
+- Daemon stopped, settled (Network Control, 6 s and more after the stop): header "Protection status unknown: the
+  local service did not answer. Monitor unavailable: Service unavailable: The service did not respond in time.
+  (service_unavailable)"; badge UNKNOWN, "Protection status unknown: the local service did not answer.";
+  button "Check protection"; firewall section READ-ONLY, "Unknown / unknown"; count "—"; "1 owned rule(s) shown
+  as last known (last read 04:39:06); their state is unknown until the local service answers.", row state
+  "Unknown (la…" (column truncated), Unblock disabled; footer "Protection: unknown · the local service did not
+  answer", lamp UNKNOWN. Matches.
+- Simple home stopped, 10 s: "STATUS UNKNOWN · Protection status is unknown", button "Check Firewall", tile
+  FIREWALL SHIELD UNKNOWN, footer "Protection: unknown · the local service did not answer", lamp UNKNOWN. Matches.
+- "Check protection" pressed while stopped: no dialog, screen unchanged, nothing sent. Matches.
+- Back: 1 s after start every surface said unknown (header "Protection status unknown: waiting for the local
+  service.", page UNKNOWN, footer "Protection: unknown", lamp UNKNOWN); 3 s and 10 s after start all surfaces
+  verified together (header "Protection active ...", page ON with a new generation verified, footer
+  "Protection: ON · 1 rule(s)", lamp SHIELD ON). Matches in that run.
+
+Does not match (recorded, not patched):
+- One run 2 s after start: page "Axiom Shield ON", "generation 6 verified", footer "Protection: ON · 1 rule(s)",
+  lamp SHIELD ON, while the header still read "Protection status unknown: the local service is offline." and
+  the footer "IPC: service offline" (header one poll behind the page).
+- For a few seconds after the stop the old state stays up: Network Control 6 s after a stop (page opened 3 s
+  before it) still showed Shield ON, "generation 8 verified", "Disable protection", footer "Protection: ON ·
+  1 rule(s)", lamp SHIELD ON, under a header "Monitor unavailable: Service unavailable ..."; Simple home 3 s and
+  6 s after a stop still showed "SHIELD ACTIVE · Firewall Shield is protecting your apps", tile ON, "Turn Shield
+  Off", footer "Monitoring: unavailable ... Protection: ON · 1 rule(s)", lamp SHIELD ON.
+- Opening Network Control after the daemon stopped (no earlier read in that page) shows no rows and "No
+  Axiom-owned rules were found on this host." under the unknown note, count "—".
+- Simple home 2 s and 10 s after start: "NOT VERIFIED · Shield is on, blocking is not verified ... has not
+  acknowledged rules generation N", footer "Protection: ON · 1 rule(s) · blocks not verified", amber lamp.
+  Header and footer agree, but it had not turned verified at 10 s (Network Control verified within 3 s).
+- Switching to Simple mode left the content area blank until Home was clicked in the side bar.
