@@ -1101,12 +1101,25 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         try
         {
             var status = await _serviceProbe.ProbeAsync(_cancellation.Token).ConfigureAwait(true);
-            ServiceStatus = status;
             if (_reachability is not null && IsServiceMode && !status.IsConnected)
             {
+                // Off Windows the probe's failure joins the shared reachability signal. An error the
+                // daemon itself answered (a command an older build lacks) means it is reachable: it
+                // is not "offline", so the earlier status line stays and nothing turns unknown.
+                if (status.ServiceResponded)
+                {
+                    OnServiceAnswered(this, EventArgs.Empty);
+                    RefreshStatus();
+                    return;
+                }
+
+                ServiceStatus = status;
                 MarkServiceUnreachable();
+                RefreshStatus();
+                return;
             }
 
+            ServiceStatus = status;
             RefreshStatus();
         }
         catch (OperationCanceledException)

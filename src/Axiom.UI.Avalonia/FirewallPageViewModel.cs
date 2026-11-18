@@ -1082,7 +1082,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             // While the shield is on but the filter has not proven enforcement, re-read on every
             // probe: Home and Mini then turn verified with the same answer as Network Control
             // instead of one or two intervals later.
-            if (status.Enabled && !Enforcement.IsEnforcementVerified)
+            // Only after a rules read succeeded (a page that could not read rules keeps the interval).
+            if (status.Enabled && _rulesReadLocal is not null && !Enforcement.IsEnforcementVerified)
             {
                 _ = RefreshAsync();
             }

@@ -55,13 +55,22 @@ public sealed class FirewallPageOfflineTests
             Assert.NotEqual("SHIELD ON", page.NoticeBadgeText);
             Assert.DoesNotContain("Shield is on", page.NoticeText, StringComparison.Ordinal);
 
-            // Daemon back: the shield answer returns at once, but not "verified" before the filter
-            // state is read again; the next enforcement re-read restores it.
+            // Daemon back: the shield answer returns at once, but "verified" is never carried over
+            // from before the stop. Only a fresh filter read decides it: the restarted daemon
+            // first reports the filter as not yet acknowledged, and the page must say so.
             client.Failure = null;
+            client.FilterState = FilterEnforcementState.Pending;
+            var rulesReadsBeforeReturn = client.RulesQueries;
             await shell.ProbeProtectionAsync(force: true);
             Assert.Equal("ON", page.ShieldBadgeText);
             Assert.NotEqual(EnforcementLevel.Protected, page.ShieldLevel);
+            Assert.DoesNotContain("verified", page.FilterEnforcedText, StringComparison.OrdinalIgnoreCase);
+
+            // The filter acknowledges: the next re-read (while the shield is on but unverified,
+            // every probe re-reads) shows the daemon's answer, from a rules read made after the return.
+            client.FilterState = FilterEnforcementState.Verified;
             page.RefreshEnforcementIfStale(DateTimeOffset.UtcNow + FirewallPageViewModel.EnforcementRefreshInterval);
+            Assert.True(client.RulesQueries > rulesReadsBeforeReturn);
             Assert.Equal("Available", page.CapabilityStatusText);
             Assert.Contains("verified", page.FilterEnforcedText, StringComparison.Ordinal);
             Assert.Equal(EnforcementLevel.Protected, page.ShieldLevel);
@@ -76,11 +85,20 @@ public sealed class FirewallPageOfflineTests
     {
         public Exception? Failure { get; set; }
 
+        public FilterEnforcementState FilterState { get; set; } = FilterEnforcementState.Verified;
+
+        public int RulesQueries { get; private set; }
+
         public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
         {
             if (Failure is not null)
             {
                 return Task.FromException<T>(Failure);
+            }
+
+            if (command == IpcCommandTypes.RulesQuery)
+            {
+                RulesQueries++;
             }
 
             object result = command switch
@@ -106,11 +124,11 @@ public sealed class FirewallPageOfflineTests
                         ManagedRuleCount = 0,
                         FilterEnforcement = new FilterEnforcementReport
                         {
-                            State = FilterEnforcementState.Verified,
+                            State = FilterState,
                             Connected = true,
                             PublishedGeneration = 7,
                             Generation = 7,
-                            AckedGeneration = 7,
+                            AckedGeneration = FilterState == FilterEnforcementState.Verified ? 7 : 6,
                             LastAckUtc = DateTimeOffset.UtcNow,
                         },
                     },
