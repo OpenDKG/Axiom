@@ -1,0 +1,163 @@
+name: Linux CI
+
+# PR-triggered Ubuntu gate for the portable solution and the Linux slices (issue #441, L1-L7).
+# Runs on an ephemeral unprivileged GitHub-hosted runner: no privileged nft/BPF/DNS mutation,
+# no service install, no secrets. Live enforcement evidence belongs in the disposable VM.
+# The DEB smoke only *builds and inspects* the package; it never installs or starts it.
+
+on:
+  # No branches filter: the Linux slices are reviewed as stacked Drafts before they reach main,
+  # so the gate must run on their actual base too.
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable-and-linux:
+    name: Portable build, tests, BPF compile and DEB smoke (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK from global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Set up Python 3.12 for agent hook runtime tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The Linux slices land incrementally; steps below are gated on the files they need so this
+      # workflow stays valid if it is applied before L1 and becomes a real gate as they land. The
+      # summary records exactly which parts ran, so a skip is never mistaken for green.
+      - name: Detect Linux slice files
+        id: slice
+        run: |
+          set -euo pipefail
+          if [[ -f src/Axiom.Infrastructure.Linux/Bpf/native/Makefile ]]; then bpf=true; else bpf=false; fi
+          if [[ -f scripts/linux/package.sh ]]; then package=true; else package=false; fi
+          echo "bpf=$bpf" >> "$GITHUB_OUTPUT"
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "Linux slice files: BPF makefile=$bpf, packaging script=$package"
+
+      - name: Environment
+        run: |
+          dotnet --version
+          python3 --version
+
+      - name: Install BPF build toolchain
+        if: steps.slice.outputs.bpf == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang llvm libbpf-dev bpftool
+
+      - name: Restore portable solution (locked mode)
+        run: dotnet restore Axiom.Portable.slnx --locked-mode
+
+      - name: Build portable solution (Release, warnings as errors)
+        run: dotnet build Axiom.Portable.slnx -c Release --no-restore
+
+      - name: Test portable solution
+        run: |
+          set -euo pipefail
+          results="$RUNNER_TEMP/test-results"
+          rm -rf "$results"
+          mkdir -p "$results"
+          dotnet test Axiom.Portable.slnx -c Release --no-build --no-restore -m:1 \
+            --logger "trx" --results-directory "$results"
+          python3 - "$results" <<'PY'
+          import glob, os, sys, xml.etree.ElementTree as ET
+
+          results = sys.argv[1]
+          files = sorted(glob.glob(os.path.join(results, "**", "*.trx"), recursive=True))
+          if not files:
+              sys.exit("No TRX test reports were produced.")
+
+          rows, total = [], [0, 0, 0, 0]  # executed, passed, failed, total
+          for path in files:
+              counters = next(
+                  (e.attrib for e in ET.parse(path).getroot().iter() if e.tag.endswith("Counters")),
+                  None,
+              )
+              if counters is None:
+                  sys.exit(f"No ResultSummary counters in {path}")
+              executed, passed = int(counters["executed"]), int(counters["passed"])
+              failed, all_tests = int(counters["failed"]), int(counters["total"])
+              rows.append((os.path.basename(path), executed, passed, failed, all_tests - executed))
+              for i, v in enumerate((executed, passed, failed, all_tests)):
+                  total[i] += v
+
+          summary = ["## Linux CI test results", "", "| Suite | Executed | Passed | Failed | Skipped |", "|---|---:|---:|---:|---:|"]
+          summary += [f"| {n} | {e} | {p} | {f} | {s} |" for n, e, p, f, s in rows]
+          summary += [f"| **Total** | **{total[0]}** | **{total[1]}** | **{total[2]}** | **{total[3] - total[0]}** |"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+              fh.write("\n".join(summary) + "\n")
+
+          # shortcut: skipped counts are reported but not fatal, because the portable suites carry
+          # OS-gated skips; fail on them per suite once the Linux projects are stable on main.
+          if total[2] > 0:
+              sys.exit(f"{total[2]} test(s) failed")
+          if total[1] == 0:
+              sys.exit("No tests passed.")
+          print(f"executed={total[0]} passed={total[1]} skipped={total[3] - total[0]}")
+          PY
+
+      # Deterministic compile of the connect-time BPF objects; no attach, no privilege required.
+      - name: Compile BPF objects
+        if: steps.slice.outputs.bpf == 'true'
+        run: |
+          set -euo pipefail
+          make -C src/Axiom.Infrastructure.Linux/Bpf/native -j2
+          for object in out/axiom_connect.bpf.o out/axiom-bpf-events; do
+            test -s "src/Axiom.Infrastructure.Linux/Bpf/native/$object"
+          done
+          sha256sum src/Axiom.Infrastructure.Linux/Bpf/native/out/* | tee "$RUNNER_TEMP/bpf-sha256.txt"
+
+      - name: Build and inspect the DEB (no install)
+        if: steps.slice.outputs.package == 'true'
+        run: |
+          set -euo pipefail
+          scripts/linux/package.sh deb --arch x64 --local ci
+          deb=$(ls build/linux/axiom-firewall_*_amd64.deb)
+          test "$(dpkg-deb -f "$deb" Package)" = axiom-firewall
+          test "$(dpkg-deb -f "$deb" Architecture)" = amd64
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n 1)
+          test "$(dpkg-deb -f "$deb" Version)" = "$version+ci"
+          root="$RUNNER_TEMP/pkgroot"
+          rm -rf "$root"
+          dpkg-deb -x "$deb" "$root"
+          test -x "$root/usr/lib/axiom-firewall/Axiom"
+          test -x "$root/usr/lib/axiom-firewall/axiomd/axiomd"
+          test -L "$root/usr/bin/axiom-firewall"
+          test -f "$root/usr/share/polkit-1/actions/com.axiom.firewall.policy"
+          test -f "$root/usr/share/applications/com.axiom.firewall.desktop"
+          test -x "$root/usr/lib/axiom-firewall/bpf-pins.sh"
+          (cd build/linux && sha256sum axiom-firewall_*_amd64.deb > SHA256SUMS.txt)
+          dpkg-deb -I "$deb" | tee "$RUNNER_TEMP/deb-control.txt"
+
+      - name: Upload test results, BPF objects and DEB
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-ci-evidence
+          path: |
+            ${{ runner.temp }}/test-results/**/*.trx
+            ${{ runner.temp }}/bpf-sha256.txt
+            ${{ runner.temp }}/deb-control.txt
+            build/linux/axiom-firewall_*_amd64.deb
+            build/linux/SHA256SUMS.txt
+          if-no-files-found: warn
+          retention-days: 14
