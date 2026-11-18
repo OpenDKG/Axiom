@@ -91,7 +91,7 @@ public sealed class DonationDestinationsTests
         Assert.Empty(config.PaypalUrl);
         Assert.Empty(config.GithubSponsorsUrl);
         Assert.Equal(3, config.Crypto.Length);
-        var eth = Assert.Single(config.Crypto.Where(DonationDestinations.IsValidCrypto));
+        var eth = Assert.Single(config.Crypto, DonationDestinations.IsValidCrypto);
         Assert.Equal("ETH", eth.Currency);
         Assert.Equal("Ethereum mainnet", eth.Network);
         Assert.Equal("0xFac745f39D832BC6A7B6D7F306928aBDC2C6a8ED", eth.Address);
