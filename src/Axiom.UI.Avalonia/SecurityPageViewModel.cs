@@ -258,11 +258,12 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     private DateTimeOffset _lastBlackboxStartAttempt = DateTimeOffset.MinValue;
     private int _dkgStartAttempts;
     private int _blackboxStartAttempts;
-    private bool _healthSampleRunning;
-
-    private readonly IUiTimer _activityTimer;
-
-    private readonly IUiTimer _healthTimer;
+    private const string StartingDkg = "Starting the installed DKG node...";
+    private const string StartingBlackbox = "Starting the installed Blackbox dashboard...";
+    private readonly CancellationTokenSource _lifetime = new();
+    private readonly IUiTimer _moduleTimer;
+    private bool _presentationVisible = true;
+    private bool _disposed;
     private readonly IUserInteraction _ui;
     private readonly ISecurityDialogService _dialogs;
     private readonly IShellActions _shell;
@@ -303,13 +304,12 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             _ = RefreshCommunityAsync();
         }
 
-        _activityTimer = timers.Create(TimeSpan.FromSeconds(15));
-        _activityTimer.Tick += (_, _) => _ = RefreshAsync();
-        _activityTimer.Start();
-
-        _healthTimer = timers.Create(TimeSpan.FromSeconds(5));
-        _healthTimer.Tick += (_, _) => _ = SampleHealthAsync();
-        _healthTimer.Start();
+        _moduleTimer = timers.Create(TimeSpan.FromSeconds(15));
+        _moduleTimer.Tick += (_, _) => _ = RefreshCoreAsync(includeAgentDetails: _presentationVisible);
+        if (!DistributionContext.IsStorePackage)
+        {
+            _moduleTimer.Start();
+        }
 
         SyncModuleHealth();
         _ = RefreshAsync();
@@ -532,24 +532,43 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     public void Dispose()
     {
-        _activityTimer.StopTimer();
-        _activityTimer.Dispose();
-        _healthTimer.StopTimer();
-        _healthTimer.Dispose();
+        _disposed = true;
+        _moduleTimer.StopTimer();
+        _moduleTimer.Dispose();
+        _lifetime.Cancel();
+        _lifetime.Dispose();
         _probe.Dispose();
         _virusTotal.Dispose();
         _communityClient.Dispose();
         _blackboxClient.Dispose();
     }
 
-    [RelayCommand]
-    private async Task RefreshAsync()
+    internal void SetPresentationVisible(bool visible)
     {
-        if (IsBusy)
+        if (_presentationVisible == visible || _disposed)
         {
             return;
         }
 
+        _presentationVisible = visible;
+        _moduleTimer.Interval = TimeSpan.FromSeconds(visible ? 15 : 60);
+        if (visible)
+        {
+            _ = RefreshAsync();
+        }
+    }
+
+    [RelayCommand]
+    private Task RefreshAsync() => RefreshCoreAsync(includeAgentDetails: true);
+
+    private async Task RefreshCoreAsync(bool includeAgentDetails)
+    {
+        if (IsBusy || _disposed)
+        {
+            return;
+        }
+
+        var cancellationToken = _lifetime.Token;
         IsBusy = true;
 
         try
@@ -566,24 +585,52 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 return;
             }
 
-            var dkgTask = _probe.ProbeDkgAsync(CancellationToken.None);
-            var blackboxTask = _probe.ProbeBlackboxAsync(CancellationToken.None);
+            var dkgTask = _probe.ProbeDkgAsync(cancellationToken);
+            var blackboxTask = _probe.ProbeBlackboxAsync(cancellationToken);
 
             await Task.WhenAll(dkgTask, blackboxTask).ConfigureAwait(true);
 
-            Rebuild(dkgTask.Result, blackboxTask.Result);
-            TryStartInstalledDkgOnLaunch(dkgTask.Result);
-            TryStartInstalledBlackboxOnLaunch(blackboxTask.Result);
-            LastCheckedText = $"Checked {DateTimeOffset.Now:HH:mm:ss}";
-            await RefreshAgentsAsync(blackboxTask.Result.IsConnected).ConfigureAwait(true);
-            ApplyHookTestStates();
+            cancellationToken.ThrowIfCancellationRequested();
+            var dkg = dkgTask.Result;
+            var blackbox = blackboxTask.Result;
+            Rebuild(dkg, blackbox);
+            if ((dkg.IsConnected && InstallStatusText == StartingDkg) ||
+                (blackbox.IsConnected && InstallStatusText == StartingBlackbox))
+            {
+                InstallStatusText = string.Empty;
+            }
 
-            AppendHealthSample(dkgTask.Result.IsConnected, blackboxTask.Result.IsConnected);
+            if (!_moduleActionRunning)
+            {
+                await TryStartInstalledDkgOnLaunchAsync(dkg).ConfigureAwait(true);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (!_moduleActionRunning)
+            {
+                await TryStartInstalledBlackboxOnLaunchAsync(blackbox).ConfigureAwait(true);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            LastCheckedText = $"Checked {DateTimeOffset.Now:HH:mm:ss}";
+            if (includeAgentDetails)
+            {
+                await RefreshAgentsAsync(blackbox.IsConnected, cancellationToken).ConfigureAwait(true);
+                ApplyHookTestStates();
+            }
+
+            AppendHealthSample(dkg.IsConnected, blackbox.IsConnected);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
         finally
         {
             IsBusy = false;
-            NotifyStatusProperties();
+            if (!_disposed)
+            {
+                NotifyStatusProperties();
+            }
         }
     }
 
@@ -591,7 +638,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     /// Starts an installed local DKG node once per session so the verified graph does not stay
     /// offline after Axiom restarts. A node that already answers is left untouched.
     /// </summary>
-    private void TryStartInstalledDkgOnLaunch(OptionalModuleStatus dkg)
+    private async Task TryStartInstalledDkgOnLaunchAsync(OptionalModuleStatus dkg)
     {
         if (dkg.IsConnected || DistributionContext.IsStorePackage || !_installer.IsDkgAvailable)
         {
@@ -606,9 +653,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
         _lastDkgStartAttempt = DateTimeOffset.UtcNow;
         _dkgStartAttempts++;
-        if (_installer.StartDkg())
+        if (await Task.Run(_installer.StartDkg).ConfigureAwait(true) && !_disposed && !_moduleActionRunning)
         {
-            InstallStatusText = "Starting the installed DKG node...";
+            InstallStatusText = StartingDkg;
             DkgBrandLabel = "OriginTrail DKG – starting";
         }
     }
@@ -618,7 +665,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     /// status does not stay offline after a restart, a crash or a power loss. A dashboard that
     /// already answers, or a port that is still binding, is left untouched.
     /// </summary>
-    private void TryStartInstalledBlackboxOnLaunch(OptionalModuleStatus blackbox)
+    private async Task TryStartInstalledBlackboxOnLaunchAsync(OptionalModuleStatus blackbox)
     {
         if (blackbox.IsConnected || DistributionContext.IsStorePackage ||
             !_uninstaller.IsBlackboxRuntimeInstalled)
@@ -634,82 +681,16 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
         _lastBlackboxStartAttempt = DateTimeOffset.UtcNow;
         _blackboxStartAttempts++;
-        if (_installer.StartBlackboxDashboard())
+        if (await Task.Run(_installer.StartBlackboxDashboard).ConfigureAwait(true) && !_disposed && !_moduleActionRunning)
         {
-            InstallStatusText = "Starting the installed Blackbox dashboard...";
+            InstallStatusText = StartingBlackbox;
             BlackboxBrandLabel = "Umanitek Blackbox – starting";
-            _ = PollBlackboxAutoStartAsync();
-        }
-    }
-
-    private async Task PollBlackboxAutoStartAsync()
-    {
-        for (var attempt = 0; attempt < 5; attempt++)
-        {
-            await Task.Delay(1500).ConfigureAwait(true);
-
-            OptionalModuleStatus blackbox;
-            OptionalModuleStatus dkg;
-            try
-            {
-                blackbox = await _probe.ProbeBlackboxAsync(CancellationToken.None).ConfigureAwait(true);
-                if (!blackbox.IsConnected)
-                {
-                    continue;
-                }
-
-                dkg = await _probe.ProbeDkgAsync(CancellationToken.None).ConfigureAwait(true);
-            }
-            catch (ObjectDisposedException)
-            {
-                return;
-            }
-            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
-            {
-                continue;
-            }
-
-            Rebuild(dkg, blackbox);
-            InstallStatusText = string.Empty;
-            NotifyStatusProperties();
-            return;
-        }
-    }
-
-    private async Task SampleHealthAsync()
-    {
-        if (_healthSampleRunning)
-        {
-            return;
-        }
-
-        _healthSampleRunning = true;
-        try
-        {
-            var dkgTask = _probe.ProbeDkgAsync(CancellationToken.None);
-            var blackboxTask = _probe.ProbeBlackboxAsync(CancellationToken.None);
-            await Task.WhenAll(dkgTask, blackboxTask).ConfigureAwait(true);
-
-            ApplyBrandLabels(dkgTask.Result.IsConnected, blackboxTask.Result.IsConnected);
-            AppendHealthSample(dkgTask.Result.IsConnected, blackboxTask.Result.IsConnected);
-        }
-#pragma warning disable CA1031 // A single failed probe must not stop the health strip.
-        catch (Exception)
-#pragma warning restore CA1031
-        {
-        }
-        finally
-        {
-            _healthSampleRunning = false;
         }
     }
 
     private void AppendHealthSample(bool dkgConnected, bool blackboxConnected)
     {
-        ApplyBrandLabels(dkgConnected, blackboxConnected);
-
-        // The 15 s full refresh and the 5 s health timer share the history. Skip a sample that would
-        // land on top of one taken seconds ago so the strip stays one square per interval.
+        // Manual refreshes can arrive between timer ticks without adding a second nearby sample.
         if (_activityHistory.Count > 0 &&
             DateTimeOffset.Now - _activityHistory.Items[^1].At < TimeSpan.FromSeconds(3))
         {
@@ -873,13 +854,31 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             return;
         }
 
+        if (_moduleActionRunning)
+        {
+            return;
+        }
+
+        _moduleActionRunning = true;
+        try
+        {
+            await StartOrInstallModuleAsync(module).ConfigureAwait(true);
+        }
+        finally
+        {
+            _moduleActionRunning = false;
+        }
+    }
+
+    private async Task StartOrInstallModuleAsync(string module)
+    {
         if (module.Equals("Blackbox", StringComparison.Ordinal))
         {
             if (_uninstaller.IsBlackboxRuntimeInstalled)
             {
                 SetModuleActionLabel(module, "Starting...");
                 InstallStatusText = "Starting the Blackbox dashboard...";
-                var started = _installer.StartBlackboxDashboard();
+                var started = await Task.Run(_installer.StartBlackboxDashboard).ConfigureAwait(true);
                 if (!started)
                 {
                     SetModuleActionLabel(module, _uninstaller.HasBlackboxFiles ? "Repair" : "Install");
@@ -934,7 +933,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             {
                 SetModuleActionLabel(module, "Starting...");
                 InstallStatusText = "Starting the DKG node...";
-                var started = _installer.StartDkg();
+                var started = await Task.Run(_installer.StartDkg).ConfigureAwait(true);
                 if (!started)
                 {
                     SetModuleActionLabel(module, _uninstaller.HasDkgFiles ? "Repair" : "Install");
@@ -1077,7 +1076,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             var dkgUp = DkgConnected || LocalModuleRuntime.AnyDkgPortListening;
             if (!dkgUp && _installer.IsDkgAvailable)
             {
-                _installer.StartDkg();
+                await Task.Run(_installer.StartDkg).ConfigureAwait(true);
                 var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(90);
                 while (DateTimeOffset.UtcNow < deadline && !LocalModuleRuntime.AnyDkgPortListening)
                 {
@@ -1090,7 +1089,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             var blackboxUp = BlackboxConnected || LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort);
             if (!blackboxUp && _uninstaller.IsBlackboxRuntimeInstalled)
             {
-                _installer.StartBlackboxDashboard();
+                await Task.Run(_installer.StartBlackboxDashboard).ConfigureAwait(true);
                 blackboxUp = await LocalModuleRuntime
                     .WaitForPortAsync(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(60), CancellationToken.None)
                     .ConfigureAwait(true);
@@ -1895,7 +1894,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         "Setup",
         IsCommunityConfigured);
 
-    private async Task RefreshAgentsAsync(bool blackboxConnected)
+    private async Task RefreshAgentsAsync(bool blackboxConnected, CancellationToken cancellationToken)
     {
         ProtectedAgents.Clear();
 
@@ -1944,17 +1943,18 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         try
         {
             using var response = await _blackboxClient
-                .GetAsync("http://127.0.0.1:9700/api/attach-targets", CancellationToken.None)
+                .GetAsync("http://127.0.0.1:9700/api/attach-targets", cancellationToken)
                 .ConfigureAwait(true);
             response.EnsureSuccessStatusCode();
 
             await using var stream = await response.Content
-                .ReadAsStreamAsync(CancellationToken.None)
+                .ReadAsStreamAsync(cancellationToken)
                 .ConfigureAwait(true);
             using var document = await JsonDocument
-                .ParseAsync(stream, cancellationToken: CancellationToken.None)
+                .ParseAsync(stream, cancellationToken: cancellationToken)
                 .ConfigureAwait(true);
 
+            cancellationToken.ThrowIfCancellationRequested();
             if (!document.RootElement.TryGetProperty("targets", out var targets) ||
                 targets.ValueKind != JsonValueKind.Array)
             {
@@ -1989,7 +1989,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 : $"Hook activity observed in {runtimeObserved} of {ProtectedAgents.Count} recognized agent workspaces. " +
                   "Installed hooks alone are not proof of runtime blocking.";
         }
-        catch (Exception exception) when (exception is
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested && exception is
             HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
         {
             AgentsStatusText = $"Could not read Blackbox agent targets: {exception.Message}";

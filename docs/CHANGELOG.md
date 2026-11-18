@@ -1,3 +1,10 @@
+## What's in 1.3.1
+
+- Pause chart sampling and page refreshes when the window is hidden or minimized. Keep connection monitoring and protection alerts active.
+- Use one integration polling loop and check less often in the tray. Limit WMI console discovery to the Windows login window.
+- Serialize DKG and Blackbox start requests through their startup windows. Drain subprocess output concurrently and enforce a deadline for repairs and cleanup.
+- Enlarge the OriginTrail, Umanitek and Blackbox marks on Agent Protection, remove their backgrounds and add a subtle shadow in light themes.
+
 ## What's in 1.3.0
 
 - **Long-running memory stability, streaming ruleset check and cleaner Blackbox git updates.** `ProcessIdentityResolver` now bounds its PID identity cache to 512 entries and evicts expired entries; `ShellViewModel` clears `_notifiedPendingApps` whenever no pending Shield decisions remain; manual threat-share preflight streams `ruleset.json` in pooled 64 K-char chunks (`ThreatShareCli.FindKnownIdentifiersInRuleset`) instead of loading the entire ruleset string into the Large Object Heap; and `OptionalModuleInstaller` discards CRLF/tracked-file drift in `agent-blackbox` (`git checkout -- .`) before running the Blackbox vendor installer.
