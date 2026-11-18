@@ -851,3 +851,57 @@ Does not match (recorded, not patched):
   acknowledged rules generation N", footer "Protection: ON · 1 rule(s) · blocks not verified", amber lamp.
   Header and footer agree, but it had not turned verified at 10 s (Network Control verified within 3 s).
 - Switching to Simple mode left the content area blank until Home was clicked in the side bar.
+
+## Addendum 2026-11-18 (3): shared "service unreachable" signal, VM look (author-run, not CI)
+
+Tested SHA `88510ce`. Package `axiom-firewall_1.1.0+linux.rc4_amd64.deb`, 62,822,552 bytes, sha256
+`6be98ba48f0e7aecd5dbeef8ec8a1b231f6694fc9340a23b524ac5599775a252` (unsigned dev candidate).
+
+Fresh disposable Ubuntu 24.04.5 overlay (6.8.0-147):
+- Install rc=0, doctor 13 PASS / 0 WARN / 0 FAIL, 4 Axiom BPF programs attached.
+- Block canary: before the rule 0/10 refused; with the rule 20/20 refused while python3 connected 20/20;
+  one `systemctl restart` with the probe loop: 561 fresh execs after the action, 0 slipped, control 46/46;
+  after it 20/20 refused. After unblock 0/10 refused, 10/10 connected. Doctor after 13 PASS.
+- Purge: no unit, no `inet axiom` table, 0 Axiom BPF programs, data and image dirs gone.
+
+GUI under Xvfb (1600x1000), one applied verified rule. Timed screenshots (offset = seconds after
+`systemctl stop|start` returned); texts read by OCR per surface and checked by eye on montages.
+
+| Moment | Header | Page | Footer / lamp | |
+|---|---|---|---|---|
+| NC up | Protection active: Axiom rules apply | Shield ON, row Applied | Protection: ON · 1 rule(s) / SHIELD ON | agree |
+| NC stop +1, +2 s | Protection active | Shield ON, row Applied | ON / SHIELD ON | agree (old state) |
+| NC stop +3 … +10 s | Protection status unknown: the local service did not answer | UNKNOWN, Check protection, row "Unknown (la…", Unblock greyed, count — | Protection: unknown · the local service did not answer / UNKNOWN | agree |
+| NC start +1 s | unknown | UNKNOWN | unknown / UNKNOWN | agree |
+| NC start +2 … +10 s | Protection active: Axiom rules apply | Shield ON, verified, row Applied | ON / SHIELD ON | agree |
+| Simple stop +1, +2 s | – | SHIELD ACTIVE, Turn Shield Off | ON / SHIELD ON | agree (old state) |
+| Simple stop +3 … +10 s | – | STATUS UNKNOWN · Protection status is unknown, Check Firewall, tile UNKNOWN | unknown / UNKNOWN | agree |
+| Simple start +1 … +5 s | – | NOT VERIFIED · Shield is on, blocking is not verified (generation 9) | ON · blocks not verified / SHIELD ON | agree |
+| Simple start +7, +10 s | – | SHIELD ACTIVE | ON / SHIELD ON | agree |
+| Agents page stop +1 s | unknown | – | unknown / UNKNOWN | agree |
+
+Measured delay stop -> all unknown: 1 to 3 s (Agents page 1 s; Network Control and Simple home between
+2 and 3 s, all surfaces in the same frame). No sampled frame showed one surface ON/verified and another
+unknown.
+
+- Network Control opened with the daemon down in a freshly started app (no earlier read): "Axiom-owned
+  rules could not be read: the local service did not answer. Whether any exist is unknown until it
+  answers.", empty table, count "—". Matches. Opened while down after an earlier read: last-known row
+  "Unknown (la…", Unblock greyed, note "Service unavailable: The service did not respond in time."
+- "Check protection" pressed while down: no dialog, screen unchanged at 3 s and 6 s.
+- Crash cycles: 10 stop/start cycles about 10 s apart with the app open, alternating Agent Protection and
+  Network Control; cycle 5's start was refused by systemd's start limit (5 starts/min, harness pace), so 9
+  real restarts, plus 2 more after `reset-failed` on a second app instance. App process alive throughout;
+  `desktop.log` and stdout: 0 fatal/unhandled/exception lines.
+
+Not as expected (recorded, not patched):
+- Simple home reached verified 5 to 7 s after start (NOT VERIFIED until then, header and footer agreeing)
+  while Network Control in its own restart was verified at 2 s. In another restart (page opened while
+  down) Network Control also stayed "generation 10 pending acknowledgement" with the red banner "nftables
+  has not acknowledged rules generation 10 yet (table read back with another generation)" until between
+  5 and 10 s, so the lag looks tied to the filter acknowledgement, not to the page.
+- In that restart, +1 s: header "Monitor unavailable: Service unavailable: The monitoring worker has not
+  produced a snapshot yet." (no protection state) while the page showed Shield ON pending and the footer
+  "Protection: ON · 1 rule(s) · blocks not verified". Nothing claimed verified; from +2 s the header read
+  "Protection active: Axiom rules not verified as enforced …" in agreement.
+- Mini mode was not looked at on Linux.
