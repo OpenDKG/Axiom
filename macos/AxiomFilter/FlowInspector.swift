@@ -29,6 +29,7 @@ import Foundation
 import Network
 import NetworkExtension
 import os
+import Security
 
 struct FlowDescription {
     let pid: Int32
@@ -140,6 +141,55 @@ enum FlowInspector {
             }
         }
         return identity
+    }
+
+    // MARK: Socket owner (resolver-delegated flows)
+
+    /// Path of the system resolver. Its delegated sockets are attributed to the asking app.
+    static let systemResolverPath = "/usr/sbin/mDNSResponder"
+    /// Code requirement the socket owner must satisfy to count as the system resolver.
+    private static let resolverRequirement: SecRequirement? = {
+        var requirement: SecRequirement?
+        let text = "anchor apple and identifier \"com.apple.mDNSResponder\"" as CFString
+        return SecRequirementCreateWithString(text, [], &requirement) == errSecSuccess ? requirement : nil
+    }()
+    /// Verified-resolver results per (pid, pidversion); a process cannot change its executable.
+    private static let resolverCache = OSAllocatedUnfairLock<[CacheKey: Bool]>(initialState: [:])
+
+    /// The process that really owns the flow's socket (`sourceProcessAuditToken`, macOS 13+), when it
+    /// differs from the attributed process `attributedPid`; nil when it is the same process or unknown.
+    /// `isSystemResolver` is set only after verifying, from the owner's audit token, that its
+    /// executable is /usr/sbin/mDNSResponder (proc_pidpath_audittoken, as for every flow) *and* that its
+    /// code is valid and Apple-signed as com.apple.mDNSResponder (SecCode guest lookup by audit token).
+    /// Nothing here trusts a name supplied by the flow.
+    static func socketOwner(_ flow: NEFilterFlow, attributedPid: Int32) -> SocketOwner? {
+        guard let tokenData = flow.sourceProcessAuditToken,
+              tokenData.count == MemoryLayout<audit_token_t>.size else { return nil }
+        let token = tokenData.withUnsafeBytes { $0.loadUnaligned(as: audit_token_t.self) }
+        let pid = Int32(bitPattern: token.val.5)
+        guard pid > 0, pid != attributedPid else { return nil }
+        let who = process(tokenData)
+        guard who.path == systemResolverPath else {
+            return SocketOwner(pid: pid, path: who.path, isSystemResolver: false)
+        }
+        let key = CacheKey(pid: pid, version: token.val.7)
+        if let hit = resolverCache.withLock({ $0[key] }) {
+            return SocketOwner(pid: pid, path: who.path, isSystemResolver: hit)
+        }
+        let verified = verifyResolverSignature(tokenData)
+        resolverCache.withLock { map in
+            if map.count >= cacheLimit { map.removeAll(keepingCapacity: true) }
+            map[key] = verified
+        }
+        return SocketOwner(pid: pid, path: who.path, isSystemResolver: verified)
+    }
+
+    private static func verifyResolverSignature(_ tokenData: Data) -> Bool {
+        guard let requirement = resolverRequirement else { return false }
+        var code: SecCode?
+        let attributes = [kSecGuestAttributeAudit as String: tokenData] as CFDictionary
+        guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess, let code else { return false }
+        return SecCodeCheckValidity(code, [], requirement) == errSecSuccess
     }
 
     // MARK: Endpoints

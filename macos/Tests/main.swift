@@ -386,6 +386,64 @@ if me != 0 {
     refusing.stop(); close(srv2)
 }
 
+// --- resolver-delegated DNS flows (v13 outage: an app block dropped mDNSResponder's socket) ---
+do {
+    let blockCurl = table(rule("""
+    {"id":"blk","appPath":"/Users/dev/curlblk","direction":"outbound","action":"block","protocol":"any","enabled":true}
+    """))
+    let resolver = SocketOwner(pid: 120, path: "/usr/sbin/mDNSResponder", isSystemResolver: true)
+    let dnsUDP = flow("/Users/dev/curlblk", .outbound, .udp, "10.0.2.3", 53)
+    let dnsTCP = flow("/Users/dev/curlblk", .outbound, .tcp, "10.0.2.3", 53)
+    let dot = flow("/Users/dev/curlblk", .outbound, .tcp, "1.1.1.1", 853)
+    var d = blockCurl.decide(dnsUDP, attributedPid: 2551, owner: resolver)
+    check(d.action == .allow && d.resolverDelegated && d.exemptedRuleId == "blk" && d.ruleId == nil,
+          "delegated resolver DNS (udp/53) of a blocked app is allowed: \(d)")
+    check(blockCurl.decide(dnsTCP, attributedPid: 2551, owner: resolver).action == .allow, "delegated resolver DNS over tcp/53 allowed")
+    check(blockCurl.decide(dot, attributedPid: 2551, owner: resolver).action == .allow, "delegated resolver DoT (853) allowed")
+    // The blocked app's own socket to :53 (owner == attributed process) stays blocked.
+    let selfOwner = SocketOwner(pid: 2551, path: "/Users/dev/curlblk", isSystemResolver: false)
+    d = blockCurl.decide(dnsUDP, attributedPid: 2551, owner: selfOwner)
+    check(d.action == .block && d.ruleId == "blk" && !d.resolverDelegated, "blocked app's own DNS socket stays blocked: \(d)")
+    check(blockCurl.decide(dnsUDP, attributedPid: 2551, owner: nil).action == .block, "no owner token: rule applies")
+    // Even a verified resolver token naming the same pid is not a delegation.
+    check(blockCurl.decide(dnsUDP, attributedPid: 120, owner: resolver).action == .block, "owner pid == attributed pid: rule applies")
+    // Delegated flow whose owner is not the verified resolver: the rule applies.
+    let other = SocketOwner(pid: 777, path: "/usr/sbin/mDNSResponder", isSystemResolver: false)
+    check(blockCurl.decide(dnsUDP, attributedPid: 2551, owner: other).action == .block, "unverified owner (path alone) is not exempt")
+    let helper = SocketOwner(pid: 778, path: "/usr/libexec/nehelper", isSystemResolver: false)
+    check(blockCurl.decide(dnsUDP, attributedPid: 2551, owner: helper).action == .block, "delegated flow from a non-resolver owner: rule applies")
+    // Resolver-owned delegated flow to a non-DNS port: the rule applies.
+    for port: UInt16 in [443, 80, 5353, 54] {
+        let f = flow("/Users/dev/curlblk", .outbound, .udp, "10.0.2.3", port)
+        check(blockCurl.decide(f, attributedPid: 2551, owner: resolver).action == .block, "resolver owner, port \(port): rule applies")
+    }
+    check(blockCurl.decide(flow("/Users/dev/curlblk", .outbound, .icmp, "10.0.2.3", 53), attributedPid: 2551, owner: resolver).action == .block,
+          "non-TCP/UDP protocol is not exempt")
+    check(blockCurl.decide(flow("/Users/dev/curlblk", .inbound, .udp, "10.0.2.3", 53), attributedPid: 2551, owner: resolver).action == .allow,
+          "inbound not covered by the outbound rule anyway")
+    // Rules that do not name the app still apply to the delegated flow (evaluated as the resolver's flow).
+    let global = table(rule("""
+    {"id":"no53","direction":"outbound","action":"block","protocol":"udp","remotePorts":"53","enabled":true},
+    {"id":"blk","appPath":"/Users/dev/curlblk","direction":"outbound","action":"block","enabled":true}
+    """))
+    d = global.decide(dnsUDP, attributedPid: 2551, owner: resolver)
+    check(d.action == .block && d.ruleId == "no53" && d.resolverDelegated, "app-less port rule still blocks delegated DNS: \(d)")
+    let blockResolver = table(rule("""
+    {"id":"mdns","appPath":"/usr/sbin/mDNSResponder","direction":"outbound","action":"block","enabled":true}
+    """))
+    check(blockResolver.decide(dnsUDP, attributedPid: 2551, owner: resolver).ruleId == "mdns", "rule naming the resolver applies to its delegated flows")
+    // mDNSResponder's own (non-delegated) flows: unchanged, evaluated as before.
+    let own = flow("/usr/sbin/mDNSResponder", .outbound, .udp, "10.0.2.3", 53)
+    check(blockCurl.decide(own, attributedPid: 120, owner: resolver).action == .allow && !blockCurl.decide(own, attributedPid: 120, owner: resolver).resolverDelegated,
+          "resolver's own flow: not delegated, app rule for another app does not match")
+    // Unblocked app: delegated flow allowed, reported as delegated without an exempted rule.
+    d = blockCurl.decide(flow("/usr/bin/curl", .outbound, .udp, "10.0.2.3", 53), attributedPid: 3000, owner: resolver)
+    check(d.action == .allow && d.resolverDelegated && d.exemptedRuleId == nil, "unblocked app's delegated DNS: allowed, nothing exempted")
+    // The same app's TCP flow to the resolved address stays blocked.
+    check(blockCurl.decide(flow("/Users/dev/curlblk", .outbound, .tcp, "93.184.215.14", 443), attributedPid: 2551, owner: selfOwner).action == .block,
+          "blocked app's own TCP flow stays blocked")
+}
+
 // --- shared fixtures (Tests/fixtures/rules-cases.json) ----------------------
 let fixturePath = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
     .appendingPathComponent("../../Tests/fixtures/rules-cases.json").standardized.path

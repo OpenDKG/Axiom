@@ -50,6 +50,10 @@ struct FlowRecord {
     /// Responsible process (review #12) when it differs from `pid`/`path`; nil otherwise.
     var responsiblePid: Int32? = nil
     var responsiblePath: String? = nil
+    /// The flow is mDNSResponder's DNS query on behalf of `pid` (resolver-delegated; app-scoped
+    /// rules not applied). Encoded only when true, as additive optional fields.
+    var resolverDelegated: Bool = false
+    var socketOwnerPid: Int32? = nil
 }
 
 /// Bounded FIFO of encoded lines with drop-oldest semantics that never breaks a line
@@ -251,7 +255,7 @@ final class EventSink: @unchecked Sendable {
         let object: [String: Any]
         switch event {
         case let .open(r):
-            object = [
+            var open: [String: Any] = [
                 "type": "flow.open",
                 "id": r.id.uuidString.lowercased(),
                 "ts": timestampFormatter.string(from: r.ts),
@@ -269,6 +273,12 @@ final class EventSink: @unchecked Sendable {
                 "responsiblePid": r.responsiblePid.map { Int($0) } ?? null,
                 "responsiblePath": r.responsiblePath ?? null,
             ]
+            // Optional, additive: the daemon parser ignores unknown properties (FlowEventParser).
+            if r.resolverDelegated {
+                open["resolverDelegated"] = true
+                if let ownerPid = r.socketOwnerPid { open["socketOwnerPid"] = Int(ownerPid) }
+            }
+            object = open
         case let .stats(id, ts, bytesIn, bytesOut):
             object = ["type": "flow.stats", "id": id.uuidString.lowercased(), "ts": timestampFormatter.string(from: ts),
                       "bytesIn": bytesIn, "bytesOut": bytesOut]

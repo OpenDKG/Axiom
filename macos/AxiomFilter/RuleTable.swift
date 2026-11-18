@@ -561,3 +561,63 @@ final class RuleTable: @unchecked Sendable {
         }
     }
 }
+
+// MARK: - Resolver-delegated DNS flows
+
+/// The process that really owns a flow's socket (`NEFilterFlow.sourceProcessAuditToken`), when
+/// macOS attributes the flow to a different process (`sourceAppAuditToken`). mDNSResponder's
+/// sockets for a lookup are attributed to the app that asked for the name.
+struct SocketOwner: Equatable {
+    let pid: Int32
+    /// Canonical executable path resolved from the owner's audit token.
+    let path: String?
+    /// True only when the owner was verified from its audit token (path *and* Apple code
+    /// signature, see `FlowInspector.socketOwner`) to be the system resolver mDNSResponder.
+    let isSystemResolver: Bool
+}
+
+/// Verdict for one new flow plus how it was reached.
+struct FlowDecision: Equatable {
+    let action: RuleAction
+    let ruleId: String?
+    /// The flow is the system resolver's DNS query made on behalf of the attributed app, and was
+    /// evaluated with the resolver's identity instead of the app's (app-scoped rules not applied).
+    let resolverDelegated: Bool
+    /// When `resolverDelegated`: the app rule that would have dropped the flow before this exemption.
+    let exemptedRuleId: String?
+}
+
+enum ResolverDelegation {
+    /// DNS (53) and DNS over TLS (853), UDP or TCP. 5353 (mDNS) is link-local multicast that
+    /// mDNSResponder sends on its own sockets; it is not exempted.
+    static let dnsPorts: Set<UInt16> = [53, 853]
+
+    /// True when the flow is a DNS query that the verified system resolver sends from its own
+    /// socket while macOS attributes it to another process (`attributedPid`).
+    static func isDelegatedResolverDNS(_ flow: FlowKey, attributedPid: Int32, owner: SocketOwner?) -> Bool {
+        guard let owner, owner.isSystemResolver, owner.pid > 0, owner.pid != attributedPid else { return false }
+        guard flow.direction == .outbound, flow.proto == .udp || flow.proto == .tcp else { return false }
+        guard let port = flow.remotePort, dnsPorts.contains(port) else { return false }
+        return true
+    }
+}
+
+extension RuleTable {
+    /// Verdict for a new flow. `flow` carries the attributed identity (the app); `owner` the real
+    /// socket owner when it is known. A resolver-delegated DNS flow is evaluated as the socket
+    /// owner's flow (mDNSResponder's path, same address/port/protocol): rules without an app path
+    /// and rules naming mDNSResponder still apply, rules scoped to the asking app do not, because
+    /// dropping the shared resolver socket stalls the same name for every app (see
+    /// docs/MACOS_ARCHITECTURE.md "Resolver-delegated DNS flows"). Everything else is `evaluate(flow)`.
+    func decide(_ flow: FlowKey, attributedPid: Int32, owner: SocketOwner?) -> FlowDecision {
+        let asApp = evaluate(flow)
+        guard let owner, ResolverDelegation.isDelegatedResolverDNS(flow, attributedPid: attributedPid, owner: owner) else {
+            return FlowDecision(action: asApp.action, ruleId: asApp.ruleId, resolverDelegated: false, exemptedRuleId: nil)
+        }
+        let ownerKey = FlowKey(appPath: owner.path, direction: flow.direction, proto: flow.proto,
+                               remoteAddress: flow.remoteAddress, remotePort: flow.remotePort, responsiblePath: nil)
+        let asOwner = evaluate(ownerKey)
+        let exempted = (asApp.action == .block && asOwner.action != .block) ? asApp.ruleId : nil
+        return FlowDecision(action: asOwner.action, ruleId: asOwner.ruleId, resolverDelegated: true, exemptedRuleId: exempted)
+    }
+}

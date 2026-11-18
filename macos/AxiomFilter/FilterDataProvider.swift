@@ -123,19 +123,27 @@ final class FilterDataProvider: NEFilterDataProvider {
         guard let socketFlow = flow as? NEFilterSocketFlow else { return .allow() }
 
         let info = FlowInspector.describe(socketFlow)
-        let decision = rules.snapshot().evaluate(info.key)
+        // The real socket owner is only looked up for DNS ports: a resolver-delegated DNS flow is
+        // the one case where it changes the verdict (RuleTable.decide; v13 outage fix).
+        let owner = info.remotePort.flatMap { UInt16(exactly: $0) }.map(ResolverDelegation.dnsPorts.contains) == true
+            ? FlowInspector.socketOwner(flow, attributedPid: info.pid) : nil
+        let decision = rules.snapshot().decide(info.key, attributedPid: info.pid, owner: owner)
+        let ownerText = owner.map { "\($0.pid) \($0.path ?? "?")" } ?? "-"
 
         let verdict: NEFilterNewFlowVerdict
         switch decision.action {
         case .block:
             verdict = .drop()
-            log.info("block pid=\(info.pid) \(info.path ?? "?", privacy: .public) -> \(info.remoteAddress ?? "?", privacy: .public):\(info.remotePort ?? 0) rule=\(decision.ruleId ?? "-", privacy: .public)")
+            log.info("block pid=\(info.pid) \(info.path ?? "?", privacy: .public) -> \(info.remoteAddress ?? "?", privacy: .public):\(info.remotePort ?? 0) rule=\(decision.ruleId ?? "-", privacy: .public) owner=\(ownerText, privacy: .public)")
         case .allow:
             verdict = .allow()
             // Byte counters, computed by the system (no payload access): periodic
             // .statistics reports plus a final .flowClosed report.
             verdict.shouldReport = true
             verdict.statisticsReportFrequency = .medium
+            if let exempted = decision.exemptedRuleId {
+                log.info("allow resolver-delegated dns pid=\(info.pid) \(info.path ?? "?", privacy: .public) -> \(info.remoteAddress ?? "?", privacy: .public):\(info.remotePort ?? 0) owner=\(ownerText, privacy: .public) app-rule-not-applied=\(exempted, privacy: .public)")
+            }
         }
 
         let now = Date()
@@ -154,7 +162,9 @@ final class FilterDataProvider: NEFilterDataProvider {
             verdict: decision.action,
             ruleId: decision.ruleId,
             responsiblePid: info.responsiblePid,
-            responsiblePath: info.responsiblePath
+            responsiblePath: info.responsiblePath,
+            resolverDelegated: decision.resolverDelegated,
+            socketOwnerPid: decision.resolverDelegated ? owner?.pid : nil
         )))
         if decision.action == .block {
             // macOS sends no flowClosed report for dropped flows (verified on 15.8), so close
