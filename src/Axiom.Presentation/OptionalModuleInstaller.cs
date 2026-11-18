@@ -67,8 +67,11 @@ public sealed class OptionalModuleInstaller
     /// </summary>
     public static bool IsInstallSupported => OperatingSystem.IsWindows();
 
-    public const string UnsupportedInstallMessage =
-        "Guided module installation is not available on macOS yet. Install the module manually, then click Check again.";
+    public static string UnsupportedInstallMessage { get; } =
+        $"Guided module installation is not available on {UnsupportedPlatformName} yet. Install the module manually, then click Check again.";
+
+    private static string UnsupportedPlatformName =>
+        OperatingSystem.IsMacOS() ? "macOS" : OperatingSystem.IsLinux() ? "Linux" : "this platform";
 
     /// <summary>Blackbox's own node tree; its DKG runtime lives below this folder.</summary>
     public string HermesBlackboxNode { get; } = Path.Combine(

@@ -73,6 +73,19 @@ public sealed class ModuleRepairPortabilityTests
     }
 
     [Fact]
+    public void Unsupported_install_message_names_the_running_os()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            Assert.Contains("on macOS yet", OptionalModuleInstaller.UnsupportedInstallMessage, StringComparison.Ordinal);
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            Assert.Contains("on Linux yet", OptionalModuleInstaller.UnsupportedInstallMessage, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void Hidden_powershell_is_not_started_off_windows()
     {
         if (OperatingSystem.IsWindows())
