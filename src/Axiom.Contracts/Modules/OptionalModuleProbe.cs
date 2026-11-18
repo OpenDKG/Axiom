@@ -41,13 +41,23 @@ public sealed class OptionalModuleProbe : IDisposable
 
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// A synced DKG node can take several seconds to answer while it reopens its store. A 2 s
+    /// timeout reported a healthy node as offline and left the DKG dot grey after a restart.
+    /// </summary>
+    private static readonly TimeSpan DkgTimeout = TimeSpan.FromSeconds(12);
+
     private readonly HttpClient _http;
+
+    private readonly HttpClient _dkgHttp;
 
     private readonly string _dkgUrl;
 
     private readonly string _blackboxUrl;
 
     private readonly bool _ownsHttpClient;
+
+    private readonly bool _ownsDkgHttpClient;
 
     private readonly ILoopbackListenerInspector? _listenerInspector;
 
@@ -73,6 +83,8 @@ public sealed class OptionalModuleProbe : IDisposable
     {
         _http = httpClient ?? CreateLoopbackHttpClient(DefaultTimeout);
         _ownsHttpClient = httpClient is null;
+        _dkgHttp = httpClient ?? CreateLoopbackHttpClient(DkgTimeout);
+        _ownsDkgHttpClient = httpClient is null;
         _listenerInspector = listenerInspector;
         _dkgUrl = dkgUrl
                   ?? Environment.GetEnvironmentVariable("AXIOM_DKG_URL")
@@ -137,7 +149,7 @@ public sealed class OptionalModuleProbe : IDisposable
     {
         try
         {
-            using var response = await _http
+            using var response = await _dkgHttp
                 .GetAsync(new Uri(baseUri, "/api/status"), cancellationToken)
                 .ConfigureAwait(false);
 
@@ -286,6 +298,11 @@ public sealed class OptionalModuleProbe : IDisposable
         if (_ownsHttpClient)
         {
             _http.Dispose();
+        }
+
+        if (_ownsDkgHttpClient)
+        {
+            _dkgHttp.Dispose();
         }
     }
 

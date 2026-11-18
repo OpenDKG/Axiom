@@ -258,6 +258,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     private DateTimeOffset _lastBlackboxStartAttempt = DateTimeOffset.MinValue;
     private int _dkgStartAttempts;
     private int _blackboxStartAttempts;
+    private bool _healthSampleRunning;
 
     private readonly IUiTimer _activityTimer;
 
@@ -676,7 +677,14 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     }
 
     private async Task SampleHealthAsync()
-    {        try
+    {
+        if (_healthSampleRunning)
+        {
+            return;
+        }
+
+        _healthSampleRunning = true;
+        try
         {
             var dkgTask = _probe.ProbeDkgAsync(CancellationToken.None);
             var blackboxTask = _probe.ProbeBlackboxAsync(CancellationToken.None);
@@ -689,6 +697,10 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         catch (Exception)
 #pragma warning restore CA1031
         {
+        }
+        finally
+        {
+            _healthSampleRunning = false;
         }
     }
 

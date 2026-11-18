@@ -70,7 +70,8 @@ Axiom starts an installed module on launch and retries it (at most five times, t
 when it crashes later. Because the Complete installation starts Axiom with Windows, this restores
 the dashboard and node after a reboot or power loss. The DKG card accepts both the historical
 standalone port **9200** and Blackbox's bundled node on **9320**, so a healthy node is not reported
-as "not running" while the dashboard is down.
+as "not running" while the dashboard is down. The probe allows 12 seconds for a synced node to
+answer, so a busy DKG is not shown as offline.
 
 ### Prerequisites
 
