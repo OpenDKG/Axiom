@@ -30,6 +30,7 @@ public partial class App : Application
     private TrayIcon? _tray;
     private ModuleWindowHider? _moduleWindowHider;
     private SingleInstanceGuard? _ownedFallbackInstance;
+    private readonly CancellationTokenSource _startupLifetime = new();
     private volatile bool _exiting;
     private volatile bool _allowExit;
 
@@ -52,23 +53,22 @@ public partial class App : Application
                 }
             }
 
-            // Provision Axiom-managed hooks for detected harnesses without a second setup dialog.
-            // Existing user-authored hooks are preserved; host-owned trust stays host-owned.
-            try
+            var startupToken = _startupLifetime.Token;
+            _ = Task.Run(async () =>
             {
-                AgentHookMaintenance.ProvisionDetectedHooks();
-            }
-            catch
-            {
-                // Hook maintenance is best-effort and must not block startup.
-            }
-
-            // A complete install must end protected: persist block mode where the guard reads it
-            // and prove it with the self-test. Runs off the UI thread so startup stays responsive.
-            _ = Task.Run(() =>
-            {
+                await Task.Delay(TimeSpan.FromSeconds(2), startupToken).ConfigureAwait(false);
                 try
                 {
+                    AgentHookMaintenance.ProvisionDetectedHooks();
+                }
+                catch
+                {
+                    // Existing hook state is usable even if a maintenance pass fails.
+                }
+
+                try
+                {
+                    startupToken.ThrowIfCancellationRequested();
                     var protection = ProtectionProvisioner.ProvisionAtStartup();
                     if (protection is not null)
                     {
@@ -77,7 +77,7 @@ public partial class App : Application
                         if (!File.Exists(privacyConfigPath))
                         {
                             PrivacyShieldProvisioner.WriteSettings(localAppData);
-                            PrivacyShieldProvisioner.ApplyAsync(CancellationToken.None).GetAwaiter().GetResult();
+                            await PrivacyShieldProvisioner.ApplyAsync(startupToken).ConfigureAwait(false);
                         }
                         TraderShieldProvisioner.ApplyToFile(Path.Combine(localAppData, "hermes", "config.yaml"));
                         HermesPluginSettings.ApplyToFile(Path.Combine(localAppData, "hermes", "config.yaml"));
@@ -367,6 +367,8 @@ public partial class App : Application
     private void Cleanup()
     {
         _exiting = true;
+        _startupLifetime.Cancel();
+        _startupLifetime.Dispose();
         SingleInstance?.Dispose();
         _ownedFallbackInstance?.Dispose();
         _ownedFallbackInstance = null;

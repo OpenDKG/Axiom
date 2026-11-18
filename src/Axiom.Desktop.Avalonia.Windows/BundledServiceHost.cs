@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using Microsoft.Win32;
 
 namespace Axiom.Desktop.Avalonia.Windows;
 
@@ -22,16 +23,9 @@ internal sealed class BundledServiceHost : IDisposable
             return false;
         }
 
-        HideExistingServiceWindows();
-
         // An installed Windows service owns the pipe. Starting a second, interactive copy next to
         // it would create two pipe servers and two history writers, so never spawn in that case.
-        if (IsServiceRegistered())
-        {
-            return true;
-        }
-
-        if (Process.GetProcessesByName("Axiom.Service").Length > 0)
+        if (HideExistingServiceWindows() || IsServiceRegistered())
         {
             return true;
         }
@@ -60,23 +54,8 @@ internal sealed class BundledServiceHost : IDisposable
     {
         try
         {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = Path.Combine(Environment.SystemDirectory, "sc.exe"),
-                Arguments = "query Axiom",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            });
-
-            if (process is null)
-            {
-                return false;
-            }
-
-            process.WaitForExit(5000);
-            return process.ExitCode == 0;
+            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\Axiom");
+            return key is not null;
         }
 #pragma warning disable CA1031 // Detection is best-effort; a failure means "not installed".
         catch (Exception)
@@ -86,9 +65,10 @@ internal sealed class BundledServiceHost : IDisposable
         }
     }
 
-    private static void HideExistingServiceWindows()
+    private static bool HideExistingServiceWindows()
     {
-        foreach (var process in Process.GetProcessesByName("Axiom.Service"))
+        var processes = Process.GetProcessesByName("Axiom.Service");
+        foreach (var process in processes)
         {
             try
             {
@@ -107,6 +87,8 @@ internal sealed class BundledServiceHost : IDisposable
                 process.Dispose();
             }
         }
+
+        return processes.Length > 0;
     }
 
     public void Dispose()

@@ -18,6 +18,7 @@ public sealed partial class ThroughputRecorderWorker(
 {
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan FlushInterval = TimeSpan.FromMinutes(5);
+    private const int MaxPendingMinutes = 24 * 60;
 
     private readonly List<ThroughputBucket> _pendingBuckets = [];
 
@@ -64,6 +65,11 @@ public sealed partial class ThroughputRecorderWorker(
                     // Keep completed minutes in memory and write them in one batch later.
                     if (_measuredSeconds > 0)
                     {
+                        if (_pendingBuckets.Count >= MaxPendingMinutes)
+                        {
+                            _pendingBuckets.RemoveAt(0);
+                        }
+
                         _pendingBuckets.Add(new ThroughputBucket(
                             _bucketStart,
                             _uploadBytes,

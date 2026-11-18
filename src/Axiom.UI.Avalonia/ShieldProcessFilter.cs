@@ -28,7 +28,10 @@ internal static class ShieldProcessFilter
     private static readonly string LocalAppData =
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
-    private static readonly ConcurrentDictionary<string, bool> Cache =
+    private const int SignatureCacheLimit = 512;
+    private static readonly TimeSpan SignatureCacheLifetime = TimeSpan.FromMinutes(5);
+    private static readonly object SignatureCacheWriteGate = new();
+    private static readonly ConcurrentDictionary<string, (bool Trusted, DateTimeOffset Expires)> Cache =
         new(StringComparer.OrdinalIgnoreCase);
 
     public static bool IsIgnored(string? appPath)
@@ -67,7 +70,27 @@ internal static class ShieldProcessFilter
             return true;
         }
 
-        return Cache.GetOrAdd(path, IsMicrosoftSigned);
+        var now = DateTimeOffset.UtcNow;
+        if (Cache.TryGetValue(path, out var cached) && cached.Expires > now)
+        {
+            return cached.Trusted;
+        }
+
+        var trusted = IsMicrosoftSigned(path);
+        lock (SignatureCacheWriteGate)
+        {
+            if (Cache.Count >= SignatureCacheLimit && !Cache.ContainsKey(path))
+            {
+                foreach (var oldest in Cache.OrderBy(pair => pair.Value.Expires).Take(128))
+                {
+                    Cache.TryRemove(oldest.Key, out _);
+                }
+            }
+
+            Cache[path] = (trusted, now + SignatureCacheLifetime);
+        }
+
+        return trusted;
     }
 
     private static bool IsMicrosoftSigned(string path)
@@ -75,7 +98,8 @@ internal static class ShieldProcessFilter
         try
         {
 #pragma warning disable SYSLIB0057 // CreateFromSignedFile is the API that reads Authenticode data from an executable.
-            using var certificate = new X509Certificate2(X509Certificate.CreateFromSignedFile(path));
+            using var signer = X509Certificate.CreateFromSignedFile(path);
+            using var certificate = new X509Certificate2(signer);
 #pragma warning restore SYSLIB0057
             if (!certificate.Subject.Contains("O=Microsoft Corporation", StringComparison.OrdinalIgnoreCase))
             {

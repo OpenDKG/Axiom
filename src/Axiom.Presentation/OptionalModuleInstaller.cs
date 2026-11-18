@@ -628,7 +628,7 @@ public sealed class OptionalModuleInstaller
 
         try
         {
-            using var process = Process.Start(startInfo);
+            using var process = LocalModuleRuntime.StartBackgroundProcess(startInfo);
             if (process is null)
             {
                 return false;
@@ -728,7 +728,7 @@ public sealed class OptionalModuleInstaller
                 WorkingDirectory = agent,
             };
 
-            using var process = Process.Start(startInfo);
+            using var process = LocalModuleRuntime.StartBackgroundProcess(startInfo);
             if (process is null)
             {
                 return false;
@@ -1119,7 +1119,7 @@ public sealed class OptionalModuleInstaller
 
         log?.Invoke("Running third-party installer silently in the background...");
         BackgroundWindowHider.HideDescendants(TimeSpan.FromMinutes(10));
-        using var process = Process.Start(startInfo);
+        using var process = LocalModuleRuntime.StartBackgroundProcess(startInfo);
         if (process is null)
         {
             log?.Invoke("Could not start PowerShell.");
@@ -1171,7 +1171,7 @@ public sealed class OptionalModuleInstaller
             WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         };
 
-        Process.Start(startInfo);
+        using var process = Process.Start(startInfo);
     }
 
     private static string Escape(string value) => value.Replace("'", "''", StringComparison.Ordinal);

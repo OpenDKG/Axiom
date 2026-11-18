@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using System.Diagnostics;
 using System.Management;
 using System.Runtime.InteropServices;
 
@@ -64,16 +63,31 @@ internal sealed class ModuleWindowHider : IDisposable
                 "WHERE Name = 'node.exe' OR Name = 'python.exe' OR Name = 'pythonw.exe' " +
                 "OR Name = 'hermes.exe' OR Name = 'cmd.exe' OR Name = 'powershell.exe' OR Name = 'pwsh.exe'");
             using var results = searcher.Get();
+            var modulePids = new HashSet<uint>();
             foreach (ManagementObject item in results)
             {
-                var commandLine = item["CommandLine"] as string ?? string.Empty;
-                if (!IsAxiomModule(commandLine))
+                using (item)
                 {
-                    continue;
+                    if (item["ProcessId"] is uint processId && processId > 4 &&
+                        IsAxiomModule(item["CommandLine"] as string ?? string.Empty))
+                    {
+                        modulePids.Add(processId);
+                    }
                 }
+            }
 
-                var processId = Convert.ToInt32(item["ProcessId"], System.Globalization.CultureInfo.InvariantCulture);
-                HideProcessWindow(processId);
+            if (modulePids.Count > 0)
+            {
+                _ = EnumWindows((window, parameter) =>
+                {
+                    _ = GetWindowThreadProcessId(window, out var ownerPid);
+                    if (modulePids.Contains(ownerPid) && IsWindowVisible(window))
+                    {
+                        _ = ShowWindow(window, SwHide);
+                    }
+
+                    return true;
+                }, IntPtr.Zero);
             }
         }
         catch (Exception exception) when (exception is
@@ -86,44 +100,6 @@ internal sealed class ModuleWindowHider : IDisposable
 
     internal static bool IsAxiomModule(string commandLine) =>
         Axiom.Presentation.AxiomModuleProcessMatcher.IsAxiomModuleCommandLine(commandLine);
-
-    private static void HideProcessWindow(int processId)
-    {
-        if (processId <= 4)
-        {
-            return;
-        }
-
-        try
-        {
-            using var process = Process.GetProcessById(processId);
-            var handle = process.MainWindowHandle;
-            if (handle != IntPtr.Zero && IsWindowVisible(handle))
-            {
-                _ = ShowWindow(handle, SwHide);
-            }
-        }
-        catch (Exception exception) when (exception is
-                     ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-        }
-
-        var targetPid = (uint)processId;
-        _ = EnumWindows((hwnd, _) =>
-        {
-            HideWindowIfOwned(hwnd, targetPid);
-            return true;
-        }, IntPtr.Zero);
-    }
-
-    private static void HideWindowIfOwned(IntPtr hwnd, uint targetPid)
-    {
-        _ = GetWindowThreadProcessId(hwnd, out var windowPid);
-        if (windowPid == targetPid && IsWindowVisible(hwnd))
-        {
-            _ = ShowWindow(hwnd, SwHide);
-        }
-    }
 
     private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
 

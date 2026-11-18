@@ -602,6 +602,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         _updateTimer.StopTimer();
         _updateTimer.Tick -= OnUpdateTimerTick;
+        _updateTimer.Dispose();
         _updateChecker.Changed -= OnUpdateCheckerChanged;
         _monitor.Updated -= OnMonitorUpdated;
         _theme.Changed -= OnThemeChanged;

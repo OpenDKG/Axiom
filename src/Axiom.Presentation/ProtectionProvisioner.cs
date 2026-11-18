@@ -235,7 +235,7 @@ public static class ProtectionProvisioner
                 RedirectStandardError = true,
             };
 
-            using var process = Process.Start(startInfo);
+            using var process = LocalModuleRuntime.StartBackgroundProcess(startInfo);
             if (process is null)
             {
                 return new ProtectionCheckResult(check.Name, check.ExpectBlock, false, "process-start-failed");

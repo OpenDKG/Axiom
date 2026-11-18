@@ -20,6 +20,8 @@ namespace Axiom.Presentation;
 public static class AiEvidenceContext
 {
     private static readonly ConcurrentDictionary<string, CachedProcessInfo> ProcessCache = new(StringComparer.Ordinal);
+    private static readonly object ProcessCacheWriteGate = new();
+    private const int ProcessCacheLimit = 512;
     private static readonly object ParentSnapshotGate = new();
     private static readonly TimeSpan ProcessCacheLifetime = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ParentSnapshotLifetime = TimeSpan.FromSeconds(2);
@@ -215,17 +217,17 @@ public static class AiEvidenceContext
         }
 
         var metadata = QueryProcess(processId, path);
-        ProcessCache[key] = new CachedProcessInfo(metadata, now);
-
-        if (ProcessCache.Count > 512)
+        lock (ProcessCacheWriteGate)
         {
-            foreach (var pair in ProcessCache)
+            if (ProcessCache.Count >= ProcessCacheLimit && !ProcessCache.ContainsKey(key))
             {
-                if (now - pair.Value.ResolvedUtc > ProcessCacheLifetime)
+                foreach (var oldest in ProcessCache.OrderBy(pair => pair.Value.ResolvedUtc).Take(128))
                 {
-                    ProcessCache.TryRemove(pair.Key, out _);
+                    ProcessCache.TryRemove(oldest.Key, out _);
                 }
             }
+
+            ProcessCache[key] = new CachedProcessInfo(metadata, now);
         }
 
         return metadata;

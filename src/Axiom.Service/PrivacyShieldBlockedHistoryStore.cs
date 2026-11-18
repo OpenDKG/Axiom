@@ -32,13 +32,14 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
 
     private readonly string _path;
 
-    private readonly List<PrivacyShieldBlockedEvent> _pending = [];
+    private readonly Queue<PrivacyShieldBlockedEvent> _pending = new();
 
     private readonly List<PrivacyShieldBlockedEvent> _persisted = [];
 
     private readonly Timer _flushTimer;
 
     private int _count;
+    private DateTimeOffset _retryFlushAfterUtc;
 
     public PrivacyShieldBlockedHistoryStore(string? path = null)
     {
@@ -50,7 +51,7 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
             "privacy-shield-blocked.jsonl");
         _persisted.AddRange(ReadPersistedFromDisk());
         _count = _persisted.Count;
-        _flushTimer = new Timer(_ => Flush(), null, FlushInterval, FlushInterval);
+        _flushTimer = new Timer(_ => FlushPending(), null, FlushInterval, FlushInterval);
     }
 
     public string HistoryPath => _path;
@@ -60,21 +61,28 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
         var flush = false;
         lock (_gate)
         {
-            _pending.Add(blocked);
+            if (_pending.Count == MaxEntries)
+            {
+                _pending.Dequeue();
+            }
+
+            _pending.Enqueue(blocked);
             flush = _pending.Count >= FlushThreshold;
         }
 
         if (flush)
         {
-            Flush();
+            FlushPending();
         }
     }
 
-    public void Flush()
+    public void Flush() => FlushPending(force: true);
+
+    private void FlushPending(bool force = false)
     {
         lock (_gate)
         {
-            if (_pending.Count == 0)
+            if (_pending.Count == 0 || (!force && DateTimeOffset.UtcNow < _retryFlushAfterUtc))
             {
                 return;
             }
@@ -83,7 +91,7 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
             {
                 if (_count + _pending.Count > MaxEntries)
                 {
-                    CompactLocked();
+                    CompactLocked(Math.Min(MaxEntries / 2, MaxEntries - _pending.Count));
                 }
 
                 var directory = Path.GetDirectoryName(_path)
@@ -108,10 +116,12 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
 
                 _count += _pending.Count;
                 _pending.Clear();
+                _retryFlushAfterUtc = default;
             }
             catch (Exception exception) when (exception is
                          IOException or UnauthorizedAccessException or JsonException)
             {
+                _retryFlushAfterUtc = DateTimeOffset.UtcNow + FlushInterval;
             }
         }
     }
@@ -171,9 +181,8 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
         Flush();
     }
 
-    private void CompactLocked()
+    private void CompactLocked(int keepCount)
     {
-        var keepCount = MaxEntries / 2;
         var lines = File.Exists(_path)
             ? File.ReadLines(_path).TakeLast(keepCount).ToArray()
             : [];

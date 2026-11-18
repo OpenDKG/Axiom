@@ -252,7 +252,13 @@ public sealed class ThreatShareController : IAsyncDisposable
             {
                 if (_items.Count > ThreatShareStore.MaxItems)
                 {
-                    _items.RemoveRange(0, _items.Count - ThreatShareStore.MaxItems);
+                    var expired = _items.Count - ThreatShareStore.MaxItems;
+                    for (var index = 0; index < expired; index++)
+                    {
+                        _knownIds.Remove(_items[index].Candidate.Id);
+                    }
+
+                    _items.RemoveRange(0, expired);
                 }
 
                 _store.Save(_items);

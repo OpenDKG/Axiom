@@ -8,6 +8,43 @@ namespace Axiom.Service.Tests;
 public sealed class PrivacyShieldBlockedHistoryTests
 {
     [Fact]
+    public void History_keeps_only_recent_entries_while_a_write_fails()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"axiom-blocked-{Guid.NewGuid():N}");
+        var path = Path.Combine(root, "history.jsonl");
+        File.WriteAllText(root, "The history directory is temporarily inaccessible.");
+        try
+        {
+            using var store = new PrivacyShieldBlockedHistoryStore(path);
+            var limit = PrivacyShieldBlockedHistoryStore.MaxEntries;
+            for (var index = 0; index < limit + 10; index++)
+            {
+                store.Append(new PrivacyShieldBlockedEvent(
+                    $"name-{index}.example", PrivacyCategory.Ads, DateTimeOffset.UnixEpoch.AddSeconds(index)));
+            }
+
+            File.Delete(root);
+            Directory.CreateDirectory(root);
+            store.Flush();
+
+            Assert.Equal(limit, File.ReadLines(path).Count());
+            Assert.Equal("name-10.example", store.LoadRecent()[^1].Domain);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                File.Delete(path);
+                Directory.Delete(root);
+            }
+            else
+            {
+                File.Delete(root);
+            }
+        }
+    }
+
+    [Fact]
     public void History_is_bounded_newest_first_and_clearable()
     {
         var path = Path.Combine(Path.GetTempPath(), $"axiom-blocked-{Guid.NewGuid():N}.jsonl");

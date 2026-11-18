@@ -251,11 +251,15 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     /// <summary>How often a module that is installed but down is started again this session.</summary>
     private static readonly TimeSpan AutoStartRetryInterval = TimeSpan.FromMinutes(3);
+    private static readonly TimeSpan DesktopStartupGrace = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan BlackboxNodeGrace = TimeSpan.FromSeconds(15);
+    private readonly DateTimeOffset _autoStartAfterUtc = DateTimeOffset.UtcNow + DesktopStartupGrace;
 
     private const int MaxAutoStartAttempts = 5;
 
     private DateTimeOffset _lastDkgStartAttempt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastBlackboxStartAttempt = DateTimeOffset.MinValue;
+    private DateTimeOffset _waitForBlackboxNodeUntilUtc;
     private int _dkgStartAttempts;
     private int _blackboxStartAttempts;
     private const string StartingDkg = "Starting the installed DKG node...";
@@ -312,7 +316,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         }
 
         SyncModuleHealth();
-        _ = RefreshAsync();
+        _ = RefreshAfterStartupAsync(_lifetime.Token);
     }
 
     /// <summary>Fixed window of module health squares, oldest on the left.</summary>
@@ -561,6 +565,18 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private Task RefreshAsync() => RefreshCoreAsync(includeAgentDetails: true);
 
+    private async Task RefreshAfterStartupAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(DesktopStartupGrace, cancellationToken).ConfigureAwait(true);
+            await RefreshCoreAsync(includeAgentDetails: _presentationVisible).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
     private async Task RefreshCoreAsync(bool includeAgentDetails)
     {
         if (IsBusy || _disposed)
@@ -600,16 +616,16 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 InstallStatusText = string.Empty;
             }
 
-            if (!_moduleActionRunning)
-            {
-                await TryStartInstalledDkgOnLaunchAsync(dkg).ConfigureAwait(true);
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-
-            if (!_moduleActionRunning)
+            if (!_moduleActionRunning && DateTimeOffset.UtcNow >= _autoStartAfterUtc)
             {
                 await TryStartInstalledBlackboxOnLaunchAsync(blackbox).ConfigureAwait(true);
                 cancellationToken.ThrowIfCancellationRequested();
+
+                if (!_moduleActionRunning && DateTimeOffset.UtcNow >= _waitForBlackboxNodeUntilUtc)
+                {
+                    await TryStartInstalledDkgOnLaunchAsync(dkg).ConfigureAwait(true);
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
             }
 
             LastCheckedText = $"Checked {DateTimeOffset.Now:HH:mm:ss}";
@@ -683,6 +699,8 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         _blackboxStartAttempts++;
         if (await Task.Run(_installer.StartBlackboxDashboard).ConfigureAwait(true) && !_disposed && !_moduleActionRunning)
         {
+            // The dashboard may bring up its configured node. Give that node a chance to bind.
+            _waitForBlackboxNodeUntilUtc = DateTimeOffset.UtcNow + BlackboxNodeGrace;
             InstallStatusText = StartingBlackbox;
             BlackboxBrandLabel = "Umanitek Blackbox – starting";
         }

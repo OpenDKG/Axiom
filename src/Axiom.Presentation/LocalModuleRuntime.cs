@@ -19,6 +19,25 @@ public static class LocalModuleRuntime
 
     public const int StandaloneDkgPort = 9200;
 
+    internal static Process? StartBackgroundProcess(ProcessStartInfo startInfo)
+    {
+        var process = Process.Start(startInfo);
+        if (process is not null && OperatingSystem.IsWindows())
+        {
+            try
+            {
+                process.PriorityClass = ProcessPriorityClass.BelowNormal;
+            }
+            catch (Exception exception) when (exception is
+                         InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                // A short-lived launcher may have already exited.
+            }
+        }
+
+        return process;
+    }
+
     /// <summary>
     /// True when something is listening on the loopback port. This is deliberate: a listener that
     /// has not finished its HTTP handshake still must not be joined by a second process.
@@ -131,7 +150,7 @@ public static class LocalModuleRuntime
 
         try
         {
-            using var process = Process.Start(startInfo);
+            using var process = StartBackgroundProcess(startInfo);
             if (process is null)
             {
                 log?.Invoke($"Could not start {Path.GetFileName(fileName)}.");

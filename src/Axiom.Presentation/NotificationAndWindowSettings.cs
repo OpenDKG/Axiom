@@ -158,6 +158,7 @@ public static class BackgroundWindowHider
     private static Timer? _timer;
     private static int _rootPid;
     private static DateTimeOffset _until;
+    private static int _sweeping;
 
     public static void HideDescendants(TimeSpan duration)
     {
@@ -181,7 +182,7 @@ public static class BackgroundWindowHider
 
     private static void Sweep()
     {
-        if (!OperatingSystem.IsWindows())
+        if (!OperatingSystem.IsWindows() || Interlocked.Exchange(ref _sweeping, 1) != 0)
         {
             return;
         }
@@ -251,6 +252,8 @@ public static class BackgroundWindowHider
                     _timer = null;
                 }
             }
+
+            Volatile.Write(ref _sweeping, 0);
         }
     }
 
