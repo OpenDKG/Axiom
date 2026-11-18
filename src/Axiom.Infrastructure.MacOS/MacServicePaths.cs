@@ -45,6 +45,9 @@ public sealed record MacServicePaths(string MachineDataDirectory, string RunDire
         ? Path.Combine(RunDirectory, "filter.sock")
         : FilterSocketOverride.Trim();
 
+    /// <summary>Last AxiomFilter instance (pid@start) the daemon saw; 0600, daemon-private.</summary>
+    public string FilterInstanceMarkerFile => Path.Combine(MachineDataDirectory, "filter-instance");
+
     public string DnsBackupFile => Path.Combine(MachineDataDirectory, "privacy-shield-dns-backup.json");
 
     /// <summary>Upstream network recovery baseline (<c>network-recovery.txt</c>, 0600) in the machine data root.</summary>

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Infrastructure.MacOS;
 using Axiom.Infrastructure.MacOS.Filter;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -7,11 +8,13 @@ namespace Axiom.Service;
 
 /// <summary>
 /// macOS: republishes the AxiomFilter rule table at start (so the filter always finds the
-/// daemon's current owned rules) and runs the flow-event socket the filter connects to.
+/// daemon's current owned rules) and runs the flow-event socket the filter connects to. Once per
+/// new filter instance it also has mDNSResponder rebuild its sockets (<see cref="ResolverResetCoordinator"/>).
 /// </summary>
 internal sealed partial class FilterEventWorker(
     FilterEventServer server,
     MacFirewallPolicyAdapter firewall,
+    MacServicePaths paths,
     ILogger<FilterEventWorker> logger) : BackgroundService
 {
     [LoggerMessage(EventId = 2101, Level = LogLevel.Information, Message = "{Message}")]
@@ -43,6 +46,17 @@ internal sealed partial class FilterEventWorker(
             LogPublished(logger, republished);
         };
 
+        // macOS breaks every socket that existed before a new filter instance attached and
+        // mDNSResponder keeps sending on its dead ones until it gets a SIGHUP.
+        var resolverReset = new ResolverResetCoordinator(
+            paths.FilterInstanceMarkerFile,
+            new MDnsResponderSignaller(),
+            TimeProvider.System,
+            message => LogMessage(logger, message));
+        server.FilterInstanceConnected = resolverReset.FilterConnected;
+        var resetLoop = resolverReset.RunAsync(stoppingToken);
+
         await server.RunAsync(message => LogMessage(logger, message), stoppingToken).ConfigureAwait(false);
+        await resetLoop.ConfigureAwait(false);
     }
 }
