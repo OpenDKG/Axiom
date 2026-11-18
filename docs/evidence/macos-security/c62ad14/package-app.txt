@@ -2,9 +2,9 @@ head c62ad14 2026-11-14T14:25:40Z
 ==> dotnet publish Axiom.Desktop.Avalonia.MacOS (osx-x64)
 ==> dotnet publish Axiom.Service -> axiomd (osx-x64)
 ==> note: publish adds RID sections to packages.lock.json; discard them with: git checkout -- '*.lock.json'
-==> assembling /home/buba/projects/Axiom-mac/build/macos/osx-x64/Axiom.app
+==> assembling ~/projects/Axiom-mac/build/macos/osx-x64/Axiom.app
 ==> no icon tools (sips/iconutil or png2icns): bundle has no icon
 ==> no prebuilt filter in macos/build (run macos/build.sh on a Mac): bundle has no network filter
-==> unsigned bundle: /home/buba/projects/Axiom-mac/build/macos/osx-x64/Axiom.app
+==> unsigned bundle: ~/projects/Axiom-mac/build/macos/osx-x64/Axiom.app
 ==> finish on a Mac: copy this tree and run scripts/macos/package-app.sh osx-x64 --skip-publish
 package rc=0

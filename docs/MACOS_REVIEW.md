@@ -120,7 +120,7 @@ Two independent read-only reviews (Swift filter + packaging; .NET daemon, infra,
 21. Single-instance race between `TryAcquire` and `Listen`; second launch may exit without showing the window.
 22. Three near-identical "run tool with timeout" helpers; `PipeServerWorker` branches only for a log string.
 23. [DONE 045c118: both documented in `macos/README.md` "Behaviour notes" and ARCHITECTURE §3.4.] Unconnected UDP sockets get one verdict; document. `exit(0)` after `stopFilter` logs as unexpected exit; document.
-24. `deploy-to-vm.sh` hardcodes `/home/buba`; mark dev-only.
+24. `deploy-to-vm.sh` hardcodes a home path; mark dev-only.
 25. [FIXED 11871d6: menu items read "Service: running" / "Filter: on" (disabled) once running; Overview line becomes "Protection active: firewall writes enabled…" when the resolver runs or writes are enabled; `MacDnsConfigurator.ListActiveServices` skips services whose device reports `status: inactive` (restore still covers every service). AppleScript quit: see MACOS_TEST_REPORT.md.] Cosmetic: menu offers Install/Turn On while running; Overview says "read-only inventory" with the shield on;
     Privacy Shield redirects inactive network services; AppleScript quit reports -128.
 
