@@ -38,6 +38,18 @@ public static class AgentPlatform
         return fileExists(venvPythonW) ? venvPythonW : venvPython;
     }
 
+    /// <summary>
+    /// True when the virtual environment under <paramref name="root"/> has an interpreter. Windows:
+    /// upstream's check, <c>venv\\Scripts\\python.exe</c> or <c>pythonw.exe</c>; POSIX: <c>venv/bin/python</c>.
+    /// </summary>
+    public static bool HasVenvPython(string root) => HasVenvPython(root, IsWindows, File.Exists);
+
+    public static bool HasVenvPython(string root, bool windows, Func<string, bool> fileExists)
+    {
+        ArgumentNullException.ThrowIfNull(fileExists);
+        return fileExists(VenvPython(root, windows)) || fileExists(VenvPythonNoConsole(root, windows, fileExists));
+    }
+
     /// <summary>A console tool installed in a virtual environment (for example <c>hermes</c>).</summary>
     public static string VenvTool(string root, string name) => VenvTool(root, name, IsWindows);
 

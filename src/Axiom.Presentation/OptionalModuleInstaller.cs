@@ -384,7 +384,7 @@ public sealed class OptionalModuleInstaller
                 return false;
             }
 
-            return File.Exists(Path.Combine(BlackboxRoot, "agent-blackbox", "venv", "Scripts", "python.exe"));
+            return File.Exists(AgentPlatform.VenvPython(Path.Combine(BlackboxRoot, "agent-blackbox")));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -825,6 +825,15 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        if (!IsInstallSupported)
+        {
+            // Repair stops processes with a PowerShell script and reinstalls Python packages; module
+            // installation and repair are Windows-only for now.
+            LastError = UnsupportedInstallMessage;
+            log?.Invoke(UnsupportedInstallMessage);
+            return false;
+        }
+
         var ok = true;
 
         if (dkg && IsDkgAvailable)
@@ -886,7 +895,7 @@ public sealed class OptionalModuleInstaller
             return;
         }
 
-        var python = Path.Combine(agent, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(agent);
         if (!File.Exists(python))
         {
             return;
@@ -914,9 +923,7 @@ public sealed class OptionalModuleInstaller
         get
         {
             var agent = ResolveBlackboxAgentRoot();
-            return agent is not null &&
-                   (File.Exists(Path.Combine(agent, "venv", "Scripts", "python.exe")) ||
-                    File.Exists(Path.Combine(agent, "venv", "Scripts", "pythonw.exe")));
+            return agent is not null && AgentPlatform.HasVenvPython(agent);
         }
     }
 
@@ -934,8 +941,7 @@ public sealed class OptionalModuleInstaller
 
         foreach (var candidate in candidates)
         {
-            if (File.Exists(Path.Combine(candidate, "venv", "Scripts", "python.exe")) ||
-                File.Exists(Path.Combine(candidate, "venv", "Scripts", "pythonw.exe")))
+            if (AgentPlatform.HasVenvPython(candidate))
             {
                 return Path.GetFullPath(candidate);
             }

@@ -1024,6 +1024,12 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             return;
         }
 
+        if (!OptionalModuleInstaller.IsInstallSupported)
+        {
+            InstallStatusText = OptionalModuleInstaller.UnsupportedInstallMessage;
+            return;
+        }
+
         var isBlackbox = module.Equals("Blackbox", StringComparison.Ordinal);
         var installed = isBlackbox
             ? _uninstaller.IsBlackboxRuntimeInstalled
