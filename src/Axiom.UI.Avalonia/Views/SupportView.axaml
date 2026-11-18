@@ -24,9 +24,14 @@
         <Button Content="Report an issue" Command="{Binding OpenGitHubIssuesCommand}" Margin="0,0,8,8" Padding="12,6" />
         <Button Content="Open repository" Command="{Binding OpenGitHubRepositoryCommand}" Margin="0,0,8,8" Padding="12,6" />
         <Button Content="GitHub Sponsors" Command="{Binding OpenDonationPageCommand}" CommandParameter="github"
-                IsEnabled="{Binding HasGitHubSponsors}" Margin="0,0,8,8" Padding="12,6" />
+                IsVisible="{Binding HasGitHubSponsors}" Margin="0,0,8,8" Padding="12,6" />
       </WrapPanel>
 
+      <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasCrypto}">
+        <Image Source="avares://Axiom.UI.Avalonia/Assets/ethereum.png" Width="22" Height="22" />
+        <controls:AxiomSelectableTextBlock Text="Donate crypto" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
+      </StackPanel>
       <controls:AxiomSelectableTextBlock Text="{Binding CryptoEmptyText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
       <ItemsControl ItemsSource="{Binding CryptoOptions}" IsVisible="{Binding HasCrypto}">
         <ItemsControl.ItemTemplate>
