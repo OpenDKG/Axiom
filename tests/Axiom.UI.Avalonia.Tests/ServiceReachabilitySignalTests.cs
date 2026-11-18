@@ -166,6 +166,8 @@ public sealed class ServiceReachabilitySignalTests
             var page = shell.Firewall;
             Assert.Empty(page.Rules);
             Assert.Contains("could not be read", page.StatusText, StringComparison.Ordinal);
+            Assert.Equal(FirewallPageViewModel.RulesUnreadableText, page.EmptyRulesText);
+            Assert.DoesNotContain("were found", page.EmptyRulesText, StringComparison.Ordinal);
             Assert.Equal("—", page.OwnedRuleCountText);
             Assert.Equal("UNKNOWN", page.ShieldBadgeText);
         }

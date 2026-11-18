@@ -372,6 +372,15 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [ObservableProperty]
     private bool _isEmpty;
 
+    /// <summary>Shown when no rule row is listed. Off Windows an unread list is unknown, not empty.</summary>
+    [ObservableProperty]
+    private string _emptyRulesText = NoRulesFoundText;
+
+    internal const string NoRulesFoundText = "No Axiom-owned rules were found on this host.";
+
+    internal const string RulesUnreadableText =
+        "Axiom-owned rules could not be read: the local service did not answer. Whether any exist is unknown until it answers.";
+
     [ObservableProperty]
     private bool _hasError;
 
@@ -1723,6 +1732,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             CapabilityDetail = snapshot.Capability.Reason
                 ?? $"{(OperatingSystem.IsWindows() ? "Windows Firewall COM policy" : PlatformText.Firewall + " policy")} is readable. No rule is changed by this page.";
             OwnedRuleCountText = snapshot.Rules.Count.ToString(CultureInfo.InvariantCulture);
+            EmptyRulesText = NoRulesFoundText;
             _rulesReadLocal = DateTimeOffset.Now;
             QueriedRuleCount = snapshot.Rules.Count;
             IsEmpty = snapshot.Rules.Count == 0;
@@ -1735,6 +1745,10 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
                 : $"{snapshot.Rules.Count} owned rules read at {DateTimeOffset.Now:HH:mm:ss}.";
 
             await RefreshShieldAsync().ConfigureAwait(true);
+        }
+        catch (ServiceUnavailableException exception) when (!OperatingSystem.IsWindows())
+        {
+            ApplyQueryFailureOffWindows("Service offline", exception.Message);
         }
         catch (ServiceUnavailableException exception)
         {
@@ -1752,6 +1766,12 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         catch (Exception exception)
 #pragma warning restore CA1031
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                ApplyQueryFailureOffWindows("Query failed", exception.Message);
+                return;
+            }
+
             Rules.Clear();
             QueriedRuleCount = null;
             CapabilityStatusText = "Query failed";
@@ -1799,8 +1819,13 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     /// </summary>
     private void MarkRulesLastKnown()
     {
-        if (_ownedRules.Count == 0 || Rules.Count == 0)
+        OwnedRuleCountText = "—";
+        if (_ownedRules.Count == 0)
         {
+            // Nothing read yet (or an earlier empty read): that is not "no rules exist".
+            Rules.Clear();
+            EmptyRulesText = RulesUnreadableText;
+            StatusText = RulesUnreadableText;
             return;
         }
 
@@ -1817,5 +1842,20 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         StatusText = string.Create(
             CultureInfo.InvariantCulture,
             $"{_ownedRules.Count} owned rule(s) shown as last known{readAt}; their state is unknown until the local service answers.");
+    }
+
+    /// <summary>
+    /// Off Windows a failed rules read leaves the shield state unknown and keeps the last-read
+    /// rows as last known (or says the rules could not be read when none was read yet): it never
+    /// claims that no rule exists. Windows keeps its behaviour in the catch blocks above.
+    /// </summary>
+    private void ApplyQueryFailureOffWindows(string capabilityStatus, string detail)
+    {
+        MarkProtectionUnknown();
+        CapabilityStatusText = capabilityStatus;
+        CapabilityDetail = detail;
+        QueriedRuleCount = null;
+        IsEmpty = Rules.Count == 0;
+        HasError = true;
     }
 }
