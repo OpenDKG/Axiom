@@ -117,7 +117,30 @@ L1 unix IPC → L2 daemon → L3 nft → L4 eBPF → L5 DNS → L6 desktop → L
   the existing Windows CI when PR'd), DCO checker pass (repo has no DCO workflow), release,
   signing, Linux production support or AI-parity claims.
 
-## 7. Next bounded steps
+## 7. First CI run attempt is blocked by the repository owner's runner billing
+
+Push and PR: branch `ci/linux-pr-validation` head
+`efe5bf6ad1281ee28ad485359d42f5e6898cc4c0`, Draft PR
+[#443](https://github.com/a-51-50/Axiom/pull/443), base `feature/linux-recon-0.97.0`.
+
+Run [44224988929](https://github.com/a-51-50/Axiom/actions/runs/44224988929) was created by the
+`pull_request` event (so the workflow parsed and the job was recognised), then the job completed as
+`failure` in one second with **zero steps** and this check-run annotation:
+
+> The job was not started because recent account payments have failed or your spending limit needs
+> to be increased. Please check the 'Billing & plans' section in your settings
+
+Nothing in the workflow or the repository caused this: no step executed, and the same billing block
+is on the repository owner's account (the Windows CI keeps working only because it runs on the
+self-hosted runner). Consequences, stated plainly:
+
+- **Blocked:** any GitHub-hosted Linux run, including this gate, until the owner fixes billing or
+  points the job at an approved Linux runner. No hosted-run green is claimed.
+- **Evidence that stands:** the local Ubuntu 24.04.5 run of the exact commands in §4/§5
+  (1361/1361 tests, BPF compile, DEB build + inspection) and the workflow YAML parse.
+- **Not a code failure:** do not treat run 44224988929 as a red build; it never started.
+
+## 8. Next bounded steps
 
 1. Owner decides whether the CI gate stays stacked on the Linux tree or is retargeted to the first
    clean L1 slice; no other change is needed for it to run.
