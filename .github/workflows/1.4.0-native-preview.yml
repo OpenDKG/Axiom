@@ -1,0 +1,51 @@
+name: Axiom 1.4.0 Ubuntu amd64 preview package
+
+on:
+  push:
+    branches: [codex/release-1.4.0-linux-preview]
+
+permissions:
+  contents: read
+
+jobs:
+  build-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      AVALONIA_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm libbpf-dev linux-tools-common linux-tools-generic
+          bpftool=$(find /usr/lib/linux-tools -name bpftool -type f | sort -V | tail -1)
+          test -x "$bpftool"
+          echo "BPFTOOL=$bpftool" >> "$GITHUB_ENV"
+      - name: Run Linux tests
+        run: |
+          dotnet test tests/Axiom.Infrastructure.Linux.Tests -c Release
+          dotnet test tests/Axiom.Desktop.Avalonia.Linux.Tests -c Release
+      - name: Package and verify the Debian build
+        run: |
+          bash scripts/linux/package.sh deb --arch x64 --local linux.preview1
+          package=build/linux/axiom-firewall_1.4.0+linux.preview1_amd64.deb
+          test "$(dpkg-deb -f "$package" Version)" = 1.4.0+linux.preview1
+          test "$(dpkg-deb -f "$package" Architecture)" = amd64
+          dpkg-deb -c "$package" > package-contents.txt
+          grep -F './usr/lib/axiom-firewall/axiomd/bpf/axiom_connect.bpf.o' package-contents.txt
+          mkdir -p release-preview
+          cp "$package" release-preview/
+          cd release-preview
+          sha256sum "$(basename "$package")" > SHA256SUMS.txt
+      - name: Record the source commit
+        run: git rev-parse HEAD > release-preview/SOURCE-COMMIT.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: axiom-1.4.0-linux-preview
+          path: release-preview/
+          if-no-files-found: error
+          compression-level: 0
