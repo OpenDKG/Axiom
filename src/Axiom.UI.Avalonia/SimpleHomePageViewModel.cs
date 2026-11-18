@@ -173,7 +173,7 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
 
     public void Activate()
     {
-        (Overview as IActivatablePage).Activate();
+        Overview.ActivateSummary();
         (PrivacyShield as IActivatablePage).Activate();
         (Agents as IActivatablePage).Activate();
     }

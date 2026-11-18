@@ -39,6 +39,29 @@ public sealed class HeadlessNavigationTests
         });
     }
 
+    [Fact]
+    public void Tray_mode_stops_the_ui_traffic_timer_and_keeps_the_connection_monitor_running()
+    {
+        TestAppBuilder.RunOnUiThread(() =>
+        {
+            var timers = new FakeTimerFactory();
+            using var shell = new ShellViewModel(new FakeSource(), timers);
+            shell.Start();
+            var monitorTimer = timers.Created[0];
+            var trafficTimer = timers.Created[1];
+            Assert.True(monitorTimer.IsEnabled);
+            Assert.True(trafficTimer.IsEnabled);
+
+            shell.SetPresentationVisible(false);
+            Assert.True(monitorTimer.IsEnabled);
+            Assert.False(trafficTimer.IsEnabled);
+
+            shell.SetPresentationVisible(true);
+            Assert.True(monitorTimer.IsEnabled);
+            Assert.True(trafficTimer.IsEnabled);
+        });
+    }
+
     private sealed class FakeSource : IConnectionSnapshotSource
     {
         public string Name => "test";
@@ -57,7 +80,14 @@ public sealed class HeadlessNavigationTests
 
     private sealed class FakeTimerFactory : IUiTimerFactory
     {
-        public IUiTimer Create(TimeSpan interval) => new FakeTimer(interval);
+        public List<IUiTimer> Created { get; } = [];
+
+        public IUiTimer Create(TimeSpan interval)
+        {
+            var timer = new FakeTimer(interval);
+            Created.Add(timer);
+            return timer;
+        }
 
         private sealed class FakeTimer(TimeSpan interval) : IUiTimer
         {

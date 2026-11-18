@@ -150,7 +150,7 @@ public partial class App : Application
                 new WindowsDnsAdapterHelper(),
                 new AvaloniaSecurityDialogs(() => window),
                 new AvaloniaShellActions(() => desktop.Shutdown()),
-                new AvaloniaBlackboxDialogs(() => window, interaction),
+                new AvaloniaBlackboxDialogs(() => window),
                 new Axiom.Persistence.AgentSessionReader(),
                 visualEffects,
                 networkRecovery is null ? null : networkRecovery.RestoreAsync,
@@ -160,6 +160,13 @@ public partial class App : Application
             window = new MainWindow { DataContext = _shell };
             _window = window;
             desktop.MainWindow = window;
+            window.PropertyChanged += (_, change) =>
+            {
+                if (change.Property == Visual.IsVisibleProperty || change.Property == Window.WindowStateProperty)
+                {
+                    _shell?.SetPresentationVisible(window.IsVisible && window.WindowState != WindowState.Minimized);
+                }
+            };
             AxiomAlertService.Configure(
                 () => _window,
                 ShowWindow,
@@ -178,6 +185,7 @@ public partial class App : Application
                 window.Hide();
             };
 
+            _shell.SetPresentationVisible(window.IsVisible && window.WindowState != WindowState.Minimized);
             _shell.Start();
             StartNetworkRecovery(networkRecovery);
 
