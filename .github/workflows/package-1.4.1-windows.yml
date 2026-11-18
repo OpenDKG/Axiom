@@ -1,0 +1,43 @@
+name: Package Axiom 1.4.1 for Windows
+
+on:
+  push:
+    branches: [codex/package-1.4.1-windows]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: [self-hosted, Windows, X64, axiom]
+    timeout-minutes: 35
+    env:
+      AVALONIA_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}\dotnet
+        with:
+          global-json-file: global.json
+      - name: Package Windows x64 release
+        shell: powershell
+        run: |
+          git checkout --detach 'HEAD^'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          .\scripts\build-release.ps1 -OutputDir artifacts\release\v1.4.1
+          $output = 'artifacts\release\v1.4.1'
+          $setup = Join-Path $output 'Axiom-Setup.exe'
+          $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $setup).Path).ProductVersion
+          if ($version -notlike '1.4.1*') { throw "Unexpected installer version $version" }
+          $process = Start-Process -FilePath (Resolve-Path $setup).Path -ArgumentList '--silent' -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 2) { throw "Unexpected silent consent exit code $($process.ExitCode)" }
+          git rev-parse HEAD > (Join-Path $output 'SOURCE-COMMIT.txt')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: axiom-1.4.1-windows-x64
+          path: artifacts/release/v1.4.1/
+          compression-level: 0
+          if-no-files-found: error
