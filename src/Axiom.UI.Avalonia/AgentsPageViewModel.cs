@@ -96,6 +96,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private bool _verifiedGraphInitialized;
 
     private bool _pageActive;
+    private bool _trayMonitoring;
 
     private bool _autoSyncRunning;
 
@@ -146,6 +147,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             if (_pageActive)
             {
                 await RefreshAsync().ConfigureAwait(true);
+            }
+            else if (_trayMonitoring)
+            {
+                await RefreshTrayActivityAsync().ConfigureAwait(true);
             }
 
             await MaybeAutoSyncAsync().ConfigureAwait(true);
@@ -420,7 +425,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         _pageActive = true;
-        _timer.Start();
+        UpdatePollTimer();
         _lastSessionRefresh = DateTimeOffset.MinValue;
         _lastActivityRefresh = DateTimeOffset.MinValue;
         _ = RefreshAsync();
@@ -429,7 +434,23 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     public void Deactivate()
     {
         _pageActive = false;
-        if (!IsAutoSyncEnabled)
+        UpdatePollTimer();
+    }
+
+    internal void SetTrayMonitoring(bool enabled)
+    {
+        _trayMonitoring = enabled && IsAvailable;
+        UpdatePollTimer();
+    }
+
+    private void UpdatePollTimer()
+    {
+        if (IsAvailable && (_pageActive || _trayMonitoring || IsAutoSyncEnabled))
+        {
+            _timer.Interval = TimeSpan.FromSeconds(_pageActive ? 8 : 30);
+            _timer.Start();
+        }
+        else
         {
             _timer.StopTimer();
         }
@@ -437,6 +458,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     public void Dispose()
     {
+        _trayMonitoring = false;
         _timer.StopTimer();
         _timer.Dispose();
         _client.Dispose();
@@ -514,17 +536,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
             if (auditTask.Result is { } auditPage)
             {
-                if (_activityInitialized)
-                {
-                    MergeActivity(auditPage);
-                }
-                else
-                {
-                    ApplyActivity(auditPage);
-                    _activityInitialized = true;
-                }
-
-                _lastActivityRefresh = now;
+                ApplyPolledActivity(auditPage, now);
             }
 
             ApplyFindings(findingsTask.Result);
@@ -555,6 +567,49 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         {
             _refreshing = false;
         }
+    }
+
+    private async Task RefreshTrayActivityAsync()
+    {
+        if (_refreshing)
+        {
+            return;
+        }
+
+        _refreshing = true;
+        try
+        {
+            var audit = await LoadActivityAsync(full: false).ConfigureAwait(true);
+            if (_trayMonitoring && audit is not null)
+            {
+                ApplyPolledActivity(audit, DateTimeOffset.UtcNow);
+            }
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or
+                     InvalidDataException or System.Text.Json.JsonException ||
+                     (exception is ObjectDisposedException && !_trayMonitoring))
+        {
+            // A temporarily unavailable dashboard will be retried on the next tray tick.
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+    }
+
+    private void ApplyPolledActivity(BlackboxAuditPage audit, DateTimeOffset checkedAt)
+    {
+        if (_activityInitialized)
+        {
+            MergeActivity(audit);
+        }
+        else
+        {
+            ApplyActivity(audit);
+            _activityInitialized = true;
+        }
+
+        _lastActivityRefresh = checkedAt;
     }
 
     [RelayCommand]
@@ -616,15 +671,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ? "Auto-sync is on; checks every 15 minutes for new verified assets."
             : "Auto-sync is off.";
 
-        if (value)
-        {
-            _timer.Start();
-        }
-        else if (!_pageActive)
-        {
-            _timer.StopTimer();
-        }
-
+        UpdatePollTimer();
         PersistAutoSync();
     }
 

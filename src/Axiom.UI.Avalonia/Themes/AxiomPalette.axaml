@@ -46,7 +46,6 @@
       <SolidColorBrush x:Key="Axiom.NavHover" Color="#26303F" />
       <SolidColorBrush x:Key="Axiom.NavSelected" Color="#354255" />
       <SolidColorBrush x:Key="Axiom.GridLine" Color="#2E394A" />
-      <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#111721" />
       <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#991B1B" />
       <SolidColorBrush x:Key="Axiom.GlassTint" Color="#222B39" />
       <SolidColorBrush x:Key="Axiom.GlassHighlight" Color="#334155" />
@@ -103,7 +102,6 @@
       <SolidColorBrush x:Key="Axiom.NavHover" Color="#EFF3F9" />
       <SolidColorBrush x:Key="Axiom.NavSelected" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Axiom.GridLine" Color="#D3DCE8" />
-      <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#1E2228" />
       <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#DC2626" />
       <SolidColorBrush x:Key="Axiom.GlassTint" Color="#F2F6FB" />
       <SolidColorBrush x:Key="Axiom.GlassHighlight" Color="#FFFFFF" />
@@ -160,7 +158,6 @@
       <SolidColorBrush x:Key="Axiom.NavHover" Color="#1B243E" />
       <SolidColorBrush x:Key="Axiom.NavSelected" Color="#263357" />
       <SolidColorBrush x:Key="Axiom.GridLine" Color="#232E4D" />
-      <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#0C111F" />
       <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#991B1B" />
       <SolidColorBrush x:Key="Axiom.GlassTint" Color="#172038" />
       <SolidColorBrush x:Key="Axiom.GlassHighlight" Color="#2D3C63" />
@@ -217,7 +214,6 @@
       <SolidColorBrush x:Key="Axiom.NavHover" Color="#F5F1EB" />
       <SolidColorBrush x:Key="Axiom.NavSelected" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Axiom.GridLine" Color="#E0D8CD" />
-      <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#1E1B18" />
       <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#B91C1C" />
       <SolidColorBrush x:Key="Axiom.GlassTint" Color="#FAF8F5" />
       <SolidColorBrush x:Key="Axiom.GlassHighlight" Color="#FFFFFF" />
@@ -274,7 +270,6 @@
       <SolidColorBrush x:Key="Axiom.NavHover" Color="#16FFFFFF" />
       <SolidColorBrush x:Key="Axiom.NavSelected" Color="#24FFFFFF" />
       <SolidColorBrush x:Key="Axiom.GridLine" Color="#1CFFFFFF" />
-      <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#1C2533" />
       <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#99991B1B" />
       <SolidColorBrush x:Key="Axiom.GlassTint" Color="#17FFFFFF" />
       <SolidColorBrush x:Key="Axiom.GlassHighlight" Color="#24FFFFFF" />
@@ -338,7 +333,6 @@
       <SolidColorBrush x:Key="Axiom.NavHover" Color="#38FFFFFF" />
       <SolidColorBrush x:Key="Axiom.NavSelected" Color="#59FFFFFF" />
       <SolidColorBrush x:Key="Axiom.GridLine" Color="#33475569" />
-      <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#1E2228" />
       <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#CCDC2626" />
       <SolidColorBrush x:Key="Axiom.GlassTint" Color="#45FFFFFF" />
       <SolidColorBrush x:Key="Axiom.GlassHighlight" Color="#99FFFFFF" />

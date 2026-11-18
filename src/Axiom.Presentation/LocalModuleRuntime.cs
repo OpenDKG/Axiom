@@ -138,9 +138,15 @@ public static class LocalModuleRuntime
                 return false;
             }
 
-            var output = process.StandardOutput.ReadToEnd();
-            var error = process.StandardError.ReadToEnd();
-            if (!process.WaitForExit((int)timeout.TotalMilliseconds))
+            using var deadline = new CancellationTokenSource(timeout);
+            var output = process.StandardOutput.ReadToEndAsync(deadline.Token);
+            var error = process.StandardError.ReadToEndAsync(deadline.Token);
+            var completion = Task.WhenAll(output, error, process.WaitForExitAsync(deadline.Token));
+            try
+            {
+                completion.WaitAsync(deadline.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
             {
                 try
                 {
@@ -154,7 +160,7 @@ public static class LocalModuleRuntime
                 return false;
             }
 
-            foreach (var line in (output + "\n" + error)
+            foreach (var line in (output.GetAwaiter().GetResult() + "\n" + error.GetAwaiter().GetResult())
                          .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                          .TakeLast(12))
             {
@@ -176,60 +182,10 @@ public static class LocalModuleRuntime
     public static bool RunHiddenPowerShell(string script, Action<string>? log, TimeSpan timeout)
     {
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
-        var startInfo = new ProcessStartInfo(
+        return RunProcess(
             OptionalModuleInstaller.ResolvePowerShellExecutable(),
-            $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}")
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-
-        try
-        {
-            using var process = Process.Start(startInfo);
-            if (process is null)
-            {
-                log?.Invoke("Could not start PowerShell.");
-                return false;
-            }
-
-            var output = process.StandardOutput.ReadToEnd();
-            var error = process.StandardError.ReadToEnd();
-            if (!process.WaitForExit((int)timeout.TotalMilliseconds))
-            {
-                try
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-                catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
-                {
-                }
-
-                log?.Invoke("Module process cleanup timed out.");
-                return false;
-            }
-
-            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                log?.Invoke(line);
-            }
-
-            foreach (var line in error.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                log?.Invoke(line);
-            }
-
-            return process.ExitCode == 0;
-        }
-        catch (Exception exception) when (exception is
-                     System.ComponentModel.Win32Exception or InvalidOperationException or
-                     IOException or UnauthorizedAccessException)
-        {
-            log?.Invoke("Module process cleanup failed: " + exception.Message);
-            return false;
-        }
+            $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}",
+            log,
+            timeout);
     }
 }
