@@ -943,7 +943,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [RelayCommand(CanExecute = nameof(CanDecidePending))]
     private Task UnblockRuleAsync(FirewallRuleRow? row) =>
         row is { CanUnblock: true }
-            ? ConfirmAndUnblockAsync(row.AppPath, row.Application)
+            ? ConfirmAndUnblockAsync(row.AppPath, row.Application, row)
             : Task.CompletedTask;
 
     [RelayCommand]
@@ -996,7 +996,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         await ApplyDecisionAsync(appPath, appName, ProtectionDecisionAction.Block).ConfigureAwait(true);
     }
 
-    private async Task ConfirmAndUnblockAsync(string appPath, string appName)
+    private async Task ConfirmAndUnblockAsync(string appPath, string appName, FirewallRuleRow? row = null)
     {
         var confirmed = await _ui.ConfirmAsync(
             "Unblock this application",
@@ -1011,13 +1011,103 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             return;
         }
 
-        await ApplyDecisionAsync(appPath, appName, ProtectionDecisionAction.Allow).ConfigureAwait(true);
+        if (row is null)
+        {
+            await ApplyDecisionAsync(appPath, appName, ProtectionDecisionAction.Allow).ConfigureAwait(true);
+            return;
+        }
+
+        // protection.decide only removes the rule id derived from the path. A row whose rule was
+        // created with another id (rule.apply by another client, an inbound block) is removed by
+        // its own id first, and the allow decision is recorded only once a fresh rule list no
+        // longer shows it.
+        if (!IsDerivedShieldRule(row) && !await RemoveRuleRowForUnblockAsync(row).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        await ApplyDecisionAsync(appPath, appName, ProtectionDecisionAction.Allow, row).ConfigureAwait(true);
+    }
+
+    private static bool IsDerivedShieldRule(FirewallRuleRow row) =>
+        !string.IsNullOrWhiteSpace(row.AppPath) &&
+        row.ManagedRuleId == RuleIdentity.ForApp(row.AppPath, FirewallDirection.Outbound);
+
+    private async Task<bool> RemoveRuleRowForUnblockAsync(FirewallRuleRow row)
+    {
+        if (_client is null)
+        {
+            return false;
+        }
+
+        IsShieldBusy = true;
+        StatusText = $"{row.Application}: removing rule {row.OsRuleName}...";
+        try
+        {
+            var removed = await _client
+                .SendAsync<RuleApplyResult>(
+                    IpcCommandTypes.RuleRemove,
+                    new RuleReference { ManagedRuleId = row.ManagedRuleId },
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            if (!removed.Success)
+            {
+                StatusText = $"Unblock failed: rule {row.OsRuleName} was not removed " +
+                    $"({removed.ErrorCode} - {removed.ErrorMessage}). {NoAllowRecordedText}";
+                return false;
+            }
+
+            if (await IsRuleStillListedAsync(row.ManagedRuleId).ConfigureAwait(true))
+            {
+                StatusText = $"Unblock not confirmed: rule {row.OsRuleName} is still listed by the service. {NoAllowRecordedText}";
+                return false;
+            }
+
+            return true;
+        }
+#pragma warning disable CA1031 // The page must show an IPC failure instead of crashing.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            StatusText = $"Unblock failed: {exception.Message} {NoAllowRecordedText}";
+            return false;
+        }
+        finally
+        {
+            IsShieldBusy = false;
+        }
+    }
+
+    private const string NoAllowRecordedText = "The block is still in force. No allow decision was recorded.";
+
+    /// <summary>Reads the rule list again; an unreadable list counts as still listed.</summary>
+    private async Task<bool> IsRuleStillListedAsync(Guid managedRuleId)
+    {
+        if (_client is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            var snapshot = await _client
+                .SendAsync<FirewallRulesSnapshot>(IpcCommandTypes.RulesQuery, null, CancellationToken.None)
+                .ConfigureAwait(true);
+            return snapshot.Rules.Any(rule => rule.ManagedRuleId == managedRuleId);
+        }
+#pragma warning disable CA1031 // A failed re-read is reported as unconfirmed, not as success.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return true;
+        }
     }
 
     private async Task ApplyDecisionAsync(
         string appPath,
         string appName,
-        ProtectionDecisionAction action)
+        ProtectionDecisionAction action,
+        FirewallRuleRow? unblockedRow = null)
     {
         if (_client is null)
         {
@@ -1049,6 +1139,17 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
                     : $"{appName}: unblocked (allow decision recorded).");
             DismissAlertFocus();
             await RefreshAsync().ConfigureAwait(true);
+
+            // Unblock from a rule row: report the result only after a fresh rule list, and say so
+            // when the row's rule is still listed (the refresh above also rewrites StatusText).
+            if (unblockedRow is not null)
+            {
+                StatusText = status.LastError is { } error
+                    ? $"Unblock failed: {error}"
+                    : await IsRuleStillListedAsync(unblockedRow.ManagedRuleId).ConfigureAwait(true)
+                        ? $"Unblock not confirmed: rule {unblockedRow.OsRuleName} is still listed by the service."
+                        : $"{appName}: unblocked (rule removed and no longer listed; allow decision recorded).";
+            }
         }
         catch (ServiceUnavailableException exception)
         {

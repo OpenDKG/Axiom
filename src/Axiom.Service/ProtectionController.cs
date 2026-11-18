@@ -197,7 +197,10 @@ public sealed partial class ProtectionController(
                     .ConfigureAwait(false);
                 if (!removed.Success)
                 {
-                    error = $"Could not remove the existing block: {removed.ErrorMessage}";
+                    // The block is still in force, so the allow decision is not recorded.
+                    return await GetStatusAsync(
+                        $"Could not remove the existing block: {removed.ErrorMessage}",
+                        cancellationToken).ConfigureAwait(false);
                 }
             }
         }
