@@ -10,9 +10,19 @@ using Avalonia.Threading;
 namespace Axiom.UI.Avalonia.Tests;
 
 /// <summary>
-/// One headless Avalonia application per test process. It is initialized lazily so the pure
-/// view-model tests do not pay for a render stack.
+/// One headless Avalonia application per test process, owned by one dedicated UI thread.
 /// </summary>
+/// <remarks>
+/// Avalonia 12 makes the first <see cref="Dispatcher"/> created in the process the UI-thread
+/// dispatcher, and every <see cref="AvaloniaObject"/> constructor (a view model's brush, for
+/// example) or <c>Dispatcher.UIThread</c> access creates one for the calling thread. If a test
+/// running on an xUnit worker thread did that before the headless thread started, the worker
+/// owned <c>Dispatcher.UIThread</c> and the headless platform set-up on this thread crashed the
+/// test host ("The calling thread cannot access this object because a different thread owns
+/// it"); set-up running alongside worker-thread tests also raced Avalonia's unsynchronised
+/// routed-event registry. <see cref="HeadlessTestFramework"/> therefore starts this thread and
+/// completes the set-up before any test runs.
+/// </remarks>
 public static class TestAppBuilder
 {
     private static readonly object Gate = new();
@@ -20,7 +30,10 @@ public static class TestAppBuilder
     private static Thread? _uiThread;
     private static readonly TaskCompletionSource UiReady = new();
 
-    public static void EnsureInitialized()
+    /// <summary>The headless UI thread, once <see cref="StartUiThread"/> has run.</summary>
+    public static Thread? UiThread => _uiThread;
+
+    private static void EnsureInitialized()
     {
         lock (Gate)
         {
@@ -29,6 +42,12 @@ public static class TestAppBuilder
                 return;
             }
 
+            // Avalonia resolves "avares://Axiom.UI.Avalonia/..." to the shortest LOADED assembly
+            // whose name starts with "Axiom.UI.Avalonia" and caches the answer. Before any test
+            // has touched a product type that is this test assembly, which has no compiled theme
+            // XAML ("No precompiled XAML found"), so load the UI assembly first.
+            GC.KeepAlive(typeof(global::Axiom.UI.Avalonia.ShellViewModel).Assembly);
+
             AppBuilder.Configure<TestApp>()
                 .UseHeadless(new AvaloniaHeadlessPlatformOptions())
                 .SetupWithoutStarting();
@@ -36,17 +55,28 @@ public static class TestAppBuilder
         }
     }
 
-    public static void RunOnUiThread(Action action)
+    /// <summary>
+    /// Starts the headless UI thread (once) and blocks until the Avalonia application is set up
+    /// on it, so that thread owns <c>Dispatcher.UIThread</c>. Rethrows a set-up failure.
+    /// </summary>
+    public static void StartUiThread()
     {
-        ArgumentNullException.ThrowIfNull(action);
-
         lock (Gate)
         {
             if (_uiThread is null)
             {
                 _uiThread = new Thread(() =>
                 {
-                    EnsureInitialized();
+                    try
+                    {
+                        EnsureInitialized();
+                    }
+                    catch (Exception ex)
+                    {
+                        UiReady.TrySetException(ex);
+                        return;
+                    }
+
                     UiReady.TrySetResult();
                     Dispatcher.UIThread.MainLoop(CancellationToken.None);
                 })
@@ -64,6 +94,13 @@ public static class TestAppBuilder
         }
 
         UiReady.Task.GetAwaiter().GetResult();
+    }
+
+    public static void RunOnUiThread(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+
+        StartUiThread();
         if (Dispatcher.UIThread.CheckAccess())
         {
             action();
