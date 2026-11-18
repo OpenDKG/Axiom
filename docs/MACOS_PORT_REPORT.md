@@ -624,3 +624,56 @@ Not as expected (recorded, not patched):
   click landed on page text. Earlier round: no dialog, nothing sent.
 
 Guest left with shield off, 0 rules, Privacy Shield disabled, DNS automatic, no dialogs; VM shut down.
+
+## Addendum 2026-11-18 (4): 1.3.0 build 18, macOS Intel Developer Preview 1 release-candidate run (author-run, not CI)
+
+Tested commit `e2b74db4aca7957013119b5ae81a05a7f11a1276` (upstream v1.3.0 merged), `AXIOM_BUILD=18`. .NET parts
+published on Linux (`package-app.sh osx-x64`, tree clean after), then copied into the OSX-KVM guest where
+`deploy-to-vm.sh` with `INSTALL=0` ran `package-app.sh --skip-publish --build-filter` (Swift filter built, whole
+bundle ad hoc signed). The signed bundle was packed in the guest with `ditto -c -k --keepParent` and copied to
+the host: `Axiom-1.3.0-18-osx-x64-adhoc.zip`, 89,050,937 bytes, sha256
+`89930957b595fb8e6a001815ab7b1783f6fb0ff8c1e82aae8cb97b55c976ffc6` (guest = host). The installed copy was
+extracted from that same file (`shasum -c` OK in the guest), and its `Axiom.UI.Avalonia.dll` sha256 equals the
+Linux publish output (`078b4035…5f2f`). Guest: macOS 15.8.3 (24H241), x86_64, SIP disabled, developer mode on.
+
+Removal of build 17, as the release notes give it: `axiomd --uninstall-service` exit 0 (newsyslog file, helper
+dir and launchd job removed); `axiom-sysext deactivate` over SSH exit 1 (`OSSystemExtensionErrorDomain` 13,
+"authorization required (run from a GUI login session)"; the filter configuration was removed anyway); in the
+GUI Terminal it asked for the admin password and returned `deactivated`, exit 0, extension 17 "terminated
+waiting to uninstall on reboot"; `sudo rm -rf /Applications/Axiom.app` ok. Left behind:
+`/Library/Application Support/Axiom` (db, filter/, network-recovery.txt, privacy and protection settings) and
+`~/Library/Application Support/Axiom`.
+
+By-hand install from the zip: `ditto -x -k` and `unzip` both propagated a simulated browser quarantine
+(`xattr -w com.apple.quarantine`); launching the quarantined app from /Applications ran it translocated and
+Gatekeeper refused it ("“Axiom” Not Opened", Done / Move to Trash). After `xattr -dr com.apple.quarantine` it
+started from /Applications, `codesign --verify --deep --strict` still ok. `axiomd --install-service` exit 0;
+`axiom-sysext activate` -> "would like to use a new network extension" -> Open System Settings -> toggle +
+password -> `[activated enabled]`; a second `activate` (first one was cut by our 45 s alarm) enabled the
+content filter -> "Would Like to Filter Network Content" -> Allow. The app's own "Install the Axiom background
+service" dialog rendered with an empty dark body (buttons only).
+
+| Check | Result |
+|---|---|
+| launchd / extension / codesign | running / `(1.3.0/18) [activated enabled]` / verify-ok, adhoc, no Team ID |
+| `--doctor` | 24 PASS / 0 WARN / 0 FAIL, exit 0 |
+| Block curl vs python, same host | run 1: refused 20/20 (rc 7), python 200 10/10; run 2: 4/4 refused |
+| Daemon restart (`kickstart -k`) | run 1: 10/10 rc 7 right after; run 2: 14/14 rc 7 over 40 s, python 200 every probe, rule re-verified |
+| Unblock | run 2: 12/12 HTTP 200 |
+| Second standard user (axtest2, temporary) | 7 private reads + rule.apply `unauthorized`; serviceHealth, capabilities answered; user deleted after |
+| Privacy Shield | on: DNS 127.0.0.1, doubleclick.net unresolved, example.com resolved; off: automatic on both services |
+| `--recover-network` dry / `--apply` (daemon booted out) | exit 1 "Dry run: no change was made." / exit 0, adapters 2 verified, rules removed 0 |
+| NC stop/start series | last state at +1 s, all unknown at +3 s; not verified at +3/+6 s after start, verified at +10 s |
+| Local modules (Agent Protection) | "Start local modules": "Neither local module answered. Install or Repair each card, then try Start local modules again."; card button is "Install" (no Repair shown): "Guided module installation is not available on macOS yet. Install the module manually, then click Check again." |
+| AI AGENT GUARD tile | NOT VERIFIED, "Unsupported on macOS for now: Blackbox host hooks are not verified here, so AI agents are not protected" |
+| New-applications list | only Python; "12 trusted process(es) are not prompted (macOS system or Axiom's own)" |
+| 10 bootout/bootstrap cycles on Agent Protection | app pid unchanged, desktop.log unchanged (no new [fatal]), no new crash report |
+
+Failure / unexplained (not patched): in run 1, from about 3 s after the daemon restart, curl timed out (rc 28,
+not the filter's rc 7) on 20/20 probes for about 2.5 min, including 10 probes after `rule.remove`, and a
+`dscacheutil` lookup hung (20 s timeout, which ended the script); python got 200 5/5 early in that window. It
+cleared by itself (curl 200 at 08:45:23Z) and the full repeat (run 2) was clean. Cause not determined.
+Also: the "Start local modules" message points to a Repair button the macOS cards do not show.
+
+Guest left with build 18 installed, service running, extension active, 0 rules, shield off, Privacy Shield
+off, DNS automatic, no dialogs; VM shut down.
