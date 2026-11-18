@@ -1,3 +1,7 @@
+## What's in 1.3.0
+
+- **Long-running memory stability, streaming ruleset check and cleaner Blackbox git updates.** `ProcessIdentityResolver` now bounds its PID identity cache to 512 entries and evicts expired entries; `ShellViewModel` clears `_notifiedPendingApps` whenever no pending Shield decisions remain; manual threat-share preflight streams `ruleset.json` in pooled 64 K-char chunks (`ThreatShareCli.FindKnownIdentifiersInRuleset`) instead of loading the entire ruleset string into the Large Object Heap; and `OptionalModuleInstaller` discards CRLF/tracked-file drift in `agent-blackbox` (`git checkout -- .`) before running the Blackbox vendor installer.
+
 ## What's in 1.2.0
 
 - **Blackbox/DKG repair and recovery.** The uninstall scripts no longer call a PowerShell 5.1-incompatible `String.Contains` overload; a Repair action stops stale or duplicated runtimes and starts one clean copy; modules are retried after a crash and survive restart/power loss through Axiom's autostart; the DKG card probes Blackbox's 9320 node. Module controls are redesigned: one Start-local-modules action, per-service Start/Repair, and a labelled Audit/Block selector. Setup validates Python 3.11-3.13 and installs 3.12 instead of accepting 3.15.

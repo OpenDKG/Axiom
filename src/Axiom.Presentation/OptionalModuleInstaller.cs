@@ -439,6 +439,11 @@ public sealed class OptionalModuleInstaller
             # existing Hermes also skips its `hermes.exe --version` probe, which prints a Python
             # traceback when the user's Hermes runtime is broken (issue #370 follow-up).
             $env:BLACKBOX_USE_EXISTING_HERMES = '0'
+            $agentRepo = Join-Path $dir 'agent-blackbox'
+            if ((Test-Path (Join-Path $agentRepo '.git')) -and (Get-Command git -ErrorAction SilentlyContinue)) {
+                # Discard CRLF/tracked-file drift so upstream vendor pull/checkout does not fail.
+                & git -C $agentRepo checkout -- . *> $null
+            }
             & $installer -StoreBackend $storeBackend
             $vendorExit = $LASTEXITCODE
             # Everything below is best-effort repair. Native tools write progress and warnings to
