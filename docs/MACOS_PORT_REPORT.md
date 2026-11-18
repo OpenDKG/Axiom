@@ -569,3 +569,58 @@ Does not match (recorded, not patched):
 - Switching to Simple mode left the content area blank until Home was clicked in the side bar.
 
 Guest left with shield off, 0 rules, Privacy Shield disabled, DNS automatic; VM shut down.
+
+## Addendum 2026-11-18 (3): shared "service unreachable" signal and IPC connect-crash fix, VM look (author-run, not CI)
+
+Tested SHA `eb3be61`, build 17 (`AXIOM_BUILD=17`), published on Linux, filter built and ad hoc signed in the
+OSX-KVM guest (macOS 15.8.3, x86_64, SIP disabled at the OpenCore picker, `csrutil status` checked over ssh).
+App and extension `Signature=adhoc`, flags `adhoc,runtime`, no Team ID, not notarized; `codesign --verify
+--deep --strict` ok. Installed `Axiom.UI.Avalonia.dll` sha256 `52a34da0…ac70ec15` = Linux publish output.
+Artifact: `Axiom-1.1.0-17-osx-x64-adhoc.zip` (tested `/Applications/Axiom.app`, `ditto -c -k --keepParent`),
+89,035,425 bytes, sha256 `ed215027aac11350f8b6d497b9ba993230817d31e543c31498fc7c85cd3688c2`.
+
+Smoke: launchd job running, `com.axiom.firewall.filter (1.1.0/17) [activated enabled]` (build 16 listed as
+"terminated waiting to uninstall on reboot"), `--doctor` 23 PASS / 1 WARN / 0 FAIL (the WARN is that
+build-16 entry), filter verified. Shield enabled, block rule on `/usr/bin/curl`: rule.verify
+enforcementVerified=true, curl 10/10 refused (rc=7) while python3 got 200 from the same host 5/5; after
+rule.remove curl 5/5 got 200.
+
+GUI (1280x800), one applied verified rule; timed screenshots, offset = seconds after the
+`launchctl bootout|bootstrap` ssh call returned (about 0.36 s round trip).
+
+| Moment | Header | Page | Footer / lamp | |
+|---|---|---|---|---|
+| NC up | Protection active: Axiom rules apply | Shield ON | Protection: ON · 1 rule(s) / SHIELD ON | agree |
+| NC stop +1, +2 s | Protection active | Shield ON | ON / SHIELD ON | agree (old state) |
+| NC stop +3 … +10 s | Protection status unknown: the local service did not answer | UNKNOWN, Check protection, last-known row "Unknown (last…", Unblock greyed, count — | Protection: unknown · the local service did not answer / UNKNOWN, IPC: service offline | agree |
+| NC start +1 s | unknown (monitoring worker has not produced a snapshot yet) | UNKNOWN | unknown / UNKNOWN | agree |
+| NC start +2 … +5 s | Protection active: Axiom rules not verified as enforced: the network filter has not connected | Shield ON | ON · blocks not verified / SHIELD ON | agree |
+| NC start +7, +10 s | Protection active: Axiom rules apply | Shield ON | ON, blocks verified / SHIELD ON | agree |
+| Simple stop +1, +2 s | – | SHIELD ACTIVE, Turn Shield Off | ON / SHIELD ON | agree (old state) |
+| Simple stop +3 … +10 s | – | STATUS UNKNOWN, Check Firewall | unknown / UNKNOWN | agree |
+| Simple start +1 s | – | STATUS UNKNOWN · Protection status is unknown, "…the service has not reported the network filter's state", Check Firewall | Protection: ON · 1 awaiting decision · blocks not verified / amber SHIELD ON | DISAGREE (neither verified) |
+| Simple start +2 … +5 s | – | NOT VERIFIED · Shield is on, blocking is not verified, Turn Shield Off | ON · blocks not verified | agree |
+| Simple start +7, +10 s | – | SHIELD ACTIVE | ON / SHIELD ON | agree |
+| Mini stop +1 s / +3 … +10 s | – | Shield: ON, Shield Protected / Shield: unknown, Shield Unknown | – | – |
+| Mini start +1 / +2 / +5, +10 s | – | Shield: ON, Shield Degraded / Shield: unknown, Shield Unknown / Shield: ON, Protected | – | flicker |
+
+Measured delay stop -> all unknown: between 2 and 3 s on Network Control, Simple home and Mini (all
+surfaces in the same frame). No sampled frame showed one surface ON/verified while another said unknown.
+Simple home and Network Control both reached verified between 5 and 7 s after the bootstrap.
+
+- Network Control opened with the daemon down in a freshly launched app: "Axiom-owned rules could not be
+  read: the local service did not answer. Whether any exist is unknown until it answers.", empty table,
+  count "—", filter READ-ONLY "Service offline". Matches.
+- Crash check: app open on Agent Protection, 10 `launchctl bootout`/`bootstrap` cycles about 4 s apart,
+  then 5 more on Network Control: app pid 2282 unchanged throughout; `desktop.log` gained no lines (its one
+  `[fatal]` is the 04:51:27Z build-16 crash); Axiom crash reports 6 user / 14 system before and after
+  (no new report). The connect-time crash did not recur.
+
+Not as expected (recorded, not patched):
+- Simple home +1 s after bootstrap said STATUS UNKNOWN while the footer said "Protection: ON · blocks not
+  verified" (one sample, see table).
+- Mini +1 s after bootstrap "Shield: ON / Degraded", +2 s back to "Shield: unknown", +5 s Protected.
+- "Check protection" while down was not pressed on macOS this round: the page had stayed scrolled and the
+  click landed on page text. Earlier round: no dialog, nothing sent.
+
+Guest left with shield off, 0 rules, Privacy Shield disabled, DNS automatic, no dialogs; VM shut down.
