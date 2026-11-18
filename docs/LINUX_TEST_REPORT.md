@@ -943,3 +943,42 @@ Not tested here: Ubuntu Desktop image (only the minimal cloud image), Wayland, r
 resolv.conf DNS backends, the app's own Privacy Shield toggle and "Block" on a live connection, Mini mode,
 arm64, other distributions. Windows CI for this commit was not checked in this run.
 Scripts: `v13-rel/rel-vm.sh`, `rel-guest.sh`, `gui.sh` (scratch, not committed).
+
+## Addendum 2026-11-18 (5): Linux Core Preview 2 package `1.3.0+linux.preview2` (author-run, not CI)
+
+Tested commit: `50e0654e0d0427c376156320c659638bc9f2f825` (branch `buba/linux-recon80`, upstream v1.3.0 merged;
+Preview 1 plus the fixes 50d4de8 Unblock-by-row-id, 55eda66 Start local modules text, 50e0654 Light-theme dialog body).
+Package: `axiom-firewall_1.3.0+linux.preview2_amd64.deb`, 62852812 bytes,
+sha256 `44d9e8435a996f2d1ff9d364b85dc4662fc0dfbe5d1e7a4ea4d5386be74bb0a6`
+(`scripts/linux/package.sh deb --local linux.preview2`; tree clean afterwards, publish lock-file churn reverted;
+the UI assembly carries the three fix strings). VM: disposable overlay of the minimal Ubuntu cloud image,
+Ubuntu 24.04.5 LTS, kernel 6.8.0-147-generic, bpftool v7.4.0, systemd-resolved, 3 GB RAM. Release-notes commands run as written, as the install user.
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| P1 | `sudo apt update`; `sha256sum -c`; `sudo apt install --no-install-recommends ./<deb>` | PASS | update rc 0; `…deb: OK`; install rc 0, 26 new packages (plain `apt install` with recommends not re-run) |
+| P2 | `systemctl status`, `--doctor`, `nft list table inet axiom` | PASS | active (enabled); doctor rc 0, 13 PASS / 0 WARN / 0 FAIL / 0 SKIP; table generation 1; 4 Axiom BPF programs attached |
+| P3 | Canary block (copied curl vs python3, netns target) | PASS | before rule 0/10 refused; blocked 30/30 refused, control 30/30; `connectTimeBlockingProven: true`; doctor 13/0/0 |
+| P4 | `systemctl restart axiomd` under 3 loops of fresh execs | PASS | 1349 probes, 961 after the action, 0 slipped; control 56 ok / 0 failed; new pid at +0.6 s, attached programs 4 → 8 → 4; 20/20 refused afterwards |
+| P5 | Release-notes block commands, `/usr/bin/curl` blocked; unblock | PASS | `curl exit 7` 5/5, `python3 connected` 5/5; after removal `curl exit 0` 5/5; canary 0/10 refused; doctor 13/0/0 |
+| P6 | Second local user (`axtest`) | PASS | 4 private reads and 3 writes → `unauthorized`; only `serviceHealth` answered; journal `Denied …` per command; user deleted |
+| P7 | Privacy Shield on/off | PASS | on: Active, DoH 1.1.1.1/9.9.9.9, resolved global + link → 127.0.0.1, `doubleclick.net` not found, `example.com` resolves, status blocked 6; off: DNS snapshot identical to pre-shield (hash `c546dd8ef330`) |
+| P8 | `--recover-network`, shield on | PASS | running: dry run rc 1, `--apply` rc 6; stop restored DNS exactly; dry run rc 1; `--apply` rc 0 "Result: Succeeded; verified: yes"; HTTPS 200; start → shield Active; off → DNS exact; doctor 13/0/0 |
+| P9 | DNS sanity for a blocked program (5 min, 5 host names, once a second) | PASS | 291 iterations: blocked copy refused 291/291, all exit 7 (0 × exit 6); unblocked curl 291/291, python3 291/291; `getent hosts` 291/291 median 13 ms max 147 ms; `resolvectl query --cache=no` 291/291 median 15 ms max 35 ms; 0 systemd-resolved journal lines |
+| G1 | Fix 1: Unblock on a rule created over IPC (random id) | PASS | dialog "Remove the Axiom outbound block rule for: /usr/local/axt/curl …" → `rules.query` 0 rules, copy connects 5/5 (0/5 refused) |
+| G2 | Fix 1: in-app rule apply + Unblock (Light theme) | PASS | "Rule applied and verified at 12:44:32.", 5/5 refused; Unblock → "curl: unblocked (rule removed and no longer listed; allow decision recorded)." (shown at +1 s; replaced by the normal status line a few seconds later), 0 rules, 5/5 connect |
+| G3 | Fix 1: refusal path (service stopped while the dialog was open, then confirm) | PASS | +1 s "curl: removing rule Axiom::d309e1fc-…::OUT…"; +4 s "Unblock failed: Service unavailable: The service did not respond in time. (service_unavailable) The block is still in force. No allow decision was recorded."; remembered decision timestamp unchanged; after start rule still Applied, 5/5 refused. One earlier attempt was void (the Unblock click missed after a layout shift; no dialog, nothing changed) |
+| G4 | Fix 2: Start local modules | PASS | "Neither local module answered. The modules have to be installed and started manually; then click Check again." No Repair in the result. Remaining: no "Check again" button visible on the page (it has Refresh); LOCAL MODULES subtitle still says "Repair stops a stale or duplicated runtime …" |
+| G5 | Fix 3: Light theme confirmation dialogs | PASS | theme switched to "Light" in the header selector; "Apply rule" and "Unblock" dialogs: light window, dark body text, readable (screenshots p2-09, p2-11, p2-20) |
+| G6 | Daemon stop → surfaces | PASS with delay | Network Control +1 s still ON (generation 15 verified), +3 s Shield badge UNKNOWN, header "Protection status unknown", nftables READ-ONLY, row "Unknown (last known)", Unblock disabled, footer UNKNOWN; Simple page +3 s "Protection status is unknown", tile UNKNOWN. Start: +1 s new generation 16 verified |
+| G7 | Simple home AI AGENT GUARD tile | PASS | "NOT VERIFIED — Unsupported on Linux for now: Blackbox host hooks are not verified here, so AI agents are not protected"; Simple page rendered (no blank page this round) |
+| G8 | 6 daemon stop/start cycles, 15 s apart, app open | PASS | app pid alive after every cycle; app stdout and `desktop.log`: 0 fatal/unhandled/exception lines |
+| G9 | Rule state after the DNS-sanity run | FINDING (recorded) | the IPC rule on the curl copy read `pending`; Network Control: "1 rule(s) not enforced by the filter … live process pid … (/usr/local/axt/curl) could not be moved into axiom.slice/…: No such process"; still refused 5/5. 25 "could not be moved" lines in the axiomd journal over the session |
+| P10 | `apt-get remove` with Privacy Shield on and a block rule present | PASS | rc 0; DNS identical to pre-shield; HTTPS 200; kept `/var/lib/axiom` (8 files) and empty `/var/log/axiom`; everything else gone |
+| P11 | `apt-get purge` | PASS | rc 0; nothing left; DNS identical to pre-shield |
+| P12 | Upgrade from Preview 1 with a block rule, under the probe loop | PASS | same VM after the purge (dependencies already present); preview1 rule refused 20/20; `apt-get install --no-install-recommends` of preview2: 6347 probes, 5945 after the action, 0 slipped; control 254 ok / 0 failed; service down between stop and start (MainPID 0 samples), new pid at +14.1 s, apt rc 0 at +16.1 s, attached programs 4 → 8 → 7 → 4; same rule id kept (state `pending` at first read), 20/20 refused, data file names kept (+`threat-share.json`), doctor 13/0/0; unblock 0/10; purged again, clean |
+
+Not tested here: plain `apt install` with recommends, Ubuntu Desktop image, Wayland, reboot, NetworkManager and
+resolv.conf DNS backends, Mini mode, arm64, other distributions, Windows (no CI run on this commit; the three fixes touch shared code).
+Not checked: whether the block is really still in force while the service is stopped, as the refusal text says.
+Scripts: `v13-p2/p2-vm.sh`, `p2-guest.sh`, `p2-gap.sh`, `p2-dns.sh`, `gui.sh` (scratch, not committed).
