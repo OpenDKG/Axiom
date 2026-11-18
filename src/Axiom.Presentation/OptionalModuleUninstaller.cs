@@ -8,15 +8,18 @@ using Axiom.Contracts.Modules;
 namespace Axiom.Presentation;
 
 /// <summary>
-/// Removes only Axiom-owned optional-module files. Blackbox and DKG cleanup runs in a visible
-/// PowerShell window; unrelated Hermes profiles, global Python/npm packages, user data and
-/// user-authored agent files are kept.
+/// Removes only Axiom-owned optional-module files. Blackbox and DKG cleanup runs in a hidden
+/// PowerShell process; the UI reports the outcome. Unrelated Hermes profiles, global Python/npm
+/// packages, user data and user-authored agent files are kept.
 /// </summary>
 public sealed class OptionalModuleUninstaller
 {
     private readonly string _userProfile;
 
     private readonly string _localAppData;
+
+    /// <summary>Tail of the last failed cleanup, for the module card.</summary>
+    public string? LastError { get; private set; }
 
     public OptionalModuleUninstaller(string? userProfile = null, string? localAppData = null)
     {
@@ -69,7 +72,13 @@ public sealed class OptionalModuleUninstaller
 
     public bool HasBlackboxFiles => Directory.Exists(BlackboxRoot) || File.Exists(BlackboxCommand);
 
-    public bool IsBlackboxRuntimeInstalled => File.Exists(BlackboxPython) || File.Exists(BlackboxPythonW);
+    public bool IsBlackboxRuntimeInstalled =>
+        File.Exists(BlackboxPython) ||
+        File.Exists(BlackboxPythonW) ||
+        File.Exists(Path.Combine(HermesBlackboxRoot, "agent-blackbox", "venv", "Scripts", "python.exe")) ||
+        File.Exists(Path.Combine(HermesBlackboxRoot, "agent-blackbox", "venv", "Scripts", "pythonw.exe"));
+
+    public string HermesBlackboxRoot => Path.Combine(_localAppData, "hermes", "blackbox");
 
     public bool IsBlackboxInstalled => HasBlackboxFiles;
 
@@ -219,26 +228,34 @@ public sealed class OptionalModuleUninstaller
         }
     }
 
-    private static bool RunPowerShellScript(string script)
+    private bool RunPowerShellScript(string script)
     {
-        var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
-        var startInfo = new ProcessStartInfo(
-            "powershell.exe",
-            $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}")
+        LastError = null;
+        var lines = new List<string>();
+        var ok = LocalModuleRuntime.RunHiddenPowerShell(
+            script,
+            line =>
+            {
+                lock (lines)
+                {
+                    lines.Add(line);
+                }
+            },
+            TimeSpan.FromMinutes(3));
+        if (!ok)
         {
-            UseShellExecute = true,
-            WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            WindowStyle = ProcessWindowStyle.Normal,
-        };
+            string tail;
+            lock (lines)
+            {
+                tail = string.Join(" ", lines.TakeLast(6));
+            }
 
-        using var process = Process.Start(startInfo);
-        if (process is null)
-        {
-            return false;
+            LastError = string.IsNullOrWhiteSpace(tail)
+                ? "The uninstall script did not finish cleanly."
+                : tail;
         }
 
-        process.WaitForExit();
-        return process.ExitCode == 0;
+        return ok;
     }
 
     private static void StartPowerShell(string script)

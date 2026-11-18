@@ -1,3 +1,7 @@
+## What's in 1.2.0
+
+- **Blackbox/DKG repair and recovery.** The uninstall scripts no longer call a PowerShell 5.1-incompatible `String.Contains` overload; a Repair action stops stale or duplicated runtimes and starts one clean copy; modules are retried after a crash and survive restart/power loss through Axiom's autostart; the DKG card probes Blackbox's 9320 node. Module controls are redesigned: one Start-local-modules action, per-service Start/Repair, and a labelled Audit/Block selector. Setup validates Python 3.11-3.13 and installs 3.12 instead of accepting 3.15.
+
 ## What's in 1.1.0
 
 - **Mini mode stays inside its fields.** The Module Health strip, throughput and activity no longer overlap at the minimum window size: Mini content scrolls when the window is too short, and the chart is a compact 72 px.

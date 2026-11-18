@@ -61,10 +61,29 @@ public sealed class OptionalModuleInstaller
 
     public string DkgCommand => Path.Combine(DkgRoot, "node_modules", ".bin", "dkg.cmd");
 
+    /// <summary>Blackbox's own node tree; its DKG runtime lives below this folder.</summary>
+    public string HermesBlackboxNode { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "hermes",
+        "blackbox",
+        "node");
+
     public bool IsDkgInstalled => File.Exists(DkgCommand);
 
-    /// <summary>True when a DKG CLI exists in the per-user folder or on PATH.</summary>
-    public bool IsDkgAvailable => ResolveDkgCommand().Command is not null;
+    /// <summary>True when a DKG CLI exists in the per-user folder, the Hermes config, or on PATH.</summary>
+    public bool IsDkgAvailable
+    {
+        get
+        {
+            var (configuredBin, _) = ResolveConfiguredDkg();
+            if (configuredBin is not null && File.Exists(configuredBin) && !IsUnsafeInstallRoot(configuredBin))
+            {
+                return true;
+            }
+
+            return ResolveDkgCommand().Command is not null;
+        }
+    }
 
     /// <summary>
     /// Why the last install request did nothing, or null when it started.
@@ -375,20 +394,21 @@ public sealed class OptionalModuleInstaller
             Set-Location $dir
             $installer = Join-Path $dir 'blackbox-install.ps1'
 
-            # The vendor installer calls 'py -3.12'. On a clean Windows without the launcher
-            # python.exe receives '-3' and the venv is never created; provide a shim for this run.
-            $pyOk = $false
-            if (Get-Command py -ErrorAction SilentlyContinue) {
-              & py -3.12 --version *> $null
-              $pyOk = ($LASTEXITCODE -eq 0)
+            # Blackbox supports Python 3.11-3.13 only, so a 3.15 path must never become the fallback:
+            # the vendor then dies with a Python traceback. Axiom's PATH preamble puts a compatible
+            # interpreter first. Do not probe `py -3.x` here: a missing minor prints a red
+            # "No runtime installed" error from the launcher before the installer even starts.
+            $python = Get-Command python -ErrorAction SilentlyContinue
+            $pythonVersion = if ($python) {
+              $value = (& $python.Source -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null)
+              if ($LASTEXITCODE -eq 0) { ([string]$value).Trim() } else { $null }
+            } else { $null }
+            if ($pythonVersion -notmatch '^3\.(11|12|13)$') {
+              throw "Blackbox requires Python 3.11-3.13, but Axiom found $(if ($pythonVersion) { "Python $pythonVersion" } else { 'no usable Python' }). Run Setup's prerequisite install (Python 3.12) and retry Repair."
             }
-            if (-not $pyOk -and (Get-Command python -ErrorAction SilentlyContinue)) {
-              $shim = Join-Path $dir 'py.cmd'
-              $shimText = "@echo off`r`nsetlocal`r`nset `"ARGS=%*`"`r`nset `"ARGS=%ARGS:-3.12=%`"`r`nset `"ARGS=%ARGS:-3=%`"`r`npython %ARGS%`r`n"
-              Set-Content -Path $shim -Value $shimText -Encoding Ascii
-              $env:PATH = $dir + ';' + $env:PATH
-              Write-Host 'Provided a py launcher shim for the vendor installer.' -ForegroundColor Yellow
-            }
+
+            # Older builds left a py.cmd shim here that could point at an incompatible interpreter.
+            Remove-Item (Join-Path $dir 'py.cmd') -Force -ErrorAction SilentlyContinue
 
             Write-Host 'Downloading the official Umanitek Blackbox installer...' -ForegroundColor Cyan
             if (-not (Test-Path $installer) -or (Get-Item $installer).Length -eq 0) {
@@ -415,8 +435,16 @@ public sealed class OptionalModuleInstaller
             }
             $env:BLACKBOX_MODE = 'block'
             $env:BLACKBOX_ATTACH_ALL = '1'
+            # Axiom always wants the vendored Blackbox tree. Telling the vendor not to reuse an
+            # existing Hermes also skips its `hermes.exe --version` probe, which prints a Python
+            # traceback when the user's Hermes runtime is broken (issue #370 follow-up).
+            $env:BLACKBOX_USE_EXISTING_HERMES = '0'
             & $installer -StoreBackend $storeBackend
             $vendorExit = $LASTEXITCODE
+            # Everything below is best-effort repair. Native tools write progress and warnings to
+            # stderr; with ErrorActionPreference=Stop Windows PowerShell 5.1 turns that into a
+            # terminating NativeCommandError and aborts before the dashboard is started.
+            $ErrorActionPreference = 'Continue'
             if ($vendorExit -ne 0) {
               # The pinned vendor build can fail its own "dependency environment committed" check.
               # Repair it once with the vendor CLI; a usable venv is what Axiom actually needs.
@@ -578,6 +606,13 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        // A node that already owns its API port is left alone. Starting a second copy is what
+        // produced duplicate daemon/worker pairs and a port race after login.
+        if (LocalModuleRuntime.AnyDkgPortListening)
+        {
+            return true;
+        }
+
         var startInfo = new ProcessStartInfo("cmd.exe", $"/c \"\"{command}\" start\"")
         {
             UseShellExecute = false,
@@ -660,7 +695,19 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        var agent = Path.Combine(BlackboxRoot, "agent-blackbox");
+        // The vendor login task may already be starting the dashboard. A second start loses the
+        // port race and leaves an orphaned Python process, so treat a listener as "already up".
+        if (LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort))
+        {
+            return true;
+        }
+
+        var agent = ResolveBlackboxAgentRoot();
+        if (agent is null)
+        {
+            return false;
+        }
+
         var venvPythonW = Path.Combine(agent, "venv", "Scripts", "pythonw.exe");
         var venvPython = Path.Combine(agent, "venv", "Scripts", "python.exe");
         var venv = File.Exists(venvPythonW) ? venvPythonW : venvPython;
@@ -702,6 +749,184 @@ public sealed class OptionalModuleInstaller
                      Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Stops only Axiom-owned module processes. Used before a restart so a hung or duplicated
+    /// runtime cannot keep the port. Returns true when the cleanup script ran.
+    /// </summary>
+    public bool StopModuleProcesses(bool blackbox, bool dkg, Action<string>? log = null)
+    {
+        var markers = new List<string>();
+        if (blackbox)
+        {
+            markers.Add(Path.Combine(BlackboxRoot, "agent-blackbox"));
+            if (ResolveBlackboxAgentRoot() is { } agentRoot)
+            {
+                markers.Add(agentRoot);
+            }
+
+            markers.Add("start-dashboard.py");
+            markers.Add("plugins.blackbox.dashboard");
+        }
+
+        if (dkg)
+        {
+            markers.Add(Path.Combine(BlackboxRoot, "agent-blackbox", "dkg"));
+            markers.Add(HermesBlackboxNode);
+            markers.Add(DkgRoot);
+            markers.Add(DkgHome);
+        }
+
+        return markers.Count == 0 || LocalModuleRuntime.StopProcesses(markers, log);
+    }
+
+    /// <summary>
+    /// Repairs the installed local services without reinstalling them: stop a hung or duplicated
+    /// runtime, start one node and one dashboard, and let the caller verify the endpoints.
+    /// <paramref name="restart"/> forces a clean restart when a process owns the port but no longer
+    /// answers the module contract.
+    /// </summary>
+    public bool RepairLocalModules(
+        bool blackbox,
+        bool dkg,
+        bool restartBlackbox = false,
+        bool restartDkg = false,
+        Action<string>? log = null)
+    {
+        LastError = null;
+        if (DistributionContext.IsStorePackage)
+        {
+            LastError = "Optional modules are not included in the Microsoft Store build.";
+            return false;
+        }
+
+        var ok = true;
+
+        if (dkg && IsDkgAvailable)
+        {
+            var dkgUp = LocalModuleRuntime.AnyDkgPortListening;
+            if (!dkgUp || restartDkg)
+            {
+                log?.Invoke(restartDkg && dkgUp
+                    ? "Repair: stopping the DKG node that no longer answers, then starting one node."
+                    : "Repair: starting the installed DKG node.");
+                StopModuleProcesses(blackbox: false, dkg: true, log);
+                if (restartDkg)
+                {
+                    WaitForPortToClose(LocalModuleRuntime.BlackboxDkgPort, TimeSpan.FromSeconds(10));
+                }
+
+                if (!StartDkg())
+                {
+                    LastError = "The installed DKG CLI could not be started; repair it from the module card.";
+                    ok = false;
+                }
+            }
+        }
+
+        if (blackbox && IsBlackboxRuntimeInstalled)
+        {
+            var blackboxUp = LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort);
+            if (!blackboxUp || restartBlackbox)
+            {
+                log?.Invoke(restartBlackbox && blackboxUp
+                    ? "Repair: stopping the dashboard that no longer answers, then starting one dashboard."
+                    : "Repair: starting the installed Blackbox dashboard.");
+                StopModuleProcesses(blackbox: true, dkg: false, log);
+                if (restartBlackbox)
+                {
+                    WaitForPortToClose(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(10));
+                }
+
+                EnsureBlackboxDependencies(log);
+                if (!StartBlackboxDashboard())
+                {
+                    LastError = "The Blackbox virtual environment is missing or unusable; reinstall Blackbox.";
+                    ok = false;
+                }
+            }
+        }
+
+        return ok;
+    }
+
+    /// <summary>
+    /// Installs the dashboard's runtime dependencies when the venv lost them (a vendor update can
+    /// leave the editable install without them). The check keeps a healthy venv untouched.
+    /// </summary>
+    private void EnsureBlackboxDependencies(Action<string>? log = null)
+    {
+        if (ResolveBlackboxAgentRoot() is not { } agent)
+        {
+            return;
+        }
+
+        var python = Path.Combine(agent, "venv", "Scripts", "python.exe");
+        if (!File.Exists(python))
+        {
+            return;
+        }
+
+        if (LocalModuleRuntime.RunProcess(
+                python,
+                "-c \"import cryptography, fastapi, uvicorn, aiohttp, psutil, ruamel.yaml, yaml, rich\"",
+                log: null,
+                TimeSpan.FromSeconds(30)))
+        {
+            return;
+        }
+
+        log?.Invoke("Repair: installing the missing Blackbox dashboard dependencies...");
+        LocalModuleRuntime.RunProcess(
+            python,
+            "-m pip install --disable-pip-version-check --quiet cryptography cffi psutil fastapi uvicorn ruamel.yaml pyyaml python-dotenv rich aiohttp",
+            log,
+            TimeSpan.FromMinutes(10));
+    }
+
+    private bool IsBlackboxRuntimeInstalled
+    {
+        get
+        {
+            var agent = ResolveBlackboxAgentRoot();
+            return agent is not null &&
+                   (File.Exists(Path.Combine(agent, "venv", "Scripts", "python.exe")) ||
+                    File.Exists(Path.Combine(agent, "venv", "Scripts", "pythonw.exe")));
+        }
+    }
+
+    /// <summary>
+    /// The vendor checkout Axiom manages, or one an earlier install left under the Hermes home.
+    /// Returns null when neither has a usable virtual environment.
+    /// </summary>
+    private string? ResolveBlackboxAgentRoot()
+    {
+        var candidates = new[]
+        {
+            Path.Combine(BlackboxRoot, "agent-blackbox"),
+            Path.Combine(HermesBlackboxNode, "..", "agent-blackbox"),
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (File.Exists(Path.Combine(candidate, "venv", "Scripts", "python.exe")) ||
+                File.Exists(Path.Combine(candidate, "venv", "Scripts", "pythonw.exe")))
+            {
+                return Path.GetFullPath(candidate);
+            }
+        }
+
+        return null;
+    }
+
+    private static void WaitForPortToClose(int port, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline && LocalModuleRuntime.IsPortListening(port))
+        {
+            Thread.Sleep(250);
         }
     }
 
