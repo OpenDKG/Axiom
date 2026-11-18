@@ -677,3 +677,35 @@ Also: the "Start local modules" message points to a Repair button the macOS card
 
 Guest left with build 18 installed, service running, extension active, 0 rules, shield off, Privacy Shield
 off, DNS automatic, no dialogs; VM shut down.
+
+## Addendum 2026-11-18 (5): resolver-delegated DNS fix, 1.3.0 build 19, VM regression run (author-run, not CI)
+
+Fix for the v13 outage found on build 18 (an app block rule dropped mDNSResponder's delegated DNS socket; lookups
+of that name stalled for every app, 22 minutes in the repro). Fix commit `3943b54` (`RuleTable.decide` +
+`ResolverDelegation`, `FlowInspector.socketOwner`, `FilterDataProvider.handleNewFlow`), design and trade-off in
+MACOS_ARCHITECTURE.md "Resolver-delegated DNS flows". No .NET change (the new `flow.open` fields are additive).
+
+Build: .NET published on Linux from `3943b54` (`AXIOM_BUILD=19 package-app.sh osx-x64`, tree clean after), Swift
+filter built and the bundle ad hoc signed in the guest (`deploy-to-vm.sh`, `INSTALL=0`), packed there with
+`ditto -c -k --keepParent`: `Axiom-1.3.0-19-osx-x64-adhoc.zip`, 89,058,431 bytes, sha256
+`74568194086be232e1fffbd0eaf1e92575f2cf78c741e653d41be34170f0efd9` (guest = host). Installed over build 18 from that
+zip (`shasum -c` OK), `axiomd --install-service` exit 0, `axiom-sysext activate` replaced 18 with 19 and re-created
+the filter configuration ("Would Like to Filter Network Content" -> Allow). Guest macOS 15.8.3, SIP disabled.
+
+| Check | Result |
+|---|---|
+| Swift unit tests (guest, `build.sh test`) | RED with `decide()` stubbed to the build-18 verdict: 162/168 (6 failures, all delegated-flow cases); GREEN 168/168 |
+| Loop 1, 10 min, right after the 18 -> 19 filter upgrade (rule on a curl copy; every second the copy fetches http://NAME/ first, then system curl and python fetch the same NAME; NAME alternates a never-seen sslip.io name and 5 real names; no cache flush) | 480 ticks. Filter: 511 `allow resolver-delegated dns` lines for the copy, **0** DNS drops, 1078 blocks of its TCP flows. Copy rc 7 454, rc 28 26; system curl 478/480; python 480/480. mDNSResponder `Broken pipe` 582 lines, but they started at the filter upgrade (590 in the 10 min before the loop) and also appeared with **no rule at all** (about 50 per 20 lookups in 6 controlled phases, system curl included). A DNS configuration change (Ethernet DNS set and reset to automatic) cleared them: 0 afterwards. Reading: replacing the filter left mDNSResponder with a broken socket (upgrade side effect, not a verdict) |
+| Loop 2, 10 min after that reset, same script | 415 ticks. **0 `Broken pipe`**, **0 DNS drops**, 447 delegated DNS flows allowed, 920 TCP blocks of the copy. Real names (207 ticks): copy refused (rc 7) 207/207, system curl 207/207, python 207/207, 0 stalls. Fresh sslip.io names (208): copy rc 7 174, rc 28 (5 s lookup) 34; system curl 203/208; python 208/208 (6 lookups > 2 s, max 15.6 s) |
+| Loop 3, 5 min, same script, **no rule** (control) | fresh sslip.io names: first asker timed out 6/128, system curl 127/128, 3 python lookups > 2 s; real names: 1/127 timeout. 0 `Broken pipe` |
+| Build 18 for comparison (v13-outage FINDINGS) | one delegated DNS drop -> `Broken pipe` on every resend, query #1-#120 for one question, hostname lookups of the same name stalled for **all** apps for 22 min (23/25 + 5/5 restart cycles with timeouts) |
+| Blocked program's own direct DNS | `dig` copy UDP rc 9 "connection timed out" (2.1 s), TCP rc 9 "connection ... failed"; `nslookup` copy rc 1 timed out; unblocked `dig`/`nslookup` answered. Filter: `block pid=… digblk -> 10.0.2.3:53 rule=… owner=-` (3 lines), 0 delegated allows for them |
+| Enforcement smoke | copy refused by IP 5/5 and by name 5/5 (rc 7), python 200 3/3, `/usr/bin/curl` 0 3/3; same after `launchctl kickstart -k` (new pid); after `rule.remove` copy 200 3/3; `--doctor` 23 PASS / 1 WARN / 0 FAIL (WARN: build-18 extension "terminated waiting to uninstall on reboot"); `codesign --verify --deep --strict` ok, adhoc |
+| UI (Light mode) | (a) "Install the Axiom background service" (menu-bar item "Install Background Service…", plist moved aside): body readable, dark on light; "Unblock this application" confirmation readable too. (b) Agent Protection, Start local modules: "Neither local module answered. The modules have to be installed and started manually; then click Check again." (no Repair; the static LOCAL MODULES subtitle still says "Repair stops a stale or duplicated runtime before starting a clean one."). (c) rule created over IPC (`createdBy b19-ipc`), row Unblock -> "curlblk: unblocked (rule removed and no longer listed; allow decision recorded).", row gone, 0 owned rules, copy then got 200 |
+
+Not met / open: the fresh-name loops did not give "refused every time, never a timeout": 34/208 first lookups of
+never-seen sslip.io names took 5 s with the rule vs 6/128 without it in a later 5-minute control. No filter drop,
+no `Broken pipe` and no cross-app stall accompanied them, and earlier 20-name phases showed 10-20 % slow fresh
+lookups with no rule, so this reads as upstream (sslip.io/slirp) latency, but the rule/no-rule difference was not
+explained in this run. Also open: a filter upgrade can leave mDNSResponder with an EPIPE socket until the next DNS
+configuration change. Not tested: Apple silicon, a signed build, macOS 13/14, DoT (853) live.
