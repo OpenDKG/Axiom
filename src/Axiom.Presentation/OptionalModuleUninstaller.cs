@@ -73,10 +73,8 @@ public sealed class OptionalModuleUninstaller
     public bool HasBlackboxFiles => Directory.Exists(BlackboxRoot) || File.Exists(BlackboxCommand);
 
     public bool IsBlackboxRuntimeInstalled =>
-        File.Exists(BlackboxPython) ||
-        File.Exists(BlackboxPythonW) ||
-        File.Exists(Path.Combine(HermesBlackboxRoot, "agent-blackbox", "venv", "Scripts", "python.exe")) ||
-        File.Exists(Path.Combine(HermesBlackboxRoot, "agent-blackbox", "venv", "Scripts", "pythonw.exe"));
+        AgentPlatform.HasVenvPython(Path.Combine(BlackboxRoot, "agent-blackbox")) ||
+        AgentPlatform.HasVenvPython(Path.Combine(HermesBlackboxRoot, "agent-blackbox"));
 
     public string HermesBlackboxRoot => Path.Combine(_localAppData, "hermes", "blackbox");
 

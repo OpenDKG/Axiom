@@ -18,6 +18,19 @@ public static class AgentPlatform
             ? Path.Combine(root, "venv", "Scripts", "python.exe")
             : Path.Combine(root, "venv", "bin", "python");
 
+    /// <summary>
+    /// True when the virtual environment under <paramref name="root"/> has an interpreter. Windows:
+    /// upstream's check, <c>venv\\Scripts\\python.exe</c> or <c>pythonw.exe</c>; POSIX: <c>venv/bin/python</c>.
+    /// </summary>
+    public static bool HasVenvPython(string root) => HasVenvPython(root, IsWindows, File.Exists);
+
+    public static bool HasVenvPython(string root, bool windows, Func<string, bool> fileExists)
+    {
+        ArgumentNullException.ThrowIfNull(fileExists);
+        return fileExists(VenvPython(root, windows)) ||
+               (windows && fileExists(Path.Combine(root, "venv", "Scripts", "pythonw.exe")));
+    }
+
     /// <summary>A console tool installed in a virtual environment (for example <c>hermes</c>).</summary>
     public static string VenvTool(string root, string name) => VenvTool(root, name, IsWindows);
 
