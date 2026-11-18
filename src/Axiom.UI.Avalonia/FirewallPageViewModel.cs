@@ -876,7 +876,37 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         }
     }
 
-    private bool CanDecidePending() => _client is not null && !IsShieldBusy && ShieldEnabled;
+    // Off Windows a row or pending action needs a known state: while the service does not
+    // answer, last-known rows and the shield flag are not a basis for a block/unblock request.
+    private bool CanDecidePending() =>
+        _client is not null && !IsShieldBusy && ShieldEnabled && (OperatingSystem.IsWindows() || ProtectionKnown);
+
+    partial void OnProtectionKnownChanged(bool value) => NotifyRowActionsOffWindows();
+
+    partial void OnShieldEnabledChanged(bool value) => NotifyRowActionsOffWindows();
+
+    partial void OnIsShieldBusyChanged(bool value) => NotifyRowActionsOffWindows();
+
+    /// <summary>
+    /// Unblock and the remembered-decision toggle were never told to re-evaluate when the shield
+    /// state changed, so a last-known row kept an enabled button. Windows keeps its behaviour.
+    /// </summary>
+    private void NotifyRowActionsOffWindows()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        UnblockRuleCommand.NotifyCanExecuteChanged();
+        ToggleDecisionCommand.NotifyCanExecuteChanged();
+        BlockPendingCommand.NotifyCanExecuteChanged();
+        AllowPendingCommand.NotifyCanExecuteChanged();
+        DismissPendingCommand.NotifyCanExecuteChanged();
+        BlockFocusedCommand.NotifyCanExecuteChanged();
+        AllowFocusedCommand.NotifyCanExecuteChanged();
+        DismissFocusedCommand.NotifyCanExecuteChanged();
+    }
 
     [RelayCommand(CanExecute = nameof(CanDecidePending))]
     private Task BlockPendingAsync(PendingAppRow? row) =>
