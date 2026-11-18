@@ -95,9 +95,9 @@ Some reporter runs cannot be classified: the CLI starts, then times out or exits
 
 ## Verified graph sync and offline behaviour
 
-Axiom reads the **local** Blackbox dashboard, including its verified-sync and public-graph endpoints. **Sync now** requests an upstream sync through Blackbox; Axiom itself does not implement a parallel DKG replication loop. An optional **Auto-sync** preference, **off by default**, requests incremental catch-up at roughly 15-minute intervals when enabled. It does not mean the node is always online or the graph is fresh.
+Axiom reads the **local** Blackbox dashboard, including its verified-sync and public-graph endpoints. **Sync now** asks Blackbox to start its sync and reports when a job is already running. The meter shows download and compilation counts separately. **Stalled** means Blackbox reports that these counts have stopped moving. The optional **Auto-sync** preference is **off by default**. When enabled, Axiom checks live readiness before each attempt and spaces requests by at least 15 minutes.
 
-When a dashboard read is slow, Axiom may display locally persisted authoritative sync/progress/ruleset information as **last-known state**. A stale cache is not a fresh verification, and an offline node does not mean that the graph contains no threats. Local firewall rules, stored DNS policies and previously loaded lists continue to function independently of a new graph sync.
+If the dashboard cannot provide a live meter, Axiom may display locally persisted counts as **last-known state**. A signed peer snapshot is labeled **peer preview**. Local firewall rules, stored DNS policies and previously loaded lists continue to function independently of a new graph sync.
 
 **Important distinction:** Axiom currently displays the synchronized verified graph through the Blackbox integration; it does **not** yet use general verified/community reputation lookups as per-connection enforcement decisions. Reputation annotations do not currently change firewall rules or block connections automatically.
 

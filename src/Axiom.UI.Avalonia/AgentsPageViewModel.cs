@@ -64,6 +64,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private DateTimeOffset _lastSessionRefresh = DateTimeOffset.MinValue;
 
     private readonly IUiTimer _timer;
+    private readonly CancellationTokenSource _syncLifetime = new();
     private readonly IUserInteraction _ui;
     private readonly IBlackboxDialogService _dialogs;
     private readonly IServiceRequestClient? _serviceClient;
@@ -78,6 +79,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private readonly List<BlackboxFinding> _allFindings = [];
 
     private bool _refreshing;
+    private bool _disposed;
 
     private bool _preservingActivitySelection;
 
@@ -99,6 +101,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private bool _trayMonitoring;
 
     private bool _autoSyncRunning;
+    private DateTimeOffset _nextAutoSyncCheckUtc;
 
     private DateTimeOffset _lastAutoSyncAttempt = DateTimeOffset.MinValue;
 
@@ -464,16 +467,24 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     public void Dispose()
     {
+        _disposed = true;
+        _syncLifetime.Cancel();
         _trayMonitoring = false;
         _timer.StopTimer();
         _timer.Dispose();
         _client.Dispose();
         _peerRelay.Dispose();
+        _syncLifetime.Dispose();
     }
 
     [RelayCommand]
     private async Task RefreshAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (!IsAvailable)
         {
             ThreatShareQueueText = "Indicator preview is unavailable in Store builds.";
@@ -510,6 +521,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             // These two are optional dashboard reads. Apply them independently so a slow audit
             // history or a missing endpoint cannot hide the verified-graph state.
             var verifiedSync = await verifiedSyncTask.ConfigureAwait(true);
+            if (_disposed)
+            {
+                _refreshing = false;
+                return;
+            }
+
+            ApplyVerifiedSync(verifiedSync);
             var graphPage = await verifiedGraphTask.ConfigureAwait(true);
             var localRules = verifiedSync?.VerifiedRules ?? 0;
             if (localRules > 0 && graphPage is { Threats.Count: > 0 })
@@ -517,17 +535,18 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 _peerRelay.PublishInMemory(verifiedSync!, graphPage);
             }
 
-            if (localRules == 0 ||
-                (shouldRefreshVerifiedGraph && (verifiedSync?.IsSyncing == true || graphPage?.Threats.Count == 0)))
+            if (shouldRefreshVerifiedGraph && localRules == 0 && graphPage?.Threats.Count is not > 0)
             {
                 if (await _peerRelay.TryFetchFromPeersAsync(localRules, CancellationToken.None).ConfigureAwait(true) is { } peerSnapshot)
                 {
-                    verifiedSync = peerSnapshot.Sync;
                     graphPage = peerSnapshot.Graph;
+                    if (verifiedSync is null or { IsCached: true })
+                    {
+                        ApplyVerifiedSync(peerSnapshot.Sync);
+                    }
                 }
             }
 
-            ApplyVerifiedSync(verifiedSync);
             if (graphPage is not null)
             {
                 ApplyVerifiedGraph(graphPage);
@@ -632,7 +651,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     [RelayCommand(CanExecute = nameof(CanSyncVerifiedGraph))]
     private async Task SyncVerifiedGraphAsync()
     {
-        if (!IsAvailable || IsVerifiedSyncRunning)
+        if (!CanSyncVerifiedGraph())
         {
             return;
         }
@@ -640,9 +659,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         IsVerifiedSyncRunning = true;
         VerifiedSyncState = "SYNCING";
         VerifiedSyncStateDetail = "Requesting a verified-graph sync from the local Blackbox dashboard…";
+        var cancellationToken = _syncLifetime.Token;
         try
         {
-            var result = await _client.RequestSyncAsync(CancellationToken.None).ConfigureAwait(true);
+            var result = await _client.RequestSyncAsync(cancellationToken).ConfigureAwait(true);
             if (!result.Ok)
             {
                 VerifiedSyncState = "SYNC FAILED";
@@ -653,8 +673,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             VerifiedSyncStateDetail = result.Message;
             _verifiedGraphInitialized = false;
             _lastVerifiedGraphRefresh = DateTimeOffset.MinValue;
-            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
-            await RefreshAsync().ConfigureAwait(true);
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(true);
+            ApplyVerifiedSync(await TryGetVerifiedSyncAsync().ConfigureAwait(true));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
@@ -668,7 +691,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
     }
 
-    private bool CanSyncVerifiedGraph() => IsAvailable && !IsVerifiedSyncRunning;
+    private bool CanSyncVerifiedGraph() => !_disposed && IsAvailable && !IsVerifiedSyncRunning && !_autoSyncRunning;
 
     partial void OnIsVerifiedSyncRunningChanged(bool value) =>
         SyncVerifiedGraphCommand.NotifyCanExecuteChanged();
@@ -685,44 +708,43 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private async Task MaybeAutoSyncAsync()
     {
-        if (!IsAutoSyncEnabled || _autoSyncRunning || !IsAvailable)
-        {
-            return;
-        }
-
-        if (IsVerifiedSyncRunning ||
-            string.Equals(VerifiedSyncState, "SYNCING", StringComparison.Ordinal) ||
-            string.Equals(VerifiedSyncState, "NODE OFFLINE", StringComparison.Ordinal) ||
-            string.Equals(VerifiedSyncState, "UNAVAILABLE", StringComparison.Ordinal))
+        if (_disposed || !IsAutoSyncEnabled || _autoSyncRunning || !IsAvailable)
         {
             return;
         }
 
         var now = DateTimeOffset.UtcNow;
-        if (now - _lastAutoSyncAttempt < AutoSyncInterval)
+        if (IsVerifiedSyncRunning || now < _nextAutoSyncCheckUtc || now - _lastAutoSyncAttempt < AutoSyncInterval)
         {
             return;
         }
 
         _autoSyncRunning = true;
-        _lastAutoSyncAttempt = now;
-        AutoSyncStatusText = "Auto-sync: checking for new verified assets…";
-        PersistAutoSync();
+        SyncVerifiedGraphCommand.NotifyCanExecuteChanged();
+        _nextAutoSyncCheckUtc = now.AddMinutes(1);
+        var cancellationToken = _syncLifetime.Token;
         try
         {
-            var result = await _client.RequestSyncAsync(CancellationToken.None).ConfigureAwait(true);
-            if (!result.Ok)
+            var live = await _client.GetVerifiedSyncAsync(cancellationToken).ConfigureAwait(true);
+            if (live.IsOffline || (live.IsSyncing && !live.IsStalled))
             {
-                AutoSyncStatusText = $"Auto-sync: {result.Message}";
                 return;
             }
 
-            AutoSyncStatusText = "Auto-sync requested; existing assets stay local and only new data is fetched.";
-            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
-            if (_pageActive)
+            _lastAutoSyncAttempt = now;
+            var result = await _client.RequestSyncAsync(cancellationToken).ConfigureAwait(true);
+            AutoSyncStatusText = $"Auto-sync: {result.Message}";
+            PersistAutoSync();
+            if (!result.Ok)
             {
-                await RefreshAsync().ConfigureAwait(true);
+                return;
             }
+
+            _verifiedGraphInitialized = false;
+            _lastVerifiedGraphRefresh = DateTimeOffset.MinValue;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
@@ -732,7 +754,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         finally
         {
             _autoSyncRunning = false;
-            PersistAutoSync();
+            SyncVerifiedGraphCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -2018,21 +2040,21 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private async Task<BlackboxVerifiedSync?> TryGetVerifiedSyncAsync()
     {
+        var cancellationToken = _syncLifetime.Token;
         try
         {
-            var dashboard = await _client.GetVerifiedSyncAsync(CancellationToken.None).ConfigureAwait(true);
-            var local = BlackboxLocalState.TryReadSync();
-            if (local is not null && local.VerifiedRules > dashboard.VerifiedRules)
-            {
-                return local;
-            }
-
-            return dashboard;
+            return await _client.GetVerifiedSyncAsync(cancellationToken).ConfigureAwait(true);
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
         {
-            return BlackboxLocalState.TryReadSync();
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+
+            var cached = await Task.Run(() => BlackboxLocalState.TryReadSync()).ConfigureAwait(true);
+            return cached is null ? null : cached with { IsCached = true };
         }
     }
 
@@ -2048,7 +2070,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
         {
-            return BlackboxLocalState.TryReadGraph();
+            return await Task.Run(() => BlackboxLocalState.TryReadGraph()).ConfigureAwait(true);
         }
     }
 
@@ -2068,9 +2090,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         var state = sync.State.Trim().ToLowerInvariant();
+        var peerPreview = string.Equals(sync.Phase, "peer-ram", StringComparison.OrdinalIgnoreCase);
         var hasCompiledRules = sync.VerifiedRules > 0 || (sync.CompiledAssets ?? 0) > 0;
         var nodeUnavailableWithRules = sync.IsOffline && hasCompiledRules;
-        VerifiedSyncState = state switch
+        VerifiedSyncState = sync.IsCached ? "LAST KNOWN" : peerPreview ? "PEER PREVIEW" :
+            sync.IsStalled ? "STALLED" : state switch
         {
             "synced" => "SYNCED",
             "syncing" => "SYNCING",
@@ -2102,20 +2126,25 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                     ? "The local dashboard is syncing the verified graph."
                     : sync.PhaseText)
                 : string.Equals(state, "synced", StringComparison.Ordinal)
-                    ? (string.Equals(sync.Phase, "peer-ram", StringComparison.OrdinalIgnoreCase) &&
-                       !string.IsNullOrWhiteSpace(sync.PhaseText)
+                    ? (peerPreview && !string.IsNullOrWhiteSpace(sync.PhaseText)
                         ? sync.PhaseText
                         : $"The local graph holds {CountText(sync.VerifiedRules)} compiled verified rule(s).")
                     : string.IsNullOrWhiteSpace(sync.PhaseText)
                         ? $"The dashboard reports verified-graph state '{sync.State}'."
                         : sync.PhaseText;
 
+        if (sync.IsStalled && sync.GraphAssets is > 0 && sync.DownloadedAssets >= sync.GraphAssets &&
+            sync.CompiledAssets < sync.GraphAssets)
+        {
+            detail = "All reported assets are downloaded. Blackbox is behind in compiling them. " + detail;
+        }
+
         if (!string.IsNullOrWhiteSpace(sync.CheckedAt))
         {
             detail += $" Last checked {sync.CheckedAt}.";
         }
 
-        VerifiedSyncStateDetail = detail;
+        VerifiedSyncStateDetail = sync.IsCached ? "Blackbox is unavailable. Last saved status: " + detail : detail;
     }
 
     private void ApplyVerifiedGraph(BlackboxGraphPage page)

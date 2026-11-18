@@ -193,6 +193,10 @@ public sealed record BlackboxVerifiedSync(
 
     public bool IsSyncing => string.Equals(State, "syncing", StringComparison.OrdinalIgnoreCase);
 
+    public bool IsStalled => IsSyncing && string.Equals(Phase, "stalled", StringComparison.OrdinalIgnoreCase);
+
+    public bool IsCached { get; init; }
+
     public double DisplayPercent => Math.Clamp(PercentCompiled ?? 0, 0, 100);
 }
 
@@ -235,7 +239,10 @@ public sealed record BlackboxGraphPage(
         new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 }
 
-public sealed record BlackboxSyncResult(bool Ok, string Message);
+public sealed record BlackboxSyncResult(bool Ok, string Message)
+{
+    public bool Busy { get; init; }
+}
 
 public sealed record BlackboxSaveResult(bool Ok, IReadOnlyList<string> Errors, JsonObject? Settings);
 
@@ -479,9 +486,15 @@ public sealed class BlackboxDashboardClient : IDisposable
             return new BlackboxSyncResult(false, errors.FirstOrDefault() ?? "Blackbox rejected the sync request.");
         }
 
+        var busy = ReadBool(root, "busy");
         return new BlackboxSyncResult(
             true,
-            ReadString(root, "message") ?? "Sync requested; the local dashboard will report progress.");
+            ReadString(root, "message") ?? (busy
+                ? "Blackbox already has a sync in progress."
+                : "Sync requested; the local dashboard will report progress."))
+        {
+            Busy = busy,
+        };
     }
 
     public void Dispose()

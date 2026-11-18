@@ -409,6 +409,36 @@ public sealed class BlackboxDashboardClientTests
     }
 
     [Fact]
+    public async Task Busy_sync_acknowledgement_reports_an_existing_job()
+    {
+        using var http = new HttpClient(new StubHandler(request =>
+            request.RequestUri!.AbsolutePath == "/api/session"
+                ? Json(HttpStatusCode.OK, """{"token":"session-token"}""")
+                : Json(HttpStatusCode.OK, """{"ok":true,"started":false,"busy":true}""")));
+        using var client = new BlackboxDashboardClient(http);
+
+        var result = await client.RequestSyncAsync(CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.True(result.Busy);
+        Assert.Contains("already", result.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Sync_meter_marks_stalled_compilation_with_all_assets_downloaded()
+    {
+        using var http = new HttpClient(new StubHandler(_ => Json(HttpStatusCode.OK, """
+            {"state":"syncing","phase":"stalled","graph_assets":1724,"downloaded_assets":1724,"compiled_assets":1682}
+            """)));
+        using var client = new BlackboxDashboardClient(http);
+
+        var sync = await client.GetVerifiedSyncAsync(CancellationToken.None);
+
+        Assert.True(sync.IsStalled);
+        Assert.Equal(sync.GraphAssets, sync.DownloadedAssets);
+        Assert.Equal(1682, sync.CompiledAssets);
+    }
+    [Fact]
     public async Task Malformed_settings_json_throws_invalid_data()
     {
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
