@@ -84,6 +84,7 @@ agent-level guardrails and signed threat-intelligence context respectively.
 - [Security model](docs/SECURITY_MODEL.md) â€” what stays on-device, what can leave and where protection can fail open.
 - [Threat intelligence lifecycle](docs/THREAT_INTELLIGENCE.md) - Axiom sightings, Blackbox reports, community sharing, verified graph and SWM/VM provenance.
 - [Appearance and Axiom Glass](docs/APPEARANCE.md) - themes, current glass styling and what is not yet implemented.
+- [Donate crypto](https://opendkg.org/donate/) — support Axiom and OpenDKG with ETH.
 - [Full historical changelog](docs/CHANGELOG.md) â€” release-by-release detail from earlier README versions.
 
 > **Do not equate a locally connected module with fresh DKG synchronization, or a signed community report with a verified threat.** Agent hooks can fail open when their local guard is unavailable. A DNS fallback can preserve connectivity while bypassing Privacy Shield filtering.

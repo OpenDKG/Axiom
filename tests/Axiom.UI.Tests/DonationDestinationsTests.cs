@@ -83,7 +83,7 @@ public sealed class DonationDestinationsTests
     }
 
     [Fact]
-    public void BundledConfigurationStartsWithNoActiveRecipients()
+    public void BundledConfigurationOffersOnlyEthOnEthereumMainnet()
     {
         var config = DonationDestinations.Load();
 
@@ -91,7 +91,10 @@ public sealed class DonationDestinationsTests
         Assert.Empty(config.PaypalUrl);
         Assert.Empty(config.GithubSponsorsUrl);
         Assert.Equal(3, config.Crypto.Length);
-        Assert.All(config.Crypto, option => Assert.Empty(option.Address));
+        var eth = Assert.Single(config.Crypto, DonationDestinations.IsValidCrypto);
+        Assert.Equal("ETH", eth.Currency);
+        Assert.Equal("Ethereum mainnet", eth.Network);
+        Assert.Equal("0xFac745f39D832BC6A7B6D7F306928aBDC2C6a8ED", eth.Address);
     }
 
     [Fact]
@@ -204,16 +207,17 @@ public sealed class DonationDestinationsTests
     }
 
     [Fact]
-    public void SupportPageRemainsUsableWithoutConfiguredDestinations()
+    public void SupportPageShowsOnlyConfiguredEthDestination()
     {
         var viewModel = new SupportViewModel();
 
         Assert.False(viewModel.HasBuyMeACoffee);
         Assert.False(viewModel.HasPayPal);
         Assert.False(viewModel.HasGitHubSponsors);
-        Assert.False(viewModel.HasCrypto);
-        Assert.Empty(viewModel.CryptoOptions);
-        Assert.Contains("not yet configured", viewModel.SetupNote);
+        Assert.True(viewModel.HasCrypto);
+        var eth = Assert.Single(viewModel.CryptoOptions);
+        Assert.Equal("ETH", eth.Currency);
+        Assert.Equal("Ethereum mainnet", eth.Network);
     }
 
     private static string CreateTempRoot()
