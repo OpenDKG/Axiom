@@ -10,6 +10,13 @@ public sealed class IpcClientException(string code, string message, Exception? i
     : Exception(message, inner)
 {
     public string Code { get; } = code;
+
+    /// <summary>
+    /// True when the service itself answered with this error. False for transport failures
+    /// (no socket/pipe, refused, denied, timed out, closed without a reply): the service was not
+    /// reached, so its state is unknown.
+    /// </summary>
+    public bool ServiceResponded { get; init; }
 }
 
 /// <summary>
@@ -70,7 +77,10 @@ public sealed class IpcPipeClient(
             {
                 throw new IpcClientException(
                     response.Error?.Code ?? IpcErrorCodes.InternalError,
-                    response.Error?.Message ?? "The service rejected the request.");
+                    response.Error?.Message ?? "The service rejected the request.")
+                {
+                    ServiceResponded = true,
+                };
             }
 
             if (response.Result is not { } result)

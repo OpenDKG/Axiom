@@ -40,6 +40,9 @@ public sealed class ConnectionMonitor : IDisposable
 
     public string? LastError { get; private set; }
 
+    /// <summary>The failure behind <see cref="LastError"/>; null after a successful poll.</summary>
+    public Exception? LastException { get; private set; }
+
     public bool IsRunning => _timer.IsEnabled;
 
     public event EventHandler? Updated;
@@ -70,6 +73,7 @@ public sealed class ConnectionMonitor : IDisposable
             var snapshot = await _source.CaptureAsync(_cancellation.Token).ConfigureAwait(true);
             Apply(snapshot);
             LastError = null;
+            LastException = null;
         }
         catch (OperationCanceledException)
         {
@@ -80,6 +84,7 @@ public sealed class ConnectionMonitor : IDisposable
 #pragma warning restore CA1031
         {
             LastError = exception.Message;
+            LastException = exception;
             Updated?.Invoke(this, EventArgs.Empty);
         }
         finally

@@ -35,6 +35,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private DateTimeOffset _lastProtectionProbeUtc = DateTimeOffset.MinValue;
     private bool _isProbing;
     private bool _isProbingProtection;
+    private readonly ServiceReachabilityClient? _reachability;
+    private bool _serviceUnreachable;
     private bool _updatingTheme;
     private ProtectionStatus? _protection;
     private readonly HashSet<string> _notifiedPendingApps = new(StringComparer.OrdinalIgnoreCase);
@@ -65,6 +67,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _monitor = new ConnectionMonitor(source, timers);
         _traffic = new TrafficEngine(timers);
         _serviceProbe = serviceProbe;
+        if (!OperatingSystem.IsWindows() && serviceClient is not null)
+        {
+            // One shared reachability signal: every page's service call reports through it.
+            _reachability = new ServiceReachabilityClient(serviceClient);
+            serviceClient = _reachability;
+        }
+
         _serviceClient = serviceClient;
         IsServiceMode = source is ServiceSnapshotSource;
         var interaction = userInteraction ?? new NullUserInteraction();
@@ -234,6 +243,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _theme.Changed += OnThemeChanged;
         _uiMode.Changed += OnUiModeChanged;
         _monitor.Updated += OnMonitorUpdated;
+        if (_reachability is not null)
+        {
+            _reachability.Answered += OnServiceAnswered;
+            _reachability.Unreachable += OnServiceUnreachable;
+            Firewall.ProtectionStatusApplied += OnFirewallProtectionApplied;
+        }
+
         AlertCenter.Changed += OnAlertCenterChanged;
         _updateChecker.Changed += OnUpdateCheckerChanged;
         _updateTimer.Tick += OnUpdateTimerTick;
@@ -580,6 +596,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _updateTimer.Tick -= OnUpdateTimerTick;
         _updateChecker.Changed -= OnUpdateCheckerChanged;
         _monitor.Updated -= OnMonitorUpdated;
+        if (_reachability is not null)
+        {
+            _reachability.Answered -= OnServiceAnswered;
+            _reachability.Unreachable -= OnServiceUnreachable;
+            Firewall.ProtectionStatusApplied -= OnFirewallProtectionApplied;
+        }
+
         Firewall.PropertyChanged -= OnFirewallStateChanged;
         _theme.Changed -= OnThemeChanged;
         _uiMode.Changed -= OnUiModeChanged;
@@ -608,6 +631,20 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     private void OnMonitorUpdated(object? sender, EventArgs e)
     {
+        if (_reachability is not null && IsServiceMode)
+        {
+            // In service mode the monitor reads the same daemon: a transport failure there is
+            // the same "unreachable" as any other call; an error the daemon answered is not.
+            if (_monitor.LastException is null)
+            {
+                OnServiceAnswered(this, EventArgs.Empty);
+            }
+            else if (_monitor.LastException is not ServiceUnavailableException { ServiceResponded: true })
+            {
+                MarkServiceUnreachable();
+            }
+        }
+
         RefreshStatus();
         _ = ProbeServiceAsync();
         _ = ProbeProtectionAsync();
@@ -630,6 +667,63 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         {
             RefreshStatus();
         }
+    }
+
+    /// <summary>
+    /// Off Windows: the first service call (from any page, the monitor or a probe) that cannot
+    /// reach the daemon turns the header, footer lamp, Network Control, Simple home and Mini to
+    /// unknown together, without waiting for each page's own poll (maintainer ruling: unreachable
+    /// is unknown, never protected).
+    /// </summary>
+    private void OnServiceUnreachable(object? sender, EventArgs e) => MarkServiceUnreachable();
+
+    private void MarkServiceUnreachable()
+    {
+        if (_reachability is null)
+        {
+            return;
+        }
+
+        if (_serviceUnreachable && _protection is null && !Firewall.ProtectionKnown)
+        {
+            return; // Already unknown everywhere; do not rebuild the rows on every failed tick.
+        }
+
+        _serviceUnreachable = true;
+        _protection = null;
+        Firewall.ApplyProtectionUnavailable("Protection status unknown: the local service did not answer.");
+        RefreshStatus();
+    }
+
+    /// <summary>
+    /// The first answer after the daemon was unreachable: an older "offline" probe result no
+    /// longer describes it, and the shell re-reads status at once so the header, the footer and
+    /// the pages return from the same answer instead of one probe interval apart.
+    /// </summary>
+    private void OnServiceAnswered(object? sender, EventArgs e)
+    {
+        if (!_serviceUnreachable)
+        {
+            return;
+        }
+
+        _serviceUnreachable = false;
+        if (ServiceStatus is { IsConnected: false })
+        {
+            ServiceStatus = null;
+        }
+
+        RefreshStatus();
+        _ = ProbeServiceAsync(force: true);
+        _ = ProbeProtectionAsync(force: true);
+    }
+
+    /// <summary>A protection answer read by Network Control itself feeds the header and footer too.</summary>
+    private void OnFirewallProtectionApplied(object? sender, ProtectionStatus status)
+    {
+        _serviceUnreachable = false;
+        _protection = status;
+        RefreshStatus();
     }
 
     internal async Task ProbeProtectionAsync(bool force = false)
@@ -933,6 +1027,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             return;
         }
 
+        if (_serviceUnreachable)
+        {
+            // Same signal as the footer lamp and the pages (off Windows only; see the client wrapper).
+            Overview.SetHeaderStatus("Protection status unknown: the local service did not answer.");
+            return;
+        }
+
         if (IsServiceMode && ServiceStatus is { IsConnected: false })
         {
             Overview.SetHeaderStatus("Protection status unknown: the local service is offline.");
@@ -972,6 +1073,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         {
             var status = await _serviceProbe.ProbeAsync(_cancellation.Token).ConfigureAwait(true);
             ServiceStatus = status;
+            if (_reachability is not null && IsServiceMode && !status.IsConnected)
+            {
+                MarkServiceUnreachable();
+            }
+
             RefreshStatus();
         }
         catch (OperationCanceledException)
