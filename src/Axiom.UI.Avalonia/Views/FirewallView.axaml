@@ -343,7 +343,7 @@
             </ListBox.ItemTemplate>
           </ListBox>
 
-          <controls:AxiomSelectableTextBlock Grid.Row="2" Text="No Axiom-owned rules were found on this host." Foreground="{DynamicResource Axiom.TextMuted}"
+          <controls:AxiomSelectableTextBlock Grid.Row="2" Text="{Binding EmptyRulesText}" TextWrapping="Wrap" Foreground="{DynamicResource Axiom.TextMuted}"
                      FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"
                      IsVisible="{Binding IsEmpty}" />
         </Grid>

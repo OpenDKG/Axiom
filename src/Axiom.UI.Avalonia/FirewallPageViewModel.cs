@@ -394,6 +394,15 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [ObservableProperty]
     private bool _isEmpty;
 
+    /// <summary>Shown when no rule row is listed. Off Windows an unread list is unknown, not empty.</summary>
+    [ObservableProperty]
+    private string _emptyRulesText = NoRulesFoundText;
+
+    internal const string NoRulesFoundText = "No Axiom-owned rules were found on this host.";
+
+    internal const string RulesUnreadableText =
+        "Axiom-owned rules could not be read: the local service did not answer. Whether any exist is unknown until it answers.";
+
     [ObservableProperty]
     private bool _hasError;
 
@@ -1724,6 +1733,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             CapabilityDetail = snapshot.Capability.Reason
                 ?? $"{(OperatingSystem.IsWindows() ? "Windows Firewall COM policy" : PlatformText.Firewall + " policy")} is readable. No rule is changed by this page.";
             OwnedRuleCountText = snapshot.Rules.Count.ToString(CultureInfo.InvariantCulture);
+            EmptyRulesText = NoRulesFoundText;
             _rulesReadLocal = DateTimeOffset.Now;
             QueriedRuleCount = snapshot.Rules.Count;
             IsEmpty = snapshot.Rules.Count == 0;
@@ -1804,8 +1814,13 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     /// </summary>
     private void MarkRulesLastKnown()
     {
-        if (_ownedRules.Count == 0 || Rules.Count == 0)
+        OwnedRuleCountText = "—";
+        if (_ownedRules.Count == 0)
         {
+            // Nothing read yet (or an earlier empty read): that is not "no rules exist".
+            Rules.Clear();
+            EmptyRulesText = RulesUnreadableText;
+            StatusText = RulesUnreadableText;
             return;
         }
 
@@ -1831,6 +1846,18 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     internal void ApplyQueryFailure(string capabilityStatus, string detail, string statusText)
     {
         ApplyProtectionUnavailable("Protection status unknown: the local service did not answer.");
+        if (!OperatingSystem.IsWindows())
+        {
+            // Off Windows the rows stay as last known (or the list reads as unread) from
+            // ApplyProtectionUnavailable; a failed read never claims that no rule exists.
+            CapabilityStatusText = capabilityStatus;
+            CapabilityDetail = detail;
+            QueriedRuleCount = null;
+            IsEmpty = Rules.Count == 0;
+            HasError = true;
+            return;
+        }
+
         Rules.Clear();
         QueriedRuleCount = null;
         Enforcement = FilterEnforcementSummary.None;
