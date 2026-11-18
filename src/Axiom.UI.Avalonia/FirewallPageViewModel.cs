@@ -1382,6 +1382,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             : $"The Axiom service did not come up. {PlatformText.ServiceCheckHint}";
     }
 
+    /// <summary>Raised after a protection answer from the service was applied to this page.</summary>
+    internal event EventHandler<ProtectionStatus>? ProtectionStatusApplied;
+
     private void ApplyStatus(ProtectionStatus status)
     {
         ShieldAvailable = true;
@@ -1439,6 +1442,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             : status.Enabled
                 ? $"Ask policy: a new outbound application waits above until you choose Block or Allow. Every block is a {PlatformText.Firewall} rule named Axiom::…."
                 : "The service runs elevated and can enforce. Turn protection on to start the ask policy.";
+
+        // Off Windows the shell's header and footer take this same answer (see ShellViewModel).
+        ProtectionStatusApplied?.Invoke(this, status);
     }
 
     private static FirewallProfile BuildProfiles(bool domain, bool privateProfile, bool publicProfile)
