@@ -515,3 +515,57 @@ notarized. `Axiom.UI.Avalonia.dll` in the guest bundle has the same sha256 as th
 - Guest left with shield off, 0 rules, Privacy Shield disabled, DNS automatic; VM shut down.
 - Artifact: `Axiom-1.1.0-15-osx-x64-adhoc.zip` (tested `/Applications/Axiom.app`, `ditto -c -k --keepParent`),
   89,036,424 bytes, sha256 `e932f0e69ee0a58a7167e4758a4ba34643465b81eb19cbb4c1fe251f69acce27`.
+
+## Addendum 2026-11-18 (2): daemon-stopped UI fixes, VM look (author-run, not CI)
+
+Tested SHA `3194639`, build 16 (`AXIOM_BUILD=16`), published on Linux, filter built and ad hoc signed in the
+OSX-KVM guest (macOS 15.8.3, x86_64, SIP disabled at the OpenCore picker, `csrutil status` checked over ssh).
+App and extension `Signature=adhoc`, flags `adhoc,runtime`, no Team ID, not notarized; `codesign --verify
+--deep --strict` ok. Installed `Axiom.UI.Avalonia.dll` sha256 `a46ac63a…7be25` = Linux publish output.
+Artifact: `Axiom-1.1.0-16-osx-x64-adhoc.zip` (tested `/Applications/Axiom.app`, `ditto -c -k --keepParent`),
+89,032,774 bytes, sha256 `08715fc081b4a02de41f718ed849cc5b7dae7991166703c9bec2a8303ecfacb8`.
+
+Smoke: launchd job running, `--doctor` 24 PASS / 0 WARN / 0 FAIL, `com.axiom.firewall.filter (1.1.0/16)
+[activated enabled]`, filter verified. With Axiom Shield enabled (`protection.enable`, policy ask) and a block
+rule on `/usr/bin/curl`: rule.verify enforcementVerified=true, curl 10/10 refused (rc=7) while python3 got 200
+from the same host 5/5; after rule.remove curl 5/5 got 200. (Without the shield enabled, rule.apply answers
+`not_supported`, "Firewall writes are disabled on this service.", as designed.)
+
+GUI (1280x800), one applied verified rule. What the screen showed:
+- Daemon up, Network Control: header "Protection active: Axiom rules apply; firewall writes enabled. No
+  telemetry."; "Axiom Shield ON", "Disable protection"; filter SHIELD ON, "Filter: connected · generation …
+  verified"; count 1, row curl "Applied"; footer "Protection: ON · 1 rule(s) · 1 awaiting decision", "blocks
+  verified", lamp SHIELD ON. New outbound applications: only Python (axiomd, Axiom.app and the filter
+  extension not listed). Simple home: SHIELD ACTIVE, FIREWALL SHIELD ON, AI AGENT GUARD NOT VERIFIED.
+- Daemon stopped (launchctl bootout), Network Control 12 s later: header "Protection status unknown: the
+  local service did not answer. Monitor unavailable: Service unavailable: The service did not respond in
+  time. (service_unavailable)"; badge UNKNOWN, "Protection status unknown: the local service did not
+  answer."; button "Check protection"; filter READ-ONLY, "Unknown / unknown"; "1 owned rule(s) shown as last
+  known …", count "—", row curl "Unknown (last…"; footer "Protection: unknown · the local service did not
+  answer", lamp UNKNOWN, "IPC: service offline". Matches.
+- "Check protection" pressed while stopped: no dialog, screen unchanged. Matches.
+- Back (launchctl bootstrap) 2 s: every surface unknown (header "Protection status unknown … The monitoring
+  worker has not produced a snapshot yet.", page UNKNOWN, footer unknown, lamp UNKNOWN). 10 s: all verified
+  together (header "Protection active …", page ON, footer "blocks verified", lamp SHIELD ON). Matches.
+- Simple home stopped 12 s: "STATUS UNKNOWN · Protection status is unknown", tile FIREWALL SHIELD UNKNOWN,
+  footer "Protection: unknown · the local service did not answer", lamp UNKNOWN.
+
+Does not match (recorded, not patched):
+- Desktop app crash: about 1 s after a `launchctl bootstrap` the app aborted with an unhandled
+  `System.Net.Sockets.SocketException (13): Permission denied /var/run/axiom/axiom.sock` thrown from
+  `AgentsPageViewModel.RefreshThreatShareAsync()` via an async event handler (`desktop.log` [fatal] entry;
+  crash report EXC_CRASH SIGABRT). Seen once in two restarts with the app open.
+- Simple home stopped 12 s: header says unknown but the button still reads "Turn Shield Off" (Linux shows
+  "Check Firewall" in that state). 3 s after the stop Simple home still showed "SHIELD ACTIVE · Firewall
+  Shield is protecting your apps", tile ON, footer "Monitoring: unavailable … Protection: ON · 1 rule(s)",
+  lamp SHIELD ON.
+- First return run, 2 s: header "Protection status unknown: the local service is offline." while the footer
+  read "Protection: ON · 1 rule(s) · 1 awaiting decision · blocks not verified", amber SHIELD ON lamp,
+  "IPC: service offline" (header and footer disagree; neither claims verified). 10 s: header "Protection
+  active: Axiom rules not verified as enforced: the network filter has not connected …" and footer "blocks
+  not verified" (agree); verified at about 13 s.
+- Opening Network Control after the stop (no earlier read in that page) shows an empty table, count "—".
+- In the stopped state the last-known row's Unblock button looks enabled (greyed on Linux); not pressed.
+- Switching to Simple mode left the content area blank until Home was clicked in the side bar.
+
+Guest left with shield off, 0 rules, Privacy Shield disabled, DNS automatic; VM shut down.
