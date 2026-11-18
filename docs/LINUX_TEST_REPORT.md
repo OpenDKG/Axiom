@@ -905,3 +905,41 @@ Not as expected (recorded, not patched):
   "Protection: ON · 1 rule(s) · blocks not verified". Nothing claimed verified; from +2 s the header read
   "Protection active: Axiom rules not verified as enforced …" in agreement.
 - Mini mode was not looked at on Linux.
+
+## Addendum 2026-11-18 (4): Linux Core Preview 1 package `1.3.0+linux.preview1` (author-run, not CI)
+
+Tested commit: `625efb32aa2ab6b9cbeb376fb76c29de564f781c` (branch `buba/linux-recon80`, upstream v1.3.0 merged).
+Package: `axiom-firewall_1.3.0+linux.preview1_amd64.deb`, 62836660 bytes,
+sha256 `ed31c7a59e4237688a87732e15b89ce895f6483e151b8dffa3dd0986cd295f90`
+(`scripts/linux/package.sh deb --local linux.preview1`; tree clean afterwards, publish lock-file churn reverted).
+VM: disposable overlay of the minimal Ubuntu cloud image, Ubuntu 24.04.5 LTS, kernel 6.8.0-147-generic,
+bpftool v7.4.0, systemd-resolved, 3 GB RAM. The release-notes commands were run as written, as the install user.
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| R1 | `echo "<sha>  <deb>" \| sha256sum -c` | PASS | `…deb: OK`, rc 0 |
+| R2 | `sudo apt install ./<deb>` as documented | FAIL, then PASS | First run rc 100: the image's package lists were stale (404 on security.ubuntu.com). After `sudo apt update`: rc 0. Recommends (`gnome-shell-extension-appindicator \| plasma-workspace`) pulled 680 new packages incl. gnome-shell, gdm3, network-manager (NM left links unmanaged); `--no-install-recommends` would install 26 |
+| R3 | `systemctl status axiomd`, `sudo /usr/libexec/axiom/axiomd --doctor`, `sudo nft list table inet axiom` | PASS | active (enabled); doctor rc 0, 13 PASS / 0 WARN / 0 FAIL / 0 SKIP; table present (generation 1); 4 Axiom BPF programs attached |
+| R4 | Canary block (copied curl vs python3, netns target) | PASS | before rule 0/10 refused; blocked 30/30 refused, control 30/30 connected; `connectTimeBlockingProven: true` |
+| R5 | `systemctl restart axiomd` under 3 probe loops | PASS | 620 probes after the action, 0 slipped (113 before, 0 slipped); control 49 ok / 0 failed; new pid at 295 ms, attached programs 4 → 8 → 4 (make-before-break); 20/20 refused afterwards |
+| R6 | Release-notes block commands with `/usr/bin/curl` blocked | PASS | `curl exit 7` 5/5, `python3 connected` 5/5; after removal `curl exit 0` 5/5 |
+| R7 | Unblock | PASS | 0/10 refused, control 10/10; doctor 13/0/0 |
+| R8 | Second local user (`axtest`, uid 1001) | PASS | `protection.status`, `snapshot`, `history.query`, `diagnostics.export` → `unauthorized` (private read); `rule.apply`, `privacy.configure`, `protection.disable` → `unauthorized` (write); only `serviceHealth` answered; journal `Denied '<cmd>' for uid:1001 …` per command; user deleted |
+| R9 | Privacy Shield on/off | PASS | on: `state Active`, DoH `1.1.1.1`/`9.9.9.9`, `resolvectl dns` global + enp0s2 → 127.0.0.1, `doubleclick.net` not found, `example.com` resolves, status `blocked 6`; doctor `PASS privacy shield dns: redirected … backup present`. off: snapshot of resolv.conf + `resolvectl dns/domain/status` byte-identical to before (hash `c546dd8ef330`) |
+| R10 | `--recover-network` (first Linux run), shield on | PASS | while running: dry run rc 1 (plan), `--apply` rc 6 "The Axiom service is running … Nothing was changed."; `systemctl stop` restored DNS exactly; dry run rc 1 "Dry run: no change was made."; `--apply` rc 0 "Result: Succeeded; verified: yes … Recovery completed and was verified."; names + `curl https://example.com` 200; after start the shield came back Active, off restored DNS exactly; doctor 13/0/0 |
+| R11 | `apt-get remove` with Privacy Shield on | PASS | rc 0; DNS identical to pre-shield; names resolve, HTTPS 200; unit, nft table, BPF programs/pins, `axiom.slice`, `/usr/libexec/axiom`, `/usr/lib/axiom-firewall`, launcher, polkit, desktop file, doc dir gone; kept `/var/lib/axiom` (8 files, 0600 root) and empty `/var/log/axiom`; dpkg state `rc` |
+| R12 | `apt-get purge` | PASS | rc 0; nothing left (incl. `/var/lib/axiom`, `/var/log/axiom`); DNS identical to pre-shield |
+| R13 | Upgrade from `1.1.0+linux.rc4` with a block rule under the probe loop | PASS | fresh overlay; rc4 rule refused 20/20; `apt-get install --reinstall` of the new deb under 3 probe loops: 3455 probes after the action, 0 slipped (123 before, 0); control 230 ok / 0 failed; old pid stopped at +18.8 s, new pid at +20.6 s, attached programs 4 → 8 → 4; IPC `pending` at +21.0 s, `verified` again at +21.7 s; doctor WARN only while stopped ("/sys/fs/bpf/axiom remains"); after: same rule id present (first `rules.query` read showed state `pending`), refused 20/20, data file names kept (+`threat-share.json`), doctor 13/0/0; purge afterwards left nothing |
+| G1 | App start (Xvfb, user session, no tray host) | PASS | "Set up Axiom" dialog, "Skip for now"; toast "Axiom protection needs attention — Enforcement is NOT protecting this host. Blackbox guard or required protection state is unavailable; actions are unprotected. Open Agent Protection to review." |
+| G2 | Network Control stop/start series | PASS with delay | stop: +1 s still ON/verified with the rule Applied, +3 s header/page/row/footer all UNKNOWN ("Unknown (la…", "The local service did not answer, so the filter state is unknown."); start: +1…+5 s "not verified … has not acknowledged rules generation 9" + red "Network filter problem" banner, footer "blocks not verified"; +10 s verified |
+| G3 | Agents page, LOCAL MODULES | as expected | Blackbox and OriginTrail DKG "NOT RUNNING", buttons "Install" (no "Repair" shown). "Start local modules" → "Neither local module answered. Install or Repair each card, then try Start local modules again."; "Install" (Blackbox) → "Guided module installation is not available on Linux yet. Install the module manually, then click Check again." Nothing claims protection ("No agents connected", OFFLINE) |
+| G4 | Simple home tile | PASS | "AI AGENT GUARD — NOT VERIFIED — Unsupported on Linux for now: Blackbox host hooks are not verified here, so AI agents are not protected" |
+| G5 | In-app rule apply/remove | PASS | "New owned rule" → path → "Apply rule" → dialog "Create or update the Axiom-owned block rule for: … Only this rule is changed. Other nftables firewall rules are not touched. Continue only on an isolated test VM." (Cancel / Apply rule) → "Rule applied and verified at 08:21:56."; curl copy refused 5/5. Row "Unblock" → dialog "Remove the Axiom outbound block rule for: … This restores network access and records an allow decision. …" (Cancel / Unblock) → rule gone, 5/5 connect |
+| G6 | Unblock on a rule created over IPC (test harness id) | FAIL (recorded) | twice: dialog confirmed, "Remembered Shield decisions: curl Allowed" appears, rule stays Applied, 5/5 still refused. The row action sends `protection.decide Allow` by app path (deterministic `RuleIdentity.ForApp` id), so a rule with another id for that path is not removed |
+| G7 | 6 daemon stop/start cycles, 15 s apart, app open | PASS | app pid alive after every cycle; `NRestarts=0`; app stdout and `desktop.log`: 0 fatal/unhandled/exception lines |
+| G8 | Simple mode | known issue | blank page after switching (footer follows: UNKNOWN by +3 s, SHIELD ON after start) |
+
+Not tested here: Ubuntu Desktop image (only the minimal cloud image), Wayland, reboot, NetworkManager and
+resolv.conf DNS backends, the app's own Privacy Shield toggle and "Block" on a live connection, Mini mode,
+arm64, other distributions. Windows CI for this commit was not checked in this run.
+Scripts: `v13-rel/rel-vm.sh`, `rel-guest.sh`, `gui.sh` (scratch, not committed).
