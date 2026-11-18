@@ -1,6 +1,6 @@
 # Axiom for Linux — port plan
 
-Status: proposal, 2026-11-12. Baseline: branch `buba/macos` @ 54ecacc (worktree `/home/buba/projects/Axiom-mac-filter`).
+Status: proposal, 2026-11-12. Baseline: branch `buba/macos` @ 54ecacc (worktree `~/projects/Axiom-mac-filter`).
 Target: x64/arm64, systemd distros with cgroup v2 and nftables (Ubuntu 24.04+, Fedora 42, Arch), GNOME/KDE on X11 and Wayland.
 Evidence box: Ubuntu 24.04.5, kernel 7.0.0-42-generic, nft 1.0.9, systemd 255, cgroup2fs, `unprivileged_bpf_disabled=2`,
 GNOME on X11, systemd-resolved stub + NetworkManager (netplan). Spike: `spike/enforcement-spike.sh` → `spike/spike-output.txt`.

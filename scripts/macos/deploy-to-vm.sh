@@ -2,7 +2,7 @@
 # Sync the Linux-published bundle to the VM, embed filter + sign there, install into /Applications.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-S=/home/buba/vms/macos-dev/ssh-mac
+S="${AXIOM_MAC_SSH:-$HOME/vms/macos-dev/ssh-mac}"
 $S 'rm -rf ~/axiom/build/macos ~/axiom/scripts ~/axiom/src && mkdir -p ~/axiom'
 tar cf - --exclude=macos/build build/macos/osx-x64/publish scripts/macos macos src/Axiom.UI.Avalonia/Assets Directory.Build.props \
   | $S 'tar xf - -C ~/axiom'

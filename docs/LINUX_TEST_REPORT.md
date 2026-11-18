@@ -599,7 +599,7 @@ The Linux daemon registers no enforcement controller, so an authorized caller ge
 installed `Axiom.Service.Hosting.dll` sha256 `c6bbe6dd…` = build. Socket `/run/axiom/axiom.sock` `root:root 666`
 (authorization is per connection by peer uid, not by socket mode). Client: `scripts/linux/axipc.py`
 (`python3 -I`), one request per connection; evaluate payload
-`{"requestId":"req-live-1","agentId":"opencode","kind":"readFile","target":"/home/buba/.ssh/canary-not-a-real-file"}`.
+`{"requestId":"req-live-1","agentId":"opencode","kind":"readFile","target":"/home/<user>/.ssh/canary-not-a-real-file"}`.
 Second user: `sudo -n useradd -m axr3test` (uid 1001, only its own group, no password, `not allowed to run sudo`),
 client run with `sudo -n -u axr3test`, then `sudo -n userdel -r axr3test` (`getent passwd axr3test` exit 2, home gone).
 
