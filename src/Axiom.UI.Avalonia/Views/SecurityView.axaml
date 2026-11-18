@@ -190,7 +190,7 @@
       </Border>
 
       <views:TraderShieldSectionView DataContext="{Binding TraderShield}"
-                                     IsVisible="{Binding IsAvailable}" />
+                                     IsEnabled="{Binding IsAvailable}" />
     </StackPanel>
   </ScrollViewer>
 </UserControl>

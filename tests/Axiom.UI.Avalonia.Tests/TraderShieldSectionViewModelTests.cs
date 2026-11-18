@@ -131,6 +131,32 @@ public sealed class TraderShieldSectionViewModelTests
     }
 
     [Fact]
+    public void Trader_shield_stays_visible_but_disabled_when_the_platform_cannot_run_it()
+    {
+        TestAppBuilder.RunOnUiThread(() =>
+        {
+            var securityView = new SecurityView { DataContext = new StubIntegrationsPage() };
+            var securityWindow = new Window { Width = 1024, Height = 768, Content = securityView };
+            securityWindow.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            try
+            {
+                var section = Assert.Single(securityView.GetVisualDescendants().OfType<TraderShieldSectionView>());
+                Assert.True(section.IsVisible);
+                Assert.False(section.IsEnabled);
+                Assert.Contains(
+                    section.GetVisualDescendants().OfType<TextBlock>(),
+                    text => text.Text == TraderShieldSectionViewModel.UnsupportedPlatformText);
+            }
+            finally
+            {
+                securityWindow.Close();
+            }
+        });
+    }
+
+    [Fact]
     public void Trader_shield_appears_only_on_integrations_and_not_on_agent_protection()
     {
         TestAppBuilder.RunOnUiThread(() =>
@@ -156,5 +182,11 @@ public sealed class TraderShieldSectionViewModelTests
                 agentsWindow.Close();
             }
         });
+    }
+
+    /// <summary>Only the Integrations binding the view needs; the rest of the page is not built.</summary>
+    private sealed class StubIntegrationsPage
+    {
+        public TraderShieldSectionViewModel TraderShield { get; } = new();
     }
 }
