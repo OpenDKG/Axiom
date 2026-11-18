@@ -99,7 +99,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             IsServiceMode ? serviceClient : null,
             timers,
             interaction,
-            processes);
+            processes,
+            startActive: false);
         Overview = new OverviewPageViewModel(
             _monitor,
             _traffic,
@@ -514,7 +515,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         }
         else
         {
-            Agents.SetTrayMonitoring(ReferenceEquals(_activePage, Agents) || _activePage is AgentStatsPageViewModel);
+            Agents.SetTrayMonitoring(
+                ReferenceEquals(_activePage, Agents) || _activePage is AgentStatsPageViewModel or SimpleHomePageViewModel);
             (_activePage as IActivatablePage)?.Deactivate();
             _traffic.Stop();
         }

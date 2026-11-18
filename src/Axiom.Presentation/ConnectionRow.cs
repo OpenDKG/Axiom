@@ -25,8 +25,25 @@ public sealed class ConnectionRow : ObservableObject
 
     public void Update(LiveConnection source)
     {
+        var previous = _source;
+        if (source == previous)
+        {
+            return;
+        }
+
         _source = source;
-        RebuildSearchBlob();
+        if (source.AppDisplayName != previous.AppDisplayName ||
+            source.AppPath != previous.AppPath ||
+            source.ProcessId != previous.ProcessId ||
+            source.LocalEndpoint != previous.LocalEndpoint ||
+            source.RemoteEndpoint != previous.RemoteEndpoint ||
+            source.State != previous.State ||
+            source.Direction != previous.Direction ||
+            source.Protocol != previous.Protocol)
+        {
+            RebuildSearchBlob();
+        }
+
         OnPropertyChanged(string.Empty);
     }
 
