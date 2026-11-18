@@ -1,4 +1,8 @@
-## What's in 1.3.1
+## What's in 1.4.0
+
+- Add permission for manual threat reporting to the existing Complete Protection setup checkbox. Every publication requires confirmation of the exact indicator and the Blackbox Reporter Terms.
+- Keep AI suggestions, DNS matches and private indicators local. Require stronger evidence for publication and keep manual reports out of the Blackbox automatic retry and renewal queues.
+- Recover the connection monitor after transient sampling failures. Refresh expensive views only while their page is active and retain agent block notifications in the tray.
 
 - Pause chart sampling and page refreshes when the window is hidden or minimized. Keep connection monitoring and protection alerts active.
 - Use one integration polling loop and check less often in the tray. Limit WMI console discovery to the Windows login window.
