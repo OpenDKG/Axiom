@@ -1064,7 +1064,17 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         // periodic rules re-read, Recheck stays enabled). The live re-query is for OS filters.
         if (!OperatingSystem.IsWindows())
         {
-            RefreshEnforcementIfStale(DateTimeOffset.UtcNow);
+            // While the shield is on but the filter has not proven enforcement, re-read on every
+            // probe: Home and Mini then turn verified with the same answer as Network Control
+            // instead of one or two intervals later.
+            if (status.Enabled && !Enforcement.IsEnforcementVerified)
+            {
+                _ = RefreshAsync();
+            }
+            else
+            {
+                RefreshEnforcementIfStale(DateTimeOffset.UtcNow);
+            }
         }
     }
 
