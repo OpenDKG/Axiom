@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.ComponentModel;
+using System.Diagnostics;
+
 namespace Axiom.Contracts.Modules;
 
 /// <summary>
@@ -15,7 +18,12 @@ public enum ModuleTool
 }
 
 /// <summary>One tool and where it was found, if anywhere.</summary>
-public sealed record ModuleToolStatus(ModuleTool Tool, string DisplayName, string? Directory, string? Executable)
+public sealed record ModuleToolStatus(
+    ModuleTool Tool,
+    string DisplayName,
+    string? Directory,
+    string? Executable,
+    string? Version = null)
 {
     public bool IsAvailable => Directory is not null;
 }
@@ -30,12 +38,18 @@ public sealed record ModuleToolStatus(ModuleTool Tool, string DisplayName, strin
 /// </remarks>
 public sealed class ModulePrerequisiteReport
 {
-    public ModulePrerequisiteReport(IReadOnlyList<ModuleToolStatus> tools)
+    public ModulePrerequisiteReport(
+        IReadOnlyList<ModuleToolStatus> tools,
+        IReadOnlyList<string>? rejectedPythonVersions = null)
     {
         Tools = tools;
+        RejectedPythonVersions = rejectedPythonVersions ?? [];
     }
 
     public IReadOnlyList<ModuleToolStatus> Tools { get; }
+
+    /// <summary>Python versions that were found but are outside Blackbox's 3.11-3.13 window.</summary>
+    public IReadOnlyList<string> RejectedPythonVersions { get; }
 
     public IReadOnlyList<ModuleToolStatus> Missing =>
         Tools.Where(tool => !tool.IsAvailable).ToArray();
@@ -46,6 +60,9 @@ public sealed class ModulePrerequisiteReport
     public IReadOnlyList<string> SearchDirectories =>
         Tools
             .Where(tool => tool.Directory is not null)
+            // Python first: the vendor installer resolves `python` from PATH and must see the
+            // compatible interpreter even when an incompatible one comes earlier in the user PATH.
+            .OrderBy(tool => tool.Tool == ModuleTool.Python ? 0 : 1)
             .Select(tool => tool.Directory!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -79,11 +96,20 @@ public static class ModulePrerequisites
 {
     private const string VcRedistPackageId = "Microsoft.VCRedist.2015+.x64";
 
+    /// <summary>Blackbox supports Python 3.11 to 3.13; 3.12 is the version Axiom installs.</summary>
+    public const int MinPythonMinor = 11;
+
+    public const int MaxPythonMinor = 13;
+
+    public const int PreferredPythonMinor = 12;
+
+    public const string PythonDisplayName = "Python 3.11-3.13";
+
     private static readonly (ModuleTool Tool, string DisplayName, string[] FileNames)[] Definitions =
     [
         (ModuleTool.Node, "Node.js", ["node.exe"]),
         (ModuleTool.Npm, "npm", ["npm.cmd"]),
-        (ModuleTool.Python, "Python 3", ["python.exe"]),
+        (ModuleTool.Python, PythonDisplayName, ["python.exe"]),
         (ModuleTool.Git, "Git", ["git.exe"]),
     ];
 
@@ -97,16 +123,23 @@ public static class ModulePrerequisites
 
     /// <summary>Probes the current process environment.</summary>
     public static ModulePrerequisiteReport Probe() =>
-        Probe(Environment.GetEnvironmentVariable("PATH"), File.Exists);
+        Probe(Environment.GetEnvironmentVariable("PATH"), File.Exists, ReadPythonVersion);
 
     /// <summary>
     /// Probes the given PATH plus the well-known per-user and per-machine install folders.
     /// <paramref name="fileExists"/> is injectable so the discovery rules stay unit-testable.
+    /// <paramref name="readPythonVersion"/> returns "3.12" for a candidate interpreter, or null when
+    /// it cannot be run. Python outside 3.11-3.13 is reported as missing so Setup installs 3.12.
     /// </summary>
-    public static ModulePrerequisiteReport Probe(string? pathValue, Func<string, bool> fileExists)
+    public static ModulePrerequisiteReport Probe(
+        string? pathValue,
+        Func<string, bool> fileExists,
+        Func<string, string?>? readPythonVersion = null)
     {
         ArgumentNullException.ThrowIfNull(fileExists);
         var searchDirectories = BuildSearchDirectories(pathValue);
+        var readVersion = readPythonVersion ?? (_ => null);
+        var rejected = new List<string>();
 
         var statuses = Definitions.Select(definition =>
         {
@@ -115,17 +148,94 @@ public static class ModulePrerequisites
                 foreach (var fileName in definition.FileNames)
                 {
                     var candidate = Path.Combine(directory, fileName);
-                    if (fileExists(candidate))
+                    if (!fileExists(candidate))
+                    {
+                        continue;
+                    }
+
+                    if (definition.Tool != ModuleTool.Python)
                     {
                         return new ModuleToolStatus(definition.Tool, definition.DisplayName, directory, candidate);
                     }
+
+                    var version = readVersion(candidate);
+                    if (IsSupportedPython(version))
+                    {
+                        return new ModuleToolStatus(
+                            definition.Tool,
+                            definition.DisplayName,
+                            directory,
+                            candidate,
+                            version);
+                    }
+
+                    // A 3.10 or 3.15 interpreter is not a usable prerequisite: Blackbox's own
+                    // installer refuses it, so keep searching for a compatible one.
+                    rejected.Add(version ?? candidate);
                 }
             }
 
             return new ModuleToolStatus(definition.Tool, definition.DisplayName, null, null);
         }).ToArray();
 
-        return new ModulePrerequisiteReport(statuses);
+        return new ModulePrerequisiteReport(statuses, rejected);
+    }
+
+    public static bool IsSupportedPython(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return false;
+        }
+
+        var parts = version.Split('.');
+        return parts.Length >= 2 &&
+               int.TryParse(parts[0], out var major) &&
+               int.TryParse(parts[1], out var minor) &&
+               major == 3 &&
+               minor is >= MinPythonMinor and <= MaxPythonMinor;
+    }
+
+    /// <summary>Runs one candidate interpreter and returns "3.12" (or null when it does not run).</summary>
+    public static string? ReadPythonVersion(string executable)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo(executable, "-c \"import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            };
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                return null;
+            }
+
+            var output = process.StandardOutput.ReadToEnd().Trim();
+            if (!process.WaitForExit(4000))
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+                {
+                }
+
+                return null;
+            }
+
+            return process.ExitCode == 0 && output.Length > 0 ? output : null;
+        }
+        catch (Exception exception) when (exception is
+                     Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -159,6 +269,7 @@ public static class ModulePrerequisites
                      Path.Combine(localAppData, "Programs", "Python", "Python312"),
                      Path.Combine(localAppData, "Programs", "Python", "Python311"),
                      Path.Combine(localAppData, "Programs", "Python", "Python310"),
+                     Path.Combine(programFiles, "Python313"),
                      Path.Combine(programFiles, "Python312"),
                      Path.Combine(programFiles, "Python311"),
                  })
@@ -209,7 +320,7 @@ public static class ModulePrerequisites
                 $ErrorActionPreference = 'Stop'
                 $winget = Get-Command winget -ErrorAction SilentlyContinue
                 if (-not $winget) {
-                  Write-Host 'winget is not available. Install Node.js, Python 3 and Git manually, then click Check again.' -ForegroundColor Red
+                  Write-Host 'winget is not available. Install Node.js, Python 3.11-3.13 and Git manually, then click Check again.' -ForegroundColor Red
                   Write-Host 'https://nodejs.org/en/download  https://www.python.org/downloads/windows/  https://git-scm.com/download/win'
                   Read-Host 'Press Enter to close'
                   exit 2

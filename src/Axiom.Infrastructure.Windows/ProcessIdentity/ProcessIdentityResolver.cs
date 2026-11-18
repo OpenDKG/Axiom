@@ -47,6 +47,7 @@ public sealed record ProcessIdentityInfo(
 public sealed class ProcessIdentityResolver
 {
     private const uint ProcessQueryLimitedInformation = 0x1000;
+    private const int MaxCacheEntries = 512;
 
     private readonly Dictionary<int, CachedIdentity> _cache = [];
     private readonly Lock _gate = new();
@@ -70,10 +71,47 @@ public sealed class ProcessIdentityResolver
 
         lock (_gate)
         {
+            if (_cache.Count >= MaxCacheEntries)
+            {
+                PruneCacheLocked(now);
+            }
+
             _cache[processId] = new CachedIdentity(identity, now);
         }
 
         return identity;
+    }
+
+    private void PruneCacheLocked(DateTimeOffset now)
+    {
+        List<int>? expired = null;
+        foreach (var pair in _cache)
+        {
+            if (now - pair.Value.ResolvedUtc >= _cacheLifetime)
+            {
+                (expired ??= []).Add(pair.Key);
+            }
+        }
+
+        if (expired is not null)
+        {
+            foreach (var key in expired)
+            {
+                _cache.Remove(key);
+            }
+        }
+
+        if (_cache.Count < MaxCacheEntries)
+        {
+            return;
+        }
+
+        // Fall back to evicting oldest quarter when PID churn exceeds MaxCacheEntries within TTL.
+        var toRemove = _cache.Count - (MaxCacheEntries * 3 / 4);
+        foreach (var key in _cache.OrderBy(static pair => pair.Value.ResolvedUtc).Take(toRemove).Select(static pair => pair.Key).ToList())
+        {
+            _cache.Remove(key);
+        }
     }
 
     public void Clear()

@@ -34,17 +34,30 @@ public sealed class OptionalModuleProbe : IDisposable
 {
     public const string DefaultDkgUrl = "http://127.0.0.1:9200";
 
+    /// <summary>Blackbox's bundled DKG node. A Complete install usually runs this node.</summary>
+    public const string DefaultBlackboxDkgUrl = "http://127.0.0.1:9320";
+
     public const string DefaultBlackboxUrl = "http://127.0.0.1:9700";
 
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// A synced DKG node can take several seconds to answer while it reopens its store. A 2 s
+    /// timeout reported a healthy node as offline and left the DKG dot grey after a restart.
+    /// </summary>
+    private static readonly TimeSpan DkgTimeout = TimeSpan.FromSeconds(12);
+
     private readonly HttpClient _http;
+
+    private readonly HttpClient _dkgHttp;
 
     private readonly string _dkgUrl;
 
     private readonly string _blackboxUrl;
 
     private readonly bool _ownsHttpClient;
+
+    private readonly bool _ownsDkgHttpClient;
 
     private readonly ILoopbackListenerInspector? _listenerInspector;
 
@@ -70,6 +83,8 @@ public sealed class OptionalModuleProbe : IDisposable
     {
         _http = httpClient ?? CreateLoopbackHttpClient(DefaultTimeout);
         _ownsHttpClient = httpClient is null;
+        _dkgHttp = httpClient ?? CreateLoopbackHttpClient(DkgTimeout);
+        _ownsDkgHttpClient = httpClient is null;
         _listenerInspector = listenerInspector;
         _dkgUrl = dkgUrl
                   ?? Environment.GetEnvironmentVariable("AXIOM_DKG_URL")
@@ -95,15 +110,32 @@ public sealed class OptionalModuleProbe : IDisposable
             return primary;
         }
 
+        // A Complete install runs Blackbox's bundled node on 9320, while the standalone Axiom node
+        // (and the historical default) uses 9200. Probe the bundled port directly too, so a healthy
+        // node is not reported as "not running" when the dashboard is temporarily down.
+        if (Uri.TryCreate(DefaultBlackboxDkgUrl, UriKind.Absolute, out var bundledUri) &&
+            !string.Equals(bundledUri.ToString(), baseUri.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            var bundled = await ProbeDkgAtAsync(bundledUri, fromBlackbox: true, cancellationToken)
+                .ConfigureAwait(false);
+            if (bundled.IsConnected)
+            {
+                return bundled;
+            }
+        }
+
         // Blackbox runs its own DKG node. When Axiom has no standalone node, point the DKG card
         // at the node Blackbox reports instead of showing a false "not installed".
         if (await TryResolveBlackboxDkgAsync(cancellationToken).ConfigureAwait(false) is { } fallback)
         {
-            var result = await ProbeDkgAtAsync(fallback, fromBlackbox: true, cancellationToken)
-                .ConfigureAwait(false);
-            if (result.IsConnected)
+            if (!string.Equals(fallback.ToString(), baseUri.ToString(), StringComparison.OrdinalIgnoreCase))
             {
-                return result;
+                var result = await ProbeDkgAtAsync(fallback, fromBlackbox: true, cancellationToken)
+                    .ConfigureAwait(false);
+                if (result.IsConnected)
+                {
+                    return result;
+                }
             }
         }
 
@@ -117,7 +149,7 @@ public sealed class OptionalModuleProbe : IDisposable
     {
         try
         {
-            using var response = await _http
+            using var response = await _dkgHttp
                 .GetAsync(new Uri(baseUri, "/api/status"), cancellationToken)
                 .ConfigureAwait(false);
 
@@ -266,6 +298,11 @@ public sealed class OptionalModuleProbe : IDisposable
         if (_ownsHttpClient)
         {
             _http.Dispose();
+        }
+
+        if (_ownsDkgHttpClient)
+        {
+            _dkgHttp.Dispose();
         }
     }
 

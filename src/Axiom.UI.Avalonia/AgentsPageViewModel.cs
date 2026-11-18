@@ -1470,7 +1470,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _threatShareSubmitting = true;
         CanSubmitThreatShare = false;
         ThreatShareActionText = "Submitting through the Blackbox reporter...";
-        var ruleset = ThreatShareCli.ReadRuleset();
+        var knownIdentifiers = ThreatShareCli.FindKnownIdentifiersInRuleset(publishable.Select(item => item.Candidate));
         var consent = ThreatShareCli.ConsentPresent();
         var key = ThreatShareCli.ReporterKeyPresent();
         var blocked = new List<string>();
@@ -1484,8 +1484,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ThreatShareQueueStatus? latest = null;
             foreach (var item in publishable)
             {
-                var preflight = ThreatSharePreflight.Evaluate(
-                    item.Candidate, ThreatSharingEnabled, consent, key, ruleset);
+                var alreadyKnown = !string.IsNullOrEmpty(item.Candidate.IndicatorType) &&
+                    !string.IsNullOrEmpty(item.Candidate.Value) &&
+                    knownIdentifiers.Contains(ThreatSharePreflight.KnownIdentifier(item.Candidate.IndicatorType, item.Candidate.Value));
+                var preflight = ThreatSharePreflight.EvaluateKnownStatus(
+                    item.Candidate, ThreatSharingEnabled, consent, key, alreadyKnown);
                 if (!preflight.Ready)
                 {
                     blocked.Add($"{item.Candidate.Value} ({preflight.FailureText})");

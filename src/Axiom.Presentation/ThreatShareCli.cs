@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.Buffers;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -604,6 +605,94 @@ public sealed class ThreatShareCli
         {
             return string.Empty;
         }
+    }
+
+    /// <summary>
+    /// Streams <c>ruleset.json</c> in fixed pooled chunks to find which candidate identifiers already exist,
+    /// avoiding loading hundreds of megabytes into a single string on the Large Object Heap.
+    /// </summary>
+    public static HashSet<string> FindKnownIdentifiersInRuleset(IEnumerable<ThreatShareCandidate> candidates)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+
+        var remaining = new List<string>();
+        var seenInputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrEmpty(candidate.IndicatorType) || string.IsNullOrEmpty(candidate.Value))
+            {
+                continue;
+            }
+
+            var id = ThreatSharePreflight.KnownIdentifier(candidate.IndicatorType, candidate.Value);
+            if (seenInputs.Add(id))
+            {
+                remaining.Add(id);
+            }
+        }
+
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (remaining.Count == 0)
+        {
+            return found;
+        }
+
+        try
+        {
+            var path = Path.Combine(BlackboxPaths.ResolveBlackboxHome(), "ruleset.json");
+            if (!File.Exists(path))
+            {
+                return found;
+            }
+
+            const int chunkSize = 65_536;
+            var maxLen = remaining.Max(static id => id.Length);
+            var overlapCapacity = Math.Max(maxLen - 1, 0);
+            var buffer = ArrayPool<char>.Shared.Rent(chunkSize + overlapCapacity);
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, chunkSize);
+                using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
+
+                var carry = 0;
+                while (remaining.Count > 0)
+                {
+                    var read = reader.Read(buffer, carry, chunkSize);
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    var total = carry + read;
+                    var span = buffer.AsSpan(0, total);
+                    for (var i = remaining.Count - 1; i >= 0; i--)
+                    {
+                        var id = remaining[i];
+                        if (span.Contains(id, StringComparison.OrdinalIgnoreCase))
+                        {
+                            found.Add(id);
+                            remaining.RemoveAt(i);
+                        }
+                    }
+
+                    carry = overlapCapacity > 0 ? Math.Min(total, overlapCapacity) : 0;
+                    if (carry > 0)
+                    {
+                        buffer.AsSpan(total - carry, carry).CopyTo(buffer);
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<char>.Shared.Return(buffer);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return found;
+        }
+
+        return found;
     }
 
     private static string? DefaultHermesPath()

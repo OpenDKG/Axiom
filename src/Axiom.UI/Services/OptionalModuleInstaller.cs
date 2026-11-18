@@ -268,6 +268,11 @@ public sealed class OptionalModuleInstaller
             }
             $env:BLACKBOX_MODE = 'block'
             $env:BLACKBOX_ATTACH_ALL = '1'
+            $agentRepo = Join-Path $dir 'agent-blackbox'
+            if ((Test-Path (Join-Path $agentRepo '.git')) -and (Get-Command git -ErrorAction SilentlyContinue)) {
+              # Discard CRLF/tracked-file drift so upstream vendor pull/checkout does not fail.
+              & git -C $agentRepo checkout -- . *> $null
+            }
             & $installer -StoreBackend $storeBackend
             $vendorExit = $LASTEXITCODE
             if ($vendorExit -ne 0) {

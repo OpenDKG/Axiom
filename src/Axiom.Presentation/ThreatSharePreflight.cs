@@ -74,6 +74,23 @@ public static class ThreatSharePreflight
         string? rulesetJson)
     {
         ArgumentNullException.ThrowIfNull(candidate);
+        return EvaluateKnownStatus(
+            candidate,
+            sharingEnabled,
+            consentPresent,
+            reporterKeyPresent,
+            IsAlreadyKnown(candidate.IndicatorType, candidate.Value, rulesetJson));
+    }
+
+    /// <summary>Evaluates preflight readiness using a precomputed novelty result without loading the full ruleset string.</summary>
+    public static ThreatSharePreflightResult EvaluateKnownStatus(
+        ThreatShareCandidate candidate,
+        bool sharingEnabled,
+        bool consentPresent,
+        bool reporterKeyPresent,
+        bool alreadyKnownInRuleset)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
         var checks = new List<ThreatSharePreflightCheck>
         {
             new("sharing", sharingEnabled, "threat sharing is off"),
@@ -92,7 +109,7 @@ public static class ThreatSharePreflight
 
         checks.Add(new(
             "novelty",
-            !IsAlreadyKnown(candidate.IndicatorType, candidate.Value, rulesetJson),
+            !alreadyKnownInRuleset,
             "the local ruleset already contains this indicator"));
         checks.Add(new(
             "reason",
@@ -100,6 +117,14 @@ public static class ThreatSharePreflight
             "the reason is not in the community vocabulary"));
 
         return new(checks);
+    }
+
+    /// <summary>Formats the canonical ruleset identifier for a candidate indicator.</summary>
+    public static string KnownIdentifier(string indicatorType, string value)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(indicatorType);
+        ArgumentException.ThrowIfNullOrEmpty(value);
+        return $"ioc:{indicatorType.ToLowerInvariant()}:{value.ToLowerInvariant()}";
     }
 
     /// <summary>The reason this value must not be shared, or null when its category is acceptable.</summary>
@@ -160,12 +185,12 @@ public static class ThreatSharePreflight
     /// <summary>True when the local ruleset already carries this exact indicator.</summary>
     public static bool IsAlreadyKnown(string indicatorType, string value, string? rulesetJson)
     {
-        if (string.IsNullOrEmpty(rulesetJson) || string.IsNullOrEmpty(value))
+        if (string.IsNullOrEmpty(rulesetJson) || string.IsNullOrEmpty(indicatorType) || string.IsNullOrEmpty(value))
         {
             return false;
         }
 
-        var identifier = $"ioc:{indicatorType.ToLowerInvariant()}:{value.ToLowerInvariant()}";
+        var identifier = KnownIdentifier(indicatorType, value);
         return rulesetJson.Contains(identifier, StringComparison.OrdinalIgnoreCase);
     }
 }
