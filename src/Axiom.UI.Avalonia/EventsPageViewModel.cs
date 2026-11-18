@@ -33,7 +33,8 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
         IServiceRequestClient? client,
         IUiTimerFactory timers,
         IUserInteraction ui,
-        IProcessActions? processActions = null)
+        IProcessActions? processActions = null,
+        bool startActive = true)
         : base("Network Events", "Unified timeline — network events from the local service", "E")
     {
         ArgumentNullException.ThrowIfNull(timers);
@@ -54,7 +55,6 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
 
         _refreshTimer = timers.Create(TimeSpan.FromSeconds(10));
         _refreshTimer.Tick += (_, _) => _ = RefreshAsync();
-        _refreshTimer.Start();
 
         _searchDebounce = timers.Create(TimeSpan.FromMilliseconds(400));
         _searchDebounce.Tick += (_, _) =>
@@ -63,8 +63,10 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
             _ = RefreshAsync();
         };
 
-        _ = LoadWriteCapabilityAsync();
-        _ = RefreshAsync();
+        if (startActive)
+        {
+            Activate();
+        }
     }
 
     public IReadOnlyList<string> Ranges { get; } = ["15m", "1h", "24h", "7d"];
@@ -263,7 +265,11 @@ public sealed partial class EventsPageViewModel : PageViewModel, IActivatablePag
         _ = RefreshAsync();
     }
 
-    public void Deactivate() => _refreshTimer?.StopTimer();
+    public void Deactivate()
+    {
+        _refreshTimer?.StopTimer();
+        _searchDebounce?.StopTimer();
+    }
 
     public void Dispose()
     {

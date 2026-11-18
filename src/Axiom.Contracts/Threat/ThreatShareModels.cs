@@ -135,10 +135,16 @@ public sealed record ThreatShareCandidate
     };
 
     public bool CanPublishToCommunity =>
-        PublicationEligibility is ThreatSharePublicationEligibility.NeedsOperatorReview or
-            ThreatSharePublicationEligibility.EligibleToSubmit &&
-        ThreatShareVocabulary.IsPublishableReason(Reason) &&
-        NoveltyStatus != ThreatShareNoveltyStatus.KnownVerified;
+        (PublicationEligibility is ThreatSharePublicationEligibility.NeedsOperatorReview or
+            ThreatSharePublicationEligibility.EligibleToSubmit) &&
+        NoveltyStatus is not (ThreatShareNoveltyStatus.KnownVerified or ThreatShareNoveltyStatus.Disputed or
+            ThreatShareNoveltyStatus.Revoked) &&
+        ThreatShareVocabulary.ReportableContexts.Contains(Context, StringComparer.Ordinal) &&
+        string.Equals(ThreatShareVocabulary.Normalize(IndicatorType, Value), Value, StringComparison.Ordinal) &&
+        string.Equals(Id, ThreatShareVocabulary.BuildId(IndicatorType, Value), StringComparison.Ordinal) &&
+        ThreatShareVocabulary.EvaluatePublicationEligibility(
+            IndicatorType, Value, Reason, EvidenceClass, ProofGrade).Eligibility >=
+                ThreatSharePublicationEligibility.NeedsOperatorReview;
 
     public string NoveltyLabel => NoveltyStatus switch
     {
@@ -330,10 +336,13 @@ public static class ThreatShareVocabulary
     public static IReadOnlyList<string> Severities { get; } = ["low", "medium", "high", "critical"];
 
     /// <summary>
-    /// Only contexts Axiom can state truthfully: an agent tool fetched the indicator, or an agent
-    /// (the AI Analyst) produced it from its tool output. A DNS block on its own is not a context.
+    /// Contexts accepted by Blackbox for an independently supported observation.
     /// </summary>
-    public static IReadOnlyList<string> Contexts { get; } = ["fetched-by-tool", "in-tool-output"];
+    public static IReadOnlyList<string> ReportableContexts { get; } = ["fetched-by-tool", "in-tool-output"];
+
+    public const string ObservedNetworkContext = "observed-network-endpoint";
+
+    public static IReadOnlyList<string> Contexts { get; } = [.. ReportableContexts, ObservedNetworkContext];
 
     /// <summary>File-like "TLDs" that appear in free text but are never shareable domains.</summary>
     private static readonly HashSet<string> NonDomainTlds = new(StringComparer.OrdinalIgnoreCase)
@@ -342,6 +351,9 @@ public static class ThreatShareVocabulary
         "tmp", "dat", "db", "sqlite", "pem", "key", "crt", "ini", "yaml", "yml", "zip", "gz",
         "pdf", "docx", "xlsx", "png", "jpg", "html", "lnk",
     };
+
+    private static readonly HashSet<string> LocalDomainTlds =
+        new(["local", "localhost", "internal", "intranet", "lan", "home", "corp"], StringComparer.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> KnownPublicResolvers = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -440,13 +452,14 @@ public static class ThreatShareVocabulary
                 "Threat reason is 'unknown'; classify with evidence-backed behavior before publishing.");
         }
 
-        if (evidenceClass == ThreatShareEvidenceClass.HeuristicOrAiSuspected &&
-            proofGrade < ThreatShareProofGrade.Correlated)
+        if (evidenceClass is not (ThreatShareEvidenceClass.ReproducibleAttackArtifact or
+                ThreatShareEvidenceClass.CuratorConfirmed) ||
+            proofGrade is not (ThreatShareProofGrade.Reproduced or ThreatShareProofGrade.IndependentlyConfirmed))
         {
             return new(
                 ThreatSharePublicationEligibility.NeedsEvidence,
-                "AI_SUSPECTED_NEEDS_CORROBORATION",
-                "AI-suspected endpoint needs correlated or reproducible evidence before production submission.");
+                "BEHAVIOR_NEEDS_VERIFICATION",
+                "An observed endpoint or AI suspicion stays local until there is reproducible evidence of malicious behavior or independent confirmation.");
         }
 
         return new(
@@ -485,9 +498,7 @@ public static class ThreatShareVocabulary
         {
             case "domain":
                 raw = raw.TrimEnd('.').ToLowerInvariant();
-                if (raw.Length is 0 or > 253 || raw.IndexOf('.') < 0 ||
-                    NonDomainTlds.Contains(raw[(raw.LastIndexOf('.') + 1)..]) ||
-                    raw.Any(character => char.IsWhiteSpace(character) || character is '/' or ':' or '@'))
+                if (!IsShareableHost(raw) || System.Net.IPAddress.TryParse(raw, out _))
                 {
                     return null;
                 }
@@ -622,8 +633,14 @@ public static class ThreatShareVocabulary
         var dot = host.LastIndexOf('.');
         return dot > 0 &&
                dot < host.Length - 1 &&
-               !host.Contains("..", StringComparison.Ordinal) &&
-               !NonDomainTlds.Contains(host[(dot + 1)..]);
+               !host.EndsWith(".home.arpa", StringComparison.Ordinal) &&
+               !string.Equals(host, "home.arpa", StringComparison.Ordinal) &&
+               !NonDomainTlds.Contains(host[(dot + 1)..]) &&
+               !LocalDomainTlds.Contains(host[(dot + 1)..]) &&
+               host.Split('.').All(label => label is { Length: > 0 and <= 63 } &&
+                   char.IsAsciiLetterOrDigit(label[0]) &&
+                   char.IsAsciiLetterOrDigit(label[^1]) &&
+                   label.All(character => char.IsAsciiLetterOrDigit(character) || character == '-'));
     }
 
     private static bool InNetwork(System.Net.IPAddress address, string network, int prefixBits) =>

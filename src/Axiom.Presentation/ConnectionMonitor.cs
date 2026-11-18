@@ -12,9 +12,10 @@ public sealed class ConnectionMonitor : IDisposable
 {
     private readonly IConnectionSnapshotSource _source;
     private readonly IUiTimer _timer;
-    private readonly Dictionary<string, ConnectionRow> _rows = new(StringComparer.Ordinal);
+    private readonly Dictionary<SocketKey, ConnectionRow> _rows = [];
     private readonly CancellationTokenSource _cancellation = new();
     private bool _isPolling;
+    private bool _disposed;
 
     public ConnectionMonitor(IConnectionSnapshotSource source, IUiTimerFactory timers)
     {
@@ -46,7 +47,7 @@ public sealed class ConnectionMonitor : IDisposable
 
     public void Start()
     {
-        if (_timer.IsEnabled)
+        if (_disposed || _timer.IsEnabled)
         {
             return;
         }
@@ -55,32 +56,56 @@ public sealed class ConnectionMonitor : IDisposable
         _ = PollAsync();
     }
 
-    public void Stop() => _timer.StopTimer();
+    public void Stop()
+    {
+        if (!_disposed)
+        {
+            _timer.StopTimer();
+        }
+    }
 
     public async Task PollAsync()
     {
-        if (_isPolling)
+        if (_disposed || _isPolling)
         {
             return;
         }
 
+        var cancellationToken = _cancellation.Token;
         _isPolling = true;
         try
         {
-            var snapshot = await _source.CaptureAsync(_cancellation.Token).ConfigureAwait(true);
-            Apply(snapshot);
-            LastError = null;
-        }
-        catch (OperationCanceledException)
-        {
-            // Shutting down.
-        }
+            try
+            {
+                var snapshot = await _source.CaptureAsync(cancellationToken).ConfigureAwait(true);
+                if (_disposed)
+                {
+                    return;
+                }
+
+                LastError = null;
+                Apply(snapshot);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
 #pragma warning disable CA1031 // A polling loop must not crash the shell on a transient OS error.
-        catch (Exception exception)
+            catch (Exception exception)
 #pragma warning restore CA1031
-        {
-            LastError = exception.Message;
-            Updated?.Invoke(this, EventArgs.Empty);
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                LastError = exception.Message;
+            }
+
+            if (!_disposed)
+            {
+                Updated?.Invoke(this, EventArgs.Empty);
+            }
         }
         finally
         {
@@ -90,6 +115,12 @@ public sealed class ConnectionMonitor : IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _timer.StopTimer();
         _timer.Tick -= OnTick;
         _timer.Dispose();
@@ -109,7 +140,7 @@ public sealed class ConnectionMonitor : IDisposable
         AppTraffic = snapshot.AppTraffic;
         Limitations = snapshot.Limitations;
 
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<SocketKey>(snapshot.Connections.Count);
 
         foreach (var connection in snapshot.Connections)
         {
@@ -131,17 +162,23 @@ public sealed class ConnectionMonitor : IDisposable
             }
         }
 
-        foreach (var key in _rows.Keys.Where(key => !seen.Contains(key)).ToList())
+        for (var index = Connections.Count - 1; index >= 0; index--)
         {
-            if (_rows.Remove(key, out var removed))
+            var key = KeyOf(Connections[index].Source);
+            if (!seen.Contains(key))
             {
-                Connections.Remove(removed);
+                _rows.Remove(key);
+                Connections.RemoveAt(index);
             }
         }
-
-        Updated?.Invoke(this, EventArgs.Empty);
     }
 
-    private static string KeyOf(LiveConnection connection) =>
-        $"{connection.Protocol}|{connection.LocalEndpoint}|{connection.RemoteEndpoint}|{connection.ProcessId}";
+    private static SocketKey KeyOf(LiveConnection connection) =>
+        new(connection.Protocol, connection.LocalEndpoint, connection.RemoteEndpoint, connection.ProcessId);
+
+    private readonly record struct SocketKey(
+        TransportProtocol Protocol,
+        string LocalEndpoint,
+        string RemoteEndpoint,
+        int ProcessId);
 }

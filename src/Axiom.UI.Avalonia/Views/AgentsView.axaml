@@ -157,11 +157,16 @@
             </StackPanel>
           </Grid>
           <controls:AxiomSelectableTextBlock
-                     Text="Axiom only proposes evidence-bound AI Analyst indicators: a malicious-role value must match a remote endpoint Axiom observed. Public blocklist matches stay local and are never reported — they would echo the same list from every install. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
+                     Text="Axiom keeps AI suggestions, observed endpoints and public blocklist matches local. A manual report needs verified evidence and your confirmation of the exact indicator."
                      FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-                     <controls:AxiomSelectableTextBlock
-                     Text="A Complete installation turns sharing on with your consent at install time. Only signed, redacted indicators leave the machine - never prompts, commands, paths, credentials, model content or session ids. It strengthens the verified graph for everyone (help me help you), and you can turn it off here at any time."
-                     FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <StackPanel Spacing="4" IsVisible="{Binding CanDisableBlackboxAutomaticSharing}">
+            <controls:AxiomSelectableTextBlock
+                       Text="Blackbox automatic sharing is active. Blackbox can publish its own reports and digests independently of the Axiom queue."
+                       IsVisible="{Binding BlackboxAutomaticSharing}"
+                       FontSize="10" Foreground="{DynamicResource Axiom.Warning}" TextWrapping="Wrap" />
+            <Button Content="Turn off Blackbox automatic sharing"
+                    Command="{Binding DisableBlackboxAutomaticSharingCommand}" HorizontalAlignment="Left" Padding="10,5" />
+          </StackPanel>
           <Border Background="{DynamicResource Axiom.SurfaceAlt}"
                   BorderBrush="{DynamicResource Axiom.Border}"
                   BorderThickness="1"

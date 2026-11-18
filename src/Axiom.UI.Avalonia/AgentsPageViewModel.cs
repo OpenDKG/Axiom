@@ -167,7 +167,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private bool _enforcementReported;
 
-    private bool _threatSharingConsentEnabling;
+    private bool _blackboxSharingKnown;
 
     public IReadOnlyList<string> ActivityFilters { get; } =
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
@@ -284,10 +284,16 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private bool _threatSharingEnabled;
 
     [ObservableProperty]
-    private bool _canToggleThreatSharing;
+    private bool _canToggleThreatSharing = !DistributionContext.IsStorePackage;
+
+    [ObservableProperty]
+    private bool _blackboxAutomaticSharing;
+
+    [ObservableProperty]
+    private bool _canDisableBlackboxAutomaticSharing;
 
     public string ThreatSharingButtonText =>
-        ThreatSharingEnabled ? "Disable threat sharing" : "Enable threat sharing";
+        ThreatSharingEnabled ? "Turn off manual reporting" : "Allow manual reports";
 
     partial void OnThreatSharingEnabledChanged(bool value) =>
         OnPropertyChanged(nameof(ThreatSharingButtonText));
@@ -471,8 +477,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         if (!IsAvailable)
         {
             ThreatShareQueueText = "Indicator preview is unavailable in Store builds.";
+            _threatShareStatus = null;
             HasThreatShareCandidates = false;
-            CanSubmitThreatShare = false;
+            UpdateThreatShareActions();
             return;
         }
 
@@ -553,8 +560,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ActivityStatusText = $"Blackbox is unavailable: {exception.Message}";
             HealthStatusText = "Blackbox dashboard is offline or not responding.";
             SummaryText = "No live Blackbox data is available.";
-            ThreatSharingStatusText = "offline · dashboard unavailable";
-            CanToggleThreatSharing = false;
+            _blackboxSharingKnown = false;
+            CanDisableBlackboxAutomaticSharing = false;
+            UpdateThreatSharingPermission();
             ApplyHookEvidence();
             await RefreshEnforcementAsync(guardAvailable: false, hookMode: null).ConfigureAwait(true);
         }
@@ -1134,60 +1142,6 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         return JsonNode.Parse(output) as JsonObject;
     }
 
-    /// <summary>
-    /// The Complete installation records consent for signed, redacted threat sharing. Apply it once,
-    /// with an explanation, and never override a later manual off switch.
-    /// </summary>
-    private async Task EnableThreatSharingFromInstallConsentAsync()
-    {
-        if (_client is null)
-        {
-            _threatSharingConsentEnabling = false;
-            return;
-        }
-
-        try
-        {
-            var result = await _client
-                .SaveSettingsAsync(new JsonObject { ["report"] = true }, CancellationToken.None)
-                .ConfigureAwait(true);
-            if (!result.Ok)
-            {
-                ThreatSharingStatusText = "off - install consent could not be applied";
-                return;
-            }
-
-            var settings = result.Settings ??
-                           await _client.GetSettingsAsync(CancellationToken.None).ConfigureAwait(true);
-            if (!ReadBool(settings, "report", false))
-            {
-                ThreatSharingStatusText = "off - Blackbox rejected the install consent";
-                return;
-            }
-
-            ThreatSharingEnabled = true;
-            ThreatSharingStatusText = "on - Complete install consent";
-            ThreatSharingConsent.MarkApplied();
-            AxiomAlertService.Show(
-                "Threat sharing enabled",
-                "The Complete installation consent turns on signed, redacted threat indicators only. " +
-                "Prompts, commands, file paths, credentials, model content and session ids are never sent. " +
-                "Sharing strengthens the verified graph for every Axiom install (help me help you). " +
-                "Turn it off on Agent Protection at any time.",
-                page: typeof(AgentsPageViewModel));
-        }
-        catch (Exception exception) when (exception is
-                     ServiceUnavailableException or HttpRequestException or TaskCanceledException or
-                     InvalidDataException or System.Text.Json.JsonException)
-        {
-            ThreatSharingStatusText = "off - install consent pending (" + exception.Message + ")";
-        }
-        finally
-        {
-            _threatSharingConsentEnabling = false;
-        }
-    }
-
     [RelayCommand]
     private async Task ToggleThreatSharingAsync()
     {
@@ -1197,73 +1151,83 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         var enable = !ThreatSharingEnabled;
-        if (enable)
-        {
-            var confirmed = await _ui.ConfirmAsync(
-                "Enable threat sharing",
-                "Allow Blackbox to send signed, redacted threat indicators to the community verified graph?\n\n" +
-                "It never sends prompts, commands, file paths, credentials, model content or raw session ids. " +
-                "Threat sharing is off by default.",
-                "Enable sharing",
-                destructive: false,
-                CancellationToken.None).ConfigureAwait(true);
-
-            if (!confirmed)
-            {
-                return;
-            }
-        }
-
         CanToggleThreatSharing = false;
         try
         {
-            var result = await _client
-                .SaveSettingsAsync(
-                    new JsonObject { ["report"] = enable },
-                    CancellationToken.None)
-                .ConfigureAwait(true);
-
-            if (!result.Ok)
+            if (enable && !await _ui.ConfirmAsync(
+                    "Allow manual threat reporting",
+                    "Axiom will show the exact indicators before every submission. Approved reports include the indicator and a signed reporter identity. Blackbox automatic sharing is controlled separately.",
+                    "Allow manual reports",
+                    destructive: false,
+                    CancellationToken.None).ConfigureAwait(true))
             {
-                ThreatSharingStatusText = "failed · " + (result.Errors.Count == 0
-                    ? "Blackbox rejected the update."
-                    : string.Join("; ", result.Errors));
                 return;
             }
 
-            var settings = result.Settings ??
-                           await _client.GetSettingsAsync(CancellationToken.None).ConfigureAwait(true);
-            var saved = ReadBool(settings, "report", enable);
-            ThreatSharingEnabled = saved;
-            ThreatSharingStatusText = saved ? "on · signed, redacted" : "off · opt in";
-            HealthStatusText = saved
-                ? "Threat sharing enabled, persisted and verified."
-                : "Threat sharing disabled and verified.";
-        }
-        catch (Exception exception) when (exception is
-                     HttpRequestException or TaskCanceledException or InvalidDataException or
-                     System.Text.Json.JsonException)
-        {
-            ThreatSharingStatusText = "failed · " + exception.Message;
+            if (!ThreatSharingConsent.TrySetPermission(enable))
+            {
+                ThreatShareActionText = "Could not save the manual reporting preference.";
+                return;
+            }
+
+            UpdateThreatSharingPermission();
         }
         finally
         {
-            CanToggleThreatSharing = true;
+            CanToggleThreatSharing = IsAvailable;
+        }
+    }
+
+    [RelayCommand]
+    private async Task DisableBlackboxAutomaticSharingAsync()
+    {
+        if (_client is null || !CanDisableBlackboxAutomaticSharing)
+        {
+            return;
+        }
+
+        CanDisableBlackboxAutomaticSharing = false;
+        try
+        {
+            var result = await _client.SaveSettingsAsync(
+                new JsonObject { ["report"] = false },
+                CancellationToken.None).ConfigureAwait(true);
+            if (!result.Ok)
+            {
+                ThreatShareActionText = "Blackbox did not accept the change to automatic sharing.";
+                return;
+            }
+
+            var settings = await _client.GetSettingsAsync(CancellationToken.None).ConfigureAwait(true);
+            UpdateBlackboxSharing(settings);
+            ThreatShareActionText = _blackboxSharingKnown && !BlackboxAutomaticSharing
+                ? "Blackbox automatic sharing is off. Local protection continues."
+                : "Could not verify that Blackbox automatic sharing is off.";
+        }
+        catch (Exception exception) when (exception is
+                     HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            _blackboxSharingKnown = false;
+            UpdateThreatShareActions();
+            ThreatShareActionText = "Blackbox automatic sharing could not be verified: " + exception.Message;
+        }
+        finally
+        {
+            CanDisableBlackboxAutomaticSharing = _blackboxSharingKnown && BlackboxAutomaticSharing;
         }
     }
 
     /// <summary>
-    /// Loads Axiom's own indicator preview from the service. The service only holds candidates for
-    /// malware indicators an agent fetched plus high-confidence AI Analyst IOCs; it never sends them
-    /// here, it only reports what is queued and what the last submission did.
+    /// Loads the local indicator queue and previous report outcomes from the Axiom service.
     /// </summary>
     private async Task RefreshThreatShareAsync()
     {
         if (_serviceClient is null)
         {
             ThreatShareQueueText = "Indicator preview needs the local Axiom service.";
+            _threatShareStatus = null;
             HasThreatShareCandidates = false;
-            CanSubmitThreatShare = false;
+            UpdateThreatShareActions();
             return;
         }
 
@@ -1282,8 +1246,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                      System.Text.Json.JsonException or System.IO.IOException)
         {
             ThreatShareQueueText = "Indicator preview is unavailable: " + exception.Message;
+            _threatShareStatus = null;
             HasThreatShareCandidates = false;
-            CanSubmitThreatShare = false;
+            UpdateThreatShareActions();
         }
     }
 
@@ -1323,16 +1288,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         HasThreatShareCandidates = pending.Count > 0;
         HasSubmittedThreatShares = submittedItems.Count > 0;
-        CanSubmitThreatShare = pending.Any(item => IsReady(item) && item.Candidate.CanPublishToCommunity) &&
-                               ThreatSharingEnabled &&
-                               status.TodaySubmitted < status.DailyLimit;
-        CanShareThreatShareItem = pending.Count > 0 &&
-                                  ThreatSharingEnabled &&
-                                  status.TodaySubmitted < status.DailyLimit;
-
-        var consent = ThreatShareCli.ConsentPresent()
-            ? string.Empty
-            : " Blackbox still needs the reporter terms accepted in its own settings.";
+        UpdateThreatShareActions();
 
         var deferred = status.Deferred > 0
             ? $" {status.Deferred} deferred after a transient failure; retry when it is due."
@@ -1349,10 +1305,36 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         ThreatShareQueueText =
             $"{status.Pending} waiting for your review, {status.Submitted} shared in total, " +
             $"{status.TodaySubmitted}/{status.DailyLimit} today.{deferred}{unverified} " +
-            (ThreatSharingEnabled
-                ? $"Sharing is on; every share is checked locally (reporter terms, signing key, category, novelty) before anything is signed. {sandboxNote}"
-                : $"Sharing is off; nothing is signed or sent. {sandboxNote}") +
-            consent;
+            (ThreatSharingEnabled ? $"Eligible reports need your confirmation. {sandboxNote}" : $"Manual reporting is off. {sandboxNote}");
+    }
+
+    private void UpdateThreatShareActions()
+    {
+        var canShare = !_threatShareSubmitting && ThreatSharingEnabled && _blackboxSharingKnown &&
+                       !BlackboxAutomaticSharing && _threatShareStatus is { } status &&
+                       status.TodaySubmitted < status.DailyLimit;
+        CanSubmitThreatShare = canShare &&
+            ThreatShareCandidates.Any(item => IsReady(item) && item.Candidate.CanPublishToCommunity);
+        CanShareThreatShareItem = canShare &&
+            ThreatShareCandidates.Any(item => item.Candidate.CanPublishToCommunity);
+    }
+
+    private void UpdateThreatSharingPermission()
+    {
+        ThreatSharingEnabled = ThreatSharingConsent.HasConsent();
+        ThreatSharingStatusText = ThreatSharingEnabled ? "manual reporting on" : "manual reporting off";
+        UpdateThreatShareActions();
+    }
+
+    private void UpdateBlackboxSharing(JsonObject settings)
+    {
+        var report = settings["report"] is JsonValue value && value.TryGetValue<bool>(out var enabled)
+            ? enabled
+            : (bool?)null;
+        _blackboxSharingKnown = report.HasValue;
+        BlackboxAutomaticSharing = report == true;
+        CanDisableBlackboxAutomaticSharing = _blackboxSharingKnown && BlackboxAutomaticSharing;
+        UpdateThreatSharingPermission();
     }
 
     [RelayCommand]
@@ -1492,19 +1474,27 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             return;
         }
 
-        if (!ThreatSharingEnabled)
+        if (!ThreatSharingConsent.HasConsent())
         {
-            ThreatShareActionText = "Turn threat sharing on before sharing indicators.";
+            UpdateThreatSharingPermission();
+            ThreatShareActionText = "Allow manual threat reporting before sharing indicators.";
             return;
         }
 
-        if (_threatShareStatus is { } status && status.TodaySubmitted >= status.DailyLimit)
+        if (!_blackboxSharingKnown || BlackboxAutomaticSharing || _threatShareStatus is not { } status)
+        {
+            ThreatShareActionText = "Verify that Blackbox automatic sharing is off before sending a manual report.";
+            return;
+        }
+
+        var available = status.DailyLimit - status.TodaySubmitted;
+        if (available <= 0)
         {
             ThreatShareActionText = "The daily sharing cap is reached; nothing was sent.";
             return;
         }
 
-        var publishable = items.Where(item => item.Candidate.CanPublishToCommunity).ToList();
+        var publishable = items.Where(item => item.Candidate.CanPublishToCommunity).Take(available).ToList();
         var heldLocal = items.Count - publishable.Count;
         if (publishable.Count == 0)
         {
@@ -1515,14 +1505,26 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         _threatShareSubmitting = true;
-        CanSubmitThreatShare = false;
-        ThreatShareActionText = "Submitting through the Blackbox reporter...";
-        var knownIdentifiers = ThreatShareCli.FindKnownIdentifiersInRuleset(publishable.Select(item => item.Candidate));
-        var consent = ThreatShareCli.ConsentPresent();
-        var key = ThreatShareCli.ReporterKeyPresent();
-        var blocked = new List<string>();
+        UpdateThreatShareActions();
         try
         {
+            var preview = string.Join("\n", publishable.Select(item =>
+                $"{item.Candidate.TypeLabel}: {item.Candidate.Value} · {item.Candidate.Severity} · {item.Candidate.Context}"));
+            if (!await _ui.ConfirmAsync(
+                    "Publish signed community reports?",
+                    $"Review the exact indicators below. Blackbox includes your node's reporter identity and a signature. Published reports are CC0 and copies may remain after retraction. " +
+                    $"By confirming, you accept the Blackbox Reporter Terms for these reports.\n\n{ThreatSharingConsent.ReporterTermsUrl}\n\n{preview}",
+                    "Publish these reports",
+                    destructive: false,
+                    CancellationToken.None).ConfigureAwait(true))
+            {
+                ThreatShareActionText = "Publication cancelled. The indicators remain in the local queue.";
+                return;
+            }
+
+            ThreatShareActionText = "Submitting through the Blackbox reporter...";
+            var knownIdentifiers = ThreatShareCli.FindKnownIdentifiersInRuleset(publishable.Select(item => item.Candidate));
+            var blocked = new List<string>();
             var shared = 0;
             var deferred = 0;
             var unverified = 0;
@@ -1535,7 +1537,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                     !string.IsNullOrEmpty(item.Candidate.Value) &&
                     knownIdentifiers.Contains(ThreatSharePreflight.KnownIdentifier(item.Candidate.IndicatorType, item.Candidate.Value));
                 var preflight = ThreatSharePreflight.EvaluateKnownStatus(
-                    item.Candidate, ThreatSharingEnabled, consent, key, alreadyKnown);
+                    item.Candidate, ThreatSharingConsent.HasConsent(),
+                    _blackboxSharingKnown && !BlackboxAutomaticSharing, alreadyKnown);
                 if (!preflight.Ready)
                 {
                     blocked.Add($"{item.Candidate.Value} ({preflight.FailureText})");
@@ -1608,6 +1611,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         finally
         {
             _threatShareSubmitting = false;
+            UpdateThreatShareActions();
         }
     }
 
@@ -2153,18 +2157,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     private void ApplyHealth(JsonObject settings, JsonObject graph)
     {
         var mode = ReadString(settings, "mode") ?? "unknown";
-        var report = ReadBool(settings, "report", false);
-
-        if (!report && !_threatSharingConsentEnabling &&
-            ThreatSharingConsent.HasConsent() && !ThreatSharingConsent.WasApplied())
-        {
-            _threatSharingConsentEnabling = true;
-            _ = EnableThreatSharingFromInstallConsentAsync();
-        }
-        BlackboxHealthText = $"Dashboard online · mode {mode} · community sharing {(report ? "ON" : "off")}";
-        ThreatSharingEnabled = report;
-        ThreatSharingStatusText = report ? "on · signed, redacted" : "off · opt in";
-        CanToggleThreatSharing = true;
+        UpdateBlackboxSharing(settings);
+        BlackboxHealthText = _blackboxSharingKnown
+            ? $"Dashboard online · mode {mode} · Blackbox automatic sharing {(BlackboxAutomaticSharing ? "ON" : "off")}"
+            : $"Dashboard online · mode {mode} · Blackbox sharing status unavailable";
 
         var dkgUrl = ReadString(graph, "dkg_url") ?? "unknown";
         var reachable = ReadBool(graph, "node_reachable", false);

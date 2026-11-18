@@ -24,12 +24,12 @@ public sealed class ThreatSharingConsentTests : IDisposable
     }
 
     [Fact]
-    public void Complete_consent_is_read_from_the_install_profile()
+    public void Legacy_complete_consent_does_not_authorize_manual_reporting()
     {
         var profile = Path.Combine(_directory, "install-profile.json");
         File.WriteAllText(profile, """{"profile":"complete","threatSharingConsent":true}""");
 
-        Assert.True(ThreatSharingConsent.HasConsent(profile));
+        Assert.False(ThreatSharingConsent.HasConsent(profile));
     }
 
     [Fact]
@@ -43,12 +43,13 @@ public sealed class ThreatSharingConsentTests : IDisposable
     }
 
     [Fact]
-    public void Applied_marker_round_trips()
+    public void Manual_permission_can_be_granted_and_withdrawn()
     {
-        var marker = Path.Combine(_directory, "applied");
-
-        Assert.False(ThreatSharingConsent.WasApplied(marker));
-        ThreatSharingConsent.MarkApplied(marker);
-        Assert.True(ThreatSharingConsent.WasApplied(marker));
+        var path = Path.Combine(_directory, "manual-threat-sharing");
+        Assert.False(ThreatSharingConsent.HasConsent(path));
+        Assert.True(ThreatSharingConsent.TrySetPermission(true, path));
+        Assert.True(ThreatSharingConsent.HasConsent(path));
+        Assert.True(ThreatSharingConsent.TrySetPermission(false, path));
+        Assert.False(ThreatSharingConsent.HasConsent(path));
     }
 }
