@@ -709,3 +709,35 @@ no `Broken pipe` and no cross-app stall accompanied them, and earlier 20-name ph
 lookups with no rule, so this reads as upstream (sslip.io/slirp) latency, but the rule/no-rule difference was not
 explained in this run. Also open: a filter upgrade can leave mDNSResponder with an EPIPE socket until the next DNS
 configuration change. Not tested: Apple silicon, a signed build, macOS 13/14, DoT (853) live.
+
+## Addendum 2026-11-18 (6): mDNSResponder reset after a new filter instance, 1.3.0 build 20, VM run (author-run, not CI)
+
+Fix for the open item of addendum (5): after a new AxiomFilter instance attaches, macOS breaks every pre-existing
+socket and mDNSResponder kept logging `Broken pipe` on its dead sockets (build 19: steady, 64 lines in about 2.5 min
+after the upgrade, more than 10 min until a DNS configuration change). Fix commit `14f0948`: the daemon reads the
+filter's pid + start time from its connection, persists it (`filter-instance`, 0600) and sends mDNSResponder one
+`SIGHUP` 5 s after a new instance's first connection; design in MACOS_ARCHITECTURE.md §3.3 "Resolver reset after a new
+filter instance". No Swift change.
+
+Build: .NET published on Linux from `14f0948` (`AXIOM_BUILD=20 package-app.sh osx-x64`, tree clean after), Swift
+filter built and the bundle ad hoc signed in the guest (`deploy-to-vm.sh`, `INSTALL=0`), packed with
+`ditto -c -k --keepParent`: `Axiom-1.3.0-20-osx-x64-adhoc.zip`, 89,063,379 bytes, sha256
+`588c2d4025cd6f0205d6e18a2db53cd15436283168f6284da916e9fc6c7a294d` (guest = host). Installed over build 19 from that
+zip (`shasum -c` OK, `axiomd --install-service` exit 0, `axiom-sysext activate` replaced 19 with 20, Allow clicked).
+Guest macOS 15.8.3, SIP disabled, 0 rules during items 1-4. `Broken pipe` = mDNSResponder log lines containing it,
+counted per 20 s window from the event.
+
+| Check | Build 20 | Build 19 (v13 diagnosis, same VM) |
+|---|---|---|
+| Upgrade 19 -> 20 (new filter `startFilter` 07:40:02.34) | 6 lines 07:40:03.5-06.6, then 0: windows `[6,0,0,0,0,0,0,0,0,0]` (200 s). `SIGHUP: Purge cache` at 07:40:07.83; axiomd: "first seen (no marker)" -> "Sent SIGHUP to mDNSResponder (pid 211)" | first at +1.2 s, 64 in about 2.5 min, continuing until a DNS change (10+ min) |
+| `axiom-sysext disable`, 5 s, `enable`, trial 1 / 2 / 3 | 6 / 6 / 6 lines, all within 3.1 s after `startFilter`, then 0 for the rest of the 200 s (`[6,0,0,0,0,0,0,0,0,0]` each); HUP 5.2-5.5 s after `startFilter`; axiomd "new AxiomFilter instance X replaced Y" each time | 34 in 100 s, continuing |
+| Daemon restart `launchctl kickstart -k`, 3 times 60 s apart, same filter instance | 0 HUPs (axiomd count of "Sent SIGHUP" stayed 4 = upgrade + 3 trials; no "new instance" line), 0 `Broken pipe` in 180 s | 0 (restart was never a trigger) |
+| Lookup loop across the 3 switches (getaddrinfo every 1 s, 07:43:49-07:55:04, 377 ticks) | fixed name `example.org`: 0 failures, 0 >= 1 s (max 0.02 s, answered from cache; also right after each HUP purge). Never-seen sslip.io name each tick: 0 failures, 65 took 5 or 10 s, at the same rate before the first switch (6/35, 17 %), 0-30 s after an enable (10/50, 20 %) and later (47/288, 16 %): the known first-lookup latency of this VM's user-mode DNS (v13 observation 1), not the switch | in-flight queriers could stall (not reproduced with the cached fixed name either) |
+| Smoke | curl copy refused by IP 5/5 and by name 5/5 (rc 7), python 200 5/5; after unblock copy 200 3/3; `--doctor` 25 PASS / 0 WARN / 0 FAIL; Privacy Shield on: DNS 127.0.0.1, python 200; off: DNS automatic (`There aren't any DNS Servers set`, resolver 10.0.2.3), no HUP sent by either (count stayed 4); `codesign --verify --deep --strict` OK; Swift tests 168/168 | |
+
+One HUP per new instance was enough in every case: 0 lines in the 194 s after it. The 6 lines before it (about 3 s)
+are the cost of the 5 s delay; an earlier send was not tried. Host gate on `14f0948`: locked restore and Release build
+0 warnings / 0 errors; Infrastructure.MacOS tests 264/264 (249 + 15 new), Desktop.Avalonia.MacOS 35/35, Service.Tests
+and Presentation.Tests failing names identical to the 19-name baseline of this host. Not tested: Apple silicon, a
+signed build, macOS 13/14, a reboot (the marker survives it; the filter gets a new pid, so one HUP is expected), other
+apps' TCP connections (they still drop once at the switch; that is the OS, not the resolver).
