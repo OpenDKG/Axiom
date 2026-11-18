@@ -56,6 +56,12 @@ public sealed class LinuxDnsConfigurator
 
     public string BackupPath => _backupPath;
 
+    /// <summary>
+    /// Why the last <see cref="RestoreIfNeeded"/> could not put one or more links back, or null.
+    /// The backup file is kept while any link still points at loopback, so the next start retries.
+    /// </summary>
+    public string? LastRestoreError { get; private set; }
+
     /// <summary>Current non-loopback resolvers across the links.</summary>
     public IReadOnlyList<IPAddress> DiscoverSystemResolvers() =>
         _backend.ListLinks()
@@ -154,8 +160,10 @@ public sealed class LinuxDnsConfigurator
     {
         lock (_gate)
         {
+            LastRestoreError = null;
             var backup = ReadBackup();
             var changed = false;
+            var failed = new List<string>();
             var links = _backend.ListLinks();
             var names = links.Select(link => link.Name).Concat(backup?.Links.Select(link => link.Name) ?? []).Distinct(StringComparer.Ordinal);
             foreach (var name in names)
@@ -180,6 +188,10 @@ public sealed class LinuxDnsConfigurator
 
                 Log($"restore '{name}' -> {(saved is null || saved.Servers.Count == 0 ? "automatic" : string.Join(' ', saved.Servers))}: {(ok ? "ok" : "failed")}");
                 changed |= ok;
+                if (!ok)
+                {
+                    failed.Add(name);
+                }
             }
 
             if (changed)
@@ -191,6 +203,13 @@ public sealed class LinuxDnsConfigurator
             if (backup is not null && !stillRedirected)
             {
                 TryDeleteBackup();
+            }
+
+            if (failed.Count > 0)
+            {
+                LastRestoreError =
+                    $"The saved DNS could not be restored for: {string.Join(", ", failed)}. " +
+                    "The backup was kept and the restore is retried on the next start.";
             }
 
             return changed;

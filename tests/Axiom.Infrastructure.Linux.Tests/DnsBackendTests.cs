@@ -118,6 +118,59 @@ public sealed class DnsBackendTests
     }
 
     [Fact]
+    public void Partial_restore_keeps_the_backup_and_names_the_link_that_failed()
+    {
+        using var temp = new TempDirectory();
+        var backend = new ScriptedDnsBackend();
+        backend.Servers["eno2"] = ["192.168.70.1"];
+        backend.Servers["wlo1"] = ["192.168.70.2"];
+        var configurator = new LinuxDnsConfigurator(backend, Path.Combine(temp.Path, "backup.json"));
+
+        Assert.True(configurator.Redirect().Changed);
+        Assert.All(backend.Servers.Values, servers => Assert.Equal(["127.0.0.1"], servers));
+
+        // eno2 comes back, wlo1's write fails and stays on loopback.
+        backend.FailWrites.Add("wlo1");
+        Assert.True(configurator.RestoreIfNeeded());
+        Assert.Equal(["192.168.70.1"], backend.Servers["eno2"]);
+        Assert.Equal(["127.0.0.1"], backend.Servers["wlo1"]);
+        Assert.True(File.Exists(configurator.BackupPath));
+        Assert.NotNull(configurator.LastRestoreError);
+        Assert.Contains("wlo1", configurator.LastRestoreError, StringComparison.Ordinal);
+        Assert.DoesNotContain("eno2", configurator.LastRestoreError, StringComparison.Ordinal);
+
+        // The next start retries only the still-redirected link and clears the backup.
+        backend.FailWrites.Clear();
+        Assert.True(configurator.RestoreIfNeeded());
+        Assert.Equal(["192.168.70.2"], backend.Servers["wlo1"]);
+        Assert.False(File.Exists(configurator.BackupPath));
+        Assert.Null(configurator.LastRestoreError);
+    }
+
+    [Fact]
+    public void Upstreams_come_from_the_saved_backup_when_every_link_is_loopback_and_stay_empty_without_one()
+    {
+        using var temp = new TempDirectory();
+        var backend = new ScriptedDnsBackend();
+        backend.Servers["eno2"] = ["127.0.0.1"];
+        var backupPath = Path.Combine(temp.Path, "backup.json");
+        var configurator = new LinuxDnsConfigurator(backend, backupPath);
+
+        // Nothing live and no backup: the caller warns and uses the encrypted DoH fallback.
+        Assert.Empty(configurator.DiscoverUpstreams());
+
+        File.WriteAllText(
+            backupPath,
+            System.Text.Json.JsonSerializer.Serialize(new LinuxDnsBackup
+            {
+                Backend = LinuxDnsBackend.SystemdResolved,
+                Links = [],
+                Upstreams = ["9.9.9.9"],
+            }));
+        Assert.Equal(["9.9.9.9"], configurator.DiscoverUpstreams().Select(endpoint => endpoint.Address.ToString()));
+    }
+
+    [Fact]
     public void RecoveryAdapterMapsLinksToAdapterStatesAndValidatesApply()
     {
         var runner = new FakeRunner().On("resolvectl dns", ResolvectlDns).On("resolvectl domain", ResolvectlDomain);
@@ -141,5 +194,32 @@ public sealed class DnsBackendTests
 
         var badServers = state with { Ipv4Servers = ["not-an-ip"] };
         Assert.Equal("dns_state_invalid", Assert.Throws<NetworkRecoveryPlatformException>(() => adapter.ApplyDns(badServers)).Code);
+    }
+
+    private sealed class ScriptedDnsBackend : ILinuxDnsBackend
+    {
+        public Dictionary<string, List<string>> Servers { get; } = new(StringComparer.Ordinal);
+
+        public HashSet<string> FailWrites { get; } = new(StringComparer.Ordinal);
+
+        public LinuxDnsBackend Kind => LinuxDnsBackend.SystemdResolved;
+
+        public IReadOnlyList<LinuxDnsLink> ListLinks() =>
+            Servers.Select(entry => new LinuxDnsLink(entry.Key, entry.Key, entry.Value.ToArray(), [])).ToArray();
+
+        public bool SetDns(string link, IReadOnlyList<string> servers, IReadOnlyList<string> domains)
+        {
+            if (FailWrites.Contains(link))
+            {
+                return false;
+            }
+
+            Servers[link] = servers.ToList();
+            return true;
+        }
+
+        public void FlushCache()
+        {
+        }
     }
 }

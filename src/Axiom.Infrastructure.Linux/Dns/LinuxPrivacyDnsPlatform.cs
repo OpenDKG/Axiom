@@ -49,5 +49,17 @@ public sealed class LinuxPrivacyDnsPlatform : IPrivacyDnsPlatform
         return _configurator.Redirect().Error;
     }
 
-    public bool RestoreIfNeeded() => _configurator.RestoreIfNeeded();
+    public bool RestoreIfNeeded()
+    {
+        var changed = _configurator.RestoreIfNeeded();
+        if (_configurator.LastRestoreError is { } error)
+        {
+            Console.Error.WriteLine("Privacy Shield DNS: " + error);
+        }
+
+        return changed;
+    }
+
+    /// <summary>Why the last restore could not put every link back, or null (journal-logged).</summary>
+    public string? LastRestoreError => _configurator.LastRestoreError;
 }
