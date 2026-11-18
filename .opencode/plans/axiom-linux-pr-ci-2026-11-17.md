@@ -61,26 +61,37 @@ then it is a stacked Draft and is not claimed as a main-line required check.
   `contents: read`, no secrets, no privileged nft/BPF/DNS mutation, no package install):
   - .NET SDK from `global.json`, Python 3.12 for agent-hook runtime tests;
   - locked restore + Release build of `Axiom.Portable.slnx` (warnings as errors);
-  - full portable test run with TRX reports and a strict gate: any failed test or zero passing
-    tests fails the job; skips are reported in the job summary (`shortcut:` comment in the workflow
-    records that skip counts become fatal per suite once the Linux projects are stable);
+  - full portable test run with TRX reports and a strict gate: any failed test, zero passing
+    tests, or a suite that executed nothing fails the job; skips are reported in the job summary
+    (`shortcut:` comment in the workflow records that skip counts become fatal per suite once the
+    Linux projects are stable);
+  - the two Linux suites outside `Axiom.Portable.slnx` — `Axiom.Desktop.Avalonia.Linux.Tests` (51)
+    and `Axiom.Infrastructure.Linux.Nft.Tests` (203) — are restored locked, built Release and
+    tested explicitly; adding them to the portable solution would break the macOS portable job;
   - deterministic BPF compile (`clang`/`llvm`/`libbpf-dev`/`bpftool`, objects hashed and uploaded);
   - DEB build smoke with `scripts/linux/package.sh deb --arch x64 --local ci`, then package
     identity and payload inspection (no install, no service start) and SHA256SUMS;
   - TRX, BPF hashes, DEB control and package uploaded as `linux-ci-evidence`;
   - Linux-only steps are file-gated and the summary states what ran, so a skip is not read as green.
+    The two Linux test projects are the exception: they must exist (the job fails with a clear
+    message otherwise), so retargeting the gate to `main` before L1 lands requires adding them.
 - This record.
 
 ## 4. Local evidence (Ubuntu 24.04.5 host, SDK 10.0.403, 2026-11-17 21:3xZ)
 
-Run in `/tmp/opencode/axiom-integration-1.1-20261117/wt-linux-src` at `07d2daf7` with the exact
-commands from the workflow (PowerShell not used):
+Run at `07d2daf7` in `wt-linux-src`, and re-run 2026-11-18 in `wt-linux-ci` with the exact commands
+from the workflow (PowerShell not used). The 2026-11-18 run restored, built and tested all three
+sets and executed the workflow's "Summarize and gate" script verbatim: **13 suites, 1615 executed,
+1615 passed, 0 failed, 0 skipped**, gate exit 0 (logs in
+`/tmp/opencode/axiom-integration-1.1-20261117/ci-followup-20261118/`).
 
 | Step | Result |
 |---|---|
 | locked restore, portable solution | ok |
 | Release build, portable solution | ok, 0 warnings / 0 errors |
 | portable tests (11 assemblies incl. Service.Hosting, Unix, Linux, Avalonia, macOS desktop) | **1361 executed / 1361 passed / 0 failed / 0 skipped** |
+| Linux desktop tests (explicit, `Axiom.Desktop.Avalonia.Linux.Tests`) | **51 executed / 51 passed / 0 failed / 0 skipped** |
+| Linux nft/BPF tests (explicit, `Axiom.Infrastructure.Linux.Nft.Tests`) | **203 executed / 203 passed / 0 failed / 0 skipped** |
 | BPF compile (`make -C src/Axiom.Infrastructure.Linux/Bpf/native`) | ok; `axiom_connect.bpf.o` 115536 B, `axiom-bpf-events` 16856 B |
 | DEB smoke | ok, see §5 |
 

@@ -70,14 +70,51 @@ jobs:
       - name: Build portable solution (Release, warnings as errors)
         run: dotnet build Axiom.Portable.slnx -c Release --no-restore
 
-      - name: Test portable solution
+      # The two Linux test projects are deliberately not in Axiom.Portable.slnx (adding them there
+      # would break the macOS portable job), so they are restored, built and tested explicitly.
+      - name: Verify Linux test projects are present
+        run: |
+          set -euo pipefail
+          for project in \
+            tests/Axiom.Desktop.Avalonia.Linux.Tests/Axiom.Desktop.Avalonia.Linux.Tests.csproj \
+            tests/Axiom.Infrastructure.Linux.Nft.Tests/Axiom.Infrastructure.Linux.Nft.Tests.csproj; do
+            if [[ ! -f "$project" ]]; then
+              echo "::error::$project is missing; this gate requires the Linux slices"
+              exit 1
+            fi
+          done
+
+      - name: Restore Linux test projects (locked mode)
+        run: |
+          set -euo pipefail
+          dotnet restore tests/Axiom.Desktop.Avalonia.Linux.Tests/Axiom.Desktop.Avalonia.Linux.Tests.csproj --locked-mode
+          dotnet restore tests/Axiom.Infrastructure.Linux.Nft.Tests/Axiom.Infrastructure.Linux.Nft.Tests.csproj --locked-mode
+
+      - name: Build Linux test projects (Release, warnings as errors)
+        run: |
+          set -euo pipefail
+          dotnet build tests/Axiom.Desktop.Avalonia.Linux.Tests/Axiom.Desktop.Avalonia.Linux.Tests.csproj -c Release --no-restore
+          dotnet build tests/Axiom.Infrastructure.Linux.Nft.Tests/Axiom.Infrastructure.Linux.Nft.Tests.csproj -c Release --no-restore
+
+      - name: Test portable and Linux suites
         run: |
           set -euo pipefail
           results="$RUNNER_TEMP/test-results"
           rm -rf "$results"
-          mkdir -p "$results"
+          mkdir -p "$results/portable" "$results/linux-desktop" "$results/linux-nft"
           dotnet test Axiom.Portable.slnx -c Release --no-build --no-restore -m:1 \
-            --logger "trx" --results-directory "$results"
+            --logger "trx" --results-directory "$results/portable"
+          dotnet test tests/Axiom.Desktop.Avalonia.Linux.Tests/Axiom.Desktop.Avalonia.Linux.Tests.csproj \
+            -c Release --no-build --no-restore -m:1 \
+            --logger "trx" --results-directory "$results/linux-desktop"
+          dotnet test tests/Axiom.Infrastructure.Linux.Nft.Tests/Axiom.Infrastructure.Linux.Nft.Tests.csproj \
+            -c Release --no-build --no-restore -m:1 \
+            --logger "trx" --results-directory "$results/linux-nft"
+
+      - name: Summarize and gate all test results
+        run: |
+          set -euo pipefail
+          results="$RUNNER_TEMP/test-results"
           python3 - "$results" <<'PY'
           import glob, os, sys, xml.etree.ElementTree as ET
 
@@ -96,7 +133,9 @@ jobs:
                   sys.exit(f"No ResultSummary counters in {path}")
               executed, passed = int(counters["executed"]), int(counters["passed"])
               failed, all_tests = int(counters["failed"]), int(counters["total"])
-              rows.append((os.path.basename(path), executed, passed, failed, all_tests - executed))
+              if executed == 0:
+                  sys.exit(f"{path} executed no tests")
+              rows.append((os.path.relpath(path, results), executed, passed, failed, all_tests - executed))
               for i, v in enumerate((executed, passed, failed, all_tests)):
                   total[i] += v
 
@@ -112,7 +151,7 @@ jobs:
               sys.exit(f"{total[2]} test(s) failed")
           if total[1] == 0:
               sys.exit("No tests passed.")
-          print(f"executed={total[0]} passed={total[1]} skipped={total[3] - total[0]}")
+          print(f"suites={len(files)} executed={total[0]} passed={total[1]} skipped={total[3] - total[0]}")
           PY
 
       # Deterministic compile of the connect-time BPF objects; no attach, no privilege required.
