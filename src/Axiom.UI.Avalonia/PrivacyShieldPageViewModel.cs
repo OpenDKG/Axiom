@@ -230,9 +230,16 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private readonly BlackboxGraphLookup _graphLookup = new();
     private bool _updating;
     private bool _resolverActive;
+    private bool _serviceUnavailable;
 
     /// <summary>True while the service reports the resolver as running (Overview wording).</summary>
     public bool IsResolverActive => _resolverActive;
+
+    /// <summary>
+    /// True when the last service read failed. The saved settings are still shown, but no surface
+    /// may claim the resolver is filtering while the daemon cannot answer.
+    /// </summary>
+    public bool IsServiceUnavailable => _serviceUnavailable;
     private bool _statsRefreshing;
     private readonly HashSet<string> _expandedHistoryApps = new(StringComparer.OrdinalIgnoreCase);
     private string? _blockedHistorySignature;
@@ -598,9 +605,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
         catch (ServiceUnavailableException exception)
         {
-            StatusBadge = "UNAVAILABLE";
-            StatusText = exception.Message;
-            DetailText = "No DNS query is observed while the service is unavailable.";
+            MarkUnavailable(exception, "No DNS query is observed while the service is unavailable.");
         }
         finally
         {
@@ -627,8 +632,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
         catch (ServiceUnavailableException exception)
         {
-            StatusBadge = "UNAVAILABLE";
-            StatusText = exception.Message;
+            MarkUnavailable(exception);
         }
         finally
         {
@@ -664,8 +668,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
         catch (ServiceUnavailableException exception)
         {
-            StatusBadge = "UNAVAILABLE";
-            StatusText = exception.Message;
+            MarkUnavailable(exception);
         }
         finally
         {
@@ -700,8 +703,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
         catch (ServiceUnavailableException exception)
         {
-            StatusBadge = "UNAVAILABLE";
-            StatusText = exception.Message;
+            MarkUnavailable(exception);
         }
         finally
         {
@@ -746,8 +748,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
         catch (ServiceUnavailableException exception)
         {
-            StatusBadge = "UNAVAILABLE";
-            StatusText = exception.Message;
+            MarkUnavailable(exception);
         }
         finally
         {
@@ -1056,8 +1057,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
         catch (ServiceUnavailableException exception)
         {
-            StatusBadge = "UNAVAILABLE";
-            StatusText = exception.Message;
+            MarkUnavailable(exception);
         }
         finally
         {
@@ -1138,12 +1138,30 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         return false;
     }
 
+    /// <summary>
+    /// A read or write that did not reach the service leaves the state unknown, not the last-known
+    /// one: the resolver is not confirmed running, so no surface may say it is filtering.
+    /// </summary>
+    private void MarkUnavailable(ServiceUnavailableException exception, string? detail = null)
+    {
+        _resolverActive = false;
+        _serviceUnavailable = true;
+        StatusBadge = "UNAVAILABLE";
+        StatusText = exception.Message;
+        if (detail is not null)
+        {
+            DetailText = detail;
+        }
+
+        OnPropertyChanged(nameof(IsResolverActive));
+        OnPropertyChanged(nameof(IsServiceUnavailable));
+    }
+
     private void ApplyStatus(PrivacyShieldStatus status)
     {
         _updating = true;
         try
         {
-            _resolverActive = status.Running;
             var settings = status.Settings;
             Enabled = settings.Enabled;
             SelectedProfile = Profiles.FirstOrDefault(profile => profile.Value == settings.Profile)
@@ -1202,7 +1220,20 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     private void ApplyStats(PrivacyShieldStatus status)
     {
+        var wasActive = _resolverActive;
+        var wasUnavailable = _serviceUnavailable;
+        _serviceUnavailable = false;
         _resolverActive = status.Running;
+        if (wasActive != _resolverActive)
+        {
+            OnPropertyChanged(nameof(IsResolverActive));
+        }
+
+        if (wasUnavailable)
+        {
+            OnPropertyChanged(nameof(IsServiceUnavailable));
+        }
+
         StatusBadge = status.Running ? "ACTIVE" : status.Enabled ? "ERROR" : "DISABLED";
         StatusText = status.Running
             ? $"Listening on {status.BindAddress}:{status.Port}; upstream {status.Upstream}."

@@ -74,7 +74,11 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
 
     public bool IsShieldActive => Firewall.ProtectionKnown && Firewall.ShieldEnabled;
 
-    public bool IsFullyProtected => Firewall.ShieldLevel == EnforcementLevel.Protected && PrivacyShield.Enabled;
+    public bool IsFullyProtected =>
+        Firewall.ShieldLevel == EnforcementLevel.Protected && PrivacyActive;
+
+    /// <summary>Privacy Shield is on and the service confirmed it, not only the saved toggle.</summary>
+    private bool PrivacyActive => PrivacyShield.Enabled && !PrivacyShield.IsServiceUnavailable;
 
     /// <summary>Shield on, but the platform filter has not proven enforcement (off Windows only).</summary>
     public bool IsShieldUnverified => Firewall.ShieldLevel == EnforcementLevel.Degraded;
@@ -84,7 +88,7 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         : IsShieldUnverified
             ? "NOT VERIFIED"
             : Firewall.ShieldEnabled
-            ? (PrivacyShield.Enabled ? "PROTECTED" : "SHIELD ACTIVE")
+            ? (PrivacyActive ? "PROTECTED" : "SHIELD ACTIVE")
             : "MONITORING ONLY";
 
     public string HeroHeadlineText => !Firewall.ProtectionKnown
@@ -92,7 +96,7 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         : IsShieldUnverified
             ? "Shield is on, blocking is not verified"
             : Firewall.ShieldEnabled
-            ? (PrivacyShield.Enabled ? "Your computer is protected" : "Firewall Shield is protecting your apps")
+            ? (PrivacyActive ? "Your computer is protected" : "Firewall Shield is protecting your apps")
             : "Firewall protection is off";
 
     public string HeroSummaryText => !Firewall.ProtectionKnown
@@ -100,7 +104,7 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         : IsShieldUnverified
             ? $"Axiom Shield is on, but {PlatformText.FilterName} has not confirmed enforcement yet ({Firewall.Enforcement.NotVerifiedReason}). Open Firewall to check."
             : Firewall.ShieldEnabled
-            ? (PrivacyShield.Enabled
+            ? (PrivacyActive
                 ? "Axiom Shield checks new outbound apps and Privacy Shield is actively filtering ads and trackers."
                 : "Axiom Shield asks before unfamiliar apps connect to the internet. You can also turn on the Ad & Tracker Blocker below.")
             : "Axiom is monitoring internet usage in read-only mode. Turn on Firewall Shield to control which apps may connect.";
@@ -117,13 +121,17 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
                 : "Active — monitoring and guarding outbound apps")
             : Firewall.ShieldStatusText;
 
-    public string PrivacyStatusText => PrivacyShield.Enabled
+    public string PrivacyStatusText => PrivacyShield.IsServiceUnavailable
+        ? "Unknown — the local service did not answer"
+        : PrivacyShield.Enabled
         ? $"Blocking {PrivacyShield.BlockedCountText} trackers & ads ({PrivacyShield.QueriesCountText} checks)"
         : PrivacyShield.IsSupported
             ? "Off — turn on to filter trackers, telemetry, and ads locally"
             : "Requires Axiom local service (--service) to filter DNS";
 
-    public string PrivacyActionText => PrivacyShield.Enabled ? "Turn Off" : "Turn On";
+    public string PrivacyActionText => PrivacyShield.IsServiceUnavailable
+        ? "Retry"
+        : PrivacyShield.Enabled ? "Turn Off" : "Turn On";
 
     public bool CanTogglePrivacy => PrivacyShield.IsSupported && !PrivacyShield.IsBusy;
 
@@ -203,6 +211,13 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
     {
         if (!PrivacyShield.IsSupported || PrivacyShield.IsBusy)
         {
+            return;
+        }
+
+        // Unknown state: re-read instead of guessing on/off and sending the wrong request.
+        if (PrivacyShield.IsServiceUnavailable)
+        {
+            PrivacyShield.RefreshCommand.Execute(null);
             return;
         }
 

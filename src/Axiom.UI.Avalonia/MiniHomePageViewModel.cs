@@ -119,7 +119,11 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
 
     public bool IsShieldToneIdle => ShieldProtection.Tone(Firewall.ShieldLevel) == "idle";
 
-    public string PrivacyButtonText => PrivacyShield.Enabled ? "Privacy: ON" : "Privacy: OFF";
+    public string PrivacyButtonText => PrivacyShield.IsServiceUnavailable
+        ? "Privacy: unknown"
+        : PrivacyShield.Enabled
+            ? "Privacy: ON"
+            : "Privacy: OFF";
 
     public bool CanTogglePrivacy => PrivacyShield.IsSupported && !PrivacyShield.IsBusy;
 
@@ -167,6 +171,13 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
     {
         if (!PrivacyShield.IsSupported || PrivacyShield.IsBusy)
         {
+            return;
+        }
+
+        // Unknown state: re-read instead of guessing on/off and sending the wrong request.
+        if (PrivacyShield.IsServiceUnavailable)
+        {
+            PrivacyShield.RefreshCommand.Execute(null);
             return;
         }
 
