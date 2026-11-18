@@ -24,6 +24,19 @@ public sealed class OptionalModuleInstallerTests
     }
 
     [Fact]
+    public void Unsupported_install_message_names_the_running_os()
+    {
+        var message = OptionalModuleInstaller.UnsupportedInstallMessage;
+
+        Assert.Contains(PlatformText.OsName, message, StringComparison.Ordinal);
+        Assert.DoesNotContain("macOS yet", message, StringComparison.Ordinal);
+        if (OperatingSystem.IsLinux())
+        {
+            Assert.Contains("on Linux yet", message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void Store_backend_defaults_to_auto_when_vcpp_runtime_is_absent()
     {
         Assert.Equal("oxigraph", OptionalModuleInstaller.SelectBlackboxStoreBackend(hasVcRuntime: true));

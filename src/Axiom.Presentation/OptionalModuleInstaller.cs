@@ -67,8 +67,8 @@ public sealed class OptionalModuleInstaller
     /// </summary>
     public static bool IsInstallSupported => OperatingSystem.IsWindows();
 
-    public const string UnsupportedInstallMessage =
-        "Guided module installation is not available on macOS yet. Install the module manually, then click Check again.";
+    public static string UnsupportedInstallMessage =>
+        $"Guided module installation is not available on {PlatformText.OsName} yet. Install the module manually, then click Check again.";
 
     public bool IsDkgInstalled => File.Exists(DkgCommand);
 
