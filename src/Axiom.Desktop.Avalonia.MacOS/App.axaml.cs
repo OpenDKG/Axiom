@@ -21,6 +21,7 @@ public partial class App : Application
     private TrayIcon? _tray;
     private MacSingleInstance? _singleInstance;
     private MacProtectionSetup? _protection;
+    private IDisposable? _storageMaintenance;
     private NativeMenuItem? _daemonStatusItem;
     private NativeMenuItem? _filterStatusItem;
     private readonly List<NativeMenuItem> _installItems = [];
@@ -162,6 +163,7 @@ public partial class App : Application
         _shell.SetPresentationVisible(window.IsVisible && window.WindowState != WindowState.Minimized);
         _shell.Start();
         StartNetworkRecovery(networkRecovery);
+        _storageMaintenance = ModuleStorageMaintenance.StartPeriodic();
 
         var autostartArgument = HasArgument(arguments, "--autostart");
         var startMinimized = HasArgument(arguments, "--start-minimized") ||
@@ -460,6 +462,8 @@ public partial class App : Application
         }
 
         _shell?.Dispose();
+        _storageMaintenance?.Dispose();
+        _storageMaintenance = null;
         _cancellation.Dispose();
     }
 }
