@@ -808,6 +808,16 @@ public sealed class HistoryStore
             await deleteThroughput.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        // Reclaim WAL growth and shrink the database file once substantial dead pages accumulate.
+        await ExecuteAsync(connection, "PRAGMA wal_checkpoint(TRUNCATE);", cancellationToken);
+        var freelistText = await ExecuteScalarAsync(connection, "PRAGMA freelist_count;", cancellationToken);
+        if (long.TryParse(freelistText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var freelistPages) &&
+            freelistPages >= 1024)
+        {
+            await ExecuteAsync(connection, "VACUUM;", cancellationToken);
+            await ExecuteAsync(connection, "PRAGMA wal_checkpoint(TRUNCATE);", cancellationToken);
+        }
+
         return deleted;
     }
 
