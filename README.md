@@ -2,6 +2,26 @@
 
 **Local network control and protection for AI coding agents.**
 
+## Install and launch
+
+**Windows x64** · Run in PowerShell to install and start the latest Windows release for your user.
+
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OpenDKG/Axiom/main/scripts/install-from-github.ps1'))) -PublicRelease
+```
+
+**Ubuntu 24.04 amd64 and macOS Intel** · Run in a desktop terminal with `curl` and Bash. The same command selects the published preview for your platform.
+
+```bash
+installer="$(curl -fsSL https://raw.githubusercontent.com/OpenDKG/Axiom/main/scripts/install-from-github.sh)" && bash -c "$installer"
+```
+
+The scripts verify downloaded packages against their SHA-256 hashes. On Windows this installs
+the core app. Use the graphical setup for the optional Complete installation. On Ubuntu, APT
+installs the package and required dependencies and may prompt for `sudo`. On macOS, the installer
+opens Axiom from `~/Applications` and preserves any app already there. The ad hoc-signed macOS preview
+may need macOS approval, and its Network Extension has separate activation requirements.
+
 [Download Windows 1.4.2](https://github.com/OpenDKG/Axiom/releases/tag/v1.4.2)
 · [All releases](https://github.com/OpenDKG/Axiom/releases)
 · [Pentest results](docs/PENTESTING.md)
