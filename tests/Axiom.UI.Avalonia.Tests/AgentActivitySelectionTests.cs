@@ -461,6 +461,30 @@ public sealed class AgentActivitySelectionTests
         });
     }
 
+    [Fact]
+    public void Agent_filter_list_includes_antigravity_and_excludes_openchamber_routing_openchamber_via_opencode()
+    {
+        TestAppBuilder.RunOnUiThread(() =>
+        {
+            using var shell = CreateShell(new RecordingUserInteraction());
+            var agents = shell.Agents;
+
+            Assert.Contains("Antigravity", agents.AgentFilters);
+            Assert.DoesNotContain("OpenChamber", agents.AgentFilters);
+
+            var agyEntry = MakeEntry(1, "pre_tool_call", "read_file", "{\"id\":1}") with { Agent = "antigravity" };
+            var ocEntry = MakeEntry(2, "pre_tool_call", "write_file", "{\"id\":2}") with { Agent = "opencode" };
+            var ochEntry = MakeEntry(3, "pre_tool_call", "run_command", "{\"id\":3}") with { Agent = "openchamber" };
+            agents.ApplyActivity(new BlackboxAuditPage([agyEntry, ocEntry, ochEntry], 3));
+
+            agents.SelectedAgentFilter = "Antigravity";
+            Assert.Equal([agyEntry], agents.Activity);
+
+            agents.SelectedAgentFilter = "OpenCode";
+            Assert.Equal([ocEntry, ochEntry], agents.Activity);
+        });
+    }
+
     private static void ClickEdge(Window window, Control target, MouseButton button)
     {
         target.BringIntoView();

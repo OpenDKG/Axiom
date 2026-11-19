@@ -71,5 +71,16 @@ public sealed class OptionalModuleInstallerScriptTests
         Assert.Contains("vcruntime140.dll", script, StringComparison.Ordinal);
         Assert.Contains("'auto'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("oxigraph-worker", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("*> $null", script, StringComparison.Ordinal);
+        Assert.Contains("$ErrorActionPreference = 'Continue'", script, StringComparison.Ordinal);
+        Assert.Contains("& $installer -StoreBackend $storeBackend", script, StringComparison.Ordinal);
+        Assert.Contains("if sys.stdout is None:", script, StringComparison.Ordinal);
+        Assert.Contains("if sys.stderr is None:", script, StringComparison.Ordinal);
+        Assert.Contains("os.devnull", script, StringComparison.Ordinal);
+        Assert.Contains("CREATE_NO_WINDOW", script, StringComparison.Ordinal);
+        Assert.Contains("STARTF_USESHOWWINDOW", script, StringComparison.Ordinal);
+        Assert.Contains("if sys.stdout is None:", OptionalModuleInstaller.BlackboxDashboardLauncherCode, StringComparison.Ordinal);
+        Assert.Contains("if sys.stderr is None:", OptionalModuleInstaller.BlackboxDashboardLauncherCode, StringComparison.Ordinal);
+        Assert.Contains("CREATE_NO_WINDOW", OptionalModuleInstaller.BlackboxDashboardLauncherCode, StringComparison.Ordinal);
     }
 }

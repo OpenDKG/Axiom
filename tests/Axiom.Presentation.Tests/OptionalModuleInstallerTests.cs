@@ -128,4 +128,74 @@ public sealed class OptionalModuleInstallerTests
         Assert.Contains("-c core.autocrlf=false", blackboxScript, StringComparison.Ordinal);
         Assert.Contains("$ErrorActionPreference = 'Continue'", blackboxScript, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Blackbox_script_switches_to_continue_before_vendor_installer_and_wraps_try()
+    {
+        var installer = new OptionalModuleInstaller();
+        var buildBlackbox = typeof(OptionalModuleInstaller).GetMethod(
+            "BuildBlackboxScript",
+            BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        var script = ((string)buildBlackbox.Invoke(installer, null)!)
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        var continueIndex = script.IndexOf("$ErrorActionPreference = 'Continue'\n$vendorExit = 0", StringComparison.Ordinal);
+        var installerIndex = script.IndexOf("& $installer -StoreBackend $storeBackend", StringComparison.Ordinal);
+        Assert.True(continueIndex >= 0, "Expected $ErrorActionPreference = 'Continue' immediately before vendor installer try block.");
+        Assert.True(installerIndex > continueIndex);
+        Assert.Contains("try {\n  & $installer -StoreBackend $storeBackend", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Blackbox_dashboard_launcher_guards_null_stdio_for_pythonw()
+    {
+        Assert.Contains("if sys.stdout is None:", OptionalModuleInstaller.BlackboxDashboardLauncherCode, StringComparison.Ordinal);
+        Assert.Contains("if sys.stderr is None:", OptionalModuleInstaller.BlackboxDashboardLauncherCode, StringComparison.Ordinal);
+        Assert.Contains("os.devnull", OptionalModuleInstaller.BlackboxDashboardLauncherCode, StringComparison.Ordinal);
+        Assert.Contains("CREATE_NO_WINDOW", OptionalModuleInstaller.BlackboxDashboardLauncherCode, StringComparison.Ordinal);
+        Assert.Contains("STARTF_USESHOWWINDOW", OptionalModuleInstaller.BlackboxDashboardLauncherCode, StringComparison.Ordinal);
+        Assert.Contains("subprocess.Popen.__init__", OptionalModuleInstaller.BlackboxDashboardLauncherCode, StringComparison.Ordinal);
+        Assert.Contains("os.system", OptionalModuleInstaller.BlackboxDashboardLauncherCode, StringComparison.Ordinal);
+
+        var installer = new OptionalModuleInstaller();
+        var buildBlackbox = typeof(OptionalModuleInstaller).GetMethod(
+            "BuildBlackboxScript",
+            BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var script = (string)buildBlackbox.Invoke(installer, null)!;
+
+        Assert.Contains("if sys.stdout is None:", script, StringComparison.Ordinal);
+        Assert.Contains("if sys.stderr is None:", script, StringComparison.Ordinal);
+        Assert.Contains("os.devnull", script, StringComparison.Ordinal);
+        Assert.Contains("CREATE_NO_WINDOW", script, StringComparison.Ordinal);
+        Assert.Contains("STARTF_USESHOWWINDOW", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Should_upgrade_running_launcher_detects_outdated_script_and_matches_current()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "axiom-launcher-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var launcher = Path.Combine(tempDir, "start-dashboard.py");
+            Assert.False(OptionalModuleInstaller.ShouldUpgradeRunningLauncher(launcher));
+
+            File.WriteAllText(launcher, "from plugins.blackbox.dashboard import cmd_dashboard\n");
+            Assert.True(OptionalModuleInstaller.ShouldUpgradeRunningLauncher(launcher));
+
+            File.WriteAllText(launcher, OptionalModuleInstaller.BlackboxDashboardLauncherCode.Replace("\n", "\r\n", StringComparison.Ordinal));
+            Assert.False(OptionalModuleInstaller.ShouldUpgradeRunningLauncher(launcher));
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
 }

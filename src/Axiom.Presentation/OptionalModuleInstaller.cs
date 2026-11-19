@@ -44,6 +44,40 @@ public sealed class OptionalModuleInstaller
     /// <summary>Marker recording which pinned vendor build is installed in this tree.</summary>
     private const string InstalledBuildMarker = ".axiom-blackbox-build";
 
+    internal const string BlackboxDashboardLauncherCode =
+        "import argparse\n" +
+        "import os\n" +
+        "import sys\n" +
+        "if sys.stdout is None:\n" +
+        "    sys.stdout = open(os.devnull, \"w\", encoding=\"utf-8\")\n" +
+        "if sys.stderr is None:\n" +
+        "    sys.stderr = open(os.devnull, \"w\", encoding=\"utf-8\")\n" +
+        "if os.name == \"nt\":\n" +
+        "    import inspect\n" +
+        "    import subprocess\n" +
+        "    _orig_popen_init = subprocess.Popen.__init__\n" +
+        "    _popen_sig = inspect.signature(_orig_popen_init)\n" +
+        "    def _silent_popen_init(self, *args, **kwargs):\n" +
+        "        _bound = _popen_sig.bind_partial(self, *args, **kwargs)\n" +
+        "        _flags = _bound.arguments.get(\"creationflags\") or 0\n" +
+        "        _no_win = getattr(subprocess, \"CREATE_NO_WINDOW\", 0x08000000)\n" +
+        "        _detached = getattr(subprocess, \"DETACHED_PROCESS\", 0x00000008)\n" +
+        "        _new_con = getattr(subprocess, \"CREATE_NEW_CONSOLE\", 0x00000010)\n" +
+        "        if not (_flags & (_detached | _no_win)):\n" +
+        "            _flags = (_flags & ~_new_con) | _no_win\n" +
+        "        _bound.arguments[\"creationflags\"] = _flags\n" +
+        "        _si = _bound.arguments.get(\"startupinfo\")\n" +
+        "        if _si is None:\n" +
+        "            _si = subprocess.STARTUPINFO()\n" +
+        "            _bound.arguments[\"startupinfo\"] = _si\n" +
+        "        _si.dwFlags |= getattr(subprocess, \"STARTF_USESHOWWINDOW\", 1)\n" +
+        "        _si.wShowWindow = getattr(subprocess, \"SW_HIDE\", 0)\n" +
+        "        return _orig_popen_init(*_bound.args, **_bound.kwargs)\n" +
+        "    subprocess.Popen.__init__ = _silent_popen_init\n" +
+        "    os.system = lambda cmd: subprocess.run(cmd, shell=True).returncode\n" +
+        "from plugins.blackbox.dashboard import cmd_dashboard\n" +
+        "raise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))\n";
+
     public string DkgRoot { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Axiom",
@@ -351,6 +385,17 @@ public sealed class OptionalModuleInstaller
         if (IsPinnedBuildInstalled())
         {
             log?.Invoke("Blackbox pinned build is already installed; reusing the existing runtime (no vendor reinstall).");
+            EnsureBlackboxDependencies(log);
+            var launcherOutdated = ResolveBlackboxAgentRoot() is { } agent &&
+                                   ShouldUpgradeRunningLauncher(Path.Combine(agent, "start-dashboard.py"));
+            if (!LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort) || launcherOutdated)
+            {
+                log?.Invoke(launcherOutdated
+                    ? "Restarting the Blackbox dashboard with the updated quiet launcher..."
+                    : "Starting the installed Blackbox dashboard...");
+                StartBlackboxDashboard();
+            }
+
             return true;
         }
 
@@ -461,12 +506,18 @@ public sealed class OptionalModuleInstaller
                     $ErrorActionPreference = $prevErrorAction
                 }
             }
-            & $installer -StoreBackend $storeBackend
-            $vendorExit = $LASTEXITCODE
-            # Everything below is best-effort repair. Native tools write progress and warnings to
-            # stderr; with ErrorActionPreference=Stop Windows PowerShell 5.1 turns that into a
-            # terminating NativeCommandError and aborts before the dashboard is started.
+            # Everything from the vendor installer onward is best-effort repair. Native tools write
+            # progress and warnings to stderr; with ErrorActionPreference=Stop Windows PowerShell 5.1
+            # turns that into a terminating NativeCommandError and aborts before the dashboard is started.
             $ErrorActionPreference = 'Continue'
+            $vendorExit = 0
+            try {
+              & $installer -StoreBackend $storeBackend
+              if ($null -ne $LASTEXITCODE) { $vendorExit = $LASTEXITCODE }
+            } catch {
+              Write-Warning "Vendor installer reported an error: $($_.Exception.Message)"
+              $vendorExit = 1
+            }
             if ($vendorExit -ne 0) {
               # The pinned vendor build can fail its own "dependency environment committed" check.
               # Repair it once with the vendor CLI; a usable venv is what Axiom actually needs.
@@ -553,7 +604,7 @@ public sealed class OptionalModuleInstaller
               }
               $agent = Join-Path $dir 'agent-blackbox'
               $launcher = Join-Path $agent 'start-dashboard.py'
-              $code = "import argparse`nfrom plugins.blackbox.dashboard import cmd_dashboard`nraise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))`n"
+              $code = '{{BlackboxDashboardLauncherCode.Replace("'", "''")}}'
               [System.IO.File]::WriteAllText($launcher, $code, (New-Object System.Text.UTF8Encoding($false)))
               $dashboard = 'http://127.0.0.1:9700'
               $running = $false
@@ -701,10 +752,25 @@ public sealed class OptionalModuleInstaller
     /// Starts the installed Blackbox dashboard without reinstalling it. Returns false when the
     /// per-user virtual environment is missing.
     /// </summary>
-    public bool StartBlackboxDashboard() => !DistributionContext.IsStorePackage &&
-        BlackboxLaunch.Start(
+    public bool StartBlackboxDashboard()
+    {
+        if (DistributionContext.IsStorePackage)
+        {
+            return false;
+        }
+
+        if (ResolveBlackboxAgentRoot() is { } agent &&
+            LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort) &&
+            ShouldUpgradeRunningLauncher(Path.Combine(agent, "start-dashboard.py")))
+        {
+            StopModuleProcesses(blackbox: true, dkg: false);
+            WaitForPortToClose(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(10));
+        }
+
+        return BlackboxLaunch.Start(
             static () => LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort),
             LaunchBlackboxDashboard);
+    }
 
     private bool LaunchBlackboxDashboard()
     {
@@ -723,15 +789,14 @@ public sealed class OptionalModuleInstaller
         }
 
         BlackboxWordlistNormalizer.NormalizeAll();
+        EnsureBlackboxDependencies();
 
         try
         {
             var launcher = Path.Combine(agent, "start-dashboard.py");
             File.WriteAllText(
                 launcher,
-                "import argparse\n" +
-                "from plugins.blackbox.dashboard import cmd_dashboard\n" +
-                "raise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))\n",
+                BlackboxDashboardLauncherCode,
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var startInfo = new ProcessStartInfo(venv, $"\"{launcher}\"")
@@ -881,7 +946,8 @@ public sealed class OptionalModuleInstaller
         }
 
         var python = Path.Combine(agent, "venv", "Scripts", "python.exe");
-        if (!File.Exists(python))
+        var pythonInfo = new FileInfo(python);
+        if (!pythonInfo.Exists || pythonInfo.Length == 0)
         {
             return;
         }
@@ -936,6 +1002,24 @@ public sealed class OptionalModuleInstaller
         }
 
         return null;
+    }
+
+    internal static bool ShouldUpgradeRunningLauncher(string launcherPath)
+    {
+        try
+        {
+            if (!File.Exists(launcherPath))
+            {
+                return false;
+            }
+
+            var current = File.ReadAllText(launcherPath).Replace("\r\n", "\n", StringComparison.Ordinal);
+            return !string.Equals(current, BlackboxDashboardLauncherCode, StringComparison.Ordinal);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static void WaitForPortToClose(int port, TimeSpan timeout)
