@@ -195,6 +195,51 @@ public sealed class ModuleStorageMaintenanceTests
         }
     }
 
+    [Fact]
+    public void RunOnce_trims_hermes_and_axiom_diagnostic_logs_while_preserving_history_and_envs()
+    {
+        var root = NewTempRoot();
+        try
+        {
+            var local = Path.Combine(root, "local");
+            var home = Path.Combine(root, "home");
+
+            var hermesLogs = Path.Combine(local, "hermes", "logs");
+            var blackboxDir = Path.Combine(local, "hermes", "blackbox");
+            var envDir = Path.Combine(local, "hermes", "installs", "abc", "environments", "old-env");
+            var axiomDir = Path.Combine(local, "Axiom");
+            Directory.CreateDirectory(hermesLogs);
+            Directory.CreateDirectory(blackboxDir);
+            Directory.CreateDirectory(envDir);
+            Directory.CreateDirectory(axiomDir);
+
+            var errorsLog = Path.Combine(hermesLogs, "errors.log");
+            var recoveryLog = Path.Combine(axiomDir, "network-recovery.log");
+            var findings = Path.Combine(blackboxDir, "findings.jsonl");
+            var envMarker = Path.Combine(envDir, "marker.txt");
+
+            // Exceed 5 MiB for errors.log and 2 MiB for network-recovery.log.
+            var line = new string('E', 1023) + "\n";
+            File.WriteAllText(errorsLog, string.Concat(Enumerable.Repeat(line, 5600)));
+            File.WriteAllText(recoveryLog, string.Concat(Enumerable.Repeat(line, 2300)));
+            File.WriteAllText(findings, "{\"id\":1}\n");
+            File.WriteAllText(envMarker, "keep");
+
+            var report = ModuleStorageMaintenance.RunOnce(localAppData: local, userProfile: home);
+
+            Assert.Equal(2, report.TrimmedLogs);
+            Assert.True(report.ReclaimedBytes > 5L * 1024 * 1024);
+            Assert.True(new FileInfo(errorsLog).Length <= 1L * 1024 * 1024);
+            Assert.True(new FileInfo(recoveryLog).Length <= 512L * 1024);
+            Assert.Equal("{\"id\":1}\n", File.ReadAllText(findings));
+            Assert.True(File.Exists(envMarker));
+        }
+        finally
+        {
+            DeleteTree(root);
+        }
+    }
+
     private static string NewTempRoot()
     {
         var path = Path.Combine(Path.GetTempPath(), "axiom-storage-maint-" + Guid.NewGuid().ToString("N"));

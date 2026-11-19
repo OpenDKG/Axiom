@@ -119,8 +119,60 @@ public static class ModuleStorageMaintenance
 
         if (!string.IsNullOrWhiteSpace(local))
         {
+            var hermesLogs = Path.Combine(local, "hermes", "logs");
             TrimIfOversized(
-                Path.Combine(local, "Axiom", "tray-error.log"),
+                Path.Combine(hermesLogs, "agent.log"),
+                maxBytes: 10L * 1024 * 1024,
+                keepBytes: 2L * 1024 * 1024,
+                ref trimmedLogs,
+                ref reclaimedBytes);
+            TrimIfOversized(
+                Path.Combine(hermesLogs, "errors.log"),
+                maxBytes: 5L * 1024 * 1024,
+                keepBytes: 1L * 1024 * 1024,
+                ref trimmedLogs,
+                ref reclaimedBytes);
+
+            var localAxiom = Path.Combine(local, "Axiom");
+            TrimIfOversized(
+                Path.Combine(localAxiom, "tray-error.log"),
+                maxBytes: 2L * 1024 * 1024,
+                keepBytes: 512L * 1024,
+                ref trimmedLogs,
+                ref reclaimedBytes);
+            TrimIfOversized(
+                Path.Combine(localAxiom, "network-recovery.log"),
+                maxBytes: 2L * 1024 * 1024,
+                keepBytes: 512L * 1024,
+                ref trimmedLogs,
+                ref reclaimedBytes);
+        }
+
+        if (!string.IsNullOrWhiteSpace(home))
+        {
+            var unixHermesLogs = Path.Combine(home, ".hermes", "logs");
+            TrimIfOversized(
+                Path.Combine(unixHermesLogs, "agent.log"),
+                maxBytes: 10L * 1024 * 1024,
+                keepBytes: 2L * 1024 * 1024,
+                ref trimmedLogs,
+                ref reclaimedBytes);
+            TrimIfOversized(
+                Path.Combine(unixHermesLogs, "errors.log"),
+                maxBytes: 5L * 1024 * 1024,
+                keepBytes: 1L * 1024 * 1024,
+                ref trimmedLogs,
+                ref reclaimedBytes);
+
+            var unixAxiom = Path.Combine(home, ".local", "share", "Axiom");
+            TrimIfOversized(
+                Path.Combine(unixAxiom, "tray-error.log"),
+                maxBytes: 2L * 1024 * 1024,
+                keepBytes: 512L * 1024,
+                ref trimmedLogs,
+                ref reclaimedBytes);
+            TrimIfOversized(
+                Path.Combine(unixAxiom, "network-recovery.log"),
                 maxBytes: 2L * 1024 * 1024,
                 keepBytes: 512L * 1024,
                 ref trimmedLogs,
@@ -372,14 +424,39 @@ public static class ModuleStorageMaintenance
 
     private static IEnumerable<string> EnumerateDkgHomes(string localAppData, string userProfile)
     {
+        var seen = new HashSet<string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
         if (!string.IsNullOrWhiteSpace(localAppData))
         {
-            yield return Path.Combine(localAppData, "hermes", "blackbox", "node", ".dkg");
+            foreach (var candidate in new[]
+                     {
+                         Path.Combine(localAppData, "hermes", "blackbox", "node", ".dkg"),
+                         Path.Combine(localAppData, "Axiom", "modules", "blackbox", "agent-blackbox", ".dkg"),
+                         Path.Combine(localAppData, "Axiom", "modules", "dkg-home"),
+                         Path.Combine(localAppData, "Axiom", "modules", "dkg"),
+                     })
+            {
+                if (seen.Add(candidate))
+                {
+                    yield return candidate;
+                }
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(userProfile))
         {
-            yield return Path.Combine(userProfile, ".hermes", "blackbox", "node", ".dkg");
+            foreach (var candidate in new[]
+                     {
+                         Path.Combine(userProfile, ".hermes", "blackbox", "node", ".dkg"),
+                         Path.Combine(userProfile, ".dkg"),
+                     })
+            {
+                if (seen.Add(candidate))
+                {
+                    yield return candidate;
+                }
+            }
         }
     }
     private static void TryDeleteFile(FileInfo file, ref int removedFiles, ref long reclaimedBytes)
