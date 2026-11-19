@@ -61,7 +61,7 @@ jobs:
       - name: Install native build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm libbpf-dev
+          sudo apt-get install -y clang llvm libbpf-dev pkexec
           mkdir -p "$RUNNER_TEMP/axiom-bpftool"
           curl --fail --silent --show-error --location \
             https://github.com/libbpf/bpftool/releases/download/v7.8.1/bpftool-v7.8.1-amd64.tar.gz \
