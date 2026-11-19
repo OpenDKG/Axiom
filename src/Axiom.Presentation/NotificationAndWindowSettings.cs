@@ -181,13 +181,18 @@ public static class BackgroundWindowHider
 
     private static void Sweep()
     {
-        if (!OperatingSystem.IsWindows() || !BackgroundWindowSettingsStore.Enabled)
+        if (!OperatingSystem.IsWindows())
         {
             return;
         }
 
         try
         {
+            if (!BackgroundWindowSettingsStore.Enabled || DateTimeOffset.UtcNow >= _until)
+            {
+                return;
+            }
+
             var parents = ReadParents();
             var descendants = new HashSet<int> { _rootPid };
             var changed = true;
@@ -238,9 +243,9 @@ public static class BackgroundWindowHider
         }
         finally
         {
-            if (DateTimeOffset.UtcNow >= _until)
+            lock (Gate)
             {
-                lock (Gate)
+                if (DateTimeOffset.UtcNow >= _until)
                 {
                     _timer?.Dispose();
                     _timer = null;

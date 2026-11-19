@@ -12,10 +12,10 @@ Axiom is a **local-first firewall, network monitor and DNS policy tool**. Its fi
 
 | Stage | Owner / component | Data and action | Network required? |
 |---|---|---|---|
-| Observe | Axiom service / Privacy Shield / AI Analyst | Local events, blocked malware DNS requests attributable to an agent or its tool, evidence-bounded high-confidence analyst indicators | No for local observation; cloud AI requires its provider |
+| Observe | Axiom service / Privacy Shield / AI Analyst | Local events, blocked malware DNS requests and analyst indicators tied to observed endpoints | No for local observation; cloud AI requires its provider |
 | Queue | Axiom service | Durable local preview queue with status, source and outcome | No |
-| Approve | Axiom user | Individually choose **Share**, or **Send now** for the reviewed queue; sharing setting and reporter consent must permit submission | No until actual submission |
-| Submit | Blackbox reporter, in signed-in user's session | Signs and attempts to send an approved, normalized indicator with the user's reporter identity | Yes for community delivery |
+| Approve | Axiom user | Allow manual reporting, then use **Share** or **Send now** to review and confirm the exact indicators and the Blackbox Reporter Terms | No until actual submission |
+| Submit | Blackbox reporter, in signed-in user's session | Sends the confirmed indicator type and value, severity and evidence context with the node's reporter identity and signature | Yes for community delivery |
 | Corroborate / curate | Third-party Blackbox / ecosystem participants | Independent reports, moderation, endorsement or promotion according to upstream rules | Usually yes |
 | Synchronize | Local Blackbox dashboard and its configured DKG node | Fetch and compile verified graph knowledge; expose local dashboard status and graph view | Yes for updates; cached data can be read locally |
 | Enforce | Windows Firewall / Axiom Privacy Shield / optional Blackbox guard | Apply local rules; Blackbox guard enforces its configured agent policy when reachable | Local enforcement does not require an online DKG lookup |
@@ -26,11 +26,19 @@ The **standalone Axiom DKG node** and the **DKG node configured by Blackbox** ar
 
 - Privacy Shield list matches stay **local**. A blocked malware domain is recorded with its matched rule, source id/version, Axiom version, reason and timestamp for local provenance, but it is not proposed to the community: the same public URLhaus list on every install would look like independent corroboration. Advertising, analytics, telemetry and tracking detections are never candidates.
 - The optional AI Analyst may propose structured malicious-role indicators only if they match remote endpoints already included in its evidence package and meet its severity/status restrictions. A value already present in Axiom's local malware-list block history is suppressed as list-derived. Text in observations, advice and free-form analysis is never scraped for arbitrary domains.
-- A blocked DNS lookup proves an attempted lookup, **not** that malicious content was downloaded or that a completed connection occurred. A blocked lookup alone does not establish that a file was downloaded.
-- Proposed items are **not automatically sent**. The user reviews and explicitly triggers submission. Turning on threat-sharing capability alone does not publish the queue.
+- A blocked DNS lookup proves an attempted lookup. Analyst correlations and DNS blocks stay local and require independent evidence before publication.
+- Community reports require evidence of a reproducible attack or curator confirmation, a supported evidence context, and an exact, normalized public indicator. Private IPs and local DNS names are excluded.
 - The reporter may reject an item under upstream policy, cooldown or consent rules. Axiom cannot guarantee acceptance or later verification.
 
 See [AI Analyst](AI_ANALYST.md) and [Optional integrations](INTEGRATIONS.md).
+
+## Manual reporting consent
+
+The interactive **Complete Protection** setup includes the manual-reporting permission in its existing risk acceptance checkbox. In silent setup, specify `--allow-manual-threat-sharing` alongside `--accept-risk` to grant that permission. The user can manage it later in **Agent Protection**.
+
+Each submission still requires confirmation. The review shows the exact indicator, severity and context. Blackbox adds the node identity and signature, and publishes under its Reporter Terms. The publication can be copied under CC0, including before a later retraction. Axiom sends a closed set of normalized fields. Local evidence, prompts, file paths, logs and policy details stay outside the report.
+
+Blackbox's own automatic sharing is a separate setting that its dashboard and other Blackbox clients can manage. Axiom shows its status in **Agent Protection** and provides an explicit action to turn it off. Axiom's manual reporter requires automatic sharing to be off and saves acceptance of the Reporter Terms separately for its own manual submissions.
 
 ### Proposed upstream provenance fields
 
@@ -63,7 +71,7 @@ documented per-indicator or batch lookup with provenance.
 
 ## Local queue, retries and retention
 
-The service persists candidates in its local threat-share store (currently `threat-share.json`, with a maximum of 500 saved entries). Failed attempts caused by network/node outages, missing CLI or unexpected reporter responses can be marked **deferred** with exponential backoff, starting at five minutes and capped at six hours. A daily reporter cap leaves items pending. **Retries are user-initiated** through **Share** or **Send now** when eligible; the existence of a backoff timestamp does *not* imply an automatic timer will transmit reports.
+The service persists candidates in its local threat-share store (currently `threat-share.json`, with a maximum of 500 saved entries). Known transient failures can be marked **deferred** with exponential backoff, starting at five minutes and capped at six hours. A daily reporter cap leaves items pending. **Retries are user-initiated** and require a new confirmation. Axiom's manual reporter records delivery attempts in the Blackbox ledger and leaves them out of the Blackbox retry and renewal queues.
 
 Axiom keeps local state according to its local retention and queue limits. This is **not** a permanent archive or proof that an upstream sighting remains available after its network TTL expires.
 

@@ -20,13 +20,15 @@ public sealed class ThreatSharePreflightTests
             Context = "fetched-by-tool",
             Source = Axiom.Contracts.Threat.ThreatShareSource.AiAnalyst,
             Detail = detail,
+            EvidenceClass = ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+            ProofGrade = ThreatShareProofGrade.Reproduced,
         };
 
     [Fact]
-    public void A_novel_public_indicator_with_consent_and_key_is_ready()
+    public void A_novel_public_indicator_in_manual_mode_is_ready()
     {
         var preflight = ThreatSharePreflight.Evaluate(
-            Candidate(), sharingEnabled: true, consentPresent: true, reporterKeyPresent: true,
+            Candidate(), sharingEnabled: true, automaticSharingOff: true,
             rulesetJson: """{"rules":[]}""");
 
         Assert.True(preflight.Ready);
@@ -44,7 +46,7 @@ public sealed class ThreatSharePreflightTests
     public void Synthetic_tracking_and_shared_hosts_are_refused(string type, string value)
     {
         var preflight = ThreatSharePreflight.Evaluate(
-            Candidate(type, value), true, true, true, rulesetJson: string.Empty);
+            Candidate(type, value), true, true, rulesetJson: string.Empty);
 
         Assert.False(preflight.Ready);
         var category = Assert.Single(preflight.Failures, check => check.Name == "category");
@@ -57,7 +59,7 @@ public sealed class ThreatSharePreflightTests
     public void The_eicar_test_file_is_never_shared(string hash)
     {
         var preflight = ThreatSharePreflight.Evaluate(
-            Candidate("hash", hash), true, true, true, rulesetJson: string.Empty);
+            Candidate("hash", hash), true, true, rulesetJson: string.Empty);
 
         Assert.False(preflight.Ready);
         Assert.Contains(preflight.Failures, check => check.Name == "category");
@@ -68,7 +70,7 @@ public sealed class ThreatSharePreflightTests
     {
         const string ruleset = """{"entries":[{"id":"ioc:domain:c2.bad-host-c2.net"}]}""";
 
-        var preflight = ThreatSharePreflight.Evaluate(Candidate(), true, true, true, ruleset);
+        var preflight = ThreatSharePreflight.Evaluate(Candidate(), true, true, ruleset);
 
         Assert.False(preflight.Ready);
         var novelty = Assert.Single(preflight.Failures, check => check.Name == "novelty");
@@ -76,15 +78,14 @@ public sealed class ThreatSharePreflightTests
     }
 
     [Fact]
-    public void Missing_consent_key_or_sharing_off_are_named_in_the_failure()
+    public void Manual_consent_and_the_separate_automatic_sharing_gate_are_required()
     {
         var preflight = ThreatSharePreflight.Evaluate(
-            Candidate(), false, false, false, rulesetJson: null);
+            Candidate(), false, false, rulesetJson: null);
 
         Assert.False(preflight.Ready);
         Assert.Contains("sharing", preflight.FailureText, StringComparison.Ordinal);
-        Assert.Contains("reporter terms", preflight.FailureText, StringComparison.Ordinal);
-        Assert.Contains("reporter key", preflight.FailureText, StringComparison.Ordinal);
+        Assert.Contains("Blackbox automatic sharing", preflight.FailureText, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -101,7 +102,7 @@ public sealed class ThreatSharePreflightTests
     {
         var candidate = Candidate() with { Reason = "because" };
 
-        var preflight = ThreatSharePreflight.Evaluate(candidate, true, true, true, null);
+        var preflight = ThreatSharePreflight.Evaluate(candidate, true, true, null);
 
         Assert.False(preflight.Ready);
         Assert.Contains(preflight.Failures, check => check.Name == "reason");
@@ -115,7 +116,7 @@ public sealed class ThreatSharePreflightTests
     public void Cloud_object_stores_and_major_cdns_are_refused(string type, string value)
     {
         var preflight = ThreatSharePreflight.Evaluate(
-            Candidate(type, value), sharingEnabled: true, consentPresent: true, reporterKeyPresent: true,
+            Candidate(type, value), sharingEnabled: true, automaticSharingOff: true,
             rulesetJson: string.Empty);
 
         Assert.False(preflight.Ready);

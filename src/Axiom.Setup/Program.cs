@@ -89,8 +89,7 @@ internal static class Program
             {
                 Console.Error.WriteLine(
                     "Axiom is a development build. Pass --accept-risk with --silent to confirm that you use it at your own risk. "
-                    + "A Complete installation also enables signed, redacted threat sharing; prompts, commands, "
-                    + "file paths, credentials, model content and session ids are never sent.");
+                    + "Manual threat reporting is a separate opt-in (--allow-manual-threat-sharing). Each report requires confirmation in Axiom.");
                 Environment.ExitCode = 2;
                 return;
             }

@@ -21,7 +21,8 @@ internal sealed class ModuleWindowHider : IDisposable
 
     public void Start()
     {
-        _loop ??= Task.Run(RunAsync);
+        var cancellationToken = _cancellation.Token;
+        _loop ??= Task.Run(() => RunAsync(cancellationToken));
     }
 
     public void Dispose()
@@ -30,20 +31,22 @@ internal sealed class ModuleWindowHider : IDisposable
         _cancellation.Dispose();
     }
 
-    private async Task RunAsync()
+    private static async Task RunAsync(CancellationToken cancellationToken)
     {
-        // The login tasks and their child workers appear over the first minutes. Check often at
-        // startup and rarely afterwards; a hidden console is cosmetic and never a dependency.
+        // Vendor login tasks may start alongside Axiom. Later Axiom launches use the bounded
+        // descendant hider and do not need a recurring WMI scan.
         var deadline = DateTimeOffset.UtcNow.AddMinutes(3);
-        while (!_cancellation.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested && DateTimeOffset.UtcNow < deadline)
         {
+            if (!Axiom.Presentation.BackgroundWindowSettingsStore.Enabled)
+            {
+                return;
+            }
+
             HideModuleWindows();
-            var delay = DateTimeOffset.UtcNow < deadline
-                ? TimeSpan.FromMilliseconds(500)
-                : TimeSpan.FromSeconds(30);
             try
             {
-                await Task.Delay(delay, _cancellation.Token).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -54,11 +57,6 @@ internal sealed class ModuleWindowHider : IDisposable
 
     private static void HideModuleWindows()
     {
-        if (!Axiom.Presentation.BackgroundWindowSettingsStore.Enabled)
-        {
-            return;
-        }
-
         try
         {
             using var searcher = new ManagementObjectSearcher(

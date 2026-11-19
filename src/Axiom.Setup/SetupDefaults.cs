@@ -8,6 +8,7 @@ using Axiom.Contracts.Community;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Privacy;
 using Axiom.Contracts.Protection;
+using Axiom.Presentation;
 using Microsoft.Win32;
 
 namespace Axiom.Setup;
@@ -47,7 +48,8 @@ internal static class SetupDefaults
         string installDir,
         Action<string> report,
         CancellationToken cancellationToken,
-        bool serviceAlreadyRegistered = false)
+        bool serviceAlreadyRegistered = false,
+        bool allowManualThreatSharing = false)
     {
         var marker = new Dictionary<string, object?>
         {
@@ -56,9 +58,12 @@ internal static class SetupDefaults
             ["serviceInstalled"] = false,
             ["shieldEnabled"] = false,
             ["privacyEnabled"] = false,
-            ["threatSharingConsent"] = true,
-            ["threatSharingConsentUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
         };
+
+        if (allowManualThreatSharing && !ThreatSharingConsent.TrySetPermission(true))
+        {
+            report("The manual threat-reporting preference could not be saved. Review it in Agent Protection.");
+        }
 
         try
         {

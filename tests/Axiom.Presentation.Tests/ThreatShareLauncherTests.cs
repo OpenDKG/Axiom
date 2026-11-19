@@ -23,7 +23,7 @@ public sealed class ThreatShareLauncherTests
     public void Plans_prefer_the_committed_runtime_then_the_launcher_then_the_module()
     {
         var plans = ThreatShareLauncher.BuildPlans(
-            Candidate(),
+            ["blackbox", "report", "--retract", Candidate().Id],
             blackboxRoot: @"C:\axiom\blackbox",
             runtimePython: @"C:\hermes\env\Scripts\python.exe",
             hermesExe: @"C:\axiom\blackbox\venv\Scripts\hermes.exe",
@@ -56,11 +56,32 @@ public sealed class ThreatShareLauncherTests
     public void Missing_optional_launchers_are_skipped()
     {
         var plans = ThreatShareLauncher.BuildPlans(
-            Candidate(), @"C:\axiom\blackbox", runtimePython: null, hermesExe: null,
+            ["blackbox", "report", "--retract", Candidate().Id], @"C:\axiom\blackbox", runtimePython: null, hermesExe: null,
             venvPython: @"C:\axiom\blackbox\venv\Scripts\python.exe", hermesHome: @"C:\h");
 
         var plan = Assert.Single(plans);
         Assert.EndsWith("python.exe", plan.FileName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Manual_reporting_uses_only_the_guarded_child_and_an_isolated_consent_receipt()
+    {
+        var plans = ThreatShareLauncher.BuildManualReportPlans(
+            ThreatShareLauncher.ReportArguments(Candidate()),
+            @"C:\axiom\blackbox",
+            @"C:\hermes\env\Scripts\python.exe",
+            @"C:\axiom\blackbox\venv\Scripts\python.exe",
+            @"C:\hermes");
+
+        Assert.Equal(2, plans.Count);
+        Assert.All(plans, plan =>
+        {
+            Assert.Equal(ThreatShareLauncher.ManualReportBootstrap, plan.Arguments[1]);
+            Assert.Equal("report", plan.Arguments[2]);
+            Assert.DoesNotContain("BLACKBOX_REPORT", plan.Environment.Keys);
+            Assert.Equal(ThreatSharingConsent.DefaultPath + ".blackbox-terms.json",
+                plan.Environment[ThreatShareLauncher.ManualConsentPathVariable]);
+        });
     }
 
     [Fact]

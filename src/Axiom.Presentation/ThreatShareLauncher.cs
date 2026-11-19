@@ -41,6 +41,56 @@ public static class ThreatShareLauncher
         "a=p.parse_args(sys.argv[1:])\n" +
         "sys.exit(rc.cmd_report(a))";
 
+    internal const string ManualReportStarted = "Axiom manual reporter ready.";
+    internal const string ManualConsentPathVariable = "AXIOM_MANUAL_REPORT_CONSENT_PATH";
+
+    // The installed Blackbox supports a process-scoped BLACKBOX_REPORT override. Load the
+    // underlying profile first, accept terms only for the confirmed operation, and invoke the
+    // reporter directly so the override never starts a dashboard or enables other agent hooks.
+    internal const string ManualReportBootstrap = """
+        import argparse, os, sys
+        from pathlib import Path
+        from plugins.blackbox.kernel.config import load_blackbox_config
+        from plugins.blackbox.community import consent, sharing
+        from plugins.blackbox.community.report_cli import report_command as rc
+
+        effective = load_blackbox_config()
+        os.environ.pop("BLACKBOX_REPORT", None)
+        saved = load_blackbox_config()
+        if effective.report or saved.report:
+            sys.exit("Not submitted: turn off Blackbox automatic sharing first.")
+        if not saved.context_graph_id or saved.community_sandbox:
+            sys.exit("Not submitted: a non-sandbox Blackbox graph must be configured.")
+        p = argparse.ArgumentParser(prog="blackbox")
+        rc.add_report_parser(p.add_subparsers(dest="cmd"))
+        args = p.parse_args(sys.argv[1:])
+        terms = consent.terms_text()
+        if not terms:
+            sys.exit("Not submitted: Blackbox reporter terms could not be read.")
+        receipt_path = os.environ.pop("AXIOM_MANUAL_REPORT_CONSENT_PATH", "")
+        if not receipt_path or not callable(getattr(consent, "_record_path", None)):
+            sys.exit("Not submitted: this Blackbox build cannot isolate manual reporter consent.")
+        if not callable(getattr(sharing, "_after_send", None)) or not callable(getattr(sharing, "_ledger_share", None)):
+            sys.exit("Not submitted: this Blackbox build cannot isolate manual reporter retries.")
+
+        # Use the vendor's ledger without enrolling this report for retry or renewal.
+        def record_one_attempt(cfg, finding, name, subject, quads, outcome, detail):
+            if outcome is not sharing.ShareOutcome.NOT_ALLOWED:
+                sharing._ledger_share(
+                    finding, subject, name, ok=outcome is sharing.ShareOutcome.ACCEPTED,
+                    error=detail, outcome=outcome.value)
+
+        sharing._after_send = record_one_attempt
+        consent._record_path = lambda: Path(receipt_path)
+        receipt = consent.current()
+        if receipt is None or not consent.in_force() or receipt.terms_hash != consent.terms_hash(terms):
+            if consent.record() is None:
+                sys.exit("Not submitted: Blackbox reporter consent could not be saved.")
+        os.environ["BLACKBOX_REPORT"] = "true"
+        print("Axiom manual reporter ready.", flush=True)
+        sys.exit(rc.cmd_report(args))
+        """;
+
     /// <summary>
     /// Report arguments shared by every plan. Only the closed vocabulary Axiom validated locally is
     /// sent; severity is the reporter's own floor and carries no free text.
@@ -52,24 +102,34 @@ public static class ThreatShareLauncher
         "--ioc-type", candidate.IndicatorType,
         "--value", candidate.Value,
         "--context", candidate.Context,
-        "--severity", "high",
+        "--severity", ThreatShareVocabulary.NormalizeSeverity(candidate.Severity),
     ];
 
-    /// <summary>Plans in preference order: committed interpreter, vendor launcher, reporter module.</summary>
-    public static IReadOnlyList<ThreatShareLaunchPlan> BuildPlans(
-        ThreatShareCandidate candidate,
+    internal static IReadOnlyList<ThreatShareLaunchPlan> BuildManualReportPlans(
+        IReadOnlyList<string> arguments,
         string blackboxRoot,
         string? runtimePython,
-        string? hermesExe,
         string? venvPython,
         string hermesHome)
     {
-        ArgumentNullException.ThrowIfNull(candidate);
-        return BuildPlans(
-            ReportArguments(candidate), blackboxRoot, runtimePython, hermesExe, venvPython, hermesHome);
+        var environment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [BlackboxPaths.HermesHomeVariable] = hermesHome,
+            ["PYTHONPATH"] = blackboxRoot,
+            [ManualConsentPathVariable] = ThreatSharingConsent.DefaultPath + ".blackbox-terms.json",
+        };
+
+        return new[] { runtimePython, venvPython }
+            .OfType<string>()
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(path => new ThreatShareLaunchPlan(
+                path, ["-c", ManualReportBootstrap, .. arguments.Skip(1)], blackboxRoot, environment,
+                "the isolated Blackbox manual reporter"))
+            .ToList();
     }
 
-    /// <summary>Plans for any reporter command; the leading <c>blackbox</c> token is dropped for the module.</summary>
+    /// <summary>Retraction plans. The leading <c>blackbox</c> token is dropped for the direct module.</summary>
     public static IReadOnlyList<ThreatShareLaunchPlan> BuildPlans(
         IReadOnlyList<string> commandArguments,
         string blackboxRoot,

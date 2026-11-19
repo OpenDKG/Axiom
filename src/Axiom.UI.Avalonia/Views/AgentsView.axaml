@@ -2,8 +2,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              xmlns:views="using:Axiom.UI.Avalonia.Views"
+             xmlns:imaging="using:Avalonia.Media.Imaging"
              x:Class="Axiom.UI.Avalonia.Views.AgentsView">
   <UserControl.Styles>
+    <Style Selector="views|AgentsView.light-logo-shadow Image.module-logo">
+      <Setter Property="Effect">
+        <DropShadowEffect Color="#242831" BlurRadius="4" OffsetX="0" OffsetY="1" Opacity="0.75" />
+      </Setter>
+    </Style>
     <Style Selector="Ellipse.tone-ok">
       <Setter Property="Fill" Value="{DynamicResource Axiom.Success}" />
     </Style>
@@ -82,11 +88,14 @@
       <Grid x:Name="ModuleCardsGrid" ColumnDefinitions="*,14,*">
         <Border x:Name="DkgModuleCard" Grid.Column="0" Classes="card" Padding="14">
           <StackPanel Spacing="10">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-              <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="6,4" VerticalAlignment="Center">
-                <Image Source="avares://Axiom.UI.Avalonia/Assets/origintrail-logo.png"
-                       Height="56" Stretch="Uniform" />
-              </Border>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" MinHeight="36">
+              <Image Classes="module-logo" Width="166" Height="36"
+                     HorizontalAlignment="Left" Stretch="Uniform" ToolTip.Tip="OriginTrail">
+                <Image.Source>
+                  <imaging:CroppedBitmap Source="avares://Axiom.UI.Avalonia/Assets/origintrail-logo.png"
+                                         SourceRect="232,163,1690,397" />
+                </Image.Source>
+              </Image>
               <controls:AxiomSelectableTextBlock Grid.Column="1" Text="origintrail.io" FontSize="10"
                          Foreground="{DynamicResource Axiom.TextMuted}" HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
@@ -105,18 +114,17 @@
         </Border>
         <Border x:Name="BlackboxModuleCard" Grid.Column="2" Classes="card" Padding="14">
           <StackPanel Spacing="10">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-              <Border Grid.Column="0" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="6,4" VerticalAlignment="Center">
-                <Image Source="avares://Axiom.UI.Avalonia/Assets/blackbox-logo.png"
-                       Height="34" Stretch="Uniform" />
-              </Border>
-              <Border Grid.Column="1" Background="{DynamicResource Axiom.LogoBackground}" CornerRadius="8" Padding="6,4"
-                      HorizontalAlignment="Right" VerticalAlignment="Center">
-                <Image Source="avares://Axiom.UI.Avalonia/Assets/umanitek-logo.png"
-                       Height="44" Stretch="Uniform"
-                       ToolTip.Tip="Umanitek" />
-              </Border>
-            </Grid>
+            <WrapPanel Orientation="Horizontal" ItemSpacing="14" LineSpacing="3" MinHeight="36">
+              <Image Classes="module-logo" Width="236" Height="40"
+                     Stretch="Uniform" ToolTip.Tip="Blackbox"
+                     Source="avares://Axiom.UI.Avalonia/Assets/blackbox-logo.png" />
+              <Image Classes="module-logo" Width="146" Height="40" Stretch="Uniform" ToolTip.Tip="Umanitek">
+                <Image.Source>
+                  <imaging:CroppedBitmap Source="avares://Axiom.UI.Avalonia/Assets/umanitek-logo.png"
+                                         SourceRect="227,232,1718,256" />
+                </Image.Source>
+              </Image>
+            </WrapPanel>
             <StackPanel Spacing="4">
               <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                 <Border Grid.Column="0" Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
@@ -149,11 +157,16 @@
             </StackPanel>
           </Grid>
           <controls:AxiomSelectableTextBlock
-                     Text="Axiom only proposes evidence-bound AI Analyst indicators: a malicious-role value must match a remote endpoint Axiom observed. Public blocklist matches stay local and are never reported — they would echo the same list from every install. Ads, tracking and telemetry lists are never proposed. Prompts, commands, file paths, credentials and session ids are never sent."
+                     Text="Axiom keeps AI suggestions, observed endpoints and public blocklist matches local. A manual report needs verified evidence and your confirmation of the exact indicator."
                      FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-                     <controls:AxiomSelectableTextBlock
-                     Text="A Complete installation turns sharing on with your consent at install time. Only signed, redacted indicators leave the machine - never prompts, commands, paths, credentials, model content or session ids. It strengthens the verified graph for everyone (help me help you), and you can turn it off here at any time."
-                     FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <StackPanel Spacing="4" IsVisible="{Binding CanDisableBlackboxAutomaticSharing}">
+            <controls:AxiomSelectableTextBlock
+                       Text="Blackbox automatic sharing is active. Blackbox can publish its own reports and digests independently of the Axiom queue."
+                       IsVisible="{Binding BlackboxAutomaticSharing}"
+                       FontSize="10" Foreground="{DynamicResource Axiom.Warning}" TextWrapping="Wrap" />
+            <Button Content="Turn off Blackbox automatic sharing"
+                    Command="{Binding DisableBlackboxAutomaticSharingCommand}" HorizontalAlignment="Left" Padding="10,5" />
+          </StackPanel>
           <Border Background="{DynamicResource Axiom.SurfaceAlt}"
                   BorderBrush="{DynamicResource Axiom.Border}"
                   BorderThickness="1"
