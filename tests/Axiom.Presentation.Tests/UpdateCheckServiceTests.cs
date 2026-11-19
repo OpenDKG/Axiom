@@ -206,7 +206,7 @@ public sealed class UpdateCheckServiceTests : IDisposable
     public async Task Installer_download_keeps_only_bytes_verified_for_the_detected_release(bool tampered)
     {
         const string url = "https://github.com/OpenDKG/Axiom/releases/download/v1.4.5/Axiom-Setup.exe";
-        var expected = "installer fixture"u8.ToArray();
+        var expected = new byte[150 * 1024];
         var returned = expected.ToArray();
         if (tampered)
         {
@@ -231,20 +231,32 @@ public sealed class UpdateCheckServiceTests : IDisposable
         Assert.True(await service.CheckIfDueAsync());
         Assert.Equal(1, handler.RequestCount);
         var downloadDir = Path.Combine(_tempDir.FullName, "updates");
+        var progress = new RecordedProgress();
         if (tampered)
         {
             await Assert.ThrowsAsync<InvalidDataException>(
-                () => service.DownloadWindowsInstallerAsync(CancellationToken.None));
+                () => service.DownloadWindowsInstallerAsync(CancellationToken.None, progress));
             Assert.Empty(Directory.GetFiles(downloadDir));
         }
         else
         {
-            var path = await service.DownloadWindowsInstallerAsync(CancellationToken.None);
+            var path = await service.DownloadWindowsInstallerAsync(CancellationToken.None, progress);
             Assert.Equal(Path.Combine(downloadDir, "Axiom-Setup.exe"), path);
             Assert.Equal(expected, await File.ReadAllBytesAsync(path));
         }
 
+        Assert.Equal(0, progress.Values[0]);
+        Assert.Equal(100, progress.Values[^1]);
+        Assert.True(progress.Values.Count > 2);
+        Assert.Equal(progress.Values.Distinct().Order(), progress.Values);
         Assert.Equal(new Uri(url), handler.LastRequestUri);
+    }
+
+    private sealed class RecordedProgress : IProgress<int>
+    {
+        public List<int> Values { get; } = [];
+
+        public void Report(int value) => Values.Add(value);
     }
 
     private sealed class BlockingHandler(Task releaseTask, string json) : HttpMessageHandler
