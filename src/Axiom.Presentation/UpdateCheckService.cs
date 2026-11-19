@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Globalization;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Axiom.Contracts;
 
@@ -9,12 +11,14 @@ namespace Axiom.Presentation;
 
 /// <summary>
 /// Checks GitHub Releases at most once every 6 hours when opted in and exposes whether a newer
-/// stable release is available. Never sends telemetry or installation IDs and never downloads binaries.
+/// stable release is available. Installer downloads require an explicit user action.
 /// </summary>
 public sealed class UpdateCheckService : IDisposable
 {
     public const string DefaultReleasesPageUrl = ProjectLinks.Releases;
     private const string RepositoryWebPrefix = DefaultReleasesPageUrl + "/tag/";
+    private const string WindowsInstallerName = "Axiom-Setup.exe";
+    private const long MaxInstallerBytes = 512L * 1024 * 1024;
     public static readonly TimeSpan MinimumCheckInterval = TimeSpan.FromHours(6);
 
     private readonly Version _currentVersion;
@@ -31,6 +35,7 @@ public sealed class UpdateCheckService : IDisposable
     private string _releaseDateText = string.Empty;
     private string _summaryText = string.Empty;
     private string _releaseUrl = DefaultReleasesPageUrl;
+    private InstallerAsset? _windowsInstaller;
     private bool _isUpdateAvailable;
     private bool _disposed;
 
@@ -69,6 +74,74 @@ public sealed class UpdateCheckService : IDisposable
     public string DismissedVersion => _dismissedVersion;
 
     public bool IsUpdateAvailable => _isUpdateAvailable;
+
+    private sealed record InstallerAsset(Uri DownloadUri, long Size, string Sha256);
+
+    /// <summary>Downloads the exact Windows asset for the detected release and verifies its GitHub digest.</summary>
+    public async Task<string> DownloadWindowsInstallerAsync(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var asset = _windowsInstaller;
+        if (!_isUpdateAvailable || asset is null)
+        {
+            throw new InvalidOperationException("This release does not provide a verifiable Windows installer.");
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(15));
+        var token = timeout.Token;
+        var settingsDirectory = Path.GetDirectoryName(Path.GetFullPath(_settingsStore.SettingsPath))!;
+        var directory = Path.Combine(settingsDirectory, "updates");
+        Directory.CreateDirectory(directory);
+        var installerPath = Path.Combine(directory, WindowsInstallerName);
+        var partialPath = Path.Combine(directory, Guid.NewGuid().ToString("N") + ".partial");
+        try
+        {
+            using var response = await _http.GetAsync(
+                asset.DownloadUri, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength is long contentLength && contentLength != asset.Size)
+            {
+                throw new InvalidDataException("The installer size does not match the published release.");
+            }
+
+            await using var input = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            long total = 0;
+            await using (var output = new FileStream(
+                             partialPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                             bufferSize: 64 * 1024, useAsync: true))
+            {
+                var buffer = new byte[64 * 1024];
+                int read;
+                while ((read = await input.ReadAsync(buffer, token).ConfigureAwait(false)) != 0)
+                {
+                    total += read;
+                    if (total > asset.Size)
+                    {
+                        throw new InvalidDataException("The installer is larger than the published release.");
+                    }
+
+                    hash.AppendData(buffer, 0, read);
+                    await output.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
+                }
+            }
+
+            if (total != asset.Size ||
+                !string.Equals(Convert.ToHexString(hash.GetHashAndReset()), asset.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException("The installer failed SHA-256 verification.");
+            }
+
+            token.ThrowIfCancellationRequested();
+            File.Move(partialPath, installerPath, overwrite: true);
+            return installerPath;
+        }
+        finally
+        {
+            File.Delete(partialPath);
+        }
+    }
 
     /// <summary>Updates the user opt-in/opt-out setting and persists it without network traffic.</summary>
     public void SetCheckForUpdatesEnabled(bool enabled)
@@ -306,6 +379,7 @@ public sealed class UpdateCheckService : IDisposable
         _releaseDateText = dateText;
         _summaryText = summary;
         _releaseUrl = htmlUrl;
+        _windowsInstaller = ReadWindowsInstaller(root, tagName!);
         _isUpdateAvailable = _checkForUpdates &&
                              !string.Equals(_dismissedVersion, formattedRemote, StringComparison.Ordinal);
 
@@ -321,10 +395,51 @@ public sealed class UpdateCheckService : IDisposable
         _releaseDateText = string.Empty;
         _summaryText = string.Empty;
         _releaseUrl = DefaultReleasesPageUrl;
+        _windowsInstaller = null;
         if (changed)
         {
             Changed?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private static InstallerAsset? ReadWindowsInstaller(JsonElement release, string tag)
+    {
+        if (!release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var downloadUri = new Uri(
+            $"{DefaultReleasesPageUrl}/download/{Uri.EscapeDataString(tag)}/{WindowsInstallerName}");
+        foreach (var asset in assets.EnumerateArray())
+        {
+            if (asset.ValueKind != JsonValueKind.Object ||
+                !asset.TryGetProperty("name", out var name) ||
+                name.ValueKind != JsonValueKind.String ||
+                !string.Equals(name.GetString(), WindowsInstallerName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (!asset.TryGetProperty("browser_download_url", out var url) ||
+                url.ValueKind != JsonValueKind.String ||
+                !string.Equals(url.GetString(), downloadUri.AbsoluteUri, StringComparison.Ordinal) ||
+                !asset.TryGetProperty("size", out var length) ||
+                length.ValueKind != JsonValueKind.Number ||
+                !length.TryGetInt64(out var size) || size <= 0 || size > MaxInstallerBytes ||
+                !asset.TryGetProperty("digest", out var digest) ||
+                digest.ValueKind != JsonValueKind.String ||
+                digest.GetString() is not { Length: 71 } digestText ||
+                !digestText.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ||
+                !digestText[7..].All(Uri.IsHexDigit))
+            {
+                return null;
+            }
+
+            return new InstallerAsset(downloadUri, size, digestText[7..]);
+        }
+
+        return null;
     }
 
     private static Version NormalizeVersion(Version version) => new(

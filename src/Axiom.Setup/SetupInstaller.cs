@@ -251,6 +251,18 @@ internal static class SetupInstaller
                         }
                     }
 
+                    var storageReport = await Task.Run(
+                        () => ModuleStorageMaintenance.RunOnce(),
+                        cancellationToken).ConfigureAwait(false);
+                    if (storageReport.DkgConfigsUpdated > 0 ||
+                        storageReport.TrimmedLogs > 0 ||
+                        storageReport.RemovedFiles > 0)
+                    {
+                        Report($"Storage hygiene: updated {storageReport.DkgConfigsUpdated} DKG WAL policy config(s), " +
+                               $"trimmed {storageReport.TrimmedLogs} log(s), removed {storageReport.RemovedFiles} rotated log(s) " +
+                               $"({storageReport.ReclaimedBytes / 1_048_576.0:F1} MB reclaimed).");
+                    }
+
                     var blackboxProvidesDkg = blackboxExit &&
                                               await TryWaitForBlackboxDkgAsync(cancellationToken).ConfigureAwait(false);
                     if (blackboxProvidesDkg)

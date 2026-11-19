@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Net.Http;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -336,9 +338,46 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public bool HasUpdateSummary => !string.IsNullOrWhiteSpace(UpdateSummaryText);
 
+    public string UpdateActionText => OperatingSystem.IsWindows() ? "Download and open installer" : "Release details";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasUpdateDownloadStatus))]
+    private string _updateDownloadStatus = string.Empty;
+
+    public bool HasUpdateDownloadStatus => !string.IsNullOrWhiteSpace(UpdateDownloadStatus);
+
     [RelayCommand]
-    private Task OpenUpdateAsync() =>
-        OpenExternalUrlAsync(_updateChecker.ReleaseUrl);
+    private async Task OpenUpdateAsync()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            await OpenExternalUrlAsync(_updateChecker.ReleaseUrl).ConfigureAwait(true);
+            return;
+        }
+
+        var token = _cancellation.Token;
+        UpdateDownloadStatus = "Downloading and verifying the installer…";
+        try
+        {
+            var installer = await _updateChecker.DownloadWindowsInstallerAsync(token).ConfigureAwait(true);
+            token.ThrowIfCancellationRequested();
+            await _ui.OpenExternalAsync(installer, token).ConfigureAwait(true);
+            UpdateDownloadStatus = "Installer opened. Choose Complete or Partial in the installer.";
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+            UpdateDownloadStatus = "The installer download timed out. Try again.";
+        }
+        catch (Exception exception) when (exception is
+                     IOException or HttpRequestException or UnauthorizedAccessException or
+                     InvalidOperationException or NotSupportedException or System.ComponentModel.Win32Exception)
+        {
+            UpdateDownloadStatus = $"Could not download or open the installer. {exception.Message}";
+        }
+    }
 
     private async Task OpenExternalUrlAsync(string url)
     {

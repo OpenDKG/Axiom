@@ -49,6 +49,9 @@ public sealed class UpgradeDataGuardTests
             Write(local, @"hermes\blackbox\findings.jsonl", "keep");
             Write(local, @"Axiom\modules\blackbox\agent-blackbox\.dkg\agent-key.bin", "identity");
             Write(local, @"hermes\blackbox\node\.dkg\oxigraph-data\0001.log", new string('x', 1024));
+            Write(local, @"hermes\blackbox\node\.dkg\oxigraph\oxigraph-v0.5.8.exe", new string('e', 1024));
+            Write(local, @"hermes\blackbox\node\.dkg\swm-public-snapshots\snap.bin", new string('s', 1024));
+            Write(local, @"hermes\blackbox\node\.dkg\rfc64-sync\state.bin", new string('r', 1024));
             Write(local, @"hermes\blackbox\node_modules\pkg\index.js", "js");
             Write(local, @"hermes\blackbox\daemon.log", "log");
             Write(local, @"Axiom\big.bin", new string('b', 33 * 1024 * 1024));
@@ -60,6 +63,9 @@ public sealed class UpgradeDataGuardTests
             Assert.Contains(backup!.Entries, entry => entry.RelativePath.EndsWith("findings.jsonl", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(backup.Entries, entry => entry.RelativePath.EndsWith("agent-key.bin", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(backup.Entries, entry => entry.RelativePath.Contains("oxigraph-data", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(backup.Entries, entry => entry.RelativePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(backup.Entries, entry => entry.RelativePath.Contains("swm-public-snapshots", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(backup.Entries, entry => entry.RelativePath.Contains("rfc64-sync", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(backup.Entries, entry => entry.RelativePath.Contains("node_modules", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(backup.Entries, entry => entry.RelativePath.EndsWith("daemon.log", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(backup.Entries, entry => entry.RelativePath.EndsWith("big.bin", StringComparison.OrdinalIgnoreCase));

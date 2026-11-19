@@ -29,6 +29,7 @@ public partial class App : Application
     private MainWindow? _window;
     private TrayIcon? _tray;
     private ModuleWindowHider? _moduleWindowHider;
+    private IDisposable? _storageMaintenance;
     private SingleInstanceGuard? _ownedFallbackInstance;
     private volatile bool _exiting;
     private volatile bool _allowExit;
@@ -198,6 +199,7 @@ public partial class App : Application
             (SingleInstance ?? _ownedFallbackInstance)?.StartListening(ShowWindow);
             _moduleWindowHider = new ModuleWindowHider();
             _moduleWindowHider.Start();
+            _storageMaintenance = ModuleStorageMaintenance.StartPeriodic();
 
             if (_tray is null)
             {
@@ -388,5 +390,7 @@ public partial class App : Application
         _serviceHost?.Dispose();
         _moduleWindowHider?.Dispose();
         _moduleWindowHider = null;
+        _storageMaintenance?.Dispose();
+        _storageMaintenance = null;
     }
 }
