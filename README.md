@@ -22,7 +22,7 @@ installs the package and required dependencies and may prompt for `sudo`. On mac
 opens Axiom from `~/Applications` and preserves any app already there. The ad hoc-signed macOS preview
 may need macOS approval, and its Network Extension has separate activation requirements.
 
-[Download Windows 1.4.3](https://github.com/OpenDKG/Axiom/releases/tag/v1.4.3)
+[Download Axiom](https://github.com/OpenDKG/Axiom/releases/latest)
 · [All releases](https://github.com/OpenDKG/Axiom/releases)
 · [Pentest results](docs/PENTESTING.md)
 · [Project website](https://opendkg.org/axiom/)
@@ -100,7 +100,7 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 | Platform | Published build |
 | --- | --- |
-| Windows x64 | [1.4.3](https://github.com/OpenDKG/Axiom/releases/tag/v1.4.3), installer and portable ZIP. See the [release notes](docs/RELEASES/1.4.3.md). |
+| Windows x64 | [Latest release](https://github.com/OpenDKG/Axiom/releases/latest), installer and portable ZIP. |
 | Linux amd64 | [1.3.0 Core Preview 2](https://github.com/OpenDKG/Axiom/releases/tag/v1.3.0-linux-preview.2), Debian package. |
 | macOS Intel | [1.3.0 Developer Preview 2](https://github.com/OpenDKG/Axiom/releases/tag/v1.3.0-macos-preview.2), ad hoc-signed app archive. The system extension has separate activation and signing requirements. |
 
