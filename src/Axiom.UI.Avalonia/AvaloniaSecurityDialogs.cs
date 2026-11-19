@@ -38,7 +38,7 @@ public sealed class AvaloniaSecurityDialogs(Func<Window?> ownerProvider) : ISecu
         {
             Text = current.ApiKey,
             PasswordChar = '●',
-            PlaceholderText = "VirusTotal API key (stored with DPAPI)",
+            PlaceholderText = $"VirusTotal API key (stored with {PlatformText.SecretStoreShort})",
         };
 
         var window = CreateWindow("Reputation provider");
@@ -103,7 +103,7 @@ public sealed class AvaloniaSecurityDialogs(Func<Window?> ownerProvider) : ISecu
         {
             Text = current.Token,
             PasswordChar = '●',
-            PlaceholderText = "Optional bearer token (stored with DPAPI)",
+            PlaceholderText = $"Optional bearer token (stored with {PlatformText.SecretStoreShort})",
         };
 
         var window = CreateWindow("Community feed");

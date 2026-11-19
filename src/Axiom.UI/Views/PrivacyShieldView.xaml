@@ -112,13 +112,13 @@
                      AutomationProperties.Name="Privacy Shield upstream DNS" />
           </Grid>
           <CheckBox Style="{StaticResource AppCheckBox}"
-                    Content="Encrypt upstream DNS via DoH (port 443 — hides queries from your ISP)"
+                    Content="Encrypt upstream DNS via DoH (HTTPS; the port comes from the DoH URL — hides queries from your ISP)"
                     IsChecked="{Binding EncryptDnsViaDoh, Mode=TwoWay}"
                     IsEnabled="{Binding IsSupported}"
                     Margin="190,6,0,0" />
           <TextBlock Text="When DoH encryption is enabled (default), Axiom never forwards plain port 53 DNS to your router or ISP unless you disable DoH or type an explicit udp:// address."
                      Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="190,4,0,0" />
-          <TextBlock Text="Suggested: 1.1.1.1 (Cloudflare), 8.8.8.8 (Google), 9.9.9.9 (Quad9), 94.140.14.14 (AdGuard) — these and explicit https://.../dns-query URLs use encrypted DoH over port 443. On a corporate or VPN network use that network's DNS (or udp://IP)."
+          <TextBlock Text="Suggested: 1.1.1.1 (Cloudflare), 8.8.8.8 (Google), 9.9.9.9 (Quad9), 94.140.14.14 (AdGuard) — these and explicit https://.../dns-query URLs use encrypted DoH over HTTPS (the port comes from the URL). On a corporate or VPN network use that network's DNS (or udp://IP)."
                      Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="190,3,0,0" />
           <TextBlock Text="Changing this upstream alone does not route Windows DNS through Privacy Shield. System-wide filtering starts only after the adapter selected below points its DNS at 127.0.0.1."
                      Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="190,3,0,0" />

@@ -52,6 +52,15 @@ public sealed record SecurityModule(
 
     public bool IsSecurityModule => Name is "Reputation provider" or "Community feed" or "File scanning";
 
+    /// <summary>
+    /// The Segoe MDL2 glyph on Windows. Other platforms have no font with those private-use code
+    /// points (they render as boxes), so they show the module's initial instead.
+    /// </summary>
+    public string DisplayGlyph =>
+        OperatingSystem.IsWindows() || Glyph.Length == 0 || Glyph[0] < '\uE000' || Glyph[0] > '\uF8FF'
+            ? Glyph
+            : Name.Length > 0 ? Name[..1] : string.Empty;
+
     public bool IsBlackbox => Name == "Blackbox";
 }
 
@@ -97,7 +106,9 @@ public sealed partial class FileScanRow : ObservableObject
 
     public bool CanBlockFromCommunity =>
         IsCommunityMatch &&
-        Path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+        (OperatingSystem.IsWindows()
+            ? Path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            : System.IO.Path.IsPathRooted(Path));
 }
 
 public sealed record CommunityFeedRow(string Sha256, string Name, string Verdict, string Source);
@@ -387,7 +398,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         : "NOT CONFIGURED";
 
     private string ReputationDetail => _reputationSettings.Enabled && !string.IsNullOrWhiteSpace(_reputationSettings.ApiKey)
-        ? "Hash-only lookups enabled; the API key is stored with Windows DPAPI."
+        ? $"Hash-only lookups enabled; the API key is stored with {PlatformText.SecretStore}."
         : "No external reputation lookup is enabled. Unknown is shown as unknown.";
 
     private bool IsCommunityConfigured =>
@@ -909,6 +920,12 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 return;
             }
 
+            if (!OptionalModuleInstaller.IsInstallSupported)
+            {
+                InstallStatusText = OptionalModuleInstaller.UnsupportedInstallMessage;
+                return;
+            }
+
             if (!await EnsureModulePrerequisitesAsync(includeVcRedist: true).ConfigureAwait(true))
             {
                 return;
@@ -964,6 +981,12 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 return;
             }
 
+            if (!OptionalModuleInstaller.IsInstallSupported)
+            {
+                InstallStatusText = OptionalModuleInstaller.UnsupportedInstallMessage;
+                return;
+            }
+
             if (!await EnsureModulePrerequisitesAsync(includeVcRedist: false).ConfigureAwait(true))
             {
                 return;
@@ -1011,6 +1034,12 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         if (DistributionContext.IsStorePackage)
         {
             InstallStatusText = "This optional third-party module is not included in the Microsoft Store build.";
+            return;
+        }
+
+        if (!OptionalModuleInstaller.IsInstallSupported)
+        {
+            InstallStatusText = OptionalModuleInstaller.UnsupportedInstallMessage;
             return;
         }
 
@@ -1128,13 +1157,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             }
 
             await RefreshAsync().ConfigureAwait(true);
-            InstallStatusText = (dkgUp, blackboxUp) switch
-            {
-                (true, true) => "Local modules are up: DKG node and Blackbox dashboard connected.",
-                (false, true) => "Blackbox is up. DKG is still offline, so local blocking works but shared-graph evidence is unavailable.",
-                (true, false) => "DKG is up. Blackbox is still offline, so agent protection is not enforcing; use Repair on its card.",
-                _ => "Neither local module answered. Install or Repair each card, then try Start local modules again.",
-            };
+            InstallStatusText = StartLocalModulesResultText(dkgUp, blackboxUp);
         }
         catch (OperationCanceledException) when (_disposed)
         {
@@ -1148,6 +1171,22 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Result line of "Start local modules". Off Windows the cards show no Repair and guided
+    /// installation is unsupported, so the text asks for a manual install and start instead.
+    /// </summary>
+    internal static string StartLocalModulesResultText(bool dkgUp, bool blackboxUp) => (dkgUp, blackboxUp) switch
+    {
+        (true, true) => "Local modules are up: DKG node and Blackbox dashboard connected.",
+        (false, true) => "Blackbox is up. DKG is still offline, so local blocking works but shared-graph evidence is unavailable.",
+        (true, false) when !OptionalModuleInstaller.IsInstallSupported =>
+            "DKG is up. Blackbox is still offline, so agent protection is not enforcing. Blackbox has to be installed and started manually; then click Check again.",
+        (true, false) => "DKG is up. Blackbox is still offline, so agent protection is not enforcing; use Repair on its card.",
+        _ when !OptionalModuleInstaller.IsInstallSupported =>
+            "Neither local module answered. The modules have to be installed and started manually; then click Check again.",
+        _ => "Neither local module answered. Install or Repair each card, then try Start local modules again.",
+    };
 
     [RelayCommand]
     private async Task CopyAgentDetailsAsync(ProtectedAgent? agent)

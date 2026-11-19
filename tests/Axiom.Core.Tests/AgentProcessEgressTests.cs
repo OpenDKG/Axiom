@@ -12,8 +12,10 @@ public sealed class AgentProcessEgressTests
     [Fact]
     public void An_authorized_agent_executable_gets_an_any_destination_block()
     {
+        // Native path per OS: Windows-style rule paths are rejected off Windows (#441).
+        var dropper = OperatingSystem.IsWindows() ? @"C:\Users\lab\Downloads\dropper.exe" : "/home/lab/Downloads/dropper";
         var result = AgentFirewallRulePlanner.BuildProcessEgressBlockSpec(
-            @"C:\Users\lab\Downloads\dropper.exe",
+            dropper,
             Sid,
             AgentNetworkPolicyOrigin.ExplicitOperatorApproval,
             explicitlyAuthorizedByUser: true);
@@ -24,7 +26,7 @@ public sealed class AgentProcessEgressTests
         Assert.Equal(FirewallAction.Block, result.Spec.Action);
         Assert.Equal(NetworkProtocol.Any, result.Spec.Protocol);
         Assert.Empty(result.Spec.RemoteAddresses);
-        Assert.Equal(@"C:\Users\lab\Downloads\dropper.exe", result.Spec.AppPath);
+        Assert.Equal(dropper, result.Spec.AppPath);
     }
 
     [Fact]
@@ -57,6 +59,11 @@ public sealed class AgentProcessEgressTests
     public void Windows_system_binaries_are_refused()
     {
         var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        if (string.IsNullOrWhiteSpace(windows))
+        {
+            windows = @"C:\Windows";
+        }
+
         var result = AgentFirewallRulePlanner.BuildProcessEgressBlockSpec(
             Path.Combine(windows, "System32", "svchost.exe"),
             Sid,

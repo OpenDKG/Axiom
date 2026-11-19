@@ -1,6 +1,7 @@
 # Build output
 bin/
 obj/
+build/
 artifacts/
 publish/
 TestResults/
@@ -46,6 +47,8 @@ desktop.ini
 # Internal planning documents (kept local, not published)
 *_SR.md
 
+# macOS app bundles from scripts/macos/package-app.sh
+/build/macos/
 # Local uncropped source brand exports in repo root
 /6217172f-fa7d-4ba8-81d9-eb02c00eaa6d.png
 /67b652cd-be32-4bd5-b0bf-a83f5686a363.png

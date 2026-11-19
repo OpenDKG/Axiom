@@ -13,6 +13,12 @@ public sealed record ServiceStatusSnapshot
     public ServiceHealth? Health { get; init; }
 
     public string? LastError { get; init; }
+
+    /// <summary>
+    /// Only meaningful when <see cref="IsConnected"/> is false: true when the service answered the
+    /// probe with its own error (it is reachable), false when it could not be reached.
+    /// </summary>
+    public bool ServiceResponded { get; init; }
 }
 
 /// <summary>
@@ -45,6 +51,7 @@ public sealed class ServiceStatusProbe(IServiceRequestClient client)
             {
                 IsConnected = false,
                 LastError = exception.Message,
+                ServiceResponded = exception.ServiceResponded,
             };
         }
 #pragma warning disable CA1031 // A status probe must not crash the shell on an unexpected transport error.

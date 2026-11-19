@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Unix-generic adapters shared by the macOS launchd daemon and the Linux systemd daemon
+    (docs/LINUX_ARCHITECTURE.md §2): the Unix-socket IPC transport with peer-credential
+    authorization, data-directory modes, the protected-image audit, the filter NDJSON contract
+    (rules file, flow events, flow table) and the service path layout. Nothing here calls a
+    macOS- or Linux-only tool; platform code lives in Axiom.Infrastructure.MacOS / .Linux.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Axiom.Infrastructure.Unix</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
+    <ProjectReference Include="..\Axiom.Core\Axiom.Core.csproj" />
+    <ProjectReference Include="..\Axiom.Service.Hosting\Axiom.Service.Hosting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Required for self-contained single-file publish under central package management. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

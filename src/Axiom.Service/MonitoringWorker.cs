@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Monitoring;
-using Axiom.Infrastructure.Windows.IpHelper;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Axiom.Service;
 
-/// <summary>Polls the IP Helper owner tables once per interval and publishes the latest snapshot.</summary>
+/// <summary>
+/// Polls the platform connection source (IP Helper owner tables on Windows, AxiomFilter flow
+/// events or libproc on macOS) once per interval and publishes the latest snapshot.
+/// </summary>
 public sealed partial class MonitoringWorker(
+    IConnectionSnapshotSource source,
     ConnectionSnapshotCache cache,
     FirewallRuleCoordinator firewall,
     ILogger<MonitoringWorker> logger) : BackgroundService
@@ -32,7 +35,6 @@ public sealed partial class MonitoringWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var source = new IpHelperConnectionSource();
         cache.SourceName = source.Name;
         cache.PollInterval = source.PollInterval;
 

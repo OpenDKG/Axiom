@@ -34,7 +34,7 @@ public sealed class ConnectionActionService(
         var directionText = direction == FirewallDirection.Outbound ? "outbound" : "inbound";
         var confirmed = await ui.ConfirmAsync(
             "Axiom firewall write",
-            $"Create a Windows Firewall block rule for {appName} ({directionText})?\n\n" +
+            $"Create a {PlatformText.Firewall} block rule for {appName} ({directionText})?\n\n" +
             "The rule is owned by Axiom and can be removed from the Firewall page.",
             "Create rule",
             destructive: true,
@@ -70,9 +70,9 @@ public sealed class ConnectionActionService(
                 .SendAsync<RuleApplyResult>(IpcCommandTypes.RuleApply, spec, CancellationToken.None)
                 .ConfigureAwait(true);
 
-            return result.Success
+            return result.Success && result.State != RuleState.Pending
                 ? $"Block applied for {appName} ({directionText}); verified at {result.VerifiedUtc:HH:mm:ss}."
-                : $"Block failed: {result.ErrorCode} — {result.ErrorMessage}";
+                : RuleApplyResultText.Describe(result, "Block");
         }
         catch (ServiceUnavailableException exception)
         {

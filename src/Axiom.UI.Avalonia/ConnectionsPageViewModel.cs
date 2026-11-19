@@ -9,12 +9,17 @@ namespace Axiom.UI.Avalonia;
 
 public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatablePage, IDisposable
 {
+    // The live status line refreshes every poll; keep an action result visible long enough to read.
+    private static readonly TimeSpan ActionStatusHold = TimeSpan.FromSeconds(15);
+    private DateTime _actionStatusUntilUtc = DateTime.MinValue;
+
     private readonly ConnectionMonitor _monitor;
     private readonly IUserInteraction _ui;
     private readonly ConnectionActionService _actions;
     private readonly Dictionary<string, ConnectionAppGroup> _groupIndex =
         new(StringComparer.OrdinalIgnoreCase);
     private string? _selectedKey;
+    private bool _rebuilding;
     private bool _isActive = true;
     private bool _dirty;
 
@@ -23,7 +28,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
         IUserInteraction? ui = null,
         IServiceRequestClient? serviceClient = null,
         IProcessActions? processActions = null)
-        : base("Live Connections", "Sockets read from this Windows host — read-only", "C")
+        : base("Live Connections", $"Sockets read from this {PlatformText.HostKind} — read-only", "C")
     {
         _monitor = monitor;
         _ui = ui ?? new NullUserInteraction();
@@ -99,9 +104,18 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
     [RelayCommand]
     private void ToggleGroupSortDirection() => GroupSortDescending = !GroupSortDescending;
 
-    partial void OnSelectedConnectionChanged(ConnectionRow? value) => _selectedKey = value?.Source.RemoteEndpoint is { } remote
-        ? $"{value.ProcessId}|{value.ProtocolText}|{value.LocalEndpoint}|{remote}"
-        : null;
+    partial void OnSelectedConnectionChanged(ConnectionRow? value)
+    {
+        // Rebuilding VisibleConnections every poll clears the ListBox selection; keep the key so
+        // ApplyFilters can restore it instead of forgetting what the user picked.
+        if (!_rebuilding)
+        {
+            _selectedKey = value is null ? null : SelectionKey(value);
+        }
+    }
+
+    private static string SelectionKey(ConnectionRow row) =>
+        $"{row.ProcessId}|{row.ProtocolText}|{row.LocalEndpoint}|{row.Source.RemoteEndpoint}";
 
     [RelayCommand]
     private Task CopyRowAsync(ConnectionRow? row) => CopyAsync(row, row?.RowTooltip);
@@ -123,6 +137,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
             StatusText = await _actions
                 .BlockAsync(row.AppDisplayName, row.PathText, FirewallDirection.Outbound)
                 .ConfigureAwait(true);
+            _actionStatusUntilUtc = DateTime.UtcNow + ActionStatusHold;
         }
     }
 
@@ -134,6 +149,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
             StatusText = await _actions
                 .BlockAsync(row.AppDisplayName, row.PathText, FirewallDirection.Inbound)
                 .ConfigureAwait(true);
+            _actionStatusUntilUtc = DateTime.UtcNow + ActionStatusHold;
         }
     }
 
@@ -149,6 +165,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
             StatusText = await _actions
                 .EndProcessAsync(target.AppDisplayName, target.ProcessId)
                 .ConfigureAwait(true);
+            _actionStatusUntilUtc = DateTime.UtcNow + ActionStatusHold;
         }
     }
 
@@ -166,11 +183,13 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
         {
             await _ui.CopyTextAsync(value, CancellationToken.None).ConfigureAwait(true);
             StatusText = "Copied to the clipboard.";
+            _actionStatusUntilUtc = DateTime.UtcNow + ActionStatusHold;
         }
         catch (Exception exception) when (exception is
                      InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException)
         {
             StatusText = "Clipboard is unavailable.";
+            _actionStatusUntilUtc = DateTime.UtcNow + ActionStatusHold;
         }
     }
 
@@ -214,7 +233,10 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
             return;
         }
 
-        StatusText = $"Live read-only · {_monitor.SourceName} · {_monitor.PollInterval.TotalSeconds:0} s";
+        if (DateTime.UtcNow >= _actionStatusUntilUtc)
+        {
+            StatusText = $"Live read-only · {_monitor.SourceName} · {_monitor.PollInterval.TotalSeconds:0} s";
+        }
     }
 
     private void ApplyFilters()
@@ -231,6 +253,7 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
                 (!OnlyLoopback || row.IsLoopback))
             .ToList();
 
+        _rebuilding = true;
         CollectionSync.SyncInPlace(VisibleConnections, filtered);
 
         var traffic = _monitor.AppTraffic.ToDictionary(
@@ -268,13 +291,14 @@ public sealed partial class ConnectionsPageViewModel : PageViewModel, IActivatab
 
         if (_selectedKey is not null)
         {
-            SelectedConnection = VisibleConnections.FirstOrDefault(row =>
-                $"{row.ProcessId}|{row.ProtocolText}|{row.LocalEndpoint}|{row.Source.RemoteEndpoint}" == _selectedKey);
+            SelectedConnection = VisibleConnections.FirstOrDefault(row => SelectionKey(row) == _selectedKey);
         }
+
+        _rebuilding = false;
 
         IsEmpty = VisibleConnections.Count == 0;
         VisibleRowsText = $"{VisibleConnections.Count} of {_monitor.Connections.Count} sockets";
-        if (_monitor.LastError is null)
+        if (_monitor.LastError is null && DateTime.UtcNow >= _actionStatusUntilUtc)
         {
             StatusText = $"Live read-only · {_monitor.SourceName} · {VisibleRowsText}";
         }

@@ -20,6 +20,59 @@ public static class DohBypassDetector
         "Windows system DoH is not checked here: it applies to a public DNS server, and an adapter " +
         "pointed at 127.0.0.1 has no DoH template.";
 
+    /// <summary>Text for Linux when no profile turns secure DNS on.</summary>
+    public const string LinuxNoBypassText =
+        "No browser secure-DNS (DoH) override found in the Chrome, Chromium, Edge or Firefox profiles " +
+        "under ~/.config, ~/.mozilla and their snap locations. Flatpak browsers and browser policies " +
+        "under /etc are not checked.";
+
+    /// <summary>Text for a platform whose browser profile locations this detector does not know.</summary>
+    public const string UnsupportedPlatformText =
+        "Browser secure-DNS (DoH) settings are not checked on this platform, so a browser may still " +
+        "resolve names past the Axiom resolver without this page showing it. Check each browser's " +
+        "secure-DNS setting by hand.";
+
+    /// <summary>True where this detector knows the browser profile locations (Windows, Linux).</summary>
+    public static bool IsCheckSupported => OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
+
+    /// <summary>What to show when nothing was found, honest about what was looked at on this platform.</summary>
+    public static string NoBypassTextForCurrentPlatform =>
+        OperatingSystem.IsWindows() ? NoBypassText
+        : OperatingSystem.IsLinux() ? LinuxNoBypassText
+        : UnsupportedPlatformText;
+
+    /// <summary>Runs the scan for this platform; empty where <see cref="IsCheckSupported"/> is false.</summary>
+    public static IReadOnlyList<DohBypassFinding> DetectForCurrentPlatform() =>
+        OperatingSystem.IsWindows() ? Detect()
+        : OperatingSystem.IsLinux() ? DetectLinux()
+        : [];
+
+    /// <summary>
+    /// Linux profile locations: Chrome, Chromium and Edge under <c>$XDG_CONFIG_HOME</c> (default
+    /// <c>~/.config</c>), Firefox under <c>~/.mozilla/firefox</c>, plus the snap copies of Chromium
+    /// and Firefox. Read-only, like <see cref="Detect"/>.
+    /// </summary>
+    public static IReadOnlyList<DohBypassFinding> DetectLinux(string? home = null, string? xdgConfigHome = null)
+    {
+        home ??= Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrWhiteSpace(xdgConfigHome))
+        {
+            var fromEnvironment = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+            xdgConfigHome = !string.IsNullOrWhiteSpace(fromEnvironment) && Path.IsPathRooted(fromEnvironment)
+                ? fromEnvironment
+                : Path.Combine(home, ".config");
+        }
+
+        var findings = new List<DohBypassFinding>();
+        AddChromium(findings, "Chrome", Path.Combine(xdgConfigHome, "google-chrome"));
+        AddChromium(findings, "Chromium", Path.Combine(xdgConfigHome, "chromium"));
+        AddChromium(findings, "Chromium (snap)", Path.Combine(home, "snap", "chromium", "common", "chromium"));
+        AddChromium(findings, "Edge", Path.Combine(xdgConfigHome, "microsoft-edge"));
+        AddFirefox(findings, "Firefox", Path.Combine(home, ".mozilla", "firefox"));
+        AddFirefox(findings, "Firefox (snap)", Path.Combine(home, "snap", "firefox", "common", ".mozilla", "firefox"));
+        return findings;
+    }
+
     private static readonly Regex TrrModePattern = new(
         "user_pref\\(\\s*\"network\\.trr\\.mode\"\\s*,\\s*(\\d+)\\s*\\)\\s*;",
         RegexOptions.Compiled);
@@ -38,7 +91,7 @@ public static class DohBypassDetector
         var findings = new List<DohBypassFinding>();
         AddChromium(findings, "Chrome", Path.Combine(localAppData, "Google", "Chrome", "User Data"));
         AddChromium(findings, "Edge", Path.Combine(localAppData, "Microsoft", "Edge", "User Data"));
-        AddFirefox(findings, Path.Combine(appData, "Mozilla", "Firefox", "Profiles"));
+        AddFirefox(findings, "Firefox", Path.Combine(appData, "Mozilla", "Firefox", "Profiles"));
         return findings;
     }
 
@@ -46,11 +99,15 @@ public static class DohBypassDetector
     /// Warning text for the Privacy Shield page. It says what was found, that the browser leaves the
     /// resolver, and exactly where each browser turns secure DNS off.
     /// </summary>
-    public static string BuildWarningText(IReadOnlyList<DohBypassFinding> findings)
+    public static string BuildWarningText(IReadOnlyList<DohBypassFinding> findings) =>
+        BuildWarningText(findings, NoBypassText);
+
+    /// <summary>As <see cref="BuildWarningText(IReadOnlyList{DohBypassFinding})"/> with the platform's no-finding text.</summary>
+    public static string BuildWarningText(IReadOnlyList<DohBypassFinding> findings, string noBypassText)
     {
         if (findings.Count == 0)
         {
-            return NoBypassText;
+            return noBypassText;
         }
 
         var lines = new List<string>
@@ -189,7 +246,7 @@ public static class DohBypassDetector
         return null;
     }
 
-    private static void AddFirefox(List<DohBypassFinding> findings, string profilesPath)
+    private static void AddFirefox(List<DohBypassFinding> findings, string application, string profilesPath)
     {
         var enabled = new List<string>();
         foreach (var profilePath in EnumerateFirefoxProfiles(profilesPath))
@@ -203,7 +260,7 @@ public static class DohBypassDetector
 
         if (enabled.Count > 0)
         {
-            findings.Add(new DohBypassFinding("Firefox", string.Join("; ", enabled)));
+            findings.Add(new DohBypassFinding(application, string.Join("; ", enabled)));
         }
     }
 

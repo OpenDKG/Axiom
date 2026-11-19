@@ -30,8 +30,7 @@ public sealed class ThreatShareStore
     public ThreatShareStore(string? path = null)
     {
         _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Axiom",
+            Axiom.Contracts.AxiomPaths.ServicePrivateDataDirectory,
             "threat-share.json");
     }
 
@@ -77,6 +76,7 @@ public sealed class ThreatShareStore
                     temp,
                     JsonSerializer.Serialize(bounded, JsonOptions),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                ServiceFiles.SetOwnerOnly(temp);
                 File.Move(temp, _path, overwrite: true);
                 return true;
             }

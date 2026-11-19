@@ -61,6 +61,12 @@ public sealed record LiveConnection
     /// <summary>Remote endpoint, or an em dash when the owner table does not provide one.</summary>
     public required string RemoteEndpoint { get; init; }
 
+    /// <summary>
+    /// Host name the app connected by, when the OS reports it (macOS AxiomFilter flows); empty on
+    /// Windows.
+    /// </summary>
+    public string RemoteHost { get; init; } = string.Empty;
+
     public required string State { get; init; }
 
     public required ConnectionDirection Direction { get; init; }

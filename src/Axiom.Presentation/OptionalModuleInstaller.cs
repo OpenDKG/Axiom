@@ -64,7 +64,19 @@ public sealed class OptionalModuleInstaller
         "modules",
         "blackbox");
 
-    public string DkgCommand => Path.Combine(DkgRoot, "node_modules", ".bin", "dkg.cmd");
+    public string DkgCommand => Path.Combine(DkgRoot, "node_modules", ".bin", AgentPlatform.NpmShimName("dkg"));
+
+    /// <summary>
+    /// The guided installers are PowerShell scripts and the Blackbox installer is a Windows
+    /// installer, so they run only on Windows. Other platforms report this message instead.
+    /// </summary>
+    public static bool IsInstallSupported => OperatingSystem.IsWindows();
+
+    public static string UnsupportedInstallMessage { get; } =
+        $"Guided module installation is not available on {UnsupportedPlatformName} yet. Install the module manually, then click Check again.";
+
+    private static string UnsupportedPlatformName =>
+        OperatingSystem.IsMacOS() ? "macOS" : OperatingSystem.IsLinux() ? "Linux" : "this platform";
 
     /// <summary>Blackbox's own node tree; its DKG runtime lives below this folder.</summary>
     public string HermesBlackboxNode { get; } = Path.Combine(
@@ -393,7 +405,7 @@ public sealed class OptionalModuleInstaller
                 return false;
             }
 
-            return File.Exists(Path.Combine(BlackboxRoot, "agent-blackbox", "venv", "Scripts", "python.exe"));
+            return File.Exists(AgentPlatform.VenvPython(Path.Combine(BlackboxRoot, "agent-blackbox")));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -532,44 +544,6 @@ public sealed class OptionalModuleInstaller
               if (Test-Path $hermes) {
                 & $hermes plugins enable blackbox --no-allow-tool-override
               }
-
-              # Hermes commits a dependency environment (installs\<hash>\environments\<hash>\venv) and
-              # injects its site-packages into whichever interpreter loads the plugin. When that
-              # interpreter is the vendor venv (Python 3.12) and the committed environment was built
-              # for another minor (3.14), the plugin dies with `No module named '_cffi_backend'`.
-              # Put the plugin's declared dependencies into every interpreter that can load it, then
-              # verify the plugin. A vendor failure stays a warning: the Axiom guard runs from the
-              # vendored venv and is unaffected (issue #370).
-              try {
-                $deps = @('cryptography', 'cffi', 'psutil', 'fastapi', 'uvicorn', 'ruamel.yaml', 'pyyaml', 'python-dotenv', 'rich', 'aiohttp')
-                $base = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'hermes\tools') -Directory -Filter 'python-*' -ErrorAction SilentlyContinue |
-                  ForEach-Object { Join-Path $_.FullName 'python.exe' } | Where-Object { Test-Path $_ } | Select-Object -First 1
-                if ($base) {
-                  Write-Host 'Ensuring the Hermes runtime has the Blackbox plugin dependencies...' -ForegroundColor Cyan
-                  & $base -m pip install --quiet --no-cache-dir @deps 2>&1 | ForEach-Object { Write-Host $_ }
-                }
-                $facts = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'hermes\installs') -Directory -ErrorAction SilentlyContinue |
-                  ForEach-Object { Join-Path $_.FullName 'facts.json' } | Where-Object { Test-Path $_ } | Select-Object -First 1
-                if ($base -and $facts) {
-                  $committed = (Get-Content $facts -Raw | ConvertFrom-Json).packages.venv.environment
-                  $envSite = if ($committed) { Join-Path $committed 'Lib\site-packages' } else { '' }
-                  if ($envSite -and (Test-Path $envSite)) {
-                    Write-Host 'Ensuring the committed Hermes environment has the plugin dependencies...' -ForegroundColor Cyan
-                    & $base -m pip install --quiet --no-cache-dir --target $envSite @deps 2>&1 | ForEach-Object { Write-Host $_ }
-                  }
-                }
-                $pluginDir = Join-Path $env:LOCALAPPDATA 'hermes\plugins\blackbox'
-                if ((Test-Path $hermes) -and (Test-Path $pluginDir)) {
-                  $doctor = (& $hermes plugins doctor $pluginDir 2>&1 | Out-String)
-                  if ($doctor -match 'ERROR|timed out|failed') {
-                    Write-Warning ("Blackbox plugin still does not load in Hermes; the Axiom guard is unaffected. " + ($doctor -replace '\s+', ' ').Trim())
-                  } else {
-                    Write-Host 'Blackbox plugin loads in Hermes.' -ForegroundColor Green
-                  }
-                }
-              } catch {
-                Write-Warning "Blackbox compatibility repair skipped: $($_.Exception.Message)"
-              }
               $agent = Join-Path $dir 'agent-blackbox'
               $launcher = Join-Path $agent 'start-dashboard.py'
               $code = '{{BlackboxDashboardLauncherCode.Replace("'", "''")}}'
@@ -645,7 +619,10 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        var startInfo = new ProcessStartInfo("cmd.exe", $"/c \"\"{command}\" start\"")
+        var (fileName, arguments) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", $"/c \"\"{command}\" start\"")
+            : (command, "start");
+        var startInfo = new ProcessStartInfo(fileName, arguments)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -694,9 +671,17 @@ public sealed class OptionalModuleInstaller
             return (null, false);
         }
 
-        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        var directories = path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries).AsEnumerable();
+        if (OperatingSystem.IsMacOS())
         {
-            foreach (var name in new[] { "dkg.cmd", "dkg.exe", "dkg.bat" })
+            directories = directories.Concat(AgentPlatform.MacExtraSearchDirectories(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)));
+        }
+
+        var names = OperatingSystem.IsWindows() ? new[] { "dkg.cmd", "dkg.exe", "dkg.bat" } : new[] { "dkg" };
+        foreach (var directory in directories)
+        {
+            foreach (var name in names)
             {
                 try
                 {
@@ -766,9 +751,13 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        var venvPythonW = Path.Combine(agent, "venv", "Scripts", "pythonw.exe");
-        var venvPython = Path.Combine(agent, "venv", "Scripts", "python.exe");
-        var venv = File.Exists(venvPythonW) ? venvPythonW : venvPython;
+        var venv = AgentPlatform.VenvPython(agent);
+        // Windows: pythonw.exe keeps the agent's console window closed (upstream behaviour).
+        var venvWindowless = Path.Combine(agent, "venv", "Scripts", "pythonw.exe");
+        if (AgentPlatform.IsWindows && File.Exists(venvWindowless))
+        {
+            venv = venvWindowless;
+        }
         if (!File.Exists(venv) || IsUnsafeInstallRoot(BlackboxRoot, agent, venv))
         {
             return false;
@@ -875,6 +864,15 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        if (!IsInstallSupported)
+        {
+            // Repair stops processes with a PowerShell script and reinstalls Python packages; module
+            // installation and repair are Windows-only for now.
+            LastError = UnsupportedInstallMessage;
+            log?.Invoke(UnsupportedInstallMessage);
+            return false;
+        }
+
         var ok = true;
 
         if (dkg && IsDkgAvailable)
@@ -936,7 +934,7 @@ public sealed class OptionalModuleInstaller
             return;
         }
 
-        var python = Path.Combine(agent, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(agent);
         var pythonInfo = new FileInfo(python);
         if (!pythonInfo.Exists || pythonInfo.Length == 0)
         {
@@ -965,9 +963,7 @@ public sealed class OptionalModuleInstaller
         get
         {
             var agent = ResolveBlackboxAgentRoot();
-            return agent is not null &&
-                   (File.Exists(Path.Combine(agent, "venv", "Scripts", "python.exe")) ||
-                    File.Exists(Path.Combine(agent, "venv", "Scripts", "pythonw.exe")));
+            return agent is not null && AgentPlatform.HasVenvPython(agent);
         }
     }
 
@@ -985,8 +981,7 @@ public sealed class OptionalModuleInstaller
 
         foreach (var candidate in candidates)
         {
-            if (File.Exists(Path.Combine(candidate, "venv", "Scripts", "python.exe")) ||
-                File.Exists(Path.Combine(candidate, "venv", "Scripts", "pythonw.exe")))
+            if (AgentPlatform.HasVenvPython(candidate))
             {
                 return Path.GetFullPath(candidate);
             }
@@ -1201,6 +1196,12 @@ public sealed class OptionalModuleInstaller
 
     private static bool RunPowerShellScript(string script, Action<string>? log)
     {
+        if (!IsInstallSupported)
+        {
+            log?.Invoke(UnsupportedInstallMessage);
+            return false;
+        }
+
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
             ResolvePowerShellExecutable(),
@@ -1300,6 +1301,11 @@ public sealed class OptionalModuleInstaller
 
     private static void StartPowerShell(string script)
     {
+        if (!IsInstallSupported)
+        {
+            return;
+        }
+
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
             ResolvePowerShellExecutable(),

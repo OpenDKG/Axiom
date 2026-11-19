@@ -304,16 +304,28 @@ public static class RuleSpecValidator
             return;
         }
 
-        if (!Path.IsPathFullyQualified(appPath))
+        if (appPath.StartsWith(@"\\", StringComparison.Ordinal))
         {
-            errors.Add(new RuleSpecValidationError("rule.path.not_absolute", "Application path must be absolute."));
+            // UNC and extended-length prefixes need a separate policy decision (FND-006). Checked
+            // before the absolute test: on Linux a UNC path is not "fully qualified", which would
+            // report the wrong reason and diverge from the Windows build.
+            errors.Add(new RuleSpecValidationError("rule.path.unc_not_supported", "UNC and extended-length paths are not supported yet."));
             return;
         }
 
-        if (appPath.StartsWith(@"\\", StringComparison.Ordinal))
+        if (!OperatingSystem.IsWindows() && IsWindowsStylePath(appPath))
         {
-            // UNC and extended-length prefixes need a separate policy decision (FND-006).
-            errors.Add(new RuleSpecValidationError("rule.path.unc_not_supported", "UNC and extended-length paths are not supported yet."));
+            // Linux/macOS rules are enforced against native executables: a drive-letter or
+            // backslash path names no file there, so it is refused instead of silently accepted.
+            errors.Add(new RuleSpecValidationError(
+                "rule.path.windows_style",
+                "Windows-style paths (drive letter or backslash) are not valid application paths on this platform."));
+            return;
+        }
+
+        if (!IsAbsolutePath(appPath))
+        {
+            errors.Add(new RuleSpecValidationError("rule.path.not_absolute", "Application path must be absolute."));
             return;
         }
 
@@ -323,6 +335,17 @@ public static class RuleSpecValidator
             errors.Add(new RuleSpecValidationError("rule.path.unstable_segment", "Application path must be fully normalised (no '.' or '..' segments)."));
         }
     }
+
+    /// <summary>
+    /// Native absolute path: Windows rules on Windows (upstream behaviour), POSIX rules elsewhere.
+    /// Windows-style paths are rejected off Windows before this check (<see cref="IsWindowsStylePath"/>).
+    /// </summary>
+    private static bool IsAbsolutePath(string path) => Path.IsPathFullyQualified(path);
+
+    /// <summary>Drive-letter prefix (<c>C:</c>) or any backslash: a Windows path shape.</summary>
+    internal static bool IsWindowsStylePath(string path) =>
+        (path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':') ||
+        path.Contains('\\', StringComparison.Ordinal);
 
     private static RuleSpecValidationResult Invalid(string code, string message) =>
         new() { IsValid = false, Errors = [new RuleSpecValidationError(code, message)] };

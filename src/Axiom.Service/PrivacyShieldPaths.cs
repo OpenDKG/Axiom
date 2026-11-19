@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.IO;
+using Axiom.Contracts;
 
 namespace Axiom.Service;
 
 /// <summary>
 /// Resolves the Privacy Shield data files. Privacy Shield filters the whole machine, so an
-/// installed (non-interactive) service keeps its state under ProgramData where the interactive
+/// installed service (see <see cref="AxiomPaths.IsServiceProcess"/>) keeps its state under the
+/// machine data directory (ProgramData, /Library/Application Support) where the interactive
 /// UI and administrators can see it. A portable or interactive run keeps the previous per-user
 /// location. Existing service data is copied once from LocalAppData when the machine-wide file
 /// does not exist yet.
@@ -24,9 +26,11 @@ public static class PrivacyShieldPaths
             return Path.Combine(configured, fileName);
         }
 
-        var localRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var machineRoot = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-        return ResolveFor(fileName, Environment.UserInteractive, localRoot, machineRoot);
+        return ResolveForDirectories(
+            fileName,
+            !AxiomPaths.IsServiceProcess,
+            AxiomPaths.UserDataDirectory,
+            AxiomPaths.MachineDataDirectory);
     }
 
     /// <summary>Pure path selection so the interactive/service split is unit-testable.</summary>
@@ -40,13 +44,31 @@ public static class PrivacyShieldPaths
         ArgumentException.ThrowIfNullOrWhiteSpace(localRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(machineRoot);
 
-        var local = Path.Combine(localRoot, DirectoryName, fileName);
+        return ResolveForDirectories(
+            fileName,
+            userInteractive,
+            Path.Combine(localRoot, DirectoryName),
+            Path.Combine(machineRoot, DirectoryName));
+    }
+
+    /// <summary>Same selection with the complete per-user and machine data directories.</summary>
+    public static string ResolveForDirectories(
+        string fileName,
+        bool userInteractive,
+        string localDirectory,
+        string machineDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(localDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(machineDirectory);
+
+        var local = Path.Combine(localDirectory, fileName);
         if (userInteractive)
         {
             return local;
         }
 
-        var machine = Path.Combine(machineRoot, DirectoryName, fileName);
+        var machine = Path.Combine(machineDirectory, fileName);
         if (!File.Exists(machine))
         {
             TryMigrateFromLocal(local, machine);

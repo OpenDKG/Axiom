@@ -11,6 +11,15 @@ public sealed class ServiceUnavailableException(string code, string message, Exc
     : Exception($"Service unavailable: {message} ({code})", inner)
 {
     public string Code { get; } = code;
+
+    /// <summary>
+    /// True when the service answered with this error (it is reachable); false when it could not
+    /// be reached. Without a transport cause the code decides: only <c>service_unavailable</c> and
+    /// <c>unauthorized</c> mean the service was not reached.
+    /// </summary>
+    public bool ServiceResponded => InnerException is IpcClientException transport
+        ? transport.ServiceResponded
+        : Code is not (IpcErrorCodes.ServiceUnavailable or IpcErrorCodes.Unauthorized);
 }
 
 /// <summary>

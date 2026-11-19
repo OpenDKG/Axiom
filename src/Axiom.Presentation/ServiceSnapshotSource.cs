@@ -7,7 +7,7 @@ namespace Axiom.Presentation;
 /// <summary>Snapshot source backed by the Windows service pipe. The UI never reads the service DB.</summary>
 public sealed class ServiceSnapshotSource(IServiceRequestClient client) : IConnectionSnapshotSource
 {
-    public string Name => "Service (Named Pipe)";
+    public string Name => $"Service ({PlatformText.IpcTransport})";
 
     public TimeSpan PollInterval => TimeSpan.FromSeconds(1);
 

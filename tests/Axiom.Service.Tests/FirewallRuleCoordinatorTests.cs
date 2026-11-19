@@ -41,6 +41,31 @@ public sealed class FirewallRuleCoordinatorTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Review 2026-11-12 (P0 #2): an adapter that only published the rule (macOS: filter
+    /// acknowledgement outstanding) answers Pending; the store and audit must not say "applied".
+    /// </summary>
+    [Fact]
+    public async Task Apply_pending_is_stored_as_pending_not_applied()
+    {
+        var spec = NewSpec();
+        _adapter.UpsertOverride = id => new RuleApplyResult
+        {
+            Success = true,
+            ManagedRuleId = id,
+            State = RuleState.Pending,
+            ErrorMessage = "awaiting AxiomFilter acknowledgement of generation 7",
+        };
+
+        var result = await _coordinator.ApplyAsync(spec, Actor, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(RuleState.Pending, result.State);
+        var stored = Assert.Single(await _store.ListFirewallRulesAsync());
+        Assert.Equal(RuleState.Pending, stored.State);
+        Assert.Null(stored.LastVerifiedUtc);
+    }
+
     [Fact]
     public async Task Apply_success_stores_applied_state_and_audit()
     {
@@ -145,7 +170,8 @@ public sealed class FirewallRuleCoordinatorTests : IDisposable
     private static RuleSpec NewSpec() => new()
     {
         ManagedRuleId = Guid.NewGuid(),
-        AppPath = @"C:\Program Files\Example\example.exe",
+        // Native path per OS: Windows-style rule paths are rejected off Windows (#441).
+        AppPath = OperatingSystem.IsWindows() ? @"C:\Program Files\Example\example.exe" : "/usr/lib/example/example",
         Direction = FirewallDirection.Outbound,
         Action = FirewallAction.Block,
         Profiles = FirewallProfile.All,

@@ -134,6 +134,14 @@ public static class ProtectionProvisioner
     /// </summary>
     public static ProtectionProvisioningResult? ProvisionAtStartup(string? localAppData = null)
     {
+        // The provisioner writes agent configs under the user profile (on a non-Windows host it
+        // resolves the real home, e.g. ~/.hermes/config.yaml) for Windows bridge paths. Off Windows
+        // there is nothing to provision: return before anything is read or written.
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
         var root = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (!IsCompleteProfile(root))
         {

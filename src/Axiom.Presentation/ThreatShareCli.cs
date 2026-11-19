@@ -769,9 +769,9 @@ public sealed class ThreatShareCli
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var candidates = new[]
         {
-            Path.Combine(local, "Axiom", "modules", "blackbox", "agent-blackbox", "venv", "Scripts", "hermes.exe"),
-            Path.Combine(local, "hermes", "bin", "hermes.exe"),
-            Path.Combine(local, "Programs", "hermes", "hermes.exe"),
+            AgentPlatform.VenvTool(Path.Combine(local, "Axiom", "modules", "blackbox", "agent-blackbox"), "hermes"),
+            Path.Combine(local, "hermes", "bin", AgentPlatform.ExecutableName("hermes")),
+            Path.Combine(local, "Programs", "hermes", AgentPlatform.ExecutableName("hermes")),
         };
 
         foreach (var candidate in candidates)
@@ -785,7 +785,7 @@ public sealed class ThreatShareCli
         foreach (var entry in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
                  .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
-            var candidate = Path.Combine(entry.Trim(), "hermes.exe");
+            var candidate = Path.Combine(entry.Trim(), AgentPlatform.ExecutableName("hermes"));
             if (File.Exists(candidate))
             {
                 return candidate;

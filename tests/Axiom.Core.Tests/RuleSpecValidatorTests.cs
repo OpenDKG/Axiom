@@ -10,7 +10,8 @@ public sealed class RuleSpecValidatorTests
     private static RuleSpec ValidSpec() => new()
     {
         ManagedRuleId = Guid.NewGuid(),
-        AppPath = @"C:\Program Files\Example\example.exe",
+        // Native path per OS: Windows shapes are valid only on Windows (#441).
+        AppPath = OperatingSystem.IsWindows() ? @"C:\Program Files\Example\example.exe" : "/usr/lib/example/example",
         Direction = FirewallDirection.Outbound,
         Action = FirewallAction.Block,
         Profiles = FirewallProfile.Domain | FirewallProfile.Private | FirewallProfile.Public,
@@ -70,7 +71,45 @@ public sealed class RuleSpecValidatorTests
         var result = RuleSpecValidator.Validate(spec);
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, error => error.Code == "rule.path.not_absolute");
+        // Off Windows a backslash path is refused as Windows-style before the absolute check.
+        var expected = !OperatingSystem.IsWindows() && path.Contains('\\', StringComparison.Ordinal)
+            ? "rule.path.windows_style"
+            : "rule.path.not_absolute";
+        Assert.Contains(result.Errors, error => error.Code == expected);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Program Files\Example\example.exe")]
+    [InlineData(@"c:/tools/agent")]
+    [InlineData(@"/usr/lib\example\agent")]
+    public void Windows_style_paths_are_rejected_as_native_rule_paths_off_windows(string path)
+    {
+        var result = RuleSpecValidator.Validate(ValidSpec() with { AppPath = path });
+        if (OperatingSystem.IsWindows())
+        {
+            // Windows behaviour unchanged: never the Windows-style code on Windows.
+            Assert.DoesNotContain(result.Errors, error => error.Code == "rule.path.windows_style");
+            return;
+        }
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Code == "rule.path.windows_style");
+    }
+
+    [Theory]
+    [InlineData("/usr/bin/curl")]
+    [InlineData("/home/user/.local/bin/agent")]
+    [InlineData("/Applications/Example.app/Contents/MacOS/Example")]
+    public void Native_posix_paths_are_valid_off_windows(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var result = RuleSpecValidator.Validate(ValidSpec() with { AppPath = path });
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors.Select(error => error.Code)));
     }
 
     [Theory]
@@ -89,7 +128,10 @@ public sealed class RuleSpecValidatorTests
     [Fact]
     public void Parent_segment_is_rejected()
     {
-        var spec = ValidSpec() with { AppPath = @"C:\Program Files\Example\..\Other\example.exe" };
+        var spec = ValidSpec() with
+        {
+            AppPath = OperatingSystem.IsWindows() ? @"C:\Program Files\Example\..\Other\example.exe" : "/usr/lib/example/../other/example",
+        };
 
         var result = RuleSpecValidator.Validate(spec);
 
@@ -100,7 +142,10 @@ public sealed class RuleSpecValidatorTests
     [Fact]
     public void Control_characters_in_path_are_rejected()
     {
-        var spec = ValidSpec() with { AppPath = "C:\\Program Files\\Example\\exam\u0001ple.exe" };
+        var spec = ValidSpec() with
+        {
+            AppPath = OperatingSystem.IsWindows() ? "C:\\Program Files\\Example\\exam\u0001ple.exe" : "/usr/lib/example/exam\u0001ple",
+        };
 
         var result = RuleSpecValidator.Validate(spec);
 

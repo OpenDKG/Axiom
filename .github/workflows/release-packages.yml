@@ -61,8 +61,18 @@ jobs:
       - name: Install native build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm libbpf-dev bpftool
-          bpftool version
+          sudo apt-get install -y clang llvm libbpf-dev pkexec
+          mkdir -p "$RUNNER_TEMP/axiom-bpftool"
+          curl --fail --silent --show-error --location \
+            https://github.com/libbpf/bpftool/releases/download/v7.8.1/bpftool-v7.8.1-amd64.tar.gz \
+            -o "$RUNNER_TEMP/axiom-bpftool.tar.gz"
+          printf '%s  %s\n' 112026bbdf48d0d00ccfc4926e59878d47943f97c197f959f110abe29c898ddc \
+            "$RUNNER_TEMP/axiom-bpftool.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/axiom-bpftool.tar.gz" -C "$RUNNER_TEMP/axiom-bpftool"
+          bpftool=$(find "$RUNNER_TEMP/axiom-bpftool" -name bpftool -type f -print -quit)
+          chmod u+x "$bpftool"
+          "$bpftool" version
+          echo "BPFTOOL=$bpftool" >> "$GITHUB_ENV"
       - name: Test the Linux desktop and infrastructure
         run: |
           dotnet test tests/Axiom.Infrastructure.Linux.Tests -c Release

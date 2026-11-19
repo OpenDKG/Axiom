@@ -36,6 +36,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private DateTimeOffset _lastProtectionProbeUtc = DateTimeOffset.MinValue;
     private bool _isProbing;
     private bool _isProbingProtection;
+    private readonly ServiceReachabilityClient? _reachability;
+    private bool _serviceUnreachable;
     private bool _updatingTheme;
     private bool _disposed;
     private ProtectionStatus? _protection;
@@ -67,6 +69,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _monitor = new ConnectionMonitor(source, timers);
         _traffic = new TrafficEngine(timers);
         _serviceProbe = serviceProbe;
+        if (!OperatingSystem.IsWindows() && serviceClient is not null)
+        {
+            // One shared reachability signal: every page's service call reports through it.
+            _reachability = new ServiceReachabilityClient(serviceClient);
+            serviceClient = _reachability;
+        }
+
         _serviceClient = serviceClient;
         IsServiceMode = source is ServiceSnapshotSource;
         var interaction = userInteraction ?? new NullUserInteraction();
@@ -117,6 +126,16 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             eventsTab: Events,
             timers: timers);
         Firewall = new FirewallPageViewModel(IsServiceMode ? serviceClient : null, interaction, _monitor);
+        // "Check protection" re-reads through the shell probe, so every surface takes the same answer.
+        Firewall.RecheckProtection = () => ProbeProtectionAsync(force: true);
+        Firewall.PropertyChanged += OnFirewallStateChanged;
+        // Review #25: the Overview line follows the same state as the "SHIELD ON" badge.
+        Overview.ProtectionState = () => new OverviewProtectionState(
+            // The service-reported write gate, not the UI toggle: Shield on does not imply writes.
+            FirewallWritesEnabled: _protection?.WriteGateOpen == true,
+            FirewallProtectionActive: _protection is { Enabled: true },
+            PrivacyShieldActive: PrivacyShield.IsResolverActive,
+            Enforcement: OperatingSystem.IsWindows() ? null : Firewall.Enforcement);
         Security = new SecurityPageViewModel(
             interaction,
             securityDialogs ?? new UnsupportedSecurityDialogs(),
@@ -227,6 +246,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _theme.Changed += OnThemeChanged;
         _uiMode.Changed += OnUiModeChanged;
         _monitor.Updated += OnMonitorUpdated;
+        if (_reachability is not null)
+        {
+            _reachability.Answered += OnServiceAnswered;
+            _reachability.Unreachable += OnServiceUnreachable;
+            Firewall.ProtectionStatusApplied += OnFirewallProtectionApplied;
+        }
+
         AlertCenter.Changed += OnAlertCenterChanged;
         _updateChecker.Changed += OnUpdateCheckerChanged;
         _updateTimer.Tick += OnUpdateTimerTick;
@@ -573,7 +599,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _statusFirewallBadgeText = "READ-ONLY";
 
-    /// <summary>Lamp next to the badge: green when protection is on, red when it is off.</summary>
+    /// <summary>Neutral lamp colour while the service has not reported the protection state.</summary>
+    internal const string UnknownLampColor = ShieldProtection.UnknownColor;
+
+    /// <summary>
+    /// Lamp next to the badge: green when protection is on, red when it is off, neutral while the
+    /// service state is unknown. Brushes are created on the caller's (UI) thread on every change.
+    /// </summary>
     [ObservableProperty]
     private IBrush _statusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FB7185"));
 
@@ -628,6 +660,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _updateTimer.Tick -= OnUpdateTimerTick;
         _updateChecker.Changed -= OnUpdateCheckerChanged;
         _monitor.Updated -= OnMonitorUpdated;
+        if (_reachability is not null)
+        {
+            _reachability.Answered -= OnServiceAnswered;
+            _reachability.Unreachable -= OnServiceUnreachable;
+            Firewall.ProtectionStatusApplied -= OnFirewallProtectionApplied;
+        }
+
+        Firewall.PropertyChanged -= OnFirewallStateChanged;
         _theme.Changed -= OnThemeChanged;
         _uiMode.Changed -= OnUiModeChanged;
         AlertCenter.Changed -= OnAlertCenterChanged;
@@ -660,6 +700,20 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             return;
         }
 
+        if (_reachability is not null && IsServiceMode)
+        {
+            // In service mode the monitor reads the same daemon: a transport failure there is
+            // the same "unreachable" as any other call; an error the daemon answered is not.
+            if (_monitor.LastException is null)
+            {
+                OnServiceAnswered(this, EventArgs.Empty);
+            }
+            else if (_monitor.LastException is not ServiceUnavailableException { ServiceResponded: true })
+            {
+                MarkServiceUnreachable();
+            }
+        }
+
         if (_presentationVisible)
         {
             RefreshStatus();
@@ -669,14 +723,90 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _ = ProbeProtectionAsync();
     }
 
-    private async Task ProbeProtectionAsync()
+    /// <summary>
+    /// Off Windows the header (Overview.StatusText) and the footer read the filter enforcement
+    /// summary that Network Control re-reads on its own schedule. Re-render them in the same
+    /// update as the page, so the three never state two different answers (the page saying
+    /// "generation N verified" while the header still says it is not acknowledged).
+    /// </summary>
+    private void OnFirewallStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        if (e.PropertyName is nameof(FirewallPageViewModel.Enforcement) or nameof(FirewallPageViewModel.ProtectionKnown))
+        {
+            RefreshStatus();
+        }
+    }
+
+    /// <summary>
+    /// Off Windows: the first service call (from any page, the monitor or a probe) that cannot
+    /// reach the daemon turns the header, footer lamp, Network Control, Simple home and Mini to
+    /// unknown together, without waiting for each page's own poll (maintainer ruling: unreachable
+    /// is unknown, never protected).
+    /// </summary>
+    private void OnServiceUnreachable(object? sender, EventArgs e) => MarkServiceUnreachable();
+
+    private void MarkServiceUnreachable()
+    {
+        if (_reachability is null)
+        {
+            return;
+        }
+
+        if (_serviceUnreachable && _protection is null && !Firewall.ProtectionKnown)
+        {
+            return; // Already unknown everywhere; do not rebuild the rows on every failed tick.
+        }
+
+        _serviceUnreachable = true;
+        _protection = null;
+        Firewall.ApplyProtectionUnavailable("Protection status unknown: the local service did not answer.");
+        RefreshStatus();
+    }
+
+    /// <summary>
+    /// The first answer after the daemon was unreachable: an older "offline" probe result no
+    /// longer describes it, and the shell re-reads status at once so the header, the footer and
+    /// the pages return from the same answer instead of one probe interval apart.
+    /// </summary>
+    private void OnServiceAnswered(object? sender, EventArgs e)
+    {
+        if (!_serviceUnreachable)
+        {
+            return;
+        }
+
+        _serviceUnreachable = false;
+        if (ServiceStatus is { IsConnected: false })
+        {
+            ServiceStatus = null;
+        }
+
+        RefreshStatus();
+        _ = ProbeServiceAsync(force: true);
+        _ = ProbeProtectionAsync(force: true);
+    }
+
+    /// <summary>A protection answer read by Network Control itself feeds the header and footer too.</summary>
+    private void OnFirewallProtectionApplied(object? sender, ProtectionStatus status)
+    {
+        _serviceUnreachable = false;
+        _protection = status;
+        RefreshStatus();
+    }
+
+    internal async Task ProbeProtectionAsync(bool force = false)
     {
         if (_disposed || _serviceClient is null || _isProbingProtection)
         {
             return;
         }
 
-        if (DateTimeOffset.UtcNow - _lastProtectionProbeUtc < TimeSpan.FromSeconds(5))
+        if (!force && DateTimeOffset.UtcNow - _lastProtectionProbeUtc < TimeSpan.FromSeconds(5))
         {
             return;
         }
@@ -698,7 +828,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             _protection = protection;
             RefreshStatus();
             NotifyNewPendingApps(_protection);
-            if (_protection is not null && ReferenceEquals(SelectedPage, Firewall))
+            // The Home page and the global header read the same service authority; the cache must
+            // be fed even when another page is selected, or a change made by another client sticks.
+            if (_protection is not null)
             {
                 Firewall.UpdateProtectionStatus(_protection);
             }
@@ -706,12 +838,16 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         catch (ServiceUnavailableException)
         {
             _protection = null;
+            Firewall.ApplyProtectionUnavailable("Protection status unknown: the local service did not answer.");
+            RefreshStatus();
         }
 #pragma warning disable CA1031 // An older service build simply does not expose the shield yet.
         catch (Exception)
 #pragma warning restore CA1031
         {
             _protection = null;
+            Firewall.ApplyProtectionUnavailable("Protection status unknown: the local service did not answer.");
+            RefreshStatus();
         }
         finally
         {
@@ -884,7 +1020,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             : $"Monitoring: unavailable · {_monitor.LastError}";
 
         StatusSourceText = _protection is { Enabled: true }
-            ? "Data source: local service · traffic not filtered"
+            ? OperatingSystem.IsWindows()
+                ? "Data source: local service · traffic not filtered"
+                : Firewall.Enforcement.IsEnforcementVerified
+                    ? $"Data source: local service · Axiom Shield on · {Firewall.Enforcement.VerifiedStatusText}"
+                    : "Data source: local service · Axiom Shield on · blocks not verified"
             : IsServiceMode
                 ? "Data source: local service (read-only)"
                 : "Data source: in-process IP Helper (read-only)";
@@ -892,11 +1032,33 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         if (_protection is { Enabled: true } protection)
         {
             var awaiting = protection.Pending.Count(app => !ShieldProcessFilter.IsIgnored(app.AppPath));
+            // Off Windows the count follows the daemon's rules.query answer; none while unknown.
+            var rules = Firewall.ShieldRuleCount(protection.OwnedRuleCount) is { } count
+                ? $" · {count} rule(s)"
+                : string.Empty;
             StatusFirewallText = awaiting > 0
-                ? $"Protection: ON · {protection.OwnedRuleCount} rule(s) · {awaiting} awaiting decision"
-                : $"Protection: ON · {protection.OwnedRuleCount} rule(s)";
+                ? $"Protection: ON{rules} · {awaiting} awaiting decision"
+                : $"Protection: ON{rules}";
             StatusFirewallBadgeText = "SHIELD ON";
-            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#4ADE80"));
+            // Shield on is green only when the platform filter proved enforcement (Windows: not
+            // reported, upstream green); otherwise the Degraded tone, never a verified-looking lamp.
+            var level = ShieldProtection.Level(
+                known: true,
+                enabled: true,
+                OperatingSystem.IsWindows() ? null : Firewall.Enforcement.IsEnforcementVerified);
+            if (level == EnforcementLevel.Degraded)
+            {
+                StatusFirewallText += " · blocks not verified";
+            }
+
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(ShieldProtection.LampColor(level)));
+        }
+        else if (IsServiceMode && (ServiceStatus is { IsConnected: false } || _protection is null))
+        {
+            StatusFirewallText = "Protection: unknown · the local service did not answer";
+            StatusFirewallBadgeText = "UNKNOWN";
+            // Unknown is neither on nor off: a neutral lamp, never the previous green or red.
+            StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse(ShieldProtection.LampColor(null)));
         }
         else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
         {
@@ -928,6 +1090,49 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             ? "Local service · no driver · no telemetry · no remote access."
             : "In-process monitor · no service · no driver · no telemetry.";
         OnPropertyChanged(nameof(FooterText));
+        RefreshHeaderStatus();
+    }
+
+    /// <summary>
+    /// The global header is bound to Overview.StatusText while other pages are shown. Update that
+    /// one line from the service authority without activating the dashboard or its polling.
+    /// </summary>
+    private void RefreshHeaderStatus()
+    {
+        if (_monitor.LastError is not null)
+        {
+            // Off Windows the monitor reads the same daemon: when the protection state is not
+            // known either, the header says so first, not only that the monitor is unavailable.
+            Overview.SetHeaderStatus(!OperatingSystem.IsWindows() && IsServiceMode && _protection is null
+                ? $"Protection status unknown: the local service did not answer. Monitor unavailable: {_monitor.LastError}"
+                : $"Monitor unavailable: {_monitor.LastError}");
+            return;
+        }
+
+        if (_serviceUnreachable)
+        {
+            // Same signal as the footer lamp and the pages (off Windows only; see the client wrapper).
+            Overview.SetHeaderStatus("Protection status unknown: the local service did not answer.");
+            return;
+        }
+
+        if (IsServiceMode && ServiceStatus is { IsConnected: false })
+        {
+            Overview.SetHeaderStatus("Protection status unknown: the local service is offline.");
+            return;
+        }
+
+        if (IsServiceMode && _protection is null)
+        {
+            Overview.SetHeaderStatus("Protection status unknown: waiting for the local service.");
+            return;
+        }
+
+        Overview.SetHeaderStatus(OverviewPageViewModel.ComposeStatus(new OverviewProtectionState(
+            FirewallWritesEnabled: _protection?.WriteGateOpen == true,
+            FirewallProtectionActive: _protection is { Enabled: true },
+            PrivacyShieldActive: PrivacyShield.IsResolverActive,
+            Enforcement: OperatingSystem.IsWindows() ? null : Firewall.Enforcement)));
     }
 
     private async Task ProbeServiceAsync(bool force = false)
@@ -952,6 +1157,24 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             var status = await _serviceProbe.ProbeAsync(token).ConfigureAwait(true);
             if (_disposed)
             {
+                return;
+            }
+
+            if (_reachability is not null && IsServiceMode && !status.IsConnected)
+            {
+                // Off Windows the probe's failure joins the shared reachability signal. An error the
+                // daemon itself answered (a command an older build lacks) means it is reachable: it
+                // is not "offline", so the earlier status line stays and nothing turns unknown.
+                if (status.ServiceResponded)
+                {
+                    OnServiceAnswered(this, EventArgs.Empty);
+                    RefreshStatus();
+                    return;
+                }
+
+                ServiceStatus = status;
+                MarkServiceUnreachable();
+                RefreshStatus();
                 return;
             }
 

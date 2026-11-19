@@ -230,6 +230,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     private readonly BlackboxGraphLookup _graphLookup = new();
     private bool _updating;
     private bool _resolverActive;
+
+    /// <summary>True while the service reports the resolver as running (Overview wording).</summary>
+    public bool IsResolverActive => _resolverActive;
     private bool _statsRefreshing;
     private readonly HashSet<string> _expandedHistoryApps = new(StringComparer.OrdinalIgnoreCase);
     private string? _blockedHistorySignature;
@@ -379,7 +382,15 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     public string StarterRulesText =>
         $"{PrivacyShieldPolicy.StarterRulesAll.Count} starter rules (manually reviewed, not a third-party list)";
 
-    public string ManualSetupText =>
+    public string ManualSetupText => PlatformText.DaemonSwitchesDns
+        ? $"The Axiom daemon points the DNS servers of every network link ({PlatformText.DnsResolverName}) at 127.0.0.1 while the " +
+          "Privacy Shield resolver runs, saves the previous servers first, and restores them when the " +
+          "resolver stops, the service stops or Axiom is uninstalled. No manual change or password " +
+          "prompt is needed. This is DNS filtering only: applications still connect directly to " +
+          "destination IPs; traffic is not routed or proxied through Axiom."
+        : ManualSetupTextWindows;
+
+    private static string ManualSetupTextWindows =>
         "Complete installation enables the Axiom Windows service to point your active adapter's DNS " +
         "at 127.0.0.1 automatically while keeping your existing DNS server behind it as a fallback. " +
         "You can also use the UAC helper or 'Restore DNS' below to switch adapters manually or opt out. " +
@@ -745,9 +756,18 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
     }
 
+    private static string MacDnsNote => PlatformText.DaemonDnsNote;
+
     [RelayCommand]
     private async Task EnableSystemDnsAsync()
     {
+        if (PlatformText.DaemonSwitchesDns)
+        {
+            // The macOS/Linux daemon points system DNS at the resolver itself and restores it on stop.
+            DnsHelperStatusText = MacDnsNote;
+            return;
+        }
+
         if (!_resolverActive)
         {
             DnsHelperStatusText = "Start the Privacy Shield resolver on port 53 first.";
@@ -797,7 +817,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             "Change adapter DNS",
             $"Point adapter '{adapterName}' at the Privacy Shield loopback resolver 127.0.0.1?\n\n" +
             "The adapter keeps its current DNS servers behind the resolver as a fallback, so a stopped " +
-            "resolver cannot take the network down. Windows will ask for elevation. The previous DNS " +
+            $"resolver cannot take the network down. {PlatformText.OsName} will ask for elevation. The previous DNS " +
             "settings are saved and can be restored.",
             "Change DNS",
             destructive: true,
@@ -810,7 +830,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             return;
         }
 
-        DnsHelperStatusText = "Waiting for the Windows elevation prompt...";
+        DnsHelperStatusText = $"Waiting for {(OperatingSystem.IsWindows() ? "the Windows elevation prompt" : PlatformText.ElevationPrompt)}...";
         try
         {
             var exitCode = await _dnsHelper
@@ -832,9 +852,18 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     [RelayCommand]
     private async Task RestoreSystemDnsAsync()
     {
+        if (PlatformText.DaemonSwitchesDns)
+        {
+            // The macOS/Linux daemon points system DNS at the resolver itself and restores it on stop.
+            DnsHelperStatusText = MacDnsNote;
+            return;
+        }
+
         var confirmed = await _ui.ConfirmAsync(
             "Restore adapter DNS",
-            "Restore the original adapter DNS settings and pause automatic loopback DNS persistence?",
+            PlatformText.DaemonSwitchesDns
+                ? $"Restore the DNS servers saved before the Axiom daemon pointed them at the resolver? {PlatformText.OsName} will ask for elevation."
+                : $"Restore the original adapter DNS settings and pause automatic loopback DNS persistence? {PlatformText.OsName} will ask for elevation.",
             "Restore DNS",
             destructive: false,
             CancellationToken.None).ConfigureAwait(true);
@@ -868,7 +897,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             }
         }
 
-        DnsHelperStatusText = "Waiting for the Windows elevation prompt...";
+        DnsHelperStatusText = $"Waiting for {(OperatingSystem.IsWindows() ? "the Windows elevation prompt" : PlatformText.ElevationPrompt)}...";
         try
         {
             var exitCode = await _dnsHelper
@@ -1405,6 +1434,9 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
     }
 
+    private static readonly TimeSpan MacDnsOutageGrace = TimeSpan.FromSeconds(8);
+    private DateTimeOffset? _dnsOutageFirstSeenUtc;
+
     /// <summary>
     /// A stopped resolver while an adapter points at 127.0.0.1 means names stop resolving unless
     /// the adapter kept a fallback server. Say which of the two is true instead of leaving the user
@@ -1418,7 +1450,22 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             HasDnsOutageRisk = false;
             DnsOutageWarningText = string.Empty;
             _dnsOutageAlerted = false;
+            _dnsOutageFirstSeenUtc = null;
             return;
+        }
+
+        // On macOS the daemon restores system DNS right after it stops the resolver, and the
+        // system resolver configuration reaches this process a moment later. Only warn when the
+        // adapter still points at 127.0.0.1 after a short grace period, so a normal Disable does
+        // not raise a false "DNS is not answering" alert.
+        if (PlatformText.DaemonSwitchesDns)
+        {
+            var now = DateTimeOffset.UtcNow;
+            _dnsOutageFirstSeenUtc ??= now;
+            if (now - _dnsOutageFirstSeenUtc.Value < MacDnsOutageGrace)
+            {
+                return;
+            }
         }
 
         HasDnsOutageRisk = true;
@@ -1504,20 +1551,27 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         HasStatsHint = true;
     }
 
-    private static PrivacyShieldAdapterOption[] BuildAdapterOptions() =>
-        NetworkInterface.GetAllNetworkInterfaces()
+    private static PrivacyShieldAdapterOption[] BuildAdapterOptions()
+    {
+        // systemd-resolved: per-link servers come from resolvectl, never the 127.0.0.53 stub.
+        var resolved = ResolvedLinkDns.Read();
+        return NetworkInterface.GetAllNetworkInterfaces()
             .Where(network => network.OperationalStatus == OperationalStatus.Up &&
                               network.NetworkInterfaceType != NetworkInterfaceType.Loopback)
             .Select(network =>
             {
                 var properties = network.GetIPProperties();
-                var usesResolver = properties.DnsAddresses.Any(IPAddress.IsLoopback);
-                var resolverAddress = properties.DnsAddresses
+                IReadOnlyList<IPAddress> dnsAddresses =
+                    resolved is not null && resolved.TryGetValue(network.Name, out var linkDns)
+                        ? linkDns
+                        : properties.DnsAddresses.Where(address => !ResolvedLinkDns.IsStub(address)).ToArray();
+                var usesResolver = dnsAddresses.Any(IPAddress.IsLoopback);
+                var resolverAddress = dnsAddresses
                     .Where(IPAddress.IsLoopback)
                     .OrderBy(address => address.AddressFamily == AddressFamily.InterNetwork ? 0 : 1)
                     .Select(address => address.ToString())
                     .FirstOrDefault();
-                var otherDns = properties.DnsAddresses
+                var otherDns = dnsAddresses
                     .Where(address => !IPAddress.IsLoopback(address))
                     .Select(address => address.ToString())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -1544,6 +1598,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             .OrderByDescending(adapter => adapter.HasDefaultRoute)
             .ThenBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
 
     private void RefreshAdapters(bool force = true)
     {

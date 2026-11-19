@@ -20,4 +20,13 @@ public sealed record RuleApplyResult
     public string? ErrorMessage { get; init; }
 
     public DateTimeOffset? VerifiedUtc { get; init; }
+
+    /// <summary>
+    /// Linux: the applied rule refuses a fresh process at <c>connect()</c> (BPF verdict read back);
+    /// false = nft-only, not race-free. Null on Windows and macOS.
+    /// </summary>
+    public bool? ConnectTimeBlockingProven { get; init; }
+
+    /// <summary>Why <see cref="ConnectTimeBlockingProven"/> is what it is (Linux only).</summary>
+    public string? CoverageReason { get; init; }
 }

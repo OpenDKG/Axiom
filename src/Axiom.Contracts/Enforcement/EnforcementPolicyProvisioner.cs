@@ -69,6 +69,15 @@ public static class EnforcementPolicyProvisioner
     /// </summary>
     public static string? EnsureDefault(string? machineRoot = null, string? userProfile = null)
     {
+        // Windows-only defaults: off Windows CommonApplicationData is /usr/share and the profile is
+        // the caller's real home, and no OS enforcement reads this policy there. Only explicit
+        // roots (tests, tooling) are honoured on other platforms.
+        if (!OperatingSystem.IsWindows() &&
+            (string.IsNullOrWhiteSpace(machineRoot) || string.IsNullOrWhiteSpace(userProfile)))
+        {
+            return null;
+        }
+
         var path = ResolvePath(machineRoot);
         var profile = string.IsNullOrWhiteSpace(userProfile)
             ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
@@ -83,6 +92,14 @@ public static class EnforcementPolicyProvisioner
     /// </summary>
     public static string? EnsureMachineDefault(string? usersRoot = null, string? policyPath = null)
     {
+        // Same rule as EnsureDefault: never enumerate the host's home directories or write a
+        // machine path from defaults off Windows.
+        if (!OperatingSystem.IsWindows() &&
+            (string.IsNullOrWhiteSpace(usersRoot) || string.IsNullOrWhiteSpace(policyPath)))
+        {
+            return null;
+        }
+
         var path = policyPath ?? ResolvePath();
         var root = usersRoot ?? Path.GetDirectoryName(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));

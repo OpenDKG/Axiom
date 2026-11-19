@@ -1,0 +1,55 @@
+# (f) offline recovery removal
+$ sw_vers; csrutil status; defaults read /Applications/Axiom.app/Contents/Info.plist CFBundleShortVersionString; defaults read /Applications/Axiom.app/Contents/Info.plist CFBundleVersion; systemextensionsctl list | grep -i 'axiom.*activated'; id -un
+ProductName:		macOS
+ProductVersion:		15.8.3
+BuildVersion:		24H241
+System Integrity Protection status: disabled.
+0.17.0
+10
+*	*	-	com.axiom.firewall.filter (0.17.0/10)	Axiom Firewall Filter	[activated enabled]
+dev
+== [01:06:10.142Z] versions: {"rc":0}
+== [01:06:10.233Z] baseline: {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372877,"ackedGeneration":1794372877,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}
+$ sudo -n test -f '/Library/Application Support/Axiom/network-recovery.txt' && sudo -n mv '/Library/Application Support/Axiom/network-recovery.txt' '/Library/Application Support/Axiom/network-recovery.txt.sec-f-backup'; sudo -n ls -l '/Library/Application Support/Axiom/network-recovery.txt.sec-f-backup' 2>&1 | cut -c1-11
+-rw-------
+== [01:06:10.341Z] set the existing baseline aside: {"rc":0}
+== [01:06:10.425Z] rule.apply block /usr/bin/curl: {"success":true,"state":"applied","errorCode":null,"verifiedUtc":"2026-11-14T01:06:10.406873+00:00","message":null}
+== [01:06:12.458Z] rule verified (expect curl blocked): {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372878,"ackedGeneration":1794372878,"appliedRuleCount":1,"rejectedRules":[],"fileError":null},"rules":[{"managedRuleId":"5ec0a000-0000-4000-8000-00000000000f","state":"applied","lastVerifiedUtc":"2026-11-14T01:06:10.406873+00:00","lastError":null}]},"curl":{"rc":7,"http":"000","blocked":true}}
+== [01:06:12.670Z] networkRecovery.capture: {"status":"succeeded","capturedUtc":"2026-11-14T01:06:12.66204+00:00","protectionWasActive":true,"adapterCount":2,"ruleCount":1,"persisted":true,"problems":[]}
+$ sudo -n launchctl bootout system '/Library/LaunchDaemons/com.axiom.service.plist'; sleep 2; sudo -n launchctl print system/com.axiom.service >/dev/null 2>&1 && echo still-loaded || echo not-loaded
+not-loaded
+== [01:06:15.136Z] stop daemon: {"rc":0}
+== [01:06:15.136Z] rules.query with the daemon stopped: {"ok":false,"error":"FileNotFoundError: [Errno 2] No such file or directory"}
+$ sudo -n '/Applications/Axiom.app/Contents/Resources/service/axiomd' --recover-network
+Axiom network recovery
+Snapshot: /Library/Application Support/Axiom/network-recovery.txt
+Captured: 11/13/2026 5:06 PM; protection was active.
+- Adapter Built-in Serial Port (1) (860f1fbf-86ab-5e71-bbfa-a29cd1e34e23): IPv4 automatic (DHCP), IPv6 automatic (DHCP)
+- Adapter Ethernet (a7c34503-cc3a-589a-8bc0-faf708440dd5): IPv4 automatic (DHCP), IPv6 automatic (DHCP)
+- Axiom rule 5ec0a000-0000-4000-8000-00000000000f OUT (group 'Axiom')
+Dry run: no change was made.
+Run this command from an elevated prompt with --apply to restore the saved state.
+== [01:06:15.301Z] offline recovery (dry run): {"rc":1}
+$ sudo -n '/Applications/Axiom.app/Contents/Resources/service/axiomd' --recover-network --apply
+Axiom network recovery
+Snapshot: /Library/Application Support/Axiom/network-recovery.txt
+Captured: 11/13/2026 5:06 PM; protection was active.
+- Adapter Built-in Serial Port (1) (860f1fbf-86ab-5e71-bbfa-a29cd1e34e23): IPv4 automatic (DHCP), IPv6 automatic (DHCP)
+- Adapter Ethernet (a7c34503-cc3a-589a-8bc0-faf708440dd5): IPv4 automatic (DHCP), IPv6 automatic (DHCP)
+- Axiom rule 5ec0a000-0000-4000-8000-00000000000f OUT (group 'Axiom')
+Result: PartialFailure; verified: no
+Adapters restored: 2 (verified 2); Axiom rules removed: 0; already absent: 0.
+- filter.disconnected: The Axiom rule was removed from rules.json but the removal is not verified: AxiomFilter has not reported to this process (the network extension is off, or the Axiom service is stopped and this is the offline recovery), so the rule may still be enforced. Enable the extension (`axiom-sysext enable`), start the Axiom service (it republishes the table and waits for the extension on connect) and run Restore network settings again.
+Recovery did not complete. Review the messages above; nothing else was changed.
+== [01:06:15.821Z] offline recovery --apply: {"rc":5}
+== [01:06:15.875Z] curl after offline recovery (filter keeps its last acknowledged table or reloads rules.json; neither is claimed): {"rc":0,"http":"200","blocked":false}
+$ sudo -n launchctl bootstrap system '/Library/LaunchDaemons/com.axiom.service.plist'; sleep 1; sudo -n launchctl print system/com.axiom.service | grep -E '^\s*state'
+	state = running
+== [01:06:16.962Z] start daemon: {"rc":0}
+== [01:06:17.622Z] daemon back (expect filter verified, recorded rule state shown honestly): {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372881,"ackedGeneration":1794372881,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}
+== [01:06:17.860Z] networkRecovery.restore (online): {"status":"succeeded","adaptersRestored":2,"adaptersVerified":2,"rulesRemoved":0,"rulesVerifiedAbsent":1,"verified":true,"completedUtc":"2026-11-14T01:06:17.849146+00:00","problems":[]}
+== [01:06:19.916Z] after online restore (expect 0 rules, curl 200): {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372881,"ackedGeneration":1794372881,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}
+$ sudo -n test -f '/Library/Application Support/Axiom/network-recovery.txt.sec-f-backup' && sudo -n mv -f '/Library/Application Support/Axiom/network-recovery.txt.sec-f-backup' '/Library/Application Support/Axiom/network-recovery.txt'; sudo -n ls -l '/Library/Application Support/Axiom/network-recovery.txt' | cut -c1-11
+-rw-------
+== [01:06:20.004Z] put the original baseline back: {"rc":0}
+== [01:06:20.007Z] networkRecovery.capture (expect alreadyCaptured, the original baseline): {"status":"alreadyCaptured","capturedUtc":"2026-11-12T00:49:44.301779+00:00","protectionWasActive":true,"adapterCount":2,"ruleCount":0,"persisted":true,"problems":[]}
