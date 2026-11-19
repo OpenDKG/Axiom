@@ -44,39 +44,7 @@ public sealed class OptionalModuleInstaller
     /// <summary>Marker recording which pinned vendor build is installed in this tree.</summary>
     private const string InstalledBuildMarker = ".axiom-blackbox-build";
 
-    internal const string BlackboxDashboardLauncherCode =
-        "import argparse\n" +
-        "import os\n" +
-        "import sys\n" +
-        "if sys.stdout is None:\n" +
-        "    sys.stdout = open(os.devnull, \"w\", encoding=\"utf-8\")\n" +
-        "if sys.stderr is None:\n" +
-        "    sys.stderr = open(os.devnull, \"w\", encoding=\"utf-8\")\n" +
-        "if os.name == \"nt\":\n" +
-        "    import inspect\n" +
-        "    import subprocess\n" +
-        "    _orig_popen_init = subprocess.Popen.__init__\n" +
-        "    _popen_sig = inspect.signature(_orig_popen_init)\n" +
-        "    def _silent_popen_init(self, *args, **kwargs):\n" +
-        "        _bound = _popen_sig.bind_partial(self, *args, **kwargs)\n" +
-        "        _flags = _bound.arguments.get(\"creationflags\") or 0\n" +
-        "        _no_win = getattr(subprocess, \"CREATE_NO_WINDOW\", 0x08000000)\n" +
-        "        _detached = getattr(subprocess, \"DETACHED_PROCESS\", 0x00000008)\n" +
-        "        _new_con = getattr(subprocess, \"CREATE_NEW_CONSOLE\", 0x00000010)\n" +
-        "        if not (_flags & (_detached | _no_win)):\n" +
-        "            _flags = (_flags & ~_new_con) | _no_win\n" +
-        "        _bound.arguments[\"creationflags\"] = _flags\n" +
-        "        _si = _bound.arguments.get(\"startupinfo\")\n" +
-        "        if _si is None:\n" +
-        "            _si = subprocess.STARTUPINFO()\n" +
-        "            _bound.arguments[\"startupinfo\"] = _si\n" +
-        "        _si.dwFlags |= getattr(subprocess, \"STARTF_USESHOWWINDOW\", 1)\n" +
-        "        _si.wShowWindow = getattr(subprocess, \"SW_HIDE\", 0)\n" +
-        "        return _orig_popen_init(*_bound.args, **_bound.kwargs)\n" +
-        "    subprocess.Popen.__init__ = _silent_popen_init\n" +
-        "    os.system = lambda cmd: subprocess.run(cmd, shell=True).returncode\n" +
-        "from plugins.blackbox.dashboard import cmd_dashboard\n" +
-        "raise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))\n";
+    internal static string BlackboxDashboardLauncherCode => BlackboxDashboardRuntime.LauncherCode;
 
     public string DkgRoot { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -744,17 +712,35 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        if (ResolveBlackboxAgentRoot() is { } agent &&
-            LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort) &&
-            ShouldUpgradeRunningLauncher(Path.Combine(agent, "start-dashboard.py")))
-        {
-            StopModuleProcesses(blackbox: true, dkg: false);
-            WaitForPortToClose(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(10));
-        }
-
         return BlackboxLaunch.Start(
             static () => LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort),
-            LaunchBlackboxDashboard);
+            LaunchBlackboxDashboard,
+            PrepareBlackboxDashboard);
+    }
+
+    private bool PrepareBlackboxDashboard()
+    {
+        if (!OperatingSystem.IsWindows() ||
+            ResolveBlackboxAgentRoot() is not { } agent ||
+            !LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort))
+        {
+            return true;
+        }
+
+        var launcher = Path.Combine(agent, "start-dashboard.py");
+        if (!ShouldUpgradeRunningLauncher(launcher))
+        {
+            return true;
+        }
+
+        if (IsUnsafeInstallRoot(BlackboxRoot, agent, launcher) ||
+            !LocalModuleRuntime.StopBlackboxDashboard(launcher))
+        {
+            return false;
+        }
+
+        WaitForPortToClose(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(10));
+        return !LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort);
     }
 
     private bool LaunchBlackboxDashboard()
@@ -783,6 +769,11 @@ public sealed class OptionalModuleInstaller
         try
         {
             var launcher = Path.Combine(agent, "start-dashboard.py");
+            if (IsUnsafeInstallRoot(launcher))
+            {
+                return false;
+            }
+
             File.WriteAllText(
                 launcher,
                 BlackboxDashboardLauncherCode,

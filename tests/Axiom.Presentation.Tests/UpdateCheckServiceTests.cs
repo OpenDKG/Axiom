@@ -62,7 +62,7 @@ public sealed class UpdateCheckServiceTests : IDisposable
             draft = false,
             prerelease = false,
             published_at = "2026-11-15T09:00:00Z",
-            html_url = "https://github.com/a-51-50/Axiom/releases/tag/v0.46.0",
+            html_url = "https://github.com/OpenDKG/Axiom/releases/tag/v0.46.0",
             body = "# Axiom 0.46.0\n\nFixes startup layout.\n",
         });
 
@@ -74,7 +74,8 @@ public sealed class UpdateCheckServiceTests : IDisposable
         Assert.Equal("0.46.0", service.LatestVersion);
         Assert.Equal("2026-11-15", service.ReleaseDateText);
         Assert.Equal("Axiom 0.46.0", service.SummaryText);
-        Assert.Equal("https://github.com/a-51-50/Axiom/releases/tag/v0.46.0", service.ReleaseUrl);
+        Assert.Equal("https://github.com/OpenDKG/Axiom/releases/tag/v0.46.0", service.ReleaseUrl);
+        Assert.Equal(new Uri("https://api.github.com/repos/OpenDKG/Axiom/releases/latest"), handler.LastRequestUri);
 
         service.Dismiss();
         Assert.False(service.IsUpdateAvailable);
@@ -87,7 +88,7 @@ public sealed class UpdateCheckServiceTests : IDisposable
             tag_name = "v0.46.0",
             draft = false,
             prerelease = false,
-            html_url = "https://github.com/a-51-50/Axiom/releases/tag/v0.46.0",
+            html_url = "https://github.com/OpenDKG/Axiom/releases/tag/v0.46.0",
             body = "Same release.",
         });
         Assert.False(await service.CheckIfDueAsync());
@@ -106,6 +107,7 @@ public sealed class UpdateCheckServiceTests : IDisposable
         Assert.True(await service.CheckIfDueAsync());
         Assert.True(service.IsUpdateAvailable);
         Assert.Equal("0.47.0", service.LatestVersion);
+        Assert.Equal("https://github.com/OpenDKG/Axiom/releases", service.ReleaseUrl);
     }
 
     [Fact]
@@ -223,6 +225,7 @@ public sealed class UpdateCheckServiceTests : IDisposable
         private readonly Queue<Func<HttpResponseMessage>> _responses = new();
 
         public int RequestCount { get; private set; }
+        public Uri? LastRequestUri { get; private set; }
 
         public void EnqueueJson(object payload) =>
             _responses.Enqueue(() => new HttpResponseMessage(HttpStatusCode.OK)
@@ -239,6 +242,7 @@ public sealed class UpdateCheckServiceTests : IDisposable
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             RequestCount++;
+            LastRequestUri = request.RequestUri;
             return Task.FromResult(_responses.Count > 0
                 ? _responses.Dequeue()()
                 : new HttpResponseMessage(HttpStatusCode.NotFound));
