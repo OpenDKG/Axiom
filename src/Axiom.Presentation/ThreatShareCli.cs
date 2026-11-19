@@ -605,7 +605,11 @@ public sealed class ThreatShareCli
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Axiom", "modules", "blackbox", "agent-blackbox");
 
-    public static string VenvPython() => Path.Combine(BlackboxRoot(), "venv", "Scripts", "python.exe");
+    /// <summary>
+    /// The Blackbox venv interpreter: <c>venv\Scripts\python.exe</c> on Windows (unchanged),
+    /// <c>venv/bin/python</c> on macOS and Linux.
+    /// </summary>
+    public static string VenvPython() => AgentPlatform.VenvPython(BlackboxRoot());
 
     /// <summary>The local ruleset text, used by the preflight to refuse a known indicator.</summary>
     public static string ReadRuleset()
