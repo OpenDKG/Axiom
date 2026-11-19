@@ -70,6 +70,7 @@ jobs:
             "$RUNNER_TEMP/axiom-bpftool.tar.gz" | sha256sum --check
           tar -xzf "$RUNNER_TEMP/axiom-bpftool.tar.gz" -C "$RUNNER_TEMP/axiom-bpftool"
           bpftool=$(find "$RUNNER_TEMP/axiom-bpftool" -name bpftool -type f -print -quit)
+          chmod u+x "$bpftool"
           "$bpftool" version
           echo "BPFTOOL=$bpftool" >> "$GITHUB_ENV"
       - name: Test the Linux desktop and infrastructure
