@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Linux adapters of the axiomd systemd daemon (docs/LINUX_ARCHITECTURE.md): the systemd
+    installer and sd_notify, /proc-based connection and process facts, DNS control through
+    systemd-resolved / NetworkManager / resolv.conf, the doctor, and the firewall adapter. The
+    firewall adapter is a stub in this phase (Firewall/LinuxFirewallPolicyAdapter.cs); the
+    nftables engine lands under Nft/ from its own branch and replaces it. Unix-generic code
+    (socket IPC, peer authorization, data modes, protected-image audit) comes from
+    Axiom.Infrastructure.Unix. Targets plain net10.0; Linux-only runtime code is marked
+    [SupportedOSPlatform("linux")] or guarded with OperatingSystem.IsLinux().
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Axiom.Infrastructure.Linux</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
+    <ProjectReference Include="..\Axiom.Core\Axiom.Core.csproj" />
+    <ProjectReference Include="..\Axiom.Service.Hosting\Axiom.Service.Hosting.csproj" />
+    <ProjectReference Include="..\Axiom.Infrastructure.Unix\Axiom.Infrastructure.Unix.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Required for self-contained single-file publish under central package management. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    Connect-time BPF layer (docs/LINUX_EBPF.md). The native objects are built separately
+    (`make -C Bpf/native`, needs clang + libbpf-dev) and shipped under bpf/ next to the daemon
+    when present; without them the daemon runs nft-only and says so in the journal/doctor.
+  -->
+  <ItemGroup Condition="Exists('Bpf/native/out/axiom_connect.bpf.o')">
+    <None Include="Bpf/native/out/axiom_connect.bpf.o" Link="bpf/axiom_connect.bpf.o" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Bpf/native/out/axiom-bpf-events" Link="bpf/axiom-bpf-events" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('Bpf/native/out/axiom-bpf-events')" />
+  </ItemGroup>
+
+</Project>

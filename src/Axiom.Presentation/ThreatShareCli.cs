@@ -660,7 +660,11 @@ public sealed class ThreatShareCli
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Axiom", "modules", "blackbox", "agent-blackbox");
 
-    public static string VenvPython() => Path.Combine(BlackboxRoot(), "venv", "Scripts", "python.exe");
+    /// <summary>
+    /// The Blackbox venv interpreter: <c>venv\Scripts\python.exe</c> on Windows (unchanged),
+    /// <c>venv/bin/python</c> on macOS and Linux.
+    /// </summary>
+    public static string VenvPython() => AgentPlatform.VenvPython(BlackboxRoot());
 
     /// <summary>The local ruleset text, used by the preflight to refuse a known indicator.</summary>
     public static string ReadRuleset()
@@ -769,9 +773,9 @@ public sealed class ThreatShareCli
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var candidates = new[]
         {
-            Path.Combine(local, "Axiom", "modules", "blackbox", "agent-blackbox", "venv", "Scripts", "hermes.exe"),
-            Path.Combine(local, "hermes", "bin", "hermes.exe"),
-            Path.Combine(local, "Programs", "hermes", "hermes.exe"),
+            AgentPlatform.VenvTool(Path.Combine(local, "Axiom", "modules", "blackbox", "agent-blackbox"), "hermes"),
+            Path.Combine(local, "hermes", "bin", AgentPlatform.ExecutableName("hermes")),
+            Path.Combine(local, "Programs", "hermes", AgentPlatform.ExecutableName("hermes")),
         };
 
         foreach (var candidate in candidates)
@@ -785,7 +789,7 @@ public sealed class ThreatShareCli
         foreach (var entry in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
                  .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
-            var candidate = Path.Combine(entry.Trim(), "hermes.exe");
+            var candidate = Path.Combine(entry.Trim(), AgentPlatform.ExecutableName("hermes"));
             if (File.Exists(candidate))
             {
                 return candidate;

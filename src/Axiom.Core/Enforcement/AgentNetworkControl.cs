@@ -158,16 +158,15 @@ public static class AgentFirewallRulePlanner
         }
 
         var path = executablePath.Trim();
-        if (!Path.IsPathFullyQualified(path))
+        if (!IsAbsolutePath(path))
         {
             return Rejected(
                 EnforcementReasonCodes.InvalidRequest,
                 "The executable path must be absolute.");
         }
 
-        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        if (!string.IsNullOrWhiteSpace(windows) &&
-            path.StartsWith(windows.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
+        if (IsWindowsSystemBinaryUnder(path, @"C:\Windows") ||
+            IsWindowsSystemBinaryUnder(path, Environment.GetFolderPath(Environment.SpecialFolder.Windows)))
         {
             return Rejected(
                 EnforcementReasonCodes.InvalidRequest,
@@ -211,4 +210,28 @@ public static class AgentFirewallRulePlanner
         RejectionMessage = message,
         Spec = null,
     };
+
+    /// <summary>
+    /// Absolute under the running OS or under Windows rules; the same rule spec reaches the Linux
+    /// adapter, where <see cref="Path.IsPathFullyQualified(string)"/> rejects <c>C:\…</c>.
+    /// </summary>
+    private static bool IsAbsolutePath(string path) =>
+        Path.IsPathFullyQualified(path) ||
+        (path.Length >= 3 && char.IsAsciiLetter(path[0]) && path[1] == ':' && (path[2] == '\\' || path[2] == '/'));
+
+    /// <summary>
+    /// Windows system binaries are refused on every host: the check must not depend on the host's
+    /// <see cref="Environment.SpecialFolder.Windows"/> (empty off Windows).
+    /// </summary>
+    private static bool IsWindowsSystemBinaryUnder(string path, string? directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return false;
+        }
+
+        var prefix = directory.TrimEnd('\\', '/');
+        return path.StartsWith(prefix + "\\", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
+    }
 }

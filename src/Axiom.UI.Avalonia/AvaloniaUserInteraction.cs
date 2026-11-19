@@ -36,6 +36,19 @@ public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUser
         }
 
         var result = false;
+        var dialog = CreateConfirmDialog(title, message, confirmLabel, destructive, () => result = true);
+        await dialog.ShowDialog(owner).ConfigureAwait(true);
+        return result && !cancellationToken.IsCancellationRequested;
+    }
+
+    /// <summary>The confirmation window, built complete before it is shown.</summary>
+    internal static Window CreateConfirmDialog(
+        string title,
+        string message,
+        string confirmLabel,
+        bool destructive,
+        Action onConfirm)
+    {
         var dialog = CreateDialog(title);
         var cancel = CreateButton("Cancel", destructive: false);
         var confirm = CreateButton(confirmLabel, destructive);
@@ -43,7 +56,7 @@ public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUser
         cancel.Click += (_, _) => dialog.Close();
         confirm.Click += (_, _) =>
         {
-            result = true;
+            onConfirm();
             dialog.Close();
         };
 
@@ -56,8 +69,7 @@ public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUser
         };
 
         dialog.Content = BuildContent(message, buttons);
-        await dialog.ShowDialog(owner).ConfigureAwait(true);
-        return result && !cancellationToken.IsCancellationRequested;
+        return dialog;
     }
 
     public async Task ShowMessageAsync(string title, string message, CancellationToken cancellationToken)
@@ -196,17 +208,23 @@ public sealed class AvaloniaUserInteraction(Func<Window?> ownerProvider) : IUser
             return null;
         }
 
+        // macOS and Linux executables have no extension (and .app bundles are packages), so an
+        // ".exe" filter would hide every valid choice there.
+        var unfiltered = !OperatingSystem.IsWindows() &&
+                         string.Equals(extension.TrimStart('.'), "exe", StringComparison.OrdinalIgnoreCase);
         var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = title,
             AllowMultiple = false,
-            FileTypeFilter =
-            [
-                new FilePickerFileType(typeName)
-                {
-                    Patterns = [$"*.{extension.TrimStart('.')}"],
-                },
-            ],
+            FileTypeFilter = unfiltered
+                ? null
+                :
+                [
+                    new FilePickerFileType(typeName)
+                    {
+                        Patterns = [$"*.{extension.TrimStart('.')}"],
+                    },
+                ],
         }).ConfigureAwait(true);
 
         cancellationToken.ThrowIfCancellationRequested();

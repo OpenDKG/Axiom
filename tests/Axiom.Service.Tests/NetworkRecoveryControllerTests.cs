@@ -321,6 +321,38 @@ public sealed class NetworkRecoveryControllerTests : IDisposable
         Assert.Equal(1, second.RulesVerifiedAbsent);
     }
 
+    /// <summary>
+    /// Review #2 MAC-2: an adapter that published the removal but could not prove it (macOS: the
+    /// network extension is offline / has not acknowledged the table) answers Pending with
+    /// Success = false. The controller must not count the rule as removed nor report the network
+    /// restored; a retry once the removal is proven completes verified.
+    /// </summary>
+    [Fact]
+    public async Task Unverified_rule_removal_is_never_reported_as_restored_and_retry_completes()
+    {
+        var id = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        _firewall.Rules.Add(Rule(id.ToString("D"), FirewallDirection.Outbound, "Axiom"));
+        var controller = Create();
+        await controller.CaptureAsync(Actor, CancellationToken.None);
+
+        _firewall.PendingRemoval = true;
+        var first = await controller.RestoreAsync(Actor, CancellationToken.None);
+
+        Assert.False(first.Verified);
+        Assert.NotEqual(NetworkRecoveryStatus.Succeeded, first.Status);
+        Assert.Equal(0, first.RulesRemoved);
+        Assert.Equal(0, first.RulesVerifiedAbsent);
+        var problem = Assert.Single(first.Problems);
+        Assert.Equal("filter.disconnected", problem.Code);
+
+        _firewall.PendingRemoval = false;
+        var retry = await controller.RestoreAsync(Actor, CancellationToken.None);
+
+        Assert.True(retry.Succeeded());
+        Assert.Equal(1, retry.RulesVerifiedAbsent);
+        Assert.Empty(_firewall.Rules);
+    }
+
     [Fact]
     public async Task Restore_continues_after_one_adapter_fails_and_reports_partial_success()
     {
@@ -545,6 +577,9 @@ public sealed class NetworkRecoveryControllerTests : IDisposable
 
         public bool FailList { get; set; }
 
+        /// <summary>Removal is published but not proven (macOS filter offline): Pending, Success = false, rule still reported Owned.</summary>
+        public bool PendingRemoval { get; set; }
+
         public Task<IReadOnlyList<ManagedRule>> ListOwnedRulesAsync(CancellationToken ct) =>
             FailList
                 ? throw new InvalidOperationException("The test firewall refused the read.")
@@ -579,6 +614,18 @@ public sealed class NetworkRecoveryControllerTests : IDisposable
                     Success = true,
                     ManagedRuleId = managedRuleId,
                     State = RuleState.Desired,
+                });
+            }
+
+            if (PendingRemoval)
+            {
+                return Task.FromResult(new RuleApplyResult
+                {
+                    Success = false,
+                    ManagedRuleId = managedRuleId,
+                    State = RuleState.Pending,
+                    ErrorCode = "filter.disconnected",
+                    ErrorMessage = "The Axiom rule was removed from rules.json but the removal is not verified.",
                 });
             }
 

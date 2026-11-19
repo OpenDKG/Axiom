@@ -432,7 +432,8 @@ public sealed class LifecycleAndLeakRegressionTests
         var method = typeof(ShellViewModel).GetMethod(
             "ProbeProtectionAsync",
             BindingFlags.Instance | BindingFlags.NonPublic);
-        var task = (Task)method!.Invoke(shell, null)!;
+        var args = method!.GetParameters().Length == 1 ? new object?[] { false } : null;
+        var task = (Task)method.Invoke(shell, args)!;
         Assert.True(task.IsCompletedSuccessfully);
     }
 

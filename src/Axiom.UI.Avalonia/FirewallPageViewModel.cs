@@ -12,9 +12,18 @@ using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
 
-/// <summary>One owned Windows Firewall rule, read-only.</summary>
-public sealed class FirewallRuleRow(ManagedRule rule)
+/// <summary>
+/// One owned Windows Firewall rule, read-only. <paramref name="lastKnown"/> marks a row kept from
+/// the last rules read after the daemon stopped answering: it stays visible, but its state is
+/// unknown, never the last "Applied" (off Windows only; Windows never builds such a row).
+/// </summary>
+public sealed class FirewallRuleRow(ManagedRule rule, bool lastKnown = false)
 {
+    /// <summary>State shown for a last-known row while the daemon does not answer (RuleState.Unknown).</summary>
+    public const string LastKnownStateText = "Unknown (last known)";
+
+    public bool IsLastKnown => lastKnown;
+
     public Guid ManagedRuleId => rule.ManagedRuleId;
 
     public string OsRuleName => rule.OsRuleName;
@@ -50,7 +59,13 @@ public sealed class FirewallRuleRow(ManagedRule rule)
 
     public string EnabledText => rule.Spec.Enabled ? "yes" : "no";
 
-    public string StateText => rule.State.ToString();
+    /// <summary>State, plus the Linux coverage split (null on Windows/macOS, so their text is unchanged).</summary>
+    public string StateText => lastKnown ? LastKnownStateText : rule.ConnectTimeBlockingProven switch
+    {
+        true => $"{rule.State} · connect-time proven",
+        false => $"{rule.State} · nft-only (not race-free)",
+        null => rule.State.ToString(),
+    };
 
     public string Tooltip =>
         $"{rule.Spec.AppPath}\nRule: {rule.OsRuleName}\nCreated by: {rule.Spec.CreatedBy}";
@@ -155,7 +170,7 @@ public sealed partial class PendingAppRow(ProtectionPendingApp app) : Observable
 /// Firewall page. It reads the capability and owned rules through the service. Apply/Remove stay
 /// disabled unless the service opened its explicit write gate, and every change asks first.
 /// </summary>
-public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
+public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, IActivatablePage
 {
     private readonly IServiceRequestClient? _client;
     private readonly IUserInteraction _ui;
@@ -178,7 +193,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             CapabilityStatusText = "Service required";
             CapabilityDetail = "Firewall policy is read through the local service. Start this host with --service.";
             OwnedRuleCountText = "—";
-            StatusText = "No Windows Firewall policy was read in in-process mode.";
+            StatusText = $"No {PlatformText.Firewall} policy was read in in-process mode.";
             IsEmpty = true;
             return;
         }
@@ -190,6 +205,9 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     public ObservableCollection<FirewallRuleRow> Rules { get; } = [];
 
     private readonly List<ManagedRule> _ownedRules = [];
+
+    /// <summary>Local time of the last successful rules read; shown with last-known rows.</summary>
+    private DateTimeOffset? _rulesReadLocal;
     private IReadOnlyList<RuleSpec> _importedRules = [];
     private string _importedFileName = string.Empty;
 
@@ -214,9 +232,14 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     /// <summary>Explanation shown when Microsoft-signed processes were removed from the ask list.</summary>
     public string IgnoredMicrosoftText => IgnoredMicrosoftCount == 0
         ? string.Empty
-        : $"{IgnoredMicrosoftCount} trusted process(es) are not prompted (Windows, Microsoft-signed or Axiom's own).";
+        : OperatingSystem.IsWindows()
+            ? $"{IgnoredMicrosoftCount} trusted process(es) are not prompted (Windows, Microsoft-signed or Axiom's own)."
+            : $"{IgnoredMicrosoftCount} trusted process(es) are not prompted ({PlatformText.OsName} system or Axiom's own).";
 
     public bool HasIgnoredMicrosoft => IgnoredMicrosoftCount > 0;
+
+    /// <summary>Domain/Private/Public profiles exist only in Windows Firewall; nftables and the macOS filter have none.</summary>
+    public bool ShowProfiles => OperatingSystem.IsWindows();
 
     public IReadOnlyList<string> ProtocolOptions { get; } = ["Any", "TCP", "UDP"];
 
@@ -276,7 +299,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     private bool _newRuleEnabled = true;
 
     [ObservableProperty]
-    private string _newRuleStatusText = "Writes are disabled; the rule editor is read-only until the test-VM write gate is enabled.";
+    private string _newRuleStatusText = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ApplyNewRuleCommand))]
@@ -294,6 +317,38 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     [ObservableProperty]
     private string _statusText = string.Empty;
 
+    /// <summary>
+    /// What the OS filter reported about the published rules (macOS). Drives the "N rule(s) not
+    /// enforced by the filter" block and the rejected-file / dropped-events banner.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RejectedRules))]
+    [NotifyPropertyChangedFor(nameof(HasRejectedRules))]
+    [NotifyPropertyChangedFor(nameof(RejectedRulesHeadline))]
+    [NotifyPropertyChangedFor(nameof(HasFilterBanner))]
+    [NotifyPropertyChangedFor(nameof(FilterBannerText))]
+    [NotifyPropertyChangedFor(nameof(FilterEnforcedText))]
+    [NotifyPropertyChangedFor(nameof(FilterConnectionText))]
+    [NotifyPropertyChangedFor(nameof(HasFilterConnectionText))]
+    [NotifyPropertyChangedFor(nameof(NoticeText))]
+    private FilterEnforcementSummary _enforcement = FilterEnforcementSummary.None;
+
+    public string FilterConnectionText => Enforcement.ConnectionText;
+
+    public bool HasFilterConnectionText => Enforcement.HasConnectionText;
+
+    public IReadOnlyList<RejectedRuleRow> RejectedRules => Enforcement.RejectedRules;
+
+    public bool HasRejectedRules => Enforcement.HasRejectedRules;
+
+    public string RejectedRulesHeadline => Enforcement.RejectedHeadline;
+
+    public bool HasFilterBanner => Enforcement.HasBanner;
+
+    public string FilterBannerText => Enforcement.BannerText;
+
+    public string FilterEnforcedText => Enforcement.EnforcedText;
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RemoveRuleCommand))]
     [NotifyCanExecuteChangedFor(nameof(ApplyNewRuleCommand))]
@@ -307,21 +362,46 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     [NotifyPropertyChangedFor(nameof(NewRuleWriteHint))]
     private bool _writesEnabled;
 
+    /// <summary>False until a rules read succeeds, so a failed probe never claims the gate is known closed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NoticeText))]
+    [NotifyPropertyChangedFor(nameof(NewRuleWriteHint))]
+    private bool _writeGateKnown;
+
     public string NoticeText => WritesEnabled
-        ? "Axiom Shield is on. Rules are read and written through the elevated local service with the documented INetFwPolicy2 COM objects. Every change is confirmed and audited."
-        : "This session is read-only for Windows Firewall changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
+        ? OperatingSystem.IsWindows()
+            ? "Axiom Shield is on. Rules are read and written through the elevated local service with the documented INetFwPolicy2 COM objects. Every change is confirmed and audited."
+            : $"Axiom Shield is on. Rules are written by the root axiomd service; they are {Enforcement.EnforcementClause(PlatformText.Firewall)}. Every change is confirmed and audited."
+        : !WriteGateKnown
+            ? $"The last {PlatformText.Firewall} write-gate read did not complete, so this session stays read-only. Recheck or restart the service."
+            : ShieldEnabled
+                ? $"Axiom Shield is on, but the local service did not open the {PlatformText.Firewall} write gate. This session stays read-only until it does."
+                : $"This session is read-only for {PlatformText.Firewall} changes. Turn on Axiom Shield to let the elevated service create Axiom-owned rules. Until then only inventory, defaults and the rule editor are available.";
 
     public string NoticeBadgeText => WritesEnabled ? "SHIELD ON" : "READ-ONLY";
 
     public string NewRuleWriteHint => WritesEnabled
         ? "Axiom Shield is on. Each change is confirmed and audited; only Axiom-owned rules are touched."
-        : "Turn on Axiom Shield to enable writes. Without it the rule editor stays read-only.";
+        : WriteGateKnown
+            ? ShieldEnabled
+                ? "The local service has not opened the write gate, so the rule editor stays read-only. Recheck or restart the service."
+                : "Turn on Axiom Shield to enable writes. Without it the rule editor stays read-only."
+            : "The service write gate could not be read, so this session stays read-only. Recheck the service.";
 
     [ObservableProperty]
     private string _writePathText = "disabled";
 
     [ObservableProperty]
     private bool _isEmpty;
+
+    /// <summary>Shown when no rule row is listed. Off Windows an unread list is unknown, not empty.</summary>
+    [ObservableProperty]
+    private string _emptyRulesText = NoRulesFoundText;
+
+    internal const string NoRulesFoundText = "No Axiom-owned rules were found on this host.";
+
+    internal const string RulesUnreadableText =
+        "Axiom-owned rules could not be read: the local service did not answer. Whether any exist is unknown until it answers.";
 
     [ObservableProperty]
     private bool _hasError;
@@ -350,7 +430,18 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     [NotifyCanExecuteChangedFor(nameof(DismissFocusedCommand))]
     [NotifyPropertyChangedFor(nameof(ShieldBadgeText))]
     [NotifyPropertyChangedFor(nameof(ShieldActionText))]
+    [NotifyPropertyChangedFor(nameof(NoticeText))]
+    [NotifyPropertyChangedFor(nameof(NewRuleWriteHint))]
     private bool _shieldEnabled;
+
+    /// <summary>
+    /// False until the service protection status was read and after any failed probe. A stale
+    /// "on" must never survive a lost service; the UI then says unknown, not off or protected.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShieldBadgeText))]
+    [NotifyPropertyChangedFor(nameof(ShieldActionText))]
+    private bool _protectionKnown;
 
     [ObservableProperty]
     private bool _shieldAvailable;
@@ -368,7 +459,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private string _shieldHintText =
-        "Axiom Shield applies Windows Firewall rules owned by Axiom. Nothing is blocked until you turn it on.";
+        $"Axiom Shield applies {PlatformText.Firewall} rules owned by Axiom. Nothing is blocked until you turn it on.";
 
     [ObservableProperty]
     private string _serviceAccountText = "unknown";
@@ -398,9 +489,33 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     [ObservableProperty]
     private string _agentLockdownHintText = "No agent executable is connected right now.";
 
-    public string ShieldBadgeText => ShieldEnabled ? "ON" : "OFF";
+    public string ShieldBadgeText => !ProtectionKnown ? "UNKNOWN" : ShieldEnabled ? "ON" : "OFF";
 
-    public string ShieldActionText => ShieldEnabled ? "Disable protection" : "Enable protection";
+    /// <summary>Axiom-owned rules in the daemon's last rules.query answer; null while unknown.</summary>
+    public int? QueriedRuleCount { get; private set; }
+
+    /// <summary>
+    /// Rule count to show next to the shield state. Off Windows it is the daemon's rules.query
+    /// answer (what the filter adapter lists), not protection.status's stored count, which can
+    /// still hold a rule the filter no longer lists; null (show no count) while that answer is
+    /// unknown. Windows keeps the protection.status count.
+    /// </summary>
+    public int? ShieldRuleCount(int statusRuleCount) =>
+        OperatingSystem.IsWindows() ? statusRuleCount : QueriedRuleCount;
+
+    /// <summary>
+    /// The shield's protection level for every surface (<see cref="ShieldProtection"/>): unknown
+    /// while the service has not answered; Degraded off Windows while the filter has not proven
+    /// enforcement (BPF hand-over pending, filter disconnected, nothing reported yet).
+    /// </summary>
+    public EnforcementLevel? ShieldLevel => ShieldProtection.Level(
+        ProtectionKnown,
+        ShieldEnabled,
+        OperatingSystem.IsWindows() ? null : Enforcement.IsEnforcementVerified);
+
+    public string ShieldActionText => !ProtectionKnown
+        ? "Check protection"
+        : ShieldEnabled ? "Disable protection" : "Enable protection";
 
     public string AgentLockdownActionText => AgentLockdown ? "Remove agent lockdown" : "Lock agents to localhost";
 
@@ -503,7 +618,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         var confirmed = await _ui.ConfirmAsync(
             "Axiom firewall write",
             $"Create or update the Axiom-owned {action.ToString().ToLowerInvariant()} rule for:\n{path}\n\n" +
-            "Only this rule is changed. Other Windows Firewall rules are not touched. Continue only on an isolated test VM.",
+            $"Only this rule is changed. Other {PlatformText.Firewall} rules are not touched." +
+            (OperatingSystem.IsMacOS() ? string.Empty : " Continue only on an isolated test VM."),
             "Apply rule",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);
@@ -521,9 +637,11 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
                 .SendAsync<RuleApplyResult>(IpcCommandTypes.RuleApply, spec, CancellationToken.None)
                 .ConfigureAwait(true);
 
-            NewRuleStatusText = result.Success
+            NewRuleStatusText = result.Success && result.State != RuleState.Pending
                 ? $"Rule applied and verified at {result.VerifiedUtc?.ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "unknown"}."
-                : $"Rule apply failed: {result.ErrorCode} - {result.ErrorMessage}";
+                : result.Success
+                    ? RuleApplyResultText.Describe(result, "Rule")
+                    : $"Rule apply failed: {result.ErrorCode} - {result.ErrorMessage}";
 
             if (result.Success)
             {
@@ -556,8 +674,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
         var confirmed = await _ui.ConfirmAsync(
             "Axiom firewall write",
-            $"Remove the owned Windows Firewall rule for {row.Application}?\n\n" +
-            "Only this Axiom rule is removed; other Windows Firewall rules are not touched.",
+            $"Remove the owned {PlatformText.Firewall} rule for {row.Application}?\n\n" +
+            $"Only this Axiom rule is removed; other {PlatformText.Firewall} rules are not touched.",
             "Remove rule",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);
@@ -601,6 +719,12 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
 
     private bool CanToggleShield() => _client is not null && !IsShieldBusy;
 
+    /// <summary>
+    /// Re-reads the protection state through the shell's probe, so the header, footer and this
+    /// page take the daemon's next answer together. Set by the shell; null in standalone use.
+    /// </summary>
+    internal Func<Task>? RecheckProtection { get; set; }
+
     [RelayCommand(CanExecute = nameof(CanToggleShield))]
     private async Task ToggleShieldAsync()
     {
@@ -610,11 +734,36 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             return;
         }
 
+        // Off Windows, while the daemon has not answered the button reads "Check protection": it
+        // only re-reads. Neither the disable nor the enable path may run on a state that is not
+        // known (a stale ShieldEnabled would otherwise send protection.disable/enable).
+        if (!OperatingSystem.IsWindows() && !ProtectionKnown)
+        {
+            IsShieldBusy = true;
+            try
+            {
+                if (RecheckProtection is { } recheck)
+                {
+                    await recheck().ConfigureAwait(true);
+                }
+                else
+                {
+                    await RefreshShieldAsync().ConfigureAwait(true);
+                }
+            }
+            finally
+            {
+                IsShieldBusy = false;
+            }
+
+            return;
+        }
+
         if (ShieldEnabled)
         {
             var confirmed = await _ui.ConfirmAsync(
                 "Disable Axiom Shield",
-                "Turn protection off and remove every Axiom-owned Windows Firewall rule?\n\n" +
+                $"Turn protection off and remove every Axiom-owned {PlatformText.Firewall} rule?\n\n" +
                 "Other firewall rules are not touched. Rules are re-created from your decisions when you enable it again.",
                 "Disable protection",
                 destructive: true,
@@ -656,8 +805,14 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         {
             var approved = await _ui.ConfirmAsync(
                 "Enable Axiom Shield",
-                "Axiom installs and starts its Windows service so it can create machine-wide firewall rules.\n\n" +
-                "Windows will ask for administrator approval once. The desktop app itself stays unprivileged.",
+                OperatingSystem.IsMacOS()
+                    ? "Axiom installs and starts its background daemon (axiomd) so it can enforce firewall rules through the Axiom network filter.\n\n" +
+                      "macOS will ask for an administrator password once. The desktop app itself stays unprivileged."
+                    : OperatingSystem.IsLinux()
+                    ? "Axiom installs and starts its background daemon (axiomd) as a systemd service so it can enforce firewall rules with nftables.\n\n" +
+                      "polkit will ask for an administrator password once. The desktop app itself stays unprivileged."
+                    : $"Axiom installs and starts its {PlatformText.ServiceKind} so it can create machine-wide firewall rules.\n\n" +
+                      $"{PlatformText.OsName} will ask for administrator approval once. The desktop app itself stays unprivileged.",
                 "Continue",
                 destructive: false,
                 CancellationToken.None).ConfigureAwait(true);
@@ -672,7 +827,11 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             ShieldStatusText = "Waiting for the administrator prompt…";
             try
             {
-                var install = ProtectionServiceInstall.InstallAndStart();
+                var install = OperatingSystem.IsMacOS()
+                    ? await ProtectionServiceInstall.InstallAndStartMacAsync(CancellationToken.None).ConfigureAwait(true)
+                    : OperatingSystem.IsLinux()
+                        ? await ProtectionServiceInstall.InstallAndStartLinuxAsync(CancellationToken.None).ConfigureAwait(true)
+                        : ProtectionServiceInstall.InstallAndStart();
                 if (!install.Success)
                 {
                     ShieldStatusText = install.Message;
@@ -717,7 +876,37 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         }
     }
 
-    private bool CanDecidePending() => _client is not null && !IsShieldBusy && ShieldEnabled;
+    // Off Windows a row or pending action needs a known state: while the service does not
+    // answer, last-known rows and the shield flag are not a basis for a block/unblock request.
+    private bool CanDecidePending() =>
+        _client is not null && !IsShieldBusy && ShieldEnabled && (OperatingSystem.IsWindows() || ProtectionKnown);
+
+    partial void OnProtectionKnownChanged(bool value) => NotifyRowActionsOffWindows();
+
+    partial void OnShieldEnabledChanged(bool value) => NotifyRowActionsOffWindows();
+
+    partial void OnIsShieldBusyChanged(bool value) => NotifyRowActionsOffWindows();
+
+    /// <summary>
+    /// Unblock and the remembered-decision toggle were never told to re-evaluate when the shield
+    /// state changed, so a last-known row kept an enabled button. Windows keeps its behaviour.
+    /// </summary>
+    private void NotifyRowActionsOffWindows()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        UnblockRuleCommand.NotifyCanExecuteChanged();
+        ToggleDecisionCommand.NotifyCanExecuteChanged();
+        BlockPendingCommand.NotifyCanExecuteChanged();
+        AllowPendingCommand.NotifyCanExecuteChanged();
+        DismissPendingCommand.NotifyCanExecuteChanged();
+        BlockFocusedCommand.NotifyCanExecuteChanged();
+        AllowFocusedCommand.NotifyCanExecuteChanged();
+        DismissFocusedCommand.NotifyCanExecuteChanged();
+    }
 
     [RelayCommand(CanExecute = nameof(CanDecidePending))]
     private Task BlockPendingAsync(PendingAppRow? row) =>
@@ -754,7 +943,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     [RelayCommand(CanExecute = nameof(CanDecidePending))]
     private Task UnblockRuleAsync(FirewallRuleRow? row) =>
         row is { CanUnblock: true }
-            ? ConfirmAndUnblockAsync(row.AppPath, row.Application)
+            ? ConfirmAndUnblockAsync(row.AppPath, row.Application, row)
             : Task.CompletedTask;
 
     [RelayCommand]
@@ -793,7 +982,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     {
         var confirmed = await _ui.ConfirmAsync(
             "Block this application",
-            $"Create an Axiom outbound Windows Firewall block rule for:\n{appPath}\n\n" +
+            $"Create an Axiom outbound {PlatformText.Firewall} block rule for:\n{appPath}\n\n" +
             "Only the Axiom-owned rule is changed. You can unblock it from Remembered Shield decisions at any time.",
             "Block",
             destructive: true,
@@ -807,12 +996,12 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         await ApplyDecisionAsync(appPath, appName, ProtectionDecisionAction.Block).ConfigureAwait(true);
     }
 
-    private async Task ConfirmAndUnblockAsync(string appPath, string appName)
+    private async Task ConfirmAndUnblockAsync(string appPath, string appName, FirewallRuleRow? row = null)
     {
         var confirmed = await _ui.ConfirmAsync(
             "Unblock this application",
             $"Remove the Axiom outbound block rule for:\n{appPath}\n\n" +
-            "This restores network access and records an allow decision. Only the Axiom-owned rule is changed; other Windows Firewall rules are not touched.",
+            $"This restores network access and records an allow decision. Only the Axiom-owned rule is changed; other {PlatformText.Firewall} rules are not touched.",
             "Unblock",
             destructive: false,
             CancellationToken.None).ConfigureAwait(true);
@@ -822,13 +1011,103 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             return;
         }
 
-        await ApplyDecisionAsync(appPath, appName, ProtectionDecisionAction.Allow).ConfigureAwait(true);
+        if (row is null)
+        {
+            await ApplyDecisionAsync(appPath, appName, ProtectionDecisionAction.Allow).ConfigureAwait(true);
+            return;
+        }
+
+        // protection.decide only removes the rule id derived from the path. A row whose rule was
+        // created with another id (rule.apply by another client, an inbound block) is removed by
+        // its own id first, and the allow decision is recorded only once a fresh rule list no
+        // longer shows it.
+        if (!IsDerivedShieldRule(row) && !await RemoveRuleRowForUnblockAsync(row).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        await ApplyDecisionAsync(appPath, appName, ProtectionDecisionAction.Allow, row).ConfigureAwait(true);
+    }
+
+    private static bool IsDerivedShieldRule(FirewallRuleRow row) =>
+        !string.IsNullOrWhiteSpace(row.AppPath) &&
+        row.ManagedRuleId == RuleIdentity.ForApp(row.AppPath, FirewallDirection.Outbound);
+
+    private async Task<bool> RemoveRuleRowForUnblockAsync(FirewallRuleRow row)
+    {
+        if (_client is null)
+        {
+            return false;
+        }
+
+        IsShieldBusy = true;
+        StatusText = $"{row.Application}: removing rule {row.OsRuleName}...";
+        try
+        {
+            var removed = await _client
+                .SendAsync<RuleApplyResult>(
+                    IpcCommandTypes.RuleRemove,
+                    new RuleReference { ManagedRuleId = row.ManagedRuleId },
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            if (!removed.Success)
+            {
+                StatusText = $"Unblock failed: rule {row.OsRuleName} was not removed " +
+                    $"({removed.ErrorCode} - {removed.ErrorMessage}). {NoAllowRecordedText}";
+                return false;
+            }
+
+            if (await IsRuleStillListedAsync(row.ManagedRuleId).ConfigureAwait(true))
+            {
+                StatusText = $"Unblock not confirmed: rule {row.OsRuleName} is still listed by the service. {NoAllowRecordedText}";
+                return false;
+            }
+
+            return true;
+        }
+#pragma warning disable CA1031 // The page must show an IPC failure instead of crashing.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            StatusText = $"Unblock failed: {exception.Message} {NoAllowRecordedText}";
+            return false;
+        }
+        finally
+        {
+            IsShieldBusy = false;
+        }
+    }
+
+    private const string NoAllowRecordedText = "The block is still in force. No allow decision was recorded.";
+
+    /// <summary>Reads the rule list again; an unreadable list counts as still listed.</summary>
+    private async Task<bool> IsRuleStillListedAsync(Guid managedRuleId)
+    {
+        if (_client is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            var snapshot = await _client
+                .SendAsync<FirewallRulesSnapshot>(IpcCommandTypes.RulesQuery, null, CancellationToken.None)
+                .ConfigureAwait(true);
+            return snapshot.Rules.Any(rule => rule.ManagedRuleId == managedRuleId);
+        }
+#pragma warning disable CA1031 // A failed re-read is reported as unconfirmed, not as success.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return true;
+        }
     }
 
     private async Task ApplyDecisionAsync(
         string appPath,
         string appName,
-        ProtectionDecisionAction action)
+        ProtectionDecisionAction action,
+        FirewallRuleRow? unblockedRow = null)
     {
         if (_client is null)
         {
@@ -860,6 +1139,17 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
                     : $"{appName}: unblocked (allow decision recorded).");
             DismissAlertFocus();
             await RefreshAsync().ConfigureAwait(true);
+
+            // Unblock from a rule row: report the result only after a fresh rule list, and say so
+            // when the row's rule is still listed (the refresh above also rewrites StatusText).
+            if (unblockedRow is not null)
+            {
+                StatusText = status.LastError is { } error
+                    ? $"Unblock failed: {error}"
+                    : await IsRuleStillListedAsync(unblockedRow.ManagedRuleId).ConfigureAwait(true)
+                        ? $"Unblock not confirmed: rule {unblockedRow.OsRuleName} is still listed by the service."
+                        : $"{appName}: unblocked (rule removed and no longer listed; allow decision recorded).";
+            }
         }
         catch (ServiceUnavailableException exception)
         {
@@ -897,7 +1187,68 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
     }
 
     /// <summary>Applies a fresh protection snapshot while the Firewall page is visible.</summary>
-    public void UpdateProtectionStatus(ProtectionStatus status) => ApplyStatus(status);
+    public void UpdateProtectionStatus(ProtectionStatus status)
+    {
+        ApplyStatus(status);
+
+        // Windows Firewall reports no filter enforcement: keep its refresh-on-demand page (no
+        // periodic rules re-read, Recheck stays enabled). The live re-query is for OS filters.
+        if (!OperatingSystem.IsWindows())
+        {
+            // While the shield is on but the filter has not proven enforcement, re-read on every
+            // probe: Home and Mini then turn verified with the same answer as Network Control
+            // instead of one or two intervals later.
+            // Only after a rules read succeeded (a page that could not read rules keeps the interval).
+            if (status.Enabled && _rulesReadLocal is not null && !Enforcement.IsEnforcementVerified)
+            {
+                _ = RefreshAsync();
+            }
+            else
+            {
+                RefreshEnforcementIfStale(DateTimeOffset.UtcNow);
+            }
+        }
+    }
+
+    /// <summary>
+    /// How often the rules/enforcement section is re-queried while the page is visible. The filter
+    /// connection state is live (review 2026-11-12 #4): a page opened while the extension was
+    /// disconnected must not keep saying "disconnected" after it reconnected, and vice versa.
+    /// </summary>
+    public static readonly TimeSpan EnforcementRefreshInterval = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// When the rules/enforcement section was last queried (UTC); the reference point for
+    /// <see cref="RefreshEnforcementIfStale"/>. Exposed so tests can derive their "now" from it
+    /// instead of racing the wall clock.
+    /// </summary>
+    public DateTimeOffset LastEnforcementRefreshUtc { get; private set; }
+
+    /// <summary>
+    /// Keeps <see cref="Enforcement"/> current while another page is visible. The shell status bar
+    /// ("blocks verified" / "blocks not verified") and the Overview read it on every page, so a
+    /// summary loaded once at start-up (often while the filter was still pending after a daemon
+    /// restart) must not stay stale until the user opens this page. Same throttle as the visible
+    /// page; Windows reports no filter enforcement and keeps its refresh-on-demand behaviour.
+    /// </summary>
+    public void KeepEnforcementCurrent(DateTimeOffset now)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            RefreshEnforcementIfStale(now);
+        }
+    }
+
+    /// <summary>Re-queries rules + capability when the last query is older than <see cref="EnforcementRefreshInterval"/>.</summary>
+    public void RefreshEnforcementIfStale(DateTimeOffset now)
+    {
+        if (now - LastEnforcementRefreshUtc < EnforcementRefreshInterval)
+        {
+            return;
+        }
+
+        _ = RefreshAsync();
+    }
 
     [RelayCommand]
     private void DismissAlertFocus()
@@ -1031,7 +1382,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         {
             var confirmed = await _ui.ConfirmAsync(
                 "Block this application",
-                $"Create a Windows Firewall block rule for:\n{row.AppPath}\n\n" +
+                $"Create a {PlatformText.Firewall} block rule for:\n{row.AppPath}\n\n" +
                 "Only the Axiom-owned rule is changed. You can remove it from the rules list at any time.",
                 "Block",
                 destructive: true,
@@ -1192,17 +1543,24 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             }
         }
 
-        ShieldStatusText = "The Axiom service did not come up. Check Windows Services for 'Axiom'.";
+        ShieldStatusText = OperatingSystem.IsMacOS()
+            ? "The Axiom daemon did not come up. Check 'sudo launchctl print system/com.axiom.service' and /Library/Logs/Axiom."
+            : $"The Axiom service did not come up. {PlatformText.ServiceCheckHint}";
     }
+
+    /// <summary>Raised after a protection answer from the service was applied to this page.</summary>
+    internal event EventHandler<ProtectionStatus>? ProtectionStatusApplied;
 
     private void ApplyStatus(ProtectionStatus status)
     {
         ShieldAvailable = true;
         ShieldEnabled = status.Enabled;
+        ProtectionKnown = true;
         ServiceElevated = status.ServiceElevated;
         AgentLockdown = status.AgentLockdown;
         ServiceAccountText = status.AccountName;
         WritesEnabled = status.WriteGateOpen;
+        WriteGateKnown = true;
         WritePathText = status.WriteGateOpen ? "enabled (Axiom Shield)" : "read-only";
 
         Pending.Clear();
@@ -1241,14 +1599,19 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         ShieldStatusText = !string.IsNullOrWhiteSpace(status.LastError)
             ? status.LastError!
             : status.Enabled
-                ? $"Protection is on · {status.OwnedRuleCount} Axiom rule(s) · {PendingCount} new outbound application(s) with no Block/Allow decision."
+                ? $"Protection is on{(ShieldRuleCount(status.OwnedRuleCount) is { } rules ? $" · {rules} Axiom rule(s)" : string.Empty)} · {PendingCount} new outbound application(s) with no Block/Allow decision."
                 : "Protection is off. Axiom only observes.";
 
         ShieldHintText = !status.ServiceElevated
-            ? "Enable installs the Axiom Windows service (one administrator approval). Until then Axiom can read rules but cannot enforce them."
+            ? (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux()
+                ? "Enable installs the Axiom daemon (one administrator password). Until then Axiom can read rules but cannot enforce them."
+                : $"Enable installs the Axiom {PlatformText.ServiceKind} (one administrator approval). Until then Axiom can read rules but cannot enforce them.")
             : status.Enabled
-                ? "Ask policy: a new outbound application waits above until you choose Block or Allow. Every block is a Windows Firewall rule named Axiom::…."
+                ? $"Ask policy: a new outbound application waits above until you choose Block or Allow. Every block is a {PlatformText.Firewall} rule named Axiom::…."
                 : "The service runs elevated and can enforce. Turn protection on to start the ask policy.";
+
+        // Off Windows the shell's header and footer take this same answer (see ShellViewModel).
+        ProtectionStatusApplied?.Invoke(this, status);
     }
 
     private static FirewallProfile BuildProfiles(bool domain, bool privateProfile, bool publicProfile)
@@ -1302,6 +1665,20 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         NewRuleProtocolText = DefaultProtocolText;
         NewRulePortsText = DefaultPortsText;
         NewRuleAddressesText = DefaultAddressesText;
+    }
+
+    /// <summary>Re-reads the owned rules whenever the page is shown: rules created from Connections
+    /// or Applications would otherwise only appear after Recheck.</summary>
+    public void Activate()
+    {
+        if (_client is not null && !OperatingSystem.IsWindows())
+        {
+            _ = RefreshAsync();
+        }
+    }
+
+    public void Deactivate()
+    {
     }
 
     /// <summary>
@@ -1397,7 +1774,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             "Apply imported Axiom rules",
             $"Create or update {plan.Rules.Count} Axiom-owned firewall rule(s) from {_importedFileName}?\n\n" +
             $"{preview}{more}\n\n" +
-            "Only these Axiom-owned rules are changed. Other Windows Firewall rules are not touched. " +
+            $"Only these Axiom-owned rules are changed. Other {PlatformText.Firewall} rules are not touched. " +
             "Continue only on a machine you control.",
             "Apply imported rules",
             destructive: true,
@@ -1409,7 +1786,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
             return;
         }
 
-        var applied = 0;
+        var results = new List<RuleApplyResult>();
         var failures = new List<string>();
         foreach (var spec in plan.Rules)
         {
@@ -1418,11 +1795,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
                 var result = await _client
                     .SendAsync<RuleApplyResult>(IpcCommandTypes.RuleApply, spec, CancellationToken.None)
                     .ConfigureAwait(true);
-                if (result.Success)
-                {
-                    applied++;
-                }
-                else
+                results.Add(result);
+                if (!result.Success)
                 {
                     failures.Add($"{Path.GetFileName(spec.AppPath)}: {result.ErrorCode}");
                 }
@@ -1443,9 +1817,8 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         _importedRules = Array.Empty<RuleSpec>();
         CanApplyImportedRules = false;
         await RefreshAsync().ConfigureAwait(true);
-        StatusText = failures.Count == 0
-            ? $"Applied {applied} imported rule(s)."
-            : $"Applied {applied} imported rule(s); {failures.Count} failed: {string.Join("; ", failures.Take(3))}";
+        // A Pending or not race-free result is not "applied" protection: word it like the editor does.
+        StatusText = RuleApplyResultText.DescribeBatch(results, failures, "imported rule");
     }
 
     /// <summary>
@@ -1491,6 +1864,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
         }
 
         IsBusy = true;
+        LastEnforcementRefreshUtc = DateTimeOffset.UtcNow;
 
         try
         {
@@ -1514,43 +1888,144 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable
                 _ => "Unknown",
             };
             CapabilityDetail = snapshot.Capability.Reason
-                ?? "Windows Firewall COM policy is readable. No rule is changed by this page.";
+                ?? $"{(OperatingSystem.IsWindows() ? "Windows Firewall COM policy" : PlatformText.Firewall + " policy")} is readable. No rule is changed by this page.";
             OwnedRuleCountText = snapshot.Rules.Count.ToString(CultureInfo.InvariantCulture);
+            EmptyRulesText = NoRulesFoundText;
+            _rulesReadLocal = DateTimeOffset.Now;
+            QueriedRuleCount = snapshot.Rules.Count;
             IsEmpty = snapshot.Rules.Count == 0;
             WritesEnabled = snapshot.WritesEnabled;
+            WriteGateKnown = true;
             WritePathText = snapshot.WritesEnabled ? "enabled (test VM only)" : "disabled";
             HasError = snapshot.Capability.Status == FirewallCapabilityStatus.Unavailable;
+            Enforcement = FilterEnforcementSummary.From(snapshot.Capability.FilterEnforcement, snapshot.Capability.ConnectTimeLayer);
             StatusText = snapshot.Rules.Count == 0
-                ? "0 owned rules. Axiom has not created any Windows Firewall rule on this host."
+                ? $"0 owned rules. Axiom has not created any {PlatformText.Firewall} rule on this host."
                 : $"{snapshot.Rules.Count} owned rules read at {DateTimeOffset.Now:HH:mm:ss}.";
 
             await RefreshShieldAsync().ConfigureAwait(true);
         }
         catch (ServiceUnavailableException exception)
         {
-            Rules.Clear();
-            CapabilityStatusText = "Service offline";
-            CapabilityDetail = exception.Message;
-            OwnedRuleCountText = "—";
-            IsEmpty = true;
-            HasError = true;
-            StatusText = exception.Message;
+            ApplyQueryFailure("Service offline", exception.Message, exception.Message);
         }
 #pragma warning disable CA1031 // The page must not stay busy on an unexpected IPC error.
         catch (Exception exception)
 #pragma warning restore CA1031
         {
-            Rules.Clear();
-            CapabilityStatusText = "Query failed";
-            CapabilityDetail = exception.Message;
-            OwnedRuleCountText = "—";
-            IsEmpty = true;
-            HasError = true;
-            StatusText = $"Firewall query failed: {exception.Message}";
+            ApplyQueryFailure(
+                "Query failed",
+                exception.Message,
+                $"Firewall query failed: {exception.Message}");
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// A failed or disconnected probe must not leave protection or writes looking enabled. Unknown
+    /// is not "off": callers render it as unknown until a later read succeeds.
+    /// </summary>
+    internal void ApplyProtectionUnavailable(string statusText)
+    {
+        ProtectionKnown = false;
+        ShieldEnabled = false;
+        WritesEnabled = false;
+        WriteGateKnown = false;
+        WritePathText = "unknown";
+        ShieldStatusText = statusText;
+        MarkFilterStateUnknown();
+    }
+
+    /// <summary>
+    /// Off Windows the page body follows the same shield model as the footer lamp: once the
+    /// daemon stops answering, the filter/enforcement lines (nft read-back, BPF coverage, macOS
+    /// filter acknowledgement) and every "verified" are unknown, not the last answer. They are read
+    /// again on the next enforcement re-read after the service answers (every
+    /// <see cref="EnforcementRefreshInterval"/>); until then the shield is at most Degraded.
+    /// Windows Firewall reports no filter enforcement and keeps its behaviour.
+    /// </summary>
+    private void MarkFilterStateUnknown()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Enforcement = FilterEnforcementSummary.None;
+        QueriedRuleCount = null;
+        CapabilityStatusText = "Unknown";
+        CapabilityDetail = "The local service did not answer, so the filter state is unknown. It is read again when the service answers.";
+        MarkRulesLastKnown();
+        Pending.Clear();
+        PendingCount = 0;
+        HasPending = false;
+    }
+
+    /// <summary>
+    /// Keeps the last-read owned rules visible as last-known data, but never with their last
+    /// "Applied"/verified state or a current-looking count: the state is unknown until the next
+    /// rules read after the service answers, which rebuilds the rows.
+    /// </summary>
+    private void MarkRulesLastKnown()
+    {
+        OwnedRuleCountText = "—";
+        if (_ownedRules.Count == 0)
+        {
+            // Nothing read yet (or an earlier empty read): that is not "no rules exist".
+            Rules.Clear();
+            EmptyRulesText = RulesUnreadableText;
+            StatusText = RulesUnreadableText;
+            return;
+        }
+
+        Rules.Clear();
+        foreach (var rule in _ownedRules)
+        {
+            Rules.Add(new FirewallRuleRow(rule, lastKnown: true));
+        }
+
+        OwnedRuleCountText = "—";
+        var readAt = _rulesReadLocal is { } at
+            ? $" (last read {at.ToString("HH:mm:ss", CultureInfo.InvariantCulture)})"
+            : string.Empty;
+        StatusText = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{_ownedRules.Count} owned rule(s) shown as last known{readAt}; their state is unknown until the local service answers.");
+    }
+
+    /// <summary>
+    /// A failed or disconnected probe must not leave writes looking enabled, and the hint must not
+    /// claim the gate is known closed when it was simply not read.
+    /// </summary>
+    internal void ApplyQueryFailure(string capabilityStatus, string detail, string statusText)
+    {
+        ApplyProtectionUnavailable("Protection status unknown: the local service did not answer.");
+        if (!OperatingSystem.IsWindows())
+        {
+            // Off Windows the rows stay as last known (or the list reads as unread) from
+            // ApplyProtectionUnavailable; a failed read never claims that no rule exists.
+            CapabilityStatusText = capabilityStatus;
+            CapabilityDetail = detail;
+            QueriedRuleCount = null;
+            IsEmpty = Rules.Count == 0;
+            HasError = true;
+            return;
+        }
+
+        Rules.Clear();
+        QueriedRuleCount = null;
+        Enforcement = FilterEnforcementSummary.None;
+        CapabilityStatusText = capabilityStatus;
+        CapabilityDetail = detail;
+        OwnedRuleCountText = "—";
+        IsEmpty = true;
+        WritesEnabled = false;
+        WriteGateKnown = false;
+        WritePathText = "unknown";
+        HasError = true;
+        StatusText = statusText;
     }
 }

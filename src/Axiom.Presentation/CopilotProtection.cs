@@ -43,7 +43,7 @@ public sealed class CopilotProtection
         "blackbox",
         "agent-blackbox");
 
-    private string PythonPath => Path.Combine(BlackboxAgentRoot, "venv", "Scripts", "python.exe");
+    private string PythonPath => AgentPlatform.VenvPython(BlackboxAgentRoot);
 
     public string HookScriptPath => Path.Combine(BlackboxAgentRoot, Marker);
 
@@ -182,7 +182,7 @@ public sealed class CopilotProtection
         }
     }
 
-    private static string BuildHookScript() => """
+    private static string BuildHookScript() => AgentPlatform.AdaptHookScript("""
         # Managed by Axiom. Calls the local Blackbox guard for Copilot CLI preToolUse hooks.
         import contextlib
         import datetime
@@ -275,5 +275,5 @@ public sealed class CopilotProtection
 
         if __name__ == "__main__":
             main()
-        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal);
+        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal));
 }

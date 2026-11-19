@@ -101,8 +101,8 @@ agent-level guardrails and signed threat-intelligence context respectively.
 | Platform | Published build |
 | --- | --- |
 | Windows x64 | [Latest release](https://github.com/OpenDKG/Axiom/releases/latest), installer and portable ZIP. |
-| Linux amd64 | [1.3.0 Core Preview 2](https://github.com/OpenDKG/Axiom/releases/tag/v1.3.0-linux-preview.2), Debian package. |
-| macOS Intel | [1.3.0 Developer Preview 2](https://github.com/OpenDKG/Axiom/releases/tag/v1.3.0-macos-preview.2), ad hoc-signed app archive. The system extension has separate activation and signing requirements. |
+| Linux amd64 | [Linux preview](https://github.com/OpenDKG/Axiom/releases/latest), Ubuntu 24.04 Debian package. |
+| macOS Intel | [macOS preview](https://github.com/OpenDKG/Axiom/releases/latest), ad hoc-signed app archive. The system extension has separate activation and signing requirements. |
 
 For Windows, choose **Axiom-Setup.exe** for installation or the ZIP for the portable build.
 Verify the package against its published SHA-256. The platform previews have their own feature
@@ -374,6 +374,13 @@ Windows Service
 The recommended release asset is **`Axiom-Setup.exe`** (published alongside **`Axiom-<version>-win-x64.zip`** and **`SHA256SUMS.txt`**). Double-click it, choose the profile (**Complete** or **Partial**) in the theme-aware installer UI, and click **Install Axiom** (or **Update Axiom**). The setup is a single self-contained executable with the desktop and local service payload embedded; it installs under `%LOCALAPPDATA%\Programs\Axiom`, creates a Start Menu shortcut, launches Axiom automatically when done, and closes the installer. On in-place updates, Setup automatically closes running `Axiom.Desktop` instances cleanly, applies the update, and restarts Axiom. Core installation needs no .NET runtime, Windows service registration, firewall change, or elevation.
 
 The desktop starts the bundled local service automatically, while the privileged Windows service provisions the machine-scope default enforcement policy (`%ProgramData%\Axiom\enforcement-policy.json`) if no operator policy exists yet. VirusTotal remains optional; its API key is configured later on the Security page.
+
+**Linux preview:** a `.deb` built by `scripts/linux/package.sh` installs
+the desktop app under `/usr/lib/axiom-firewall` (launched through `/usr/bin/axiom-firewall`),
+the app-grid entry and icon, the polkit action and registers
+the `axiomd` systemd service (nftables + optional eBPF enforcement) in its postinst; no terminal
+or password prompt at first launch. `.rpm` is built with nfpm but untested. Details:
+[docs/LINUX_PACKAGING.md](docs/LINUX_PACKAGING.md).
 
 **Complete installation** also runs the official Blackbox and DKG installers, starts their local
 services and installs agent hooks after Blackbox is ready. Those third-party installers may download

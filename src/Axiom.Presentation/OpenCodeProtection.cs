@@ -67,7 +67,7 @@ public sealed class OpenCodeProtection
         "blackbox",
         "agent-blackbox");
 
-    private string PythonPath => Path.Combine(BlackboxAgentRoot, "venv", "Scripts", "python.exe");
+    private string PythonPath => AgentPlatform.VenvPython(BlackboxAgentRoot);
 
     public string BridgePath => Path.Combine(BlackboxAgentRoot, "axiom-guard-bridge.py");
 
@@ -536,7 +536,7 @@ public sealed class OpenCodeProtection
         }
         """;
 
-    private static string BuildBridge() => """
+    private static string BuildBridge() => AgentPlatform.AdaptHookScript("""
         # Managed by Axiom. Calls the local Blackbox guard for OpenCode/OpenChamber tool calls.
         import contextlib
         import datetime
@@ -805,7 +805,7 @@ public sealed class OpenCodeProtection
 
         if __name__ == "__main__":
             main()
-        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal);
+        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal));
 
     private static string JsPath(string path) =>
         path.Replace("\\", "\\\\", StringComparison.Ordinal)

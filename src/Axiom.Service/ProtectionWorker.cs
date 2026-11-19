@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Core.Protection;
-using Axiom.Infrastructure.Windows.Firewall;
+using Axiom.Core.Firewall;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 

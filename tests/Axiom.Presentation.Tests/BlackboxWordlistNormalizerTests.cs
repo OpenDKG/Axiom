@@ -16,8 +16,10 @@ public sealed class BlackboxWordlistNormalizerTests
 
         Assert.Equal(3, paths.Count);
         Assert.Contains(paths, p => p.Contains("agent-blackbox", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(paths, p => p.Contains(@"AppData\Local\hermes", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(paths, p => p.Contains(@"\.hermes\", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(paths, p => p.Replace('\\', '/').Contains("AppData/Local/hermes", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(paths, p => p.EndsWith(
+            Path.Combine(".hermes", "plugins", "blackbox", "kernel", "crypto_secrets", "bip39_english.txt"),
+            StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

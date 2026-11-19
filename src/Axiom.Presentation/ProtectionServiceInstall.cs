@@ -16,7 +16,13 @@ public static class ProtectionServiceInstall
     {
         if (!OperatingSystem.IsWindows())
         {
-            return new ProtectionInstallResult(false, "Axiom Shield is Windows-only.");
+            return new ProtectionInstallResult(
+                false,
+                OperatingSystem.IsMacOS()
+                    ? "Use InstallAndStartMacAsync to install the macOS daemon."
+                    : OperatingSystem.IsLinux()
+                        ? "Use InstallAndStartLinuxAsync to install the Linux daemon."
+                        : "Axiom Shield is not available on this platform.");
         }
 
         var executable = Path.Combine(AppContext.BaseDirectory, "Axiom.Service.exe");
@@ -60,6 +66,112 @@ public static class ProtectionServiceInstall
         {
             return new ProtectionInstallResult(false, $"The service could not be installed: {exception.Message}");
         }
+    }
+
+    /// <summary>
+    /// macOS: registers the bundled <c>axiomd</c> as the <c>com.axiom.service</c> launchd daemon
+    /// (<c>axiomd --install-service</c>) after the standard administrator password dialog. The
+    /// desktop app stays unprivileged; only that one command runs as root.
+    /// </summary>
+    public static Task<ProtectionInstallResult> InstallAndStartMacAsync(CancellationToken cancellationToken) =>
+        InstallAndStartMacAsync(MacBundleLayout.Current, MacElevation.RunAsync, cancellationToken);
+
+    public static async Task<ProtectionInstallResult> InstallAndStartMacAsync(
+        MacBundleLayout layout,
+        Func<string, string?, CancellationToken, Task<MacElevationResult>> runElevated,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(runElevated);
+
+        if (!File.Exists(layout.DaemonPath))
+        {
+            return new ProtectionInstallResult(
+                false,
+                $"The Axiom daemon was not found at {layout.DaemonPath}. Reinstall Axiom.app.");
+        }
+
+        var command = MacElevation.BuildShellCommand(layout.DaemonPath, "--install-service");
+        var result = await runElevated(
+            command,
+            "Axiom wants to install its background service (axiomd).",
+            cancellationToken).ConfigureAwait(false);
+
+        if (result.Succeeded)
+        {
+            return new ProtectionInstallResult(true, "The Axiom daemon is installed and starting.");
+        }
+
+        if (result.Cancelled)
+        {
+            return new ProtectionInstallResult(false, "Administrator approval was cancelled.");
+        }
+
+        var detail = result.StandardError.Trim();
+        return new ProtectionInstallResult(
+            false,
+            detail.Length == 0
+                ? $"The daemon installer exited with code {result.ExitCode}."
+                : $"The daemon installer exited with code {result.ExitCode}: {detail}");
+    }
+
+    /// <summary>
+    /// Linux: installs the bundled <c>axiomd</c> as the <c>axiomd.service</c> systemd unit
+    /// (<c>axiomd --install-service</c>) through <c>pkexec</c>. Re-running against a newer bundle
+    /// upgrades the image in <c>/usr/libexec/axiom</c>. Only that one command runs as root.
+    /// </summary>
+    public static Task<ProtectionInstallResult> InstallAndStartLinuxAsync(CancellationToken cancellationToken) =>
+        InstallAndStartLinuxAsync(LinuxDaemonLayout.Current, LinuxElevation.RunAsync, cancellationToken);
+
+    public static async Task<ProtectionInstallResult> InstallAndStartLinuxAsync(
+        LinuxDaemonLayout layout,
+        Func<IReadOnlyList<string>, CancellationToken, Task<LinuxElevationResult>> runElevated,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(runElevated);
+        var daemon = layout.DaemonPath;
+        if (!File.Exists(daemon))
+        {
+            return new ProtectionInstallResult(
+                false,
+                $"The Axiom daemon was not found at {layout.BundledDaemonPath}. Reinstall Axiom.");
+        }
+
+        if (!File.Exists(LinuxElevation.PkexecPath))
+        {
+            return new ProtectionInstallResult(
+                false,
+                $"{LinuxElevation.PkexecPath} is missing (polkit). Install it, or run 'sudo {daemon} --install-service' once.");
+        }
+
+        LinuxElevationResult result;
+        try
+        {
+            result = await runElevated(LinuxElevation.BuildArguments(daemon, "--install-service"), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or IOException)
+        {
+            return new ProtectionInstallResult(false, $"pkexec could not start: {exception.Message}");
+        }
+
+        if (result.Succeeded)
+        {
+            return new ProtectionInstallResult(true, "The Axiom daemon is installed and starting.");
+        }
+
+        if (result.Cancelled)
+        {
+            return new ProtectionInstallResult(false, "Administrator approval was cancelled.");
+        }
+
+        var detail = result.StandardError.Trim();
+        return new ProtectionInstallResult(
+            false,
+            detail.Length == 0
+                ? $"The daemon installer exited with code {result.ExitCode}."
+                : $"The daemon installer exited with code {result.ExitCode}: {detail}");
     }
 
     /// <summary>

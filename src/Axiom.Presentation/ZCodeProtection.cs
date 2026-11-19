@@ -45,7 +45,7 @@ public sealed class ZCodeProtection
         "blackbox",
         "agent-blackbox");
 
-    private string PythonPath => Path.Combine(BlackboxAgentRoot, "venv", "Scripts", "python.exe");
+    private string PythonPath => AgentPlatform.VenvPython(BlackboxAgentRoot);
 
     public string HookScriptPath => Path.Combine(BlackboxAgentRoot, "axiom-zcode-hook.py");
 

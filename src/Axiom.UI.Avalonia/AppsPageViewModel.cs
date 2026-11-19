@@ -213,6 +213,29 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
         }
     }
 
+    /// <summary>
+    /// Applications-page write status off Windows (owner point 8): blocks are described as enforced
+    /// only when the filter verified the published rules; otherwise the reason is shown.
+    /// </summary>
+    public static string UnixWriteStatus(bool canWrite, FilterEnforcementSummary enforcement, string enforcer) => canWrite
+        ? $"Firewall rules are enabled (Axiom Shield is on). Blocks are {enforcement.EnforcementClause(enforcer)}."
+        : "Firewall rules are off. Turn on Axiom Shield on the Firewall page to create block rules.";
+
+    private async Task<FilterEnforcementSummary> QueryEnforcementAsync()
+    {
+        try
+        {
+            var snapshot = await _client!
+                .SendAsync<FirewallRulesSnapshot>(IpcCommandTypes.RulesQuery, null, CancellationToken.None)
+                .ConfigureAwait(true);
+            return FilterEnforcementSummary.From(snapshot.Capability.FilterEnforcement, snapshot.Capability.ConnectTimeLayer);
+        }
+        catch (ServiceUnavailableException)
+        {
+            return FilterEnforcementSummary.None;
+        }
+    }
+
     private async Task LoadWriteCapabilityAsync()
     {
         if (_client is null)
@@ -227,9 +250,11 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
                 .ConfigureAwait(true);
 
             CanWrite = capabilities.FirewallWrites;
-            WriteStatusText = CanWrite
-                ? "Firewall writes are enabled for this service session. Use only on an isolated test VM."
-                : "Firewall writes are disabled. Set the explicit write gate on an isolated VM.";
+            WriteStatusText = !OperatingSystem.IsWindows()
+                ? UnixWriteStatus(CanWrite, CanWrite ? await QueryEnforcementAsync().ConfigureAwait(true) : FilterEnforcementSummary.None, PlatformText.Firewall)
+                : CanWrite
+                    ? "Firewall writes are enabled for this service session. Use only on an isolated test VM."
+                    : "Firewall writes are disabled. Set the explicit write gate on an isolated VM.";
         }
         catch (ServiceUnavailableException exception)
         {
@@ -261,9 +286,9 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
         var directionText = direction == FirewallDirection.Outbound ? "outbound" : "inbound";
         var confirmed = await _ui.ConfirmAsync(
             "Axiom firewall write",
-            $"Create a Windows Firewall block rule for {app.Name} ({directionText})?\n\n" +
-            "The rule is owned by Axiom and can be removed from the Firewall page. " +
-            "Only continue on an isolated test VM.",
+            $"Create a {PlatformText.Firewall} block rule for {app.Name} ({directionText})?\n\n" +
+            "The rule is owned by Axiom and can be removed from the Firewall page." +
+            (OperatingSystem.IsMacOS() ? string.Empty : " Only continue on an isolated test VM."),
             "Create rule",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);
@@ -286,9 +311,9 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
                 .SendAsync<RuleApplyResult>(IpcCommandTypes.RuleApply, spec, CancellationToken.None)
                 .ConfigureAwait(true);
 
-            WriteStatusText = result.Success
+            WriteStatusText = result.Success && result.State != RuleState.Pending
                 ? $"Block applied for {app.Name} ({directionText}); verified at {result.VerifiedUtc:HH:mm:ss}."
-                : $"Block failed: {result.ErrorCode} — {result.ErrorMessage}";
+                : RuleApplyResultText.Describe(result, "Block");
         }
         catch (ServiceUnavailableException exception)
         {

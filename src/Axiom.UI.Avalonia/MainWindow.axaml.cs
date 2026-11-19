@@ -30,13 +30,87 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        if (!OperatingSystem.IsWindows())
+        {
+            UseNativeCaption();
+        }
+
         UpdateCaptionGlyph();
         AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+    }
+
+    /// <summary>
+    /// The XAML size is the preferred desktop size. On a smaller display the window must still open
+    /// fully inside the screen working area at the active DPI scale, not at negative coordinates.
+    /// </summary>
+    private void FitToWorkingArea()
+    {
+        try
+        {
+            // The platform screen list exists only once the window is opened (X11/Windows).
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen is null)
+            {
+                return;
+            }
+
+            var (width, height, position) = FitToWorkingArea(
+                Width, Height, MinWidth, MinHeight, screen.WorkingArea, screen.Scaling);
+            // A work area smaller than the 900x600 minimum cannot honour that minimum; lower the
+            // floor only as far as the screen requires so the window still opens fully visible.
+            MinWidth = Math.Min(MinWidth, width);
+            MinHeight = Math.Min(MinHeight, height);
+            Width = width;
+            Height = height;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Position = position;
+        }
+        catch (InvalidOperationException)
+        {
+            // No platform screen yet (headless/early startup); keep the centered XAML default.
+        }
+    }
+
+    internal static (double Width, double Height, PixelPoint Position) FitToWorkingArea(
+        double width,
+        double height,
+        double minWidth,
+        double minHeight,
+        PixelRect workingArea,
+        double scaling)
+    {
+        if (!double.IsFinite(scaling) || scaling <= 0)
+        {
+            scaling = 1;
+        }
+
+        var availableWidth = workingArea.Width / scaling;
+        var availableHeight = workingArea.Height / scaling;
+        var fittedWidth = Math.Max(
+            Math.Min(width, availableWidth),
+            Math.Min(minWidth, availableWidth));
+        var fittedHeight = Math.Max(
+            Math.Min(height, availableHeight),
+            Math.Min(minHeight, availableHeight));
+        // Ceiling can overshoot by one pixel at fractional scales (1280/1.5 -> 1280.0000000000002).
+        // Cap in pixels first, then report the DIP size that maps back to that pixel count.
+        var pixelWidth = Math.Min((int)Math.Ceiling(fittedWidth * scaling), workingArea.Width);
+        var pixelHeight = Math.Min((int)Math.Ceiling(fittedHeight * scaling), workingArea.Height);
+        fittedWidth = pixelWidth / scaling;
+        fittedHeight = pixelHeight / scaling;
+
+        return (
+            fittedWidth,
+            fittedHeight,
+            new PixelPoint(
+                workingArea.X + Math.Max(0, (workingArea.Width - pixelWidth) / 2),
+                workingArea.Y + Math.Max(0, (workingArea.Height - pixelHeight) / 2)));
     }
 
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
+        FitToWorkingArea();
 
         if (DataContext is ShellViewModel shell)
         {
@@ -124,6 +198,9 @@ public partial class MainWindow : Window
             Width = Math.Max(FullWindowMinWidth, _expandedWindowSize.Width);
             Height = Math.Max(FullWindowMinHeight, _expandedWindowSize.Height);
         }
+
+        // The restored or Mini size must still open fully inside the current screen's working area.
+        FitToWorkingArea();
     }
 
     private void OnVisualEffectsChanged(object? sender, EventArgs e) => ApplyBackdrop();
@@ -257,6 +334,27 @@ public partial class MainWindow : Window
             var glass = IsGlassTheme();
             UpdateBackdropTint(glass);
             ReportBackdrop(glass);
+        }
+    }
+
+    /// <summary>
+    /// The drawn caption buttons use Segoe MDL2 Assets and Windows placement. Elsewhere (macOS)
+    /// the native window buttons are kept over the extended title bar, the title content makes
+    /// room for them, and the bell uses a vector icon.
+    /// </summary>
+    private void UseNativeCaption()
+    {
+        WindowDecorations = WindowDecorations.Full;
+        MinimizeButton.IsVisible = false;
+        MaximizeButton.IsVisible = false;
+        CloseButton.IsVisible = false;
+        BellGlyph.IsVisible = false;
+        BellIcon.IsVisible = true;
+        UpdateGlyph.IsVisible = false;
+        UpdateIcon.IsVisible = true;
+        if (OperatingSystem.IsMacOS())
+        {
+            TitleContent.Margin = new Thickness(70, 0, 0, 0);
         }
     }
 

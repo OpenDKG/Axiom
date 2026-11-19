@@ -1,0 +1,38 @@
+.TH AXIOM-FIREWALL 1 "November 2026" "Axiom 0.59.0" "User Commands"
+.SH NAME
+axiom-firewall \- network and AI agent security (desktop application)
+.SH SYNOPSIS
+.B axiom-firewall
+.RI [ options ]
+.SH DESCRIPTION
+.B axiom-firewall
+starts the Axiom desktop application: a per-application firewall with connection
+monitoring, history, Privacy Shield DNS filtering and AI-agent awareness.
+The window talks to the privileged background service
+.B axiomd
+over a local socket; the desktop process itself never runs as root.
+.PP
+The package registers
+.B axiomd
+as a systemd unit and installs the polkit action used to install or upgrade it.
+Rules are enforced with nftables and, where available, a connect-time eBPF layer.
+.SH FILES
+.TP
+.I /usr/lib/axiom-firewall
+Desktop application and the bundled daemon publish tree.
+.TP
+.I /usr/bin/axiom-firewall
+Launcher for the desktop application.
+.TP
+.I /usr/libexec/axiom
+Root-owned copy of the daemon image, installed by
+.B axiomd --install-service
+and audited on every start.
+.TP
+.I /var/lib/axiom
+Rules, settings, history and the Privacy Shield DNS backup.
+.SH SEE ALSO
+.BR systemctl (1),
+.BR nft (8)
+.PP
+Documentation: https://github.com/a-51-50/Axiom

@@ -13,7 +13,9 @@ public sealed class FirewallRuleImportTests
     [Fact]
     public void Exported_rules_round_trip_through_the_import_preview()
     {
-        var rule = MakeRule(@"C:\Apps\agent.exe", FirewallAction.Block, "443");
+        // Native path per OS: Windows-style rule paths are rejected off Windows (#441).
+        var path = OperatingSystem.IsWindows() ? @"C:\Apps\agent.exe" : "/opt/apps/agent";
+        var rule = MakeRule(path, FirewallAction.Block, "443");
         var json = FirewallRuleExport.ToJson([rule], DateTimeOffset.UnixEpoch);
 
         var result = FirewallRuleImport.Preview(json);
@@ -26,6 +28,41 @@ public sealed class FirewallRuleImportTests
         Assert.Equal(FirewallDirection.Outbound, spec.Direction);
         Assert.Equal(FirewallAction.Block, spec.Action);
         Assert.Empty(result.RuleErrors);
+    }
+
+    [Theory]
+    [InlineData("/Applications/Example Agent.app/Contents/MacOS/Example Agent")]
+    [InlineData("/usr/bin/curl")]
+    [InlineData("/usr/local/bin/node")]
+    public void Posix_and_app_bundle_paths_round_trip_and_plan_one_rule_each(string appPath)
+    {
+        // An export taken on macOS or Linux carries POSIX paths (including .app bundle
+        // executables with spaces); the shared validator and the apply plan must accept them
+        // unchanged so the daemon's normal rule.apply path receives the same path.
+        // On Windows these are not native paths and the validator rejects them, so the
+        // check applies off Windows only (return early instead of Skip: the Windows CI
+        // gate fails on skipped tests).
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var rule = MakeRule(appPath, FirewallAction.Block, "443");
+        var json = FirewallRuleExport.ToJson([rule], DateTimeOffset.UnixEpoch);
+
+        var result = FirewallRuleImport.Preview(json);
+
+        Assert.Null(result.FileError);
+        Assert.Empty(result.RuleErrors);
+        var spec = Assert.Single(result.Rules);
+        Assert.Equal(appPath, spec.AppPath);
+
+        var plan = FirewallRuleImport.PlanApply(result.Rules, "tester", "rules.json");
+        Assert.Empty(plan.Conflicts);
+        var planned = Assert.Single(plan.Rules);
+        Assert.Equal(appPath, planned.AppPath);
+        Assert.Equal(FirewallAction.Block, planned.Action);
+        Assert.Equal("tester", planned.CreatedBy);
     }
 
     [Fact]
@@ -41,7 +78,7 @@ public sealed class FirewallRuleImportTests
     [Fact]
     public void Relative_application_path_is_reported_as_an_invalid_rule()
     {
-        var rule = MakeRule(@"relative\agent.exe", FirewallAction.Block, "443");
+        var rule = MakeRule(OperatingSystem.IsWindows() ? @"relative\agent.exe" : "relative/agent", FirewallAction.Block, "443");
         var json = FirewallRuleExport.ToJson([rule], DateTimeOffset.UnixEpoch);
 
         var result = FirewallRuleImport.Preview(json);
@@ -51,6 +88,26 @@ public sealed class FirewallRuleImportTests
         var error = Assert.Single(result.RuleErrors);
         Assert.Equal(0, error.Index);
         Assert.Contains("absolute", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Windows_style_application_path_is_an_invalid_rule_off_windows()
+    {
+        var rule = MakeRule(@"C:\Apps\agent.exe", FirewallAction.Block, "443");
+        var json = FirewallRuleExport.ToJson([rule], DateTimeOffset.UnixEpoch);
+
+        var result = FirewallRuleImport.Preview(json);
+
+        Assert.True(result.SchemaValid);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Single(result.Rules);
+            return;
+        }
+
+        Assert.Empty(result.Rules);
+        var error = Assert.Single(result.RuleErrors);
+        Assert.Contains("Windows-style", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

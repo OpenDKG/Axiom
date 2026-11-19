@@ -1,0 +1,45 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# RPM %postun: $1 = 0 on erase, 1 on upgrade. Erase = the Debian postrm remove branch (unit
+# file, protected image and runtime directory, only if prerm could not). RPM has no purge:
+# /var/lib/axiom and /var/log/axiom are kept; delete them by hand to start from scratch.
+#
+# The leftover unit/image is removed only after its stop is confirmed (systemd reports
+# inactive/failed); an unconfirmed or still-active stop keeps everything and fails the erase.
+# `AXIOM_MAINTAINER_TEST_ROOT` relocates every path for packaging tests only.
+set -e
+[ "$1" = 0 ] || exit 0
+
+AXIOM_ROOT=${AXIOM_MAINTAINER_TEST_ROOT:-}
+AXIOM_UNIT=$AXIOM_ROOT/etc/systemd/system/axiomd.service
+AXIOM_IMAGE_DIR=$AXIOM_ROOT/usr/libexec/axiom
+AXIOM_RUN_DIR=$AXIOM_ROOT/run/axiom
+AXIOM_SYSTEMD_RUN_DIR=$AXIOM_ROOT/run/systemd/system
+
+service_stopped() {
+    state=$(systemctl is-active axiomd.service 2>/dev/null) || true
+    case "$state" in
+        inactive|failed) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+stop_confirmed() {
+    [ -d "$AXIOM_SYSTEMD_RUN_DIR" ] || return 0
+    if ! command -v systemctl >/dev/null 2>&1; then
+        return 1
+    fi
+    systemctl disable --now axiomd.service >/dev/null 2>&1 || true
+    service_stopped
+}
+
+if ! stop_confirmed; then
+    echo "axiom %postun: axiomd.service is still active or its stop is unconfirmed; keeping $AXIOM_UNIT, $AXIOM_IMAGE_DIR and $AXIOM_RUN_DIR for recovery." >&2
+    exit 1
+fi
+rm -f "$AXIOM_UNIT"
+if [ -d "$AXIOM_SYSTEMD_RUN_DIR" ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+rm -rf "$AXIOM_IMAGE_DIR" "$AXIOM_RUN_DIR"
+exit 0

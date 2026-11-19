@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements of Axiom.app/Contents/MacOS/Axiom (the Avalonia desktop host).
+  - The .NET runtime needs JIT and unsigned executable memory under the hardened runtime, and
+    library validation off so the ad hoc / separately signed native libraries (Skia, HarfBuzz,
+    Avalonia.Native) load.
+  - The system-extension and network-extension entries mirror axiom-sysext.entitlements: the
+    bundle's main executable carries the same entitlements as in the verified macos/build.sh
+    "helper" layout. @APP_GROUP@ is filled in by scripts/macos/package-app.sh.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <key>com.apple.developer.system-extension.install</key>
+  <true/>
+  <key>com.apple.developer.networking.networkextension</key>
+  <array>
+    <string>content-filter-provider-systemextension</string>
+  </array>
+  <key>com.apple.security.application-groups</key>
+  <array>
+    <string>@APP_GROUP@</string>
+  </array>
+</dict>
+</plist>

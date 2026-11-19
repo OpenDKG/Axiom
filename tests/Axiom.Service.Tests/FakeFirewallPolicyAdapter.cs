@@ -15,6 +15,9 @@ internal sealed class FakeFirewallPolicyAdapter : IFirewallPolicyAdapter
 
     public bool ThrowOnRemove { get; set; }
 
+    /// <summary>Replaces the apply result (e.g. a Pending answer from a publish-only adapter).</summary>
+    public Func<Guid, RuleApplyResult>? UpsertOverride { get; set; }
+
     public int UpsertCalls { get; private set; }
 
     public int RemoveCalls { get; private set; }
@@ -35,6 +38,11 @@ internal sealed class FakeFirewallPolicyAdapter : IFirewallPolicyAdapter
     public Task<RuleApplyResult> UpsertOwnedRuleAsync(RuleSpec spec, CancellationToken ct)
     {
         UpsertCalls++;
+
+        if (UpsertOverride is { } overridden)
+        {
+            return Task.FromResult(overridden(spec.ManagedRuleId));
+        }
 
         if (FailNextApply)
         {

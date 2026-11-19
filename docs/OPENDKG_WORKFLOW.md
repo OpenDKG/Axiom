@@ -5,9 +5,11 @@ Keep implementation discussion and review on the originating PR. Merge team
 changes into OpenDKG's `main` to queue them for upstream review.
 
 [a-51-50/Axiom](https://github.com/a-51-50/Axiom) is the private upstream
-repository. The importer checks OpenDKG `main` twice per hour and advances
-the upstream `opendkg/sync-main` review branch. Further imports update the
-same PR while it is open. The upstream maintainer
+repository. The importer is scheduled to check OpenDKG `main` twice per hour
+and advance the upstream `opendkg/sync-main` review branch. It also supports
+manual dispatch. If GitHub rejects a change to an Actions workflow, an
+upstream maintainer with workflow write access fast-forwards the review
+branch. Further imports update the same PR while it is open. The maintainer
 [opens a new import PR when needed](https://github.com/a-51-50/Axiom/compare/main...opendkg/sync-main?expand=1)
 and uses **Create a merge commit** after review to preserve commit identity.
 GitHub stores issues, pull requests, and reviews in their original repository.
