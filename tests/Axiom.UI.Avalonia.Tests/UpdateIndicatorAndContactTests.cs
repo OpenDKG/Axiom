@@ -6,6 +6,10 @@ using System.Text;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
+using Avalonia.Headless;
+using Avalonia.Input;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Axiom.Contracts.Monitoring;
@@ -25,6 +29,57 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
         {
             _tempDir.Delete(recursive: true);
         }
+    }
+
+    [Theory]
+    [InlineData(UiMode.Advanced)]
+    [InlineData(UiMode.Mini)]
+    public void Website_logo_highlights_without_button_chrome_and_links_are_public(UiMode mode)
+    {
+        TestAppBuilder.RunOnUiThread(() =>
+        {
+            var interaction = new RecordingInteraction();
+            using var shell = new ShellViewModel(
+                new FakeSource(),
+                new FakeTimerFactory(),
+                userInteraction: interaction,
+                uiModeService: new FixedUiModeService(mode));
+            var window = new MainWindow { DataContext = shell, Width = 1100, Height = 800 };
+            try
+            {
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var button = Assert.Single(window.GetVisualDescendants().OfType<Button>(),
+                    candidate => candidate.IsEffectivelyVisible && candidate.Classes.Contains("website-logo"));
+                var highlight = Assert.Single(button.GetVisualDescendants().OfType<Border>(),
+                    border => border.Classes.Contains("website-logo-highlight"));
+                var presenter = Assert.Single(button.GetVisualDescendants().OfType<ContentPresenter>());
+                Assert.IsAssignableFrom<IImageBrush>(highlight.OpacityMask);
+                Assert.Equal(0.0, highlight.Opacity);
+
+                var center = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), window);
+                Assert.NotNull(center);
+                window.MouseMove(center.GetValueOrDefault(), RawInputModifiers.None);
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.True(button.IsPointerOver);
+                Assert.Equal(0.22, highlight.Opacity);
+                Assert.Equal(Colors.Transparent, Assert.IsAssignableFrom<ISolidColorBrush>(presenter.Background).Color);
+                Assert.Equal(0, presenter.BorderThickness.Left);
+
+                button.Command!.Execute(null);
+                shell.OpenGitHubCommand.Execute(null);
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(
+                    ["https://opendkg.org/axiom/", "https://github.com/OpenDKG/Axiom"],
+                    interaction.OpenedUrls);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
     }
 
     [Fact]
@@ -73,7 +128,7 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
             draft = false,
             prerelease = false,
             published_at = "2026-11-15T10:00:00Z",
-            html_url = "https://github.com/a-51-50/Axiom/releases/tag/v0.99.0",
+            html_url = "https://github.com/OpenDKG/Axiom/releases/tag/v0.99.0",
             body = "Security hardening release.",
         });
         using var http = new HttpClient(handler);
@@ -102,7 +157,7 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
 
             shell.OpenUpdateCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
-            Assert.Contains("https://github.com/a-51-50/Axiom/releases/tag/v0.99.0", interaction.OpenedUrls);
+            Assert.Contains("https://github.com/OpenDKG/Axiom/releases/tag/v0.99.0", interaction.OpenedUrls);
 
             shell.DismissUpdateCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();

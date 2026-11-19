@@ -1,0 +1,131 @@
+name: Release packages
+
+on:
+  push:
+    branches:
+      - codex/public-release-links
+      - 'codex/release-*-linux-preview'
+      - 'codex/release-*-macos-preview'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AVALONIA_TELEMETRY_OPTOUT: '1'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  windows:
+    if: ${{ !endsWith(github.ref_name, '-preview') }}
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Test the desktop and installer
+        run: |
+          dotnet test tests/Axiom.UI.Avalonia.Tests -c Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet test tests/Axiom.Presentation.Tests -c Release
+      - name: Package Windows x64
+        run: |
+          ./scripts/build-release.ps1 -OutputDir "$PWD/release"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = ([xml](Get-Content -Raw Directory.Build.props)).Project.PropertyGroup.Version
+          $setup = Get-Item -LiteralPath release/Axiom-Setup.exe
+          if ($setup.VersionInfo.ProductVersion -ne $version) { throw 'Windows setup version does not match source' }
+          git rev-parse HEAD | Set-Content release/SOURCE-COMMIT.txt -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: axiom-windows-x64
+          path: release/
+          if-no-files-found: error
+          compression-level: 0
+
+  linux:
+    if: ${{ endsWith(github.ref_name, '-linux-preview') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm libbpf-dev bpftool
+          bpftool version
+      - name: Test the Linux desktop and infrastructure
+        run: |
+          dotnet test tests/Axiom.Infrastructure.Linux.Tests -c Release
+          dotnet test tests/Axiom.Desktop.Avalonia.Linux.Tests -c Release
+          dotnet test tests/Axiom.UI.Avalonia.Tests -c Release --filter 'FullyQualifiedName~AgentsViewLogoTests|FullyQualifiedName~UpdateIndicatorAndContactTests'
+      - name: Package and verify Ubuntu amd64
+        run: |
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
+          test -n "$version"
+          bash scripts/linux/package.sh deb --arch x64 --local linux.preview1
+          package="build/linux/axiom-firewall_${version}+linux.preview1_amd64.deb"
+          test "$(dpkg-deb -f "$package" Version)" = "$version+linux.preview1"
+          test "$(dpkg-deb -f "$package" Architecture)" = amd64
+          dpkg-deb -c "$package" > package-contents.txt
+          grep -F './usr/lib/axiom-firewall/axiomd/bpf/axiom_connect.bpf.o' package-contents.txt
+          mkdir -p release
+          git rev-parse HEAD > release/SOURCE-COMMIT.txt
+          cp "$package" release/
+          cd release
+          sha256sum "$(basename "$package")" > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: axiom-linux-amd64
+          path: release/
+          if-no-files-found: error
+          compression-level: 0
+
+  macos:
+    if: ${{ endsWith(github.ref_name, '-macos-preview') }}
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Test the macOS filter and desktop
+        run: |
+          mkdir -p "$RUNNER_TEMP/axiom"
+          export TMPDIR="$RUNNER_TEMP/axiom"
+          bash macos/build.sh test
+          dotnet test tests/Axiom.Infrastructure.MacOS.Tests -c Release
+          dotnet test tests/Axiom.Desktop.Avalonia.MacOS.Tests -c Release
+          dotnet test tests/Axiom.UI.Avalonia.Tests -c Release --filter 'FullyQualifiedName~AgentsViewLogoTests|FullyQualifiedName~UpdateIndicatorAndContactTests'
+      - name: Package and verify the Intel app
+        run: |
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
+          test -n "$version"
+          AXIOM_BUILD=21 bash scripts/macos/package-app.sh osx-x64 --build-filter
+          app=build/macos/osx-x64/Axiom.app
+          codesign --verify --deep --strict "$app"
+          test -d "$app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension"
+          test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "$version"
+          test "$(lipo -archs "$app/Contents/MacOS/Axiom")" = x86_64
+          mkdir -p release
+          git rev-parse HEAD > release/SOURCE-COMMIT.txt
+          package="Axiom-$version-21-osx-x64-adhoc.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "release/$package"
+          cd release
+          shasum -a 256 "$package" > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: axiom-macos-intel
+          path: release/
+          if-no-files-found: error
+          compression-level: 0

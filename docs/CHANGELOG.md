@@ -1,3 +1,13 @@
+## What's in 1.4.4
+
+- Blackbox verified-graph sync runs its Git subprocesses without opening Windows console windows. Dashboard upgrades restart the dashboard and its Python workers together.
+- Agent Protection uses transparent integration logos with theme-aware shadows in the Avalonia desktop.
+- The desktop updater, repository buttons and website logo use the public OpenDKG project links.
+
+## What's in 1.4.3
+
+- **Blackbox auto-start, upgrade reuse, `pythonw.exe` stdio and Agent Activity filter fixes.** Ensures `InstallBlackboxAndWait()` verifies dashboard dependencies and starts the Blackbox dashboard on port `9700` even when reusing an already-pinned Blackbox runtime during an upgrade; has `SetupInstaller` explicitly start the dashboard if it is not yet listening before the health probe; redirects `sys.stdout` and `sys.stderr` to `os.devnull` when `None` in `start-dashboard.py` so `pythonw.exe` launched without a console handle never crashes Uvicorn/dashboard logging; verifies dashboard dependencies on desktop launch (`EnsureBlackboxDependencies`); moves `$ErrorActionPreference = 'Continue'` inside a `try/catch` before `& $installer -StoreBackend $storeBackend` in both Avalonia and WPF PowerShell installers so vendor stderr output cannot abort Windows PowerShell 5.1 before dependency repair and dashboard startup; and adds `Antigravity` to Agent Activity's agent filter selector while removing the duplicate `OpenChamber` entry (grouping OpenChamber events under `OpenCode` with OpenChamber hooks kept intact).
+
 ## What's in 1.4.2
 
 - **Native handle leak, concurrency, PowerShell 5.1, Setup and UI lifecycle fixes.** Releases WinTrust/CoTaskMem handles in `ProcessMetadataProvider`, wraps the native row buffer in `SafeHandle` (`TcpConnectionByteReader`/`IpHelperConnectionSource`), fixes Named Pipe idle-timeout resets and enforcement capabilities advertisement, validates DNS response flags (`QR`/`QDCOUNT`) and adds TCP proxy timeouts, synchronizes `PrivacyShieldController`, `ProtectionController`, `HistoryStore` and `HistoryWriter` shutdown flushes, hardens `UpgradeDataGuard` path containment and subprocess stdout/stderr cancellation across Blackbox/ThreatShare/Setup runners, fixes Setup service detection (`query Axiom`), and detaches Avalonia/WPF UI event handlers cleanly across visual-tree detach/re-attach cycles.

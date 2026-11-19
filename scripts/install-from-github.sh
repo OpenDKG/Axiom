@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 set -euo pipefail
 
-release_url='https://github.com/OpenDKG/Axiom/releases/download'
+release_url='https://github.com/OpenDKG/Axiom/releases/latest/download'
 scratch=''
+package=''
 
 fail() {
     printf 'Axiom installer: %s\n' "$*" >&2
@@ -11,14 +12,27 @@ fail() {
 }
 
 download_package() {
-    local tag=$1 name=$2 expected=$3 sha_command=$4 directory=${5:-${TMPDIR:-/tmp}} actual
+    local pattern=$1 sha_command=$2 directory=${3:-${TMPDIR:-/tmp}}
+    local actual expected entry name='' checksum
     scratch=$(mktemp -d "$directory/.axiom-install.XXXXXX")
     trap 'rm -rf -- "$scratch"' EXIT
-    curl -fsSL "$release_url/$tag/$name" -o "$scratch/$name"
+    curl -fsSL "$release_url/SHA256SUMS-previews.txt" -o "$scratch/SHA256SUMS-previews.txt"
+    while read -r checksum entry; do
+        entry=${entry%$'\r'}
+        entry=${entry#\*}
+        if [[ $checksum =~ ^[[:xdigit:]]{64}$ && $entry =~ $pattern ]]; then
+            [[ -z $name ]] || fail 'Multiple preview packages match this platform.'
+            name=$entry
+            expected=$(printf '%s' "$checksum" | tr '[:upper:]' '[:lower:]')
+        fi
+    done < "$scratch/SHA256SUMS-previews.txt"
+    [[ -n $name ]] || fail 'The latest release has no verified preview for this platform.'
+    package="$scratch/$name"
+    curl -fsSL "$release_url/$name" -o "$package"
     if [[ $sha_command == shasum ]]; then
-        actual=$(shasum -a 256 "$scratch/$name")
+        actual=$(shasum -a 256 "$package")
     else
-        actual=$(sha256sum "$scratch/$name")
+        actual=$(sha256sum "$package")
     fi
     [[ ${actual%% *} == "$expected" ]] || fail 'Package SHA-256 verification failed.'
 }
@@ -30,12 +44,10 @@ install_linux() {
     [[ ${ID:-} == ubuntu && ${VERSION_ID:-} == 24.04 && $(uname -m) == x86_64 ]] ||
         fail 'The Linux preview requires Ubuntu 24.04 amd64.'
     [[ $EUID -ne 0 ]] || fail 'Run this as your desktop user. The installer calls sudo for APT.'
-    local name='axiom-firewall_1.3.0+linux.preview2_amd64.deb'
-    download_package 'v1.3.0-linux-preview.2' "$name" \
-        '44d9e8435a996f2d1ff9d364b85dc4662fc0dfbe5d1e7a4ea4d5386be74bb0a6' sha256sum
+    download_package '^axiom-firewall_[0-9]+\.[0-9]+\.[0-9]+\+linux\.preview[0-9]+_amd64\.deb$' sha256sum
     chmod a+rx "$scratch"
-    chmod a+r "$scratch/$name"
-    sudo apt-get install -y "$scratch/$name"
+    chmod a+r "$package"
+    sudo apt-get install -y "$package"
     [[ -x /usr/bin/axiom-firewall ]] || fail 'The Axiom desktop launcher is missing.'
     nohup /usr/bin/axiom-firewall </dev/null >/dev/null 2>&1 &
 }
@@ -46,11 +58,9 @@ install_macos() {
     if [[ -d $application ]]; then
         printf 'Opening the existing Axiom installation in ~/Applications.\n'
     else
-        local name='Axiom-1.3.0-19-osx-x64-adhoc.zip'
         mkdir -p "$HOME/Applications"
-        download_package 'v1.3.0-macos-preview.2' "$name" \
-            '74568194086be232e1fffbd0eaf1e92575f2cf78c741e653d41be34170f0efd9' shasum "$HOME/Applications"
-        ditto -x -k "$scratch/$name" "$scratch/unpacked"
+        download_package '^Axiom-[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-osx-x64-adhoc\.zip$' shasum "$HOME/Applications"
+        ditto -x -k "$package" "$scratch/unpacked"
         local bundle="$scratch/unpacked/Axiom.app"
         [[ -x $bundle/Contents/MacOS/Axiom ]] || fail 'The downloaded app bundle is incomplete.'
         codesign --verify --deep --strict "$bundle"

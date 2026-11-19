@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
+using Axiom.Contracts;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Axiom.UI.Services;
@@ -86,10 +87,10 @@ public sealed partial class SupportViewModel : PageViewModel
     private string _actionStatus = "All donations are optional. Axiom remains free.";
 
     [RelayCommand]
-    private void OpenGitHubIssues() => OpenExternal("https://github.com/a-51-50/Axiom/issues/new/choose");
+    private void OpenGitHubIssues() => OpenExternal(ProjectLinks.NewIssue);
 
     [RelayCommand]
-    private void OpenGitHubRepository() => OpenExternal("https://github.com/a-51-50/Axiom");
+    private void OpenGitHubRepository() => OpenExternal(ProjectLinks.Repository);
 
     [RelayCommand]
     private void OpenDonationPage(string? provider)

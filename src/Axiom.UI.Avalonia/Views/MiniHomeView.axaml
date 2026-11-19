@@ -190,12 +190,16 @@
     <!-- Bottom bar: Axiom logo, Donate, GitHub, Settings -->
     <Border Grid.Row="5" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
       <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-        <Button Grid.Column="0" Command="{Binding OpenWebsiteCommand}" Classes="ghost"
+        <Button Grid.Column="0" Command="{Binding OpenWebsiteCommand}" Classes="website-logo"
                 Cursor="Hand" ToolTip.Tip="Open opendkg.org/axiom"
                 AutomationProperties.Name="Open the Axiom website">
           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png" Width="26" Height="26" Stretch="Uniform"
-                   RenderOptions.BitmapInterpolationMode="HighQuality" />
+            <Grid Width="26" Height="26">
+              <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png" Stretch="Uniform"
+                     RenderOptions.BitmapInterpolationMode="HighQuality" />
+              <Border Classes="website-logo-highlight" OpacityMask="{StaticResource Axiom.WebsiteLogoMask}"
+                      RenderOptions.BitmapInterpolationMode="HighQuality" />
+            </Grid>
             <StackPanel VerticalAlignment="Center" Spacing="0">
               <TextBlock Text="Axiom" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
               <TextBlock Text="{Binding VersionText}" FontSize="9.5" Foreground="{DynamicResource Axiom.TextMuted}" />

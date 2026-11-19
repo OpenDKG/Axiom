@@ -1,6 +1,11 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:Axiom.UI.Avalonia.Controls">
+  <Styles.Resources>
+    <ImageBrush x:Key="Axiom.WebsiteLogoMask"
+                Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png" Stretch="Uniform" />
+  </Styles.Resources>
+
   <Style Selector="Button">
     <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
@@ -622,5 +627,23 @@
   <Style Selector="Button.ghost:pressed /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
     <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.website-logo">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+  </Style>
+  <Style Selector="Button.website-logo:pointerover /template/ ContentPresenter, Button.website-logo:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Border.website-logo-highlight">
+    <Setter Property="Background" Value="White" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+    <Setter Property="Opacity" Value="0" />
+  </Style>
+  <Style Selector="Button.website-logo:pointerover Border.website-logo-highlight">
+    <Setter Property="Opacity" Value="0.22" />
   </Style>
 </Styles>

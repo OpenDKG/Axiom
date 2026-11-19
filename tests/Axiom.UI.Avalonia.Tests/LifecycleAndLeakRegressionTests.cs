@@ -179,21 +179,21 @@ public sealed class LifecycleAndLeakRegressionTests
             AdvanceLastProtectionProbe(shell);
             TriggerProtectionProbe(shell, timers);
             Dispatcher.UIThread.RunJobs();
-            Assert.Single(AlertCenter.Items);
+            Assert.Single(AlertCenter.Items, static alert => alert.ActionText == "Open Firewall");
 
             // 2. Pending list empties (user allowed/dismissed).
             client.Pending = [];
             AdvanceLastProtectionProbe(shell);
             TriggerProtectionProbe(shell, timers);
             Dispatcher.UIThread.RunJobs();
-            Assert.Single(AlertCenter.Items);
+            Assert.Single(AlertCenter.Items, static alert => alert.ActionText == "Open Firewall");
 
             // 3. Same app becomes pending again later -> must alert again!
             client.Pending = [app];
             AdvanceLastProtectionProbe(shell);
             TriggerProtectionProbe(shell, timers);
             Dispatcher.UIThread.RunJobs();
-            Assert.Equal(2, AlertCenter.Items.Count);
+            Assert.Equal(2, AlertCenter.Items.Count(static alert => alert.ActionText == "Open Firewall"));
             AlertCenter.Clear();
         });
     }

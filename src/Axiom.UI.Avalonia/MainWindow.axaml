@@ -307,14 +307,17 @@
 
         <StackPanel Grid.Row="2" Margin="16,0,16,10" Spacing="8">
           <Border Height="1" Background="{DynamicResource Axiom.Border}" />
-          <Button Command="{Binding OpenWebsiteCommand}" Classes="ghost"
+          <Button Command="{Binding OpenWebsiteCommand}" Classes="website-logo"
                   HorizontalAlignment="Center" Cursor="Hand"
                   ToolTip.Tip="Open opendkg.org/axiom"
                   AutomationProperties.Name="Open the Axiom website">
             <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-              <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png"
-                     Width="40" Height="40" Stretch="Uniform"
-                     RenderOptions.BitmapInterpolationMode="HighQuality" />
+              <Grid Width="40" Height="40">
+                <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png" Stretch="Uniform"
+                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                <Border Classes="website-logo-highlight" OpacityMask="{StaticResource Axiom.WebsiteLogoMask}"
+                        RenderOptions.BitmapInterpolationMode="HighQuality" />
+              </Grid>
               <StackPanel VerticalAlignment="Center" Spacing="2">
                 <TextBlock Text="Axiom" FontWeight="SemiBold" FontSize="13"
                            Foreground="{DynamicResource Axiom.TextPrimary}" />
