@@ -234,7 +234,7 @@
                         IsChecked="{Binding IsAutoSyncEnabled, Mode=TwoWay}"
                         VerticalAlignment="Center"
                         Margin="10,0,10,0"
-                        ToolTip="Every 15 minutes, ask the local dashboard for new verified assets. This is an incremental catch-up; existing local assets are kept and are not downloaded again." />
+                        ToolTip="About once an hour, ask the local dashboard for new verified assets. This is an incremental catch-up; existing local assets are kept and are not downloaded again." />
               <Button Style="{StaticResource GhostButton}"
                       Content="Sync now"
                       Command="{Binding SyncVerifiedGraphCommand}"

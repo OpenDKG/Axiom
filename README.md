@@ -177,7 +177,7 @@ shows the charts and captures.
   compiled assets, triples, verified rules and verified-answer lookup health. It draws the verified
   threat graph natively from the same local `/api/graph` data, grouped by the dashboard's categories
   and coloured by severity. **Sync now** triggers the dashboard's own `POST /api/sync`; Axiom does
-  not run a second DKG sync loop. **Auto-sync**, off by default, requests incremental catch-up approximately every 15 minutes when enabled, so existing local assets stay in place and new graph entries are fetched without
+  not run a second DKG sync loop. **Auto-sync**, off by default, requests incremental catch-up approximately once an hour when enabled, so existing local assets stay in place and new graph entries are fetched without
   repeating the full download. Missing values stay unknown and an offline node is never shown as a
   clean graph.
 - Agent configuration, sessions and databases are fingerprinted during install, hook repair and

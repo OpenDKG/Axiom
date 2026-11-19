@@ -334,7 +334,7 @@ external peers. The local-only API boundary must not be confused with network-si
   last known counts and graph sample instead of falsely reporting the node offline. Null values are
   shown as `—`, never as zero, and an offline node is never presented as an empty or clean graph.
   **Auto-sync is opt-in and off by default**; when enabled, Axiom asks the local dashboard for
-  incremental catch-up approximately every 15 minutes. A graph drawn from the local fallback files
+  incremental catch-up approximately once an hour. A graph drawn from the local fallback files
   is last-known state, not proof of a new remote verification.
 - **Test Protection** creates a temporary harmless canary, adds it to protected paths, requires
   Block mode, calls the local guard, restores the original paths and removes the canary. Its result

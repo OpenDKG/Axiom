@@ -37,8 +37,6 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private static readonly TimeSpan VerifiedGraphRefreshInterval = TimeSpan.FromSeconds(60);
 
-    private static readonly TimeSpan AutoSyncInterval = TimeSpan.FromMinutes(15);
-
     private static readonly Regex SecretPattern = new(
         @"(?i)\b(token|secret|password|passwd|api[_-]?key|authorization)\b\s*[:=]\s*(""[^""]*""|'[^']*'|[^\s,}\]]+)",
         RegexOptions.Compiled);
@@ -138,9 +136,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _isAutoSyncEnabled = autoSync.Enabled;
         _lastAutoSyncAttempt = autoSync.LastAttemptUtc;
         _autoSyncStatusText = autoSync.Enabled
-            ? string.IsNullOrWhiteSpace(autoSync.LastStatus)
-                ? "Auto-sync is on; checks every 15 minutes for new verified assets."
-                : autoSync.LastStatus
+            ? BlackboxAutoSyncSchedule.EnabledStatusAfterLoad(autoSync.LastStatus)
             : "Auto-sync is off.";
 
         _timer = timers.Create(TimeSpan.FromSeconds(8));
@@ -737,7 +733,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     partial void OnIsAutoSyncEnabledChanged(bool value)
     {
         AutoSyncStatusText = value
-            ? "Auto-sync is on; checks every 15 minutes for new verified assets."
+            ? BlackboxAutoSyncSchedule.EnabledStatus
             : "Auto-sync is off.";
 
         UpdatePollTimer();
@@ -760,7 +756,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         var now = DateTimeOffset.UtcNow;
-        if (now - _lastAutoSyncAttempt < AutoSyncInterval)
+        if (!BlackboxAutoSyncSchedule.IsDue(_lastAutoSyncAttempt, now))
         {
             return;
         }
