@@ -135,6 +135,22 @@ public static class LibProcLayout
             CString(buffer.Slice(64, 32)));
     }
 
+    /// <summary>
+    /// <c>pbi_start_tvsec</c>/<c>pbi_start_tvusec</c> (offsets 120/128 of <c>struct proc_bsdinfo</c>):
+    /// the process start time, which together with the pid identifies one process instance.
+    /// </summary>
+    public static (long Seconds, long Microseconds)? ParseStartTime(ReadOnlySpan<byte> buffer)
+    {
+        if (buffer.Length < BsdInfoSize)
+        {
+            return null;
+        }
+
+        var seconds = (long)BinaryPrimitives.ReadUInt64LittleEndian(buffer[120..]);
+        var micros = (long)BinaryPrimitives.ReadUInt64LittleEndian(buffer[128..]);
+        return seconds > 0 ? (seconds, micros) : null;
+    }
+
     /// <summary>Decodes the <c>struct proc_fdinfo</c> array from <c>PROC_PIDLISTFDS</c>.</summary>
     public static IEnumerable<int> SocketDescriptors(byte[] buffer, int length)
     {
@@ -226,6 +242,13 @@ public static class LibProc
         var buffer = new byte[LibProcLayout.BsdInfoSize];
         var bytes = proc_pidinfo(pid, ProcPidTBsdInfo, 0, buffer, buffer.Length);
         return bytes >= LibProcLayout.BsdInfoSize ? LibProcLayout.ParseBsdInfo(buffer) : null;
+    }
+
+    public static (long Seconds, long Microseconds)? StartTime(int pid)
+    {
+        var buffer = new byte[LibProcLayout.BsdInfoSize];
+        var bytes = proc_pidinfo(pid, ProcPidTBsdInfo, 0, buffer, buffer.Length);
+        return bytes >= LibProcLayout.BsdInfoSize ? LibProcLayout.ParseStartTime(buffer) : null;
     }
 
     public static IReadOnlyList<LibProcSocket> Sockets(int pid)

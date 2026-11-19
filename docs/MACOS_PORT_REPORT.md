@@ -677,3 +677,67 @@ Also: the "Start local modules" message points to a Repair button the macOS card
 
 Guest left with build 18 installed, service running, extension active, 0 rules, shield off, Privacy Shield
 off, DNS automatic, no dialogs; VM shut down.
+
+## Addendum 2026-11-18 (5): resolver-delegated DNS fix, 1.3.0 build 19, VM regression run (author-run, not CI)
+
+Fix for the v13 outage found on build 18 (an app block rule dropped mDNSResponder's delegated DNS socket; lookups
+of that name stalled for every app, 22 minutes in the repro). Fix commit `3943b54` (`RuleTable.decide` +
+`ResolverDelegation`, `FlowInspector.socketOwner`, `FilterDataProvider.handleNewFlow`), design and trade-off in
+MACOS_ARCHITECTURE.md "Resolver-delegated DNS flows". No .NET change (the new `flow.open` fields are additive).
+
+Build: .NET published on Linux from `3943b54` (`AXIOM_BUILD=19 package-app.sh osx-x64`, tree clean after), Swift
+filter built and the bundle ad hoc signed in the guest (`deploy-to-vm.sh`, `INSTALL=0`), packed there with
+`ditto -c -k --keepParent`: `Axiom-1.3.0-19-osx-x64-adhoc.zip`, 89,058,431 bytes, sha256
+`74568194086be232e1fffbd0eaf1e92575f2cf78c741e653d41be34170f0efd9` (guest = host). Installed over build 18 from that
+zip (`shasum -c` OK), `axiomd --install-service` exit 0, `axiom-sysext activate` replaced 18 with 19 and re-created
+the filter configuration ("Would Like to Filter Network Content" -> Allow). Guest macOS 15.8.3, SIP disabled.
+
+| Check | Result |
+|---|---|
+| Swift unit tests (guest, `build.sh test`) | RED with `decide()` stubbed to the build-18 verdict: 162/168 (6 failures, all delegated-flow cases); GREEN 168/168 |
+| Loop 1, 10 min, right after the 18 -> 19 filter upgrade (rule on a curl copy; every second the copy fetches http://NAME/ first, then system curl and python fetch the same NAME; NAME alternates a never-seen sslip.io name and 5 real names; no cache flush) | 480 ticks. Filter: 511 `allow resolver-delegated dns` lines for the copy, **0** DNS drops, 1078 blocks of its TCP flows. Copy rc 7 454, rc 28 26; system curl 478/480; python 480/480. mDNSResponder `Broken pipe` 582 lines, but they started at the filter upgrade (590 in the 10 min before the loop) and also appeared with **no rule at all** (about 50 per 20 lookups in 6 controlled phases, system curl included). A DNS configuration change (Ethernet DNS set and reset to automatic) cleared them: 0 afterwards. Reading: replacing the filter left mDNSResponder with a broken socket (upgrade side effect, not a verdict) |
+| Loop 2, 10 min after that reset, same script | 415 ticks. **0 `Broken pipe`**, **0 DNS drops**, 447 delegated DNS flows allowed, 920 TCP blocks of the copy. Real names (207 ticks): copy refused (rc 7) 207/207, system curl 207/207, python 207/207, 0 stalls. Fresh sslip.io names (208): copy rc 7 174, rc 28 (5 s lookup) 34; system curl 203/208; python 208/208 (6 lookups > 2 s, max 15.6 s) |
+| Loop 3, 5 min, same script, **no rule** (control) | fresh sslip.io names: first asker timed out 6/128, system curl 127/128, 3 python lookups > 2 s; real names: 1/127 timeout. 0 `Broken pipe` |
+| Build 18 for comparison (v13-outage FINDINGS) | one delegated DNS drop -> `Broken pipe` on every resend, query #1-#120 for one question, hostname lookups of the same name stalled for **all** apps for 22 min (23/25 + 5/5 restart cycles with timeouts) |
+| Blocked program's own direct DNS | `dig` copy UDP rc 9 "connection timed out" (2.1 s), TCP rc 9 "connection ... failed"; `nslookup` copy rc 1 timed out; unblocked `dig`/`nslookup` answered. Filter: `block pid=… digblk -> 10.0.2.3:53 rule=… owner=-` (3 lines), 0 delegated allows for them |
+| Enforcement smoke | copy refused by IP 5/5 and by name 5/5 (rc 7), python 200 3/3, `/usr/bin/curl` 0 3/3; same after `launchctl kickstart -k` (new pid); after `rule.remove` copy 200 3/3; `--doctor` 23 PASS / 1 WARN / 0 FAIL (WARN: build-18 extension "terminated waiting to uninstall on reboot"); `codesign --verify --deep --strict` ok, adhoc |
+| UI (Light mode) | (a) "Install the Axiom background service" (menu-bar item "Install Background Service…", plist moved aside): body readable, dark on light; "Unblock this application" confirmation readable too. (b) Agent Protection, Start local modules: "Neither local module answered. The modules have to be installed and started manually; then click Check again." (no Repair; the static LOCAL MODULES subtitle still says "Repair stops a stale or duplicated runtime before starting a clean one."). (c) rule created over IPC (`createdBy b19-ipc`), row Unblock -> "curlblk: unblocked (rule removed and no longer listed; allow decision recorded).", row gone, 0 owned rules, copy then got 200 |
+
+Not met / open: the fresh-name loops did not give "refused every time, never a timeout": 34/208 first lookups of
+never-seen sslip.io names took 5 s with the rule vs 6/128 without it in a later 5-minute control. No filter drop,
+no `Broken pipe` and no cross-app stall accompanied them, and earlier 20-name phases showed 10-20 % slow fresh
+lookups with no rule, so this reads as upstream (sslip.io/slirp) latency, but the rule/no-rule difference was not
+explained in this run. Also open: a filter upgrade can leave mDNSResponder with an EPIPE socket until the next DNS
+configuration change. Not tested: Apple silicon, a signed build, macOS 13/14, DoT (853) live.
+
+## Addendum 2026-11-18 (6): mDNSResponder reset after a new filter instance, 1.3.0 build 20, VM run (author-run, not CI)
+
+Fix for the open item of addendum (5): after a new AxiomFilter instance attaches, macOS breaks every pre-existing
+socket and mDNSResponder kept logging `Broken pipe` on its dead sockets (build 19: steady, 64 lines in about 2.5 min
+after the upgrade, more than 10 min until a DNS configuration change). Fix commit `14f0948`: the daemon reads the
+filter's pid + start time from its connection, persists it (`filter-instance`, 0600) and sends mDNSResponder one
+`SIGHUP` 5 s after a new instance's first connection; design in MACOS_ARCHITECTURE.md §3.3 "Resolver reset after a new
+filter instance". No Swift change.
+
+Build: .NET published on Linux from `14f0948` (`AXIOM_BUILD=20 package-app.sh osx-x64`, tree clean after), Swift
+filter built and the bundle ad hoc signed in the guest (`deploy-to-vm.sh`, `INSTALL=0`), packed with
+`ditto -c -k --keepParent`: `Axiom-1.3.0-20-osx-x64-adhoc.zip`, 89,063,379 bytes, sha256
+`588c2d4025cd6f0205d6e18a2db53cd15436283168f6284da916e9fc6c7a294d` (guest = host). Installed over build 19 from that
+zip (`shasum -c` OK, `axiomd --install-service` exit 0, `axiom-sysext activate` replaced 19 with 20, Allow clicked).
+Guest macOS 15.8.3, SIP disabled, 0 rules during items 1-4. `Broken pipe` = mDNSResponder log lines containing it,
+counted per 20 s window from the event.
+
+| Check | Build 20 | Build 19 (v13 diagnosis, same VM) |
+|---|---|---|
+| Upgrade 19 -> 20 (new filter `startFilter` 07:40:02.34) | 6 lines 07:40:03.5-06.6, then 0: windows `[6,0,0,0,0,0,0,0,0,0]` (200 s). `SIGHUP: Purge cache` at 07:40:07.83; axiomd: "first seen (no marker)" -> "Sent SIGHUP to mDNSResponder (pid 211)" | first at +1.2 s, 64 in about 2.5 min, continuing until a DNS change (10+ min) |
+| `axiom-sysext disable`, 5 s, `enable`, trial 1 / 2 / 3 | 6 / 6 / 6 lines, all within 3.1 s after `startFilter`, then 0 for the rest of the 200 s (`[6,0,0,0,0,0,0,0,0,0]` each); HUP 5.2-5.5 s after `startFilter`; axiomd "new AxiomFilter instance X replaced Y" each time | 34 in 100 s, continuing |
+| Daemon restart `launchctl kickstart -k`, 3 times 60 s apart, same filter instance | 0 HUPs (axiomd count of "Sent SIGHUP" stayed 4 = upgrade + 3 trials; no "new instance" line), 0 `Broken pipe` in 180 s | 0 (restart was never a trigger) |
+| Lookup loop across the 3 switches (getaddrinfo every 1 s, 07:43:49-07:55:04, 377 ticks) | fixed name `example.org`: 0 failures, 0 >= 1 s (max 0.02 s, answered from cache; also right after each HUP purge). Never-seen sslip.io name each tick: 0 failures, 65 took 5 or 10 s, at the same rate before the first switch (6/35, 17 %), 0-30 s after an enable (10/50, 20 %) and later (47/288, 16 %): the known first-lookup latency of this VM's user-mode DNS (v13 observation 1), not the switch | in-flight queriers could stall (not reproduced with the cached fixed name either) |
+| Smoke | curl copy refused by IP 5/5 and by name 5/5 (rc 7), python 200 5/5; after unblock copy 200 3/3; `--doctor` 25 PASS / 0 WARN / 0 FAIL; Privacy Shield on: DNS 127.0.0.1, python 200; off: DNS automatic (`There aren't any DNS Servers set`, resolver 10.0.2.3), no HUP sent by either (count stayed 4); `codesign --verify --deep --strict` OK; Swift tests 168/168 | |
+
+One HUP per new instance was enough in every case: 0 lines in the 194 s after it. The 6 lines before it (about 3 s)
+are the cost of the 5 s delay; an earlier send was not tried. Host gate on `14f0948`: locked restore and Release build
+0 warnings / 0 errors; Infrastructure.MacOS tests 264/264 (249 + 15 new), Desktop.Avalonia.MacOS 35/35, Service.Tests
+and Presentation.Tests failing names identical to the 19-name baseline of this host. Not tested: Apple silicon, a
+signed build, macOS 13/14, a reboot (the marker survives it; the filter gets a new pid, so one HUP is expected), other
+apps' TCP connections (they still drop once at the switch; that is the OS, not the resolver).

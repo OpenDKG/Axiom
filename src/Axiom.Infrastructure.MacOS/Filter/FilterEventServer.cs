@@ -60,6 +60,13 @@ public sealed class FilterEventServer
     /// </summary>
     public Func<CancellationToken, Task>? ClientConnectedAsync { get; set; }
 
+    /// <summary>
+    /// Runs after every accepted filter connection with the peer's process identity (pid + start
+    /// time; null when it cannot be read). The daemon uses it to reset mDNSResponder once per new
+    /// filter instance (<see cref="ResolverResetCoordinator"/>).
+    /// </summary>
+    public Action<FilterInstanceIdentity?>? FilterInstanceConnected { get; set; }
+
     public long RejectedLines => Interlocked.Read(ref _rejectedLines);
 
     public long AcceptedEvents => Interlocked.Read(ref _acceptedEvents);
@@ -206,6 +213,8 @@ public sealed class FilterEventServer
             log("AxiomFilter connected to the flow-event socket.");
             try
             {
+                FilterInstanceConnected?.Invoke(FilterInstanceIdentity.TryRead(client));
+
                 if (ClientConnectedAsync is { } onConnected)
                 {
                     try

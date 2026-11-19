@@ -36,6 +36,17 @@ public sealed class ModuleRepairPortabilityTests
     }
 
     [Fact]
+    public void Threat_report_venv_interpreter_uses_the_native_layout()
+    {
+        // 1.4.0 manual reports run only through the runtime or venv interpreter, so the venv path
+        // must be the one the platform actually creates.
+        var expected = OperatingSystem.IsWindows()
+            ? Path.Combine(ThreatShareCli.BlackboxRoot(), "venv", "Scripts", "python.exe")
+            : Path.Combine(ThreatShareCli.BlackboxRoot(), "venv", "bin", "python");
+        Assert.Equal(expected, ThreatShareCli.VenvPython());
+    }
+
+    [Fact]
     public void Uninstaller_sees_a_native_blackbox_venv()
     {
         var root = Path.Combine(Path.GetTempPath(), "axiom-venv-" + Guid.NewGuid().ToString("N"));
