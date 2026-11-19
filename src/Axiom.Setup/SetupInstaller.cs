@@ -230,6 +230,11 @@ internal static class SetupInstaller
                             () => moduleInstaller.InstallBlackboxAndWait(Report),
                             cancellationToken).ConfigureAwait(false);
                         Report($"Blackbox installer exit code: {(blackboxExit ? "0" : "non-zero")}.");
+                        if (blackboxExit && !LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort))
+                        {
+                            Report("Starting the installed Blackbox dashboard...");
+                            moduleInstaller.StartBlackboxDashboard();
+                        }
                     }
 
                     if (upgradeBackup is not null)

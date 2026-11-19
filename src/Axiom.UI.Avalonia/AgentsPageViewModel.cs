@@ -186,7 +186,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
 
     public IReadOnlyList<string> AgentFilters { get; } =
-        ["All agents", "Hermes", "OpenClaw", "OpenCode", "OpenChamber", "Codex", "Claude", "Cursor", "Copilot", "Gemini", "Windsurf", "Cline", "ZCode", "DeepSeek", "Unknown"];
+        ["All agents", "Hermes", "OpenClaw", "OpenCode", "Codex", "Claude", "Antigravity", "Cursor", "Copilot", "Gemini", "Windsurf", "Cline", "ZCode", "DeepSeek", "Unknown"];
 
     public IReadOnlyList<string> SeverityFilters { get; } =
         ["All severities", "Info", "Low", "Medium", "High", "Critical"];
@@ -2454,8 +2454,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 continue;
             }
 
-            if (SelectedAgentFilter != "All agents" &&
-                !string.Equals(entry.Agent, SelectedAgentFilter, StringComparison.OrdinalIgnoreCase))
+            if (!MatchesAgentFilter(entry.Agent, SelectedAgentFilter))
             {
                 continue;
             }
@@ -2555,6 +2554,12 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             "Threats" => entry.IsThreat,
             _ => true,
         };
+
+    private static bool MatchesAgentFilter(string? agent, string filter) =>
+        filter == "All agents" ||
+        string.Equals(agent, filter, StringComparison.OrdinalIgnoreCase) ||
+        (string.Equals(filter, "OpenCode", StringComparison.OrdinalIgnoreCase) &&
+         string.Equals(agent, "openchamber", StringComparison.OrdinalIgnoreCase));
 
     private static string ActivityIdentity(BlackboxAuditEntry entry) =>
         entry.RawJson.Length > 0
