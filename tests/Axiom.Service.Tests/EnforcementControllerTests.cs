@@ -31,6 +31,21 @@ public sealed class EnforcementControllerTests
         """;
 
     [Fact]
+    public void Default_provisioning_is_windows_only()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var policy = new TemporaryPolicy(null);
+        var controller = new EnforcementController(policy.PolicyPath, provisionDefaultIfMissing: true);
+
+        Assert.False(controller.GetStatus().Enabled);
+        Assert.False(File.Exists(policy.PolicyPath));
+    }
+
+    [Fact]
     public async Task Missing_policy_file_is_disabled_and_returns_unavailable()
     {
         using var policy = new TemporaryPolicy(null);

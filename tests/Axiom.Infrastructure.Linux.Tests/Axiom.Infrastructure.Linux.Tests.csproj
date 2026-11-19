@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!--
+      Linux-only runtime behaviour ('/' paths, pkexec wording, Doctor): the project still compiles everywhere, but `dotnet test Axiom.sln` on a Windows runner skips it.
+    -->
+    <IsTestProject Condition="!$([MSBuild]::IsOSPlatform('Windows'))">true</IsTestProject>
+    <IsTestProject Condition="$([MSBuild]::IsOSPlatform('Windows'))">false</IsTestProject>
+    <RootNamespace>Axiom.Infrastructure.Linux.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Axiom.Infrastructure.Linux\Axiom.Infrastructure.Linux.csproj" />
+  </ItemGroup>
+
+</Project>

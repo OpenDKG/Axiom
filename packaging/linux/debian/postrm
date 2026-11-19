@@ -1,0 +1,92 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# axiom postrm (docs/LINUX_PACKAGING.md §4). remove: make sure nothing of the service survives a
+# prerm that could not run (unit file, protected image, runtime directory) — every path here is
+# created by Axiom and nothing else is touched. purge: additionally delete the machine data
+# (/var/lib/axiom: rules, settings, history database, DNS backup) and the log directory. Upgrades
+# never reach the remove/purge branches. Per-user desktop state under ~/.local/state/axiom and
+# ~/.local/share/Axiom belongs to the user and is left alone.
+#
+# A leftover unit is deleted only after its stop is confirmed (systemd reports inactive/failed).
+# An unconfirmed or still-active stop keeps the unit, the protected image, the runtime directory
+# and (on purge) the machine data/logs, and fails the removal: deleting the image under a running
+# daemon would strand the process without its recovery handles. The same rule is in the RPM
+# %postun. `AXIOM_MAINTAINER_TEST_ROOT` relocates every path for packaging tests only; dpkg and
+# rpm never set it.
+set -e
+
+AXIOM_ROOT=${AXIOM_MAINTAINER_TEST_ROOT:-}
+AXIOM_UNIT=$AXIOM_ROOT/etc/systemd/system/axiomd.service
+AXIOM_IMAGE_DIR=$AXIOM_ROOT/usr/libexec/axiom
+AXIOM_DATA_DIR=$AXIOM_ROOT/var/lib/axiom
+AXIOM_LOG_DIR=$AXIOM_ROOT/var/log/axiom
+AXIOM_RUN_DIR=$AXIOM_ROOT/run/axiom
+AXIOM_SYSTEMD_RUN_DIR=$AXIOM_ROOT/run/systemd/system
+
+# Axiom's service can only be running while its unit exists and this boot uses systemd.
+service_stopped() {
+    state=$(systemctl is-active axiomd.service 2>/dev/null) || true
+    case "$state" in
+        inactive|failed) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+stop_confirmed() {
+    [ -d "$AXIOM_SYSTEMD_RUN_DIR" ] || return 0
+    if ! command -v systemctl >/dev/null 2>&1; then
+        return 1
+    fi
+    # A stop that reports failure is not trusted either way: accept it only if the state reads
+    # inactive/failed, otherwise the service may still be running. The stop/disable go through
+    # the Debian helpers (policy-rc.d aware); the read-back below is the authority, so a quiet
+    # helper failure cannot strand the daemon without its recovery handles.
+    if command -v deb-systemd-invoke >/dev/null 2>&1; then
+        deb-systemd-invoke stop axiomd.service >/dev/null 2>&1 || true
+    fi
+    if command -v deb-systemd-helper >/dev/null 2>&1; then
+        deb-systemd-helper disable axiomd.service >/dev/null 2>&1 || true
+    fi
+    service_stopped
+}
+
+remove_service_leftovers() {
+    if ! stop_confirmed; then
+        echo "axiom postrm: axiomd.service is still active or its stop is unconfirmed; keeping $AXIOM_UNIT, $AXIOM_IMAGE_DIR and $AXIOM_RUN_DIR for recovery." >&2
+        return 1
+    fi
+    rm -f "$AXIOM_UNIT"
+    # A unit enabled by the daemon's own `systemctl enable` has no deb-systemd-helper state file,
+    # so the helper may not know the symlink. Remove only Axiom's unit name from the enablement
+    # directories systemd writes (*.wants/*.requires); a symlink elsewhere, a regular file, a
+    # directory or another unit name is left alone. POSIX glob, no recursive find. An enablement
+    # directory that is itself a symlink may lead outside /etc/systemd/system, so it is skipped.
+    for enablement in "$AXIOM_ROOT"/etc/systemd/system/*.wants "$AXIOM_ROOT"/etc/systemd/system/*.requires; do
+        [ -d "$enablement" ] && [ ! -L "$enablement" ] || continue
+        if [ -L "$enablement/axiomd.service" ]; then
+            rm -f "$enablement/axiomd.service"
+        fi
+    done
+    if [ -d "$AXIOM_SYSTEMD_RUN_DIR" ] && command -v systemctl >/dev/null 2>&1; then
+        systemctl daemon-reload >/dev/null 2>&1 || true
+    fi
+    rm -rf "$AXIOM_IMAGE_DIR" "$AXIOM_RUN_DIR"
+}
+
+case "$1" in
+    remove)
+        remove_service_leftovers || exit 1
+        ;;
+    purge)
+        remove_service_leftovers || exit 1
+        rm -rf "$AXIOM_DATA_DIR" "$AXIOM_LOG_DIR"
+        ;;
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+    *)
+        echo "axiom postrm: unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

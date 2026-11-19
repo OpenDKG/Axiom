@@ -65,7 +65,7 @@ public sealed class ProtectionPathFamilyTests
 
     private static LiveConnection Connection(string path) => new()
     {
-        AppDisplayName = Path.GetFileName(path),
+        AppDisplayName = path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries) is { Length: > 0 } segments ? segments[^1] : "unknown",
         AppPath = path,
         ProcessId = 100,
         Protocol = TransportProtocol.Tcp,

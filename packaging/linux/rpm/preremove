@@ -1,0 +1,28 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# RPM %preun: $1 = 0 on erase, 1 on upgrade. Erase = the Debian prerm remove branch
+# (`axiomd --uninstall-service` + stale BPF pins); upgrades do nothing, the new %post replaces
+# the image in place.
+set -e
+[ "$1" = 0 ] || exit 0
+AXIOM_IMAGE_DAEMON=/usr/libexec/axiom/axiomd
+AXIOM_BUNDLED_DAEMON=/usr/lib/axiom-firewall/axiomd/axiomd
+AXIOM_PIN_DIR=/sys/fs/bpf/axiom
+AXIOM_BPF_PINS_SCRIPT=/usr/lib/axiom-firewall/bpf-pins.sh
+if [ ! -r "$AXIOM_BPF_PINS_SCRIPT" ]; then
+    echo "axiom %preun: $AXIOM_BPF_PINS_SCRIPT is missing; cannot verify the BPF layer, keeping $AXIOM_PIN_DIR." >&2
+    exit 1
+fi
+. "$AXIOM_BPF_PINS_SCRIPT"
+if [ -d /run/systemd/system ]; then
+    if [ -x "$AXIOM_IMAGE_DAEMON" ]; then
+        "$AXIOM_IMAGE_DAEMON" --uninstall-service
+    elif [ -x "$AXIOM_BUNDLED_DAEMON" ]; then
+        "$AXIOM_BUNDLED_DAEMON" --uninstall-service
+    fi
+fi
+if ! axiom_bpf_pins_remove "$AXIOM_PIN_DIR" /sys/fs/cgroup; then
+    echo "axiom %preun: the BPF layer is in an unknown state; keeping $AXIOM_PIN_DIR for recovery." >&2
+    exit 1
+fi
+exit 0

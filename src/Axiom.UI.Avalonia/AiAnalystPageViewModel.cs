@@ -144,7 +144,7 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
         ? "Uses the OpenChamber/OpenCode CLI already signed in on this PC; no separate API key is needed."
         : string.IsNullOrWhiteSpace(_apiKey)
             ? "No API key stored. A local endpoint may not require one."
-            : "API key is stored with Windows DPAPI; it is never shown or logged.";
+            : $"API key is stored with {PlatformText.SecretStore}; it is never shown or logged.";
 
     public string PrivacyText =>
         "Evidence is bounded and contains process names, PIDs, parent process chains, executable " +
@@ -320,7 +320,7 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
         {
             _suppressApiKeyInputChanged = false;
         }
-        SettingsStatus = "Settings saved locally. The API key is protected with Windows DPAPI.";
+        SettingsStatus = $"Settings saved locally. The API key is protected with {PlatformText.SecretStore}.";
         UpdateCredentialsText();
         UpdateStatus();
         StartAutomaticTimer();

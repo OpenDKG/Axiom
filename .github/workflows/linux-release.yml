@@ -1,0 +1,81 @@
+name: Linux package
+
+# Builds the Linux .deb alongside the Windows release assets. This workflow only produces a
+# downloadable artifact: it does not create a GitHub release, upload an asset or push anything.
+# Attaching the package to a public release is a separate, explicitly gated task (release write
+# permission); this job hands the artifact + SHA256SUMS + PROVENANCE to the release pipeline.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-package-${{ github.event.inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deb:
+    name: Build Ubuntu .deb (x64)
+    # The package is validated on Ubuntu 24.04 (docs/LINUX_TEST_REPORT.md); build on the same base.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Set up .NET SDK from global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install BPF build tools
+        run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev bpftool
+
+      - name: Build the .deb
+        run: scripts/linux/package.sh deb --arch x64
+
+      - name: Checksums and inventory
+        run: |
+          cd build/linux
+          sha256sum axiom-firewall_*.deb > SHA256SUMS.txt
+          dpkg-deb -I axiom-firewall_*.deb | sed -n '1,40p' > control.txt
+          dpkg-deb -c axiom-firewall_*.deb > contents.txt
+          cat SHA256SUMS.txt
+
+      - name: Provenance (handoff metadata, no release write)
+        env:
+          SOURCE_REF: ${{ inputs.ref }}
+        run: |
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "ref=${SOURCE_REF:-$GITHUB_REF}"
+            echo "dotnet=$(dotnet --version)"
+            echo "package=$(basename build/linux/axiom-firewall_*.deb)"
+            echo "version=$(dpkg-deb -f build/linux/axiom-firewall_*.deb Version)"
+            echo "architecture=$(dpkg-deb -f build/linux/axiom-firewall_*.deb Architecture)"
+            echo "sha256=$(sha256sum build/linux/axiom-firewall_*.deb | cut -d' ' -f1)"
+          } | tee build/linux/PROVENANCE.txt
+
+      - name: Upload the package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: axiom-linux-x64-deb
+          path: |
+            build/linux/axiom-firewall_*.deb
+            build/linux/SHA256SUMS.txt
+            build/linux/control.txt
+            build/linux/contents.txt
+            build/linux/PROVENANCE.txt
+          if-no-files-found: error
+          retention-days: 14

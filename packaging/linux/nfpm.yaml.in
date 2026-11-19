@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# nfpm (https://nfpm.goreleaser.com) configuration for the Axiom .rpm, rendered by
+# scripts/linux/package.sh from the staged package root (@STAGE@). The .deb is built with dpkg-deb
+# from the same root; this file carries the RPM mapping of packaging/linux/debian/control.in.
+name: axiom-firewall
+arch: "@ARCH@"
+platform: linux
+version: "@VERSION@"
+release: "1"
+section: net
+priority: optional
+maintainer: The Axiom contributors <51213010+a-51-50@users.noreply.github.com>
+description: |
+  Network and AI agent security (desktop app + axiomd service)
+  Axiom is a free, open-source per-application firewall with connection
+  monitoring, history, Privacy Shield DNS filtering and AI-agent awareness.
+  The desktop application lives under /usr/lib/axiom-firewall (launched through
+  /usr/bin/axiom-firewall); the privileged background service axiomd is registered
+  as a systemd unit (root-owned image in /usr/libexec/axiom, data in /var/lib/axiom)
+  and enforces rules with nftables and, where available, a connect-time eBPF layer.
+vendor: Axiom
+homepage: https://github.com/a-51-50/Axiom
+license: GPL-3.0-or-later
+depends:
+  - nftables
+  - polkit
+  - systemd
+  - libicu
+  # The .NET crypto shim dlopens libssl.so.3 (then 1.1/1.0/10) and does not know OpenSSL 4's
+  # libssl.so.4. Fedora 45's openssl-libs is OpenSSL 4, so naming the package is not enough:
+  # require the soname capability (openssl3-libs on Fedora >= 45, openssl-libs on Fedora <= 44
+  # and RHEL 9/10, libopenssl3 on openSUSE). Without it axiomd aborts with
+  # "No usable version of libssl was found" (docs/LINUX_PACKAGING.md §7, F-2).
+  - libssl.so.3()(64bit)
+  - libcrypto.so.3()(64bit)
+  # bpf/axiom-bpf-events links libbpf.so.1 (the .deb gets libbpf1 from dpkg-shlibdeps; nfpm has no
+  # automatic requires). package.sh drops this line for --no-bpf builds.
+  - libbpf.so.1()(64bit) # @IF_BPF@
+  - fontconfig
+  - libX11
+  - libXext
+  - libXrender
+  - libXi
+  - libXcursor
+  - libXrandr
+  - libICE
+  - libSM
+# Builds up to 0.17 were named `axiom`, also an unrelated computer algebra package in the
+# Debian/Ubuntu/Fedora archives (20170501). The bound only matches our 0.x. No Obsoletes: rpm
+# would run the old erase scriptlets after the new %post and remove the service again, so an old
+# `axiom` build must be removed first; `axiom-firewall` only declares the conflict.
+conflicts:
+  - axiom < 1000
+recommends:
+  - bpftool
+  - libsecret
+contents:
+  - src: "@STAGE@/usr/lib/axiom-firewall"
+    dst: /usr/lib/axiom-firewall
+    type: tree
+  # Same stable launcher name as the .deb: /usr/bin/axiom-firewall -> the real apphost.
+  # nfpm symlink semantics: src/dst are installed filesystem paths, not build-host paths; src is
+  # the link target and dst is the link created. Prepending @STAGE@ here would ship a link to the
+  # build directory. Regular file/tree entries above are the ones that use @STAGE@.
+  - src: /usr/lib/axiom-firewall/Axiom
+    dst: /usr/bin/axiom-firewall
+    type: symlink
+  - src: "@STAGE@/usr/share/applications/com.axiom.firewall.desktop"
+    dst: /usr/share/applications/com.axiom.firewall.desktop
+  - src: "@STAGE@/usr/share/polkit-1/actions/com.axiom.firewall.policy"
+    dst: /usr/share/polkit-1/actions/com.axiom.firewall.policy
+  - src: "@STAGE@/usr/share/icons/hicolor"
+    dst: /usr/share/icons/hicolor
+    type: tree
+  - src: "@STAGE@/usr/share/doc/axiom-firewall"
+    dst: /usr/share/doc/axiom-firewall
+    type: tree
+  - src: "@STAGE@/usr/share/man/man1/axiom-firewall.1.gz"
+    dst: /usr/share/man/man1/axiom-firewall.1.gz
+scripts:
+  postinstall: "@PKG@/rpm/postinstall"
+  preremove: "@PKG@/rpm/preremove"
+  postremove: "@PKG@/rpm/postremove"
+rpm:
+  summary: Network and AI agent security (desktop app + axiomd service)
+  group: Applications/Internet
+  compression: xz

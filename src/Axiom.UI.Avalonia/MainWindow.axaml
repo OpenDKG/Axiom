@@ -112,7 +112,7 @@
     <Border Classes="glass-chrome" Grid.Row="0" Grid.ColumnSpan="2" Background="{DynamicResource Axiom.Nav}" BorderBrush="{DynamicResource Axiom.Border}"
             BorderThickness="0,0,0,1" chrome:WindowDecorationProperties.ElementRole="TitleBar">
       <Grid ColumnDefinitions="*,Auto" Margin="18,0,4,0">
-        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+        <StackPanel x:Name="TitleContent" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
           <Image Source="avares://Axiom.UI.Avalonia/Assets/axiom-icon.png" Width="22" Height="22" Stretch="Uniform"
                  RenderOptions.BitmapInterpolationMode="HighQuality" />
           <TextBlock Text="AXIOM" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource Axiom.TextPrimary}" />
@@ -145,9 +145,14 @@
           <Button x:Name="AlertsButton" Classes="caption" Click="OnAlertsClicked" ToolTip.Tip="Notifications"
                   chrome:WindowDecorationProperties.ElementRole="User">
             <Grid Width="46" Height="44">
-              <TextBlock Text="&#xE7E7;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+              <TextBlock x:Name="BellGlyph" Text="&#xE7E7;" FontFamily="Segoe MDL2 Assets" FontSize="13"
                          Foreground="{DynamicResource Axiom.TextPrimary}"
                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <!-- Segoe MDL2 Assets exists only on Windows; other platforms show this vector bell. -->
+              <PathIcon x:Name="BellIcon" IsVisible="False" Width="15" Height="15"
+                        Foreground="{DynamicResource Axiom.TextPrimary}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Data="M21,19V20H3V19L5,17V11C5,7.9 7.03,5.17 10,4.29C10,4.19 10,4.1 10,4A2,2 0 0,1 12,2A2,2 0 0,1 14,4C14,4.1 14,4.19 14,4.29C16.97,5.17 19,7.9 19,11V17L21,19M14,21A2,2 0 0,1 12,23A2,2 0 0,1 10,21H14Z" />
               <Border IsVisible="{Binding HasUnreadAlerts}" Background="#C42B1C" CornerRadius="7"
                       MinWidth="14" Height="14" Padding="3,0" Margin="0,5,7,0"
                       HorizontalAlignment="Right" VerticalAlignment="Top">
@@ -162,21 +167,26 @@
                   AutomationProperties.Name="Available update"
                   chrome:WindowDecorationProperties.ElementRole="User">
             <Grid Width="46" Height="44">
-              <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+              <TextBlock x:Name="UpdateGlyph" Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="13"
                          Foreground="{DynamicResource Axiom.Accent}"
                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <!-- Segoe MDL2 Assets exists only on Windows; other platforms show this vector arrow. -->
+              <PathIcon x:Name="UpdateIcon" IsVisible="False" Width="14" Height="14"
+                        Foreground="{DynamicResource Axiom.Accent}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Data="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
               <Border Background="{DynamicResource Axiom.Accent}" CornerRadius="4"
                       Width="8" Height="8" Margin="0,7,9,0"
                       HorizontalAlignment="Right" VerticalAlignment="Top" />
             </Grid>
           </Button>
-          <Button Classes="caption" Content="&#xE921;" ToolTip.Tip="Minimize"
+          <Button x:Name="MinimizeButton" Classes="caption" Content="&#xE921;" ToolTip.Tip="Minimize"
                   chrome:WindowDecorationProperties.ElementRole="MinimizeButton"
                   Click="OnMinimizeClicked" />
           <Button x:Name="MaximizeButton" Classes="caption" Content="&#xE922;" ToolTip.Tip="Maximize"
                   chrome:WindowDecorationProperties.ElementRole="MaximizeButton"
                   Click="OnMaximizeClicked" />
-          <Button Classes="caption close" Content="&#xE8BB;" ToolTip.Tip="Close"
+          <Button x:Name="CloseButton" Classes="caption close" Content="&#xE8BB;" ToolTip.Tip="Close"
                   chrome:WindowDecorationProperties.ElementRole="CloseButton"
                   Click="OnCloseClicked" />
         </StackPanel>

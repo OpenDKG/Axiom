@@ -1,0 +1,67 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# axiom postinst (docs/LINUX_PACKAGING.md §5). Runs `axiomd --install-service` from the shipped
+# bundle on every configure (first install and upgrade): the daemon stages a root-owned copy of
+# /usr/lib/axiom-firewall/axiomd into /usr/libexec/axiom, audits owner and modes, writes
+# /etc/systemd/system/axiomd.service, `systemctl daemon-reload` and `enable --now`. A running
+# daemon (previous package version or a dev install) is stopped and replaced in place; its stop
+# restores Privacy Shield DNS before the new image starts. Idempotent: re-running against the same
+# image is a no-op apart from a restart.
+set -e
+
+AXIOM_ROOT=${AXIOM_MAINTAINER_TEST_ROOT:-}
+AXIOM_BUNDLED_DAEMON=$AXIOM_ROOT/usr/lib/axiom-firewall/axiomd/axiomd
+AXIOM_SYSTEMD_RUN_DIR=$AXIOM_ROOT/run/systemd/system
+
+# dpkg sets DPKG_ADMINDIR for every maintainer script; when the script is run by hand, dpkg-query
+# uses its own default. Querying is deliberate: the script never spells out dpkg's private
+# directory (lintian's uses-dpkg-database-directly), and --control-list/--control-show cannot
+# hand back the path that the migration below has to rewrite.
+query_control() {
+    if [ -n "${DPKG_ADMINDIR:-}" ]; then
+        dpkg-query --admindir="$DPKG_ADMINDIR" "$@"
+    else
+        dpkg-query "$@"
+    fi
+}
+
+# Builds up to 0.17 were packaged as `axiom`. Replacing one leaves it in dpkg's "config-files"
+# state with its postrm, whose purge branch deletes /var/lib/axiom and /var/log/axiom: the data
+# this package now owns. Disarm that script so `dpkg --purge axiom` only drops the record. The
+# marker lines only exist in our old postrm, never in the archive's unrelated `axiom` package.
+disarm_old_package_purge() {
+    old_postrm=$(query_control --control-path axiom postrm 2>/dev/null) || return 0
+    [ -f "$old_postrm" ] || return 0
+    # Our 0.53-era postrm prefixes every path with AXIOM_ROOT (packaging-test seam); the older
+    # builds spell the paths out. Accept both, and nothing else.
+    grep -Eq '^AXIOM_DATA_DIR=(\$AXIOM_ROOT)?/var/lib/axiom$' "$old_postrm" || return 0
+    grep -Eq '^AXIOM_UNIT=(\$AXIOM_ROOT)?/etc/systemd/system/axiomd\.service$' "$old_postrm" || return 0
+    printf '#!/bin/sh\n# Replaced by axiom-firewall: /var/lib/axiom belongs to that package now.\nexit 0\n' >"$old_postrm"
+    chmod 0755 "$old_postrm"
+    echo "axiom-firewall: the replaced 'axiom' package can no longer delete /var/lib/axiom on purge."
+}
+
+case "$1" in
+    configure)
+        disarm_old_package_purge
+        if [ ! -x "$AXIOM_BUNDLED_DAEMON" ]; then
+            echo "axiom: $AXIOM_BUNDLED_DAEMON is missing; the package is damaged." >&2
+            exit 1
+        fi
+        if [ ! -d "$AXIOM_SYSTEMD_RUN_DIR" ]; then
+            # Container or chroot without a running systemd (image builds): leave the unit for the
+            # first real boot, when `axiomd --install-service` can be run by hand or by the desktop.
+            echo "axiom: systemd is not running; skipping the service install (run '$AXIOM_BUNDLED_DAEMON --install-service' later)." >&2
+            exit 0
+        fi
+        "$AXIOM_BUNDLED_DAEMON" --install-service
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "axiom postinst: unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

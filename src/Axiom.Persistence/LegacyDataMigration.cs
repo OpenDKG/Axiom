@@ -23,8 +23,14 @@ public static class LegacyDataMigration
             StopProcess(LegacyIdentity.ProductName + ".Service");
         }
 
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var common = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        // The legacy product only shipped on Windows; there is nothing to migrate elsewhere.
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var local = AxiomPaths.UserBaseDirectory;
+        var common = AxiomPaths.MachineBaseDirectory;
         MigrateDirectory(
             Path.Combine(local, LegacyIdentity.DataDirectoryName),
             Path.Combine(local, DatabasePaths.DataDirectoryName));

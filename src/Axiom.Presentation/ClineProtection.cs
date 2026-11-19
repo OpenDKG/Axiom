@@ -35,7 +35,7 @@ public sealed class ClineProtection
         "blackbox",
         "agent-blackbox");
 
-    private string PythonPath => Path.Combine(BlackboxAgentRoot, "venv", "Scripts", "python.exe");
+    private string PythonPath => AgentPlatform.VenvPython(BlackboxAgentRoot);
 
     public bool IsClineDetected => Directory.Exists(Path.Combine(_userProfile, "Documents", "Cline")) || AgentBinaryLocator.IsClineAvailable();
 
@@ -117,7 +117,7 @@ public sealed class ClineProtection
         text.Contains(Marker, StringComparison.Ordinal) ||
         LegacyHookIdentity.IsLegacyManagedText(text);
 
-    private string BuildHookScript() => ($$"""
+    private string BuildHookScript() => AgentPlatform.AdaptHookScript(($$"""
         # Managed by Axiom. Calls the local Blackbox guard for Cline PreToolUse.
         import datetime
         import contextlib
@@ -211,5 +211,5 @@ public sealed class ClineProtection
 
         if __name__ == "__main__":
             main()
-        """).Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal);
+        """).Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal));
 }

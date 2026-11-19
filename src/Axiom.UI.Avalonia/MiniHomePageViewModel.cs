@@ -103,7 +103,21 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
 
     public bool HasBlockedPrivacy => BlockedPrivacy.Count > 0;
 
-    public string ShieldButtonText => Firewall.ShieldEnabled ? "Shield: ON" : "Shield: OFF";
+    // While the service has not answered the shield state is unknown, not OFF.
+    public string ShieldButtonText => !Firewall.ProtectionKnown
+        ? "Shield: unknown"
+        : Firewall.ShieldEnabled ? "Shield: ON" : "Shield: OFF";
+
+    /// <summary>Shield entry of the module health row, same model as the header lamp.</summary>
+    public string ShieldLevelText => ShieldProtection.LevelText(Firewall.ShieldLevel);
+
+    public bool IsShieldToneOk => ShieldProtection.Tone(Firewall.ShieldLevel) == "ok";
+
+    public bool IsShieldToneWarn => ShieldProtection.Tone(Firewall.ShieldLevel) == "warn";
+
+    public bool IsShieldToneFail => ShieldProtection.Tone(Firewall.ShieldLevel) == "fail";
+
+    public bool IsShieldToneIdle => ShieldProtection.Tone(Firewall.ShieldLevel) == "idle";
 
     public string PrivacyButtonText => PrivacyShield.Enabled ? "Privacy: ON" : "Privacy: OFF";
 
@@ -244,6 +258,11 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
     private void OnChildPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         OnPropertyChanged(nameof(ShieldButtonText));
+        OnPropertyChanged(nameof(ShieldLevelText));
+        OnPropertyChanged(nameof(IsShieldToneOk));
+        OnPropertyChanged(nameof(IsShieldToneWarn));
+        OnPropertyChanged(nameof(IsShieldToneFail));
+        OnPropertyChanged(nameof(IsShieldToneIdle));
         OnPropertyChanged(nameof(PrivacyButtonText));
         OnPropertyChanged(nameof(CanTogglePrivacy));
         OnPropertyChanged(nameof(NetworkBlockedCountText));

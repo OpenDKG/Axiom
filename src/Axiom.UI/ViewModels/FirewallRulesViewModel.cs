@@ -147,7 +147,7 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
     private bool _newRuleEnabled = true;
 
     [ObservableProperty]
-    private string _newRuleStatusText = "Writes are disabled; the rule editor is read-only until the test-VM write gate is enabled.";
+    private string _newRuleStatusText = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ApplyNewRuleCommand))]
@@ -186,7 +186,9 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
 
     public string NewRuleWriteHint => WritesEnabled
         ? "Writes are enabled for this test session. Each change requires confirmation and is audited."
-        : "Writes are disabled by design. Start the service with AXIOM_ENABLE_FIREWALL_WRITES=1 and AXIOM_FIREWALL_WRITE_CONFIRM=yes on an isolated test VM, then recheck.";
+        : WriteGateKnown
+            ? "Writes are disabled by design. Start the service with AXIOM_ENABLE_FIREWALL_WRITES=1 and AXIOM_FIREWALL_WRITE_CONFIRM=yes on an isolated test VM, then recheck."
+            : "The service write gate could not be read, so this session stays read-only. Recheck the service.";
 
     [ObservableProperty]
     private string _writePathText = "disabled";
@@ -196,6 +198,10 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
 
     [ObservableProperty]
     private bool _hasError;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NewRuleWriteHint))]
+    private bool _writeGateKnown;
 
     [ObservableProperty]
     private bool _canRecheck;
@@ -473,6 +479,7 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
             OwnedRuleCountText = snapshot.Rules.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
             IsEmpty = snapshot.Rules.Count == 0;
             WritesEnabled = snapshot.WritesEnabled;
+            WriteGateKnown = true;
             WritePathText = snapshot.WritesEnabled ? "enabled (test VM only)" : "disabled";
             HasError = snapshot.Capability.Status == FirewallCapabilityStatus.Unavailable;
             StatusText = snapshot.Rules.Count == 0
@@ -481,29 +488,38 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
         }
         catch (ServiceUnavailableException exception)
         {
-            Rules.Clear();
-            CapabilityStatusText = "Service offline";
-            CapabilityDetail = exception.Message;
-            OwnedRuleCountText = "—";
-            IsEmpty = true;
-            HasError = true;
-            StatusText = exception.Message;
+            ApplyQueryFailure("Service offline", exception.Message, exception.Message);
         }
 #pragma warning disable CA1031 // The page must not stay busy on an unexpected IPC error.
         catch (Exception exception)
 #pragma warning restore CA1031
         {
-            Rules.Clear();
-            CapabilityStatusText = "Query failed";
-            CapabilityDetail = exception.Message;
-            OwnedRuleCountText = "—";
-            IsEmpty = true;
-            HasError = true;
-            StatusText = $"Firewall query failed: {exception.Message}";
+            ApplyQueryFailure(
+                "Query failed",
+                exception.Message,
+                $"Firewall query failed: {exception.Message}");
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// A failed or disconnected probe must not leave writes looking enabled, and the hint must not
+    /// fall back to "disabled by design" when the gate is simply unknown.
+    /// </summary>
+    internal void ApplyQueryFailure(string capabilityStatus, string detail, string statusText)
+    {
+        Rules.Clear();
+        CapabilityStatusText = capabilityStatus;
+        CapabilityDetail = detail;
+        OwnedRuleCountText = "—";
+        IsEmpty = true;
+        WritesEnabled = false;
+        WriteGateKnown = false;
+        WritePathText = "unknown";
+        HasError = true;
+        StatusText = statusText;
     }
 }

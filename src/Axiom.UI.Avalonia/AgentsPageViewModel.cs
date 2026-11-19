@@ -1156,7 +1156,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             "modules",
             "blackbox",
             "agent-blackbox");
-        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(root);
         var bridge = Path.Combine(root, "axiom-guard-bridge.py");
         if (!File.Exists(python) || !File.Exists(bridge))
         {

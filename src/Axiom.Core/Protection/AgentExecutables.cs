@@ -44,6 +44,8 @@ public static class AgentExecutables
             return false;
         }
 
+        // Native separators only (upstream behaviour): off Windows a backslash is part of a file
+        // name, so a Windows-style path is not an agent executable on Linux/macOS.
         var name = System.IO.Path.GetFileNameWithoutExtension(path);
         if (name.Length > 0 &&
             Names.Contains(name, StringComparer.OrdinalIgnoreCase))

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!--
+      Unix-only runtime behaviour (File.SetUnixFileMode, '/' paths, peer credentials): the project still compiles everywhere, but `dotnet test Axiom.sln` on a Windows runner skips it.
+    -->
+    <IsTestProject Condition="!$([MSBuild]::IsOSPlatform('Windows'))">true</IsTestProject>
+    <IsTestProject Condition="$([MSBuild]::IsOSPlatform('Windows'))">false</IsTestProject>
+    <RootNamespace>Axiom.Infrastructure.Unix.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Axiom.Infrastructure.Unix\Axiom.Infrastructure.Unix.csproj" />
+  </ItemGroup>
+
+</Project>

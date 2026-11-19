@@ -1,0 +1,51 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# axiom prerm (docs/LINUX_PACKAGING.md §4). On remove: `axiomd --uninstall-service` stops and
+# disables the unit (the daemon's own shutdown detaches its BPF programs and restores DNS), deletes
+# the unit file, tears down `table inet axiom` and axiom.slice, restores the DNS backup if the
+# daemon could not, and removes the protected image /usr/libexec/axiom. /var/lib/axiom (rules,
+# settings, history) is kept for a reinstall; postrm purge deletes it.
+# On upgrade nothing happens here: the new version's postinst replaces the image in place.
+set -e
+
+AXIOM_IMAGE_DAEMON=/usr/libexec/axiom/axiomd
+AXIOM_BUNDLED_DAEMON=/usr/lib/axiom-firewall/axiomd/axiomd
+AXIOM_PIN_DIR=/sys/fs/bpf/axiom
+AXIOM_BPF_PINS_SCRIPT=/usr/lib/axiom-firewall/bpf-pins.sh
+
+uninstall_service() {
+    if [ -x "$AXIOM_IMAGE_DAEMON" ]; then
+        "$AXIOM_IMAGE_DAEMON" --uninstall-service || return 1
+    elif [ -x "$AXIOM_BUNDLED_DAEMON" ]; then
+        "$AXIOM_BUNDLED_DAEMON" --uninstall-service || return 1
+    fi
+    return 0
+}
+
+case "$1" in
+    remove|deconfigure)
+        # Belt and braces for a daemon that was killed before it could detach. Only Axiom's own
+        # pins are touched, and only after the kernel confirms nothing is attached: an unavailable
+        # or unreadable bpftool, or a remaining attachment, keeps the pins and fails the removal.
+        if [ ! -r "$AXIOM_BPF_PINS_SCRIPT" ]; then
+            echo "axiom prerm: $AXIOM_BPF_PINS_SCRIPT is missing; cannot verify the BPF layer, keeping $AXIOM_PIN_DIR." >&2
+            exit 1
+        fi
+        . "$AXIOM_BPF_PINS_SCRIPT"
+        if [ -d /run/systemd/system ]; then
+            uninstall_service
+        fi
+        if ! axiom_bpf_pins_remove "$AXIOM_PIN_DIR" /sys/fs/cgroup; then
+            echo "axiom prerm: the BPF layer is in an unknown state; keeping $AXIOM_PIN_DIR for recovery." >&2
+            exit 1
+        fi
+        ;;
+    upgrade|failed-upgrade)
+        ;;
+    *)
+        echo "axiom prerm: unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

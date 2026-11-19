@@ -1,0 +1,175 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:themes="using:Axiom.UI.Avalonia"
+             x:Class="Axiom.Desktop.Avalonia.Linux.App"
+             RequestedThemeVariant="Dark"
+             Name="Axiom">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="Axiom.Window" Color="#0F1216" />
+          <SolidColorBrush x:Key="Axiom.Nav" Color="#0B0F13" />
+          <SolidColorBrush x:Key="Axiom.Surface" Color="#161B22" />
+          <SolidColorBrush x:Key="Axiom.SurfaceAlt" Color="#1B222B" />
+          <SolidColorBrush x:Key="Axiom.Border" Color="#2E3A47" />
+          <SolidColorBrush x:Key="Axiom.BorderStrong" Color="#5A7088" />
+          <SolidColorBrush x:Key="Axiom.TextPrimary" Color="#E6EDF3" />
+          <SolidColorBrush x:Key="Axiom.TextSecondary" Color="#9BA9B8" />
+          <SolidColorBrush x:Key="Axiom.TextMuted" Color="#8A98A8" />
+          <SolidColorBrush x:Key="Axiom.Accent" Color="#5EEAD4" />
+          <SolidColorBrush x:Key="Axiom.AccentSoft" Color="#12332F" />
+          <SolidColorBrush x:Key="Axiom.AccentStrong" Color="#5EEAD4" />
+          <SolidColorBrush x:Key="Axiom.AccentContrast" Color="#062A27" />
+          <SolidColorBrush x:Key="Axiom.Upload" Color="#5EEAD4" />
+          <SolidColorBrush x:Key="Axiom.Download" Color="#7AA2FF" />
+          <SolidColorBrush x:Key="Axiom.Success" Color="#4ADE80" />
+          <SolidColorBrush x:Key="Axiom.Warning" Color="#F2B450" />
+          <SolidColorBrush x:Key="Axiom.Critical" Color="#F87171" />
+          <SolidColorBrush x:Key="Axiom.NavHover" Color="#171E26" />
+          <SolidColorBrush x:Key="Axiom.NavSelected" Color="#15262A" />
+          <SolidColorBrush x:Key="Axiom.GridLine" Color="#222B35" />
+          <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#0B1024" />
+          <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#7F1D1D" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="Axiom.Window" Color="#F2F5F8" />
+          <SolidColorBrush x:Key="Axiom.Nav" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Axiom.Surface" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Axiom.SurfaceAlt" Color="#F6F9FB" />
+          <SolidColorBrush x:Key="Axiom.Border" Color="#DCE3EA" />
+          <SolidColorBrush x:Key="Axiom.BorderStrong" Color="#C3CED9" />
+          <SolidColorBrush x:Key="Axiom.TextPrimary" Color="#101820" />
+          <SolidColorBrush x:Key="Axiom.TextSecondary" Color="#496070" />
+          <SolidColorBrush x:Key="Axiom.TextMuted" Color="#5A6977" />
+          <SolidColorBrush x:Key="Axiom.Accent" Color="#0F766E" />
+          <SolidColorBrush x:Key="Axiom.AccentSoft" Color="#D9F0EC" />
+          <SolidColorBrush x:Key="Axiom.AccentStrong" Color="#0F766E" />
+          <SolidColorBrush x:Key="Axiom.AccentContrast" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Axiom.Upload" Color="#0F766E" />
+          <SolidColorBrush x:Key="Axiom.Download" Color="#2E5BFF" />
+          <SolidColorBrush x:Key="Axiom.Success" Color="#15803D" />
+          <SolidColorBrush x:Key="Axiom.Warning" Color="#B45309" />
+          <SolidColorBrush x:Key="Axiom.Critical" Color="#B91C1C" />
+          <SolidColorBrush x:Key="Axiom.NavHover" Color="#F0F5F8" />
+          <SolidColorBrush x:Key="Axiom.NavSelected" Color="#E4F4F1" />
+          <SolidColorBrush x:Key="Axiom.GridLine" Color="#E6ECF1" />
+          <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#E6F4F1" />
+          <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#B42318" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="{x:Static themes:AxiomThemeVariants.DarkMidnight}">
+          <SolidColorBrush x:Key="Axiom.Window" Color="#0B1024" />
+          <SolidColorBrush x:Key="Axiom.Nav" Color="#080D1C" />
+          <SolidColorBrush x:Key="Axiom.Surface" Color="#121A32" />
+          <SolidColorBrush x:Key="Axiom.SurfaceAlt" Color="#18223C" />
+          <SolidColorBrush x:Key="Axiom.Border" Color="#3A4868" />
+          <SolidColorBrush x:Key="Axiom.BorderStrong" Color="#5C75A0" />
+          <SolidColorBrush x:Key="Axiom.TextPrimary" Color="#EFF3FF" />
+          <SolidColorBrush x:Key="Axiom.TextSecondary" Color="#B1BCD6" />
+          <SolidColorBrush x:Key="Axiom.TextMuted" Color="#8F9EBE" />
+          <SolidColorBrush x:Key="Axiom.Accent" Color="#A5A6FF" />
+          <SolidColorBrush x:Key="Axiom.AccentSoft" Color="#24224A" />
+          <SolidColorBrush x:Key="Axiom.AccentStrong" Color="#A5A6FF" />
+          <SolidColorBrush x:Key="Axiom.AccentContrast" Color="#100E30" />
+          <SolidColorBrush x:Key="Axiom.Upload" Color="#A5A6FF" />
+          <SolidColorBrush x:Key="Axiom.Download" Color="#5AB9FF" />
+          <SolidColorBrush x:Key="Axiom.Success" Color="#56D9A4" />
+          <SolidColorBrush x:Key="Axiom.Warning" Color="#F0BC6C" />
+          <SolidColorBrush x:Key="Axiom.Critical" Color="#FF777F" />
+          <SolidColorBrush x:Key="Axiom.NavHover" Color="#18213B" />
+          <SolidColorBrush x:Key="Axiom.NavSelected" Color="#22234D" />
+          <SolidColorBrush x:Key="Axiom.GridLine" Color="#28334A" />
+          <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#080D1C" />
+          <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#7F1D1D" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="{x:Static themes:AxiomThemeVariants.LightWarm}">
+          <SolidColorBrush x:Key="Axiom.Window" Color="#F8F5F0" />
+          <SolidColorBrush x:Key="Axiom.Nav" Color="#FFFDF9" />
+          <SolidColorBrush x:Key="Axiom.Surface" Color="#FFFDF9" />
+          <SolidColorBrush x:Key="Axiom.SurfaceAlt" Color="#F5EFE7" />
+          <SolidColorBrush x:Key="Axiom.Border" Color="#E7DCCF" />
+          <SolidColorBrush x:Key="Axiom.BorderStrong" Color="#D0C1B1" />
+          <SolidColorBrush x:Key="Axiom.TextPrimary" Color="#2D2927" />
+          <SolidColorBrush x:Key="Axiom.TextSecondary" Color="#6D5B51" />
+          <SolidColorBrush x:Key="Axiom.TextMuted" Color="#6F6258" />
+          <SolidColorBrush x:Key="Axiom.Accent" Color="#A54D39" />
+          <SolidColorBrush x:Key="Axiom.AccentSoft" Color="#F8E1D6" />
+          <SolidColorBrush x:Key="Axiom.AccentStrong" Color="#A54D39" />
+          <SolidColorBrush x:Key="Axiom.AccentContrast" Color="#FFFDF9" />
+          <SolidColorBrush x:Key="Axiom.Upload" Color="#A54D39" />
+          <SolidColorBrush x:Key="Axiom.Download" Color="#2F6F9F" />
+          <SolidColorBrush x:Key="Axiom.Success" Color="#32794D" />
+          <SolidColorBrush x:Key="Axiom.Warning" Color="#A56521" />
+          <SolidColorBrush x:Key="Axiom.Critical" Color="#B63B3F" />
+          <SolidColorBrush x:Key="Axiom.NavHover" Color="#F7F1E9" />
+          <SolidColorBrush x:Key="Axiom.NavSelected" Color="#F5E4DA" />
+          <SolidColorBrush x:Key="Axiom.GridLine" Color="#EDE4D8" />
+          <SolidColorBrush x:Key="Axiom.LogoBackground" Color="#FDF0D5" />
+          <SolidColorBrush x:Key="Axiom.DangerBackground" Color="#B42318" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+    <Style Selector="Button">
+      <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+    </Style>
+    <Style Selector="Button /template/ ContentPresenter">
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+    </Style>
+    <Style Selector="Button:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.Border}" />
+    </Style>
+    <Style Selector="Button:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.BorderStrong}" />
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Axiom.AccentContrast}" />
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Axiom.AccentStrong}" />
+      <Setter Property="Opacity" Value="0.88" />
+    </Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.Accent}" />
+      <Setter Property="Opacity" Value="0.78" />
+    </Style>
+    <Style Selector="ListBox.data-list > ListBoxItem:selected">
+      <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+      <Setter Property="Foreground" Value="{DynamicResource Axiom.TextPrimary}" />
+    </Style>
+    <Style Selector="ListBox.data-list > ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.AccentSoft}" />
+    </Style>
+    <Style Selector="ListBox.data-list > ListBoxItem:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    </Style>
+    <Style Selector="ListBox.data-list > ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.SurfaceAlt}" />
+    </Style>
+    <Style Selector="ListBox.nav-list > ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.NavHover}" />
+    </Style>
+    <Style Selector="ListBox.nav-list > ListBoxItem:selected">
+      <Setter Property="Background" Value="{DynamicResource Axiom.NavSelected}" />
+    </Style>
+    <Style Selector="ListBox.nav-list > ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Axiom.NavSelected}" />
+    </Style>
+  </Application.Styles>
+</Application>

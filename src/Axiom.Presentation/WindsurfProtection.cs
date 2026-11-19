@@ -43,11 +43,17 @@ public sealed class WindsurfProtection
         "blackbox",
         "agent-blackbox");
 
-    private string PythonPath => Path.Combine(BlackboxAgentRoot, "venv", "Scripts", "python.exe");
+    private string PythonPath => AgentPlatform.VenvPython(BlackboxAgentRoot);
 
     public string HookScriptPath => Path.Combine(BlackboxAgentRoot, Marker);
 
-    private string ManagedCommand => $"& \"{PythonPath}\" \"{HookScriptPath}\"";
+    // Windows Cascade hooks run through PowerShell ("powershell" key); macOS/Linux hooks run
+    // through the POSIX shell ("command" key).
+    private static string CommandKey => OperatingSystem.IsWindows() ? "powershell" : "command";
+
+    private string ManagedCommand => OperatingSystem.IsWindows()
+        ? $"& \"{PythonPath}\" \"{HookScriptPath}\""
+        : $"\"{PythonPath}\" \"{HookScriptPath}\"";
 
     public bool IsWindsurfDetected => Directory.Exists(ConfigDirectory) || File.Exists(HooksPath) || AgentBinaryLocator.IsWindsurfAvailable();
 
@@ -192,7 +198,7 @@ public sealed class WindsurfProtection
     }
 
     private bool IsOwnedHandler(JsonObject handler) =>
-        handler["powershell"] is JsonValue value &&
+        handler[CommandKey] is JsonValue value &&
         value.TryGetValue<string>(out var command) &&
         (string.Equals(command, ManagedCommand, StringComparison.OrdinalIgnoreCase) ||
          LegacyHookIdentity.IsLegacyCommand(command));
@@ -238,7 +244,7 @@ public sealed class WindsurfProtection
 
             handlers.Add(new JsonObject
             {
-                ["powershell"] = ManagedCommand,
+                [CommandKey] = ManagedCommand,
                 ["show_output"] = false,
             });
         }
@@ -252,7 +258,7 @@ public sealed class WindsurfProtection
         return true;
     }
 
-    private static string BuildHookScript() => """
+    private static string BuildHookScript() => AgentPlatform.AdaptHookScript("""
         # Managed by Axiom. Calls the local Blackbox guard for Windsurf Cascade pre-hooks.
         import datetime
         import contextlib
@@ -351,5 +357,5 @@ public sealed class WindsurfProtection
 
         if __name__ == "__main__":
             main()
-        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal);
+        """.Replace("# <<AXIOM_COMMAND_GUARD>>", AgentCommandGuard.PythonHelpers, StringComparison.Ordinal));
 }

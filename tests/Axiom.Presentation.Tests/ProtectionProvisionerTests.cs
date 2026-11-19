@@ -7,8 +7,8 @@ namespace Axiom.Presentation.Tests;
 
 public sealed class ProtectionProvisionerTests
 {
-    private const string LocalConfig = @"C:\lab\AppData\Local\hermes\config.yaml";
-    private const string ProfileConfig = @"C:\lab\.hermes\config.yaml";
+    private static readonly string LocalConfig = Path.Combine(@"C:\lab\AppData\Local", "hermes", "config.yaml");
+    private static readonly string ProfileConfig = Path.Combine(@"C:\lab", ".hermes", "config.yaml");
 
     [Fact]
     public void Provision_writes_block_mode_to_the_config_the_guard_reads()
