@@ -80,14 +80,18 @@ if [[ $SKIP_PUBLISH -eq 0 ]]; then
   DOTNET=${DOTNET:-$(command -v dotnet || echo "$HOME/.dotnet/dotnet")}
   [[ -x "$DOTNET" ]] || die "dotnet not found (set DOTNET or use --skip-publish with an existing $PUBLISH)"
   SERVICE_PROJECT=${AXIOM_SERVICE_PROJECT:-$ROOT/src/Axiom.Service/Axiom.Service.csproj}
-  read -r -a WRAP <<<"${DOTNET_WRAPPER:-}"
+  publish_command=("$DOTNET")
+  if [[ -n ${DOTNET_WRAPPER:-} ]]; then
+    read -r -a wrapper <<<"$DOTNET_WRAPPER"
+    publish_command=("${wrapper[@]}" "$DOTNET")
+  fi
   rm -rf "$PUBLISH"
   log "dotnet publish Axiom.Desktop.Avalonia.MacOS ($RID)"
-  "${WRAP[@]}" "$DOTNET" publish "$ROOT/src/Axiom.Desktop.Avalonia.MacOS/Axiom.Desktop.Avalonia.MacOS.csproj" \
+  "${publish_command[@]}" publish "$ROOT/src/Axiom.Desktop.Avalonia.MacOS/Axiom.Desktop.Avalonia.MacOS.csproj" \
     -c Release -r "$RID" --self-contained true -m:2 -nologo -v:q \
     -p:UseAppHost=true -p:PublishSingleFile=false -o "$PUBLISH/app"
   log "dotnet publish Axiom.Service -> axiomd ($RID)"
-  "${WRAP[@]}" "$DOTNET" publish "$SERVICE_PROJECT" \
+  "${publish_command[@]}" publish "$SERVICE_PROJECT" \
     -f net10.0 -c Release -r "$RID" --self-contained true -m:2 -nologo -v:q \
     -p:UseAppHost=true -o "$PUBLISH/service"
   "$DOTNET" build-server shutdown >/dev/null 2>&1 || true
