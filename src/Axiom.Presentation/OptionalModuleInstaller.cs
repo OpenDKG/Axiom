@@ -305,6 +305,14 @@ public sealed class OptionalModuleInstaller
                   } else {
                     $config.autoUpdate.enabled = $false
                   }
+                  if ($null -ne $config.store -and $config.store.backend -eq 'oxigraph-server') {
+                    if ($null -eq $config.store.options) {
+                      $config.store | Add-Member -NotePropertyName options -NotePropertyValue ([pscustomobject]@{})
+                    }
+                    if ($null -eq $config.store.options.walRestartThresholdBytes -or $config.store.options.walRestartThresholdBytes -gt {{ModuleStorageMaintenance.DefaultOxigraphWalRestartThresholdBytes}}) {
+                      $config.store.options | Add-Member -Force -NotePropertyName walRestartThresholdBytes -NotePropertyValue {{ModuleStorageMaintenance.DefaultOxigraphWalRestartThresholdBytes}}
+                    }
+                  }
                   [System.IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
                   Write-Host 'DKG auto-update is disabled; Axiom pins the installed version.' -ForegroundColor Yellow
                 } catch {
@@ -585,7 +593,7 @@ public sealed class OptionalModuleInstaller
               # verify the plugin. A vendor failure stays a warning: the Axiom guard runs from the
               # vendored venv and is unaffected (issue #370).
               try {
-                $deps = @('cryptography', 'cffi', 'psutil', 'fastapi', 'uvicorn', 'ruamel.yaml', 'pyyaml', 'python-dotenv', 'rich', 'aiohttp')
+                $deps = @('cryptography', 'cffi', 'psutil', 'fastapi', 'uvicorn', 'ruamel.yaml', 'pyyaml', 'python-dotenv', 'rich', 'aiohttp', 'pywin32')
                 $base = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'hermes\tools') -Directory -Filter 'python-*' -ErrorAction SilentlyContinue |
                   ForEach-Object { Join-Path $_.FullName 'python.exe' } | Where-Object { Test-Path $_ } | Select-Object -First 1
                 if ($base) {
@@ -704,6 +712,7 @@ public sealed class OptionalModuleInstaller
         if (!string.IsNullOrWhiteSpace(effectiveHome))
         {
             startInfo.Environment["DKG_HOME"] = effectiveHome;
+            ModuleStorageMaintenance.EnsureOxigraphWalMaintenance(Path.Combine(effectiveHome, "config.json"));
         }
 
         try
@@ -982,9 +991,12 @@ public sealed class OptionalModuleInstaller
             return;
         }
 
+        var importCheck = OperatingSystem.IsWindows()
+            ? "-c \"import cryptography, fastapi, uvicorn, aiohttp, psutil, ruamel.yaml, yaml, rich, pywintypes\""
+            : "-c \"import cryptography, fastapi, uvicorn, aiohttp, psutil, ruamel.yaml, yaml, rich\"";
         if (LocalModuleRuntime.RunProcess(
                 python,
-                "-c \"import cryptography, fastapi, uvicorn, aiohttp, psutil, ruamel.yaml, yaml, rich\"",
+                importCheck,
                 log: null,
                 TimeSpan.FromSeconds(30)))
         {
@@ -992,9 +1004,12 @@ public sealed class OptionalModuleInstaller
         }
 
         log?.Invoke("Repair: installing the missing Blackbox dashboard dependencies...");
+        var pipPackages = OperatingSystem.IsWindows()
+            ? "cryptography cffi psutil fastapi uvicorn ruamel.yaml pyyaml python-dotenv rich aiohttp pywin32"
+            : "cryptography cffi psutil fastapi uvicorn ruamel.yaml pyyaml python-dotenv rich aiohttp";
         LocalModuleRuntime.RunProcess(
             python,
-            "-m pip install --disable-pip-version-check --quiet cryptography cffi psutil fastapi uvicorn ruamel.yaml pyyaml python-dotenv rich aiohttp",
+            $"-m pip install --disable-pip-version-check --quiet {pipPackages}",
             log,
             TimeSpan.FromMinutes(10));
     }

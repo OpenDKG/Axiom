@@ -52,9 +52,9 @@ public static class UpgradeDataGuard
     /// files and froze the machine because these were included.
     /// </summary>
     private static readonly string[] SkipDirectories =
-        ["oxigraph-data", "node_modules", "venv", ".git", "__pycache__", "cache"];
+        ["oxigraph-data", "oxigraph", "swm-public-snapshots", "rfc64-sync", "node_modules", "venv", ".git", "__pycache__", "cache"];
 
-    private static readonly string[] SkipExtensions = [".log", ".tmp", ".etl"];
+    private static readonly string[] SkipExtensions = [".log", ".tmp", ".etl", ".exe", ".dll"];
 
     /// <summary>Individual files above this size are regenerable data, not findings or identity.</summary>
     private const long MaxFileBytes = 32L * 1024 * 1024;
