@@ -1,8 +1,8 @@
 ﻿# Authors and attribution
 
-Axiom is developed in the canonical repository <https://github.com/a-51-50/Axiom>,
-currently private during active development, and is licensed under **GPL-3.0-or-later**
-(see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE)).
+Axiom's canonical upstream is <https://github.com/a-51-50/Axiom>. Team development
+and downloads are at <https://github.com/OpenDKG/Axiom>. The project is licensed under
+**GPL-3.0-or-later** (see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE)).
 
 This file separates roles that are often confused. Git commit authorship is not treated as proof of
 copyright ownership, and nothing here transfers rights.

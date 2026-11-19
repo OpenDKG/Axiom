@@ -1,22 +1,23 @@
 # Axiom
 
-**Free Open-Source Network & AI Agent Security**
+**Local network control and protection for AI coding agents.**
 
-**Version:** 1.4.2 | **Repository:** https://github.com/a-51-50/Axiom | **License:** GPL-3.0-or-later
+[Download Windows 1.4.2](https://github.com/OpenDKG/Axiom/releases/tag/v1.4.2)
+· [All releases](https://github.com/OpenDKG/Axiom/releases)
+· [Pentest results](docs/PENTESTING.md)
+· [Project website](https://opendkg.org/axiom/)
+· [GPL-3.0-or-later](LICENSE)
 
-> The repository is private during active development. The source license remains
-> GPL-3.0-or-later; public source availability will be confirmed before a public release.
+Axiom monitors which apps use the network and gives you local control over connections and DNS.
+With optional agent hooks, it can inspect supported coding agents' tool calls and block
+policy-defined actions before a tool runs. The core Windows app works without an account,
+Blackbox, or a DKG node.
 
 > **Development build - use at your own risk.** Axiom is under active development and may contain
 > defects, incomplete features or regressions. Firewall changes can interrupt connectivity, DNS
 > changes can break name resolution, and agent hooks can block tools or files. Do not rely on it as
 > your only security control. Where possible, test firewall and DNS changes in a VM, keep backups
 > and keep a recovery path.
-
-> **What Axiom is.** An agent-first endpoint security application: it protects the computer from the
-> agents that run on it and protects those agents from the world they read, using Agent Blackbox
-> hooks, an honest enforcement receipt, an OS network boundary and a verifiable DKG memory. See
-> [docs/AXIOM_OVERVIEW.md](docs/AXIOM_OVERVIEW.md).
 
 ## Project Leadership & Founding Team
 
@@ -39,6 +40,8 @@ Members of Axiom's founding development team, contributing to its long-term tech
 cross-platform development and maintenance. The team is expanding Axiom across Windows, Linux and
 macOS; platform-specific responsibilities and actual implementations are documented separately as
 development progresses.
+
+**Development and downloads:** [OpenDKG/Axiom](https://github.com/OpenDKG/Axiom)
 
 **Canonical upstream:** [a-51-50/Axiom](https://github.com/a-51-50/Axiom)
 
@@ -63,7 +66,7 @@ network peers when deliberately enabled.
 Axiom brings together four surfaces:
 
 - **Network visibility and history** for TCP/UDP IPv4/IPv6 sockets and applications.
-- **Axiom Shield** â€” one switch that installs the elevated local service and turns the ask policy
+- **Axiom Shield** — one switch that installs the elevated local service and turns the ask policy
   on: every new outbound application waits for Block or Allow, and blocks are Axiom-owned Windows
   Firewall rules with read-back verification and recovery.
 - **Local privacy controls** including Privacy Shield DNS filtering and a read-only AI analyst.
@@ -73,21 +76,38 @@ Axiom brings together four surfaces:
 Blackbox and OriginTrail DKG are optional. Axiom works without either; when present, they add
 agent-level guardrails and signed threat-intelligence context respectively.
 
-## Current release and quick links
+## Downloads
 
-**Release notes:** [1.4.2](docs/RELEASES/1.4.2.md). Axiom's **core protection is local-first**: Windows Firewall rules, stored DNS policy and network monitoring do not require Blackbox or DKG. Optional integrations can sync or share data externally when configured and approved.
+| Platform | Published build |
+| --- | --- |
+| Windows x64 | [1.4.2](https://github.com/OpenDKG/Axiom/releases/tag/v1.4.2), installer and portable ZIP. See the [release notes](docs/RELEASES/1.4.2.md). |
+| Linux amd64 | [1.3.0 Core Preview 2](https://github.com/OpenDKG/Axiom/releases/tag/v1.3.0-linux-preview.2), Debian package. |
+| macOS Intel | [1.3.0 Developer Preview 2](https://github.com/OpenDKG/Axiom/releases/tag/v1.3.0-macos-preview.2), ad hoc-signed app archive. The system extension has separate activation and signing requirements. |
 
-> **Version numbering:** development builds were previously numbered `0.10.x`. A short reset produced `0.2.0` and `0.3.0`, but GitHub orders releases by semantic version, which hid them below `0.10.25`. The public release line resumed at `0.11.0` and continues in the `1.x` series. `scripts/build-release.ps1` refuses a version that is not greater than the highest existing `v*` tag.
+For Windows, choose **Axiom-Setup.exe** for installation or the ZIP for the portable build.
+Verify the package against its published SHA-256. The platform previews have their own feature
+and install limits in their release notes.
 
-- [Install and first-run modes](docs/INSTALL.md) â€” core vs Complete setup and required privileges.
-- [Architecture](docs/ARCHITECTURE.md) â€” Avalonia UI, local service, Windows Firewall and optional components.
-- [Security model](docs/SECURITY_MODEL.md) â€” what stays on-device, what can leave and where protection can fail open.
+### Quick links
+
+- [Install and first-run modes](docs/INSTALL.md) — core vs Complete setup and required privileges.
+- [Architecture](docs/ARCHITECTURE.md) — Avalonia UI, local service, Windows Firewall and optional components.
+- [Security model](docs/SECURITY_MODEL.md) — what stays on-device, what can leave and where protection can fail open.
 - [Threat intelligence lifecycle](docs/THREAT_INTELLIGENCE.md) - Axiom sightings, Blackbox reports, community sharing, verified graph and SWM/VM provenance.
 - [Appearance and Axiom Glass](docs/APPEARANCE.md) - themes, current glass styling and what is not yet implemented.
 - [Donate crypto](https://opendkg.org/donate/) — support Axiom and OpenDKG with ETH.
-- [Full historical changelog](docs/CHANGELOG.md) â€” release-by-release detail from earlier README versions.
+- [Full historical changelog](docs/CHANGELOG.md) — release-by-release detail from earlier README versions.
 
 > **Do not equate a locally connected module with fresh DKG synchronization, or a signed community report with a verified threat.** Agent hooks can fail open when their local guard is unavailable. A DNS fallback can preserve connectivity while bypassing Privacy Shield filtering.
+
+## Pentest results
+
+In a controlled Windows VM, the November 2026 lab snapshot recorded **3,189 blocks**
+and **810 allows** from **3,999 explicit hook decisions** across 11 harness categories.
+A separate targeted sweep expected **13 blocks and 2 allowed controls** per harness.
+These are project-reported lab observations. The [results and limits](docs/PENTESTING.md)
+explain what the tests measured, and the [evidence gallery](https://opendkg.org/axiom/pentesting)
+shows the charts and captures.
 
 ## What it covers
 
@@ -294,12 +314,12 @@ The optional community feed can display reputation evidence from a chosen HTTPS 
 
 ```text
 Unprivileged Avalonia UI (WPF fallback retained in source)
-   â”‚  local Named Pipe (explicit ACL, client SID check)
-   â–¼
+   │  local Named Pipe (explicit ACL, client SID check)
+   ▼
 Windows Service
-   â”œâ”€ IP Helper inventory and process attribution
-   â”œâ”€ bounded aggregation and local SQLite history
-   â””â”€ owned-rule coordinator â†’ Windows Firewall
+   ├─ IP Helper inventory and process attribution
+   ├─ bounded aggregation and local SQLite history
+   └─ owned-rule coordinator → Windows Firewall
 ```
 
 - The UI never runs as administrator and never receives a generic shell or "execute" command.
@@ -372,7 +392,7 @@ copyright and grant. Third-party components and their licenses are listed in
 [`TRADEMARKS.md`](TRADEMARKS.md). The roles of creators, copyright holders, maintainers and
 contributors are described in [`AUTHORS.md`](AUTHORS.md).
 
-The installed application shows the same information under **Settings â†’ About Axiom**, including the
+The installed application shows the same information under **Settings → About Axiom**, including the
 full GPL text, the notice, the third-party list and the source repository. Those documents are
 embedded in the application, so they remain readable offline.
 

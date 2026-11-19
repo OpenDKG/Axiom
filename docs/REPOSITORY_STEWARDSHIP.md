@@ -29,8 +29,7 @@ administration, revenue rights or legal ownership.
 
 The canonical repository remains [a-51-50/Axiom](https://github.com/a-51-50/Axiom). Project titles do
 not transfer GitHub ownership, copyright, trademarks, signing authority or legal rights, and the
-existing signed founder agreements and contributor obligations are unaffected. The planned OpenDKG
-fork relationship described below is unchanged.
+existing signed founder agreements and contributor obligations are unaffected.
 
 The complete Git history (commits, timestamps and Git author metadata) is the technical record
 of contributions. [AUTHORS.md](../AUTHORS.md) records project origin and credited roles.
@@ -66,29 +65,16 @@ CODEOWNERS does not establish legal ownership. Listing several owners requests r
 owners; it is not a legal or merge-authority grant. Branch protection and rulesets are configured
 separately and must not prevent a platform maintainer from working on their platform.
 
-## Optional future OpenDKG repository
+## OpenDKG working repository
 
-**No transfer, fork or synchronization is authorized or performed by this document.**
+[OpenDKG/Axiom](https://github.com/OpenDKG/Axiom) hosts team development and
+distribution copies of Axiom releases. The original discussion history and official package
+builds stay with the canonical upstream.
 
-The intended arrangement, if approved later, is:
-
-1. Keep `a-51-50/Axiom` as the canonical upstream, maintaining original administration,
-   issues, PRs, releases and security-advisory workflow there.
-2. Once the project is deliberately made public after a disclosure/security review,
-   an OpenDKG organization repository may be created as a **fork** of that public upstream.
-   It will preserve the upstream Git commits, but have separate organization permissions,
-   settings, issues, PRs, releases and workflows.
-3. Prefer changes via pull requests **to the canonical upstream**. Keep a future OpenDKG fork
-   synchronized deliberately and label it clearly as a fork; it does not become the release
-   authority by default. A fork is not a live, bidirectional mirror.
-4. Do not automate destructive `git push --mirror` operations, publish private branches,
-   or expose confidential CI logs and materials without separate approval.
-5. GitHub organization owners can administer repositories inside that organization, including
-   its forks. They do not become administrators of the personal upstream merely by operating
-   an organization fork. Existing collaborator access on the upstream is separate.
-
-If OpenDKG is to distribute an **official** Axiom build, agree the release and trademark
-permissions separately; the fork itself does not convey those privileges.
+The upstream importer advances the separate `opendkg/sync-main` review branch from
+OpenDKG's `main`. A maintainer opens and reviews the corresponding upstream PR.
+Organization owners administer the OpenDKG repository. Upstream collaborator access
+is managed separately. See the [working-repository guide](OPENDKG_WORKFLOW.md).
 
 ## Checklist before making Axiom public
 
