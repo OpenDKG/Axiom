@@ -228,6 +228,13 @@ public static class LocalModuleRuntime
     /// <summary>Runs a short hidden PowerShell script and mirrors its output to the caller's log.</summary>
     public static bool RunHiddenPowerShell(string script, Action<string>? log, TimeSpan timeout)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            // The module scripts (process cleanup, uninstall) use Windows PowerShell and CIM.
+            log?.Invoke(OptionalModuleInstaller.UnsupportedInstallMessage);
+            return false;
+        }
+
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         return RunProcess(
             OptionalModuleInstaller.ResolvePowerShellExecutable(),

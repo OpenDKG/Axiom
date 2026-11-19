@@ -1,0 +1,23 @@
+# (e) disconnect / reconnect
+$ sw_vers; csrutil status; defaults read /Applications/Axiom.app/Contents/Info.plist CFBundleShortVersionString; defaults read /Applications/Axiom.app/Contents/Info.plist CFBundleVersion; systemextensionsctl list | grep -i 'axiom.*activated'; id -un
+ProductName:		macOS
+ProductVersion:		15.8.3
+BuildVersion:		24H241
+System Integrity Protection status: disabled.
+0.17.0
+10
+*	*	-	com.axiom.firewall.filter (0.17.0/10)	Axiom Firewall Filter	[activated enabled]
+dev
+== [01:03:31.968Z] versions: {"rc":0}
+== [01:03:32.016Z] baseline: {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372868,"ackedGeneration":1794372868,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}
+== [01:03:32.117Z] rule.apply block /usr/bin/curl: {"success":true,"state":"applied","errorCode":null,"verifiedUtc":"2026-11-14T01:03:32.09618+00:00","message":null}
+== [01:03:34.150Z] connected (expect verified + curl blocked): {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372869,"ackedGeneration":1794372869,"appliedRuleCount":1,"rejectedRules":[],"fileError":null},"rules":[{"managedRuleId":"5ec0a000-0000-4000-8000-00000000000e","state":"applied","lastVerifiedUtc":"2026-11-14T01:03:32.09618+00:00","lastError":null}]},"curl":{"rc":7,"http":"000","blocked":true}}
+$ '/Applications/Axiom.app/Contents/MacOS/axiom-sysext' disable
+{"appBundle":"/Applications/Axiom.app","command":"disable","exitCode":0,"extensionIdentifier":"com.axiom.firewall.filter","filter":{"configured":true,"dataProvider":"com.axiom.firewall.filter","description":"Axiom Firewall","enabled":false},"ok":true,"state":"disabled"}
+== [01:03:34.258Z] disable: {"rc":0}
+== [01:03:35.829Z] disabled (expect degraded/not connected, rule not verified; curl 200 is consistent): {"rulesQuery":{"status":"degraded","reason":"The AxiomFilter network extension is disconnected (last seen 2026-11-14 01:03:34Z); published rules are not known to be enforced.","filter":{"state":"degraded","connected":false,"publishedGeneration":1794372869,"ackedGeneration":1794372869,"appliedRuleCount":1,"rejectedRules":[],"fileError":null},"rules":[{"managedRuleId":"5ec0a000-0000-4000-8000-00000000000e","state":"pending","lastVerifiedUtc":"2026-11-14T01:03:32.09618+00:00","lastError":null}]},"curl":{"rc":0,"http":"200","blocked":false}}
+== [01:03:35.830Z] rule.verify (disabled): {"presentInOs":true,"matchesSpec":true,"effectiveAction":null,"enforcementVerified":false,"filterRejectionReason":null,"notes":["rules.json generation 1794372869.","AxiomFilter is disconnected (last seen 2026-11-14 01:03:34Z); the rule is published but not known to be enforced."]}
+$ '/Applications/Axiom.app/Contents/MacOS/axiom-sysext' enable
+{"appBundle":"/Applications/Axiom.app","command":"enable","exitCode":0,"extensionIdentifier":"com.axiom.firewall.filter","filter":{"configured":true,"dataProvider":"com.axiom.firewall.filter","description":"Axiom Firewall","enabled":true},"ok":true,"state":"enabled"}
+== [01:03:35.865Z] enable: {"rc":0}
+Connection to 127.0.0.1 closed by remote host.

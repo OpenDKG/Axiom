@@ -1,0 +1,47 @@
+name: Axiom 1.4.3 macOS Intel preview package
+
+on:
+  push:
+    branches: [codex/release-1.4.3-macos-preview]
+
+permissions:
+  contents: read
+
+jobs:
+  build-preview:
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    env:
+      AVALONIA_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Run macOS filter and desktop tests
+        run: |
+          mkdir -p /tmp/axiom-release
+          export TMPDIR=/tmp/axiom-release
+          bash macos/build.sh test
+          dotnet test tests/Axiom.Infrastructure.MacOS.Tests -c Release
+          dotnet test tests/Axiom.Desktop.Avalonia.MacOS.Tests -c Release
+      - name: Package and verify the Intel app
+        run: |
+          AXIOM_BUILD=20 bash scripts/macos/package-app.sh osx-x64 --build-filter
+          app=build/macos/osx-x64/Axiom.app
+          codesign --verify --deep --strict "$app"
+          test -d "$app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension"
+          test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = 1.4.3
+          test "$(lipo -archs "$app/Contents/MacOS/Axiom")" = x86_64
+          mkdir -p release-preview
+          ditto -c -k --sequesterRsrc --keepParent "$app" release-preview/Axiom-1.4.3-20-osx-x64-adhoc.zip
+          cd release-preview
+          shasum -a 256 Axiom-1.4.3-20-osx-x64-adhoc.zip > SHA256SUMS.txt
+      - name: Record the source commit
+        run: git rev-parse HEAD > release-preview/SOURCE-COMMIT.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: axiom-1.4.3-macos-preview
+          path: release-preview/
+          if-no-files-found: error
+          compression-level: 0

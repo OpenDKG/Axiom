@@ -11,7 +11,9 @@ public sealed class EnforcementPolicyProvisionerTests
     [Fact]
     public void Default_policy_is_an_enabled_block_policy_for_every_harness()
     {
-        var json = EnforcementPolicyProvisioner.BuildDefaultPolicy(@"C:\Users\lab");
+        // Path.Combine joins with the host separator, so the profile has to be a host path.
+        var profile = OperatingSystem.IsWindows() ? @"C:\Users\lab" : "/home/lab";
+        var json = EnforcementPolicyProvisioner.BuildDefaultPolicy(profile);
         var root = JsonNode.Parse(json)!.AsObject();
 
         Assert.True(root["enabled"]!.GetValue<bool>());
@@ -30,7 +32,7 @@ public sealed class EnforcementPolicyProvisionerTests
             {
                 Assert.True(ruleIds.Add(rule!["ruleId"]!.GetValue<string>()));
                 Assert.Equal("block", rule["effect"]!.GetValue<string>());
-                Assert.StartsWith(@"C:\Users\lab\", rule["targetScope"]!.GetValue<string>(), StringComparison.Ordinal);
+                Assert.StartsWith(profile + Path.DirectorySeparatorChar, rule["targetScope"]!.GetValue<string>(), StringComparison.Ordinal);
             }
         }
 
@@ -39,7 +41,7 @@ public sealed class EnforcementPolicyProvisionerTests
         Assert.Equal(EnforcementPolicyProvisioner.ProtectedScopes.Count, resources.Count);
         Assert.Contains(
             resources,
-            resource => resource!["scope"]!.GetValue<string>().EndsWith(@"\.ssh", StringComparison.Ordinal));
+            resource => resource!["scope"]!.GetValue<string>().EndsWith(Path.DirectorySeparatorChar + ".ssh", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -121,5 +123,21 @@ public sealed class EnforcementPolicyProvisionerTests
             {
             }
         }
+    }
+
+    [Fact]
+    public void Defaults_write_nothing_off_windows()
+    {
+        // Off Windows the defaults would be /usr/share and the runner's real home; the provisioner
+        // must refuse them. On Windows this would write ProgramData, so the check stops there.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Assert.Null(EnforcementPolicyProvisioner.EnsureDefault());
+        Assert.Null(EnforcementPolicyProvisioner.EnsureDefault(userProfile: "/home/lab"));
+        Assert.Null(EnforcementPolicyProvisioner.EnsureMachineDefault());
+        Assert.False(File.Exists(EnforcementPolicyProvisioner.ResolvePath()));
     }
 }

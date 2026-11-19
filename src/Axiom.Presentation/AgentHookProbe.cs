@@ -132,7 +132,7 @@ public sealed class AgentHookProbe
     private async Task<AgentHookTestResult> TestCodexAsync(CancellationToken cancellationToken)
     {
         var root = Path.Combine(_localAppData, "Axiom", "modules", "blackbox", "agent-blackbox");
-        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(root);
         var hook = Path.Combine(root, "axiom-codex-hook.py");
         if (!File.Exists(python) || !IsManagedScript(hook))
         {
@@ -205,7 +205,7 @@ public sealed class AgentHookProbe
     private async Task<AgentHookTestResult> TestClaudeAsync(CancellationToken cancellationToken)
     {
         var root = Path.Combine(_localAppData, "Axiom", "modules", "blackbox", "agent-blackbox");
-        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(root);
         var hook = Path.Combine(root, "axiom-claude-hook.py");
         if (!File.Exists(python) || !IsManagedScript(hook))
         {
@@ -256,7 +256,7 @@ public sealed class AgentHookProbe
     private async Task<AgentHookTestResult> TestCursorAsync(CancellationToken cancellationToken)
     {
         var root = Path.Combine(_localAppData, "Axiom", "modules", "blackbox", "agent-blackbox");
-        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(root);
         var hook = Path.Combine(root, "axiom-cursor-hook.py");
         if (!File.Exists(python) || !IsManagedScript(hook))
         {
@@ -321,7 +321,7 @@ public sealed class AgentHookProbe
     private async Task<AgentHookTestResult> TestCopilotAsync(CancellationToken cancellationToken)
     {
         var root = Path.Combine(_localAppData, "Axiom", "modules", "blackbox", "agent-blackbox");
-        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(root);
         var hook = Path.Combine(root, "axiom-copilot-hook.py");
         if (!File.Exists(python) || !IsManagedScript(hook))
         {
@@ -386,7 +386,7 @@ public sealed class AgentHookProbe
     private async Task<AgentHookTestResult> TestGeminiAsync(CancellationToken cancellationToken)
     {
         var root = Path.Combine(_localAppData, "Axiom", "modules", "blackbox", "agent-blackbox");
-        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(root);
         var hook = Path.Combine(root, "axiom-gemini-hook.py");
         if (!File.Exists(python) || !IsManagedScript(hook))
         {
@@ -504,7 +504,7 @@ public sealed class AgentHookProbe
     private async Task<AgentHookTestResult> TestWindsurfAsync(CancellationToken cancellationToken)
     {
         var root = Path.Combine(_localAppData, "Axiom", "modules", "blackbox", "agent-blackbox");
-        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(root);
         var hook = Path.Combine(root, "axiom-windsurf-hook.py");
         if (!File.Exists(python) || !IsManagedScript(hook))
         {
@@ -560,7 +560,7 @@ public sealed class AgentHookProbe
     private async Task<AgentHookTestResult> TestClineAsync(CancellationToken cancellationToken)
     {
         var root = Path.Combine(_localAppData, "Axiom", "modules", "blackbox", "agent-blackbox");
-        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(root);
         var hook = Path.Combine(_userProfile, "Documents", "Cline", "Hooks", "PreToolUse.py");
         if (!File.Exists(python) || !IsManagedScript(hook))
         {
@@ -633,7 +633,7 @@ public sealed class AgentHookProbe
         CancellationToken cancellationToken)
     {
         var root = Path.Combine(_localAppData, "Axiom", "modules", "blackbox", "agent-blackbox");
-        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(root);
         var hook = Path.Combine(root, scriptName);
         if (!File.Exists(python) || !IsManagedScript(hook))
         {
@@ -686,7 +686,7 @@ public sealed class AgentHookProbe
     private async Task<AgentHookTestResult> TestOpenCodeAsync(string label, CancellationToken cancellationToken)
     {
         var root = Path.Combine(_localAppData, "Axiom", "modules", "blackbox", "agent-blackbox");
-        var python = Path.Combine(root, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(root);
         var plugin = Path.Combine(
             _userProfile,
             ".config",

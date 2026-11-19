@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!--
+      macOS-only runtime behaviour ('/' paths, File.SetUnixFileMode, launchd/sysext wording): the
+      project still compiles everywhere, but `dotnet test Axiom.sln` on a Windows runner skips it.
+    -->
+    <IsTestProject Condition="!$([MSBuild]::IsOSPlatform('Windows'))">true</IsTestProject>
+    <IsTestProject Condition="$([MSBuild]::IsOSPlatform('Windows'))">false</IsTestProject>
+    <RootNamespace>Axiom.Infrastructure.MacOS.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Axiom.Infrastructure.MacOS\Axiom.Infrastructure.MacOS.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared with the Swift tests (macos/Tests/main.swift): the rule-semantics contract. -->
+    <None Include="..\..\macos\Tests\fixtures\rules-cases.json" Link="fixtures\rules-cases.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

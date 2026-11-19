@@ -1,0 +1,22 @@
+==>   /Users/dev/axiom/macos/build/com.axiom.firewall.filter.systemextension
+==>   /Users/dev/axiom/macos/build/axiom-sysext
+==>   /Users/dev/axiom/macos/build/libAxiomSysext.dylib
+==> adding the filter extension and axiom-sysext from macos/build
+==> adding libAxiomSysext.dylib (in-process activation)
+==> codesign axiomd and its runtime (Contents/Resources/service)
+==>   signed 15 files, left 212 non-Mach-O files to the bundle seal
+/Users/dev/axiom/build/macos/osx-x64/Axiom.app/Contents/Resources/service/axiomd: replacing existing signature
+==> codesign the .NET runtime and libraries (Contents/MacOS)
+==>   signed 229 files, left 0 non-Mach-O files to the bundle seal
+==> codesign Axiom.app (ad hoc, app group group.com.axiom.firewall)
+/Users/dev/axiom/build/macos/osx-x64/Axiom.app: replacing existing signature
+==> signed bundle: /Users/dev/axiom/build/macos/osx-x64/Axiom.app
+==> installer: /Users/dev/axiom/build/macos/osx-x64/Axiom.pkg (unsigned unless AXIOM_INSTALLER_IDENTITY="Developer ID Installer: …")
+==> install (bundle only): sudo rm -rf /Applications/Axiom.app && sudo ditto '/Users/dev/axiom/build/macos/osx-x64/Axiom.app' /Applications/Axiom.app
+INSTALLED
+IPC write commands are allowed for uid 501 (installing user), root and members of the admin group.
+Log rotation: /etc/newsyslog.d/com.axiom.service.conf (5 MB, keep 5, compressed).
+Installed and started system/com.axiom.service from /Library/PrivilegedHelperTools/com.axiom.service (/Library/LaunchDaemons/com.axiom.service.plist).
+DAEMON-UPGRADED
+deploy rc=0
+DONE

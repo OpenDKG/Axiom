@@ -82,7 +82,9 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public bool IsAutostartSupported { get; }
 
-    public string MilestoneText => $"{Axiom.Contracts.ProductMilestone.Current} · Windows-first";
+    public string MilestoneText => OperatingSystem.IsMacOS()
+        ? $"{Axiom.Contracts.ProductMilestone.Current} · macOS port"
+        : $"{Axiom.Contracts.ProductMilestone.Current} · Windows-first";
 
     public string ProtocolText { get; }
 
@@ -92,9 +94,13 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     public string PollText { get; }
 
-    public string StorageText => @"%LOCALAPPDATA%\Axiom\axiom.db (service mode)";
+    public string StorageText => OperatingSystem.IsMacOS()
+        ? "/Library/Application Support/Axiom/axiom.db (daemon)"
+        : @"%LOCALAPPDATA%\Axiom\axiom.db (service mode)";
 
-    public string OsText => Environment.OSVersion.VersionString;
+    public string OsText => OperatingSystem.IsMacOS()
+        ? "macOS " + Environment.OSVersion.Version.ToString(3)
+        : Environment.OSVersion.VersionString;
 
     public string ProcessText =>
         $"{RuntimeInformation.ProcessArchitecture} · 64-bit process: " +

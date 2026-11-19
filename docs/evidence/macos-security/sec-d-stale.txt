@@ -1,0 +1,29 @@
+# (d) stale generation
+$ sw_vers; csrutil status; defaults read /Applications/Axiom.app/Contents/Info.plist CFBundleShortVersionString; defaults read /Applications/Axiom.app/Contents/Info.plist CFBundleVersion; systemextensionsctl list | grep -i 'axiom.*activated'; id -un
+ProductName:		macOS
+ProductVersion:		15.8.3
+BuildVersion:		24H241
+System Integrity Protection status: disabled.
+0.17.0
+10
+*	*	-	com.axiom.firewall.filter (0.17.0/10)	Axiom Firewall Filter	[activated enabled]
+dev
+== [01:03:19.206Z] versions: {"rc":0}
+== [01:03:19.241Z] filter pid: "4967"
+== [01:03:19.297Z] baseline: {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372866,"ackedGeneration":1794372866,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}
+$ sudo -n kill -STOP 4967 && ps -o pid,stat,comm -p 4967
+  PID STAT COMM
+ 4967 Ts   /Library/SystemExtensions/2A580C3D-1FE0-43CE-B4B4-549345E47EFD/com.axiom.firewall.filter.systemextension/Contents/MacOS/com.axiom.firewall.filter
+== [01:03:19.345Z] freeze filter: {"rc":0}
+== [01:03:21.420Z] rule.apply while the filter cannot ack (expect pending): {"success":true,"state":"pending","errorCode":null,"verifiedUtc":null,"message":null}
+== [01:03:21.422Z] rule.apply duration s: 2.1
+== [01:03:21.423Z] rules.query (expect published > acked, rule pending): {"status":"available","reason":"AxiomFilter has not acknowledged rules generation 1794372867 yet (last acknowledged 1794372866).","filter":{"state":"pending","connected":true,"publishedGeneration":1794372867,"ackedGeneration":1794372866,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[{"managedRuleId":"5ec0a000-0000-4000-8000-00000000000d","state":"pending","lastVerifiedUtc":null,"lastError":null}]}
+== [01:03:21.424Z] rule.verify (expect enforcementVerified false): {"presentInOs":true,"matchesSpec":true,"effectiveAction":null,"enforcementVerified":false,"filterRejectionReason":null,"notes":["rules.json generation 1794372867.","AxiomFilter acknowledged generation 1794372866, not 1794372867; enforcement of this table is pending."]}
+$ sudo -n kill -CONT 4967 && ps -o pid,stat,comm -p 4967
+  PID STAT COMM
+ 4967 Ss   /Library/SystemExtensions/2A580C3D-1FE0-43CE-B4B4-549345E47EFD/com.axiom.firewall.filter.systemextension/Contents/MacOS/com.axiom.firewall.filter
+== [01:03:21.458Z] thaw filter: {"rc":0}
+== [01:03:21.484Z] after thaw (expect fresh ack: verified, rule applied, curl blocked): {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372867,"ackedGeneration":1794372867,"appliedRuleCount":1,"rejectedRules":[],"fileError":null},"rules":[{"managedRuleId":"5ec0a000-0000-4000-8000-00000000000d","state":"applied","lastVerifiedUtc":null,"lastError":null}]},"curl":{"rc":7,"http":"000","blocked":true}}
+== [01:03:21.486Z] rule.verify (after ack): {"presentInOs":true,"matchesSpec":true,"effectiveAction":"block","enforcementVerified":true,"filterRejectionReason":null,"notes":["rules.json generation 1794372867.","AxiomFilter acknowledged generation 1794372867 at 2026-11-14 01:03:21Z."]}
+== [01:03:21.575Z] rule.remove: {"success":true,"state":"desired","errorCode":null,"verifiedUtc":"2026-11-14T01:03:21.574156+00:00","message":null}
+== [01:03:23.638Z] after remove (expect 0 rules, curl 200): {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372868,"ackedGeneration":1794372868,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}

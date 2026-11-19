@@ -1,0 +1,92 @@
+# (b2) daemon log continuity across newsyslog rotation
+Sat Nov 14 14:27:59 UTC 2026
+$ cat /etc/newsyslog.d/com.axiom.service.conf
+# Axiom daemon log rotation (written by axiomd --install-service, removed by --uninstall-service).
+# logfilename	[owner:group]	mode	count	size	when	flags	[/pid_file]	[sig_num]
+/Library/Logs/Axiom/axiomd.log	root:wheel	600	5	5120	*	J	/var/run/axiomd.pid	1
+daemon pid (launchctl) 22221
+$ ls -l /var/run/axiomd.pid ; cat /var/run/axiomd.pid
+-rw-r--r--  1 root  daemon  6 Nov 14 06:27 /var/run/axiomd.pid
+22221
+$ before: stat (mode owner size inode name)
+drwx------ root:wheel 224 196383 /Library/Logs/Axiom
+-rw------- root:wheel 157 343227 /Library/Logs/Axiom/axiomd.log
+-rw------- root:wheel 1370 343233 /Library/Logs/Axiom/axiomd.log.0.bz2
+-rw------- root:wheel 986 324045 /Library/Logs/Axiom/axiomd.log.1.bz2
+-rw------- root:wheel 1153 321321 /Library/Logs/Axiom/axiomd.log.2.bz2
+-rw------- root:wheel 3247 318184 /Library/Logs/Axiom/axiomd.log.3.bz2
+$ before: axiomd fds on axiomd.log
+COMMAND   PID USER   FD     TYPE             DEVICE SIZE/OFF                NODE NAME
+axiomd  22221 root    1w     REG                1,7      157              343227 /Library/Logs/Axiom/axiomd.log
+axiomd  22221 root    2w     REG                1,7      157              343227 /Library/Logs/Axiom/axiomd.log
+axiomd  22221 root    7u     REG                1,7     6433              324031 /axiomd.log.0
+axiomd  22221 root    8u     REG                1,7     6433              324031 /axiomd.log.0
+axiomd  22221 root   50w     REG                1,7      157              343227 /Library/Logs/Axiom/axiomd.log
+== [14:28:00.038Z] apply (before rotation): {"success":true,"state":"applied","errorCode":null,"verifiedUtc":"2026-11-14T14:28:00.030067+00:00","message":null}
+== [14:28:00.082Z] remove (before rotation): {"success":true,"state":"desired","errorCode":null,"verifiedUtc":"2026-11-14T14:28:00.081311+00:00","message":null}
+$ stat after the marker writes
+drwx------ root:wheel 224 196383 /Library/Logs/Axiom
+-rw------- root:wheel 157 343227 /Library/Logs/Axiom/axiomd.log
+-rw------- root:wheel 1370 343233 /Library/Logs/Axiom/axiomd.log.0.bz2
+-rw------- root:wheel 986 324045 /Library/Logs/Axiom/axiomd.log.1.bz2
+-rw------- root:wheel 1153 321321 /Library/Logs/Axiom/axiomd.log.2.bz2
+-rw------- root:wheel 3247 318184 /Library/Logs/Axiom/axiomd.log.3.bz2
+$ sudo -n newsyslog -F -v -f /etc/newsyslog.d/com.axiom.service.conf
+/Library/Logs/Axiom/axiomd.log <5J>: size (Kb): 4 [5120] --> trimming log....
+Signal all daemon process(es)...
+Notified daemon pid 22221 = /var/run/axiomd.pid
+Pause 10 seconds to allow daemon(s) to close log file(s)
+Compress all rotated log file(s)...
+rc=0
+$ after rotation: stat
+drwx------ root:wheel 256 196383 /Library/Logs/Axiom
+-rw------- root:wheel 157 343247 /Library/Logs/Axiom/axiomd.log
+-rw------- root:wheel 206 343260 /Library/Logs/Axiom/axiomd.log.0.bz2
+-rw------- root:wheel 1370 343233 /Library/Logs/Axiom/axiomd.log.1.bz2
+-rw------- root:wheel 986 324045 /Library/Logs/Axiom/axiomd.log.2.bz2
+-rw------- root:wheel 1153 321321 /Library/Logs/Axiom/axiomd.log.3.bz2
+-rw------- root:wheel 3247 318184 /Library/Logs/Axiom/axiomd.log.4.bz2
+$ after rotation: axiomd fds on axiomd.log (expect the NEW inode)
+COMMAND   PID USER   FD     TYPE             DEVICE SIZE/OFF                NODE NAME
+axiomd  22221 root    1w     REG                1,7      157              343247 /Library/Logs/Axiom/axiomd.log
+axiomd  22221 root    2w     REG                1,7      157              343247 /Library/Logs/Axiom/axiomd.log
+axiomd  22221 root    7u     REG                1,7     6433              324031 /axiomd.log.0
+axiomd  22221 root    8u     REG                1,7     6433              324031 /axiomd.log.0
+axiomd  22221 root   50w     REG                1,7      157              343247 /Library/Logs/Axiom/axiomd.log
+== [14:28:14.647Z] apply (after rotation): {"success":true,"state":"applied","errorCode":null,"verifiedUtc":"2026-11-14T14:28:14.637186+00:00","message":null}
+== [14:28:14.697Z] remove (after rotation): {"success":true,"state":"desired","errorCode":null,"verifiedUtc":"2026-11-14T14:28:14.695804+00:00","message":null}
+$ after the marker writes: stat (expect axiomd.log to grow, .0.bz2 unchanged)
+drwx------ root:wheel 256 196383 /Library/Logs/Axiom
+-rw------- root:wheel 157 343247 /Library/Logs/Axiom/axiomd.log
+-rw------- root:wheel 206 343260 /Library/Logs/Axiom/axiomd.log.0.bz2
+-rw------- root:wheel 1370 343233 /Library/Logs/Axiom/axiomd.log.1.bz2
+-rw------- root:wheel 986 324045 /Library/Logs/Axiom/axiomd.log.2.bz2
+-rw------- root:wheel 1153 321321 /Library/Logs/Axiom/axiomd.log.3.bz2
+-rw------- root:wheel 3247 318184 /Library/Logs/Axiom/axiomd.log.4.bz2
+$ sudo -n tail -n 8 /Library/Logs/Axiom/axiomd.log
+Nov 14 06:28:01 Axioms-iMac newsyslog[22409]: logfile turned over due to -F request
+2026-11-14T14:28:01.225Z axiomd[22221]: log reopened (signal), reopen #2
+$ same daemon pid?
+pid 22221
+$ non-root admin dev: ls / cat
+ls: /Library/Logs/Axiom: Permission denied
+total 0
+cat: /Library/Logs/Axiom/axiomd.log: Permission denied
+$ sudo -n -u axtest2 cat /Library/Logs/Axiom/axiomd.log
+cat: /Library/Logs/Axiom/axiomd.log: Permission denied
+$ sudo -n -u axtest2 cat /Library/Logs/Axiom/axiomd.log.0.bz2
+cat: /Library/Logs/Axiom/axiomd.log.0.bz2: Permission denied
+$ sudo -n -u axtest2 cat /Library/Logs/Axiom/axiomd.log.1.bz2
+cat: /Library/Logs/Axiom/axiomd.log.1.bz2: Permission denied
+$ sudo -n -u axtest2 cat /Library/Logs/Axiom/axiomd.log.2.bz2
+cat: /Library/Logs/Axiom/axiomd.log.2.bz2: Permission denied
+$ sudo -n -u axtest2 cat /Library/Logs/Axiom/axiomd.log.3.bz2
+cat: /Library/Logs/Axiom/axiomd.log.3.bz2: Permission denied
+$ sudo -n -u axtest2 cat /Library/Logs/Axiom/axiomd.log.4.bz2
+cat: /Library/Logs/Axiom/axiomd.log.4.bz2: Permission denied
+$ sudo -n -u axtest2 ls -l /Library/Logs/Axiom
+ls: /Library/Logs/Axiom: Permission denied
+total 0
+$ id axtest2; dseditgroup -o checkmember -m axtest2 admin
+uid=502(axtest2) gid=20(staff) groups=20(staff),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),702(com.apple.sharepoint.group.2),704(com.apple.sharepoint.group.4),100(_lpoperator),705(com.apple.sharepoint.group.5),703(com.apple.sharepoint.group.3)
+no axtest2 is NOT a member of admin

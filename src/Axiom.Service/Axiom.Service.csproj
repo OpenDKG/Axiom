@@ -1,12 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    One service, two hosts (docs/MACOS_ARCHITECTURE.md):
+      net10.0-windows  Windows service "Axiom" (unchanged): named pipe, Windows Firewall, IP Helper.
+      net10.0          macOS launchd daemon "axiomd": Unix socket, AxiomFilter, libproc, networksetup.
+    Shared workers live here; transport/adapters come from the platform infrastructure projects.
+    Publish macOS with: dotnet publish -f net10.0 -r osx-x64|osx-arm64 -c Release
+  -->
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFrameworks>net10.0-windows;net10.0</TargetFrameworks>
     <RootNamespace>Axiom.Service</RootNamespace>
-    <AssemblyName>Axiom.Service</AssemblyName>
     <AssemblyTitle>Axiom Service</AssemblyTitle>
     <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>Axiom.Service</AssemblyName>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <OutputType>Exe</OutputType>
+    <AssemblyName>axiomd</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,12 +31,20 @@
   <ItemGroup>
     <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
     <ProjectReference Include="..\Axiom.Core\Axiom.Core.csproj" />
-    <ProjectReference Include="..\Axiom.Infrastructure.Windows\Axiom.Infrastructure.Windows.csproj" />
     <ProjectReference Include="..\Axiom.Persistence\Axiom.Persistence.csproj" />
+    <ProjectReference Include="..\Axiom.Service.Hosting\Axiom.Service.Hosting.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <ProjectReference Include="..\Axiom.Infrastructure.Windows\Axiom.Infrastructure.Windows.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <Compile Remove="Platform\ServicePlatform.Unix.cs;Platform\MachineStateSecurity.Unix.cs;Platform\FilterEventWorker.cs;Platform\UnixAssemblyInfo.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <ProjectReference Include="..\Axiom.Infrastructure.MacOS\Axiom.Infrastructure.MacOS.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <Compile Remove="Platform\ServicePlatform.Windows.cs;Platform\ServiceInfo.Windows.cs;ServiceInstaller.cs;ServiceImageProtection.cs;MachineStateSecurity.cs;PrivacyDnsFailSafe.cs;AgentFirewallEnforcer.cs;ProcessSpawnAuditWorker.cs" />
   </ItemGroup>
 
   <ItemGroup>

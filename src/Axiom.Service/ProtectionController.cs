@@ -4,7 +4,6 @@ using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Protection;
 using Axiom.Core.Firewall;
 using Axiom.Core.Protection;
-using Axiom.Infrastructure.Windows.Firewall;
 using Microsoft.Extensions.Logging;
 
 namespace Axiom.Service;
@@ -75,7 +74,7 @@ public sealed partial class ProtectionController(
         {
             Enabled = settings.Enabled,
             ServiceElevated = ProtectionWriteConsent.IsServiceHost,
-            WriteGateOpen = WindowsFirewallPolicyAdapter.IsWriteGateOpen,
+            WriteGateOpen = FirewallWriteGate.IsOpen,
             AccountName = CurrentAccount(),
             DefaultPolicy = settings.DefaultPolicy,
             Pending = queue.Pending,
@@ -100,7 +99,9 @@ public sealed partial class ProtectionController(
             if (!ProtectionWriteConsent.IsServiceHost)
             {
                 return await GetStatusLockedAsync(
-                    "Axiom Shield needs the Axiom Windows service. Approve the administrator prompt to install it.",
+                    OperatingSystem.IsWindows()
+                        ? "Axiom Shield needs the Axiom Windows service. Approve the administrator prompt to install it."
+                        : "Axiom Shield needs the axiomd system daemon. Install it with administrator rights.",
                     cancellationToken).ConfigureAwait(false);
             }
 
@@ -232,7 +233,10 @@ public sealed partial class ProtectionController(
                         .ConfigureAwait(false);
                     if (!removed.Success)
                     {
-                        error = $"Could not remove the existing block: {removed.ErrorMessage}";
+                        // The block is still in force, so the allow decision is not recorded.
+                        return await GetStatusLockedAsync(
+                            $"Could not remove the existing block: {removed.ErrorMessage}",
+                            cancellationToken).ConfigureAwait(false);
                     }
                 }
             }
@@ -435,6 +439,10 @@ public sealed partial class ProtectionController(
     }
 
     /// <summary>
+    /// Re-applies the agent lockdown to executables that appeared after the switch was enabled.
+    /// Idempotent: the deterministic rule id is upserted, so repeated calls are cheap.
+    /// </summary>
+    /// <summary>
     /// Applies an existing decision to an updated install path. An application that was allowed or
     /// blocked in one versioned folder keeps that decision when the updater moves it to a new
     /// version or hash folder, instead of asking again. A block also creates the outbound rule for
@@ -601,6 +609,11 @@ public sealed partial class ProtectionController(
     {
         try
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                return Environment.UserName;
+            }
+
             using var identity = WindowsIdentity.GetCurrent();
             return identity.Name;
         }

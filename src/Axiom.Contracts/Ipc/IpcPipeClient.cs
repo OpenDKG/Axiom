@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.IO.Pipes;
+using System.Net.Sockets;
 using System.Text.Json;
 
 namespace Axiom.Contracts.Ipc;
@@ -9,6 +10,13 @@ public sealed class IpcClientException(string code, string message, Exception? i
     : Exception(message, inner)
 {
     public string Code { get; } = code;
+
+    /// <summary>
+    /// True when the service itself answered with this error. False for transport failures
+    /// (no socket/pipe, refused, denied, timed out, closed without a reply): the service was not
+    /// reached, so its state is unknown.
+    /// </summary>
+    public bool ServiceResponded { get; init; }
 }
 
 /// <summary>
@@ -35,7 +43,7 @@ public sealed class IpcPipeClient(
         {
             await using var pipe = new NamedPipeClientStream(
                 ".",
-                pipeName,
+                IpcPipe.Resolve(pipeName),
                 PipeDirection.InOut,
                 PipeOptions.Asynchronous);
 
@@ -69,7 +77,10 @@ public sealed class IpcPipeClient(
             {
                 throw new IpcClientException(
                     response.Error?.Code ?? IpcErrorCodes.InternalError,
-                    response.Error?.Message ?? "The service rejected the request.");
+                    response.Error?.Message ?? "The service rejected the request.")
+                {
+                    ServiceResponded = true,
+                };
             }
 
             if (response.Result is not { } result)
@@ -123,6 +134,22 @@ public sealed class IpcPipeClient(
             throw new IpcClientException(
                 IpcErrorCodes.Unauthorized,
                 "Access to the service pipe was denied.",
+                exception);
+        }
+        catch (SocketException exception) when (!OperatingSystem.IsWindows())
+        {
+            // On Unix the pipe stream is a Unix domain socket: .NET retries ENOENT/ECONNREFUSED
+            // until the connect timeout (reported above as unavailable) but rethrows any other
+            // connect error raw. Right after a daemon restart the socket exists before its mode is
+            // set (EACCES); that must be the same typed failure, not an exception no caller
+            // expects. Windows named pipes never raise socket errors.
+            throw new IpcClientException(
+                exception.SocketErrorCode == SocketError.AccessDenied
+                    ? IpcErrorCodes.Unauthorized
+                    : IpcErrorCodes.ServiceUnavailable,
+                exception.SocketErrorCode == SocketError.AccessDenied
+                    ? "Access to the service socket was denied."
+                    : $"The service socket could not be reached ({exception.SocketErrorCode}).",
                 exception);
         }
     }

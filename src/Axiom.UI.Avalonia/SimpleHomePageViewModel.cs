@@ -72,31 +72,52 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
 
     public bool HasAgentActivity => RecentAgentActivity.Count > 0;
 
-    public bool IsShieldActive => Firewall.ShieldEnabled;
+    public bool IsShieldActive => Firewall.ProtectionKnown && Firewall.ShieldEnabled;
 
-    public bool IsFullyProtected => Firewall.ShieldEnabled && PrivacyShield.Enabled;
+    public bool IsFullyProtected => Firewall.ShieldLevel == EnforcementLevel.Protected && PrivacyShield.Enabled;
 
-    public string HeroBadgeText => Firewall.ShieldEnabled
-        ? (PrivacyShield.Enabled ? "PROTECTED" : "SHIELD ACTIVE")
-        : "MONITORING ONLY";
+    /// <summary>Shield on, but the platform filter has not proven enforcement (off Windows only).</summary>
+    public bool IsShieldUnverified => Firewall.ShieldLevel == EnforcementLevel.Degraded;
 
-    public string HeroHeadlineText => Firewall.ShieldEnabled
-        ? (PrivacyShield.Enabled ? "Your computer is protected" : "Firewall Shield is protecting your apps")
-        : "Firewall protection is off";
+    public string HeroBadgeText => !Firewall.ProtectionKnown
+        ? "STATUS UNKNOWN"
+        : IsShieldUnverified
+            ? "NOT VERIFIED"
+            : Firewall.ShieldEnabled
+            ? (PrivacyShield.Enabled ? "PROTECTED" : "SHIELD ACTIVE")
+            : "MONITORING ONLY";
 
-    public string HeroSummaryText => Firewall.ShieldEnabled
-        ? (PrivacyShield.Enabled
-            ? "Axiom Shield checks new outbound apps and Privacy Shield is actively filtering ads and trackers."
-            : "Axiom Shield asks before unfamiliar apps connect to the internet. You can also turn on the Ad & Tracker Blocker below.")
-        : "Axiom is monitoring internet usage in read-only mode. Turn on Firewall Shield to control which apps may connect.";
+    public string HeroHeadlineText => !Firewall.ProtectionKnown
+        ? "Protection status is unknown"
+        : IsShieldUnverified
+            ? "Shield is on, blocking is not verified"
+            : Firewall.ShieldEnabled
+            ? (PrivacyShield.Enabled ? "Your computer is protected" : "Firewall Shield is protecting your apps")
+            : "Firewall protection is off";
 
-    public string ShieldButtonText => Firewall.ShieldEnabled ? "Turn Shield Off" : "Turn Shield On";
+    public string HeroSummaryText => !Firewall.ProtectionKnown
+        ? "Axiom could not read the local service, so it cannot confirm whether Shield is on. Open Firewall to check."
+        : IsShieldUnverified
+            ? $"Axiom Shield is on, but the {PlatformText.Firewall} has not confirmed enforcement yet ({Firewall.Enforcement.NotVerifiedReason}). Open Firewall to check."
+            : Firewall.ShieldEnabled
+            ? (PrivacyShield.Enabled
+                ? "Axiom Shield checks new outbound apps and Privacy Shield is actively filtering ads and trackers."
+                : "Axiom Shield asks before unfamiliar apps connect to the internet. You can also turn on the Ad & Tracker Blocker below.")
+            : "Axiom is monitoring internet usage in read-only mode. Turn on Firewall Shield to control which apps may connect.";
 
-    public string FirewallStatusText => Firewall.ShieldEnabled
-        ? (Firewall.PendingCount > 0
-            ? $"Active — {Firewall.PendingCount} app(s) waiting for your decision"
-            : "Active — monitoring and guarding outbound apps")
-        : Firewall.ShieldStatusText;
+    // Off Windows an unknown state offers only a check (opens Network Control), never Off/On:
+    // the toggle would send enable/disable to a daemon whose state is unknown.
+    public string ShieldButtonText => !OperatingSystem.IsWindows() && !Firewall.ProtectionKnown
+        ? "Check Firewall"
+        : Firewall.ShieldEnabled ? "Turn Shield Off" : "Turn Shield On";
+
+    public string FirewallStatusText => !Firewall.ProtectionKnown
+        ? "Unknown — the local service did not answer"
+        : Firewall.ShieldEnabled
+            ? (Firewall.PendingCount > 0
+                ? $"Active — {Firewall.PendingCount} app(s) waiting for your decision"
+                : "Active — monitoring and guarding outbound apps")
+            : Firewall.ShieldStatusText;
 
     public string PrivacyStatusText => PrivacyShield.Enabled
         ? $"Blocking {PrivacyShield.BlockedCountText} trackers & ads ({PrivacyShield.QueriesCountText} checks)"
@@ -113,15 +134,29 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
             ? "AI Agent Guard is active and monitoring coding-assistant sessions locally."
             : "AI Agent modules are optional — switch to Advanced mode to inspect or configure them.";
 
+    /// <summary>
+    /// Off Windows no Blackbox host hook is proven yet, so agent protection is not verified: the
+    /// tile never says READY there, and it never reads the firewall or BPF state (network
+    /// enforcement is not agent protection). Only a verified host/OS deny reported by the
+    /// enforcement controller may say ACTIVE. Windows keeps its wording.
+    /// </summary>
+    private static bool AgentGuardUnproven => !OperatingSystem.IsWindows();
+
     public string AgentGuardBadgeText =>
-        Agents.Security.BlackboxConnected || Agents.Enforcement.CanClaimVerifiedBlocking
+        AgentGuardUnproven
+            ? Agents.Enforcement.CanClaimVerifiedBlocking ? "ACTIVE" : "NOT VERIFIED"
+            : Agents.Security.BlackboxConnected || Agents.Enforcement.CanClaimVerifiedBlocking
             ? "ACTIVE"
             : Agents.Security.ProtectedAgents.Count > 0
                 ? "DETECTED"
                 : "READY";
 
     public string AgentGuardStatusText =>
-        Agents.Security.BlackboxConnected
+        AgentGuardUnproven && !Agents.Enforcement.CanClaimVerifiedBlocking
+            ? Agents.Security.BlackboxConnected
+                ? $"Blackbox guard connected · {Agents.Security.ProtectedAgents.Count} AI tool(s) watched · blocking is not verified on {PlatformText.OsName}"
+                : $"Unsupported on {PlatformText.OsName} for now: Blackbox host hooks are not verified here, so AI agents are not protected"
+            : Agents.Security.BlackboxConnected
             ? $"{Agents.Security.ProtectedAgents.Count} AI tool(s) watched · {Agents.BlockedFindingCount} blocked threat(s)"
             : Agents.Security.ProtectedAgents.Count > 0
                 ? $"{Agents.Security.ProtectedAgents.Count} local AI tool(s) found · {Agents.BlockedFindingCount} blocked"
@@ -153,6 +188,12 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
     [RelayCommand]
     private void ToggleShield()
     {
+        if (!OperatingSystem.IsWindows() && !Firewall.ProtectionKnown)
+        {
+            _openFirewall();
+            return;
+        }
+
         if (Firewall.ToggleShieldCommand.CanExecute(null))
         {
             Firewall.ToggleShieldCommand.Execute(null);
@@ -245,6 +286,7 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
     {
         OnPropertyChanged(nameof(IsShieldActive));
         OnPropertyChanged(nameof(IsFullyProtected));
+        OnPropertyChanged(nameof(IsShieldUnverified));
         OnPropertyChanged(nameof(HeroBadgeText));
         OnPropertyChanged(nameof(HeroHeadlineText));
         OnPropertyChanged(nameof(HeroSummaryText));

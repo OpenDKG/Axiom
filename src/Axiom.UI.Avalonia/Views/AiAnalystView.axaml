@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
+             xmlns:presentation="using:Axiom.Presentation"
              xmlns:converters="using:Avalonia.Data.Converters"
              x:Class="Axiom.UI.Avalonia.Views.AiAnalystView">
   <Grid RowDefinitions="Auto,Auto,*" Margin="24,18,24,24">
@@ -34,7 +35,7 @@
         <Grid ColumnDefinitions="1*,12,1*,12,1*">
           <StackPanel Grid.Column="0" Spacing="4">
             <controls:AxiomSelectableTextBlock Text="API key (optional)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
-            <TextBox Text="{Binding ApiKeyInput}" PasswordChar="●" PlaceholderText="stored with DPAPI" />
+            <TextBox Text="{Binding ApiKeyInput}" PasswordChar="●" PlaceholderText="{x:Static presentation:PlatformText.ApiKeyPlaceholder}" />
           </StackPanel>
           <StackPanel Grid.Column="2" Spacing="4">
             <controls:AxiomSelectableTextBlock Text="Verifier model (optional)" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />

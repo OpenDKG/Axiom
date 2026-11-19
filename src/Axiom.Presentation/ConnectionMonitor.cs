@@ -41,6 +41,9 @@ public sealed class ConnectionMonitor : IDisposable
 
     public string? LastError { get; private set; }
 
+    /// <summary>The failure behind <see cref="LastError"/>; null after a successful poll.</summary>
+    public Exception? LastException { get; private set; }
+
     public bool IsRunning => _timer.IsEnabled;
 
     public event EventHandler? Updated;
@@ -93,6 +96,7 @@ public sealed class ConnectionMonitor : IDisposable
                 }
 
                 LastError = null;
+                LastException = null;
                 Apply(snapshot);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -109,6 +113,7 @@ public sealed class ConnectionMonitor : IDisposable
                 }
 
                 LastError = exception.Message;
+                LastException = exception;
             }
 
             if (!_disposed)

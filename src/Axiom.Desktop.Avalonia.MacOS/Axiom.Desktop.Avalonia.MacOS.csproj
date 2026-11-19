@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    macOS desktop host (Contents/MacOS/Axiom inside Axiom.app). It references only the portable
+    projects: the axiomd daemon owns monitoring, firewall and DNS; this process talks to it over
+    /var/run/axiom/axiom.sock and manages the AxiomFilter system extension through axiom-sysext.
+    Plain net10.0 so it builds on Linux (dotnet publish -r osx-x64|osx-arm64).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Axiom.Desktop.Avalonia.MacOS</RootNamespace>
+    <AssemblyName>Axiom</AssemblyName>
+    <AssemblyTitle>Axiom</AssemblyTitle>
+    <UseAppHost>true</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
+    <ProjectReference Include="..\Axiom.UI.Avalonia\Axiom.UI.Avalonia.csproj" />
+    <ProjectReference Include="..\Axiom.Presentation\Axiom.Presentation.csproj" />
+    <ProjectReference Include="..\Axiom.Persistence\Axiom.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Axiom.Desktop.Avalonia.MacOS.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\community\feed.json"
+             Link="community\feed.json"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Keeps packages.lock.json identical for normal restore and self-contained publish. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

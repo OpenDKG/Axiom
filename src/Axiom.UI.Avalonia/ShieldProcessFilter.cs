@@ -22,8 +22,10 @@ internal static class ShieldProcessFilter
     private static readonly string ProgramFilesX86 =
         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
-    private static readonly string ProgramData =
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+    // CommonApplicationData is /usr/share on Unix; only the Windows ProgramData root is trusted.
+    private static readonly string ProgramData = OperatingSystem.IsWindows()
+        ? Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)
+        : string.Empty;
 
     private static readonly string LocalAppData =
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -52,14 +54,16 @@ internal static class ShieldProcessFilter
             IsUnder(path, Path.Combine(ProgramFiles, "Microsoft")) ||
             IsUnder(path, Path.Combine(ProgramFilesX86, "Microsoft")) ||
             IsUnder(path, Path.Combine(ProgramFiles, "WindowsApps")) ||
-            IsUnder(path, Path.Combine(ProgramData, "Microsoft")))
+            IsUnder(path, Path.Combine(ProgramData, "Microsoft")) ||
+            (OperatingSystem.IsMacOS() && (IsMacSystemPath(path) || IsMacOwnPath(path, OwnBundleRoot))))
         {
             return true;
         }
 
         // Axiom must never ask the user to block Axiom itself: the desktop, the service, the
         // optional modules and their runtimes live under these roots.
-        if (IsUnder(path, Path.Combine(LocalAppData, "Programs", "Axiom")) ||
+        if ((OperatingSystem.IsLinux() && IsLinuxOwnPath(path)) ||
+            IsUnder(path, Path.Combine(LocalAppData, "Programs", "Axiom")) ||
             IsUnder(path, Path.Combine(LocalAppData, "Axiom")) ||
             IsUnder(path, Path.Combine(ProgramFiles, "Axiom")) ||
             IsUnder(path, Path.Combine(ProgramFilesX86, "Axiom")))
@@ -72,6 +76,12 @@ internal static class ShieldProcessFilter
 
     private static bool IsMicrosoftSigned(string path)
     {
+        // Authenticode only exists on Windows; macOS signers are handled by the desktop host.
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
         try
         {
 #pragma warning disable SYSLIB0057 // CreateFromSignedFile is the API that reads Authenticode data from an executable.
@@ -94,6 +104,81 @@ internal static class ShieldProcessFilter
             return false;
         }
     }
+
+    /// <summary>
+    /// macOS counterpart of the Windows directory: the sealed, SIP-protected system volume
+    /// (Apple daemons and command-line tools), equivalent to ignoring C:\Windows.
+    /// </summary>
+    internal static bool IsMacSystemPath(string path) =>
+        MacSystemRoots.Any(root => path.StartsWith(root + "/", StringComparison.Ordinal));
+
+    /// <summary>
+    /// True when <paramref name="path"/> lies inside Axiom's own .app bundle. The bundled axiomd
+    /// daemon forwards Privacy Shield queries upstream itself, so prompting for it (and letting the
+    /// user block it) would only break the resolver.
+    /// </summary>
+    internal static bool IsInOwnBundle(string path, string? bundleRoot) =>
+        !string.IsNullOrEmpty(bundleRoot) &&
+        path.StartsWith(bundleRoot + "/", StringComparison.Ordinal);
+
+    /// <summary>Returns "/Applications/Axiom.app" for a base directory inside that bundle.</summary>
+    internal static string? BundleRootOf(string baseDirectory)
+    {
+        var index = baseDirectory.IndexOf(".app/", StringComparison.Ordinal);
+        return index < 0 ? null : baseDirectory[..(index + 4)];
+    }
+
+    private static readonly string? OwnBundleRoot =
+        OperatingSystem.IsMacOS() ? BundleRootOf(AppContext.BaseDirectory) : null;
+
+    /// <summary>
+    /// macOS counterpart of the Program Files roots: the running bundle, the installed
+    /// <c>/Applications/Axiom.app</c>, the root daemon copy launchd runs from
+    /// <c>/Library/PrivilegedHelperTools/com.axiom.service</c> (PrivilegedHelperLayout.HelperDirectory
+    /// in Axiom.Infrastructure.MacOS, which this assembly does not reference; the label is
+    /// <see cref="Axiom.Presentation.MacBundleLayout.DaemonLabel"/>) and the activated content-filter
+    /// system extension under /Library/SystemExtensions. Matched case-sensitively.
+    /// </summary>
+    internal static bool IsMacOwnPath(string path, string? runningBundleRoot) =>
+        IsInOwnBundle(path, runningBundleRoot) ||
+        MacOwnRoots.Any(root => path.StartsWith(root + "/", StringComparison.Ordinal)) ||
+        IsMacFilterExtension(path);
+
+    internal const string MacHelperDirectory =
+        "/Library/PrivilegedHelperTools/" + Axiom.Presentation.MacBundleLayout.DaemonLabel;
+
+    internal const string MacInstalledBundle = "/Applications/Axiom.app";
+
+    /// <summary>Bundle of the AxiomFilter system extension (scripts/macos/package-app.sh EXT_ID).</summary>
+    internal const string MacFilterExtensionBundle = "com.axiom.firewall.filter.systemextension";
+
+    private static readonly string[] MacOwnRoots = [MacHelperDirectory, MacInstalledBundle];
+
+    /// <summary>/Library/SystemExtensions/&lt;UUID&gt;/com.axiom.firewall.filter.systemextension/...</summary>
+    private static bool IsMacFilterExtension(string path)
+    {
+        const string root = "/Library/SystemExtensions/";
+        if (!path.StartsWith(root, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var parts = path[root.Length..].Split('/');
+        return parts.Length > 2 && string.Equals(parts[1], MacFilterExtensionBundle, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Linux counterpart of the Program Files roots: the packaged bundle (desktop and its bundled
+    /// axiomd under /opt/axiom) and the root-owned daemon image the service stages into
+    /// /usr/libexec/axiom. Matched case-sensitively, as the file system is.
+    /// </summary>
+    internal static bool IsLinuxOwnPath(string path) =>
+        LinuxOwnRoots.Any(root => path.StartsWith(root + "/", StringComparison.Ordinal));
+
+    private static readonly string[] LinuxOwnRoots = ["/opt/axiom", "/usr/libexec/axiom"];
+
+    private static readonly string[] MacSystemRoots =
+        ["/System", "/usr/libexec", "/usr/sbin", "/usr/bin", "/sbin", "/bin"];
 
     private static bool IsUnder(string path, string root)
     {

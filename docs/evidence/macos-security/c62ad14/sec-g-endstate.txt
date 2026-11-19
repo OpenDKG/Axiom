@@ -1,0 +1,7 @@
+# end state
+Sat Nov 14 14:28:56 UTC 2026
+	state = running
+	pid = 22639
+*	*	-	com.axiom.firewall.filter (0.17.0/10)	Axiom Firewall Filter	[activated enabled]
+22639 root             /Library/PrivilegedHelperTools/com.axiom.service/axiomd
+== [14:28:56.810Z] state: {"rulesQuery":{"status":"available","reason":null,"filter":{"state":"verified","connected":true,"publishedGeneration":1794372920,"ackedGeneration":1794372920,"appliedRuleCount":0,"rejectedRules":[],"fileError":null},"rules":[]},"curl":{"rc":0,"http":"200","blocked":false}}

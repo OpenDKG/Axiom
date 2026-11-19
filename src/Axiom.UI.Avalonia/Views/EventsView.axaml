@@ -5,7 +5,7 @@
   <Grid RowDefinitions="Auto,Auto,*" Margin="24,18,24,24">
     <Border Grid.Row="0" Classes="card" Padding="14">
       <StackPanel Spacing="8">
-        <Grid ColumnDefinitions="Auto,14,Auto,14,*,14,Auto,10,Auto">
+        <Grid ColumnDefinitions="Auto,14,Auto,14,*,14,Auto,10,Auto,10,Auto">
           <StackPanel Grid.Column="0" Spacing="5">
             <controls:AxiomSelectableTextBlock Text="Range" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11" />
             <ComboBox Width="96" ItemsSource="{Binding Ranges}" SelectedItem="{Binding SelectedRange}" />
@@ -21,9 +21,9 @@
           <StackPanel Grid.Column="6" VerticalAlignment="Bottom" Spacing="5" Margin="0,0,0,2">
             <CheckBox Content="Group by application" IsChecked="{Binding IsGroupedByApp}" Foreground="{DynamicResource Axiom.TextPrimary}" />
           </StackPanel>
-          <Button Grid.Column="7" Content="Refresh" Command="{Binding RefreshCommand}"
+          <Button Grid.Column="8" Content="Refresh" Command="{Binding RefreshCommand}"
                   VerticalAlignment="Bottom" Padding="12,6" />
-          <StackPanel Grid.Column="8" Orientation="Horizontal" Spacing="6" VerticalAlignment="Bottom">
+          <StackPanel Grid.Column="10" Orientation="Horizontal" Spacing="6" VerticalAlignment="Bottom">
             <Button Content="Export CSV" Command="{Binding ExportCsvCommand}"
                     IsEnabled="{Binding CanExport}" Classes="primary" Padding="12,6" />
             <Button Content="Export JSON" Command="{Binding ExportJsonCommand}"

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Firewall;
-using Axiom.Infrastructure.Windows.Ipc;
+using Axiom.Service.Hosting.Ipc;
 using Xunit;
 
 namespace Axiom.Infrastructure.Windows.Tests;

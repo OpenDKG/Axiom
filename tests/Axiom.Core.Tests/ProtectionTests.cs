@@ -102,22 +102,36 @@ public sealed class ProtectionTests
     [Fact]
     public void Pending_detector_marks_agents_and_respects_the_limit()
     {
+        // Native path per OS: Windows-style rule paths are rejected off Windows (#441).
+        var windows = OperatingSystem.IsWindows();
+        var agent = windows ? @"C:\Tools\opencode.exe" : "/usr/local/bin/opencode";
         var now = DateTimeOffset.UtcNow;
         var connections = Enumerable.Range(0, 10)
-            .Select(index => Connection($@"C:\Apps\app{index}.exe", now.AddSeconds(-index), false, ConnectionDirection.Outbound))
-            .Append(Connection(@"C:\Tools\opencode.exe", now.AddSeconds(-20), false, ConnectionDirection.Outbound))
+            .Select(index => Connection(windows ? $@"C:\Apps\app{index}.exe" : $"/opt/apps/app{index}", now.AddSeconds(-index), false, ConnectionDirection.Outbound))
+            .Append(Connection(agent, now.AddSeconds(-20), false, ConnectionDirection.Outbound))
             .ToList();
 
         var pending = PendingAppDetector.Detect(connections, [], limit: 5);
 
         Assert.Equal(5, pending.Count);
         Assert.True(pending[0].IsAgent);
-        Assert.Equal(@"C:\Tools\opencode.exe", pending[0].AppPath);
+        Assert.Equal(agent, pending[0].AppPath);
     }
 
     [Fact]
     public void Agent_executable_detection_is_name_and_path_based()
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            // Native separators only (#441): POSIX agent paths match, Windows shapes do not.
+            Assert.True(AgentExecutables.IsAgentPath("/usr/local/bin/opencode"));
+            Assert.True(AgentExecutables.IsAgentPath("/home/me/.local/bin/codex"));
+            Assert.False(AgentExecutables.IsAgentPath(@"C:\Tools\opencode.exe"));
+            Assert.False(AgentExecutables.IsAgentPath("/usr/bin/nautilus"));
+            Assert.False(AgentExecutables.IsAgentPath(string.Empty));
+            return;
+        }
+
         Assert.True(AgentExecutables.IsAgentPath(@"C:\Tools\opencode.exe"));
         Assert.True(AgentExecutables.IsAgentPath(@"C:\Users\me\AppData\Local\Programs\@openchamberelectron\resources\opencode-cli\opencode.exe"));
         Assert.True(AgentExecutables.IsAgentPath(@"C:\Tools\Codex.exe"));
@@ -149,10 +163,12 @@ public sealed class ProtectionTests
     [Fact]
     public void Every_non_loopback_range_passes_rule_validation()
     {
+        // Native path per OS: Windows-style rule paths are rejected off Windows (#441).
+        var agent = OperatingSystem.IsWindows() ? @"C:\Tools\opencode.exe" : "/usr/local/bin/opencode";
         var spec = new RuleSpec
         {
-            ManagedRuleId = RuleIdentity.ForApp(@"C:\Tools\opencode.exe", FirewallDirection.Outbound),
-            AppPath = @"C:\Tools\opencode.exe",
+            ManagedRuleId = RuleIdentity.ForApp(agent, FirewallDirection.Outbound),
+            AppPath = agent,
             Direction = FirewallDirection.Outbound,
             Action = FirewallAction.Block,
             Profiles = FirewallProfile.All,

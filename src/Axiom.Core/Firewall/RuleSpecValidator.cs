@@ -304,6 +304,16 @@ public static class RuleSpecValidator
             return;
         }
 
+        if (!OperatingSystem.IsWindows() && IsWindowsStylePath(appPath))
+        {
+            // Linux/macOS rules are enforced against native executables: a drive-letter or
+            // backslash path names no file there, so it is refused instead of silently accepted.
+            errors.Add(new RuleSpecValidationError(
+                "rule.path.windows_style",
+                "Windows-style paths (drive letter or backslash) are not valid application paths on this platform."));
+            return;
+        }
+
         if (!Path.IsPathFullyQualified(appPath))
         {
             errors.Add(new RuleSpecValidationError("rule.path.not_absolute", "Application path must be absolute."));
@@ -323,6 +333,11 @@ public static class RuleSpecValidator
             errors.Add(new RuleSpecValidationError("rule.path.unstable_segment", "Application path must be fully normalised (no '.' or '..' segments)."));
         }
     }
+
+    /// <summary>Drive-letter prefix (<c>C:</c>) or any backslash: a Windows path shape.</summary>
+    internal static bool IsWindowsStylePath(string path) =>
+        (path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':') ||
+        path.Contains('\\', StringComparison.Ordinal);
 
     private static RuleSpecValidationResult Invalid(string code, string message) =>
         new() { IsValid = false, Errors = [new RuleSpecValidationError(code, message)] };

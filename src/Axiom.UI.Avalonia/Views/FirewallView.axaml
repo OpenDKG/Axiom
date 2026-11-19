@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
+             xmlns:presentation="using:Axiom.Presentation"
              x:Class="Axiom.UI.Avalonia.Views.FirewallView">
   <UserControl.Styles>
     <Style Selector="Border.pending-row.focused">
@@ -59,7 +60,7 @@
                 <controls:AxiomSelectableTextBlock Text="Why Axiom Shield is asking" FontSize="11" FontWeight="SemiBold"
                            Foreground="{DynamicResource Axiom.Accent}" />
                 <controls:AxiomSelectableTextBlock
-                           Text="Axiom Shield lists every executable that opened a new outbound connection and has no Block/Allow decision yet. It stays listed after the connection ends until you choose Block, Allow or Dismiss. Dismiss hides it until the application opens a new connection. This is not a malware verdict, a VirusTotal result or a community-feed match. Block creates an outbound Windows Firewall rule for this executable; Allow records an allow decision and removes any existing Axiom block."
+                           Text="{x:Static presentation:PlatformText.AskQueueExplanation}"
                            FontSize="10.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
               </StackPanel>
             </Border>
@@ -204,7 +205,7 @@
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Grid.Column="0" Spacing="4">
           <StackPanel Orientation="Horizontal" Spacing="10">
-            <controls:AxiomSelectableTextBlock Text="Windows Firewall · Axiom-owned rules" Classes="section-title" />
+            <controls:AxiomSelectableTextBlock Text="{x:Static presentation:PlatformText.FirewallRulesTitle}" Classes="section-title" />
             <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="5" Padding="8,3" VerticalAlignment="Center">
               <controls:AxiomSelectableTextBlock Text="{Binding NoticeBadgeText}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" FontWeight="Bold" />
             </Border>
@@ -213,14 +214,52 @@
         </StackPanel>
         <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Right">
           <controls:AxiomSelectableTextBlock Text="{Binding CapabilityStatusText}" Foreground="{DynamicResource Axiom.TextPrimary}" FontSize="12" FontWeight="Medium" HorizontalAlignment="Right" />
+          <!-- macOS only: live filter connection and acknowledged generation (empty on Windows). -->
+          <controls:AxiomSelectableTextBlock IsVisible="{Binding HasFilterConnectionText}" Text="{Binding FilterConnectionText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="10.5" HorizontalAlignment="Right" />
           <controls:AxiomSelectableTextBlock Text="{Binding WritePathText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="10.5" HorizontalAlignment="Right" />
           <Button Content="Recheck" Command="{Binding RefreshCommand}" HorizontalAlignment="Right" Padding="12,5" Margin="0,4,0,0" />
         </StackPanel>
       </Grid>
     </Border>
 
-    <controls:AxiomSelectableTextBlock Grid.Row="2" Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11.5"
-               TextWrapping="Wrap" Margin="2,10,0,0" />
+    <StackPanel Grid.Row="2" Spacing="8" Margin="0,10,0,0">
+      <controls:AxiomSelectableTextBlock Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11.5"
+                 TextWrapping="Wrap" Margin="2,0,0,0" />
+
+      <!-- macOS only: the whole rules file was rejected by the filter, or the filter dropped events. -->
+      <Border IsVisible="{Binding HasFilterBanner}" Background="{DynamicResource Axiom.DangerBackground}"
+              BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="1" CornerRadius="8" Padding="12">
+        <StackPanel Spacing="3">
+          <controls:AxiomSelectableTextBlock Text="Network filter problem" FontSize="12" FontWeight="SemiBold"
+                     Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <controls:AxiomSelectableTextBlock Text="{Binding FilterBannerText}" FontSize="11.5"
+                     Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <!-- macOS only: rules published to the filter that it refused to enforce (filter.rules event). -->
+      <Border IsVisible="{Binding HasRejectedRules}" Background="{DynamicResource Axiom.SurfaceAlt}"
+              BorderBrush="{DynamicResource Axiom.Accent}" BorderThickness="1" CornerRadius="8" Padding="12">
+        <StackPanel Spacing="6">
+          <controls:AxiomSelectableTextBlock Text="{Binding RejectedRulesHeadline}" FontSize="12" FontWeight="SemiBold"
+                     Foreground="{DynamicResource Axiom.TextPrimary}" />
+          <controls:AxiomSelectableTextBlock Text="{Binding FilterEnforcedText}" FontSize="11"
+                     Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+          <ItemsControl ItemsSource="{Binding RejectedRules}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid ColumnDefinitions="Auto,*" Margin="0,2,0,0">
+                  <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding RuleId}" Classes="mono" FontSize="11"
+                             Foreground="{DynamicResource Axiom.TextSecondary}" Margin="0,0,10,0" />
+                  <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Reason}" FontSize="11"
+                             Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </StackPanel>
 
     <Grid Grid.Row="3" ColumnDefinitions="1.35*,8,1*" Margin="0,10,0,0">
       <Border Grid.Column="0" Classes="card" Padding="0">
@@ -304,7 +343,7 @@
             </ListBox.ItemTemplate>
           </ListBox>
 
-          <controls:AxiomSelectableTextBlock Grid.Row="2" Text="No Axiom-owned rules were found on this host." Foreground="{DynamicResource Axiom.TextMuted}"
+          <controls:AxiomSelectableTextBlock Grid.Row="2" Text="{Binding EmptyRulesText}" TextWrapping="Wrap" Foreground="{DynamicResource Axiom.TextMuted}"
                      FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"
                      IsVisible="{Binding IsEmpty}" />
         </Grid>

@@ -20,9 +20,10 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.98.0, )"
+          "Axiom.Contracts": "[1.4.3, )"
         }
       }
-    }
+    },
+    "net10.0/osx-x64": {}
   }
 }

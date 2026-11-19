@@ -30,8 +30,7 @@ public sealed class ProtectionSettingsStore
     }
 
     public static string DefaultPath => System.IO.Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "Axiom",
+        Axiom.Contracts.AxiomPaths.MachineDataDirectory,
         "protection.json");
 
     public string FilePath => _path;
@@ -127,6 +126,12 @@ public sealed class ProtectionSettingsStore
                 try
                 {
                     File.WriteAllText(temporary, payload);
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        // Machine-wide state written by the root daemon: not readable by other local users.
+                        File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                    }
+
                     File.Move(temporary, _path, overwrite: true);
                 }
                 finally
@@ -165,6 +170,15 @@ public sealed record ProtectionSettings
     public DateTimeOffset? EnabledUtc { get; init; }
 
     public string? AllowedSid { get; init; }
+
+    /// <summary>
+    /// macOS: uid of the account that installed the daemon; it may send IPC write commands.
+    /// Recorded by <c>axiomd --install-service</c>. Ignored on Windows (which uses <see cref="AllowedSid"/>).
+    /// </summary>
+    public uint? AllowedUid { get; init; }
+
+    /// <summary>macOS: members of the <c>admin</c> group may also send IPC write commands. Ignored on Windows.</summary>
+    public bool AllowAdminGroupWrites { get; init; } = true;
 
     public IReadOnlyList<ProtectionDecision>? Decisions { get; init; } = [];
 

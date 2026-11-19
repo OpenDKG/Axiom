@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Portable (net10.0) service building blocks shared by the Windows service and the macOS
+    launchd daemon: the IPC request dispatcher, the Privacy Shield DNS proxy and the platform
+    seams they plug into. No OS-specific API is used here.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Axiom.Service.Hosting</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
+    <ProjectReference Include="..\Axiom.Core\Axiom.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Required for self-contained single-file publish under central package management. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

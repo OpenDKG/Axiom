@@ -280,7 +280,7 @@
                     <Grid ColumnDefinitions="Auto,*,Auto">
                       <Border Grid.Column="0" Width="32" Height="32" CornerRadius="8"
                               Background="{DynamicResource Axiom.SurfaceAlt}" Margin="0,0,12,0">
-                        <controls:AxiomSelectableTextBlock Text="{Binding Glyph}" FontSize="14" Foreground="{DynamicResource Axiom.TextSecondary}"
+                        <controls:AxiomSelectableTextBlock Text="{Binding DisplayGlyph}" FontSize="14" Foreground="{DynamicResource Axiom.TextSecondary}"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                       </Border>
                       <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">

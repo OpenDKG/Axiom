@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using System.Diagnostics;
 using System.Globalization;
-using System.Runtime.InteropServices;
-using System.Security.Principal;
 using Axiom.Contracts.NetworkRecovery;
-using Axiom.Infrastructure.Windows.Firewall;
-using Axiom.Infrastructure.Windows.Network;
 using Axiom.Persistence;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -15,22 +10,19 @@ namespace Axiom.Service;
 /// Explicit administrator recovery when the service or desktop cannot run. It reads only the
 /// validated machine snapshot, prints a dry-run plan by default, and applies only with
 /// <c>--apply</c> from an elevated prompt while the service is stopped. It accepts no adapter,
-/// server or rule names from the command line.
+/// server or rule names from the command line. Platform specifics (console, elevation check,
+/// service process, DNS/firewall adapters) come from <see cref="ServicePlatform"/>.
 /// </summary>
 internal static class NetworkRecoveryCommand
 {
     private const string ApplyArgument = "--apply";
 
-    private const string ServiceProcessName = "Axiom.Service";
-
-    private const uint AttachParentProcess = 0xFFFFFFFF;
-
     public static int Run(string[] arguments) =>
-        Run(arguments, NetworkRecoverySnapshotStore.DefaultPath);
+        Run(arguments, ServicePlatform.RecoverySnapshotPath);
 
     internal static int Run(string[] arguments, string snapshotPath)
     {
-        _ = AttachConsole(AttachParentProcess);
+        ServicePlatform.AttachParentConsole();
 
         var path = snapshotPath;
         var apply = arguments.Any(argument =>
@@ -71,33 +63,22 @@ internal static class NetworkRecoveryCommand
             return ExitCodes.PlanOnly;
         }
 
-        if (!ServiceInstaller.IsAdministrator())
+        if (!ServicePlatform.IsAdministrator())
         {
             Write("Restore requires administrator rights. Re-run from an elevated prompt. Nothing was changed.");
             return ExitCodes.NotAdministrator;
         }
 
-        var runningProcesses = Process.GetProcessesByName(ServiceProcessName);
-        try
+        if (ServicePlatform.IsServiceProcessRunning())
         {
-            if (runningProcesses.Any(process => process.Id != Environment.ProcessId))
-            {
-                Write(
-                    "The Axiom service is running. Stop it before the offline recovery, or use " +
-                    "Settings > Restore network settings in the app. Nothing was changed.");
-                return ExitCodes.ServiceRunning;
-            }
-        }
-        finally
-        {
-            foreach (var process in runningProcesses)
-            {
-                process.Dispose();
-            }
+            Write(
+                "The Axiom service is running. Stop it before the offline recovery, or use " +
+                "Settings > Restore network settings in the app. Nothing was changed.");
+            return ExitCodes.ServiceRunning;
         }
 
-        using var firewall = new WindowsFirewallPolicyAdapter();
-        var dns = new WindowsDnsRecoveryAdapter();
+        var (dns, firewall, adapterOwner) = ServicePlatform.CreateRecoveryAdapters();
+        using var adapterLifetime = adapterOwner;
         HistoryStore? history = null;
         try
         {
@@ -119,7 +100,7 @@ internal static class NetworkRecoveryCommand
             history,
             NullLogger<NetworkRecoveryController>.Instance);
 
-        var actor = CurrentActor();
+        var actor = ServicePlatform.CurrentActor();
         NetworkRecoveryRestoreResult result;
         try
         {
@@ -185,24 +166,7 @@ internal static class NetworkRecoveryCommand
             ? "automatic (DHCP)"
             : "static " + string.Join(", ", servers);
 
-    private static string CurrentActor()
-    {
-        try
-        {
-            using var identity = WindowsIdentity.GetCurrent();
-            return identity.Name ?? "administrator";
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException)
-        {
-            return "administrator";
-        }
-    }
-
     private static void Write(string message) => Console.WriteLine(message);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool AttachConsole(uint processId);
 
     internal static class ExitCodes
     {

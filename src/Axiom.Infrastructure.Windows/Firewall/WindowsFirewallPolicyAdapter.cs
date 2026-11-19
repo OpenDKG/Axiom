@@ -20,9 +20,9 @@ namespace Axiom.Infrastructure.Windows.Firewall;
 /// </summary>
 public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwnedRuleRecoveryAdapter, IDisposable
 {
-    public const string WriteEnableVariable = "AXIOM_ENABLE_FIREWALL_WRITES";
+    public const string WriteEnableVariable = FirewallWriteGate.WriteEnableVariable;
 
-    public const string WriteConfirmVariable = "AXIOM_FIREWALL_WRITE_CONFIRM";
+    public const string WriteConfirmVariable = FirewallWriteGate.WriteConfirmVariable;
 
     private const int NetFwActionBlock = 0;
 
@@ -141,22 +141,10 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
     /// True when the test override is present, or when the elevated service holds persisted user
     /// consent for the shield. An interactive process never writes: only the service can.
     /// </summary>
-    public static bool IsWriteGateOpen =>
-        EnvironmentGateOpen ||
-        (ProtectionWriteConsent.Granted && ProtectionWriteConsent.IsServiceHost);
+    public static bool IsWriteGateOpen => FirewallWriteGate.IsOpen;
 
     /// <summary>Explicit test/debug override; both variables must be present.</summary>
-    public static bool EnvironmentGateOpen =>
-        string.Equals(
-            Environment.GetEnvironmentVariable(WriteEnableVariable)
-            ?? Environment.GetEnvironmentVariable(LegacyIdentity.ProductName + "_ENABLE_FIREWALL_WRITES"),
-            "1",
-            StringComparison.Ordinal) &&
-        string.Equals(
-            Environment.GetEnvironmentVariable(WriteConfirmVariable)
-            ?? Environment.GetEnvironmentVariable(LegacyIdentity.ProductName + "_FIREWALL_WRITE_CONFIRM"),
-            "yes",
-            StringComparison.OrdinalIgnoreCase);
+    public static bool EnvironmentGateOpen => FirewallWriteGate.EnvironmentGateOpen;
 
     private static void EnsureWriteGate()
     {

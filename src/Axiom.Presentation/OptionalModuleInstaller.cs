@@ -64,7 +64,19 @@ public sealed class OptionalModuleInstaller
         "modules",
         "blackbox");
 
-    public string DkgCommand => Path.Combine(DkgRoot, "node_modules", ".bin", "dkg.cmd");
+    public string DkgCommand => Path.Combine(DkgRoot, "node_modules", ".bin", AgentPlatform.NpmShimName("dkg"));
+
+    /// <summary>
+    /// The guided installers are PowerShell scripts and the Blackbox installer is a Windows
+    /// installer, so they run only on Windows. Other platforms report this message instead.
+    /// </summary>
+    public static bool IsInstallSupported => OperatingSystem.IsWindows();
+
+    public static string UnsupportedInstallMessage { get; } =
+        $"Guided module installation is not available on {UnsupportedPlatformName} yet. Install the module manually, then click Check again.";
+
+    private static string UnsupportedPlatformName =>
+        OperatingSystem.IsMacOS() ? "macOS" : OperatingSystem.IsLinux() ? "Linux" : "this platform";
 
     /// <summary>Blackbox's own node tree; its DKG runtime lives below this folder.</summary>
     public string HermesBlackboxNode { get; } = Path.Combine(
@@ -393,7 +405,7 @@ public sealed class OptionalModuleInstaller
                 return false;
             }
 
-            return File.Exists(Path.Combine(BlackboxRoot, "agent-blackbox", "venv", "Scripts", "python.exe"));
+            return File.Exists(AgentPlatform.VenvPython(Path.Combine(BlackboxRoot, "agent-blackbox")));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -645,7 +657,10 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        var startInfo = new ProcessStartInfo("cmd.exe", $"/c \"\"{command}\" start\"")
+        var (fileName, arguments) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", $"/c \"\"{command}\" start\"")
+            : (command, "start");
+        var startInfo = new ProcessStartInfo(fileName, arguments)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -694,9 +709,17 @@ public sealed class OptionalModuleInstaller
             return (null, false);
         }
 
-        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        var directories = path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries).AsEnumerable();
+        if (OperatingSystem.IsMacOS())
         {
-            foreach (var name in new[] { "dkg.cmd", "dkg.exe", "dkg.bat" })
+            directories = directories.Concat(AgentPlatform.MacExtraSearchDirectories(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)));
+        }
+
+        var names = OperatingSystem.IsWindows() ? new[] { "dkg.cmd", "dkg.exe", "dkg.bat" } : new[] { "dkg" };
+        foreach (var directory in directories)
+        {
+            foreach (var name in names)
             {
                 try
                 {
@@ -766,9 +789,7 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        var venvPythonW = Path.Combine(agent, "venv", "Scripts", "pythonw.exe");
-        var venvPython = Path.Combine(agent, "venv", "Scripts", "python.exe");
-        var venv = File.Exists(venvPythonW) ? venvPythonW : venvPython;
+        var venv = AgentPlatform.VenvPythonNoConsole(agent);
         if (!File.Exists(venv) || IsUnsafeInstallRoot(BlackboxRoot, agent, venv))
         {
             return false;
@@ -875,6 +896,15 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
+        if (!IsInstallSupported)
+        {
+            // Repair stops processes with a PowerShell script and reinstalls Python packages; module
+            // installation and repair are Windows-only for now.
+            LastError = UnsupportedInstallMessage;
+            log?.Invoke(UnsupportedInstallMessage);
+            return false;
+        }
+
         var ok = true;
 
         if (dkg && IsDkgAvailable)
@@ -936,7 +966,7 @@ public sealed class OptionalModuleInstaller
             return;
         }
 
-        var python = Path.Combine(agent, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(agent);
         var pythonInfo = new FileInfo(python);
         if (!pythonInfo.Exists || pythonInfo.Length == 0)
         {
@@ -965,9 +995,7 @@ public sealed class OptionalModuleInstaller
         get
         {
             var agent = ResolveBlackboxAgentRoot();
-            return agent is not null &&
-                   (File.Exists(Path.Combine(agent, "venv", "Scripts", "python.exe")) ||
-                    File.Exists(Path.Combine(agent, "venv", "Scripts", "pythonw.exe")));
+            return agent is not null && AgentPlatform.HasVenvPython(agent);
         }
     }
 
@@ -985,8 +1013,7 @@ public sealed class OptionalModuleInstaller
 
         foreach (var candidate in candidates)
         {
-            if (File.Exists(Path.Combine(candidate, "venv", "Scripts", "python.exe")) ||
-                File.Exists(Path.Combine(candidate, "venv", "Scripts", "pythonw.exe")))
+            if (AgentPlatform.HasVenvPython(candidate))
             {
                 return Path.GetFullPath(candidate);
             }
@@ -1201,6 +1228,12 @@ public sealed class OptionalModuleInstaller
 
     private static bool RunPowerShellScript(string script, Action<string>? log)
     {
+        if (!IsInstallSupported)
+        {
+            log?.Invoke(UnsupportedInstallMessage);
+            return false;
+        }
+
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
             ResolvePowerShellExecutable(),
@@ -1300,6 +1333,11 @@ public sealed class OptionalModuleInstaller
 
     private static void StartPowerShell(string script)
     {
+        if (!IsInstallSupported)
+        {
+            return;
+        }
+
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
             ResolvePowerShellExecutable(),

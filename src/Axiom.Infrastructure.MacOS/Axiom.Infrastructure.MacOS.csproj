@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    macOS adapters of the axiomd launchd daemon: the AxiomFilter rule table and flow-event socket,
+    the Unix-socket IPC transport, libproc connection/process facts and networksetup DNS control.
+    Targets plain net10.0 so it builds (and its pure logic is tested) on Linux; macOS-only runtime
+    code is marked [SupportedOSPlatform("macos")] and guarded with OperatingSystem.IsMacOS().
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Axiom.Infrastructure.MacOS</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Axiom.Contracts\Axiom.Contracts.csproj" />
+    <ProjectReference Include="..\Axiom.Core\Axiom.Core.csproj" />
+    <ProjectReference Include="..\Axiom.Service.Hosting\Axiom.Service.Hosting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Required for self-contained single-file publish under central package management. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
