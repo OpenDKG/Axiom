@@ -273,6 +273,14 @@ public sealed class OptionalModuleInstaller
                   } else {
                     $config.autoUpdate.enabled = $false
                   }
+                  if ($null -ne $config.store -and $config.store.backend -eq 'oxigraph-server') {
+                    if ($null -eq $config.store.options) {
+                      $config.store | Add-Member -NotePropertyName options -NotePropertyValue ([pscustomobject]@{})
+                    }
+                    if ($config.store.options -is [pscustomobject] -and $null -eq $config.store.options.PSObject.Properties['walRestartThresholdBytes']) {
+                      $config.store.options | Add-Member -NotePropertyName walRestartThresholdBytes -NotePropertyValue {{ModuleStorageMaintenance.DefaultOxigraphWalRestartThresholdBytes}}
+                    }
+                  }
                   [System.IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
                   Write-Host 'DKG auto-update is disabled; Axiom pins the installed version.' -ForegroundColor Yellow
                 } catch {
@@ -538,7 +546,7 @@ public sealed class OptionalModuleInstaller
             $venvW = Join-Path $dir 'agent-blackbox\venv\Scripts\pythonw.exe'
             if (Test-Path $venv) {
               Write-Host 'Repairing missing Blackbox Python dependencies...' -ForegroundColor Cyan
-              & $venv -m pip install ruamel.yaml python-dotenv rich pyyaml aiohttp cryptography psutil fastapi uvicorn
+              & $venv -m pip install ruamel.yaml python-dotenv rich pyyaml aiohttp cryptography psutil fastapi uvicorn pywin32
               if ($LASTEXITCODE -ne 0) { throw "Blackbox dependency repair failed with exit code $LASTEXITCODE" }
               $hermes = Join-Path $dir 'agent-blackbox\venv\Scripts\hermes.exe'
               if (Test-Path $hermes) {
@@ -634,6 +642,7 @@ public sealed class OptionalModuleInstaller
         if (!string.IsNullOrWhiteSpace(effectiveHome))
         {
             startInfo.Environment["DKG_HOME"] = effectiveHome;
+            ModuleStorageMaintenance.EnsureOxigraphWalMaintenance(Path.Combine(effectiveHome, "config.json"));
         }
 
         try
@@ -935,9 +944,12 @@ public sealed class OptionalModuleInstaller
             return;
         }
 
+        var importCheck = OperatingSystem.IsWindows()
+            ? "-c \"import cryptography, fastapi, uvicorn, aiohttp, psutil, ruamel.yaml, yaml, rich, pywintypes\""
+            : "-c \"import cryptography, fastapi, uvicorn, aiohttp, psutil, ruamel.yaml, yaml, rich\"";
         if (LocalModuleRuntime.RunProcess(
                 python,
-                "-c \"import cryptography, fastapi, uvicorn, aiohttp, psutil, ruamel.yaml, yaml, rich\"",
+                importCheck,
                 log: null,
                 TimeSpan.FromSeconds(30)))
         {
@@ -945,9 +957,12 @@ public sealed class OptionalModuleInstaller
         }
 
         log?.Invoke("Repair: installing the missing Blackbox dashboard dependencies...");
+        var pipPackages = OperatingSystem.IsWindows()
+            ? "cryptography cffi psutil fastapi uvicorn ruamel.yaml pyyaml python-dotenv rich aiohttp pywin32"
+            : "cryptography cffi psutil fastapi uvicorn ruamel.yaml pyyaml python-dotenv rich aiohttp";
         LocalModuleRuntime.RunProcess(
             python,
-            "-m pip install --disable-pip-version-check --quiet cryptography cffi psutil fastapi uvicorn ruamel.yaml pyyaml python-dotenv rich aiohttp",
+            $"-m pip install --disable-pip-version-check --quiet {pipPackages}",
             log,
             TimeSpan.FromMinutes(10));
     }
