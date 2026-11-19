@@ -46,6 +46,36 @@ public static class LocalModuleRuntime
     public static bool AnyDkgPortListening =>
         IsPortListening(BlackboxDkgPort) || IsPortListening(StandaloneDkgPort);
 
+    internal static bool StopBlackboxDashboard(string launcher)
+    {
+        var escaped = launcher.Replace("'", "''", StringComparison.Ordinal);
+        var script = $$"""
+            $ErrorActionPreference = 'Stop'
+            $launcher = '{{escaped}}'
+            $python = @(Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' OR Name='python.exe'")
+            $owned = [System.Collections.Generic.HashSet[uint32]]::new()
+            foreach ($process in $python) {
+              if ($process.CommandLine -and
+                  $process.CommandLine.IndexOf($launcher, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                [void]$owned.Add($process.ProcessId)
+              }
+            }
+            if ($owned.Count -eq 0) { exit 1 }
+            do {
+              $oldCount = $owned.Count
+              foreach ($process in $python) {
+                if ($owned.Contains($process.ParentProcessId)) {
+                  [void]$owned.Add($process.ProcessId)
+                }
+              }
+            } while ($owned.Count -gt $oldCount)
+            foreach ($idToStop in $owned) {
+              Stop-Process -Id $idToStop -Force -ErrorAction SilentlyContinue
+            }
+            """;
+        return RunHiddenPowerShell(script, log: null, TimeSpan.FromSeconds(10));
+    }
+
     /// <summary>
     /// Waits for a module port, polling in short steps. Returns true as soon as the port accepts a
     /// connection; the HTTP contract is verified separately by <c>OptionalModuleProbe</c>.

@@ -8,10 +8,15 @@ internal sealed class ModuleLaunchGate(TimeSpan startupWindow, TimeProvider? tim
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private long? _lastLaunch;
 
-    public bool Start(Func<bool> isListening, Func<bool> launch)
+    public bool Start(Func<bool> isListening, Func<bool> launch, Func<bool>? prepare = null)
     {
         lock (_lock)
         {
+            if (prepare is not null && !prepare())
+            {
+                return false;
+            }
+
             if (isListening())
             {
                 _lastLaunch = null;

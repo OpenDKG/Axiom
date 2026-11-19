@@ -5,27 +5,38 @@
              xmlns:controls="clr-namespace:Axiom.UI.Controls"
              xmlns:vm="clr-namespace:Axiom.UI.ViewModels">
 
+  <UserControl.Resources>
+    <Style x:Key="ModuleLogo" TargetType="Image">
+      <Setter Property="Stretch" Value="Uniform" />
+      <Setter Property="RenderOptions.BitmapScalingMode" Value="HighQuality" />
+      <Setter Property="Effect">
+        <Setter.Value>
+          <DropShadowEffect Color="#242831" BlurRadius="4" ShadowDepth="1"
+                            Direction="270" Opacity="0.75" RenderingBias="Quality" />
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </UserControl.Resources>
+
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24,18,24,24" HorizontalAlignment="Stretch">
 
-      <!-- Product identity cards; symbolic initials are NOT third-party official logos. -->
+      <!-- Optional integration logos and status. -->
       <Grid Margin="0,0,0,14">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="14" />
           <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
-        <Border Grid.Column="0" Style="{StaticResource Card}">
+        <Border Grid.Column="0" Padding="14">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto" />
               <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Border Background="#0B1024" CornerRadius="9" Padding="8,6" VerticalAlignment="Top">
-              <Image Source="/Axiom.UI;component/Resources/origintrail-logo.png"
-                     Width="104" Height="23" Stretch="Uniform"
-                     RenderOptions.BitmapScalingMode="HighQuality" />
-            </Border>
+            <Image Source="/Axiom.UI;component/Resources/origintrail-logo.png"
+                   Style="{StaticResource ModuleLogo}" Width="132" Height="30"
+                   Margin="0,0,12,0" VerticalAlignment="Top" ToolTip="OriginTrail" />
             <StackPanel Grid.Column="1">
               <TextBlock Text="{Binding Security.DkgBrandLabel}" Style="{StaticResource SectionTitle}"
                          TextWrapping="Wrap" />
@@ -35,25 +46,22 @@
             </StackPanel>
           </Grid>
         </Border>
-        <Border Grid.Column="2" Style="{StaticResource Card}">
+        <Border Grid.Column="2" Padding="14">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto" />
               <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Border Background="#0B1024" CornerRadius="9" Padding="8,6" VerticalAlignment="Top">
-              <Image Source="/Axiom.UI;component/Resources/blackbox-logo.png"
-                     Width="104" Height="18" Stretch="Uniform"
-                     RenderOptions.BitmapScalingMode="HighQuality" />
-            </Border>
+            <Image Source="/Axiom.UI;component/Resources/blackbox-logo.png"
+                   Style="{StaticResource ModuleLogo}" Width="142" Height="28"
+                   Margin="0,0,12,0" VerticalAlignment="Top" ToolTip="Blackbox" />
             <StackPanel Grid.Column="1">
               <TextBlock Text="{Binding Security.BlackboxBrandLabel}" Style="{StaticResource SectionTitle}"
                          TextWrapping="Wrap" />
               <TextBlock Text="Guardian Agent Blackbox by Umanitek: optional local agent-safety module. Connection alone does not prove every agent is protected."
                          Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,5,0,0" />
               <Image Source="/Axiom.UI;component/Resources/umanitek-logo.png"
-                     Width="92" Height="20" Stretch="Uniform"
-                     RenderOptions.BitmapScalingMode="HighQuality"
+                     Style="{StaticResource ModuleLogo}" Width="120" Height="22"
                      HorizontalAlignment="Left" Margin="0,7,0,0"
                      ToolTip="Umanitek" />
             </StackPanel>

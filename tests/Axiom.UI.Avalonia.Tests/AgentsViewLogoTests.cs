@@ -3,6 +3,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -14,7 +15,7 @@ namespace Axiom.UI.Avalonia.Tests;
 public sealed class AgentsViewLogoTests
 {
     [Fact]
-    public void Logo_marks_fit_the_cards_and_gain_a_shadow_only_in_light_themes()
+    public void Module_logos_fit_unframed_sections_with_theme_specific_shadows()
     {
         TestAppBuilder.RunOnUiThread(() =>
         {
@@ -31,36 +32,46 @@ public sealed class AgentsViewLogoTests
                 {
                     Assert.NotNull(logo.Source);
                     // The allocated size can exceed the artwork's aspect-ratio-preserving bounds.
-                    Assert.InRange(logo.DesiredSize.Width, 140, 236);
+                    Assert.InRange(logo.DesiredSize.Width, 140, 208);
                     Assert.InRange(logo.DesiredSize.Height, 35, 41);
+                    Assert.Equal(BitmapInterpolationMode.HighQuality, RenderOptions.GetBitmapInterpolationMode(logo));
                 }
+
+                var dkgSection = view.FindControl<Border>("DkgModuleCard");
+                var blackboxSection = view.FindControl<Border>("BlackboxModuleCard");
+                Assert.NotNull(dkgSection);
+                Assert.NotNull(blackboxSection);
+                Assert.Null(dkgSection.Background);
+                Assert.Null(blackboxSection.Background);
+                Assert.Equal(default, dkgSection.BorderThickness);
+                Assert.Equal(default, blackboxSection.BorderThickness);
 
                 foreach (var theme in new[] { ThemeVariant.Light, AxiomThemeVariants.LightWarm, AxiomThemeVariants.GlassLight })
                 {
                     window.RequestedThemeVariant = theme;
                     Dispatcher.UIThread.RunJobs();
-                    Assert.All(logos, logo => Assert.IsAssignableFrom<IDropShadowEffect>(logo.Effect));
+                    Assert.All(logos, logo =>
+                        Assert.Equal(Color.Parse("#242831"), Assert.IsAssignableFrom<IDropShadowEffect>(logo.Effect).Color));
                 }
 
                 foreach (var theme in new[] { ThemeVariant.Dark, AxiomThemeVariants.DarkMidnight, AxiomThemeVariants.GlassDark })
                 {
                     window.RequestedThemeVariant = theme;
                     Dispatcher.UIThread.RunJobs();
-                    Assert.All(logos, logo => Assert.Null(logo.Effect));
+                    Assert.All(logos, logo =>
+                        Assert.Equal(Color.Parse("#B9C4D6"), Assert.IsAssignableFrom<IDropShadowEffect>(logo.Effect).Color));
                 }
 
                 window.Width = 640;
                 window.UpdateLayout();
                 Dispatcher.UIThread.RunJobs();
-                var blackboxCard = view.FindControl<Border>("BlackboxModuleCard");
-                Assert.NotNull(blackboxCard);
-                var first = logos[1].TranslatePoint(new Point(0, 0), blackboxCard);
-                var second = logos[2].TranslatePoint(new Point(0, 0), blackboxCard);
+                var first = logos[1].TranslatePoint(new Point(0, 0), blackboxSection);
+                var second = logos[2].TranslatePoint(new Point(0, 0), blackboxSection);
                 Assert.NotNull(first);
                 Assert.NotNull(second);
                 Assert.True(second.Value.Y > first.Value.Y);
-                Assert.True(first.Value.X + logos[1].Bounds.Width <= blackboxCard.Bounds.Width);
-                Assert.True(second.Value.X + logos[2].Bounds.Width <= blackboxCard.Bounds.Width);
+                Assert.True(first.Value.X + logos[1].Bounds.Width <= blackboxSection.Bounds.Width);
+                Assert.True(second.Value.X + logos[2].Bounds.Width <= blackboxSection.Bounds.Width);
             }
             finally
             {

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using Axiom.Contracts;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Axiom.Presentation;
@@ -88,10 +89,10 @@ public sealed partial class SupportPageViewModel : PageViewModel
     private string _actionStatus = "All donations are optional. Axiom remains free.";
 
     [RelayCommand]
-    private Task OpenGitHubIssuesAsync() => OpenExternalAsync("https://github.com/a-51-50/Axiom/issues/new/choose");
+    private Task OpenGitHubIssuesAsync() => OpenExternalAsync(ProjectLinks.NewIssue);
 
     [RelayCommand]
-    private Task OpenGitHubRepositoryAsync() => OpenExternalAsync("https://github.com/a-51-50/Axiom");
+    private Task OpenGitHubRepositoryAsync() => OpenExternalAsync(ProjectLinks.Repository);
 
     [RelayCommand]
     private async Task OpenDonationPageAsync(string? provider)

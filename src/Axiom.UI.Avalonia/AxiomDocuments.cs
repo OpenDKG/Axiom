@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Reflection;
+using Axiom.Contracts;
 
 namespace Axiom.UI.Avalonia;
 
@@ -13,7 +14,7 @@ public sealed record ProjectRole(string GitHubHandle, string Role, string Profil
 /// </summary>
 public static class AxiomDocuments
 {
-    public const string SourceUrl = "https://github.com/a-51-50/Axiom";
+    public const string SourceUrl = ProjectLinks.Repository;
 
     public const string LeadMaintainerRole = "Founder & Original Creator";
 
