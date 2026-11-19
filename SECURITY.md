@@ -4,10 +4,11 @@
 
 | Version | Status |
 |---|---|
-| Current 0.10.x pre-release (see latest release tag) | Best-effort security fixes; not production-certified |
+| Current Windows release (see [Releases](https://github.com/OpenDKG/Axiom/releases/latest)) | Best-effort security fixes |
+| Linux and macOS developer previews | Experimental builds with platform-specific limits |
 | Earlier development milestones | Not maintained; upgrade for current fixes |
 
-The project is pre-1.0. Interfaces, storage schema and IPC protocol may change between milestones.
+Interfaces, storage schema and IPC protocol may change between releases.
 
 ## Reporting a vulnerability
 
