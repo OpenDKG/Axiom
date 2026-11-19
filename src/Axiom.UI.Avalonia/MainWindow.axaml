@@ -220,6 +220,13 @@
             <Button Content="Dismiss" Command="{Binding DismissUpdateCommand}"
                     Click="OnUpdateDismissClicked" Padding="12,5" FontSize="11" />
           </StackPanel>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding IsDownloadingUpdate}">
+            <ProgressBar Minimum="0" Maximum="100" Height="5" VerticalAlignment="Center"
+                         Value="{Binding UpdateDownloadProgress}" IsIndeterminate="{Binding IsUpdateDownloadIndeterminate}"
+                         AutomationProperties.Name="Installer download progress" />
+            <TextBlock Grid.Column="1" Text="{Binding UpdateDownloadProgress, StringFormat={}{0}%}"
+                       FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+          </Grid>
           <TextBlock Text="{Binding UpdateDownloadStatus}" IsVisible="{Binding HasUpdateDownloadStatus}"
                      FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
         </StackPanel>

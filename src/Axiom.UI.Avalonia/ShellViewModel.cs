@@ -346,6 +346,15 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public bool HasUpdateDownloadStatus => !string.IsNullOrWhiteSpace(UpdateDownloadStatus);
 
+    [ObservableProperty]
+    private bool _isDownloadingUpdate;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsUpdateDownloadIndeterminate))]
+    private int _updateDownloadProgress;
+
+    public bool IsUpdateDownloadIndeterminate => UpdateDownloadProgress == 0;
+
     [RelayCommand]
     private async Task OpenUpdateAsync()
     {
@@ -356,10 +365,25 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         }
 
         var token = _cancellation.Token;
-        UpdateDownloadStatus = "Downloading and verifying the installer…";
+        UpdateDownloadProgress = 0;
+        IsDownloadingUpdate = true;
+        UpdateDownloadStatus = "Downloading the installer…";
+        var progress = new Progress<int>(percent =>
+        {
+            if (!IsDownloadingUpdate)
+            {
+                return;
+            }
+
+            UpdateDownloadProgress = percent;
+            if (percent == 100)
+            {
+                UpdateDownloadStatus = "Verifying the installer…";
+            }
+        });
         try
         {
-            var installer = await _updateChecker.DownloadWindowsInstallerAsync(token).ConfigureAwait(true);
+            var installer = await _updateChecker.DownloadWindowsInstallerAsync(token, progress).ConfigureAwait(true);
             token.ThrowIfCancellationRequested();
             await _ui.OpenExternalAsync(installer, token).ConfigureAwait(true);
             UpdateDownloadStatus = "Installer opened. Choose Complete or Partial in the installer.";
@@ -376,6 +400,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                      InvalidOperationException or NotSupportedException or System.ComponentModel.Win32Exception)
         {
             UpdateDownloadStatus = $"Could not download or open the installer. {exception.Message}";
+        }
+        finally
+        {
+            IsDownloadingUpdate = false;
         }
     }
 

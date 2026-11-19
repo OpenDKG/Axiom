@@ -78,7 +78,9 @@ public sealed class UpdateCheckService : IDisposable
     private sealed record InstallerAsset(Uri DownloadUri, long Size, string Sha256);
 
     /// <summary>Downloads the exact Windows asset for the detected release and verifies its GitHub digest.</summary>
-    public async Task<string> DownloadWindowsInstallerAsync(CancellationToken cancellationToken)
+    public async Task<string> DownloadWindowsInstallerAsync(
+        CancellationToken cancellationToken,
+        IProgress<int>? progress = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var asset = _windowsInstaller;
@@ -95,6 +97,7 @@ public sealed class UpdateCheckService : IDisposable
         Directory.CreateDirectory(directory);
         var installerPath = Path.Combine(directory, WindowsInstallerName);
         var partialPath = Path.Combine(directory, Guid.NewGuid().ToString("N") + ".partial");
+        progress?.Report(0);
         try
         {
             using var response = await _http.GetAsync(
@@ -108,6 +111,7 @@ public sealed class UpdateCheckService : IDisposable
             await using var input = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             long total = 0;
+            var reportedPercentage = 0;
             await using (var output = new FileStream(
                              partialPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
                              bufferSize: 64 * 1024, useAsync: true))
@@ -124,6 +128,12 @@ public sealed class UpdateCheckService : IDisposable
 
                     hash.AppendData(buffer, 0, read);
                     await output.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
+                    var percentage = (int)(total * 100 / asset.Size);
+                    if (percentage > reportedPercentage)
+                    {
+                        reportedPercentage = percentage;
+                        progress?.Report(percentage);
+                    }
                 }
             }
 
