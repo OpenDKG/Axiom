@@ -44,6 +44,17 @@ public sealed class OptionalModuleInstaller
     /// <summary>Marker recording which pinned vendor build is installed in this tree.</summary>
     private const string InstalledBuildMarker = ".axiom-blackbox-build";
 
+    internal const string BlackboxDashboardLauncherCode =
+        "import argparse\n" +
+        "import os\n" +
+        "import sys\n" +
+        "if sys.stdout is None:\n" +
+        "    sys.stdout = open(os.devnull, \"w\", encoding=\"utf-8\")\n" +
+        "if sys.stderr is None:\n" +
+        "    sys.stderr = open(os.devnull, \"w\", encoding=\"utf-8\")\n" +
+        "from plugins.blackbox.dashboard import cmd_dashboard\n" +
+        "raise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))\n";
+
     public string DkgRoot { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Axiom",
@@ -351,6 +362,13 @@ public sealed class OptionalModuleInstaller
         if (IsPinnedBuildInstalled())
         {
             log?.Invoke("Blackbox pinned build is already installed; reusing the existing runtime (no vendor reinstall).");
+            EnsureBlackboxDependencies(log);
+            if (!LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort))
+            {
+                log?.Invoke("Starting the installed Blackbox dashboard...");
+                StartBlackboxDashboard();
+            }
+
             return true;
         }
 
@@ -461,12 +479,18 @@ public sealed class OptionalModuleInstaller
                     $ErrorActionPreference = $prevErrorAction
                 }
             }
-            & $installer -StoreBackend $storeBackend
-            $vendorExit = $LASTEXITCODE
-            # Everything below is best-effort repair. Native tools write progress and warnings to
-            # stderr; with ErrorActionPreference=Stop Windows PowerShell 5.1 turns that into a
-            # terminating NativeCommandError and aborts before the dashboard is started.
+            # Everything from the vendor installer onward is best-effort repair. Native tools write
+            # progress and warnings to stderr; with ErrorActionPreference=Stop Windows PowerShell 5.1
+            # turns that into a terminating NativeCommandError and aborts before the dashboard is started.
             $ErrorActionPreference = 'Continue'
+            $vendorExit = 0
+            try {
+              & $installer -StoreBackend $storeBackend
+              if ($null -ne $LASTEXITCODE) { $vendorExit = $LASTEXITCODE }
+            } catch {
+              Write-Warning "Vendor installer reported an error: $($_.Exception.Message)"
+              $vendorExit = 1
+            }
             if ($vendorExit -ne 0) {
               # The pinned vendor build can fail its own "dependency environment committed" check.
               # Repair it once with the vendor CLI; a usable venv is what Axiom actually needs.
@@ -553,7 +577,7 @@ public sealed class OptionalModuleInstaller
               }
               $agent = Join-Path $dir 'agent-blackbox'
               $launcher = Join-Path $agent 'start-dashboard.py'
-              $code = "import argparse`nfrom plugins.blackbox.dashboard import cmd_dashboard`nraise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))`n"
+              $code = "import argparse`nimport os`nimport sys`nif sys.stdout is None:`n    sys.stdout = open(os.devnull, `"w`", encoding=`"utf-8`")`nif sys.stderr is None:`n    sys.stderr = open(os.devnull, `"w`", encoding=`"utf-8`")`nfrom plugins.blackbox.dashboard import cmd_dashboard`nraise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))`n"
               [System.IO.File]::WriteAllText($launcher, $code, (New-Object System.Text.UTF8Encoding($false)))
               $dashboard = 'http://127.0.0.1:9700'
               $running = $false
@@ -723,15 +747,14 @@ public sealed class OptionalModuleInstaller
         }
 
         BlackboxWordlistNormalizer.NormalizeAll();
+        EnsureBlackboxDependencies();
 
         try
         {
             var launcher = Path.Combine(agent, "start-dashboard.py");
             File.WriteAllText(
                 launcher,
-                "import argparse\n" +
-                "from plugins.blackbox.dashboard import cmd_dashboard\n" +
-                "raise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))\n",
+                BlackboxDashboardLauncherCode,
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var startInfo = new ProcessStartInfo(venv, $"\"{launcher}\"")
@@ -881,7 +904,8 @@ public sealed class OptionalModuleInstaller
         }
 
         var python = Path.Combine(agent, "venv", "Scripts", "python.exe");
-        if (!File.Exists(python))
+        var pythonInfo = new FileInfo(python);
+        if (!pythonInfo.Exists || pythonInfo.Length == 0)
         {
             return;
         }
