@@ -1935,7 +1935,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     private async Task RefreshAgentsAsync(bool blackboxConnected, CancellationToken cancellationToken)
     {
-        await RefreshAgentsCoreAsync(blackboxConnected).ConfigureAwait(true);
+        await RefreshAgentsCoreAsync(blackboxConnected, cancellationToken).ConfigureAwait(true);
 
         // Windows: unchanged. macOS/Linux: the shared status models are shown, with the sentence
         // that the guard runtime and its provisioning are unsupported and unverified there.
@@ -1948,7 +1948,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         }
     }
 
-    private async Task RefreshAgentsCoreAsync(bool blackboxConnected)
+    private async Task RefreshAgentsCoreAsync(bool blackboxConnected, CancellationToken cancellationToken)
     {
         ProtectedAgents.Clear();
 
