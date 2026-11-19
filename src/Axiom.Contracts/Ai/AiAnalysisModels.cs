@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.Text.Json.Serialization;
+
 namespace Axiom.Contracts.Ai;
 
 public enum AiProviderKind
@@ -85,6 +87,36 @@ public sealed record AiFinding
     public string VerifierSummary { get; init; } = string.Empty;
 
     public string? Error { get; init; }
+
+    [JsonIgnore]
+    public AiFindingAssessment Assessment
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Error))
+            {
+                return AiFindingAssessment.Failed;
+            }
+
+            return (Status?.Trim().ToUpperInvariant(), Severity?.Trim().ToLowerInvariant()) switch
+            {
+                ("SUSPICIOUS" or "SUPPORTED_ALERT", "high" or "critical") => AiFindingAssessment.Serious,
+                ("SUSPICIOUS" or "SUPPORTED_ALERT", _) => AiFindingAssessment.Flagged,
+                ("LOW_OBSERVED_RISK", "low") => AiFindingAssessment.LowRisk,
+                _ => AiFindingAssessment.Uncertain,
+            };
+        }
+    }
+}
+
+/// <summary>Display labels and colors derived from a finding's status and severity.</summary>
+public sealed record AiFindingAssessment(string Label, bool IsSerious = false, bool IsFlagged = false, bool IsLowRisk = false)
+{
+    internal static AiFindingAssessment Serious { get; } = new("High-priority finding", IsSerious: true);
+    internal static AiFindingAssessment Flagged { get; } = new("Flagged for review", IsFlagged: true);
+    internal static AiFindingAssessment LowRisk { get; } = new("Low observed risk", IsLowRisk: true);
+    internal static AiFindingAssessment Uncertain { get; } = new("Inconclusive");
+    internal static AiFindingAssessment Failed { get; } = new("Analysis failed");
 }
 
 /// <summary>

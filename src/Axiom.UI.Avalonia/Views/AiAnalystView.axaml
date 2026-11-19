@@ -3,6 +3,34 @@
              xmlns:controls="using:Axiom.UI.Avalonia.Controls"
              xmlns:converters="using:Avalonia.Data.Converters"
              x:Class="Axiom.UI.Avalonia.Views.AiAnalystView">
+  <UserControl.Styles>
+    <Style Selector="Ellipse.finding-risk">
+      <Setter Property="Fill" Value="{DynamicResource Axiom.TextMuted}" />
+    </Style>
+    <Style Selector="Ellipse.finding-risk.serious">
+      <Setter Property="Fill" Value="{DynamicResource Axiom.Critical}" />
+    </Style>
+    <Style Selector="Ellipse.finding-risk.flagged">
+      <Setter Property="Fill" Value="{DynamicResource Axiom.Warning}" />
+    </Style>
+    <Style Selector="Ellipse.finding-risk.low">
+      <Setter Property="Fill" Value="{DynamicResource Axiom.Success}" />
+    </Style>
+  </UserControl.Styles>
+  <UserControl.Resources>
+    <DataTemplate x:Key="FindingAssessmentTemplate">
+      <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="5" Padding="8,3"
+              HorizontalAlignment="Left" ToolTip.Tip="{Binding Status}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Ellipse Classes="finding-risk" Classes.serious="{Binding Assessment.IsSerious}"
+                   Classes.flagged="{Binding Assessment.IsFlagged}" Classes.low="{Binding Assessment.IsLowRisk}"
+                   Width="8" Height="8" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Assessment.Label}" Foreground="{DynamicResource Axiom.TextPrimary}"
+                     FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+  </UserControl.Resources>
   <Grid RowDefinitions="Auto,Auto,*" Margin="24,18,24,24">
     <Border Grid.Row="0" Classes="card" Padding="16">
       <StackPanel Spacing="10">
@@ -116,6 +144,7 @@
                                   Command="{Binding $parent[ContextMenu].PlacementTarget.Tag.CopyAllResultsCommand}" />
                       </ContextMenu>
                     </StackPanel.ContextMenu>
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource FindingAssessmentTemplate}" Margin="0,0,0,3" />
                     <TextBlock Text="{Binding Summary}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Axiom.TextPrimary}"
                                TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding AnalysisTimestampUtc, StringFormat={}{0:HH:mm:ss}}" Classes="mono" FontSize="10.5"
@@ -148,9 +177,7 @@
             <controls:AxiomSelectableTextBlock Text="{Binding SelectedFinding.Summary}" FontSize="15" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
             <WrapPanel Orientation="Horizontal">
-              <Border Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="5" Padding="8,3" Margin="0,0,6,0">
-                <controls:AxiomSelectableTextBlock Text="{Binding SelectedFinding.Status}" Foreground="{DynamicResource Axiom.Accent}" FontSize="10" FontWeight="Bold" />
-              </Border>
+              <ContentControl Content="{Binding SelectedFinding}" ContentTemplate="{StaticResource FindingAssessmentTemplate}" Margin="0,0,6,0" />
               <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="5" Padding="8,3" Margin="0,0,6,0">
                 <controls:AxiomSelectableTextBlock Text="{Binding SelectedFinding.Severity, StringFormat=Severity: {0}}" Foreground="{DynamicResource Axiom.TextPrimary}" FontSize="10" />
               </Border>
