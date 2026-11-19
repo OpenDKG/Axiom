@@ -22,7 +22,7 @@ installs the package and required dependencies and may prompt for `sudo`. On mac
 opens Axiom from `~/Applications` and preserves any app already there. The ad hoc-signed macOS preview
 may need macOS approval, and its Network Extension has separate activation requirements.
 
-[Download Windows 1.4.3](https://github.com/OpenDKG/Axiom/releases/tag/v1.4.3)
+[Download Axiom](https://github.com/OpenDKG/Axiom/releases/latest)
 · [All releases](https://github.com/OpenDKG/Axiom/releases)
 · [Pentest results](docs/PENTESTING.md)
 · [Project website](https://opendkg.org/axiom/)
@@ -100,7 +100,7 @@ agent-level guardrails and signed threat-intelligence context respectively.
 
 | Platform | Published build |
 | --- | --- |
-| Windows x64 | [1.4.3](https://github.com/OpenDKG/Axiom/releases/tag/v1.4.3), installer and portable ZIP. See the [release notes](docs/RELEASES/1.4.3.md). |
+| Windows x64 | [Latest release](https://github.com/OpenDKG/Axiom/releases/latest), installer and portable ZIP. |
 | Linux amd64 | [1.3.0 Core Preview 2](https://github.com/OpenDKG/Axiom/releases/tag/v1.3.0-linux-preview.2), Debian package. |
 | macOS Intel | [1.3.0 Developer Preview 2](https://github.com/OpenDKG/Axiom/releases/tag/v1.3.0-macos-preview.2), ad hoc-signed app archive. The system extension has separate activation and signing requirements. |
 
@@ -177,7 +177,7 @@ shows the charts and captures.
   compiled assets, triples, verified rules and verified-answer lookup health. It draws the verified
   threat graph natively from the same local `/api/graph` data, grouped by the dashboard's categories
   and coloured by severity. **Sync now** triggers the dashboard's own `POST /api/sync`; Axiom does
-  not run a second DKG sync loop. **Auto-sync**, off by default, requests incremental catch-up approximately every 15 minutes when enabled, so existing local assets stay in place and new graph entries are fetched without
+  not run a second DKG sync loop. **Auto-sync**, off by default, requests incremental catch-up approximately once an hour when enabled, so existing local assets stay in place and new graph entries are fetched without
   repeating the full download. Missing values stay unknown and an offline node is never shown as a
   clean graph.
 - Agent configuration, sessions and databases are fingerprinted during install, hook repair and

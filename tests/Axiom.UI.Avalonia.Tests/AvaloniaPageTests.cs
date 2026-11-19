@@ -1,16 +1,63 @@
 ﻿// SPDX-License-Identifier: GPL-3.0-or-later
+using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
+using Avalonia.Media;
+using Avalonia.Styling;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using Axiom.Contracts.Ai;
 using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
 using Axiom.Contracts.Protection;
 using Axiom.Presentation;
 using Axiom.UI.Avalonia;
+using Axiom.UI.Avalonia.Views;
 using Xunit;
 
 namespace Axiom.UI.Avalonia.Tests;
 
 public sealed class AvaloniaPageTests
 {
+    [Theory]
+    [InlineData("SUSPICIOUS", "high", "High-priority finding", "#FB7185", "#DC2626")]
+    [InlineData("SUSPICIOUS", "medium", "Flagged for review", "#FBBF24", "#B45309")]
+    [InlineData("LOW_OBSERVED_RISK", "low", "Low observed risk", "#4ADE80", "#059669")]
+    [InlineData("UNKNOWN", "unknown", "Inconclusive", "#9AA8BC", "#475569")]
+    public void Analyst_shows_matching_badges_in_history_and_details(
+        string status, string severity, string label, string dark, string light)
+    {
+        TestAppBuilder.RunOnUiThread(() =>
+        {
+            using var shell = new ShellViewModel(new FakeSource(), new FakeTimerFactory());
+            var finding = new AiFinding { Status = status, Severity = severity };
+            shell.AiAnalyst.History.Clear();
+            shell.AiAnalyst.History.Add(finding);
+            shell.AiAnalyst.SelectedFinding = finding;
+            var view = new AiAnalystView { DataContext = shell.AiAnalyst };
+            var window = new Window { Width = 1100, Height = 820, Content = view };
+            window.Show();
+            try
+            {
+                foreach (var (theme, color) in new[] { (ThemeVariant.Dark, dark), (ThemeVariant.Light, light) })
+                {
+                    window.RequestedThemeVariant = theme;
+                    Dispatcher.UIThread.RunJobs();
+                    window.UpdateLayout();
+                    var objects = view.GetVisualDescendants().ToArray();
+                    var marks = objects.OfType<Ellipse>().Where(mark => mark.Classes.Contains("finding-risk")).ToArray();
+                    Assert.Equal(2, marks.Length);
+                    Assert.All(marks, mark => Assert.Equal(Color.Parse(color), Assert.IsAssignableFrom<ISolidColorBrush>(mark.Fill).Color));
+                    Assert.Equal(2, objects.OfType<TextBlock>().Count(text => text.Text == label));
+                }
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
     [Fact]
     public void Shell_exposes_all_navigation_pages()
     {

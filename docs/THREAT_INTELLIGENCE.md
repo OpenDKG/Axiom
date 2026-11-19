@@ -95,7 +95,7 @@ Some reporter runs cannot be classified: the CLI starts, then times out or exits
 
 ## Verified graph sync and offline behaviour
 
-Axiom reads the **local** Blackbox dashboard, including its verified-sync and public-graph endpoints. **Sync now** requests an upstream sync through Blackbox; Axiom itself does not implement a parallel DKG replication loop. An optional **Auto-sync** preference, **off by default**, requests incremental catch-up at roughly 15-minute intervals when enabled. It does not mean the node is always online or the graph is fresh.
+Axiom reads the **local** Blackbox dashboard, including its verified-sync and public-graph endpoints. **Sync now** requests an upstream sync through Blackbox; Axiom itself does not implement a parallel DKG replication loop. An optional **Auto-sync** preference, **off by default**, requests incremental catch-up about once an hour when enabled. It does not mean the node is always online or the graph is fresh.
 
 When a dashboard read is slow, Axiom may display locally persisted authoritative sync/progress/ruleset information as **last-known state**. A stale cache is not a fresh verification, and an offline node does not mean that the graph contains no threats. Local firewall rules, stored DNS policies and previously loaded lists continue to function independently of a new graph sync.
 
