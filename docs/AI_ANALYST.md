@@ -6,10 +6,11 @@ or modify agent configuration.
 
 ## What is implemented
 
-- **Seamless OpenChamber/OpenCode provider.** The built-in `opencode://local` provider runs the
-  already-installed and signed-in OpenCode CLI in headless plan mode
-  (`opencode run --format json --agent plan`). It needs no Ollama, LM Studio, extra API key or
-  separate HTTP server. The default model is `opencode-go/deepseek-v4.1-flash`.
+- **OpenChamber/OpenCode provider.** `opencode://local` runs the installed and signed-in OpenCode
+  CLI with a standalone server, an analyst-specific configuration and an in-memory session database.
+  Its permissions deny all tool actions, MCP servers, external plugins and skills. OpenCode
+  2.x version 2.2.3 or later is required for this policy. The default model is
+  `opencode-go/deepseek-v4.1-flash`, which processes the evidence remotely.
 - Provider-neutral OpenAI-compatible chat-completions adapter:
   - HTTPS cloud endpoint;
   - HTTP is allowed only for a loopback local inference endpoint;
@@ -28,6 +29,8 @@ or modify agent configuration.
   - no packet contents, credentials, cookies, agent histories or arbitrary files.
 - Structured result contract with status, severity, confidence, observations, evidence references,
   alternative explanations, missing evidence and text-only next steps.
+- The history and result panel both label findings: red for high-priority findings, amber for
+  flagged activity, green for low observed risk, and grey for inconclusive or failed analysis.
 - Bounded local finding history in `%LOCALAPPDATA%\Axiom\ai-findings.json`; no prompts or provider
   responses are stored.
 - The model result is sanitized: unknown/SAFE-like statuses become `UNKNOWN`, list lengths are

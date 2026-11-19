@@ -13,8 +13,7 @@ namespace Axiom.UI.Services;
 /// <summary>
 /// Analysis adapter for the AI analyst. Cloud and local HTTP providers use the OpenAI-compatible
 /// chat-completions shape; the OpenChamber/OpenCode provider runs the already-configured OpenCode
-/// CLI in headless plan mode and needs no separate local model server. It has no firewall, shell or
-/// file-access capability of its own.
+/// CLI with a standalone server and the analyst's deny-all tool policy.
 /// </summary>
 public sealed class AiAnalystClient : IDisposable
 {
@@ -240,26 +239,28 @@ public sealed class AiAnalystClient : IDisposable
             return new OpenCodeRunResult([], "OpenCode model is not configured.");
         }
 
-        var startInfo = new ProcessStartInfo
+        var executable = ResolveOpenCodeExecutable();
+        string workingDirectory;
+        try
         {
-            FileName = ResolveOpenCodeExecutable(),
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-            WorkingDirectory = GetOpenCodeWorkingDirectory(),
-        };
-        startInfo.ArgumentList.Add("run");
-        startInfo.ArgumentList.Add("--format");
-        startInfo.ArgumentList.Add("json");
-        startInfo.ArgumentList.Add("--agent");
-        startInfo.ArgumentList.Add("plan");
-        startInfo.ArgumentList.Add("--model");
-        startInfo.ArgumentList.Add(model.Trim());
-        startInfo.Environment["NO_COLOR"] = "1";
+            workingDirectory = GetOpenCodeWorkingDirectory();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return new OpenCodeRunResult([], "Could not open the AI Analyst configuration directory.");
+        }
+
+        if (!await OpenCodeAnalystLaunch.SupportsToolPolicyAsync(executable, workingDirectory, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return new OpenCodeRunResult(
+                [],
+                cancellationToken.IsCancellationRequested
+                    ? "OpenCode request was cancelled."
+                    : "AI Analyst requires OpenCode 2.2.3 or newer within 2.x to enforce its tool policy.");
+        }
+
+        var startInfo = OpenCodeAnalystLaunch.CreateRequest(executable, workingDirectory, model);
 
         using var process = new Process { StartInfo = startInfo };
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -297,8 +298,13 @@ public sealed class AiAnalystClient : IDisposable
             await process.StandardInput.WriteAsync(prompt.AsMemory(), timeout.Token).ConfigureAwait(false);
             await process.StandardInput.FlushAsync(timeout.Token).ConfigureAwait(false);
             process.StandardInput.Close();
-            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
+            var exitTask = process.WaitForExitAsync(timeout.Token);
+            if (await Task.WhenAny(stdoutTask, exitTask).ConfigureAwait(false) == stdoutTask)
+            {
+                await stdoutTask.ConfigureAwait(false);
+            }
+
+            await Task.WhenAll(exitTask, stdoutTask, stderrTask).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -306,7 +312,7 @@ public sealed class AiAnalystClient : IDisposable
             await IgnoreAsync(stdoutTask).ConfigureAwait(false);
             await IgnoreAsync(stderrTask).ConfigureAwait(false);
             return new OpenCodeRunResult(
-                BuildContents(chunks),
+                [],
                 cancellationToken.IsCancellationRequested
                     ? "OpenCode request was cancelled."
                     : $"OpenCode did not respond within {OpenCodeTimeout.TotalSeconds:0} seconds.");
@@ -316,7 +322,7 @@ public sealed class AiAnalystClient : IDisposable
             KillProcessTree(process);
             await IgnoreAsync(stdoutTask).ConfigureAwait(false);
             await IgnoreAsync(stderrTask).ConfigureAwait(false);
-            return new OpenCodeRunResult(BuildContents(chunks), "OpenCode run failed: " + exception.Message);
+            return new OpenCodeRunResult([], "OpenCode run failed: " + exception.Message);
         }
         finally
         {
@@ -465,6 +471,11 @@ public sealed class AiAnalystClient : IDisposable
             }
 
             var type = typeElement.GetString();
+            if (string.Equals(type, "tool_use", StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("The analyst attempted to call a disabled OpenCode tool.");
+            }
+
             if (string.Equals(type, "text", StringComparison.Ordinal) &&
                 root.TryGetProperty("part", out var part) &&
                 part.TryGetProperty("text", out var text) &&
@@ -520,22 +531,11 @@ public sealed class AiAnalystClient : IDisposable
         }
     }
 
-    private static string GetOpenCodeWorkingDirectory()
-    {
-        try
-        {
-            var path = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Axiom",
-                "opencode-agent");
-            Directory.CreateDirectory(path);
-            return path;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            return Path.GetTempPath();
-        }
-    }
+    private static string GetOpenCodeWorkingDirectory() => Directory.CreateDirectory(
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Axiom",
+            "opencode-agent")).FullName;
 
     private static string ResolveOpenCodeExecutable()
     {
