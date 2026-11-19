@@ -560,6 +560,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
     {
         _statsTimer?.StopTimer();
         _statsTimer?.Dispose();
+        ClearBlockedHistoryGroups();
         _graphLookup.Dispose();
     }
 
@@ -782,6 +783,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
 
         var adapterName = SelectedAdapter.Name;
+        var previousAlias = _preferredAdapterAlias;
+        var previousAutoPoint = AutoPointAdapterDns;
         _preferredAdapterAlias = adapterName;
         AutoPointAdapterDns = true;
 
@@ -823,6 +826,8 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             CancellationToken.None).ConfigureAwait(true);
         if (!confirmed)
         {
+            _preferredAdapterAlias = previousAlias;
+            AutoPointAdapterDns = previousAutoPoint;
             DnsHelperStatusText = "Adapter DNS change cancelled.";
             return;
         }
@@ -1293,7 +1298,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
 
         _blockedHistorySignature = signature;
-        BlockedHistoryGroups.Clear();
+        ClearBlockedHistoryGroups();
 
         var knownApps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var appGroup in historyRows
@@ -1330,6 +1335,16 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         BlockedHistorySummary = historyRows.Count == 0
             ? "No blocked query history yet."
             : $"{historyRows.Count} blocks from {BlockedHistoryGroups.Count} apps; open an app to see its domains.";
+    }
+
+    private void ClearBlockedHistoryGroups()
+    {
+        foreach (var group in BlockedHistoryGroups)
+        {
+            group.PropertyChanged -= OnBlockedHistoryGroupPropertyChanged;
+        }
+
+        BlockedHistoryGroups.Clear();
     }
 
     private void OnBlockedHistoryGroupPropertyChanged(object? sender, PropertyChangedEventArgs e)

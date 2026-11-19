@@ -215,7 +215,8 @@ public static class ModulePrerequisites
                 return null;
             }
 
-            var output = process.StandardOutput.ReadToEnd().Trim();
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
             if (!process.WaitForExit(4000))
             {
                 try
@@ -229,6 +230,8 @@ public static class ModulePrerequisites
                 return null;
             }
 
+            Task.WaitAll([stdoutTask, stderrTask], 500);
+            var output = stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result.Trim() : string.Empty;
             return process.ExitCode == 0 && output.Length > 0 ? output : null;
         }
         catch (Exception exception) when (exception is

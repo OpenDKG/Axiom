@@ -31,6 +31,7 @@ public sealed class AxiomToolsTests
     [Theory]
     [InlineData("203.0.113.10:443", "203.0.113.10")]
     [InlineData("[2001:db8::1]:443", "2001:db8::1")]
+    [InlineData("2001:4860:4860::8888", "2001:4860:4860::8888")]
     [InlineData("example.test:8080", "example.test")]
     [InlineData("—", "")]
     [InlineData("", "")]
@@ -42,6 +43,7 @@ public sealed class AxiomToolsTests
     [Theory]
     [InlineData("203.0.113.10:443", 443)]
     [InlineData("[2001:db8::1]:8443", 8443)]
+    [InlineData("2001:4860:4860::8888", null)]
     [InlineData("example.test", null)]
     [InlineData("—", null)]
     public void ParsesEndpointPort(string endpoint, int? expected)

@@ -25,6 +25,45 @@ public sealed class LocalModuleRuntimeTests
     }
 
     [Fact]
+    public void Process_timeout_does_not_leave_unobserved_task_exceptions()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var unobserved = new List<Exception>();
+        void Handler(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            lock (unobserved)
+            {
+                unobserved.Add(e.Exception);
+            }
+
+            e.SetObserved();
+        }
+
+        TaskScheduler.UnobservedTaskException += Handler;
+        try
+        {
+            Assert.False(LocalModuleRuntime.RunHiddenPowerShell(
+                "Start-Sleep -Seconds 20",
+                log: null,
+                TimeSpan.FromMilliseconds(300)));
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= Handler;
+        }
+
+        Assert.Empty(unobserved);
+    }
+
+    [Fact]
     public void Process_drains_standard_error_even_when_standard_output_is_still_open()
     {
         if (!OperatingSystem.IsWindows())

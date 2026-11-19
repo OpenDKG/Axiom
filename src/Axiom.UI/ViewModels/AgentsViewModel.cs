@@ -84,7 +84,9 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     private bool _verifiedGraphInitialized;
 
+    private readonly CancellationTokenSource _lifetime = new();
     private bool _pageActive;
+    private bool _disposed;
 
     private bool _autoSyncRunning;
 
@@ -108,12 +110,23 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
         _timer.Tick += async (_, _) =>
         {
-            if (_pageActive)
+            if (_disposed)
             {
-                await RefreshAsync().ConfigureAwait(true);
+                return;
             }
 
-            await MaybeAutoSyncAsync().ConfigureAwait(true);
+            try
+            {
+                if (_pageActive)
+                {
+                    await RefreshAsync().ConfigureAwait(true);
+                }
+
+                await MaybeAutoSyncAsync().ConfigureAwait(true);
+            }
+            catch (Exception exception) when (_disposed && exception is OperationCanceledException or ObjectDisposedException)
+            {
+            }
         };
     }
 
@@ -125,7 +138,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
 
     public IReadOnlyList<string> AgentFilters { get; } =
-        ["All agents", "Hermes", "OpenClaw", "OpenCode", "OpenChamber", "Codex", "Claude", "Cursor", "Copilot", "Gemini", "Windsurf", "Cline", "ZCode", "DeepSeek", "Unknown"];
+        ["All agents", "Hermes", "OpenClaw", "OpenCode", "Codex", "Claude", "Antigravity", "Cursor", "Copilot", "Gemini", "Windsurf", "Cline", "ZCode", "DeepSeek", "Unknown"];
 
     public IReadOnlyList<string> SeverityFilters { get; } =
         ["All severities", "Info", "Low", "Medium", "High", "Critical"];
@@ -254,7 +267,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     public void Activate()
     {
-        if (!IsAvailable)
+        if (!IsAvailable || _disposed)
         {
             return;
         }
@@ -278,19 +291,29 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _pageActive = false;
         _timer.Stop();
+        _lifetime.Cancel();
+        _lifetime.Dispose();
         _client.Dispose();
     }
 
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        if (!IsAvailable || _refreshing)
+        if (!IsAvailable || _disposed || _refreshing)
         {
             return;
         }
 
         _refreshing = true;
+        var token = _lifetime.Token;
         var now = DateTimeOffset.UtcNow;
         try
         {
@@ -298,8 +321,8 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
                                        now - _lastActivityRefresh >= ActivityRefreshInterval;
             var shouldRefreshVerifiedGraph = !_verifiedGraphInitialized ||
                                             now - _lastVerifiedGraphRefresh >= VerifiedGraphRefreshInterval;
-            var settingsTask = _client.GetSettingsAsync(CancellationToken.None);
-            var graphTask = _client.GetGraphStatusAsync(CancellationToken.None);
+            var settingsTask = _client.GetSettingsAsync(token);
+            var graphTask = _client.GetGraphStatusAsync(token);
             var verifiedSyncTask = TryGetVerifiedSyncAsync();
             var verifiedGraphTask = shouldRefreshVerifiedGraph
                 ? TryGetVerifiedGraphAsync()
@@ -307,11 +330,16 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             var auditTask = shouldRefreshActivity
                 ? LoadActivityAsync(full: !_activityInitialized)
                 : Task.FromResult<BlackboxAuditPage?>(null);
-            var findingsTask = _client.GetFindingsAsync(100, 0, CancellationToken.None);
+            var findingsTask = _client.GetFindingsAsync(100, 0, token);
 
             // These two are optional dashboard reads. Apply them independently so a slow audit
             // history or a missing endpoint cannot hide the verified-graph state.
             ApplyVerifiedSync(await verifiedSyncTask.ConfigureAwait(true));
+            if (_disposed)
+            {
+                return;
+            }
+
             if (await verifiedGraphTask.ConfigureAwait(true) is { } graphPage)
             {
                 ApplyVerifiedGraph(graphPage);
@@ -324,6 +352,10 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
                 graphTask,
                 auditTask,
                 findingsTask).ConfigureAwait(true);
+            if (_disposed)
+            {
+                return;
+            }
 
             if (auditTask.Result is { } auditPage)
             {
@@ -344,6 +376,9 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             ApplyHealth(settingsTask.Result, graphTask.Result);
             ApplyHookEvidence();
             await RefreshSessionsAsync().ConfigureAwait(true);
+        }
+        catch (Exception exception) when (_disposed && exception is OperationCanceledException or ObjectDisposedException)
+        {
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
@@ -1025,6 +1060,10 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             _allActivity.Sort((left, right) =>
                 (right.Timestamp ?? DateTimeOffset.MinValue)
                 .CompareTo(left.Timestamp ?? DateTimeOffset.MinValue));
+            if (_allActivity.Count > ActivityMax)
+            {
+                _allActivity.RemoveRange(ActivityMax, _allActivity.Count - ActivityMax);
+            }
         }
 
         UpdateActivitySummary();
@@ -1364,6 +1403,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
         {
             "claude" or "claude-code" => "Claude Code",
             "codex" => "Codex",
+            "antigravity" => "Antigravity",
             "opencode" or "openchamber" => "OpenCode / OpenChamber",
             _ => framework,
         };
@@ -1412,8 +1452,7 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
                 continue;
             }
 
-            if (SelectedAgentFilter != "All agents" &&
-                !string.Equals(entry.Agent, SelectedAgentFilter, StringComparison.OrdinalIgnoreCase))
+            if (!MatchesAgentFilter(entry.Agent, SelectedAgentFilter))
             {
                 continue;
             }
@@ -1504,6 +1543,12 @@ public sealed partial class AgentsViewModel : PageViewModel, IActivatablePage, I
             "Threats" => entry.IsThreat,
             _ => true,
         };
+
+    private static bool MatchesAgentFilter(string? agent, string filter) =>
+        filter == "All agents" ||
+        string.Equals(agent, filter, StringComparison.OrdinalIgnoreCase) ||
+        (string.Equals(filter, "OpenCode", StringComparison.OrdinalIgnoreCase) &&
+         string.Equals(agent, "openchamber", StringComparison.OrdinalIgnoreCase));
 
     private static string ActivityIdentity(BlackboxAuditEntry entry) =>
         entry.RawJson.Length > 0

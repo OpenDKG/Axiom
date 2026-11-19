@@ -437,6 +437,69 @@ public sealed class PrivacyShieldTests
         Assert.False(PrivacyDnsFailSafe.IsVirtualInterface("Wi-Fi", "Intel(R) Wi-Fi 6E AX211 160MHz"));
     }
 
+    [Fact]
+    public async Task Concurrent_status_polls_and_reconfigurations_do_not_race()
+    {
+        var directory = CreateTemporaryDirectory();
+        var port = ReservePort();
+        await using var controller = new PrivacyShieldController(
+            new PrivacyShieldSettingsStore(Path.Combine(directory, "settings.json")),
+            new PrivacyShieldRuleStore(Path.Combine(directory, "rules.json")));
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var poller = Task.Run(async () =>
+            {
+                for (var i = 0; i < 20; i++)
+                {
+                    var status = await controller.GetStatusAsync(cts.Token);
+                    Assert.NotNull(status.Sources);
+                }
+            }, cts.Token);
+
+            var mutator = Task.Run(async () =>
+            {
+                for (var i = 0; i < 4; i++)
+                {
+                    await controller.ConfigureAsync(EnabledSettings(port), cts.Token);
+                    await controller.ConfigureAsync(
+                        EnabledSettings(port) with { Enabled = false },
+                        cts.Token);
+                }
+            }, cts.Token);
+
+            await Task.WhenAll(poller, mutator);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Blocked_history_store_flush_ignores_blank_domains_and_bounds_count()
+    {
+        var directory = CreateTemporaryDirectory();
+        var historyPath = Path.Combine(directory, "blocked.jsonl");
+        try
+        {
+            using var store = new PrivacyShieldBlockedHistoryStore(historyPath);
+            store.Append(new PrivacyShieldBlockedEvent("", PrivacyCategory.Ads, DateTimeOffset.UtcNow));
+            store.Append(new PrivacyShieldBlockedEvent("ads.example", PrivacyCategory.Ads, DateTimeOffset.UtcNow));
+            store.Flush();
+
+            var recent = store.LoadRecent();
+            var entry = Assert.Single(recent);
+            Assert.Equal("ads.example", entry.Domain);
+            Assert.Single(File.ReadAllLines(historyPath));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static PrivacyShieldSettings EnabledSettings(int port) => new()
     {
         Enabled = true,

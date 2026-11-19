@@ -124,7 +124,8 @@ public static class ProtectionServiceInstall
             return;
         }
 
-        var sessionId = Process.GetCurrentProcess().SessionId;
+        using var currentProcess = Process.GetCurrentProcess();
+        var sessionId = currentProcess.SessionId;
 
         foreach (var process in Process.GetProcessesByName("Axiom.Service"))
         {

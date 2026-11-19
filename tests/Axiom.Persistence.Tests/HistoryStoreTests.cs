@@ -385,6 +385,29 @@ public sealed class HistoryStoreTests : IDisposable
         Assert.Equal("192.0.2.10", page.Rows[0].LocalEndpoint);
     }
 
+    [Fact]
+    public async Task Concurrent_upserts_synchronize_flow_cache_and_database_writes()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var baseTime = new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.Zero);
+        var tasks = Enumerable.Range(0, 8).Select(index =>
+            store.UpsertAsync(Snapshot(
+                baseTime.AddSeconds(index),
+                ($"app{index}.exe", $@"C:\app{index}.exe", 1000 + index, $"203.0.113.{index + 1}:443"))));
+
+        await Task.WhenAll(tasks);
+
+        var page = await store.QueryAsync(new HistoryQuery
+        {
+            FromUtc = baseTime.AddMinutes(-1),
+            ToUtc = baseTime.AddMinutes(1),
+        });
+
+        Assert.Equal(8, page.TotalCount);
+    }
+
     private static ConnectionSnapshot SnapshotWithLocal(DateTimeOffset capturedUtc, string local) =>
         new()
         {

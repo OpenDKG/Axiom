@@ -14,14 +14,14 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )"
+          "Axiom.Contracts": "[1.4.3, )"
         }
       },
       "axiom.service.hosting": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[0.10.6, )",
-          "Axiom.Core": "[0.10.6, )"
+          "Axiom.Contracts": "[1.4.3, )",
+          "Axiom.Core": "[1.4.3, )"
         }
       }
     }

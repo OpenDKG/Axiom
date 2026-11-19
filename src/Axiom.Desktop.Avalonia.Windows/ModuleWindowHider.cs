@@ -64,16 +64,19 @@ internal sealed class ModuleWindowHider : IDisposable
                 "WHERE Name = 'node.exe' OR Name = 'python.exe' OR Name = 'pythonw.exe' " +
                 "OR Name = 'hermes.exe' OR Name = 'cmd.exe' OR Name = 'powershell.exe' OR Name = 'pwsh.exe'");
             using var results = searcher.Get();
-            foreach (ManagementObject item in results)
+            foreach (ManagementBaseObject item in results)
             {
-                var commandLine = item["CommandLine"] as string ?? string.Empty;
-                if (!IsAxiomModule(commandLine))
+                using (item)
                 {
-                    continue;
-                }
+                    var commandLine = item["CommandLine"] as string ?? string.Empty;
+                    if (!IsAxiomModule(commandLine))
+                    {
+                        continue;
+                    }
 
-                var processId = Convert.ToInt32(item["ProcessId"], System.Globalization.CultureInfo.InvariantCulture);
-                HideProcessWindow(processId);
+                    var processId = Convert.ToInt32(item["ProcessId"], System.Globalization.CultureInfo.InvariantCulture);
+                    HideProcessWindow(processId);
+                }
             }
         }
         catch (Exception exception) when (exception is

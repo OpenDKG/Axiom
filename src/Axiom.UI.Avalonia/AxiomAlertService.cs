@@ -247,6 +247,7 @@ public static class AxiomAlertService
         };
         close.Click += (_, _) => toast.Close();
 
+        var closed = false;
         var timer = new DispatcherTimer { Interval = request.Lifetime };
         timer.Tick += (_, _) =>
         {
@@ -255,8 +256,18 @@ public static class AxiomAlertService
         };
         timer.Start();
         toast.PointerEntered += (_, _) => timer.Stop();
-        toast.PointerExited += (_, _) => timer.Start();
-        toast.Closed += (_, _) => timer.Stop();
+        toast.PointerExited += (_, _) =>
+        {
+            if (!closed)
+            {
+                timer.Start();
+            }
+        };
+        toast.Closed += (_, _) =>
+        {
+            closed = true;
+            timer.Stop();
+        };
         return toast;
     }
 

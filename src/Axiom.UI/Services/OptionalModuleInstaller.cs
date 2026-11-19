@@ -24,6 +24,40 @@ public sealed class OptionalModuleInstaller
     /// <summary>Marker recording which pinned vendor build is installed in this tree.</summary>
     private const string InstalledBuildMarker = ".axiom-blackbox-build";
 
+    internal const string BlackboxDashboardLauncherCode =
+        "import argparse\n" +
+        "import os\n" +
+        "import sys\n" +
+        "if sys.stdout is None:\n" +
+        "    sys.stdout = open(os.devnull, \"w\", encoding=\"utf-8\")\n" +
+        "if sys.stderr is None:\n" +
+        "    sys.stderr = open(os.devnull, \"w\", encoding=\"utf-8\")\n" +
+        "if os.name == \"nt\":\n" +
+        "    import inspect\n" +
+        "    import subprocess\n" +
+        "    _orig_popen_init = subprocess.Popen.__init__\n" +
+        "    _popen_sig = inspect.signature(_orig_popen_init)\n" +
+        "    def _silent_popen_init(self, *args, **kwargs):\n" +
+        "        _bound = _popen_sig.bind_partial(self, *args, **kwargs)\n" +
+        "        _flags = _bound.arguments.get(\"creationflags\") or 0\n" +
+        "        _no_win = getattr(subprocess, \"CREATE_NO_WINDOW\", 0x08000000)\n" +
+        "        _detached = getattr(subprocess, \"DETACHED_PROCESS\", 0x00000008)\n" +
+        "        _new_con = getattr(subprocess, \"CREATE_NEW_CONSOLE\", 0x00000010)\n" +
+        "        if not (_flags & (_detached | _no_win)):\n" +
+        "            _flags = (_flags & ~_new_con) | _no_win\n" +
+        "        _bound.arguments[\"creationflags\"] = _flags\n" +
+        "        _si = _bound.arguments.get(\"startupinfo\")\n" +
+        "        if _si is None:\n" +
+        "            _si = subprocess.STARTUPINFO()\n" +
+        "            _bound.arguments[\"startupinfo\"] = _si\n" +
+        "        _si.dwFlags |= getattr(subprocess, \"STARTF_USESHOWWINDOW\", 1)\n" +
+        "        _si.wShowWindow = getattr(subprocess, \"SW_HIDE\", 0)\n" +
+        "        return _orig_popen_init(*_bound.args, **_bound.kwargs)\n" +
+        "    subprocess.Popen.__init__ = _silent_popen_init\n" +
+        "    os.system = lambda cmd: subprocess.run(cmd, shell=True).returncode\n" +
+        "from plugins.blackbox.dashboard import cmd_dashboard\n" +
+        "raise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))\n";
+
     public string DkgRoot { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Axiom",
@@ -178,6 +212,7 @@ public sealed class OptionalModuleInstaller
         if (IsPinnedBuildInstalled())
         {
             log?.Invoke("Blackbox pinned build is already installed; reusing the existing runtime (no vendor reinstall).");
+            StartBlackboxDashboard();
             return true;
         }
 
@@ -232,8 +267,14 @@ public sealed class OptionalModuleInstaller
             # python.exe receives '-3' and the venv is never created; provide a shim for this run.
             $pyOk = $false
             if (Get-Command py -ErrorAction SilentlyContinue) {
-              & py -3.12 --version *> $null
-              $pyOk = ($LASTEXITCODE -eq 0)
+              $prevPref = $ErrorActionPreference
+              $ErrorActionPreference = 'Continue'
+              try {
+                & py -3.12 --version 2>&1 | Out-Null
+                $pyOk = ($LASTEXITCODE -eq 0)
+              } finally {
+                $ErrorActionPreference = $prevPref
+              }
             }
             if (-not $pyOk -and (Get-Command python -ErrorAction SilentlyContinue)) {
               $shim = Join-Path $dir 'py.cmd'
@@ -271,10 +312,19 @@ public sealed class OptionalModuleInstaller
             $agentRepo = Join-Path $dir 'agent-blackbox'
             if ((Test-Path (Join-Path $agentRepo '.git')) -and (Get-Command git -ErrorAction SilentlyContinue)) {
               # Discard CRLF/tracked-file drift so upstream vendor pull/checkout does not fail.
-              & git -C $agentRepo checkout -- . *> $null
+              $prevPref = $ErrorActionPreference
+              $ErrorActionPreference = 'Continue'
+              try { & git -C $agentRepo -c core.autocrlf=false checkout -- . 2>&1 | Out-Null } finally { $ErrorActionPreference = $prevPref }
             }
-            & $installer -StoreBackend $storeBackend
-            $vendorExit = $LASTEXITCODE
+            $ErrorActionPreference = 'Continue'
+            $vendorExit = 0
+            try {
+              & $installer -StoreBackend $storeBackend
+              if ($null -ne $LASTEXITCODE) { $vendorExit = $LASTEXITCODE }
+            } catch {
+              Write-Warning "Vendor installer reported an error: $($_.Exception.Message)"
+              $vendorExit = 1
+            }
             if ($vendorExit -ne 0) {
               # The pinned vendor build can fail its own "dependency environment committed" check.
               # Repair it once with the vendor CLI; a usable venv is what Axiom actually needs.
@@ -357,7 +407,7 @@ public sealed class OptionalModuleInstaller
               }
               $agent = Join-Path $dir 'agent-blackbox'
               $launcher = Join-Path $agent 'start-dashboard.py'
-              $code = "import argparse`nfrom plugins.blackbox.dashboard import cmd_dashboard`nraise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))`n"
+              $code = '{{BlackboxDashboardLauncherCode.Replace("'", "''")}}'
               [System.IO.File]::WriteAllText($launcher, $code, (New-Object System.Text.UTF8Encoding($false)))
               $dashboard = 'http://127.0.0.1:9700'
               $running = $false
@@ -511,9 +561,7 @@ public sealed class OptionalModuleInstaller
             var launcher = Path.Combine(agent, "start-dashboard.py");
             File.WriteAllText(
                 launcher,
-                "import argparse\n" +
-                "from plugins.blackbox.dashboard import cmd_dashboard\n" +
-                "raise SystemExit(cmd_dashboard(argparse.Namespace(port=None)))\n",
+                BlackboxDashboardLauncherCode,
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var startInfo = new ProcessStartInfo(venv, $"\"{launcher}\"")
@@ -611,51 +659,76 @@ public sealed class OptionalModuleInstaller
         };
 
         log?.Invoke("Running third-party installer silently in the background...");
-        BackgroundWindowHider.HideDescendants(TimeSpan.FromMinutes(10));
-        using var process = Process.Start(startInfo);
-        if (process is null)
+        try
         {
-            log?.Invoke("Could not start PowerShell.");
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                log?.Invoke("Could not start PowerShell.");
+                return false;
+            }
+
+            BackgroundWindowHider.HideDescendants(TimeSpan.FromMinutes(10));
+            ProcessWindowHider.Start(process.Id, TimeSpan.FromMinutes(10));
+
+            var logGate = new object();
+            process.OutputDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Data) || log is null)
+                {
+                    return;
+                }
+
+                lock (logGate)
+                {
+                    log(args.Data);
+                }
+            };
+            process.ErrorDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Data) || log is null)
+                {
+                    return;
+                }
+
+                lock (logGate)
+                {
+                    log(args.Data);
+                }
+            };
+
+            process.StandardInput.Close();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            if (!process.WaitForExit((int)TimeSpan.FromMinutes(15).TotalMilliseconds))
+            {
+                log?.Invoke("Installer timed out after 15 minutes; terminating process tree.");
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+#pragma warning disable CA1031 // Best effort on timeout.
+                catch (Exception)
+#pragma warning restore CA1031
+                {
+                }
+
+                process.CancelOutputRead();
+                process.CancelErrorRead();
+                return false;
+            }
+
+            log?.Invoke($"Installer finished with exit code {process.ExitCode}.");
+            return process.ExitCode == 0;
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+        {
+            log?.Invoke($"Could not start PowerShell: {exception.Message}");
             return false;
         }
-
-        ProcessWindowHider.Start(process.Id, TimeSpan.FromMinutes(10));
-
-        var logGate = new object();
-        process.OutputDataReceived += (_, args) =>
-        {
-            if (string.IsNullOrWhiteSpace(args.Data) || log is null)
-            {
-                return;
-            }
-
-            lock (logGate)
-            {
-                log(args.Data);
-            }
-        };
-        process.ErrorDataReceived += (_, args) =>
-        {
-            if (string.IsNullOrWhiteSpace(args.Data) || log is null)
-            {
-                return;
-            }
-
-            lock (logGate)
-            {
-                log(args.Data);
-            }
-        };
-
-        process.StandardInput.Close();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        process.WaitForExit();
-        log?.Invoke($"Installer finished with exit code {process.ExitCode}.");
-        return process.ExitCode == 0;
     }
 
-    private static void StartPowerShell(string script)
+    private void StartPowerShell(string script)
     {
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
@@ -666,7 +739,18 @@ public sealed class OptionalModuleInstaller
             WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         };
 
-        Process.Start(startInfo);
+        try
+        {
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                LastError = "Could not open PowerShell.";
+            }
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+        {
+            LastError = $"Could not open PowerShell: {exception.Message}";
+        }
     }
 
     private static string Escape(string value) => value.Replace("'", "''", StringComparison.Ordinal);

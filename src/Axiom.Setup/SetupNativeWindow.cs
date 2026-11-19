@@ -1396,7 +1396,7 @@ internal sealed class SetupNativeWindow : IDisposable
         var options = _initialOptions with
         {
             CreateShortcut = _createShortcut,
-            StartAfterInstall = !isRepair || _startAfterInstall,
+            StartAfterInstall = _startAfterInstall,
             CompleteInstallation = _completeMode,
             AllowManualThreatSharing = _completeMode &&
                 (isRepair ? ThreatSharingConsent.HasConsent() : _allowManualThreatSharing),
@@ -1410,10 +1410,22 @@ internal sealed class SetupNativeWindow : IDisposable
 
         _ = Task.Run(async () =>
         {
-            _installResult = await SetupInstaller
-                .InstallAsync(options, progress, CancellationToken.None)
-                .ConfigureAwait(false);
-            _ = NativeMethods.PostMessage(_hwnd, WmAppDone, 0, 0);
+            try
+            {
+                _installResult = await SetupInstaller
+                    .InstallAsync(options, progress, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // Background setup exceptions must unlock the progress view instead of hanging it.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                _installResult = new SetupInstallResult(false, "Installation failed: " + exception.Message, []);
+            }
+            finally
+            {
+                _ = NativeMethods.PostMessage(_hwnd, WmAppDone, 0, 0);
+            }
         });
     }
 
@@ -1439,10 +1451,22 @@ internal sealed class SetupNativeWindow : IDisposable
 
         _ = Task.Run(async () =>
         {
-            _installResult = await SetupInstaller
-                .UninstallAsync(_initialOptions, progress, CancellationToken.None)
-                .ConfigureAwait(false);
-            _ = NativeMethods.PostMessage(_hwnd, WmAppDone, 0, 0);
+            try
+            {
+                _installResult = await SetupInstaller
+                    .UninstallAsync(_initialOptions, progress, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // Background uninstall exceptions must unlock the progress view instead of hanging it.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                _installResult = new SetupInstallResult(false, "Uninstall failed: " + exception.Message, []);
+            }
+            finally
+            {
+                _ = NativeMethods.PostMessage(_hwnd, WmAppDone, 0, 0);
+            }
         });
     }
 
@@ -1551,7 +1575,7 @@ internal sealed class SetupNativeWindow : IDisposable
 
         try
         {
-            _ = Process.Start(new ProcessStartInfo(desktopTarget)
+            using var started = Process.Start(new ProcessStartInfo(desktopTarget)
             {
                 UseShellExecute = true,
                 WorkingDirectory = _initialOptions.InstallDir,

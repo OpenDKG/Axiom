@@ -179,6 +179,7 @@ public sealed class ThreatShareController : IAsyncDisposable
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
+            FlushIncomingLocked();
             _store.Save(_items);
         }
         finally
@@ -198,69 +199,80 @@ public sealed class ThreatShareController : IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var changed = false;
-            while (_incoming.TryDequeue(out var request))
-            {
-                var type = (request.IndicatorType ?? string.Empty).Trim().ToLowerInvariant();
-                var reason = (request.Reason ?? string.Empty).Trim().ToLowerInvariant();
-                var context = (request.Context ?? string.Empty).Trim().ToLowerInvariant();
-                if (!ThreatShareVocabulary.IsSupported(type, reason, context))
-                {
-                    continue;
-                }
-
-                if (ThreatShareVocabulary.Normalize(type, request.Value) is not { } value)
-                {
-                    continue;
-                }
-
-                var id = ThreatShareVocabulary.BuildId(type, value);
-                if (!_knownIds.Add(id))
-                {
-                    continue;
-                }
-
-                var severity = ThreatShareVocabulary.NormalizeSeverity(request.Severity);
-                var assessment = ResolveAssessment(request, type, value, reason);
-
-                _items.Add(new ThreatShareItem(
-                    new ThreatShareCandidate
-                    {
-                        Id = id,
-                        IndicatorType = type,
-                        Value = value,
-                        Reason = reason,
-                        Context = context,
-                        Source = request.Source,
-                        Detail = Trim(request.Detail, 200),
-                        ObservedUtc = request.ObservedUtc,
-                        Severity = severity,
-                        EvidenceClass = request.EvidenceClass,
-                        ProofGrade = request.ProofGrade,
-                        PublicationEligibility = assessment.Eligibility,
-                        NoveltyStatus = request.NoveltyStatus,
-                        EligibilityReasonCode = assessment.ReasonCode,
-                        EligibilityExplanation = assessment.Explanation,
-                    },
-                    ThreatShareState.Pending,
-                    string.Empty,
-                    null));
-                changed = true;
-            }
-
-            if (changed)
-            {
-                if (_items.Count > ThreatShareStore.MaxItems)
-                {
-                    _items.RemoveRange(0, _items.Count - ThreatShareStore.MaxItems);
-                }
-
-                _store.Save(_items);
-            }
+            FlushIncomingLocked();
         }
         finally
         {
             _gate.Release();
+        }
+    }
+
+    private void FlushIncomingLocked()
+    {
+        var changed = false;
+        while (_incoming.TryDequeue(out var request))
+        {
+            var type = (request.IndicatorType ?? string.Empty).Trim().ToLowerInvariant();
+            var reason = (request.Reason ?? string.Empty).Trim().ToLowerInvariant();
+            var context = (request.Context ?? string.Empty).Trim().ToLowerInvariant();
+            if (!ThreatShareVocabulary.IsSupported(type, reason, context))
+            {
+                continue;
+            }
+
+            if (ThreatShareVocabulary.Normalize(type, request.Value) is not { } value)
+            {
+                continue;
+            }
+
+            var id = ThreatShareVocabulary.BuildId(type, value);
+            if (!_knownIds.Add(id))
+            {
+                continue;
+            }
+
+            var severity = ThreatShareVocabulary.NormalizeSeverity(request.Severity);
+            var assessment = ResolveAssessment(request, type, value, reason);
+
+            _items.Add(new ThreatShareItem(
+                new ThreatShareCandidate
+                {
+                    Id = id,
+                    IndicatorType = type,
+                    Value = value,
+                    Reason = reason,
+                    Context = context,
+                    Source = request.Source,
+                    Detail = Trim(request.Detail, 200),
+                    ObservedUtc = request.ObservedUtc,
+                    Severity = severity,
+                    EvidenceClass = request.EvidenceClass,
+                    ProofGrade = request.ProofGrade,
+                    PublicationEligibility = assessment.Eligibility,
+                    NoveltyStatus = request.NoveltyStatus,
+                    EligibilityReasonCode = assessment.ReasonCode,
+                    EligibilityExplanation = assessment.Explanation,
+                },
+                ThreatShareState.Pending,
+                string.Empty,
+                null));
+            changed = true;
+        }
+
+        if (changed)
+        {
+            if (_items.Count > ThreatShareStore.MaxItems)
+            {
+                var overflow = _items.Count - ThreatShareStore.MaxItems;
+                for (var i = 0; i < overflow; i++)
+                {
+                    _knownIds.Remove(_items[i].Candidate.Id);
+                }
+
+                _items.RemoveRange(0, overflow);
+            }
+
+            _store.Save(_items);
         }
     }
 

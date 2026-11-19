@@ -199,15 +199,41 @@ public sealed class ThreatShareCli
 
             var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
             var stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
-            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            var text = ((await stdoutTask.ConfigureAwait(false)) + "\n" +
-                        (await stderrTask.ConfigureAwait(false))).Replace("\r", string.Empty);
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+                var text = ((await stdoutTask.ConfigureAwait(false)) + "\n" +
+                            (await stderrTask.ConfigureAwait(false))).Replace("\r", string.Empty, StringComparison.Ordinal);
 
-            var manualReporterStarted = text.Contains(ThreatShareLauncher.ManualReportStarted, StringComparison.Ordinal);
-            text = text.Replace(ThreatShareLauncher.ManualReportStarted, string.Empty, StringComparison.Ordinal);
-            return !manualReporterStarted && IsUnavailable(text)
-                ? null
-                : new CommandExecution(text, process.ExitCode, null);
+                var manualReporterStarted = text.Contains(ThreatShareLauncher.ManualReportStarted, StringComparison.Ordinal);
+                text = text.Replace(ThreatShareLauncher.ManualReportStarted, string.Empty, StringComparison.Ordinal);
+                return !manualReporterStarted && IsUnavailable(text)
+                    ? null
+                    : new CommandExecution(text, process.ExitCode, null);
+            }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                }
+
+                ObserveFaults(stdoutTask);
+                ObserveFaults(stderrTask);
+                try
+                {
+                    await Task.WhenAny(Task.WhenAll(stdoutTask, stderrTask), Task.Delay(500, CancellationToken.None))
+                        .ConfigureAwait(false);
+                }
+                catch (Exception exception) when (exception is OperationCanceledException or IOException or InvalidOperationException)
+                {
+                }
+
+                throw;
+            }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -227,6 +253,13 @@ public sealed class ThreatShareCli
                 : null;
         }
     }
+
+    private static void ObserveFaults(Task task) =>
+        _ = task.ContinueWith(
+            static completed => _ = completed.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
     /// <summary>
     /// Maps one reporter run to a result. Unknown text after a completed run is treated as an
@@ -476,7 +509,7 @@ public sealed class ThreatShareCli
     {
         if (root.TryGetProperty("kill_list", out var killList) &&
             killList.ValueKind == JsonValueKind.Object &&
-            killList.TryGetProperty(indicatorId, out _))
+            TryGetPropertyIgnoreCase(killList, indicatorId, out _))
         {
             return true;
         }
@@ -523,13 +556,13 @@ public sealed class ThreatShareCli
         if (root.TryGetProperty("ioc", out var iocs) &&
             iocs.ValueKind == JsonValueKind.Object)
         {
-            if (iocs.TryGetProperty(indicatorId, out _))
+            if (TryGetPropertyIgnoreCase(iocs, indicatorId, out _))
             {
                 return true;
             }
 
             var prefixSplit = indicatorId.Split(':', 3);
-            if (prefixSplit.Length == 3 && iocs.TryGetProperty(prefixSplit[2], out _))
+            if (prefixSplit.Length == 3 && TryGetPropertyIgnoreCase(iocs, prefixSplit[2], out _))
             {
                 return true;
             }
@@ -547,7 +580,7 @@ public sealed class ThreatShareCli
             return false;
         }
 
-        if (!community.TryGetProperty(indicatorId, out var entry) ||
+        if (!TryGetPropertyIgnoreCase(community, indicatorId, out var entry) ||
             entry.ValueKind != JsonValueKind.Object)
         {
             return false;
@@ -567,12 +600,34 @@ public sealed class ThreatShareCli
         return true;
     }
 
+    private static bool TryGetPropertyIgnoreCase(JsonElement obj, string name, out JsonElement value)
+    {
+        if (obj.TryGetProperty(name, out value))
+        {
+            return true;
+        }
+
+        foreach (var prop in obj.EnumerateObject())
+        {
+            if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = prop.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
     private static bool IsFreshSyncedRuleset(JsonElement root, DateTimeOffset nowUtc)
     {
         if (!root.TryGetProperty("synced_at", out var syncedProp) ||
             syncedProp.ValueKind != JsonValueKind.Number ||
             !syncedProp.TryGetDouble(out var syncedUnix) ||
-            syncedUnix <= 0)
+            !double.IsFinite(syncedUnix) ||
+            syncedUnix <= 0 ||
+            syncedUnix > DateTimeOffset.MaxValue.ToUnixTimeSeconds())
         {
             return false;
         }

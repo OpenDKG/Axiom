@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 
 namespace Axiom.UI.Avalonia.Views;
@@ -7,6 +8,7 @@ namespace Axiom.UI.Avalonia.Views;
 public partial class AiAnalystView : UserControl
 {
     private INotifyPropertyChanged? _viewModel;
+    private bool _attached;
 
     public AiAnalystView()
     {
@@ -14,17 +16,41 @@ public partial class AiAnalystView : UserControl
         DataContextChanged += (_, _) => AttachViewModel();
     }
 
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _attached = true;
+        AttachViewModel();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _attached = false;
+        DetachViewModel();
+        base.OnDetachedFromVisualTree(e);
+    }
+
     private void AttachViewModel()
     {
-        if (_viewModel is not null)
+        DetachViewModel();
+        if (!_attached)
         {
-            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            return;
         }
 
         _viewModel = DataContext as INotifyPropertyChanged;
         if (_viewModel is not null)
         {
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
+    }
+
+    private void DetachViewModel()
+    {
+        if (_viewModel is not null)
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel = null;
         }
     }
 

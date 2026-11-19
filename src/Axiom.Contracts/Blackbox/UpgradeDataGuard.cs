@@ -149,13 +149,23 @@ public static class UpgradeDataGuard
             return new UpgradeDataRestoreResult(restored, shrunk, failed);
         }
 
+        var normalizedBackupRoot = EnsureTrailingSeparator(Path.GetFullPath(backupDirectory));
+        var normalizedLocalRoot = EnsureTrailingSeparator(Path.GetFullPath(local));
+
         foreach (var entry in manifest.Entries)
         {
-            var source = Path.Combine(backupDirectory, entry.RelativePath);
-            var target = Path.Combine(local, entry.RelativePath);
+            var relativePath = entry.RelativePath;
+            if (string.IsNullOrWhiteSpace(relativePath) ||
+                !TryResolveContainedPath(backupDirectory, normalizedBackupRoot, relativePath, out var source) ||
+                !TryResolveContainedPath(local, normalizedLocalRoot, relativePath, out var target))
+            {
+                failed.Add(relativePath ?? string.Empty);
+                continue;
+            }
+
             if (!File.Exists(source))
             {
-                failed.Add(entry.RelativePath);
+                failed.Add(relativePath);
                 continue;
             }
 
@@ -164,7 +174,7 @@ public static class UpgradeDataGuard
             {
                 if (current < entry.Length)
                 {
-                    shrunk.Add(entry.RelativePath);
+                    shrunk.Add(relativePath);
                 }
 
                 continue;
@@ -174,11 +184,11 @@ public static class UpgradeDataGuard
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 File.Copy(source, target, overwrite: true);
-                restored.Add(entry.RelativePath);
+                restored.Add(relativePath);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                failed.Add(entry.RelativePath);
+                failed.Add(relativePath);
             }
         }
 
@@ -323,6 +333,40 @@ public static class UpgradeDataGuard
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static string EnsureTrailingSeparator(string fullPath) =>
+        fullPath.EndsWith(Path.DirectorySeparatorChar) || fullPath.EndsWith(Path.AltDirectorySeparatorChar)
+            ? fullPath
+            : fullPath + Path.DirectorySeparatorChar;
+
+    private static bool TryResolveContainedPath(
+        string root,
+        string normalizedRoot,
+        string? relativePath,
+        out string fullPath)
+    {
+        fullPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var candidate = Path.GetFullPath(Path.Combine(root, relativePath));
+            if (!candidate.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            fullPath = candidate;
+            return true;
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
         {
             return false;
         }

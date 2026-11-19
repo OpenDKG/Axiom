@@ -205,7 +205,7 @@ public partial class App : Application
                 Dispatcher.UIThread.Post(async () =>
                 {
                     await Task.Delay(TimeSpan.FromSeconds(3)).ConfigureAwait(true);
-                    if (_tray is null)
+                    if (_tray is null && !_exiting)
                     {
                         CreateTrayIcon(desktop);
                     }
@@ -222,7 +222,12 @@ public partial class App : Application
             if (!startMinimized && !autostartArgument && !OnboardingStore.IsCompleted)
             {
                 Dispatcher.UIThread.Post(async () =>
-                    await FirstRunDialog.ShowAsync(window, protector).ConfigureAwait(true));
+                {
+                    if (!_exiting)
+                    {
+                        await FirstRunDialog.ShowAsync(window, protector).ConfigureAwait(true);
+                    }
+                });
             }
 
             desktop.Exit += (_, _) => Cleanup();

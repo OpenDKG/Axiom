@@ -158,10 +158,11 @@ public static class BackgroundWindowHider
     private static Timer? _timer;
     private static int _rootPid;
     private static DateTimeOffset _until;
+    private static int _sweeping;
 
     public static void HideDescendants(TimeSpan duration)
     {
-        if (!OperatingSystem.IsWindows() || !BackgroundWindowSettingsStore.Enabled)
+        if (!OperatingSystem.IsWindows() || !BackgroundWindowSettingsStore.Enabled || duration <= TimeSpan.Zero)
         {
             return;
         }
@@ -169,9 +170,13 @@ public static class BackgroundWindowHider
         lock (Gate)
         {
             _rootPid = Environment.ProcessId;
-            _until = DateTimeOffset.UtcNow + duration;
-            _timer?.Dispose();
-            _timer = new Timer(
+            var candidateUntil = DateTimeOffset.UtcNow + duration;
+            if (candidateUntil > _until)
+            {
+                _until = candidateUntil;
+            }
+
+            _timer ??= new Timer(
                 _ => Sweep(),
                 null,
                 dueTime: 0,
@@ -186,15 +191,28 @@ public static class BackgroundWindowHider
             return;
         }
 
+        if (Interlocked.Exchange(ref _sweeping, 1) != 0)
+        {
+            return;
+        }
+
         try
         {
-            if (!BackgroundWindowSettingsStore.Enabled || DateTimeOffset.UtcNow >= _until)
+            int rootPid;
+            DateTimeOffset until;
+            lock (Gate)
+            {
+                rootPid = _rootPid;
+                until = _until;
+            }
+
+            if (!BackgroundWindowSettingsStore.Enabled || DateTimeOffset.UtcNow >= until)
             {
                 return;
             }
 
             var parents = ReadParents();
-            var descendants = new HashSet<int> { _rootPid };
+            var descendants = new HashSet<int> { rootPid };
             var changed = true;
             while (changed)
             {
@@ -211,7 +229,7 @@ public static class BackgroundWindowHider
 
             foreach (var processId in descendants)
             {
-                if (processId == _rootPid)
+                if (processId == rootPid)
                 {
                     continue;
                 }
@@ -245,12 +263,14 @@ public static class BackgroundWindowHider
         {
             lock (Gate)
             {
-                if (DateTimeOffset.UtcNow >= _until)
+                if (!BackgroundWindowSettingsStore.Enabled || DateTimeOffset.UtcNow >= _until)
                 {
                     _timer?.Dispose();
                     _timer = null;
                 }
             }
+
+            Volatile.Write(ref _sweeping, 0);
         }
     }
 

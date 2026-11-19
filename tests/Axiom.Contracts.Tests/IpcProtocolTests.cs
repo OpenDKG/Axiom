@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.IO.Pipes;
+using System.Text;
 using Axiom.Contracts.Ipc;
 using Xunit;
 
@@ -32,5 +34,35 @@ public sealed class IpcProtocolTests
     {
         Assert.Equal(IpcCommandTypes.All.Count, IpcCommandTypes.All.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(IpcCommandTypes.All, name => name.Contains("exec", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Pipe_client_wraps_oversized_response_as_ipc_client_exception()
+    {
+        var pipeName = $"Axiom.Contracts.Test.{Guid.NewGuid():N}";
+        using var server = new NamedPipeServerStream(
+            pipeName,
+            PipeDirection.InOut,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous);
+
+        var serverTask = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync().ConfigureAwait(false);
+            _ = await IpcLineProtocol.ReadLineAsync(server, IpcProtocol.MaxMessageBytes, CancellationToken.None)
+                .ConfigureAwait(false);
+            var oversized = new string('a', IpcProtocol.MaxResponseBytes + 128);
+            var bytes = Encoding.UTF8.GetBytes(oversized + "\n");
+            await server.WriteAsync(bytes).ConfigureAwait(false);
+            await server.FlushAsync().ConfigureAwait(false);
+        });
+
+        var client = new IpcPipeClient(pipeName);
+        var ex = await Assert.ThrowsAsync<IpcClientException>(() =>
+            client.SendAsync<ServiceHealth>(IpcCommandTypes.ServiceHealth, null, CancellationToken.None));
+
+        Assert.Equal(IpcErrorCodes.MessageTooLarge, ex.Code);
+        await serverTask;
     }
 }

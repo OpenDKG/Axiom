@@ -31,7 +31,7 @@ internal sealed class BundledServiceHost : IDisposable
             return true;
         }
 
-        if (Process.GetProcessesByName("Axiom.Service").Length > 0)
+        if (HasRunningServiceProcess())
         {
             return true;
         }
@@ -54,6 +54,18 @@ internal sealed class BundledServiceHost : IDisposable
         {
             return false;
         }
+    }
+
+    private static bool HasRunningServiceProcess()
+    {
+        var processes = Process.GetProcessesByName("Axiom.Service");
+        var any = processes.Length > 0;
+        foreach (var process in processes)
+        {
+            process.Dispose();
+        }
+
+        return any;
     }
 
     private static bool IsServiceRegistered()

@@ -30,10 +30,17 @@ public sealed record SetupOptions(
 
         for (var index = 0; index < args.Length; index++)
         {
-            switch (args[index].ToLowerInvariant())
+            var arg = args[index];
+            if (arg.StartsWith("--install-dir=", StringComparison.OrdinalIgnoreCase))
+            {
+                TrySetInstallDir(arg["--install-dir=".Length..], ref installDir);
+                continue;
+            }
+
+            switch (arg.ToLowerInvariant())
             {
                 case "--install-dir" when index + 1 < args.Length:
-                    installDir = Path.GetFullPath(args[++index]);
+                    TrySetInstallDir(args[++index], ref installDir);
                     break;
                 case "--no-shortcut":
                     createShortcut = false;
@@ -69,5 +76,22 @@ public sealed record SetupOptions(
             acceptRisk,
             uninstall,
             completeInstallation && allowManualThreatSharing);
+    }
+
+    private static void TrySetInstallDir(string raw, ref string installDir)
+    {
+        var trimmed = raw.Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return;
+        }
+
+        try
+        {
+            installDir = Path.GetFullPath(trimmed);
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+        }
     }
 }

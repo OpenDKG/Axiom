@@ -191,6 +191,7 @@ public sealed class HistoryStore
         try
         {
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await ExecuteAsync(connection, "PRAGMA busy_timeout=5000;", cancellationToken).ConfigureAwait(false);
             await ExecuteAsync(connection, "PRAGMA synchronous=NORMAL;", cancellationToken).ConfigureAwait(false);
             await ExecuteAsync(connection, "PRAGMA temp_store=MEMORY;", cancellationToken).ConfigureAwait(false);
             await ExecuteAsync(connection, "PRAGMA cache_size=-8192;", cancellationToken).ConfigureAwait(false);
@@ -218,18 +219,22 @@ public sealed class HistoryStore
         ArgumentNullException.ThrowIfNull(snapshot);
 
         var now = ToStorage(snapshot.CapturedUtc);
-        var refreshAll = forceRefresh || DateTimeOffset.UtcNow - _lastFullRefresh >= FullRefreshInterval;
+        bool refreshAll;
         var changed = new List<(LiveConnection Flow, string Key, string Fingerprint)>();
-        foreach (var flow in snapshot.Connections)
+        lock (_writtenFlows)
         {
-            var key = FlowKey(flow);
-            var fingerprint = FlowFingerprint(flow);
-            if (refreshAll ||
-                !_writtenFlows.TryGetValue(key, out var previous) ||
-                !string.Equals(previous.Fingerprint, fingerprint, StringComparison.Ordinal) ||
-                !string.Equals(previous.CapturedUtc, now, StringComparison.Ordinal))
+            refreshAll = forceRefresh || DateTimeOffset.UtcNow - _lastFullRefresh >= FullRefreshInterval;
+            foreach (var flow in snapshot.Connections)
             {
-                changed.Add((flow, key, fingerprint));
+                var key = FlowKey(flow);
+                var fingerprint = FlowFingerprint(flow);
+                if (refreshAll ||
+                    !_writtenFlows.TryGetValue(key, out var previous) ||
+                    !string.Equals(previous.Fingerprint, fingerprint, StringComparison.Ordinal) ||
+                    !string.Equals(previous.CapturedUtc, now, StringComparison.Ordinal))
+                {
+                    changed.Add((flow, key, fingerprint));
+                }
             }
         }
 
@@ -264,20 +269,23 @@ public sealed class HistoryStore
 
         await transaction.CommitAsync(cancellationToken);
 
-        if (refreshAll)
+        lock (_writtenFlows)
         {
-            _writtenFlows.Clear();
-            _lastFullRefresh = DateTimeOffset.UtcNow;
-        }
+            if (refreshAll)
+            {
+                _writtenFlows.Clear();
+                _lastFullRefresh = DateTimeOffset.UtcNow;
+            }
 
-        foreach (var (_, key, fingerprint) in changed)
-        {
-            _writtenFlows[key] = (fingerprint, now);
-        }
+            foreach (var (_, key, fingerprint) in changed)
+            {
+                _writtenFlows[key] = (fingerprint, now);
+            }
 
-        if (_writtenFlows.Count > 20_000)
-        {
-            _writtenFlows.Clear();
+            if (_writtenFlows.Count > 20_000)
+            {
+                _writtenFlows.Clear();
+            }
         }
 
         return changed.Count;

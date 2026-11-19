@@ -147,7 +147,15 @@ public sealed class PipeServer
                 exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
             {
                 _log?.Invoke($"Pipe server could not start: {exception.Message}");
-                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
                 continue;
             }
 

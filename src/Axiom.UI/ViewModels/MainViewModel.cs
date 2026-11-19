@@ -156,7 +156,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         try
         {
-            Process.Start(new ProcessStartInfo("https://github.com/a-51-50/Axiom")
+            using var _ = Process.Start(new ProcessStartInfo("https://github.com/a-51-50/Axiom")
             {
                 UseShellExecute = true,
             });

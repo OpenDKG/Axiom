@@ -28,22 +28,22 @@
       "axiom.core": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[1.0.0, )"
+          "Axiom.Contracts": "[1.4.3, )"
         }
       },
       "axiom.presentation": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[1.0.0, )",
-          "Axiom.Core": "[1.0.0, )",
+          "Axiom.Contracts": "[1.4.3, )",
+          "Axiom.Core": "[1.4.3, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )"
         }
       },
       "axiom.service.hosting": {
         "type": "Project",
         "dependencies": {
-          "Axiom.Contracts": "[1.0.0, )",
-          "Axiom.Core": "[1.0.0, )"
+          "Axiom.Contracts": "[1.4.3, )",
+          "Axiom.Core": "[1.4.3, )"
         }
       },
       "CommunityToolkit.Mvvm": {
@@ -51,6 +51,17 @@
         "requested": "[8.4.2, )",
         "resolved": "8.4.2",
         "contentHash": "WadCzGEc2U+3e20avRLng4qNtt4zoOGWrdUISqJWrHe3/FSnrYjuM5Sb4yQb09LhkBXrrI4Zt3dLKgRMbItsrg=="
+      }
+    },
+    "net10.0-windows7.0/osx-x64": {
+      "System.Management": {
+        "type": "Direct",
+        "requested": "[10.0.14, )",
+        "resolved": "10.0.14",
+        "contentHash": "ywAltakc72Oe7liNatclpyq8oiLYx0VMSjQvphlsbPbiQ9glrV3JKvn5M2xFbsOzzh8sV3QAiUdmu2AV/ffN7Q==",
+        "dependencies": {
+          "System.CodeDom": "10.0.14"
+        }
       }
     }
   }

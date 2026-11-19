@@ -95,8 +95,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private bool _verifiedGraphInitialized;
 
+    private readonly CancellationTokenSource _lifetime = new();
     private bool _pageActive;
     private bool _trayMonitoring;
+    private bool _disposed;
 
     private bool _autoSyncRunning;
 
@@ -144,16 +146,27 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _timer = timers.Create(TimeSpan.FromSeconds(8));
         _timer.Tick += async (_, _) =>
         {
-            if (_pageActive)
+            if (_disposed)
             {
-                await RefreshAsync().ConfigureAwait(true);
-            }
-            else if (_trayMonitoring)
-            {
-                await RefreshTrayActivityAsync().ConfigureAwait(true);
+                return;
             }
 
-            await MaybeAutoSyncAsync().ConfigureAwait(true);
+            try
+            {
+                if (_pageActive)
+                {
+                    await RefreshAsync().ConfigureAwait(true);
+                }
+                else if (_trayMonitoring)
+                {
+                    await RefreshTrayActivityAsync().ConfigureAwait(true);
+                }
+
+                await MaybeAutoSyncAsync().ConfigureAwait(true);
+            }
+            catch (Exception exception) when (_disposed && exception is OperationCanceledException or ObjectDisposedException)
+            {
+            }
         };
     }
 
@@ -173,7 +186,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         ["All Activity", "Sessions", "API calls", "Tool calls", "Installs", "File access", "Threats"];
 
     public IReadOnlyList<string> AgentFilters { get; } =
-        ["All agents", "Hermes", "OpenClaw", "OpenCode", "OpenChamber", "Codex", "Claude", "Cursor", "Copilot", "Gemini", "Windsurf", "Cline", "ZCode", "DeepSeek", "Unknown"];
+        ["All agents", "Hermes", "OpenClaw", "OpenCode", "Codex", "Claude", "Antigravity", "Cursor", "Copilot", "Gemini", "Windsurf", "Cline", "ZCode", "DeepSeek", "Unknown"];
 
     public IReadOnlyList<string> SeverityFilters { get; } =
         ["All severities", "Info", "Low", "Medium", "High", "Critical"];
@@ -425,7 +438,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     public void Activate()
     {
-        if (!IsAvailable)
+        if (!IsAvailable || _disposed)
         {
             return;
         }
@@ -445,13 +458,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     internal void SetTrayMonitoring(bool enabled)
     {
-        _trayMonitoring = enabled && IsAvailable;
+        _trayMonitoring = enabled && IsAvailable && !_disposed;
         UpdatePollTimer();
     }
 
     private void UpdatePollTimer()
     {
-        if (IsAvailable && (_pageActive || _trayMonitoring || IsAutoSyncEnabled))
+        if (!_disposed && IsAvailable && (_pageActive || _trayMonitoring || IsAutoSyncEnabled))
         {
             _timer.Interval = TimeSpan.FromSeconds(_pageActive ? 8 : 30);
             _timer.Start();
@@ -464,9 +477,18 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _pageActive = false;
         _trayMonitoring = false;
         _timer.StopTimer();
         _timer.Dispose();
+        _lifetime.Cancel();
+        _lifetime.Dispose();
         _client.Dispose();
         _peerRelay.Dispose();
     }
@@ -474,6 +496,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     [RelayCommand]
     private async Task RefreshAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (!IsAvailable)
         {
             ThreatShareQueueText = "Indicator preview is unavailable in Store builds.";
@@ -489,87 +516,119 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         _refreshing = true;
+        var token = _lifetime.Token;
         var now = DateTimeOffset.UtcNow;
         try
         {
-            var shouldRefreshActivity = !_activityInitialized ||
-                                       now - _lastActivityRefresh >= ActivityRefreshInterval;
-            var shouldRefreshVerifiedGraph = !_verifiedGraphInitialized ||
-                                            now - _lastVerifiedGraphRefresh >= VerifiedGraphRefreshInterval;
-            var settingsTask = _client.GetSettingsAsync(CancellationToken.None);
-            var graphTask = _client.GetGraphStatusAsync(CancellationToken.None);
-            var verifiedSyncTask = TryGetVerifiedSyncAsync();
-            var verifiedGraphTask = shouldRefreshVerifiedGraph
-                ? TryGetVerifiedGraphAsync()
-                : Task.FromResult<BlackboxGraphPage?>(null);
-            var auditTask = shouldRefreshActivity
-                ? LoadActivityAsync(full: !_activityInitialized)
-                : Task.FromResult<BlackboxAuditPage?>(null);
-            var findingsTask = _client.GetFindingsAsync(100, 0, CancellationToken.None);
-
-            // These two are optional dashboard reads. Apply them independently so a slow audit
-            // history or a missing endpoint cannot hide the verified-graph state.
-            var verifiedSync = await verifiedSyncTask.ConfigureAwait(true);
-            var graphPage = await verifiedGraphTask.ConfigureAwait(true);
-            var localRules = verifiedSync?.VerifiedRules ?? 0;
-            if (localRules > 0 && graphPage is { Threats.Count: > 0 })
+            try
             {
-                _peerRelay.PublishInMemory(verifiedSync!, graphPage);
-            }
+                var shouldRefreshActivity = !_activityInitialized ||
+                                           now - _lastActivityRefresh >= ActivityRefreshInterval;
+                var shouldRefreshVerifiedGraph = !_verifiedGraphInitialized ||
+                                                now - _lastVerifiedGraphRefresh >= VerifiedGraphRefreshInterval;
+                var settingsTask = _client.GetSettingsAsync(token);
+                var graphTask = _client.GetGraphStatusAsync(token);
+                var verifiedSyncTask = TryGetVerifiedSyncAsync(token);
+                var verifiedGraphTask = shouldRefreshVerifiedGraph
+                    ? TryGetVerifiedGraphAsync(token)
+                    : Task.FromResult<BlackboxGraphPage?>(null);
+                var auditTask = shouldRefreshActivity
+                    ? LoadActivityAsync(full: !_activityInitialized, token)
+                    : Task.FromResult<BlackboxAuditPage?>(null);
+                var findingsTask = _client.GetFindingsAsync(100, 0, token);
 
-            if (localRules == 0 ||
-                (shouldRefreshVerifiedGraph && (verifiedSync?.IsSyncing == true || graphPage?.Threats.Count == 0)))
-            {
-                if (await _peerRelay.TryFetchFromPeersAsync(localRules, CancellationToken.None).ConfigureAwait(true) is { } peerSnapshot)
+                // These two are optional dashboard reads. Apply them independently so a slow audit
+                // history or a missing endpoint cannot hide the verified-graph state.
+                var verifiedSync = await verifiedSyncTask.ConfigureAwait(true);
+                var graphPage = await verifiedGraphTask.ConfigureAwait(true);
+                if (_disposed)
                 {
-                    verifiedSync = peerSnapshot.Sync;
-                    graphPage = peerSnapshot.Graph;
+                    return;
                 }
-            }
 
-            ApplyVerifiedSync(verifiedSync);
-            if (graphPage is not null)
+                var localRules = verifiedSync?.VerifiedRules ?? 0;
+                if (localRules > 0 && graphPage is { Threats.Count: > 0 })
+                {
+                    _peerRelay.PublishInMemory(verifiedSync!, graphPage);
+                }
+
+                if (localRules == 0 ||
+                    (shouldRefreshVerifiedGraph && (verifiedSync?.IsSyncing == true || graphPage?.Threats.Count == 0)))
+                {
+                    if (await _peerRelay.TryFetchFromPeersAsync(localRules, token).ConfigureAwait(true) is { } peerSnapshot)
+                    {
+                        verifiedSync = peerSnapshot.Sync;
+                        graphPage = peerSnapshot.Graph;
+                    }
+                }
+
+                if (_disposed)
+                {
+                    return;
+                }
+
+                ApplyVerifiedSync(verifiedSync);
+                if (graphPage is not null)
+                {
+                    ApplyVerifiedGraph(graphPage);
+                    _lastVerifiedGraphRefresh = now;
+                    _verifiedGraphInitialized = true;
+                }
+
+                await Task.WhenAll(
+                    settingsTask,
+                    graphTask,
+                    auditTask,
+                    findingsTask).ConfigureAwait(true);
+                if (_disposed)
+                {
+                    return;
+                }
+
+                if (auditTask.Result is { } auditPage)
+                {
+                    ApplyPolledActivity(auditPage, now);
+                }
+
+                ApplyFindings(findingsTask.Result);
+                ApplyHealth(settingsTask.Result, graphTask.Result);
+                ApplyHookEvidence();
+                await RefreshEnforcementAsync(
+                    guardAvailable: true,
+                    ReadString(settingsTask.Result, "mode")).ConfigureAwait(true);
+                if (_disposed)
+                {
+                    return;
+                }
+
+                await RefreshSessionsAsync().ConfigureAwait(true);
+            }
+            catch (Exception exception) when (_disposed && exception is OperationCanceledException or ObjectDisposedException)
             {
-                ApplyVerifiedGraph(graphPage);
-                _lastVerifiedGraphRefresh = now;
-                _verifiedGraphInitialized = true;
+                return;
             }
-
-            await Task.WhenAll(
-                settingsTask,
-                graphTask,
-                auditTask,
-                findingsTask).ConfigureAwait(true);
-
-            if (auditTask.Result is { } auditPage)
+            catch (Exception exception) when (exception is
+                HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
             {
-                ApplyPolledActivity(auditPage, now);
+                if (_disposed)
+                {
+                    return;
+                }
+
+                ActivityStatusText = $"Blackbox is unavailable: {exception.Message}";
+                HealthStatusText = "Blackbox dashboard is offline or not responding.";
+                SummaryText = "No live Blackbox data is available.";
+                _blackboxSharingKnown = false;
+                CanDisableBlackboxAutomaticSharing = false;
+                UpdateThreatSharingPermission();
+                ApplyHookEvidence();
+                await RefreshEnforcementAsync(guardAvailable: false, hookMode: null).ConfigureAwait(true);
             }
 
-            ApplyFindings(findingsTask.Result);
-            ApplyHealth(settingsTask.Result, graphTask.Result);
-            ApplyHookEvidence();
-            await RefreshEnforcementAsync(
-                guardAvailable: true,
-                ReadString(settingsTask.Result, "mode")).ConfigureAwait(true);
-            await RefreshSessionsAsync().ConfigureAwait(true);
-        }
-        catch (Exception exception) when (exception is
-            HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
-        {
-            ActivityStatusText = $"Blackbox is unavailable: {exception.Message}";
-            HealthStatusText = "Blackbox dashboard is offline or not responding.";
-            SummaryText = "No live Blackbox data is available.";
-            _blackboxSharingKnown = false;
-            CanDisableBlackboxAutomaticSharing = false;
-            UpdateThreatSharingPermission();
-            ApplyHookEvidence();
-            await RefreshEnforcementAsync(guardAvailable: false, hookMode: null).ConfigureAwait(true);
-        }
-
-        try
-        {
-            await RefreshThreatShareAsync().ConfigureAwait(true);
+            if (!_disposed)
+            {
+                await RefreshThreatShareAsync().ConfigureAwait(true);
+            }
         }
         finally
         {
@@ -579,22 +638,24 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private async Task RefreshTrayActivityAsync()
     {
-        if (_refreshing)
+        if (_disposed || _refreshing)
         {
             return;
         }
 
         _refreshing = true;
+        var token = _lifetime.Token;
         try
         {
-            var audit = await LoadActivityAsync(full: false).ConfigureAwait(true);
-            if (_trayMonitoring && audit is not null)
+            var audit = await LoadActivityAsync(full: false, token).ConfigureAwait(true);
+            if (!_disposed && _trayMonitoring && audit is not null)
             {
                 ApplyPolledActivity(audit, DateTimeOffset.UtcNow);
             }
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or
                      InvalidDataException or System.Text.Json.JsonException ||
+                     (_disposed && exception is OperationCanceledException or ObjectDisposedException) ||
                      (exception is ObjectDisposedException && !_trayMonitoring))
         {
             // A temporarily unavailable dashboard will be retried on the next tray tick.
@@ -685,7 +746,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private async Task MaybeAutoSyncAsync()
     {
-        if (!IsAutoSyncEnabled || _autoSyncRunning || !IsAvailable)
+        if (_disposed || !IsAutoSyncEnabled || _autoSyncRunning || !IsAvailable)
         {
             return;
         }
@@ -708,9 +769,15 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _lastAutoSyncAttempt = now;
         AutoSyncStatusText = "Auto-sync: checking for new verified assets…";
         PersistAutoSync();
+        var token = _lifetime.Token;
         try
         {
-            var result = await _client.RequestSyncAsync(CancellationToken.None).ConfigureAwait(true);
+            var result = await _client.RequestSyncAsync(token).ConfigureAwait(true);
+            if (_disposed)
+            {
+                return;
+            }
+
             if (!result.Ok)
             {
                 AutoSyncStatusText = $"Auto-sync: {result.Message}";
@@ -718,11 +785,14 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             }
 
             AutoSyncStatusText = "Auto-sync requested; existing assets stay local and only new data is fetched.";
-            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
-            if (_pageActive)
+            await Task.Delay(TimeSpan.FromSeconds(2), token).ConfigureAwait(true);
+            if (!_disposed && _pageActive)
             {
                 await RefreshAsync().ConfigureAwait(true);
             }
+        }
+        catch (Exception exception) when (_disposed && exception is OperationCanceledException or ObjectDisposedException)
+        {
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
@@ -732,7 +802,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         finally
         {
             _autoSyncRunning = false;
-            PersistAutoSync();
+            if (!_disposed)
+            {
+                PersistAutoSync();
+            }
         }
     }
 
@@ -774,14 +847,14 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
     }
 
-    private async Task<BlackboxAuditPage?> LoadActivityAsync(bool full)
+    private async Task<BlackboxAuditPage?> LoadActivityAsync(bool full, CancellationToken cancellationToken = default)
     {
         if (!full)
         {
             return await _client.GetAuditAsync(
                 ActivityPageSize,
                 0,
-                CancellationToken.None).ConfigureAwait(true);
+                cancellationToken).ConfigureAwait(true);
         }
 
         var entries = new List<BlackboxAuditEntry>();
@@ -792,7 +865,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             var page = await _client.GetAuditAsync(
                 Math.Min(ActivityPageSize, ActivityMax - entries.Count),
                 offset,
-                CancellationToken.None).ConfigureAwait(true);
+                cancellationToken).ConfigureAwait(true);
             total = page.Total;
             if (page.Entries.Count == 0)
             {
@@ -1119,9 +1192,12 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
-        var exitTask = process.WaitForExitAsync();
-        var completed = await Task.WhenAny(exitTask, Task.Delay(TimeSpan.FromSeconds(15))).ConfigureAwait(true);
-        if (completed != exitTask)
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        try
+        {
+            await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
         {
             try
             {
@@ -1133,10 +1209,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             {
             }
 
+            _ = outputTask.ContinueWith(task => _ = task.Exception, TaskScheduler.Default);
+            _ = errorTask.ContinueWith(task => _ = task.Exception, TaskScheduler.Default);
             throw new TimeoutException("Blackbox guard timed out.");
         }
 
-        await exitTask.ConfigureAwait(true);
         var output = await outputTask.ConfigureAwait(true);
         _ = await errorTask.ConfigureAwait(true);
         return JsonNode.Parse(output) as JsonObject;
@@ -1425,6 +1502,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         _threatShareSubmitting = true;
+        UpdateThreatShareActions();
         ThreatShareActionText = $"Submitting retraction for {item.Candidate.Value}...";
         try
         {
@@ -1459,6 +1537,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         finally
         {
             _threatShareSubmitting = false;
+            UpdateThreatShareActions();
         }
     }
 
@@ -1814,6 +1893,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             _allActivity.Sort((left, right) =>
                 (right.Timestamp ?? DateTimeOffset.MinValue)
                 .CompareTo(left.Timestamp ?? DateTimeOffset.MinValue));
+            if (_allActivity.Count > ActivityMax)
+            {
+                _allActivity.RemoveRange(ActivityMax, _allActivity.Count - ActivityMax);
+            }
         }
 
         UpdateActivitySummary();
@@ -2016,11 +2099,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         HasSelectedFinding = value is not null;
     }
 
-    private async Task<BlackboxVerifiedSync?> TryGetVerifiedSyncAsync()
+    private async Task<BlackboxVerifiedSync?> TryGetVerifiedSyncAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            var dashboard = await _client.GetVerifiedSyncAsync(CancellationToken.None).ConfigureAwait(true);
+            var dashboard = await _client.GetVerifiedSyncAsync(cancellationToken).ConfigureAwait(true);
             var local = BlackboxLocalState.TryReadSync();
             if (local is not null && local.VerifiedRules > dashboard.VerifiedRules)
             {
@@ -2036,14 +2119,14 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
     }
 
-    private async Task<BlackboxGraphPage?> TryGetVerifiedGraphAsync()
+    private async Task<BlackboxGraphPage?> TryGetVerifiedGraphAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             return await _client.GetVerifiedGraphAsync(
                 VerifiedGraphPageSize,
                 0,
-                CancellationToken.None).ConfigureAwait(true);
+                cancellationToken).ConfigureAwait(true);
         }
         catch (Exception exception) when (exception is
             HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
@@ -2371,8 +2454,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 continue;
             }
 
-            if (SelectedAgentFilter != "All agents" &&
-                !string.Equals(entry.Agent, SelectedAgentFilter, StringComparison.OrdinalIgnoreCase))
+            if (!MatchesAgentFilter(entry.Agent, SelectedAgentFilter))
             {
                 continue;
             }
@@ -2472,6 +2554,12 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             "Threats" => entry.IsThreat,
             _ => true,
         };
+
+    private static bool MatchesAgentFilter(string? agent, string filter) =>
+        filter == "All agents" ||
+        string.Equals(agent, filter, StringComparison.OrdinalIgnoreCase) ||
+        (string.Equals(filter, "OpenCode", StringComparison.OrdinalIgnoreCase) &&
+         string.Equals(agent, "openchamber", StringComparison.OrdinalIgnoreCase));
 
     private static string ActivityIdentity(BlackboxAuditEntry entry) =>
         entry.RawJson.Length > 0
