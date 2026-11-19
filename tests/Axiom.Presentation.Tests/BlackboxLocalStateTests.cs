@@ -242,6 +242,36 @@ public sealed class BlackboxLocalStateTests
         Assert.Equal(2, BlackboxLocalState.GetParseCountForPathForTests(rulesetPath));
     }
 
+    [Fact]
+    public void Out_of_range_timestamps_and_utf8_bom_do_not_crash_local_state_readers()
+    {
+        using var temp = new TemporaryDirectory();
+        var bomJson =
+            """
+            {
+              "synced_at": 1e20,
+              "graph_threats": [
+                {"identifier":"c2.verified.example","name":"Verified C2","category":"ioc","severity":"high","source":"public"}
+              ]
+            }
+            """;
+        File.WriteAllText(
+            Path.Combine(temp.Path, "ruleset.json"),
+            bomJson,
+            new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        File.WriteAllText(
+            Path.Combine(temp.Path, "authoritative-sync.json"),
+            """{"status":"done","public_entries":1,"updated_at":1e20}""");
+
+        var report = BlackboxLocalState.EvaluateContinuity(root: temp.Path, guardPresent: true, dkgConnected: true);
+        var sync = BlackboxLocalState.TryReadSync(temp.Path);
+
+        Assert.True(report.RulesetAvailable);
+        Assert.Null(report.LastSyncedUtc);
+        Assert.NotNull(sync);
+        Assert.Equal("synced", sync!.State);
+    }
+
     private static void WriteHealthyState(string root, DateTimeOffset syncedAt, string lookupState)
     {
         var unix = syncedAt.ToUnixTimeSeconds();

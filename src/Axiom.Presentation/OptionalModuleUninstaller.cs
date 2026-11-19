@@ -271,13 +271,13 @@ public sealed class OptionalModuleUninstaller
 
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
-            "powershell.exe",
+            OptionalModuleInstaller.ResolvePowerShellExecutable(),
             $"-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand {encoded}")
         {
             UseShellExecute = true,
             WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         };
 
-        Process.Start(startInfo);
+        using var _ = Process.Start(startInfo);
     }
 }

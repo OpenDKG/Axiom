@@ -271,6 +271,39 @@ public sealed class ThreatShareTests
         }
     }
 
+    [Fact]
+    public async Task Overflow_eviction_releases_known_ids_and_dispose_flushes_incoming()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "axiom-threat-share", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "queue.json");
+
+        try
+        {
+            var store = new ThreatShareStore(path);
+            await using (var controller = new ThreatShareController(store))
+            {
+                for (var i = 0; i < ThreatShareStore.MaxItems + 5; i++)
+                {
+                    controller.Enqueue(Candidate() with { Value = $"host{i}.example" });
+                }
+
+                await controller.FlushAsync(CancellationToken.None);
+
+                // The evicted first entry (host0.example) can be re-enqueued once evicted.
+                controller.Enqueue(Candidate() with { Value = "host0.example" });
+            }
+
+            var reloaded = store.Load();
+            Assert.Equal(ThreatShareStore.MaxItems, reloaded.Count);
+            Assert.Contains(reloaded, item => item.Candidate.Value == "host0.example");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static ThreatShareEnqueueRequest Candidate() => new()
     {
         IndicatorType = "domain",

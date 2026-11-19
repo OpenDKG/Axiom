@@ -74,7 +74,16 @@ public sealed class ConnectionMonitor : IDisposable
             return;
         }
 
-        var cancellationToken = _cancellation.Token;
+        CancellationToken cancellationToken;
+        try
+        {
+            cancellationToken = _cancellation.Token;
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
         _isPolling = true;
         try
         {

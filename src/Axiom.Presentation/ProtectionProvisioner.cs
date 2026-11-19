@@ -251,13 +251,42 @@ public static class ProtectionProvisioner
 
             process.StandardInput.Write(payload);
             process.StandardInput.Close();
-            var stdout = process.StandardOutput.ReadToEnd();
-            _ = process.StandardError.ReadToEnd();
-            if (!process.WaitForExit(40_000))
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(40));
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(deadline.Token);
+            var stderrTask = process.StandardError.ReadToEndAsync(deadline.Token);
+            var completion = Task.WhenAll(stdoutTask, stderrTask, process.WaitForExitAsync(deadline.Token));
+            try
             {
-                try { process.Kill(entireProcessTree: true); } catch { }
+                completion.WaitAsync(deadline.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                }
+
+                try
+                {
+                    completion.WaitAsync(TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
+                }
+                catch (Exception exception) when (exception is OperationCanceledException or IOException or InvalidOperationException or TimeoutException)
+                {
+                }
+
+                _ = completion.ContinueWith(
+                    static task => _ = task.Exception,
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+
                 return new ProtectionCheckResult(check.Name, check.ExpectBlock, false, "timeout");
             }
+
+            var stdout = stdoutTask.GetAwaiter().GetResult();
 
             return new ProtectionCheckResult(
                 check.Name,

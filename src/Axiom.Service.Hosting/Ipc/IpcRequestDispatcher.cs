@@ -138,7 +138,6 @@ public sealed class IpcRequestDispatcher
         ArgumentException.ThrowIfNullOrWhiteSpace(caller.Actor);
 
         using var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        idle.CancelAfter(IdleTimeout);
 
         var reader = new IpcLineReader(stream);
         var requestsInWindow = 0;
@@ -146,6 +145,7 @@ public sealed class IpcRequestDispatcher
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            idle.CancelAfter(IdleTimeout);
             string? line;
 
             try
@@ -178,18 +178,15 @@ public sealed class IpcRequestDispatcher
                 return;
             }
 
-            if (!await ProcessAsync(stream, line, caller, cancellationToken).ConfigureAwait(false))
+            var now = DateTime.UtcNow;
+            if (now - windowStart >= TimeSpan.FromSeconds(1))
             {
-                return;
+                requestsInWindow = 0;
+                windowStart = now;
             }
 
             requestsInWindow++;
-            if (DateTime.UtcNow - windowStart >= TimeSpan.FromSeconds(1))
-            {
-                requestsInWindow = 0;
-                windowStart = DateTime.UtcNow;
-            }
-            else if (requestsInWindow > MaxRequestsPerSecond)
+            if (requestsInWindow > MaxRequestsPerSecond)
             {
                 await WriteErrorAsync(
                     stream,
@@ -197,6 +194,11 @@ public sealed class IpcRequestDispatcher
                     IpcErrorCodes.InvalidRequest,
                     "Rate limit exceeded.",
                     cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (!await ProcessAsync(stream, line, caller, cancellationToken).ConfigureAwait(false))
+            {
                 return;
             }
         }
@@ -1055,6 +1057,21 @@ public sealed class IpcRequestDispatcher
         if (_networkRecoveryRestore is not null)
         {
             commands.Add(IpcCommandTypes.NetworkRecoveryRestore);
+        }
+
+        if (_enforcementStatus is not null)
+        {
+            commands.Add(IpcCommandTypes.EnforcementStatus);
+        }
+
+        if (_enforcementEvaluate is not null)
+        {
+            commands.Add(IpcCommandTypes.EnforcementEvaluate);
+        }
+
+        if (_enforcementReceipts is not null)
+        {
+            commands.Add(IpcCommandTypes.EnforcementReceipts);
         }
 
         if (_writeGateOpen())

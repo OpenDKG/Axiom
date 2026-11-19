@@ -21,6 +21,8 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private static readonly TimeSpan UpstreamTimeout = TimeSpan.FromSeconds(3);
 
+    private static readonly TimeSpan TcpClientTimeout = TimeSpan.FromSeconds(10);
+
     private static readonly TimeSpan MultiTargetAttemptTimeout = TimeSpan.FromMilliseconds(1500);
 
     private readonly UdpClient _udp4;
@@ -372,7 +374,10 @@ public sealed class DnsProxyServer : IAsyncDisposable
         {
             try
             {
-                var lengthBytes = await ReadExactAsync(stream, 2, cancellationToken).ConfigureAwait(false);
+                using var readTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                readTimeout.CancelAfter(TcpClientTimeout);
+
+                var lengthBytes = await ReadExactAsync(stream, 2, readTimeout.Token).ConfigureAwait(false);
                 if (lengthBytes is null)
                 {
                     return;
@@ -385,7 +390,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
                     return;
                 }
 
-                var query = await ReadExactAsync(stream, length, cancellationToken).ConfigureAwait(false);
+                var query = await ReadExactAsync(stream, length, readTimeout.Token).ConfigureAwait(false);
                 if (query is null)
                 {
                     return;
@@ -396,7 +401,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
                 if (!DnsProtocol.TryParseQuery(query, out var parsed) || parsed is null)
                 {
                     Interlocked.Increment(ref _errors);
-                    await WriteTcpAsync(stream, DnsProtocol.BuildError(query, 1), cancellationToken)
+                    await WriteTcpAsync(stream, DnsProtocol.BuildError(query, 1), readTimeout.Token)
                         .ConfigureAwait(false);
                     return;
                 }
@@ -410,7 +415,8 @@ public sealed class DnsProxyServer : IAsyncDisposable
                         parsed.Domain,
                         decision,
                         client.Client.RemoteEndPoint as IPEndPoint,
-                        tcp: true);
+                        tcp: true,
+                        cancellationToken);
                     response = DnsProtocol.BuildResponse(query, parsed.QuestionEnd, 3);
                 }
                 else
@@ -432,7 +438,9 @@ public sealed class DnsProxyServer : IAsyncDisposable
                     }
                 }
 
-                await WriteTcpAsync(stream, response, cancellationToken).ConfigureAwait(false);
+                using var writeTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                writeTimeout.CancelAfter(TcpClientTimeout);
+                await WriteTcpAsync(stream, response, writeTimeout.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -754,7 +762,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
         if (decision.Blocked)
         {
             Interlocked.Increment(ref _blocked);
-            RecordBlocked(parsed.Domain, decision, request.RemoteEndPoint, tcp: false);
+            RecordBlocked(parsed.Domain, decision, request.RemoteEndPoint, tcp: false, cancellationToken);
             await SendAsync(
                 client,
                 DnsProtocol.BuildResponse(query, parsed.QuestionEnd, 3),
@@ -836,7 +844,8 @@ public sealed class DnsProxyServer : IAsyncDisposable
         string domain,
         DnsPolicyDecision decision,
         IPEndPoint? source,
-        bool tcp)
+        bool tcp,
+        CancellationToken cancellationToken)
     {
         if (_blockedDomains.Count < 256 || _blockedDomains.ContainsKey(domain))
         {
@@ -865,11 +874,17 @@ public sealed class DnsProxyServer : IAsyncDisposable
             _recentBlocked.TryDequeue(out _);
         }
 
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
         try
         {
             _onBlocked?.Invoke(blocked);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is
+                     IOException or UnauthorizedAccessException or ObjectDisposedException or InvalidOperationException)
         {
             // History persistence is best effort and must never fail a DNS response.
         }

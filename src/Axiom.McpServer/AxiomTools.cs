@@ -558,8 +558,21 @@ public sealed class AxiomTools
             return string.Empty;
         }
 
-        var separator = endpoint.LastIndexOf(':');
-        return separator > 0 ? endpoint[..separator].Trim('[', ']') : endpoint;
+        if (endpoint.StartsWith('['))
+        {
+            var closing = endpoint.IndexOf(']');
+            return closing > 1 ? endpoint[1..closing] : endpoint.Trim('[', ']');
+        }
+
+        var firstColon = endpoint.IndexOf(':');
+        var lastColon = endpoint.LastIndexOf(':');
+        if (firstColon >= 0 && firstColon != lastColon)
+        {
+            // Unbracketed IPv6 literal without an explicit port.
+            return endpoint;
+        }
+
+        return lastColon > 0 ? endpoint[..lastColon] : endpoint;
     }
 
     internal static int? EndpointPort(string endpoint)
@@ -569,9 +582,27 @@ public sealed class AxiomTools
             return null;
         }
 
-        var separator = endpoint.LastIndexOf(':');
-        return separator > 0 && int.TryParse(endpoint[(separator + 1)..], NumberStyles.Integer,
-            CultureInfo.InvariantCulture, out var port)
+        string? portText = null;
+        if (endpoint.StartsWith('['))
+        {
+            var closing = endpoint.IndexOf(']');
+            if (closing > 0 && closing + 1 < endpoint.Length && endpoint[closing + 1] == ':')
+            {
+                portText = endpoint[(closing + 2)..];
+            }
+        }
+        else
+        {
+            var firstColon = endpoint.IndexOf(':');
+            var lastColon = endpoint.LastIndexOf(':');
+            if (lastColon > 0 && firstColon == lastColon)
+            {
+                portText = endpoint[(lastColon + 1)..];
+            }
+        }
+
+        return portText is not null &&
+               int.TryParse(portText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var port)
             ? port
             : null;
     }

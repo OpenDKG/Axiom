@@ -250,14 +250,35 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     [ObservableProperty]
     private bool _canRepairStartup;
 
-    partial void OnTrayNotificationsEnabledChanged(bool value) =>
+    partial void OnTrayNotificationsEnabledChanged(bool value)
+    {
+        if (_updatingStartup)
+        {
+            return;
+        }
+
         TraySettingsStore.SetEnabled(value);
+    }
 
-    partial void OnNotificationsEnabledChanged(bool value) =>
+    partial void OnNotificationsEnabledChanged(bool value)
+    {
+        if (_updatingStartup)
+        {
+            return;
+        }
+
         NotificationSettingsStore.SetEnabled(value);
+    }
 
-    partial void OnHideBackgroundWindowsChanged(bool value) =>
+    partial void OnHideBackgroundWindowsChanged(bool value)
+    {
+        if (_updatingStartup)
+        {
+            return;
+        }
+
         BackgroundWindowSettingsStore.SetEnabled(value);
+    }
 
     partial void OnCheckForUpdatesChanged(bool value)
     {

@@ -47,6 +47,7 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
     private DateTimeOffset _lastAutoAttempt = DateTimeOffset.MinValue;
     private DateTimeOffset _analysisStartedUtc;
     private CancellationTokenSource? _analysisCts;
+    private bool _disposed;
 
     private string _apiKey = string.Empty;
     private bool _apiKeyDirty;
@@ -278,12 +279,24 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _autoTimer.StopTimer();
         _autoTimer.Dispose();
         _busyTimer.StopTimer();
         _busyTimer.Dispose();
-        _analysisCts?.Cancel();
-        _analysisCts?.Dispose();
+        try
+        {
+            _analysisCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
         _client.Dispose();
     }
 
@@ -356,7 +369,19 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
     [RelayCommand]
     private void CancelAnalysis()
     {
-        _analysisCts?.Cancel();
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            _analysisCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
         StatusText = "Cancelling the AI analysis…";
     }
 
@@ -431,7 +456,7 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
         bool automatic,
         IReadOnlyList<LiveConnection>? connections)
     {
-        if (IsBusy)
+        if (_disposed || IsBusy)
         {
             return;
         }
@@ -525,7 +550,18 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
             // Only a high-confidence malicious finding proposes indicators, and only values Axiom
             // itself observed. They go into the Agents-page review list; nothing leaves the machine
             // until the user presses Share or Send now.
-            await QueueThreatShareCandidatesAsync(finding, evidence).ConfigureAwait(true);
+            if (!_disposed)
+            {
+                await QueueThreatShareCandidatesAsync(finding, evidence).ConfigureAwait(true);
+            }
+        }
+        catch (Exception exception) when (exception is OperationCanceledException ||
+                                          (_disposed && exception is ObjectDisposedException))
+        {
+            if (!_disposed)
+            {
+                StatusText = "Analysis cancelled. No finding was saved.";
+            }
         }
         finally
         {
@@ -615,7 +651,7 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
 
     private async Task AutomaticTickAsync()
     {
-        if (!AutomaticAnalysis || !Enabled || !IsConfigured || IsBusy)
+        if (_disposed || !AutomaticAnalysis || !Enabled || !IsConfigured || IsBusy)
         {
             return;
         }

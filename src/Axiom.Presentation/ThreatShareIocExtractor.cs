@@ -277,7 +277,8 @@ public static class ThreatShareIocExtractor
             "ip" => observed.Addresses.Contains(value),
             "domain" => observed.Names.Contains(value.TrimEnd('.')),
             "url" => Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-                     (observed.Names.Contains(uri.Host) || observed.Addresses.Contains(uri.Host)),
+                     ExtractUriHost(uri) is { Length: > 0 } host &&
+                     (observed.Names.Contains(host) || observed.Addresses.Contains(host)),
             "hash" => observed.Hashes.Contains(value),
             _ => false,
         };
@@ -300,8 +301,12 @@ public static class ThreatShareIocExtractor
         {
             "domain" or "ip" or "hash" => listDerivedValues.Contains(value.TrimEnd('.')),
             "url" => Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-                     listDerivedValues.Contains(uri.Host.TrimEnd('.')),
+                     ExtractUriHost(uri) is { Length: > 0 } host &&
+                     listDerivedValues.Contains(host),
             _ => false,
         };
     }
+
+    private static string ExtractUriHost(Uri uri) =>
+        uri.IdnHost.Trim('[', ']').TrimEnd('.');
 }

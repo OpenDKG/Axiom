@@ -21,6 +21,9 @@
     Optional GitHub token for a private repository. When omitted, the installer reads
     AXIOM_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN. Never pass a token on a shared command line.
 
+.PARAMETER PublicRelease
+    Download from the OpenDKG public releases without using GitHub credentials.
+
 .EXAMPLE
     irm https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-github.ps1 | iex
 
@@ -36,17 +39,21 @@ param(
     [string]$Version = "",
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Axiom"),
     [switch]$NoLaunch,
-    [string]$Token = ""
+    [string]$Token = "",
+    [switch]$PublicRelease
 )
 
 $ErrorActionPreference = "Stop"
-$repo = "a-51-50/Axiom"
+$repo = if ($PublicRelease) { "OpenDKG/Axiom" } else { "a-51-50/Axiom" }
 $headers = @{
     "User-Agent" = "Axiom-Installer"
     "Accept" = "application/vnd.github+json"
 }
 
-$tokenValue = if (-not [string]::IsNullOrWhiteSpace($Token)) {
+$tokenValue = if ($PublicRelease) {
+    ""
+}
+elseif (-not [string]::IsNullOrWhiteSpace($Token)) {
     $Token
 }
 elseif (-not [string]::IsNullOrWhiteSpace($env:AXIOM_GITHUB_TOKEN)) {
@@ -79,6 +86,9 @@ try {
     $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers
 }
 catch {
+    if ($PublicRelease) {
+        throw "Could not read the public OpenDKG release metadata. $($_.Exception.Message)"
+    }
     throw "Could not read release metadata. If the repository is private, set AXIOM_GITHUB_TOKEN (for example: `$env:AXIOM_GITHUB_TOKEN = gh auth token). $($_.Exception.Message)"
 }
 

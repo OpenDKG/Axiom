@@ -293,6 +293,26 @@ public sealed class ThreatShareIocExtractorTests
         Assert.Equal(DnsCorrelationStatus.Unavailable, unavailable.Status);
     }
 
+    [Fact]
+    public void Ipv6_url_indicator_matches_observed_endpoint_and_respects_list_derived_filter()
+    {
+        var finding = Finding(
+            new AiIndicator { Type = "url", Value = "https://[2606:4700:4700::9999]", Role = "malicious" });
+
+        var observed = ThreatShareIocExtractor.Extract(
+            finding,
+            Evidence("[2606:4700:4700::9999]:443"));
+        var extracted = Assert.Single(observed);
+        Assert.Equal("url", extracted.IndicatorType);
+        Assert.Equal("https://[2606:4700:4700::9999]", extracted.Value);
+
+        var suppressed = ThreatShareIocExtractor.Extract(
+            finding,
+            Evidence("[2606:4700:4700::9999]:443"),
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "2606:4700:4700::9999" });
+        Assert.Empty(suppressed);
+    }
+
     private const string Sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     private static AiFinding Finding(params AiIndicator[] indicators) => new()

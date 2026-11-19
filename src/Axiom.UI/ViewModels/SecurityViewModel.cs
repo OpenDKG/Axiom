@@ -187,6 +187,8 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     private bool _communityConnected;
 
     private readonly DispatcherTimer _activityTimer;
+    private readonly CancellationTokenSource _lifetime = new();
+    private bool _disposed;
 
     public SecurityViewModel()
         : base("Security", "Optional intelligence and protection modules", "\uE8D7")
@@ -372,7 +374,15 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _activityTimer.Stop();
+        _lifetime.Cancel();
+        _lifetime.Dispose();
         _probe.Dispose();
         _virusTotal.Dispose();
         _communityClient.Dispose();
@@ -382,12 +392,13 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        if (IsBusy)
+        if (_disposed || IsBusy)
         {
             return;
         }
 
         IsBusy = true;
+        var token = _lifetime.Token;
 
         try
         {
@@ -403,14 +414,22 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 return;
             }
 
-            var dkgTask = _probe.ProbeDkgAsync(CancellationToken.None);
-            var blackboxTask = _probe.ProbeBlackboxAsync(CancellationToken.None);
+            var dkgTask = _probe.ProbeDkgAsync(token);
+            var blackboxTask = _probe.ProbeBlackboxAsync(token);
 
             await Task.WhenAll(dkgTask, blackboxTask).ConfigureAwait(true);
+            if (_disposed)
+            {
+                return;
+            }
 
             Rebuild(dkgTask.Result, blackboxTask.Result);
             LastCheckedText = $"Checked {DateTimeOffset.Now:HH:mm:ss}";
             await RefreshAgentsAsync(blackboxTask.Result.IsConnected).ConfigureAwait(true);
+            if (_disposed)
+            {
+                return;
+            }
 
             _activityHistory.Add(new ModuleActivity(
                 DateTimeOffset.Now,
@@ -423,10 +442,16 @@ public sealed partial class SecurityViewModel : PageViewModel, IDisposable
                 Activity.Add(sample);
             }
         }
+        catch (Exception exception) when (_disposed && exception is OperationCanceledException or ObjectDisposedException)
+        {
+        }
         finally
         {
             IsBusy = false;
-            NotifyStatusProperties();
+            if (!_disposed)
+            {
+                NotifyStatusProperties();
+            }
         }
     }
 

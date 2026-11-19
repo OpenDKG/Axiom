@@ -156,6 +156,23 @@ public static class LocalModuleRuntime
                 {
                 }
 
+                // Wait briefly for the killed process's pipe reads and exit waiter to settle before
+                // disposing the Process streams, and observe any fault so it never surfaces as an
+                // UnobservedTaskException.
+                try
+                {
+                    completion.WaitAsync(TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
+                }
+                catch (Exception exception) when (exception is OperationCanceledException or IOException or InvalidOperationException or TimeoutException)
+                {
+                }
+
+                _ = completion.ContinueWith(
+                    static task => _ = task.Exception,
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+
                 log?.Invoke($"{Path.GetFileName(fileName)} timed out.");
                 return false;
             }

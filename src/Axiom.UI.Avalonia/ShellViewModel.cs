@@ -38,6 +38,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly ServiceReachabilityClient? _reachability;
     private bool _serviceUnreachable;
     private bool _updatingTheme;
+    private bool _disposed;
     private ProtectionStatus? _protection;
     private readonly HashSet<string> _notifiedPendingApps = new(StringComparer.OrdinalIgnoreCase);
 
@@ -350,8 +351,23 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private void DismissUpdate() => _updateChecker.Dismiss();
 
     /// <summary>Runs a silent update check if opted in and the 6-hour cooldown has elapsed.</summary>
-    public Task<bool> CheckForUpdatesAsync() =>
-        _updateChecker.CheckIfDueAsync(_cancellation.Token);
+    public async Task<bool> CheckForUpdatesAsync()
+    {
+        if (_disposed)
+        {
+            return false;
+        }
+
+        var token = _cancellation.Token;
+        try
+        {
+            return await _updateChecker.CheckIfDueAsync(token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_disposed || token.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
 
     private void OnUpdateTimerTick(object? sender, EventArgs e) =>
         _ = CheckForUpdatesAsync();
@@ -543,7 +559,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         {
             Agents.SetTrayMonitoring(
                 ReferenceEquals(_activePage, Agents) ||
-                _activePage is AgentDashboardPageViewModel or AgentStatsPageViewModel or SimpleHomePageViewModel);
+                _activePage is AgentDashboardPageViewModel or AgentStatsPageViewModel or
+                    AgentHealthPageViewModel or SimpleHomePageViewModel or MiniHomePageViewModel);
             (_activePage as IActivatablePage)?.Deactivate();
             _traffic.Stop();
         }
@@ -632,6 +649,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _updateTimer.StopTimer();
         _updateTimer.Tick -= OnUpdateTimerTick;
         _updateChecker.Changed -= OnUpdateCheckerChanged;
@@ -671,6 +694,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     private void OnMonitorUpdated(object? sender, EventArgs e)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (_reachability is not null && IsServiceMode)
         {
             // In service mode the monitor reads the same daemon: a transport failure there is
@@ -772,7 +800,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     internal async Task ProbeProtectionAsync(bool force = false)
     {
-        if (_serviceClient is null || _isProbingProtection)
+        if (_disposed || _serviceClient is null || _isProbingProtection)
         {
             return;
         }
@@ -784,12 +812,19 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         _isProbingProtection = true;
         _lastProtectionProbeUtc = DateTimeOffset.UtcNow;
+        var token = _cancellation.Token;
 
         try
         {
-            _protection = await _serviceClient
-                .SendAsync<ProtectionStatus>(IpcCommandTypes.ProtectionStatus, null, _cancellation.Token)
+            var protection = await _serviceClient
+                .SendAsync<ProtectionStatus>(IpcCommandTypes.ProtectionStatus, null, token)
                 .ConfigureAwait(true);
+            if (_disposed)
+            {
+                return;
+            }
+
+            _protection = protection;
             RefreshStatus();
             NotifyNewPendingApps(_protection);
             // The Home page and the global header read the same service authority; the cache must
@@ -827,6 +862,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         if (protection is not { Enabled: true } || protection.Pending.Count == 0)
         {
+            _notifiedPendingApps.Clear();
             return;
         }
 
@@ -1100,7 +1136,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     private async Task ProbeServiceAsync(bool force = false)
     {
-        if (_serviceProbe is null || _isProbing)
+        if (_disposed || _serviceProbe is null || _isProbing)
         {
             return;
         }
@@ -1114,9 +1150,15 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         _isProbing = true;
         _lastProbeUtc = DateTimeOffset.UtcNow;
+        var token = _cancellation.Token;
         try
         {
-            var status = await _serviceProbe.ProbeAsync(_cancellation.Token).ConfigureAwait(true);
+            var status = await _serviceProbe.ProbeAsync(token).ConfigureAwait(true);
+            if (_disposed)
+            {
+                return;
+            }
+
             if (_reachability is not null && IsServiceMode && !status.IsConnected)
             {
                 // Off Windows the probe's failure joins the shared reachability signal. An error the
@@ -1138,7 +1180,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             ServiceStatus = status;
             RefreshStatus();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (_disposed || token.IsCancellationRequested)
         {
             // Shutting down.
         }

@@ -278,8 +278,10 @@ public sealed partial class ProcessMetadataProvider
                 var action = WinTrustActionGenericVerifyV2;
                 var result = WinVerifyTrust(IntPtr.Zero, ref action, trustDataPtr);
 
-                trustData.dwStateAction = 2; // WTD_STATEACTION_CLOSE
-                Marshal.StructureToPtr(trustData, trustDataPtr, fDeleteOld: true);
+                // Preserve hWVTStateData populated by WinVerifyTrust before closing the state handle.
+                var verifyState = Marshal.PtrToStructure<WinTrustData>(trustDataPtr);
+                verifyState.dwStateAction = 2; // WTD_STATEACTION_CLOSE
+                Marshal.StructureToPtr(verifyState, trustDataPtr, fDeleteOld: false);
                 _ = WinVerifyTrust(IntPtr.Zero, ref action, trustDataPtr);
                 return result;
             }
@@ -290,6 +292,7 @@ public sealed partial class ProcessMetadataProvider
         }
         finally
         {
+            Marshal.DestroyStructure<WinTrustFileInfo>(fileInfoPtr);
             Marshal.FreeHGlobal(fileInfoPtr);
         }
     }

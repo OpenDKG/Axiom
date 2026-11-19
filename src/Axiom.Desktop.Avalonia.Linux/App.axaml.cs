@@ -105,7 +105,7 @@ public partial class App : Application
             new LinuxDnsAdapterHelper(),
             new AvaloniaSecurityDialogs(() => window),
             new AvaloniaShellActions(() => desktop.Shutdown()),
-            new AvaloniaBlackboxDialogs(() => window, interaction),
+            new AvaloniaBlackboxDialogs(() => window),
             new Axiom.Persistence.AgentSessionReader(),
             visualEffects: null,
             restoreNetwork: networkRecovery.RestoreAsync);
@@ -113,6 +113,13 @@ public partial class App : Application
         window = new MainWindow { DataContext = _shell };
         _window = window;
         desktop.MainWindow = window;
+        window.PropertyChanged += (_, change) =>
+        {
+            if (change.Property == Visual.IsVisibleProperty || change.Property == Window.WindowStateProperty)
+            {
+                _shell?.SetPresentationVisible(window.IsVisible && window.WindowState != WindowState.Minimized);
+            }
+        };
         AxiomAlertService.Configure(
             () => _window,
             ShowWindow,

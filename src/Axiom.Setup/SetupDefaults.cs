@@ -321,7 +321,11 @@ internal static class SetupDefaults
 
     private static void StopInteractiveServiceProcesses(Action<string> report)
     {
-        var sessionId = Process.GetCurrentProcess().SessionId;
+        int sessionId;
+        using (var currentProcess = Process.GetCurrentProcess())
+        {
+            sessionId = currentProcess.SessionId;
+        }
         foreach (var process in Process.GetProcessesByName("Axiom.Service"))
         {
             try
