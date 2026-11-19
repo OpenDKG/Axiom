@@ -1,3 +1,9 @@
+## What's in 1.4.4
+
+- Blackbox verified-graph sync runs its Git subprocesses without opening Windows console windows. Dashboard upgrades restart the dashboard and its Python workers together.
+- Agent Protection uses transparent integration logos with theme-aware shadows in the Avalonia desktop.
+- The desktop updater, repository buttons and website logo use the public OpenDKG project links.
+
 ## What's in 1.4.3
 
 - **Blackbox auto-start, upgrade reuse, `pythonw.exe` stdio and Agent Activity filter fixes.** Ensures `InstallBlackboxAndWait()` verifies dashboard dependencies and starts the Blackbox dashboard on port `9700` even when reusing an already-pinned Blackbox runtime during an upgrade; has `SetupInstaller` explicitly start the dashboard if it is not yet listening before the health probe; redirects `sys.stdout` and `sys.stderr` to `os.devnull` when `None` in `start-dashboard.py` so `pythonw.exe` launched without a console handle never crashes Uvicorn/dashboard logging; verifies dashboard dependencies on desktop launch (`EnsureBlackboxDependencies`); moves `$ErrorActionPreference = 'Continue'` inside a `try/catch` before `& $installer -StoreBackend $storeBackend` in both Avalonia and WPF PowerShell installers so vendor stderr output cannot abort Windows PowerShell 5.1 before dependency repair and dashboard startup; and adds `Antigravity` to Agent Activity's agent filter selector while removing the duplicate `OpenChamber` entry (grouping OpenChamber events under `OpenCode` with OpenChamber hooks kept intact).
