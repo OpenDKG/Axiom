@@ -113,6 +113,14 @@ public partial class App : Application
         window = new MainWindow { DataContext = _shell };
         _window = window;
         desktop.MainWindow = window;
+        // Upstream 1.3.1: pages and traffic sampling pause while the window is hidden or minimized.
+        window.PropertyChanged += (_, change) =>
+        {
+            if (change.Property == Visual.IsVisibleProperty || change.Property == Window.WindowStateProperty)
+            {
+                _shell?.SetPresentationVisible(window.IsVisible && window.WindowState != WindowState.Minimized);
+            }
+        };
         AxiomAlertService.Configure(
             () => _window,
             ShowWindow,
@@ -134,6 +142,7 @@ public partial class App : Application
         _protection = new LinuxProtectionSetup(serviceProbe, interaction);
         _protection.Changed += (_, _) => Dispatcher.UIThread.Post(UpdateStatusItems);
 
+        _shell.SetPresentationVisible(window.IsVisible && window.WindowState != WindowState.Minimized);
         _shell.Start();
         StartNetworkRecovery(networkRecovery);
 
