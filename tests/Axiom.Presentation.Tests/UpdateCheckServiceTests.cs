@@ -2,6 +2,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Axiom.Presentation;
@@ -199,6 +200,53 @@ public sealed class UpdateCheckServiceTests : IDisposable
         Assert.False(await service.CheckIfDueAsync());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Installer_download_keeps_only_bytes_verified_for_the_detected_release(bool tampered)
+    {
+        const string url = "https://github.com/OpenDKG/Axiom/releases/download/v1.4.5/Axiom-Setup.exe";
+        var expected = "installer fixture"u8.ToArray();
+        var returned = expected.ToArray();
+        if (tampered)
+        {
+            returned[0] ^= 1;
+        }
+
+        var store = new UpdateSettingsStore(Path.Combine(_tempDir.FullName, "updates.json"));
+        var handler = new QueueHandler();
+        handler.EnqueueJson(new
+        {
+            tag_name = "v1.4.5",
+            assets = new[]
+            {
+                new { name = "Axiom-Setup.exe", browser_download_url = url, size = expected.Length,
+                    digest = "sha256:" + Convert.ToHexString(SHA256.HashData(expected)) },
+            },
+        });
+        handler.EnqueueBytes(returned);
+        using var http = new HttpClient(handler);
+        using var service = new UpdateCheckService(new Version(1, 4, 4), store, http);
+
+        Assert.True(await service.CheckIfDueAsync());
+        Assert.Equal(1, handler.RequestCount);
+        var downloadDir = Path.Combine(_tempDir.FullName, "updates");
+        if (tampered)
+        {
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => service.DownloadWindowsInstallerAsync(CancellationToken.None));
+            Assert.Empty(Directory.GetFiles(downloadDir));
+        }
+        else
+        {
+            var path = await service.DownloadWindowsInstallerAsync(CancellationToken.None);
+            Assert.Equal(Path.Combine(downloadDir, "Axiom-Setup.exe"), path);
+            Assert.Equal(expected, await File.ReadAllBytesAsync(path));
+        }
+
+        Assert.Equal(new Uri(url), handler.LastRequestUri);
+    }
+
     private sealed class BlockingHandler(Task releaseTask, string json) : HttpMessageHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -235,6 +283,12 @@ public sealed class UpdateCheckServiceTests : IDisposable
 
         public void EnqueueStatus(HttpStatusCode status) =>
             _responses.Enqueue(() => new HttpResponseMessage(status));
+
+        public void EnqueueBytes(byte[] bytes) =>
+            _responses.Enqueue(() => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(bytes),
+            });
 
         public void EnqueueException(Exception exception) =>
             _responses.Enqueue(() => throw exception);

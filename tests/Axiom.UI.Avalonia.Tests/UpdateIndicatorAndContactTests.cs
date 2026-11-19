@@ -2,6 +2,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Avalonia;
@@ -119,9 +120,10 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
     }
 
     [Fact]
-    public async Task Update_badge_shows_for_newer_release_opens_download_and_dismisses_cleanly()
+    public async Task Update_badge_launches_the_verified_installer_on_windows_and_dismisses_cleanly()
     {
         var store = new UpdateSettingsStore(Path.Combine(_tempDir.FullName, "updates.json"));
+        var installer = "installer fixture"u8.ToArray();
         var handler = new StaticReleaseHandler(new
         {
             tag_name = "v0.99.0",
@@ -130,20 +132,34 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
             published_at = "2026-11-15T10:00:00Z",
             html_url = "https://github.com/OpenDKG/Axiom/releases/tag/v0.99.0",
             body = "Security hardening release.",
-        });
+            assets = new[]
+            {
+                new
+                {
+                    name = "Axiom-Setup.exe",
+                    browser_download_url = "https://github.com/OpenDKG/Axiom/releases/download/v0.99.0/Axiom-Setup.exe",
+                    size = installer.Length,
+                    digest = "sha256:" + Convert.ToHexString(SHA256.HashData(installer)),
+                },
+            },
+        }, installer);
         using var http = new HttpClient(handler);
         using var checker = new UpdateCheckService(new Version(0, 45, 0), store, http);
         await checker.CheckIfDueAsync();
 
+        Task? action = null;
+        ShellViewModel? shell = null;
+        MainWindow? window = null;
+        Button? updateButton = null;
+        var interaction = new RecordingInteraction();
         TestAppBuilder.RunOnUiThread(() =>
         {
-            var interaction = new RecordingInteraction();
-            var shell = new ShellViewModel(
+            shell = new ShellViewModel(
                 new FakeSource(),
                 new FakeTimerFactory(),
                 userInteraction: interaction,
                 updateChecker: checker);
-            var window = new MainWindow { DataContext = shell };
+            window = new MainWindow { DataContext = shell };
             window.Show();
             Dispatcher.UIThread.RunJobs();
 
@@ -151,32 +167,54 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
             Assert.Equal("0.99.0", shell.LatestVersion);
             Assert.Equal("Update to version 0.99.0", shell.UpdateTooltip);
 
-            var updateButton = window.FindControl<Button>("UpdateButton");
+            updateButton = window.FindControl<Button>("UpdateButton");
             Assert.NotNull(updateButton);
             Assert.True(updateButton.IsVisible);
 
-            shell.OpenUpdateCommand.Execute(null);
-            Dispatcher.UIThread.RunJobs();
-            Assert.Contains("https://github.com/OpenDKG/Axiom/releases/tag/v0.99.0", interaction.OpenedUrls);
+            action = shell.OpenUpdateCommand.ExecuteAsync(null);
+        });
+        await action!;
 
-            shell.DismissUpdateCommand.Execute(null);
+        TestAppBuilder.RunOnUiThread(() =>
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var path = Path.Combine(_tempDir.FullName, "updates", "Axiom-Setup.exe");
+                Assert.Equal(path, Assert.Single(interaction.OpenedUrls));
+                Assert.Equal(installer, File.ReadAllBytes(path));
+            }
+            else
+            {
+                Assert.Equal("https://github.com/OpenDKG/Axiom/releases/tag/v0.99.0", Assert.Single(interaction.OpenedUrls));
+            }
+
+            shell!.DismissUpdateCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
             Assert.False(shell.UpdateAvailable);
-            Assert.False(updateButton.IsVisible);
+            Assert.False(updateButton!.IsVisible);
 
             // Disabling the Settings toggle persists opt-out.
             shell.Settings.CheckForUpdates = false;
             Assert.False(checker.CheckForUpdates);
 
-            window.Close();
+            window!.Close();
             shell.Dispose();
         });
     }
 
-    private sealed class StaticReleaseHandler(object? payload = null) : HttpMessageHandler
+    private sealed class StaticReleaseHandler(object? payload = null, byte[]? installer = null) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (installer is not null &&
+                request.RequestUri?.AbsolutePath.EndsWith("/Axiom-Setup.exe", StringComparison.Ordinal) == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(installer),
+                });
+            }
+
             if (payload is null)
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));

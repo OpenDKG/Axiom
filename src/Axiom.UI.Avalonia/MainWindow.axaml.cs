@@ -367,9 +367,6 @@ public partial class MainWindow : Window
         UpdatePopup.IsOpen = !UpdatePopup.IsOpen;
     }
 
-    private void OnUpdateDownloadClicked(object? sender, RoutedEventArgs e) =>
-        UpdatePopup.IsOpen = false;
-
     private void OnUpdateDismissClicked(object? sender, RoutedEventArgs e) =>
         UpdatePopup.IsOpen = false;
 
