@@ -121,7 +121,8 @@ jobs:
         run: |
           version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
           test -n "$version"
-          AXIOM_BUILD=21 bash scripts/macos/package-app.sh osx-x64 --build-filter
+          build=22
+          AXIOM_BUILD="$build" bash scripts/macos/package-app.sh osx-x64 --build-filter
           app=build/macos/osx-x64/Axiom.app
           codesign --verify --deep --strict "$app"
           test -d "$app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension"
@@ -129,7 +130,8 @@ jobs:
           test "$(lipo -archs "$app/Contents/MacOS/Axiom")" = x86_64
           mkdir -p release
           git rev-parse HEAD > release/SOURCE-COMMIT.txt
-          package="Axiom-$version-21-osx-x64-adhoc.zip"
+          test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "$build"
+          package="Axiom-$version-$build-osx-x64-adhoc.zip"
           ditto -c -k --sequesterRsrc --keepParent "$app" "release/$package"
           cd release
           shasum -a 256 "$package" > SHA256SUMS.txt
