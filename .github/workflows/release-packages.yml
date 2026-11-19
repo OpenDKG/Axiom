@@ -61,10 +61,8 @@ jobs:
       - name: Install native build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm libbpf-dev linux-tools-common linux-tools-generic
-          bpftool=$(find /usr/lib/linux-tools -name bpftool -type f | sort -V | tail -1)
-          test -x "$bpftool"
-          echo "BPFTOOL=$bpftool" >> "$GITHUB_ENV"
+          sudo apt-get install -y clang llvm libbpf-dev bpftool
+          bpftool version
       - name: Test the Linux desktop and infrastructure
         run: |
           dotnet test tests/Axiom.Infrastructure.Linux.Tests -c Release
