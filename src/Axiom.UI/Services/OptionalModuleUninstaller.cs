@@ -271,6 +271,15 @@ public sealed class OptionalModuleUninstaller
             WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         };
 
-        Process.Start(startInfo);
+        try
+        {
+            using var _ = Process.Start(startInfo);
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 }

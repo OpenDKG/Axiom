@@ -169,7 +169,15 @@ public sealed class PipeServer
                 exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
             {
                 _log?.Invoke($"Pipe server could not start: {exception.Message}");
-                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
                 continue;
             }
 
@@ -217,67 +225,78 @@ public sealed class PipeServer
             }
 
             using var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            idle.CancelAfter(IdleTimeout);
 
             var reader = new IpcLineReader(server);
             var requestsInWindow = 0;
             var windowStart = DateTime.UtcNow;
 
-            while (!cancellationToken.IsCancellationRequested)
+            try
             {
-                string? line;
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    idle.CancelAfter(IdleTimeout);
+                    string? line;
 
-                try
-                {
-                    line = await reader
-                        .ReadLineAsync(IpcProtocol.MaxMessageBytes, idle.Token)
-                        .ConfigureAwait(false);
-                }
-                catch (IpcMessageTooLargeException)
-                {
-                    await WriteErrorAsync(
-                        server,
-                        Guid.Empty,
-                        IpcErrorCodes.MessageTooLarge,
-                        $"Message exceeded {IpcProtocol.MaxMessageBytes} bytes.",
-                        cancellationToken).ConfigureAwait(false);
-                    return;
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
-                catch (IOException)
-                {
-                    return;
-                }
+                    try
+                    {
+                        line = await reader
+                            .ReadLineAsync(IpcProtocol.MaxMessageBytes, idle.Token)
+                            .ConfigureAwait(false);
+                    }
+                    catch (IpcMessageTooLargeException)
+                    {
+                        await WriteErrorAsync(
+                            server,
+                            Guid.Empty,
+                            IpcErrorCodes.MessageTooLarge,
+                            $"Message exceeded {IpcProtocol.MaxMessageBytes} bytes.",
+                            cancellationToken).ConfigureAwait(false);
+                        return;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+                    catch (IOException)
+                    {
+                        return;
+                    }
 
-                if (line is null)
-                {
-                    return;
-                }
+                    if (line is null)
+                    {
+                        return;
+                    }
 
-                if (!await ProcessAsync(server, line, clientSid!, cancellationToken).ConfigureAwait(false))
-                {
-                    return;
-                }
+                    var now = DateTime.UtcNow;
+                    if (now - windowStart >= TimeSpan.FromSeconds(1))
+                    {
+                        requestsInWindow = 0;
+                        windowStart = now;
+                    }
 
-                requestsInWindow++;
-                if (DateTime.UtcNow - windowStart >= TimeSpan.FromSeconds(1))
-                {
-                    requestsInWindow = 0;
-                    windowStart = DateTime.UtcNow;
+                    requestsInWindow++;
+                    if (requestsInWindow > MaxRequestsPerSecond)
+                    {
+                        await WriteErrorAsync(
+                            server,
+                            Guid.Empty,
+                            IpcErrorCodes.InvalidRequest,
+                            "Rate limit exceeded.",
+                            cancellationToken).ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (!await ProcessAsync(server, line, clientSid!, cancellationToken).ConfigureAwait(false))
+                    {
+                        return;
+                    }
                 }
-                else if (requestsInWindow > MaxRequestsPerSecond)
-                {
-                    await WriteErrorAsync(
-                        server,
-                        Guid.Empty,
-                        IpcErrorCodes.InvalidRequest,
-                        "Rate limit exceeded.",
-                        cancellationToken).ConfigureAwait(false);
-                    return;
-                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (IOException)
+            {
             }
         }
     }
@@ -1115,6 +1134,21 @@ public sealed class PipeServer
         if (_networkRecoveryRestore is not null)
         {
             commands.Add(IpcCommandTypes.NetworkRecoveryRestore);
+        }
+
+        if (_enforcementStatus is not null)
+        {
+            commands.Add(IpcCommandTypes.EnforcementStatus);
+        }
+
+        if (_enforcementEvaluate is not null)
+        {
+            commands.Add(IpcCommandTypes.EnforcementEvaluate);
+        }
+
+        if (_enforcementReceipts is not null)
+        {
+            commands.Add(IpcCommandTypes.EnforcementReceipts);
         }
 
         if (WindowsFirewallPolicyAdapter.IsWriteGateOpen)

@@ -178,6 +178,37 @@ public sealed class UpdateCheckServiceTests : IDisposable
         Assert.Equal(0, handler.RequestCount);
     }
 
+    [Fact]
+    public async Task Disposing_or_opting_out_during_inflight_check_does_not_throw_or_republish()
+    {
+        var store = new UpdateSettingsStore(Path.Combine(_tempDir.FullName, "updates.json"));
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var http = new HttpClient(new BlockingHandler(gate.Task, """{"tag_name":"v9.9.9","draft":false,"prerelease":false}"""));
+        var service = new UpdateCheckService(new Version(1, 0, 0), store, http);
+
+        var inflight = service.CheckIfDueAsync();
+        service.SetCheckForUpdatesEnabled(false);
+        gate.SetResult();
+        Assert.False(await inflight);
+        Assert.False(service.IsUpdateAvailable);
+        Assert.Equal(string.Empty, service.LatestVersion);
+
+        service.Dispose();
+        Assert.False(await service.CheckIfDueAsync());
+    }
+
+    private sealed class BlockingHandler(Task releaseTask, string json) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await releaseTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            };
+        }
+    }
+
     private sealed class AdjustableTimeProvider(DateTimeOffset startUtc) : TimeProvider
     {
         private DateTimeOffset _now = startUtc;

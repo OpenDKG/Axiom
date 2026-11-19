@@ -29,6 +29,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private readonly object _rulesGate = new();
 
+    private readonly object _statusGate = new();
+
     private readonly Dictionary<string, string> _sourceErrors =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -63,16 +65,42 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     }
 
     /// <summary>Whether the persisted configuration asks the resolver to run.</summary>
-    public bool IsEnabled => _settings.Enabled;
+    public bool IsEnabled
+    {
+        get
+        {
+            lock (_statusGate)
+            {
+                return _settings.Enabled;
+            }
+        }
+    }
 
     /// <summary>Whether the loopback resolver is listening right now.</summary>
-    public bool IsResolverRunning => Volatile.Read(ref _server) is not null;
+    public bool IsResolverRunning
+    {
+        get
+        {
+            lock (_statusGate)
+            {
+                return _server is not null;
+            }
+        }
+    }
 
     /// <summary>Whether automatic adapter DNS pointing is requested for port 53.</summary>
-    public bool ShouldAutoPointAdapterDns =>
-        _settings.Enabled &&
-        _settings.Port == 53 &&
-        (_settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(_settings.PreferredAdapterAlias));
+    public bool ShouldAutoPointAdapterDns
+    {
+        get
+        {
+            lock (_statusGate)
+            {
+                return _settings.Enabled &&
+                       _settings.Port == 53 &&
+                       (_settings.AutoPointAdapterDns || !string.IsNullOrWhiteSpace(_settings.PreferredAdapterAlias));
+            }
+        }
+    }
 
     public async Task<PrivacyShieldStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
@@ -123,13 +151,21 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             {
                 if (!_store.Save(normalized))
                 {
-                    _settings = previous;
-                    _lastError = "Configuration failed; previous disabled configuration was kept.";
+                    lock (_statusGate)
+                    {
+                        _settings = previous;
+                        _lastError = "Configuration failed; previous disabled configuration was kept.";
+                    }
+
                     return CreateStatus();
                 }
 
-                _settings = normalized;
-                _lastError = null;
+                lock (_statusGate)
+                {
+                    _settings = normalized;
+                    _lastError = null;
+                }
+
                 return CreateStatus();
             }
 
@@ -140,16 +176,27 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 await StopServerLockedAsync().ConfigureAwait(false);
                 if (!_store.Save(normalized))
                 {
-                    _settings = previous;
+                    lock (_statusGate)
+                    {
+                        _settings = previous;
+                    }
+
                     var restored = await RestorePreviousServerAsync(previous).ConfigureAwait(false);
-                    _lastError = restored
-                        ? "Configuration failed; previous resolver restored."
-                        : "Configuration failed; previous resolver could not be restored.";
+                    lock (_statusGate)
+                    {
+                        _lastError = restored
+                            ? "Configuration failed; previous resolver restored."
+                            : "Configuration failed; previous resolver could not be restored.";
+                    }
+
                     return CreateStatus();
                 }
 
-                _settings = normalized;
-                _lastError = null;
+                lock (_statusGate)
+                {
+                    _settings = normalized;
+                    _lastError = null;
+                }
 
                 // The adapter may still send DNS to 127.0.0.1. With the resolver stopped that would
                 // take name resolution down, so restore the saved DNS without an extra prompt.
@@ -167,14 +214,22 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
             if (!TryCreateServer(normalized, out var candidate, out var startError, out var startWarning))
             {
-                _settings = previous;
+                lock (_statusGate)
+                {
+                    _settings = previous;
+                }
+
                 var restored = await RestorePreviousServerAsync(previous).ConfigureAwait(false);
                 var recovery = !previous.Enabled
                     ? "previous disabled configuration was kept"
                     : restored
                         ? "previous resolver restored"
                         : "previous resolver could not be restored";
-                _lastError = $"Configuration failed; {recovery}. {startError}".Trim();
+                lock (_statusGate)
+                {
+                    _lastError = $"Configuration failed; {recovery}. {startError}".Trim();
+                }
+
                 return CreateStatus();
             }
 
@@ -185,14 +240,22 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                     await candidate.DisposeAsync().ConfigureAwait(false);
                 }
 
-                _settings = previous;
+                lock (_statusGate)
+                {
+                    _settings = previous;
+                }
+
                 var restored = await RestorePreviousServerAsync(previous).ConfigureAwait(false);
                 var recovery = !previous.Enabled
                     ? "previous disabled configuration was kept"
                     : restored
                         ? "previous resolver restored"
                         : "previous resolver could not be restored";
-                _lastError = $"Configuration failed; {recovery}.";
+                lock (_statusGate)
+                {
+                    _lastError = $"Configuration failed; {recovery}.";
+                }
+
                 return CreateStatus();
             }
 
@@ -201,9 +264,13 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 await StopServerLockedAsync().ConfigureAwait(false);
             }
 
-            _server = candidate;
-            _settings = normalized;
-            _lastError = startWarning;
+            lock (_statusGate)
+            {
+                _server = candidate;
+                _settings = normalized;
+                _lastError = startWarning;
+            }
+
             EnsureConfiguredAdapterDns();
             if (ShouldAutoUpdateSources())
             {
@@ -227,13 +294,21 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
         if (!TryCreateServer(previous, out var server, out var error, out var warning))
         {
-            _server = null;
-            _lastError = error;
+            lock (_statusGate)
+            {
+                _server = null;
+                _lastError = error;
+            }
+
             return Task.FromResult(false);
         }
 
-        _server = server;
-        _lastError = warning;
+        lock (_statusGate)
+        {
+            _server = server;
+            _lastError = warning;
+        }
+
         return Task.FromResult(true);
     }
 
@@ -243,17 +318,23 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     /// </summary>
     public bool ShouldAutoUpdateSources(DateTimeOffset? nowUtc = null)
     {
-        if (!_settings.Enabled ||
-            !_settings.AutoUpdateSources ||
-            _settings.EnabledSourceIds.Count == 0)
+        PrivacyShieldSettings settings;
+        lock (_statusGate)
+        {
+            settings = _settings;
+        }
+
+        if (!settings.Enabled ||
+            !settings.AutoUpdateSources ||
+            settings.EnabledSourceIds.Count == 0)
         {
             return false;
         }
 
         var utcNow = nowUtc ?? DateTimeOffset.UtcNow;
-        var maxAge = TimeSpan.FromHours(Math.Clamp(_settings.AutoUpdateIntervalHours, 1, 168));
+        var maxAge = TimeSpan.FromHours(Math.Clamp(settings.AutoUpdateIntervalHours, 1, 168));
         var totals = _sourceTotals;
-        foreach (var sourceId in _settings.EnabledSourceIds)
+        foreach (var sourceId in settings.EnabledSourceIds)
         {
             if (!totals.TryGetValue(sourceId, out var total) ||
                 total.Updated is not { } updated ||
@@ -341,22 +422,32 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 .ToArray();
 
             var result = await _sourceUpdater.UpdateAsync(selected, cancellationToken).ConfigureAwait(false);
-            _sourceErrors.Clear();
-            foreach (var source in result.Sources.Where(source => source.Error is not null))
+            lock (_statusGate)
             {
-                _sourceErrors[source.Id] = source.Error!;
+                _sourceErrors.Clear();
+                foreach (var source in result.Sources.Where(source => source.Error is not null))
+                {
+                    _sourceErrors[source.Id] = source.Error!;
+                }
             }
 
             if (result.Success)
             {
                 if (!_ruleStore.Save(result.Rules))
                 {
-                    _lastError = "Could not write the compiled Privacy Shield ruleset.";
+                    lock (_statusGate)
+                    {
+                        _lastError = "Could not write the compiled Privacy Shield ruleset.";
+                    }
                 }
                 else
                 {
                     SetRules(result.Rules);
-                    _lastError = result.Error;
+                    lock (_statusGate)
+                    {
+                        _lastError = result.Error;
+                    }
+
                     result = null;
                     CompactMemory();
                     if (_settings.Enabled)
@@ -367,7 +458,10 @@ public sealed class PrivacyShieldController : IAsyncDisposable
             }
             else
             {
-                _lastError = result.Error ?? "The blocklist update failed; the previous ruleset was kept.";
+                lock (_statusGate)
+                {
+                    _lastError = result.Error ?? "The blocklist update failed; the previous ruleset was kept.";
+                }
             }
 
             return CreateStatus();
@@ -389,6 +483,7 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         {
             _gate.Release();
             _gate.Dispose();
+            _blockedHistory.Dispose();
             _sourceUpdater.Dispose();
         }
     }
@@ -398,13 +493,20 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         await StopServerLockedAsync().ConfigureAwait(false);
         if (TryCreateServer(_settings, out var server, out var error, out var warning))
         {
-            _server = server;
-            _lastError = warning;
+            lock (_statusGate)
+            {
+                _server = server;
+                _lastError = warning;
+            }
+
             return;
         }
 
-        _server = null;
-        _lastError = error;
+        lock (_statusGate)
+        {
+            _server = null;
+            _lastError = error;
+        }
 
         // A failed start (port taken, socket error) must not leave the adapter without a resolver.
         _ = Task.Run(PrivacyDnsFailSafe.RestoreIfNeeded);
@@ -481,13 +583,19 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private async Task StopServerLockedAsync()
     {
-        if (_server is null)
+        DnsProxyServer? server;
+        lock (_statusGate)
+        {
+            server = _server;
+            _server = null;
+        }
+
+        if (server is null)
         {
             return;
         }
 
-        await _server.DisposeAsync().ConfigureAwait(false);
-        _server = null;
+        await server.DisposeAsync().ConfigureAwait(false);
     }
 
     private Task EnsureRulesLoadedAsync()
@@ -499,23 +607,40 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                 return Task.CompletedTask;
             }
 
+            if (_rulesTask is { IsFaulted: true })
+            {
+                _rulesTask = null;
+            }
+
             // Load and compile the ruleset off the service-startup thread so the pipe, firewall
             // consent, and monitor are ready immediately, then drop the raw list and compact LOH.
             return _rulesTask ??= Task.Run(() =>
             {
-                var rules = _ruleStore.Load();
-                lock (_rulesGate)
+                try
                 {
-                    if (!_rulesUpdated)
+                    var rules = _ruleStore.Load();
+                    lock (_rulesGate)
                     {
-                        AdoptRulesLocked(rules, _settings);
+                        if (!_rulesUpdated)
+                        {
+                            AdoptRulesLocked(rules, _settings);
+                        }
+
+                        _rulesLoaded = true;
                     }
 
-                    _rulesLoaded = true;
+                    rules = [];
+                    CompactMemory();
                 }
+                catch
+                {
+                    lock (_rulesGate)
+                    {
+                        _rulesTask = null;
+                    }
 
-                rules = [];
-                CompactMemory();
+                    throw;
+                }
             });
         }
     }
@@ -616,44 +741,58 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private PrivacyShieldStatus CreateStatus()
     {
-        if (_server is not null)
+        DnsProxyServer? server;
+        PrivacyShieldSettings settings;
+        string? lastError;
+        Dictionary<string, string> sourceErrors;
+        lock (_statusGate)
         {
-            return _server.Snapshot(_settings) with
+            server = _server;
+            settings = _settings;
+            lastError = _lastError;
+            sourceErrors = new Dictionary<string, string>(_sourceErrors, StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (server is not null)
+        {
+            return server.Snapshot(settings) with
             {
-                Settings = _settings,
-                Sources = BuildSourceStatuses(),
+                Settings = settings,
+                Sources = BuildSourceStatuses(settings, sourceErrors),
                 BlockedHistory = _blockedHistory.LoadRecent(),
-                LastError = _lastError,
+                LastError = lastError,
             };
         }
 
-        var ruleCount = GetPolicy(_settings).RuleCount;
+        var ruleCount = GetPolicy(settings).RuleCount;
         return new PrivacyShieldStatus
         {
-            State = _settings.Enabled ? "Error" : "Disabled",
-            Enabled = _settings.Enabled,
+            State = settings.Enabled ? "Error" : "Disabled",
+            Enabled = settings.Enabled,
             Running = false,
-            Port = _settings.Port,
+            Port = settings.Port,
             BindAddress = "not listening",
-            Upstream = string.IsNullOrWhiteSpace(_settings.UpstreamDns)
-                ? (_settings.EncryptDnsViaDoh ? "encrypted DoH (1.1.1.1, 9.9.9.9)" : "system DNS")
-                : _settings.UpstreamDns,
+            Upstream = string.IsNullOrWhiteSpace(settings.UpstreamDns)
+                ? (settings.EncryptDnsViaDoh ? "encrypted DoH (1.1.1.1, 9.9.9.9)" : "system DNS")
+                : settings.UpstreamDns,
             Queries = 0,
             Allowed = 0,
             Blocked = 0,
             Errors = 0,
             RuleCount = ruleCount,
-            Settings = _settings,
-            Sources = BuildSourceStatuses(),
+            Settings = settings,
+            Sources = BuildSourceStatuses(settings, sourceErrors),
             BlockedHistory = _blockedHistory.LoadRecent(),
-            Detail = _settings.Enabled
+            Detail = settings.Enabled
                 ? "Privacy Shield is enabled but the resolver is not running."
                 : "Privacy Shield is disabled. No DNS query is observed or filtered.",
-            LastError = _lastError,
+            LastError = lastError,
         };
     }
 
-    private PrivacyShieldSourceStatus[] BuildSourceStatuses()
+    private PrivacyShieldSourceStatus[] BuildSourceStatuses(
+        PrivacyShieldSettings settings,
+        IReadOnlyDictionary<string, string> sourceErrors)
     {
         var totals = _sourceTotals;
         return PrivacyShieldSourceCatalog.All
@@ -664,10 +803,10 @@ public sealed class PrivacyShieldController : IAsyncDisposable
                     source.Id,
                     source.Name,
                     source.License,
-                    _settings.EnabledSourceIds.Contains(source.Id, StringComparer.OrdinalIgnoreCase),
+                    settings.EnabledSourceIds.Contains(source.Id, StringComparer.OrdinalIgnoreCase),
                     total.Entries,
                     total.Updated,
-                    _sourceErrors.GetValueOrDefault(source.Id));
+                    sourceErrors.GetValueOrDefault(source.Id));
             })
             .ToArray();
     }

@@ -502,12 +502,20 @@ internal static class SetupInstaller
                 SaveLastSetupWarning(warning);
                 if (options.StartAfterInstall)
                 {
-                    Process.Start(new ProcessStartInfo(desktopTarget)
+                    try
                     {
-                        UseShellExecute = true,
-                        WorkingDirectory = options.InstallDir,
-                    });
-                    Report("Started Axiom");
+                        using var started = Process.Start(new ProcessStartInfo(desktopTarget)
+                        {
+                            UseShellExecute = true,
+                            WorkingDirectory = options.InstallDir,
+                        });
+                        Report("Started Axiom");
+                    }
+                    catch (Exception exception) when (exception is
+                                 System.ComponentModel.Win32Exception or InvalidOperationException)
+                    {
+                        Report("Axiom was installed, but could not start automatically: " + exception.Message);
+                    }
                 }
 
                 var resultMessage = partialSuccess
@@ -576,8 +584,7 @@ internal static class SetupInstaller
             }
 
             Thread.Sleep(250);
-            return Process.GetProcessesByName("Axiom.Desktop").Length == 0 &&
-                   Process.GetProcessesByName("Netpetra.Desktop").Length == 0;
+            return !AnyProcessRunning("Axiom.Desktop", "Netpetra.Desktop");
         }
         finally
         {
@@ -586,6 +593,26 @@ internal static class SetupInstaller
                 proc.Dispose();
             }
         }
+    }
+
+    private static bool AnyProcessRunning(params string[] processNames)
+    {
+        foreach (var name in processNames)
+        {
+            var processes = Process.GetProcessesByName(name);
+            var any = processes.Length > 0;
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
+
+            if (any)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static async Task<SetupInstallResult> UninstallAsync(
@@ -604,8 +631,7 @@ internal static class SetupInstaller
 
         try
         {
-            if (Process.GetProcessesByName("Axiom.Desktop").Length > 0 ||
-                Process.GetProcessesByName("Netpetra.Desktop").Length > 0)
+            if (AnyProcessRunning("Axiom.Desktop", "Netpetra.Desktop"))
             {
                 return new SetupInstallResult(false, "Axiom is running. Close it before uninstalling.", log);
             }
@@ -706,7 +732,7 @@ internal static class SetupInstaller
                     var path = Path.Combine(options.InstallDir, fileName);
                     if (File.Exists(path))
                     {
-                        File.Delete(path);
+                        DeleteFileWithRetry(path);
                         Report($"Removed {fileName}.");
                     }
                 }
@@ -750,11 +776,14 @@ internal static class SetupInstaller
         }
     }
 
+    internal const string WindowsServiceQueryArguments = "query Axiom";
+
     private static async Task<bool> IsWindowsServiceRegisteredAsync(CancellationToken cancellationToken)
     {
         try
         {
-            using var proc = Process.Start(new ProcessStartInfo("sc.exe", "query AxiomService")
+            var scPath = Path.Combine(Environment.SystemDirectory, "sc.exe");
+            using var proc = Process.Start(new ProcessStartInfo(scPath, WindowsServiceQueryArguments)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -907,6 +936,22 @@ internal static class SetupInstaller
             try
             {
                 File.Copy(source, destination, overwrite);
+                return;
+            }
+            catch (IOException) when (attempt < 10)
+            {
+                Thread.Sleep(1000);
+            }
+        }
+    }
+
+    internal static void DeleteFileWithRetry(string path)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.Delete(path);
                 return;
             }
             catch (IOException) when (attempt < 10)

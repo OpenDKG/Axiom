@@ -52,7 +52,7 @@ public partial class BlackboxSettingsWindow : Window
     private void Populate(JsonObject settings)
     {
         var severities = (settings["severity_order"] as JsonArray)?
-            .Select(node => node?.GetValue<string>())
+            .Select(node => node is JsonValue jv && jv.TryGetValue<string>(out var s) ? s : null)
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Cast<string>()
             .ToArray() ?? DefaultSeverities;
@@ -78,7 +78,8 @@ public partial class BlackboxSettingsWindow : Window
         {
             foreach (var path in paths)
             {
-                if (path?.GetValue<string>() is { Length: > 0 } value && !_paths.Contains(value))
+                if (path is JsonValue jv && jv.TryGetValue<string>(out var value) &&
+                    value.Length > 0 && !_paths.Contains(value))
                 {
                     _paths.Add(value);
                 }
@@ -188,7 +189,7 @@ public partial class BlackboxSettingsWindow : Window
         }
 
         var savedPaths = (settings["protected_paths"] as JsonArray)?
-            .Select(node => node?.GetValue<string>() ?? string.Empty)
+            .Select(node => node is JsonValue jv && jv.TryGetValue<string>(out var s) ? s : string.Empty)
             .ToArray() ?? [];
         if (!savedPaths.SequenceEqual(_paths, StringComparer.OrdinalIgnoreCase))
         {
@@ -290,7 +291,7 @@ public partial class BlackboxSettingsWindow : Window
     {
         try
         {
-            Process.Start(new ProcessStartInfo("http://127.0.0.1:9700")
+            using var _ = Process.Start(new ProcessStartInfo("http://127.0.0.1:9700")
             {
                 UseShellExecute = true,
             });

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Globalization;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace Axiom.Infrastructure.Windows.IpHelper;
 
@@ -12,7 +13,7 @@ internal readonly record struct TcpByteCounts(long Sent, long Received);
 /// connection (requires elevation); enabling resets that connection's counters, so the reader
 /// remembers tuples it has already enabled. UDP has no equivalent and returns null.
 /// </summary>
-internal sealed class TcpConnectionByteReader
+internal sealed class TcpConnectionByteReader : IDisposable
 {
     private const int TcpConnectionEstatsData = 1;
 
@@ -29,7 +30,8 @@ internal sealed class TcpConnectionByteReader
     private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
 
     // One reusable 64-byte row buffer; MIB_TCP6ROW is 52 bytes and MIB_TCPROW is 20 bytes.
-    private readonly IntPtr _row = Marshal.AllocHGlobal(64);
+    // Wrapped in a SafeHandle so the unmanaged allocation is reliably freed on GC even without explicit disposal.
+    private readonly NativeRowBuffer _row = new(64);
 
     private bool _unavailable;
 
@@ -41,6 +43,14 @@ internal sealed class TcpConnectionByteReader
             {
                 return _unavailable;
             }
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            _row.Dispose();
         }
     }
 
@@ -72,7 +82,7 @@ internal sealed class TcpConnectionByteReader
     {
         lock (_gate)
         {
-            if (_unavailable)
+            if (_unavailable || _row.IsClosed || _row.IsInvalid)
             {
                 return null;
             }
@@ -91,7 +101,7 @@ internal sealed class TcpConnectionByteReader
     {
         lock (_gate)
         {
-            if (_unavailable)
+            if (_unavailable || _row.IsClosed || _row.IsInvalid)
             {
                 return null;
             }
@@ -116,7 +126,7 @@ internal sealed class TcpConnectionByteReader
         var rod = default(TcpEstatsDataRod);
         var status = ipv6
             ? GetPerTcp6ConnectionEStats(
-                _row,
+                _row.DangerousGetHandle(),
                 TcpConnectionEstatsData,
                 IntPtr.Zero,
                 0,
@@ -128,7 +138,7 @@ internal sealed class TcpConnectionByteReader
                 0,
                 (uint)Marshal.SizeOf<TcpEstatsDataRod>())
             : GetPerTcpConnectionEStats(
-                _row,
+                _row.DangerousGetHandle(),
                 TcpConnectionEstatsData,
                 IntPtr.Zero,
                 0,
@@ -170,8 +180,8 @@ internal sealed class TcpConnectionByteReader
 
         var rw = new TcpEstatsDataRw { EnableCollection = 1 };
         var status = ipv6
-            ? SetPerTcp6ConnectionEStats(_row, TcpConnectionEstatsData, ref rw, 0, 1, 0)
-            : SetPerTcpConnectionEStats(_row, TcpConnectionEstatsData, ref rw, 0, 1, 0);
+            ? SetPerTcp6ConnectionEStats(_row.DangerousGetHandle(), TcpConnectionEstatsData, ref rw, 0, 1, 0)
+            : SetPerTcpConnectionEStats(_row.DangerousGetHandle(), TcpConnectionEstatsData, ref rw, 0, 1, 0);
 
         if (status == 0)
         {
@@ -192,22 +202,39 @@ internal sealed class TcpConnectionByteReader
 
     private void WriteV4(in NativeMethods.TcpRowV4 row)
     {
-        Marshal.WriteInt32(_row, 0, unchecked((int)row.State));
-        Marshal.WriteInt32(_row, 4, unchecked((int)row.LocalAddress));
-        Marshal.WriteInt32(_row, 8, unchecked((int)row.LocalPort));
-        Marshal.WriteInt32(_row, 12, unchecked((int)row.RemoteAddress));
-        Marshal.WriteInt32(_row, 16, unchecked((int)row.RemotePort));
+        var buffer = _row.DangerousGetHandle();
+        Marshal.WriteInt32(buffer, 0, unchecked((int)row.State));
+        Marshal.WriteInt32(buffer, 4, unchecked((int)row.LocalAddress));
+        Marshal.WriteInt32(buffer, 8, unchecked((int)row.LocalPort));
+        Marshal.WriteInt32(buffer, 12, unchecked((int)row.RemoteAddress));
+        Marshal.WriteInt32(buffer, 16, unchecked((int)row.RemotePort));
     }
 
     private void WriteV6(in NativeMethods.TcpRowV6 row)
     {
-        Marshal.Copy(row.LocalAddress, 0, _row, 16);
-        Marshal.WriteInt32(_row, 16, unchecked((int)row.LocalScopeId));
-        Marshal.WriteInt32(_row, 20, unchecked((int)row.LocalPort));
-        Marshal.Copy(row.RemoteAddress, 0, IntPtr.Add(_row, 24), 16);
-        Marshal.WriteInt32(_row, 40, unchecked((int)row.RemoteScopeId));
-        Marshal.WriteInt32(_row, 44, unchecked((int)row.RemotePort));
-        Marshal.WriteInt32(_row, 48, unchecked((int)row.State));
+        var buffer = _row.DangerousGetHandle();
+        Marshal.Copy(row.LocalAddress, 0, buffer, 16);
+        Marshal.WriteInt32(buffer, 16, unchecked((int)row.LocalScopeId));
+        Marshal.WriteInt32(buffer, 20, unchecked((int)row.LocalPort));
+        Marshal.Copy(row.RemoteAddress, 0, IntPtr.Add(buffer, 24), 16);
+        Marshal.WriteInt32(buffer, 40, unchecked((int)row.RemoteScopeId));
+        Marshal.WriteInt32(buffer, 44, unchecked((int)row.RemotePort));
+        Marshal.WriteInt32(buffer, 48, unchecked((int)row.State));
+    }
+
+    private sealed class NativeRowBuffer : SafeHandleZeroOrMinusOneIsInvalid
+    {
+        public NativeRowBuffer(int size)
+            : base(ownsHandle: true)
+        {
+            SetHandle(Marshal.AllocHGlobal(size));
+        }
+
+        protected override bool ReleaseHandle()
+        {
+            Marshal.FreeHGlobal(handle);
+            return true;
+        }
     }
 
     private static long Clamp(ulong value) => value > long.MaxValue ? long.MaxValue : (long)value;

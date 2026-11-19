@@ -104,6 +104,13 @@ public sealed class IpcPipeClient(
                 "The service returned malformed JSON.",
                 exception);
         }
+        catch (IpcMessageTooLargeException exception)
+        {
+            throw new IpcClientException(
+                IpcErrorCodes.MessageTooLarge,
+                exception.Message,
+                exception);
+        }
         catch (IOException exception)
         {
             throw new IpcClientException(

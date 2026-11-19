@@ -328,6 +328,84 @@ public sealed class PipeServerTests : IAsyncLifetime
         Assert.True(restoreCalled);
     }
 
+    [Fact]
+    public async Task Capabilities_advertise_enforcement_commands_when_handlers_are_registered()
+    {
+        var pipeName = $"Axiom.Test.{Guid.NewGuid():N}";
+        var sid = WindowsIdentity.GetCurrent().User!.Value;
+        var health = new ServiceHealth
+        {
+            Status = "running",
+            UptimeSeconds = 1,
+            SourceName = "test",
+            PollIntervalSeconds = 1,
+            ConnectionCount = 0,
+            ProcessCount = 0,
+        };
+
+        var server = new PipeServer(
+            pipeName,
+            sid,
+            () => null,
+            () => health,
+            enforcementStatus: _ => Task.FromResult(new EnforcementStatusDto
+            {
+                Enabled = false,
+                Revision = "0",
+                AgentCount = 0,
+                RuleCount = 0,
+                ProtectedResourceCount = 0,
+            }),
+            enforcementEvaluate: (req, _, _) => Task.FromResult(new EnforcementVerdictDto
+            {
+                RequestId = req.RequestId,
+                Decision = "audit",
+                RuleId = "default",
+                ReasonCode = "monitor",
+                AvailableStrength = "observation",
+                EvaluatedUtc = DateTimeOffset.UtcNow,
+            }),
+            enforcementReceipts: _ => Task.FromResult(new EnforcementReceiptsSnapshotDto
+            {
+                ChainValid = true,
+                Total = 0,
+                Receipts = [],
+            }));
+
+        using var cts = new CancellationTokenSource();
+        var run = server.RunAsync(cts.Token);
+        for (var i = 0; i < 60; i++)
+        {
+            if (Directory.GetFiles(@"\\.\pipe\").Any(p => string.Equals(Path.GetFileName(p), pipeName, StringComparison.OrdinalIgnoreCase)))
+            {
+                break;
+            }
+
+            await Task.Delay(50);
+        }
+
+        try
+        {
+            var capsResponse = await SendAsync(pipeName, IpcCommandTypes.Capabilities);
+            Assert.True(capsResponse.Ok);
+            var caps = capsResponse.Result!.Value.Deserialize<ServiceCapabilities>(IpcJson.Options)!;
+            Assert.Contains(IpcCommandTypes.EnforcementStatus, caps.Commands);
+            Assert.Contains(IpcCommandTypes.EnforcementEvaluate, caps.Commands);
+            Assert.Contains(IpcCommandTypes.EnforcementReceipts, caps.Commands);
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            try
+            {
+                await run.WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch (TimeoutException)
+            {
+            }
+        }
+    }
+
     private static NetworkRecoveryCaptureResult Captured() => new()
     {
         Status = NetworkRecoveryStatus.Succeeded,

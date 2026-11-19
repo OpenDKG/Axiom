@@ -154,6 +154,44 @@ public sealed class ThreatShareCliTests
         }
     }
 
+    [Fact]
+    public void InspectLocalGraphNovelty_handles_case_insensitive_keys_and_out_of_range_timestamps()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "axiom-threat-cli", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var rulesetPath = Path.Combine(dir, "ruleset.json");
+            File.WriteAllText(
+                rulesetPath,
+                """
+                {
+                  "synced_at": 1e20,
+                  "kill_list": { "ioc:domain:revoked.example": true },
+                  "ioc": { "verified.example": { "severity": "high" } },
+                  "community": { "ioc:domain:disputed.example": { "disputed": "yes" } }
+                }
+                """);
+
+            Assert.Equal(
+                ThreatShareNoveltyStatus.Revoked,
+                ThreatShareCli.InspectLocalGraphNovelty("IOC:DOMAIN:REVOKED.EXAMPLE", dir));
+            Assert.Equal(
+                ThreatShareNoveltyStatus.KnownVerified,
+                ThreatShareCli.InspectLocalGraphNovelty("IOC:DOMAIN:VERIFIED.EXAMPLE", dir));
+            Assert.Equal(
+                ThreatShareNoveltyStatus.Disputed,
+                ThreatShareCli.InspectLocalGraphNovelty("IOC:DOMAIN:DISPUTED.EXAMPLE", dir));
+            Assert.Equal(
+                ThreatShareNoveltyStatus.Unknown,
+                ThreatShareCli.InspectLocalGraphNovelty("ioc:domain:unseen.example", dir));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
     private static ThreatShareCandidate Candidate(
         string reason,
         ThreatSharePublicationEligibility eligibility,

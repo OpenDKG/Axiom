@@ -40,6 +40,8 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
 
     private int _count;
 
+    private bool _disposed;
+
     public PrivacyShieldBlockedHistoryStore(string? path = null)
     {
         // History is deliberately kept in the service account's local profile: blocked domains
@@ -60,6 +62,11 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
         var flush = false;
         lock (_gate)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             _pending.Add(blocked);
             flush = _pending.Count >= FlushThreshold;
         }
@@ -74,45 +81,58 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
     {
         lock (_gate)
         {
-            if (_pending.Count == 0)
+            FlushLocked();
+        }
+    }
+
+    private void FlushLocked()
+    {
+        if (_pending.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var valid = _pending
+                .Where(item => !string.IsNullOrWhiteSpace(item.Domain))
+                .ToList();
+            if (valid.Count == 0)
             {
+                _pending.Clear();
                 return;
             }
 
-            try
+            if (valid.Count > MaxEntries)
             {
-                if (_count + _pending.Count > MaxEntries)
-                {
-                    CompactLocked();
-                }
-
-                var directory = Path.GetDirectoryName(_path)
-                    ?? throw new InvalidOperationException("Privacy Shield history path has no directory.");
-                Directory.CreateDirectory(directory);
-                File.AppendAllLines(
-                    _path,
-                    _pending.Select(item => JsonSerializer.Serialize(item, JsonOptions)),
-                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                foreach (var item in _pending)
-                {
-                    if (!string.IsNullOrWhiteSpace(item.Domain))
-                    {
-                        _persisted.Add(item);
-                    }
-                }
-
-                if (_persisted.Count > MaxEntries)
-                {
-                    _persisted.RemoveRange(0, _persisted.Count - MaxEntries);
-                }
-
-                _count += _pending.Count;
-                _pending.Clear();
+                valid = valid.Skip(valid.Count - MaxEntries).ToList();
             }
-            catch (Exception exception) when (exception is
-                         IOException or UnauthorizedAccessException or JsonException)
+
+            if (_count + valid.Count > MaxEntries)
             {
+                CompactLocked();
             }
+
+            var directory = Path.GetDirectoryName(_path)
+                ?? throw new InvalidOperationException("Privacy Shield history path has no directory.");
+            Directory.CreateDirectory(directory);
+            File.AppendAllLines(
+                _path,
+                valid.Select(item => JsonSerializer.Serialize(item, JsonOptions)),
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            _persisted.AddRange(valid);
+
+            if (_persisted.Count > MaxEntries)
+            {
+                _persisted.RemoveRange(0, _persisted.Count - MaxEntries);
+            }
+
+            _count = Math.Min(MaxEntries, _count + valid.Count);
+            _pending.Clear();
+        }
+        catch (Exception exception) when (exception is
+                     IOException or UnauthorizedAccessException or JsonException)
+        {
         }
     }
 
@@ -168,7 +188,16 @@ public sealed class PrivacyShieldBlockedHistoryStore : IDisposable
     public void Dispose()
     {
         _flushTimer.Dispose();
-        Flush();
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            FlushLocked();
+            _disposed = true;
+        }
     }
 
     private void CompactLocked()

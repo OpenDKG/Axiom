@@ -191,6 +191,13 @@ public sealed class DnsProxyTests
 
         var truncated = response.AsSpan(0, parsed.QuestionEnd - 1);
         Assert.False(DnsProtocol.IsMatchingResponse(query, parsed.QuestionEnd, truncated));
+
+        // A reflected query (QR=0) or mismatched QDCOUNT must be rejected even if ID and question match.
+        Assert.False(DnsProtocol.IsMatchingResponse(query, parsed.QuestionEnd, query));
+        var zeroQuestions = (byte[])response.Clone();
+        zeroQuestions[4] = 0;
+        zeroQuestions[5] = 0;
+        Assert.False(DnsProtocol.IsMatchingResponse(query, parsed.QuestionEnd, zeroQuestions));
     }
 
     [Fact]
@@ -355,6 +362,37 @@ public sealed class DnsProxyTests
         var defaults = SystemDnsResolver.DefaultDohTargets();
         Assert.Equal(2, defaults.Count);
         Assert.True(defaults.All(item => item.IsDoh && !item.FallbackToPlainAllowed));
+    }
+
+    [Fact]
+    public async Task Proxy_survives_throwing_blocked_callback_and_stalled_tcp_client()
+    {
+        var settings = new PrivacyShieldSettings
+        {
+            Categories = PrivacyCategory.None,
+            BlockedDomains = ["blocked.example"],
+        };
+        var policy = PrivacyShieldPolicy.Create(settings);
+        await using var server = new DnsProxyServer(
+            policy,
+            [new IPEndPoint(IPAddress.Loopback, 9)],
+            port: 0,
+            onBlocked: _ => throw new InvalidOperationException("simulated history store fault"));
+
+        // Connect a TCP client that sends 1 byte and stalls without closing.
+        using var stalledTcp = new TcpClient(AddressFamily.InterNetwork);
+        await stalledTcp.ConnectAsync(IPAddress.Loopback, server.Port);
+        await stalledTcp.GetStream().WriteAsync(new byte[] { 0x00 });
+
+        // UDP blocking must still answer NXDOMAIN cleanly despite throwing callback and stalled TCP client.
+        using var udp = new UdpClient(AddressFamily.InterNetwork);
+        udp.Connect(IPAddress.Loopback, server.Port);
+        var query = BuildQuery("blocked.example");
+        await udp.SendAsync(query, query.Length);
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var reply = await udp.ReceiveAsync(timeout.Token);
+        Assert.Equal(3, reply.Buffer[3] & 0x0F);
     }
 
     private sealed class FakeDohHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)

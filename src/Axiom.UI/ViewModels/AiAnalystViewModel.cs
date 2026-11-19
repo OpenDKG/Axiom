@@ -42,6 +42,7 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
     private DateTimeOffset _lastAutoAttempt = DateTimeOffset.MinValue;
     private DateTimeOffset _analysisStartedUtc;
     private CancellationTokenSource? _analysisCts;
+    private bool _disposed;
 
     private string _apiKey = string.Empty;
     private bool _apiKeyDirty;
@@ -255,10 +256,22 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _autoTimer.Stop();
         _busyTimer.Stop();
-        _analysisCts?.Cancel();
-        _analysisCts?.Dispose();
+        try
+        {
+            _analysisCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
         _client.Dispose();
     }
 
@@ -293,7 +306,7 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         bool automatic,
         IReadOnlyList<Axiom.Contracts.Monitoring.LiveConnection>? connections)
     {
-        if (IsBusy)
+        if (_disposed || IsBusy)
         {
             return;
         }
@@ -384,6 +397,14 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
                 : "Analysis returned no reliable result: " + finding.Error;
             UpdateStatus();
         }
+        catch (Exception exception) when (exception is OperationCanceledException ||
+                                          (_disposed && exception is ObjectDisposedException))
+        {
+            if (!_disposed)
+            {
+                StatusText = "Analysis cancelled. No finding was saved.";
+            }
+        }
         finally
         {
             _analysisCts = null;
@@ -393,7 +414,7 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
 
     private async Task AutomaticTickAsync()
     {
-        if (!AutomaticAnalysis || !Enabled || !IsConfigured || IsBusy)
+        if (_disposed || !AutomaticAnalysis || !Enabled || !IsConfigured || IsBusy)
         {
             return;
         }
@@ -490,7 +511,19 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
     [RelayCommand]
     private void CancelAnalysis()
     {
-        _analysisCts?.Cancel();
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            _analysisCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
         StatusText = "Cancelling the AI analysis…";
     }
 

@@ -235,7 +235,7 @@ public sealed class AgentSessionReader : IAgentSessionSource
             : columns.Contains("name") ? "name" : "title";
         var updatedColumn = columns.Contains("updated_at_ms") ? "updated_at_ms" : "updated_at";
         var workspaceColumn = columns.Contains("cwd") ? "cwd" : "NULL";
-        var query = connection.CreateCommand();
+        using var query = connection.CreateCommand();
         query.CommandText =
             $"SELECT id, {titleColumn}, {workspaceColumn}, {updatedColumn} FROM threads " +
             "ORDER BY " + updatedColumn + " DESC LIMIT 16";
@@ -325,7 +325,7 @@ public sealed class AgentSessionReader : IAgentSessionSource
         var archivedFilter = columns.Contains("time_archived")
             ? "WHERE time_archived IS NULL OR time_archived = 0"
             : string.Empty;
-        var query = connection.CreateCommand();
+        using var query = connection.CreateCommand();
         query.CommandText =
             $"SELECT id, {titleColumn}, {directoryColumn}, time_updated FROM {table} " +
             $"{archivedFilter} ORDER BY time_updated DESC LIMIT 16";
@@ -403,7 +403,7 @@ public sealed class AgentSessionReader : IAgentSessionSource
             ? "WHERE parent_conversation_id IS NULL OR parent_conversation_id = ''"
             : string.Empty;
 
-        var query = connection.CreateCommand();
+        using var query = connection.CreateCommand();
         query.CommandText =
             $"SELECT conversation_id, {titleColumn}, {workspaceColumn}, last_modified_time, {statusColumn} " +
             $"FROM conversation_summaries {parentFilter} ORDER BY last_modified_time DESC LIMIT 16";

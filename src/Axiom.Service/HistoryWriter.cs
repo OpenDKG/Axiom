@@ -59,81 +59,87 @@ public sealed partial class HistoryWriter(
         using var timer = new PeriodicTimer(FlushInterval);
         long lastRevision = -1;
 
-        do
+        try
         {
-            // Capture the revision before the snapshot. If a newer snapshot arrives while the
-            // write is in progress, the next tick must still see a revision greater than the one
-            // recorded here; reading Revision after the write could silently skip that snapshot.
-            var revision = cache.Revision;
-            var snapshot = cache.Latest;
-            if (snapshot is not null && revision != lastRevision)
+            do
             {
-                // Persist a connection only after it survived one refresh cycle. Short-lived
-                // sockets (the bulk of the churn) never reach SQLite, which keeps page writes low.
-                var stable = new List<LiveConnection>();
-                var currentKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var connection in snapshot.Connections)
+                // Capture the revision before the snapshot. If a newer snapshot arrives while the
+                // write is in progress, the next tick must still see a revision greater than the one
+                // recorded here; reading Revision after the write could silently skip that snapshot.
+                var revision = cache.Revision;
+                var snapshot = cache.Latest;
+                if (snapshot is not null && revision != lastRevision)
                 {
-                    var key = ConnectionKey(connection);
-                    currentKeys.Add(key);
-                    if (_previousKeys.Contains(key))
+                    // Persist a connection only after it survived one refresh cycle. Short-lived
+                    // sockets (the bulk of the churn) never reach SQLite, which keeps page writes low.
+                    var stable = new List<LiveConnection>();
+                    var currentKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var connection in snapshot.Connections)
                     {
-                        stable.Add(connection);
+                        var key = ConnectionKey(connection);
+                        currentKeys.Add(key);
+                        if (_previousKeys.Contains(key))
+                        {
+                            stable.Add(connection);
+                        }
+                    }
+
+                    _previousKeys.Clear();
+                    foreach (var key in currentKeys)
+                    {
+                        _previousKeys.Add(key);
+                    }
+
+                    var persistable = stable.Count == snapshot.Connections.Count
+                        ? snapshot
+                        : snapshot with { Connections = stable };
+                    _lastPersistable = persistable;
+
+                    try
+                    {
+                        await store.UpsertAsync(persistable, cancellationToken: stoppingToken).ConfigureAwait(false);
+                        lastRevision = revision;
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                    {
+                        break;
+                    }
+#pragma warning disable CA1031 // A transient SQLite error must not stop the service.
+                    catch (Exception exception)
+#pragma warning restore CA1031
+                    {
+                        LogWriteFailure(logger, exception);
                     }
                 }
 
-                _previousKeys.Clear();
-                foreach (var key in currentKeys)
+                if (DateTimeOffset.UtcNow - lastRetention >= RetentionInterval)
                 {
-                    _previousKeys.Add(key);
-                }
+                    try
+                    {
+                        var removed = await store
+                            .ApplyRetentionAsync(DateTimeOffset.UtcNow, HistoryStore.DefaultRetention, stoppingToken)
+                            .ConfigureAwait(false);
 
-                var persistable = stable.Count == snapshot.Connections.Count
-                    ? snapshot
-                    : snapshot with { Connections = stable };
-                _lastPersistable = persistable;
-
-                try
-                {
-                    await store.UpsertAsync(persistable, cancellationToken: stoppingToken).ConfigureAwait(false);
-                    lastRevision = revision;
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
-                    return;
-                }
-#pragma warning disable CA1031 // A transient SQLite error must not stop the service.
-                catch (Exception exception)
-#pragma warning restore CA1031
-                {
-                    LogWriteFailure(logger, exception);
-                }
-            }
-
-            if (DateTimeOffset.UtcNow - lastRetention >= RetentionInterval)
-            {
-                try
-                {
-                    var removed = await store
-                        .ApplyRetentionAsync(DateTimeOffset.UtcNow, HistoryStore.DefaultRetention, stoppingToken)
-                        .ConfigureAwait(false);
-
-                    lastRetention = DateTimeOffset.UtcNow;
-                    LogRetention(logger, removed);
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
-                    return;
-                }
+                        lastRetention = DateTimeOffset.UtcNow;
+                        LogRetention(logger, removed);
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                    {
+                        break;
+                    }
 #pragma warning disable CA1031
-                catch (Exception exception)
+                    catch (Exception exception)
 #pragma warning restore CA1031
-                {
-                    LogWriteFailure(logger, exception);
+                    {
+                        LogWriteFailure(logger, exception);
+                    }
                 }
             }
+            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
         }
-        while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
 
         // One last write on shutdown keeps the final stable snapshot in history.
         if (_lastPersistable is { } last)

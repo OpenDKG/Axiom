@@ -8,6 +8,7 @@ namespace Axiom.UI.Avalonia.Views;
 public partial class FirewallView : UserControl
 {
     private FirewallPageViewModel? _page;
+    private bool _attached;
 
     public FirewallView()
     {
@@ -15,17 +16,36 @@ public partial class FirewallView : UserControl
         DataContextChanged += OnDataContextChanged;
     }
 
-    private void OnDataContextChanged(object? sender, EventArgs e)
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        if (_page is not null)
+        base.OnAttachedToVisualTree(e);
+        _attached = true;
+        AttachViewModel();
+    }
+
+    private void OnDataContextChanged(object? sender, EventArgs e) => AttachViewModel();
+
+    private void AttachViewModel()
+    {
+        DetachViewModel();
+        if (!_attached)
         {
-            _page.AlertFocusRequested -= OnAlertFocusRequested;
+            return;
         }
 
         _page = DataContext as FirewallPageViewModel;
         if (_page is not null)
         {
             _page.AlertFocusRequested += OnAlertFocusRequested;
+        }
+    }
+
+    private void DetachViewModel()
+    {
+        if (_page is not null)
+        {
+            _page.AlertFocusRequested -= OnAlertFocusRequested;
+            _page = null;
         }
     }
 
@@ -36,11 +56,8 @@ public partial class FirewallView : UserControl
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
+        _attached = false;
+        DetachViewModel();
         base.OnDetachedFromVisualTree(e);
-        if (_page is not null)
-        {
-            _page.AlertFocusRequested -= OnAlertFocusRequested;
-            _page = null;
-        }
     }
 }

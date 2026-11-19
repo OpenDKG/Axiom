@@ -37,6 +37,7 @@ public sealed class TrafficEngine : IDisposable
     private bool _historyLoaded;
     private int _historyBucketSeconds = 60;
     private string? _historyDetail;
+    private bool _disposed;
 
     public TrafficEngine(IUiTimerFactory timers)
     {
@@ -86,7 +87,7 @@ public sealed class TrafficEngine : IDisposable
 
     public void Start()
     {
-        if (_timer.IsEnabled)
+        if (_disposed || _timer.IsEnabled)
         {
             return;
         }
@@ -118,7 +119,13 @@ public sealed class TrafficEngine : IDisposable
         Updated?.Invoke(this, EventArgs.Empty);
     }
 
-    public void Stop() => _timer.StopTimer();
+    public void Stop()
+    {
+        if (!_disposed)
+        {
+            _timer.StopTimer();
+        }
+    }
 
     public void SetRange(TrafficRange range)
     {
@@ -213,6 +220,12 @@ public sealed class TrafficEngine : IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _timer.StopTimer();
         _timer.Tick -= OnTimerTick;
         _timer.Dispose();
@@ -220,8 +233,20 @@ public sealed class TrafficEngine : IDisposable
 
     private void OnTimerTick(object? sender, EventArgs e)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         var current = ReadCounters();
         var now = Stopwatch.GetTimestamp();
+        if (_lastTimestamp == 0)
+        {
+            _previous = current;
+            _lastTimestamp = now;
+            return;
+        }
+
         var elapsed = (now - _lastTimestamp) / (double)Stopwatch.Frequency;
         double upload = double.NaN;
         double download = double.NaN;

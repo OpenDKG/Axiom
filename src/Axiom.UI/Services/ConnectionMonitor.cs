@@ -17,6 +17,7 @@ public sealed class ConnectionMonitor : IDisposable
     private readonly Dictionary<string, ConnectionRow> _rows = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _cancellation = new();
     private bool _isPolling;
+    private bool _disposed;
 
     public ConnectionMonitor(IConnectionSnapshotSource source)
     {
@@ -58,7 +59,7 @@ public sealed class ConnectionMonitor : IDisposable
 
     public async Task PollAsync()
     {
-        if (_isPolling)
+        if (_disposed || _isPolling)
         {
             return;
         }
@@ -67,7 +68,22 @@ public sealed class ConnectionMonitor : IDisposable
 
         try
         {
-            var snapshot = await _source.CaptureAsync(_cancellation.Token).ConfigureAwait(true);
+            CancellationToken token;
+            try
+            {
+                token = _cancellation.Token;
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+
+            var snapshot = await _source.CaptureAsync(token).ConfigureAwait(true);
+            if (_disposed)
+            {
+                return;
+            }
+
             Apply(snapshot);
             LastError = null;
         }
@@ -79,8 +95,11 @@ public sealed class ConnectionMonitor : IDisposable
         catch (Exception exception)
 #pragma warning restore CA1031
         {
-            LastError = exception.Message;
-            Updated?.Invoke(this, EventArgs.Empty);
+            if (!_disposed)
+            {
+                LastError = exception.Message;
+                Updated?.Invoke(this, EventArgs.Empty);
+            }
         }
         finally
         {
@@ -90,6 +109,12 @@ public sealed class ConnectionMonitor : IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _timer.Stop();
         _timer.Tick -= OnTick;
         _cancellation.Cancel();

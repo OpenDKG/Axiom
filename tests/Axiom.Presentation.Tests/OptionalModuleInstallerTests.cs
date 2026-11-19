@@ -108,4 +108,24 @@ public sealed class OptionalModuleInstallerTests
                 fileExists: _ => false,
                 programFiles: @"C:\Program Files"));
     }
+
+    [Fact]
+    public void Installer_scripts_guard_native_stderr_against_ps51_terminating_errors_and_crlf_drift()
+    {
+        var installer = new OptionalModuleInstaller();
+        var buildDkg = typeof(OptionalModuleInstaller).GetMethod(
+            "BuildDkgScript",
+            BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var buildBlackbox = typeof(OptionalModuleInstaller).GetMethod(
+            "BuildBlackboxScript",
+            BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        var dkgScript = (string)buildDkg.Invoke(installer, null)!;
+        var blackboxScript = (string)buildBlackbox.Invoke(installer, null)!;
+
+        Assert.Contains("$ErrorActionPreference = 'Continue'", dkgScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("*> $null", blackboxScript, StringComparison.Ordinal);
+        Assert.Contains("-c core.autocrlf=false", blackboxScript, StringComparison.Ordinal);
+        Assert.Contains("$ErrorActionPreference = 'Continue'", blackboxScript, StringComparison.Ordinal);
+    }
 }

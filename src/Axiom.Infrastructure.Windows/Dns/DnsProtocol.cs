@@ -130,7 +130,9 @@ internal static class DnsProtocol
             return false;
         }
 
-        return response[0] == query[0] &&
+        return (response[2] & 0x80) != 0 &&
+               BinaryPrimitives.ReadUInt16BigEndian(response.Slice(4, 2)) == 1 &&
+               response[0] == query[0] &&
                response[1] == query[1] &&
                query[12..questionEnd].SequenceEqual(response[12..questionEnd]);
     }

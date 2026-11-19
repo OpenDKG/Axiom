@@ -54,11 +54,67 @@ public sealed class AgentHookProbe
             };
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-            Win32Exception or InvalidOperationException or JsonException or TaskCanceledException)
+            Win32Exception or InvalidOperationException or JsonException or OperationCanceledException)
         {
             return new AgentHookTestResult("FAIL", "Hook test could not run: " + exception.Message);
         }
     }
+
+    private static async Task<(int ExitCode, string Output, string Error)> RunProcessAsync(
+        ProcessStartInfo startInfo,
+        string startFailureMessage,
+        string? stdinPayload,
+        CancellationToken cancellationToken)
+    {
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException(startFailureMessage);
+
+        if (stdinPayload is not null)
+        {
+            await process.StandardInput.WriteAsync(stdinPayload.AsMemory(), cancellationToken).ConfigureAwait(false);
+            process.StandardInput.Close();
+        }
+
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            var output = await outputTask.ConfigureAwait(false);
+            var error = await errorTask.ConfigureAwait(false);
+            return (process.ExitCode, output, error);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+            {
+            }
+
+            ObserveFaults(outputTask);
+            ObserveFaults(errorTask);
+            try
+            {
+                await Task.WhenAny(Task.WhenAll(outputTask, errorTask), Task.Delay(500, CancellationToken.None))
+                    .ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is OperationCanceledException or IOException or InvalidOperationException)
+            {
+            }
+
+            throw;
+        }
+    }
+
+    private static void ObserveFaults(Task task) =>
+        _ = task.ContinueWith(
+            static completed => _ = completed.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
     private static bool IsManagedScript(string path)
     {
@@ -94,26 +150,21 @@ public sealed class AgentHookProbe
         };
         startInfo.ArgumentList.Add(hook);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Codex hook.");
-        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
-        {
-            tool_name = "read",
-            tool_input = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
-            session_id = "axiom-hook-test",
-            tool_use_id = Guid.NewGuid().ToString("N"),
-        })).ConfigureAwait(false);
-        process.StandardInput.Close();
+        var (exitCode, output, _) = await RunProcessAsync(
+            startInfo,
+            "Could not start the Codex hook.",
+            JsonSerializer.Serialize(new
+            {
+                tool_name = "read",
+                tool_input = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
+                session_id = "axiom-hook-test",
+                tool_use_id = Guid.NewGuid().ToString("N"),
+            }),
+            cancellationToken).ConfigureAwait(false);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var output = await outputTask.ConfigureAwait(false);
-        _ = await errorTask.ConfigureAwait(false);
-
-        if (process.ExitCode != 0)
+        if (exitCode != 0)
         {
-            return new AgentHookTestResult("FAIL", $"Codex hook exited with {process.ExitCode}.");
+            return new AgentHookTestResult("FAIL", $"Codex hook exited with {exitCode}.");
         }
 
         if (IsDeniedCodexOutput(output))
@@ -172,26 +223,21 @@ public sealed class AgentHookProbe
         };
         startInfo.ArgumentList.Add(hook);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Claude Code hook.");
-        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
-        {
-            tool_name = "Read",
-            tool_input = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
-            session_id = "axiom-hook-test",
-            tool_use_id = Guid.NewGuid().ToString("N"),
-        })).ConfigureAwait(false);
-        process.StandardInput.Close();
+        var (exitCode, output, _) = await RunProcessAsync(
+            startInfo,
+            "Could not start the Claude Code hook.",
+            JsonSerializer.Serialize(new
+            {
+                tool_name = "Read",
+                tool_input = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
+                session_id = "axiom-hook-test",
+                tool_use_id = Guid.NewGuid().ToString("N"),
+            }),
+            cancellationToken).ConfigureAwait(false);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var output = await outputTask.ConfigureAwait(false);
-        _ = await errorTask.ConfigureAwait(false);
-
-        if (process.ExitCode != 0)
+        if (exitCode != 0)
         {
-            return new AgentHookTestResult("FAIL", $"Claude Code hook exited with {process.ExitCode}.");
+            return new AgentHookTestResult("FAIL", $"Claude Code hook exited with {exitCode}.");
         }
 
         if (IsDeniedCodexOutput(output))
@@ -228,26 +274,21 @@ public sealed class AgentHookProbe
         };
         startInfo.ArgumentList.Add(hook);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Cursor hook.");
-        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
-        {
-            tool_name = "Read",
-            tool_input = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
-            conversation_id = "axiom-hook-test",
-            tool_use_id = Guid.NewGuid().ToString("N"),
-        })).ConfigureAwait(false);
-        process.StandardInput.Close();
+        var (exitCode, output, _) = await RunProcessAsync(
+            startInfo,
+            "Could not start the Cursor hook.",
+            JsonSerializer.Serialize(new
+            {
+                tool_name = "Read",
+                tool_input = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
+                conversation_id = "axiom-hook-test",
+                tool_use_id = Guid.NewGuid().ToString("N"),
+            }),
+            cancellationToken).ConfigureAwait(false);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var output = await outputTask.ConfigureAwait(false);
-        _ = await errorTask.ConfigureAwait(false);
-
-        if (process.ExitCode != 0)
+        if (exitCode != 0)
         {
-            return new AgentHookTestResult("FAIL", $"Cursor hook exited with {process.ExitCode}.");
+            return new AgentHookTestResult("FAIL", $"Cursor hook exited with {exitCode}.");
         }
 
         if (IsDeniedCursorOutput(output))
@@ -298,26 +339,21 @@ public sealed class AgentHookProbe
         };
         startInfo.ArgumentList.Add(hook);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Copilot hook.");
-        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
-        {
-            toolName = "read",
-            toolArgs = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
-            sessionId = "axiom-hook-test",
-            toolCallId = Guid.NewGuid().ToString("N"),
-        })).ConfigureAwait(false);
-        process.StandardInput.Close();
+        var (exitCode, output, _) = await RunProcessAsync(
+            startInfo,
+            "Could not start the Copilot hook.",
+            JsonSerializer.Serialize(new
+            {
+                toolName = "read",
+                toolArgs = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
+                sessionId = "axiom-hook-test",
+                toolCallId = Guid.NewGuid().ToString("N"),
+            }),
+            cancellationToken).ConfigureAwait(false);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var output = await outputTask.ConfigureAwait(false);
-        _ = await errorTask.ConfigureAwait(false);
-
-        if (process.ExitCode != 0)
+        if (exitCode != 0)
         {
-            return new AgentHookTestResult("FAIL", $"Copilot hook exited with {process.ExitCode}.");
+            return new AgentHookTestResult("FAIL", $"Copilot hook exited with {exitCode}.");
         }
 
         if (IsDeniedCopilotOutput(output))
@@ -368,25 +404,20 @@ public sealed class AgentHookProbe
         };
         startInfo.ArgumentList.Add(hook);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Gemini hook.");
-        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
-        {
-            tool_name = "read_file",
-            tool_input = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
-            session_id = "axiom-hook-test",
-        })).ConfigureAwait(false);
-        process.StandardInput.Close();
+        var (exitCode, output, _) = await RunProcessAsync(
+            startInfo,
+            "Could not start the Gemini hook.",
+            JsonSerializer.Serialize(new
+            {
+                tool_name = "read_file",
+                tool_input = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
+                session_id = "axiom-hook-test",
+            }),
+            cancellationToken).ConfigureAwait(false);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var output = await outputTask.ConfigureAwait(false);
-        _ = await errorTask.ConfigureAwait(false);
-
-        if (process.ExitCode != 0)
+        if (exitCode != 0)
         {
-            return new AgentHookTestResult("FAIL", $"Gemini hook exited with {process.ExitCode}.");
+            return new AgentHookTestResult("FAIL", $"Gemini hook exited with {exitCode}.");
         }
 
         if (IsDeniedGeminiOutput(output))
@@ -423,29 +454,24 @@ public sealed class AgentHookProbe
         };
         startInfo.ArgumentList.Add(hook);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Antigravity hook.");
-        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
-        {
-            toolCall = new
+        var (exitCode, output, _) = await RunProcessAsync(
+            startInfo,
+            "Could not start the Antigravity hook.",
+            JsonSerializer.Serialize(new
             {
-                name = "read_file",
-                args = new { Path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
-            },
-            conversationId = "axiom-hook-test",
-            stepIdx = 1,
-        })).ConfigureAwait(false);
-        process.StandardInput.Close();
+                toolCall = new
+                {
+                    name = "read_file",
+                    args = new { Path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
+                },
+                conversationId = "axiom-hook-test",
+                stepIdx = 1,
+            }),
+            cancellationToken).ConfigureAwait(false);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var output = await outputTask.ConfigureAwait(false);
-        _ = await errorTask.ConfigureAwait(false);
-
-        if (process.ExitCode != 0)
+        if (exitCode != 0)
         {
-            return new AgentHookTestResult("FAIL", $"Antigravity hook exited with {process.ExitCode}.");
+            return new AgentHookTestResult("FAIL", $"Antigravity hook exited with {exitCode}.");
         }
 
         if (IsDeniedGeminiOutput(output))
@@ -496,28 +522,23 @@ public sealed class AgentHookProbe
         };
         startInfo.ArgumentList.Add(hook);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Windsurf hook.");
-        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
-        {
-            agent_action_name = "pre_run_command",
-            trajectory_id = "axiom-hook-test",
-            execution_id = Guid.NewGuid().ToString("N"),
-            tool_info = new
+        var (exitCode, _, error) = await RunProcessAsync(
+            startInfo,
+            "Could not start the Windsurf hook.",
+            JsonSerializer.Serialize(new
             {
-                command_line = "read axiom-hook-test.txt",
-                cwd = Path.GetTempPath(),
-            },
-        })).ConfigureAwait(false);
-        process.StandardInput.Close();
+                agent_action_name = "pre_run_command",
+                trajectory_id = "axiom-hook-test",
+                execution_id = Guid.NewGuid().ToString("N"),
+                tool_info = new
+                {
+                    command_line = "read axiom-hook-test.txt",
+                    cwd = Path.GetTempPath(),
+                },
+            }),
+            cancellationToken).ConfigureAwait(false);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        _ = await outputTask.ConfigureAwait(false);
-        var error = await errorTask.ConfigureAwait(false);
-
-        if (process.ExitCode == 2)
+        if (exitCode == 2)
         {
             return new AgentHookTestResult(
                 "BLOCKED",
@@ -526,14 +547,14 @@ public sealed class AgentHookProbe
                 "The real Cascade process was not exercised.");
         }
 
-        if (process.ExitCode == 0)
+        if (exitCode == 0)
         {
             return new AgentHookTestResult(
                 "HOOK RAN",
                 "Windsurf hook executed and reached the local guard without a block. The real Cascade process was not exercised.");
         }
 
-        return new AgentHookTestResult("FAIL", $"Windsurf hook exited with {process.ExitCode}.");
+        return new AgentHookTestResult("FAIL", $"Windsurf hook exited with {exitCode}.");
     }
 
     private async Task<AgentHookTestResult> TestClineAsync(CancellationToken cancellationToken)
@@ -559,29 +580,24 @@ public sealed class AgentHookProbe
         };
         startInfo.ArgumentList.Add(hook);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Cline hook.");
-        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
-        {
-            taskId = "axiom-hook-test",
-            tool_call = new
+        var (exitCode, output, _) = await RunProcessAsync(
+            startInfo,
+            "Could not start the Cline hook.",
+            JsonSerializer.Serialize(new
             {
-                id = Guid.NewGuid().ToString("N"),
-                name = "read_files",
-                input = new { filePath = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
-            },
-        })).ConfigureAwait(false);
-        process.StandardInput.Close();
+                taskId = "axiom-hook-test",
+                tool_call = new
+                {
+                    id = Guid.NewGuid().ToString("N"),
+                    name = "read_files",
+                    input = new { filePath = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
+                },
+            }),
+            cancellationToken).ConfigureAwait(false);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var output = await outputTask.ConfigureAwait(false);
-        _ = await errorTask.ConfigureAwait(false);
-
-        if (process.ExitCode != 0)
+        if (exitCode != 0)
         {
-            return new AgentHookTestResult("FAIL", $"Cline hook exited with {process.ExitCode}.");
+            return new AgentHookTestResult("FAIL", $"Cline hook exited with {exitCode}.");
         }
 
         if (IsCancelledClineOutput(output))
@@ -635,27 +651,22 @@ public sealed class AgentHookProbe
         };
         startInfo.ArgumentList.Add(hook);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Could not start the {label} hook.");
-        await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
-        {
-            hook_event_name = "PreToolUse",
-            tool_name = "Read",
-            tool_input = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
-            session_id = "axiom-hook-test",
-            tool_use_id = Guid.NewGuid().ToString("N"),
-        })).ConfigureAwait(false);
-        process.StandardInput.Close();
+        var (exitCode, output, _) = await RunProcessAsync(
+            startInfo,
+            $"Could not start the {label} hook.",
+            JsonSerializer.Serialize(new
+            {
+                hook_event_name = "PreToolUse",
+                tool_name = "Read",
+                tool_input = new { path = Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt") },
+                session_id = "axiom-hook-test",
+                tool_use_id = Guid.NewGuid().ToString("N"),
+            }),
+            cancellationToken).ConfigureAwait(false);
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var output = await outputTask.ConfigureAwait(false);
-        _ = await errorTask.ConfigureAwait(false);
-
-        if (process.ExitCode != 0)
+        if (exitCode != 0)
         {
-            return new AgentHookTestResult("FAIL", $"{label} hook exited with {process.ExitCode}.");
+            return new AgentHookTestResult("FAIL", $"{label} hook exited with {exitCode}.");
         }
 
         if (IsDeniedCodexOutput(output))
@@ -756,13 +767,11 @@ public sealed class AgentHookProbe
             startInfo.ArgumentList.Add(pluginCopy);
             startInfo.ArgumentList.Add(Path.Combine(Path.GetTempPath(), "axiom-hook-test.txt"));
 
-            using var process = Process.Start(startInfo)
-                ?? throw new InvalidOperationException("Could not start Node for the hook test.");
-            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            var output = await outputTask.ConfigureAwait(false);
-            var error = await errorTask.ConfigureAwait(false);
+            var (exitCode, output, error) = await RunProcessAsync(
+                startInfo,
+                "Could not start Node for the hook test.",
+                stdinPayload: null,
+                cancellationToken).ConfigureAwait(false);
 
             if (output.Contains("BLOCKED:", StringComparison.Ordinal))
             {
@@ -771,7 +780,7 @@ public sealed class AgentHookProbe
                     $"{label} hook executed and blocked the benign test call. The real agent process was not exercised.");
             }
 
-            if (process.ExitCode == 0 && output.Contains("ALLOWED", StringComparison.Ordinal))
+            if (exitCode == 0 && output.Contains("ALLOWED", StringComparison.Ordinal))
             {
                 return new AgentHookTestResult(
                     "HOOK RAN",
@@ -780,7 +789,7 @@ public sealed class AgentHookProbe
 
             return new AgentHookTestResult(
                 "FAIL",
-                $"{label} hook test did not complete (exit {process.ExitCode})." +
+                $"{label} hook test did not complete (exit {exitCode})." +
                 (string.IsNullOrWhiteSpace(error) ? string.Empty : " " + error.Trim()));
         }
         finally

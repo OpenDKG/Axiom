@@ -1114,7 +1114,7 @@ public static class BlackboxLocalState
                 return null;
             }
 
-            return DateTimeOffset.FromUnixTimeMilliseconds((long)(seconds * 1000));
+            return FromUnixSecondsClamped(seconds);
         }
     }
 
@@ -1219,8 +1219,13 @@ public static class BlackboxLocalState
                     }
                 }
 
-                if (!bomChecked && (buffered >= 3 || isFinalBlock))
+                if (!bomChecked)
                 {
+                    if (buffered < 3 && !isFinalBlock)
+                    {
+                        continue;
+                    }
+
                     bomChecked = true;
                     if (buffered >= 3 &&
                         buffer[0] == 0xEF &&
@@ -1334,7 +1339,20 @@ public static class BlackboxLocalState
             return null;
         }
 
-        return DateTimeOffset.FromUnixTimeMilliseconds((long)(seconds * 1000));
+        return FromUnixSecondsClamped(seconds);
+    }
+
+    private static DateTimeOffset? FromUnixSecondsClamped(double seconds)
+    {
+        var millis = seconds * 1000d;
+        if (!double.IsFinite(millis) ||
+            millis < DateTimeOffset.MinValue.ToUnixTimeMilliseconds() ||
+            millis > DateTimeOffset.MaxValue.ToUnixTimeMilliseconds())
+        {
+            return null;
+        }
+
+        return DateTimeOffset.FromUnixTimeMilliseconds((long)millis);
     }
 
     private static double Percent(int value, int total) =>

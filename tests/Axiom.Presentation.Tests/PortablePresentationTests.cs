@@ -220,6 +220,26 @@ public sealed class PortablePresentationTests
         Assert.False(traffic.HasHistoryData);
     }
 
+    [Fact]
+    public async Task Disposed_monitor_and_traffic_engine_ignore_subsequent_calls_without_throwing()
+    {
+        var monitor = new ConnectionMonitor(new FakeSource(), new FakeTimerFactory());
+        monitor.Dispose();
+        await monitor.PollAsync();
+
+        var timerFactory = new ControllableTimerFactory();
+        var traffic = new TrafficEngine(timerFactory);
+        // An early tick before Start() must not invent 300 NaN gap samples.
+        timerFactory.LastTimer?.RaiseTick();
+        Assert.Empty(traffic.Samples);
+
+        traffic.Start();
+        traffic.Dispose();
+        traffic.Start();
+        traffic.Stop();
+        timerFactory.LastTimer?.RaiseTick();
+    }
+
     private sealed class FakeSource : IConnectionSnapshotSource
     {
         public string Name => "test source";
@@ -262,6 +282,34 @@ public sealed class PortablePresentationTests
             public void Dispose()
             {
             }
+        }
+    }
+
+    private sealed class ControllableTimerFactory : IUiTimerFactory
+    {
+        public ControllableTimer? LastTimer { get; private set; }
+
+        public IUiTimer Create(TimeSpan interval)
+        {
+            LastTimer = new ControllableTimer(interval);
+            return LastTimer;
+        }
+
+        internal sealed class ControllableTimer(TimeSpan interval) : IUiTimer
+        {
+            public TimeSpan Interval { get; set; } = interval;
+
+            public bool IsEnabled { get; private set; }
+
+            public event EventHandler? Tick;
+
+            public void Start() => IsEnabled = true;
+
+            public void StopTimer() => IsEnabled = false;
+
+            public void RaiseTick() => Tick?.Invoke(this, EventArgs.Empty);
+
+            public void Dispose() => IsEnabled = false;
         }
     }
 

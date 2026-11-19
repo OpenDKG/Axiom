@@ -114,9 +114,16 @@ public sealed class UpdateCheckService : IDisposable
             return false;
         }
 
-        await _checkGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var entered = false;
         try
         {
+            await _checkGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            entered = true;
+            if (_disposed)
+            {
+                return false;
+            }
+
             var settings = _settingsStore.Load();
             _checkForUpdates = settings.CheckForUpdates;
             _dismissedVersion = NormalizeDismissed(settings.DismissedVersion);
@@ -151,16 +158,31 @@ public sealed class UpdateCheckService : IDisposable
             }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (_disposed || !_checkForUpdates)
+            {
+                return false;
+            }
+
             return ApplyReleaseJson(json);
         }
         catch (Exception exception) when (exception is
-                     HttpRequestException or TaskCanceledException or OperationCanceledException or JsonException)
+                     HttpRequestException or TaskCanceledException or OperationCanceledException or
+                     JsonException or ObjectDisposedException)
         {
             return false;
         }
         finally
         {
-            _checkGate.Release();
+            if (entered)
+            {
+                try
+                {
+                    _checkGate.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+            }
         }
     }
 

@@ -32,7 +32,7 @@ public sealed partial class MonitoringWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var source = new IpHelperConnectionSource();
+        using var source = new IpHelperConnectionSource();
         cache.SourceName = source.Name;
         cache.PollInterval = source.PollInterval;
 

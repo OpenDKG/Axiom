@@ -271,7 +271,9 @@ public sealed class OptionalModuleInstaller
             $agentRepo = Join-Path $dir 'agent-blackbox'
             if ((Test-Path (Join-Path $agentRepo '.git')) -and (Get-Command git -ErrorAction SilentlyContinue)) {
               # Discard CRLF/tracked-file drift so upstream vendor pull/checkout does not fail.
-              & git -C $agentRepo checkout -- . *> $null
+              $prevPref = $ErrorActionPreference
+              $ErrorActionPreference = 'Continue'
+              try { & git -C $agentRepo -c core.autocrlf=false checkout -- . 2>&1 | Out-Null } finally { $ErrorActionPreference = $prevPref }
             }
             & $installer -StoreBackend $storeBackend
             $vendorExit = $LASTEXITCODE
@@ -611,51 +613,76 @@ public sealed class OptionalModuleInstaller
         };
 
         log?.Invoke("Running third-party installer silently in the background...");
-        BackgroundWindowHider.HideDescendants(TimeSpan.FromMinutes(10));
-        using var process = Process.Start(startInfo);
-        if (process is null)
+        try
         {
-            log?.Invoke("Could not start PowerShell.");
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                log?.Invoke("Could not start PowerShell.");
+                return false;
+            }
+
+            BackgroundWindowHider.HideDescendants(TimeSpan.FromMinutes(10));
+            ProcessWindowHider.Start(process.Id, TimeSpan.FromMinutes(10));
+
+            var logGate = new object();
+            process.OutputDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Data) || log is null)
+                {
+                    return;
+                }
+
+                lock (logGate)
+                {
+                    log(args.Data);
+                }
+            };
+            process.ErrorDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Data) || log is null)
+                {
+                    return;
+                }
+
+                lock (logGate)
+                {
+                    log(args.Data);
+                }
+            };
+
+            process.StandardInput.Close();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            if (!process.WaitForExit((int)TimeSpan.FromMinutes(15).TotalMilliseconds))
+            {
+                log?.Invoke("Installer timed out after 15 minutes; terminating process tree.");
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+#pragma warning disable CA1031 // Best effort on timeout.
+                catch (Exception)
+#pragma warning restore CA1031
+                {
+                }
+
+                process.CancelOutputRead();
+                process.CancelErrorRead();
+                return false;
+            }
+
+            log?.Invoke($"Installer finished with exit code {process.ExitCode}.");
+            return process.ExitCode == 0;
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+        {
+            log?.Invoke($"Could not start PowerShell: {exception.Message}");
             return false;
         }
-
-        ProcessWindowHider.Start(process.Id, TimeSpan.FromMinutes(10));
-
-        var logGate = new object();
-        process.OutputDataReceived += (_, args) =>
-        {
-            if (string.IsNullOrWhiteSpace(args.Data) || log is null)
-            {
-                return;
-            }
-
-            lock (logGate)
-            {
-                log(args.Data);
-            }
-        };
-        process.ErrorDataReceived += (_, args) =>
-        {
-            if (string.IsNullOrWhiteSpace(args.Data) || log is null)
-            {
-                return;
-            }
-
-            lock (logGate)
-            {
-                log(args.Data);
-            }
-        };
-
-        process.StandardInput.Close();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        process.WaitForExit();
-        log?.Invoke($"Installer finished with exit code {process.ExitCode}.");
-        return process.ExitCode == 0;
     }
 
-    private static void StartPowerShell(string script)
+    private void StartPowerShell(string script)
     {
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var startInfo = new ProcessStartInfo(
@@ -666,7 +693,18 @@ public sealed class OptionalModuleInstaller
             WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         };
 
-        Process.Start(startInfo);
+        try
+        {
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                LastError = "Could not open PowerShell.";
+            }
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+        {
+            LastError = $"Could not open PowerShell: {exception.Message}";
+        }
     }
 
     private static string Escape(string value) => value.Replace("'", "''", StringComparison.Ordinal);

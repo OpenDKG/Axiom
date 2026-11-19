@@ -11,7 +11,7 @@ namespace Axiom.Infrastructure.Windows.IpHelper;
 /// Read-only TCP/UDP inventory from the Windows IP Helper owner tables (IPv4 and IPv6) with
 /// process attribution. Runs without elevation; protected processes are reported as unresolved.
 /// </summary>
-public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
+public sealed class IpHelperConnectionSource : IConnectionSnapshotSource, IDisposable
 {
     private static readonly TimeSpan NewConnectionWindow = TimeSpan.FromSeconds(60);
 
@@ -45,6 +45,8 @@ public sealed class IpHelperConnectionSource : IConnectionSnapshotSource
     public string Name => "IP Helper (TCP/UDP v4+v6)";
 
     public TimeSpan PollInterval => TimeSpan.FromSeconds(1);
+
+    public void Dispose() => _byteReader.Dispose();
 
     public Task<ConnectionSnapshot> CaptureAsync(CancellationToken cancellationToken) =>
         Task.Run(() => Capture(cancellationToken), cancellationToken);

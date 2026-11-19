@@ -753,9 +753,23 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
     private async Task<bool> WaitForModuleStartAsync(string moduleName, int attempts = 12)
     {
-        for (var attempt = 0; attempt < attempts; attempt++)
+        var token = _disposed ? CancellationToken.None : _lifetime.Token;
+        for (var attempt = 0; attempt < attempts && !_disposed; attempt++)
         {
-            await Task.Delay(2000).ConfigureAwait(true);
+            try
+            {
+                await Task.Delay(2000, token).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
+
+            if (_disposed)
+            {
+                return false;
+            }
+
             await RefreshAsync().ConfigureAwait(true);
 
             var module = Modules.FirstOrDefault(item => item.Name == moduleName);
@@ -1025,19 +1039,25 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                     restartDkg: !isBlackbox && restart),
                 CancellationToken.None).ConfigureAwait(true);
 
+            var token = _disposed ? CancellationToken.None : _lifetime.Token;
             if (isBlackbox)
             {
                 await LocalModuleRuntime
-                    .WaitForPortAsync(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(60), CancellationToken.None)
+                    .WaitForPortAsync(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(60), token)
                     .ConfigureAwait(true);
             }
             else
             {
                 var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(120);
-                while (DateTimeOffset.UtcNow < deadline && !LocalModuleRuntime.AnyDkgPortListening)
+                while (DateTimeOffset.UtcNow < deadline && !LocalModuleRuntime.AnyDkgPortListening && !_disposed)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+                    await Task.Delay(TimeSpan.FromSeconds(2), token).ConfigureAwait(true);
                 }
+            }
+
+            if (_disposed)
+            {
+                return;
             }
 
             await RefreshAsync().ConfigureAwait(true);
@@ -1047,10 +1067,16 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 : _installer.LastError
                   ?? $"{module} did not answer after the repair. Check its local log, then try Repair again.";
         }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
         finally
         {
             _moduleActionRunning = false;
-            await RefreshAsync().ConfigureAwait(true);
+            if (!_disposed)
+            {
+                await RefreshAsync().ConfigureAwait(true);
+            }
         }
     }
 
@@ -1073,26 +1099,32 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             SetModuleActionLabel("Blackbox", "Starting...");
             InstallStatusText = "Starting local modules: the DKG node first, then the Blackbox dashboard.";
 
+            var token = _disposed ? CancellationToken.None : _lifetime.Token;
             var dkgUp = DkgConnected || LocalModuleRuntime.AnyDkgPortListening;
             if (!dkgUp && _installer.IsDkgAvailable)
             {
                 await Task.Run(_installer.StartDkg).ConfigureAwait(true);
                 var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(90);
-                while (DateTimeOffset.UtcNow < deadline && !LocalModuleRuntime.AnyDkgPortListening)
+                while (DateTimeOffset.UtcNow < deadline && !LocalModuleRuntime.AnyDkgPortListening && !_disposed)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+                    await Task.Delay(TimeSpan.FromSeconds(2), token).ConfigureAwait(true);
                 }
 
                 dkgUp = LocalModuleRuntime.AnyDkgPortListening;
             }
 
             var blackboxUp = BlackboxConnected || LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort);
-            if (!blackboxUp && _uninstaller.IsBlackboxRuntimeInstalled)
+            if (!blackboxUp && _uninstaller.IsBlackboxRuntimeInstalled && !_disposed)
             {
                 await Task.Run(_installer.StartBlackboxDashboard).ConfigureAwait(true);
                 blackboxUp = await LocalModuleRuntime
-                    .WaitForPortAsync(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(60), CancellationToken.None)
+                    .WaitForPortAsync(LocalModuleRuntime.BlackboxPort, TimeSpan.FromSeconds(60), token)
                     .ConfigureAwait(true);
+            }
+
+            if (_disposed)
+            {
+                return;
             }
 
             await RefreshAsync().ConfigureAwait(true);
@@ -1104,10 +1136,16 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 _ => "Neither local module answered. Install or Repair each card, then try Start local modules again.",
             };
         }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
         finally
         {
             _moduleActionRunning = false;
-            await RefreshAsync().ConfigureAwait(true);
+            if (!_disposed)
+            {
+                await RefreshAsync().ConfigureAwait(true);
+            }
         }
     }
 
@@ -1445,6 +1483,11 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     [RelayCommand]
     private Task RefreshCommunityAsync()
     {
+        if (_communityLoadTask is { IsCompleted: false } inFlight)
+        {
+            return inFlight;
+        }
+
         _communityLoadTask = LoadCommunityAsync(updateEntries: true);
         return _communityLoadTask;
     }

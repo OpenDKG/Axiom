@@ -1,3 +1,7 @@
+## What's in 1.4.2
+
+- **Native handle leak, concurrency, PowerShell 5.1, Setup and UI lifecycle fixes.** Releases WinTrust/CoTaskMem handles in `ProcessMetadataProvider`, wraps the native row buffer in `SafeHandle` (`TcpConnectionByteReader`/`IpHelperConnectionSource`), fixes Named Pipe idle-timeout resets and enforcement capabilities advertisement, validates DNS response flags (`QR`/`QDCOUNT`) and adds TCP proxy timeouts, synchronizes `PrivacyShieldController`, `ProtectionController`, `HistoryStore` and `HistoryWriter` shutdown flushes, hardens `UpgradeDataGuard` path containment and subprocess stdout/stderr cancellation across Blackbox/ThreatShare/Setup runners, fixes Setup service detection (`query Axiom`), and detaches Avalonia/WPF UI event handlers cleanly across visual-tree detach/re-attach cycles.
+
 ## What's in 1.4.0
 
 - Add permission for manual threat reporting to the existing Complete Protection setup checkbox. Every publication requires confirmation of the exact indicator and the Blackbox Reporter Terms.

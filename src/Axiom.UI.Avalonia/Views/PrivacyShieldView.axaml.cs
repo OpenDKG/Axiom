@@ -11,6 +11,7 @@ public partial class PrivacyShieldView : UserControl
     private PrivacyShieldPageViewModel? _viewModel;
     private double _historyOffset;
     private bool _restorePending;
+    private bool _attached;
 
     public PrivacyShieldView()
     {
@@ -19,17 +20,43 @@ public partial class PrivacyShieldView : UserControl
         DataContextChanged += OnDataContextChanged;
     }
 
-    private void OnDataContextChanged(object? sender, EventArgs e)
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        if (_viewModel is not null)
+        base.OnAttachedToVisualTree(e);
+        _attached = true;
+        AttachViewModel();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _attached = false;
+        DetachViewModel();
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    private void OnDataContextChanged(object? sender, EventArgs e) => AttachViewModel();
+
+    private void AttachViewModel()
+    {
+        DetachViewModel();
+        if (!_attached)
         {
-            _viewModel.BlockedHistoryGroups.CollectionChanged -= OnBlockedHistoryChanged;
+            return;
         }
 
         _viewModel = DataContext as PrivacyShieldPageViewModel;
         if (_viewModel is not null)
         {
             _viewModel.BlockedHistoryGroups.CollectionChanged += OnBlockedHistoryChanged;
+        }
+    }
+
+    private void DetachViewModel()
+    {
+        if (_viewModel is not null)
+        {
+            _viewModel.BlockedHistoryGroups.CollectionChanged -= OnBlockedHistoryChanged;
+            _viewModel = null;
         }
     }
 

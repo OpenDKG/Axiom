@@ -31,6 +31,7 @@ public sealed class TrafficChartControl : Control
         AvaloniaProperty.Register<TrafficChartControl, IBrush?>(nameof(MutedBrush));
 
     private IBrush _muted = new SolidColorBrush(Color.Parse("#8A98A8"));
+    private bool _isAttached;
 
     static TrafficChartControl()
     {
@@ -77,23 +78,57 @@ public sealed class TrafficChartControl : Control
         set => SetValue(MutedBrushProperty, value);
     }
 
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _isAttached = true;
+        AttachSeries(UploadSeries as INotifyCollectionChanged);
+        AttachSeries(DownloadSeries as INotifyCollectionChanged);
+        InvalidateVisual();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _isAttached = false;
+        DetachSeries(UploadSeries as INotifyCollectionChanged);
+        DetachSeries(DownloadSeries as INotifyCollectionChanged);
+        base.OnDetachedFromVisualTree(e);
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
         if (change.Property == UploadSeriesProperty || change.Property == DownloadSeriesProperty)
         {
-            if (change.OldValue is INotifyCollectionChanged oldCollection)
+            if (_isAttached)
             {
-                oldCollection.CollectionChanged -= OnSeriesChanged;
-            }
-
-            if (change.NewValue is INotifyCollectionChanged newCollection)
-            {
-                newCollection.CollectionChanged += OnSeriesChanged;
+                DetachSeries(change.OldValue as INotifyCollectionChanged);
+                AttachSeries(change.NewValue as INotifyCollectionChanged);
             }
 
             InvalidateVisual();
         }
+    }
+
+    private void AttachSeries(INotifyCollectionChanged? collection)
+    {
+        if (collection is null)
+        {
+            return;
+        }
+
+        collection.CollectionChanged -= OnSeriesChanged;
+        collection.CollectionChanged += OnSeriesChanged;
+    }
+
+    private void DetachSeries(INotifyCollectionChanged? collection)
+    {
+        if (collection is null)
+        {
+            return;
+        }
+
+        collection.CollectionChanged -= OnSeriesChanged;
     }
 
     private void OnSeriesChanged(object? sender, NotifyCollectionChangedEventArgs e) => InvalidateVisual();

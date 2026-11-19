@@ -233,7 +233,9 @@ public sealed class OptionalModuleInstaller
               if (Test-Path $dkg) {
                 $env:DKG_HOME = $dkgHome
                 Write-Host "Stopping Axiom's DKG $installed before upgrading to $dkgVersion..." -ForegroundColor Yellow
-                & $dkg stop 2>$null | Out-Null
+                $prevErrorAction = $ErrorActionPreference
+                $ErrorActionPreference = 'Continue'
+                try { & $dkg stop 2>&1 | Out-Null } finally { $ErrorActionPreference = $prevErrorAction }
                 Start-Sleep -Seconds 2
               }
               Write-Host "Installing pinned @origintrail-official/dkg $dkgVersion from the Axiom lockfile..." -ForegroundColor Cyan
@@ -403,8 +405,14 @@ public sealed class OptionalModuleInstaller
             # "No runtime installed" error from the launcher before the installer even starts.
             $python = Get-Command python -ErrorAction SilentlyContinue
             $pythonVersion = if ($python) {
-              $value = (& $python.Source -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null)
-              if ($LASTEXITCODE -eq 0) { ([string]$value).Trim() } else { $null }
+              $prevErrorAction = $ErrorActionPreference
+              $ErrorActionPreference = 'Continue'
+              try {
+                $value = (& $python.Source -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null)
+                if ($LASTEXITCODE -eq 0) { ([string]$value).Trim() } else { $null }
+              } finally {
+                $ErrorActionPreference = $prevErrorAction
+              }
             } else { $null }
             if ($pythonVersion -notmatch '^3\.(11|12|13)$') {
               throw "Blackbox requires Python 3.11-3.13, but Axiom found $(if ($pythonVersion) { "Python $pythonVersion" } else { 'no usable Python' }). Run Setup's prerequisite install (Python 3.12) and retry Repair."
@@ -444,8 +452,14 @@ public sealed class OptionalModuleInstaller
             $env:BLACKBOX_USE_EXISTING_HERMES = '0'
             $agentRepo = Join-Path $dir 'agent-blackbox'
             if ((Test-Path (Join-Path $agentRepo '.git')) -and (Get-Command git -ErrorAction SilentlyContinue)) {
-                # Discard CRLF/tracked-file drift so upstream vendor pull/checkout does not fail.
-                & git -C $agentRepo checkout -- . *> $null
+                # Discard CRLF/tracked-file drift without triggering PS 5.1 NativeCommandError on stderr.
+                $prevErrorAction = $ErrorActionPreference
+                $ErrorActionPreference = 'Continue'
+                try {
+                    & git -c core.autocrlf=false -C $agentRepo checkout -- . 2>&1 | Out-Null
+                } finally {
+                    $ErrorActionPreference = $prevErrorAction
+                }
             }
             & $installer -StoreBackend $storeBackend
             $vendorExit = $LASTEXITCODE
@@ -818,7 +832,7 @@ public sealed class OptionalModuleInstaller
                 StopModuleProcesses(blackbox: false, dkg: true, log);
                 if (restartDkg)
                 {
-                    WaitForPortToClose(LocalModuleRuntime.BlackboxDkgPort, TimeSpan.FromSeconds(10));
+                    WaitForAnyDkgPortToClose(TimeSpan.FromSeconds(10));
                 }
 
                 if (!StartDkg())
@@ -928,6 +942,15 @@ public sealed class OptionalModuleInstaller
     {
         var deadline = DateTimeOffset.UtcNow + timeout;
         while (DateTimeOffset.UtcNow < deadline && LocalModuleRuntime.IsPortListening(port))
+        {
+            Thread.Sleep(250);
+        }
+    }
+
+    private static void WaitForAnyDkgPortToClose(TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline && LocalModuleRuntime.AnyDkgPortListening)
         {
             Thread.Sleep(250);
         }
@@ -1118,46 +1141,86 @@ public sealed class OptionalModuleInstaller
         };
 
         log?.Invoke("Running third-party installer silently in the background...");
-        BackgroundWindowHider.HideDescendants(TimeSpan.FromMinutes(10));
-        using var process = Process.Start(startInfo);
-        if (process is null)
+        try
         {
-            log?.Invoke("Could not start PowerShell.");
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                log?.Invoke("Could not start PowerShell.");
+                return false;
+            }
+
+            BackgroundWindowHider.HideDescendants(TimeSpan.FromMinutes(10));
+
+            var logGate = new object();
+            process.OutputDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Data) || log is null)
+                {
+                    return;
+                }
+
+                lock (logGate)
+                {
+                    log(args.Data);
+                }
+            };
+            process.ErrorDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Data) || log is null)
+                {
+                    return;
+                }
+
+                lock (logGate)
+                {
+                    log(args.Data);
+                }
+            };
+
+            process.StandardInput.Close();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            if (!process.WaitForExit((int)TimeSpan.FromMinutes(15).TotalMilliseconds))
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+                {
+                }
+
+                try
+                {
+                    process.CancelOutputRead();
+                }
+                catch (InvalidOperationException)
+                {
+                }
+
+                try
+                {
+                    process.CancelErrorRead();
+                }
+                catch (InvalidOperationException)
+                {
+                }
+
+                log?.Invoke("Installer timed out after 15 minutes.");
+                return false;
+            }
+
+            // Ensure asynchronous output/error streams finish flushing after process exit.
+            process.WaitForExit();
+            log?.Invoke($"Installer finished with exit code {process.ExitCode}.");
+            return process.ExitCode == 0;
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or IOException)
+        {
+            log?.Invoke($"Could not run PowerShell installer: {exception.Message}");
             return false;
         }
-
-        var logGate = new object();
-        process.OutputDataReceived += (_, args) =>
-        {
-            if (string.IsNullOrWhiteSpace(args.Data) || log is null)
-            {
-                return;
-            }
-
-            lock (logGate)
-            {
-                log(args.Data);
-            }
-        };
-        process.ErrorDataReceived += (_, args) =>
-        {
-            if (string.IsNullOrWhiteSpace(args.Data) || log is null)
-            {
-                return;
-            }
-
-            lock (logGate)
-            {
-                log(args.Data);
-            }
-        };
-
-        process.StandardInput.Close();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        process.WaitForExit();
-        log?.Invoke($"Installer finished with exit code {process.ExitCode}.");
-        return process.ExitCode == 0;
     }
 
     private static void StartPowerShell(string script)
@@ -1171,7 +1234,7 @@ public sealed class OptionalModuleInstaller
             WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         };
 
-        Process.Start(startInfo);
+        using var _ = Process.Start(startInfo);
     }
 
     private static string Escape(string value) => value.Replace("'", "''", StringComparison.Ordinal);
