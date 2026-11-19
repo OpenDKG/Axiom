@@ -4,7 +4,7 @@
   "githubSponsorsUrl": "",
   "crypto": [
     { "currency": "BTC", "network": "Bitcoin mainnet", "address": "" },
-    { "currency": "ETH", "network": "Ethereum mainnet", "address": "" },
+    { "currency": "ETH", "network": "Ethereum mainnet", "address": "0xFac745f39D832BC6A7B6D7F306928aBDC2C6a8ED" },
     { "currency": "USDC", "network": "Ethereum mainnet", "address": "" }
   ]
 }

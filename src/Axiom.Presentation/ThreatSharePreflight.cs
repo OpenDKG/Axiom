@@ -69,16 +69,14 @@ public static class ThreatSharePreflight
     public static ThreatSharePreflightResult Evaluate(
         ThreatShareCandidate candidate,
         bool sharingEnabled,
-        bool consentPresent,
-        bool reporterKeyPresent,
+        bool automaticSharingOff,
         string? rulesetJson)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         return EvaluateKnownStatus(
             candidate,
             sharingEnabled,
-            consentPresent,
-            reporterKeyPresent,
+            automaticSharingOff,
             IsAlreadyKnown(candidate.IndicatorType, candidate.Value, rulesetJson));
     }
 
@@ -86,16 +84,15 @@ public static class ThreatSharePreflight
     public static ThreatSharePreflightResult EvaluateKnownStatus(
         ThreatShareCandidate candidate,
         bool sharingEnabled,
-        bool consentPresent,
-        bool reporterKeyPresent,
+        bool automaticSharingOff,
         bool alreadyKnownInRuleset)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         var checks = new List<ThreatSharePreflightCheck>
         {
-            new("sharing", sharingEnabled, "threat sharing is off"),
-            new("reporter terms", consentPresent, "the Blackbox reporter terms are not accepted"),
-            new("reporter key", reporterKeyPresent, "the reporter signing key is missing"),
+            new("manual sharing", sharingEnabled, "manual threat reporting is off"),
+            new("Blackbox automatic sharing", automaticSharingOff, "turn off Blackbox automatic sharing first"),
+            new("evidence", candidate.CanPublishToCommunity, "the indicator lacks publishable evidence or has been disputed, revoked or verified"),
         };
 
         var normalized = ThreatShareVocabulary.Normalize(candidate.IndicatorType, candidate.Value);
@@ -113,7 +110,7 @@ public static class ThreatSharePreflight
             "the local ruleset already contains this indicator"));
         checks.Add(new(
             "reason",
-            ThreatShareVocabulary.Reasons.Contains(candidate.Reason, StringComparer.OrdinalIgnoreCase),
+            ThreatShareVocabulary.IsPublishableReason(candidate.Reason),
             "the reason is not in the community vocabulary"));
 
         return new(checks);

@@ -108,7 +108,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             IsServiceMode ? serviceClient : null,
             timers,
             interaction,
-            processes);
+            processes,
+            startActive: false);
         Overview = new OverviewPageViewModel(
             _monitor,
             _traffic,
@@ -511,12 +512,44 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedPageChanged(PageViewModel value)
     {
-        (_activePage as IActivatablePage)?.Deactivate();
+        if (_presentationVisible)
+        {
+            (_activePage as IActivatablePage)?.Deactivate();
+            (value as IActivatablePage)?.Activate();
+        }
+
         _activePage = value;
-        (value as IActivatablePage)?.Activate();
     }
 
     private PageViewModel? _activePage;
+    private bool _presentationVisible = true;
+
+    public void SetPresentationVisible(bool visible)
+    {
+        if (_presentationVisible == visible)
+        {
+            return;
+        }
+
+        _presentationVisible = visible;
+        if (visible)
+        {
+            Agents.SetTrayMonitoring(false);
+            _traffic.Start();
+            (_activePage as IActivatablePage)?.Activate();
+            RefreshStatus();
+        }
+        else
+        {
+            Agents.SetTrayMonitoring(
+                ReferenceEquals(_activePage, Agents) ||
+                _activePage is AgentDashboardPageViewModel or AgentStatsPageViewModel or SimpleHomePageViewModel);
+            (_activePage as IActivatablePage)?.Deactivate();
+            _traffic.Stop();
+        }
+
+        Security.SetPresentationVisible(visible);
+    }
 
     [ObservableProperty]
     private string _statusMonitoringText = "Monitoring: starting";
@@ -568,7 +601,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public void Start()
     {
         _monitor.Start();
-        _traffic.Start();
+        if (_presentationVisible)
+        {
+            _traffic.Start();
+        }
+
         Overview.Refresh();
         if (!ReferenceEquals(SimpleHome, SelectedPage))
         {
@@ -583,7 +620,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         }
 
         _activePage = SelectedPage;
-        (SelectedPage as IActivatablePage)?.Activate();
+        if (_presentationVisible)
+        {
+            (SelectedPage as IActivatablePage)?.Activate();
+        }
         RefreshStatus();
         _updateTimer.Start();
         _ = ProbeServiceAsync(force: true);
@@ -645,7 +685,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             }
         }
 
-        RefreshStatus();
+        if (_presentationVisible)
+        {
+            RefreshStatus();
+        }
+
         _ = ProbeServiceAsync();
         _ = ProbeProtectionAsync();
     }

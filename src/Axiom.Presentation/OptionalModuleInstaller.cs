@@ -31,6 +31,9 @@ public static class DkgRelease
 /// </summary>
 public sealed class OptionalModuleInstaller
 {
+    private static readonly ModuleLaunchGate DkgLaunch = new(TimeSpan.FromSeconds(90));
+    private static readonly ModuleLaunchGate BlackboxLaunch = new(TimeSpan.FromSeconds(60));
+
     private const string DkgPackageJsonResource = "Axiom.Presentation.Resources.dkg.package.json";
 
     private const string DkgPackageLockResource = "Axiom.Presentation.Resources.dkg.package-lock.json";
@@ -561,13 +564,11 @@ public sealed class OptionalModuleInstaller
     /// Starts an installed DKG node without reinstalling it. Returns false when the local CLI is
     /// missing.
     /// </summary>
-    public bool StartDkg()
-    {
-        if (DistributionContext.IsStorePackage)
-        {
-            return false;
-        }
+    public bool StartDkg() => !DistributionContext.IsStorePackage &&
+        DkgLaunch.Start(static () => LocalModuleRuntime.AnyDkgPortListening, LaunchDkg);
 
+    private bool LaunchDkg()
+    {
         var (configuredBin, configuredHome) = ResolveConfiguredDkg();
         string? command;
         var useOwnHome = false;
@@ -583,13 +584,6 @@ public sealed class OptionalModuleInstaller
         if (command is null)
         {
             return false;
-        }
-
-        // A node that already owns its API port is left alone. Starting a second copy is what
-        // produced duplicate daemon/worker pairs and a port race after login.
-        if (LocalModuleRuntime.AnyDkgPortListening)
-        {
-            return true;
         }
 
         var (fileName, arguments) = OperatingSystem.IsWindows()
@@ -678,20 +672,13 @@ public sealed class OptionalModuleInstaller
     /// Starts the installed Blackbox dashboard without reinstalling it. Returns false when the
     /// per-user virtual environment is missing.
     /// </summary>
-    public bool StartBlackboxDashboard()
+    public bool StartBlackboxDashboard() => !DistributionContext.IsStorePackage &&
+        BlackboxLaunch.Start(
+            static () => LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort),
+            LaunchBlackboxDashboard);
+
+    private bool LaunchBlackboxDashboard()
     {
-        if (DistributionContext.IsStorePackage)
-        {
-            return false;
-        }
-
-        // The vendor login task may already be starting the dashboard. A second start loses the
-        // port race and leaves an orphaned Python process, so treat a listener as "already up".
-        if (LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort))
-        {
-            return true;
-        }
-
         var agent = ResolveBlackboxAgentRoot();
         if (agent is null)
         {
@@ -773,7 +760,18 @@ public sealed class OptionalModuleInstaller
             markers.Add(DkgHome);
         }
 
-        return markers.Count == 0 || LocalModuleRuntime.StopProcesses(markers, log);
+        bool Stop() => LocalModuleRuntime.StopProcesses(markers, log);
+        if (blackbox && dkg)
+        {
+            return DkgLaunch.Stop(() => BlackboxLaunch.Stop(Stop));
+        }
+
+        if (blackbox)
+        {
+            return BlackboxLaunch.Stop(Stop);
+        }
+
+        return !dkg || DkgLaunch.Stop(Stop);
     }
 
     /// <summary>

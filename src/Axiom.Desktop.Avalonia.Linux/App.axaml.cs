@@ -105,7 +105,7 @@ public partial class App : Application
             new LinuxDnsAdapterHelper(),
             new AvaloniaSecurityDialogs(() => window),
             new AvaloniaShellActions(() => desktop.Shutdown()),
-            new AvaloniaBlackboxDialogs(() => window, interaction),
+            new AvaloniaBlackboxDialogs(() => window),
             new Axiom.Persistence.AgentSessionReader(),
             visualEffects: null,
             restoreNetwork: networkRecovery.RestoreAsync);

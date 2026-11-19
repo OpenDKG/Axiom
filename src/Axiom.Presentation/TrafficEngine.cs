@@ -106,6 +106,12 @@ public sealed class TrafficEngine : IDisposable
             }
         }
 
+        if (_lastTimestamp != 0)
+        {
+            var elapsed = Stopwatch.GetElapsedTime(_lastTimestamp);
+            FillMissingSamples(elapsed.TotalSeconds, DateTimeOffset.UtcNow);
+        }
+
         _previous = ReadCounters();
         _lastTimestamp = Stopwatch.GetTimestamp();
         _timer.Start();
@@ -250,6 +256,13 @@ public sealed class TrafficEngine : IDisposable
         _lastTimestamp = now;
 
         var nowTimestamp = DateTimeOffset.UtcNow;
+        FillMissingSamples(elapsed, nowTimestamp);
+        Push(upload, download, nowTimestamp);
+        Updated?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void FillMissingSamples(double elapsed, DateTimeOffset nowTimestamp)
+    {
         if (elapsed >= 1.5)
         {
             var missingSeconds = (int)Math.Clamp(Math.Round(elapsed) - 1, 0, BucketCount);
@@ -259,9 +272,6 @@ public sealed class TrafficEngine : IDisposable
                 Push(double.NaN, double.NaN, missingStart.AddSeconds(i));
             }
         }
-
-        Push(upload, download, nowTimestamp);
-        Updated?.Invoke(this, EventArgs.Empty);
     }
 
     private void Push(double upload, double download, DateTimeOffset timestamp)

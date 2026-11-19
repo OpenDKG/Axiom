@@ -12,7 +12,7 @@ using Axiom.Presentation;
 namespace Axiom.UI.Avalonia;
 
 /// <summary>Compact Avalonia Blackbox settings and log dialogs. Save is verified by re-reading.</summary>
-public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserInteraction ui)
+public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
     : IBlackboxDialogService
 {
     private static readonly string[] Severities = ["info", "low", "medium", "high", "critical"];
@@ -36,8 +36,6 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
         var blockSeverity = new ComboBox { ItemsSource = Severities, Width = 140 };
         var discover = new CheckBox { Content = "Discover", Foreground = Foreground };
         var osv = new CheckBox { Content = "OSV lookup", Foreground = Foreground };
-        var report = new CheckBox { Content = "Signed threat sharing", Foreground = Foreground };
-        var originalReport = false;
         var paths = new ObservableCollection<string>();
         var pathList = new ListBox
         {
@@ -67,7 +65,7 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
         try
         {
             loaded = await client.GetSettingsAsync(cancellationToken).ConfigureAwait(true);
-            Populate(loaded, mode, blockSeverity, discover, osv, report, categories, paths, ref originalReport);
+            Populate(loaded, mode, blockSeverity, discover, osv, categories, paths);
             status.Text = $"Loaded from http://127.0.0.1:9700 at {DateTimeOffset.Now:HH:mm:ss}.";
         }
         catch (Exception exception) when (exception is
@@ -115,30 +113,12 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
                 return;
             }
 
-            var sharing = report.IsChecked == true;
-            if (sharing && !originalReport)
-            {
-                var consent = await ui.ConfirmAsync(
-                    "Enable threat sharing",
-                    "Enable signed, redacted threat sharing with the community graph?\n\n" +
-                    "This sends only signed, privacy-safe statements. It never sends prompts, commands, paths or credentials.",
-                    "Enable sharing",
-                    destructive: false,
-                    CancellationToken.None).ConfigureAwait(true);
-                if (!consent)
-                {
-                    status.Text = "Threat sharing was not enabled.";
-                    return;
-                }
-            }
-
             var patch = new JsonObject
             {
                 ["mode"] = mode.SelectedItem?.ToString() ?? "audit",
                 ["block_severity"] = blockSeverity.SelectedItem?.ToString() ?? "critical",
                 ["discover"] = discover.IsChecked == true,
                 ["osv_lookup"] = osv.IsChecked == true,
-                ["report"] = sharing,
                 ["categories"] = new JsonObject(
                     categories.ToDictionary(
                         category => category.Key,
@@ -170,8 +150,7 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
                 }
 
                 loaded = result.Settings;
-                originalReport = sharing;
-                Populate(result.Settings, mode, blockSeverity, discover, osv, report, categories, paths, ref originalReport);
+                Populate(result.Settings, mode, blockSeverity, discover, osv, categories, paths);
                 status.Text = $"Saved and verified at {DateTimeOffset.Now:HH:mm:ss}.";
             }
             catch (Exception exception) when (exception is
@@ -210,7 +189,7 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
             Spacing = 12,
             VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(20, 0, 0, 0),
-            Children = { discover, osv, report },
+            Children = { discover, osv },
         };
         settingsRow.Children.Add(modeField);
         Grid.SetColumn(severityField, 1);
@@ -313,10 +292,8 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
         ComboBox severity,
         CheckBox discover,
         CheckBox osv,
-        CheckBox report,
         IReadOnlyList<CategoryControls> categories,
-        ObservableCollection<string> paths,
-        ref bool originalReport)
+        ObservableCollection<string> paths)
     {
         var severities = (settings["severity_order"] as JsonArray)?
             .Select(node => node?.GetValue<string>())
@@ -329,8 +306,6 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider, IUserIn
         severity.SelectedItem = ReadString(settings, "block_severity") ?? "critical";
         discover.IsChecked = ReadBool(settings, "discover", true);
         osv.IsChecked = ReadBool(settings, "osv_lookup", true);
-        originalReport = ReadBool(settings, "report", false);
-        report.IsChecked = originalReport;
 
         var categoryRoot = settings["categories"] as JsonObject;
         foreach (var category in categories)

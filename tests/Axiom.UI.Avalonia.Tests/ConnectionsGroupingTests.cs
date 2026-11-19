@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Monitoring;
+using Axiom.Contracts.Ipc;
 using Axiom.Presentation;
 using Axiom.UI.Avalonia;
 using Xunit;
@@ -94,6 +95,42 @@ public sealed class ConnectionsGroupingTests
         monitor.Dispose();
     }
 
+    [Fact]
+    public async Task Network_dashboard_refreshes_only_the_selected_tab_and_none_in_simple_mode()
+    {
+        var timers = new FakeTimerFactory();
+        var source = new ScriptedSource(Snapshot([], Connection(@"C:\Apps\first.exe", "first.exe", 10, "127.0.0.1:5000")));
+        var service = new RecordingService();
+        using var monitor = new ConnectionMonitor(source, timers);
+        using var traffic = new TrafficEngine(timers);
+        using var overview = new OverviewPageViewModel(monitor, traffic, serviceClient: service, timers: timers);
+
+        await monitor.PollAsync();
+        Assert.Single(overview.ConnectionsTab.VisibleConnections);
+        Assert.Empty(overview.AppsTab.Apps);
+        Assert.Equal(0, service.HistoryRequests);
+        var historyTimer = Assert.Single(timers.Created, timer => timer.Interval == TimeSpan.FromSeconds(10));
+        Assert.False(historyTimer.IsEnabled);
+
+        overview.SelectedMonitoringTabIndex = 1;
+        Assert.Single(overview.AppsTab.Apps);
+        source.Snapshot = Snapshot([], Connection(@"C:\Apps\second.exe", "second.exe", 11, "127.0.0.1:5001"));
+        await monitor.PollAsync();
+        Assert.Equal("second.exe", Assert.Single(overview.AppsTab.Apps).Name);
+        Assert.Equal("first.exe", Assert.Single(overview.ConnectionsTab.VisibleConnections).AppDisplayName);
+
+        overview.SelectedMonitoringTabIndex = 2;
+        Assert.True(historyTimer.IsEnabled);
+        Assert.Equal(1, service.HistoryRequests);
+
+        overview.ActivateSummary();
+        Assert.False(historyTimer.IsEnabled);
+        overview.SelectedMonitoringTabIndex = 0;
+        Assert.Equal("first.exe", Assert.Single(overview.ConnectionsTab.VisibleConnections).AppDisplayName);
+        overview.Activate();
+        Assert.Equal("second.exe", Assert.Single(overview.ConnectionsTab.VisibleConnections).AppDisplayName);
+    }
+
     private static ConnectionSnapshot Snapshot(
         IReadOnlyList<AppTrafficTotals> traffic,
         params LiveConnection[] connections) => new()
@@ -160,11 +197,18 @@ public sealed class ConnectionsGroupingTests
 
     private sealed class FakeTimerFactory : IUiTimerFactory
     {
-        public IUiTimer Create(TimeSpan interval) => new FakeTimer();
+        public List<IUiTimer> Created { get; } = [];
 
-        private sealed class FakeTimer : IUiTimer
+        public IUiTimer Create(TimeSpan interval)
         {
-            public TimeSpan Interval { get; set; } = TimeSpan.FromSeconds(1);
+            var timer = new FakeTimer(interval);
+            Created.Add(timer);
+            return timer;
+        }
+
+        private sealed class FakeTimer(TimeSpan interval) : IUiTimer
+        {
+            public TimeSpan Interval { get; set; } = interval;
 
             public bool IsEnabled { get; private set; }
 
@@ -179,6 +223,21 @@ public sealed class ConnectionsGroupingTests
             public void StopTimer() => IsEnabled = false;
 
             public void Dispose() => IsEnabled = false;
+        }
+    }
+
+    private sealed class RecordingService : IServiceRequestClient
+    {
+        public int HistoryRequests { get; private set; }
+
+        public Task<T> SendAsync<T>(string command, object? payload, CancellationToken cancellationToken)
+        {
+            if (command == IpcCommandTypes.HistoryQuery)
+            {
+                HistoryRequests++;
+            }
+
+            return Task.FromException<T>(new ServiceUnavailableException(IpcErrorCodes.ServiceUnavailable, "test"));
         }
     }
 }

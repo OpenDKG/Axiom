@@ -20,7 +20,6 @@ public partial class BlackboxSettingsWindow : Window
 
     private JsonObject? _settings;
 
-    private bool _originalReport;
 
     public BlackboxSettingsWindow(BlackboxDashboardClient client)
     {
@@ -65,8 +64,7 @@ public partial class BlackboxSettingsWindow : Window
 
         DiscoverCheck.IsChecked = ReadBool(settings, "discover", true);
         OsvCheck.IsChecked = ReadBool(settings, "osv_lookup", true);
-        _originalReport = ReadBool(settings, "report", false);
-        ReportCheck.IsChecked = _originalReport;
+        ReportCheck.IsChecked = false;
 
         var categories = settings["categories"] as JsonObject;
         PopulateCategory(categories, "injection", InjectionCheck, InjectionSeverity, severities);
@@ -117,29 +115,12 @@ public partial class BlackboxSettingsWindow : Window
             return;
         }
 
-        var sharing = ReportCheck.IsChecked == true;
-        if (sharing && !_originalReport)
-        {
-            var consent = MessageBox.Show(
-                "Enable signed, redacted threat sharing with the community graph?\n\n" +
-                "This sends only signed, privacy-safe statements. It never sends prompts, commands, paths or credentials.",
-                "Enable threat sharing",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-            if (consent != MessageBoxResult.Yes)
-            {
-                SetStatus("Threat sharing was not enabled.");
-                return;
-            }
-        }
-
         var patch = new JsonObject
         {
             ["mode"] = ModeBox.SelectedItem?.ToString() ?? "audit",
             ["block_severity"] = BlockSeverityBox.SelectedItem?.ToString() ?? "critical",
             ["discover"] = DiscoverCheck.IsChecked == true,
             ["osv_lookup"] = OsvCheck.IsChecked == true,
-            ["report"] = sharing,
             ["categories"] = new JsonObject
             {
                 ["injection"] = CategoryPatch(InjectionCheck, InjectionSeverity),
@@ -151,6 +132,11 @@ public partial class BlackboxSettingsWindow : Window
             ["protected_paths"] = new JsonArray(
                 _paths.Select(path => (JsonNode?)JsonValue.Create(path)).ToArray()),
         };
+
+        if (ReportCheck.IsChecked == true)
+        {
+            patch["report"] = false;
+        }
 
         SaveButton.IsEnabled = false;
         SetStatus("Saving…");
@@ -174,7 +160,6 @@ public partial class BlackboxSettingsWindow : Window
             }
 
             _settings = result.Settings;
-            _originalReport = sharing;
             Populate(result.Settings);
             SetStatus($"Saved and verified at {DateTimeOffset.Now:HH:mm:ss}.");
         }

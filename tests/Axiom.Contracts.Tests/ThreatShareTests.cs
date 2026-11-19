@@ -123,7 +123,7 @@ public sealed class ThreatShareTests
             "domain", "evil-drop.github.io", "phishing",
             ThreatShareEvidenceClass.HeuristicOrAiSuspected,
             ThreatShareProofGrade.Correlated);
-        Assert.Equal(ThreatSharePublicationEligibility.NeedsOperatorReview, tenantSubdomain.Eligibility);
+        Assert.Equal(ThreatSharePublicationEligibility.NeedsEvidence, tenantSubdomain.Eligibility);
 
         var cdnIp = ThreatShareVocabulary.EvaluatePublicationEligibility(
             "ip", "104.16.1.1", "command-and-control",
@@ -148,16 +148,36 @@ public sealed class ThreatShareTests
             Context = "in-tool-output",
             Source = ThreatShareSource.AiAnalyst,
             Severity = "high",
+            EvidenceClass = ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+            ProofGrade = ThreatShareProofGrade.Reproduced,
             NoveltyStatus = ThreatShareNoveltyStatus.PotentiallyNewLocalOnly,
             PublicationEligibility = ThreatSharePublicationEligibility.NeedsOperatorReview,
         };
         Assert.True(candidate.CanPublishToCommunity);
+        Assert.False((candidate with { EvidenceClass = ThreatShareEvidenceClass.HeuristicOrAiSuspected }).CanPublishToCommunity);
+        Assert.False((candidate with { ProofGrade = ThreatShareProofGrade.Correlated }).CanPublishToCommunity);
+        Assert.False((candidate with { Context = ThreatShareVocabulary.ObservedNetworkContext }).CanPublishToCommunity);
+        Assert.False((candidate with { NoveltyStatus = ThreatShareNoveltyStatus.Revoked }).CanPublishToCommunity);
+        Assert.False((candidate with { NoveltyStatus = ThreatShareNoveltyStatus.Disputed }).CanPublishToCommunity);
         Assert.Equal("Potentially new (local graph only)", candidate.NoveltyLabel);
         Assert.Contains("CC0 1.0 replicated statement", candidate.PublicPayloadPreview, StringComparison.Ordinal);
 
         var retracted = new ThreatShareItem(candidate, ThreatShareState.Retracted, string.Empty, DateTimeOffset.UtcNow);
         Assert.Equal("retracted", retracted.StateLabel);
         Assert.Contains("CC0 replicas", retracted.StateDetail, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("workstation.local")]
+    [InlineData("gateway.internal")]
+    [InlineData("service.lan")]
+    [InlineData("router.home.arpa")]
+    [InlineData("gateway.localhost")]
+    [InlineData("192.168.0.1")]
+    public void Local_names_cannot_become_reportable_domains_or_url_hosts(string host)
+    {
+        Assert.Null(ThreatShareVocabulary.Normalize("domain", host));
+        Assert.Null(ThreatShareVocabulary.Normalize("url", "https://" + host));
     }
 
     [Fact]

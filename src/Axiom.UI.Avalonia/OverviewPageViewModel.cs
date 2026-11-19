@@ -29,7 +29,9 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     private DateTimeOffset _lastHistoryUtc = DateTimeOffset.MinValue;
     private DateTimeOffset _lastPrivacyRefreshUtc = DateTimeOffset.MinValue;
     private bool _isActive = true;
+    private bool _monitoringTabsVisible = true;
     private bool _dirty;
+    private IActivatablePage? _activeMonitoringTab;
 
     public OverviewPageViewModel(
         ConnectionMonitor monitor,
@@ -63,7 +65,12 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
             serviceClient,
             timers ?? FallbackTimerFactory.Instance,
             _ui,
-            resolvedProcesses);
+            resolvedProcesses,
+            startActive: false);
+        ConnectionsTab.Deactivate();
+        AppsTab.Deactivate();
+        EventsTab.Deactivate();
+        UpdateMonitoringTab();
         _actions = new ConnectionActionService(
             serviceClient,
             _ui,
@@ -140,19 +147,43 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     [RelayCommand]
     private void OpenPrivacySettings() => _openPrivacySettings?.Invoke();
 
-    public void Activate()
+    public void Activate() => Activate(showMonitoringTabs: true);
+
+    internal void ActivateSummary() => Activate(showMonitoringTabs: false);
+
+    private void Activate(bool showMonitoringTabs)
     {
         _isActive = true;
+        _monitoringTabsVisible = showMonitoringTabs;
         if (_dirty)
         {
             _dirty = false;
             Refresh();
         }
 
-        (ConnectionsTab as IActivatablePage)?.Activate();
-        (AppsTab as IActivatablePage)?.Activate();
-        (EventsTab as IActivatablePage)?.Activate();
+        UpdateMonitoringTab();
         QueuePrivacyRefresh(force: true);
+    }
+
+    partial void OnSelectedMonitoringTabIndexChanged(int value) => UpdateMonitoringTab();
+
+    private void UpdateMonitoringTab()
+    {
+        IActivatablePage? selected = _isActive && _monitoringTabsVisible
+            ? SelectedMonitoringTabIndex switch
+            {
+                0 => ConnectionsTab,
+                1 => AppsTab,
+                2 => EventsTab,
+                _ => null,
+            }
+            : null;
+        if (!ReferenceEquals(selected, _activeMonitoringTab))
+        {
+            _activeMonitoringTab?.Deactivate();
+            _activeMonitoringTab = selected;
+            selected?.Activate();
+        }
     }
 
     private void QueuePrivacyRefresh(bool force)
@@ -175,9 +206,7 @@ public sealed partial class OverviewPageViewModel : PageViewModel, IActivatableP
     public void Deactivate()
     {
         _isActive = false;
-        (ConnectionsTab as IActivatablePage)?.Deactivate();
-        (AppsTab as IActivatablePage)?.Deactivate();
-        (EventsTab as IActivatablePage)?.Deactivate();
+        UpdateMonitoringTab();
     }
 
     public ObservableCollection<ConnectionRow> Connections => _monitor.Connections;
