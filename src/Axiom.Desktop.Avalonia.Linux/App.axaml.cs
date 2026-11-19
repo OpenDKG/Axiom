@@ -24,6 +24,7 @@ public partial class App : Application
     /// <summary>Lock taken by <see cref="Program.Main"/> before Avalonia starts; owned (disposed) by the app.</summary>
     internal static LinuxSingleInstance? SingleInstance { get; set; }
     private LinuxProtectionSetup? _protection;
+    private IDisposable? _storageMaintenance;
     private NativeMenuItem? _daemonStatusItem;
     private readonly List<NativeMenuItem> _installItems = [];
     private bool _trayWanted;
@@ -143,6 +144,7 @@ public partial class App : Application
 
         _shell.Start();
         StartNetworkRecovery(networkRecovery);
+        _storageMaintenance = ModuleStorageMaintenance.StartPeriodic();
 
         var autostartArgument = HasArgument(arguments, "--autostart");
         var startMinimized = HasArgument(arguments, "--start-minimized") ||
@@ -383,6 +385,8 @@ public partial class App : Application
         }
 
         _shell?.Dispose();
+        _storageMaintenance?.Dispose();
+        _storageMaintenance = null;
         _cancellation.Dispose();
     }
 }
