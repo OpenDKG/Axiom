@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Axiom.Contracts;
 
 namespace Axiom.Presentation;
 
@@ -12,9 +13,8 @@ namespace Axiom.Presentation;
 /// </summary>
 public sealed class UpdateCheckService : IDisposable
 {
-    public const string DefaultReleasesPageUrl = "https://github.com/a-51-50/Axiom/releases";
-    private const string DefaultApiUrl = "https://api.github.com/repos/a-51-50/Axiom/releases/latest";
-    private const string RepositoryWebPrefix = "https://github.com/a-51-50/Axiom/";
+    public const string DefaultReleasesPageUrl = ProjectLinks.Releases;
+    private const string RepositoryWebPrefix = DefaultReleasesPageUrl + "/tag/";
     public static readonly TimeSpan MinimumCheckInterval = TimeSpan.FromHours(6);
 
     private readonly Version _currentVersion;
@@ -46,7 +46,7 @@ public sealed class UpdateCheckService : IDisposable
         _settingsStore = settingsStore ?? new UpdateSettingsStore();
         _ownsHttpClient = httpClient is null;
         _http = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        _releaseEndpoint = releaseEndpoint ?? new Uri(DefaultApiUrl, UriKind.Absolute);
+        _releaseEndpoint = releaseEndpoint ?? new Uri(ProjectLinks.LatestReleaseApi, UriKind.Absolute);
         _timeProvider = timeProvider ?? TimeProvider.System;
 
         var settings = _settingsStore.Load();

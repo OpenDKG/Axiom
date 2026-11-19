@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Axiom.Contracts;
 using Axiom.Contracts.Agents;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Monitoring;
@@ -266,7 +267,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private Task OpenGitHubAsync() =>
-        OpenExternalUrlAsync("https://github.com/a-51-50/Axiom");
+        OpenExternalUrlAsync(ProjectLinks.Repository);
 
     [RelayCommand]
     private Task OpenContactAsync() =>
@@ -274,7 +275,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private Task OpenWebsiteAsync() =>
-        OpenExternalUrlAsync("https://opendkg.org/axiom");
+        OpenExternalUrlAsync(ProjectLinks.Website);
 
     [RelayCommand]
     private void OpenSupport()
