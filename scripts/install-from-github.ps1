@@ -17,40 +17,50 @@
 .PARAMETER NoLaunch
     Install without starting the desktop.
 
+.PARAMETER Repository
+    GitHub repository to install from, as owner/name. Defaults to the public OpenDKG/Axiom.
+
 .PARAMETER Token
-    Optional GitHub token for a private repository. When omitted, the installer reads
-    AXIOM_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN. Never pass a token on a shared command line.
+    Optional GitHub token for a private repository. When omitted for a private repository, the
+    installer reads AXIOM_GITHUB_TOKEN, NETPETRA_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN. Tokens are
+    never sent to the public OpenDKG/Axiom endpoints unless you pass -Token explicitly. Never pass a
+    token on a shared command line.
 
 .PARAMETER PublicRelease
-    Download from the OpenDKG public releases without using GitHub credentials.
+    Download from the OpenDKG public releases without using GitHub credentials. Kept for backwards
+    compatibility; it forces the repository to OpenDKG/Axiom and ignores any token.
 
 .EXAMPLE
-    irm https://raw.githubusercontent.com/a-51-50/Axiom/main/scripts/install-from-github.ps1 | iex
+    irm https://raw.githubusercontent.com/OpenDKG/Axiom/main/scripts/install-from-github.ps1 | iex
 
 .EXAMPLE
     .\install-from-github.ps1 -Version 0.4.0 -NoLaunch
 
 .EXAMPLE
-    # Private repository: reuse an authenticated GitHub CLI session.
+    # Private upstream repository: reuse an authenticated GitHub CLI session.
     $env:AXIOM_GITHUB_TOKEN = gh auth token
-    .\install-from-github.ps1
+    .\install-from-github.ps1 -Repository a-51-50/Axiom
 #>
 param(
     [string]$Version = "",
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Axiom"),
     [switch]$NoLaunch,
     [string]$Token = "",
-    [switch]$PublicRelease
+    [switch]$PublicRelease,
+    [ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')]
+    [string]$Repository = "OpenDKG/Axiom"
 )
 
 $ErrorActionPreference = "Stop"
-$repo = if ($PublicRelease) { "OpenDKG/Axiom" } else { "a-51-50/Axiom" }
+$repo = if ($PublicRelease) { "OpenDKG/Axiom" } else { $Repository }
+$isPublicRepository = $repo -eq "OpenDKG/Axiom"
 $headers = @{
     "User-Agent" = "Axiom-Installer"
     "Accept" = "application/vnd.github+json"
 }
 
-$tokenValue = if ($PublicRelease) {
+$tokenValue = if ($PublicRelease -or ($isPublicRepository -and -not $PSBoundParameters.ContainsKey("Token"))) {
+    # Never forward ambient credentials to the public repository's endpoints.
     ""
 }
 elseif (-not [string]::IsNullOrWhiteSpace($Token)) {
@@ -86,7 +96,7 @@ try {
     $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers
 }
 catch {
-    if ($PublicRelease) {
+    if ($PublicRelease -or $isPublicRepository) {
         throw "Could not read the public OpenDKG release metadata. $($_.Exception.Message)"
     }
     throw "Could not read release metadata. If the repository is private, set AXIOM_GITHUB_TOKEN (for example: `$env:AXIOM_GITHUB_TOKEN = gh auth token). $($_.Exception.Message)"
@@ -109,6 +119,10 @@ $temp = Join-Path $env:TEMP ("axiom-install-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $temp | Out-Null
 
 try {
+    if ([IO.Path]::GetFileName($zipAsset.name) -ne $zipAsset.name) {
+        throw "The release archive name is not a plain file name: $($zipAsset.name)"
+    }
+
     $zipPath = Join-Path $temp $zipAsset.name
     $sumPath = Join-Path $temp "SHA256SUMS.txt"
 
@@ -125,12 +139,15 @@ try {
     Invoke-WebRequest -UseBasicParsing -Uri $zipUri -Headers $assetHeaders -OutFile $zipPath
     Invoke-WebRequest -UseBasicParsing -Uri $sumUri -Headers $assetHeaders -OutFile $sumPath
 
-    $line = Get-Content $sumPath | Where-Object { $_ -match [regex]::Escape($zipAsset.name) } | Select-Object -First 1
-    if (-not $line) {
-        throw "SHA256SUMS.txt does not contain $($zipAsset.name)."
+    # Match the whole line so a shorter asset name cannot match inside a longer one.
+    $sumPattern = "^\s*([0-9a-fA-F]{64})\s+\*?" + [regex]::Escape($zipAsset.name) + "\s*$"
+    $sumMatch = Get-Content $sumPath | ForEach-Object { [regex]::Match($_, $sumPattern) } |
+        Where-Object { $_.Success } | Select-Object -First 1
+    if (-not $sumMatch) {
+        throw "SHA256SUMS.txt does not contain a valid entry for $($zipAsset.name)."
     }
 
-    $expected = ($line -split "\s+")[0].ToUpperInvariant()
+    $expected = $sumMatch.Groups[1].Value.ToUpperInvariant()
     $actual = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToUpperInvariant()
     if ($actual -ne $expected) {
         throw "Checksum mismatch. Expected $expected, got $actual."
