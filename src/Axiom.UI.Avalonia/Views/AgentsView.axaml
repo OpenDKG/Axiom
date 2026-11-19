@@ -375,7 +375,7 @@
           </Grid>
           <controls:AxiomSelectableTextBlock Text="{Binding VerifiedSyncLookupText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
           <controls:AxiomSelectableTextBlock Text="{Binding VerifiedGraphListStatus}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-          <CheckBox Content="Auto-sync verified graph every 15 minutes"
+          <CheckBox Content="Auto-sync verified graph every hour"
                     IsChecked="{Binding IsAutoSyncEnabled}"
                     Foreground="{DynamicResource Axiom.TextPrimary}" />
           <controls:AxiomSelectableTextBlock Text="{Binding AutoSyncStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
