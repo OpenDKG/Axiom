@@ -96,6 +96,8 @@ public sealed partial class PipeServerWorker(
                 threatShare.Enqueue(request);
                 return await threatShare.GetStatusAsync(cancellationToken).ConfigureAwait(false);
             },
+            ThreatShareVerify = (request, cancellationToken) =>
+                threatShare.VerifyAsync(request, cancellationToken),
             ThreatShareDismiss = (request, cancellationToken) =>
                 threatShare.DismissAsync(request.Id, cancellationToken),
             ThreatShareRecord = (request, cancellationToken) =>

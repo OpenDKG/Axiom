@@ -74,6 +74,78 @@ public sealed class ThreatShareController : IAsyncDisposable
         return await SnapshotAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Applies explicit operator classification and reproducible-evidence confirmation to a queued
+    /// candidate. Local-only entries (public-list matches, resolvers) and shared infrastructure
+    /// still cannot be promoted past the local eligibility rules.
+    /// </summary>
+    public async Task<ThreatShareQueueStatus> VerifyAsync(
+        ThreatShareVerifyRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        await FlushIncomingAsync(cancellationToken).ConfigureAwait(false);
+
+        var reason = (request.Reason ?? string.Empty).Trim().ToLowerInvariant();
+        var context = (request.Context ?? string.Empty).Trim().ToLowerInvariant();
+        if (!ThreatShareVocabulary.IsPublishableReason(reason) ||
+            !ThreatShareVocabulary.ReportableContexts.Contains(context, StringComparer.Ordinal))
+        {
+            return await SnapshotAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var index = _items.FindIndex(item =>
+                string.Equals(item.Candidate.Id, request.Id, StringComparison.Ordinal));
+            if (index >= 0 && _items[index].State == ThreatShareState.Pending)
+            {
+                var current = _items[index];
+                if (current.Candidate.EvidenceClass is ThreatShareEvidenceClass.LocalObservation or
+                        ThreatShareEvidenceClass.PublicFeedMatch ||
+                    current.Candidate.PublicationEligibility == ThreatSharePublicationEligibility.LocalOnly)
+                {
+                    return await SnapshotAsyncLocked().ConfigureAwait(false);
+                }
+
+                var assessment = ThreatShareVocabulary.EvaluatePublicationEligibility(
+                    current.Candidate.IndicatorType,
+                    current.Candidate.Value,
+                    reason,
+                    ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+                    ThreatShareProofGrade.Reproduced,
+                    listDerived: false);
+
+                var detail = string.IsNullOrWhiteSpace(request.Detail)
+                    ? current.Candidate.Detail
+                    : Trim(request.Detail, 200);
+                _items[index] = current with
+                {
+                    Candidate = current.Candidate with
+                    {
+                        Reason = reason,
+                        Context = context,
+                        Severity = ThreatShareVocabulary.NormalizeSeverity(request.Severity),
+                        Detail = detail,
+                        EvidenceClass = ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+                        ProofGrade = ThreatShareProofGrade.Reproduced,
+                        PublicationEligibility = assessment.Eligibility,
+                        EligibilityReasonCode = assessment.ReasonCode,
+                        EligibilityExplanation = assessment.Explanation,
+                    },
+                };
+                _store.Save(_items);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        return await SnapshotAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Marks a previously submitted report as retracted locally after CLI confirmation.</summary>
     public Task<ThreatShareQueueStatus> RetractAsync(
         string id,
@@ -226,13 +298,58 @@ public sealed class ThreatShareController : IAsyncDisposable
             }
 
             var id = ThreatShareVocabulary.BuildId(type, value);
-            if (!_knownIds.Add(id))
-            {
-                continue;
-            }
-
             var severity = ThreatShareVocabulary.NormalizeSeverity(request.Severity);
             var assessment = ResolveAssessment(request, type, value, reason);
+
+            if (!_knownIds.Add(id))
+            {
+                if (request.Source != ThreatShareSource.Operator)
+                {
+                    continue;
+                }
+
+                var existingIndex = _items.FindIndex(item =>
+                    string.Equals(item.Candidate.Id, id, StringComparison.Ordinal));
+                if (existingIndex < 0 ||
+                    _items[existingIndex].State is not (ThreatShareState.Pending or
+                        ThreatShareState.Dismissed or ThreatShareState.Rejected))
+                {
+                    continue;
+                }
+
+                var existing = _items[existingIndex];
+                if (existing.Candidate.EvidenceClass is ThreatShareEvidenceClass.PublicFeedMatch or
+                        ThreatShareEvidenceClass.LocalObservation ||
+                    existing.Candidate.PublicationEligibility == ThreatSharePublicationEligibility.LocalOnly)
+                {
+                    continue;
+                }
+
+                _items[existingIndex] = new ThreatShareItem(
+                    new ThreatShareCandidate
+                    {
+                        Id = id,
+                        IndicatorType = type,
+                        Value = value,
+                        Reason = reason,
+                        Context = context,
+                        Source = request.Source,
+                        Detail = Trim(request.Detail, 200),
+                        ObservedUtc = request.ObservedUtc,
+                        Severity = severity,
+                        EvidenceClass = request.EvidenceClass,
+                        ProofGrade = request.ProofGrade,
+                        PublicationEligibility = assessment.Eligibility,
+                        NoveltyStatus = request.NoveltyStatus,
+                        EligibilityReasonCode = assessment.ReasonCode,
+                        EligibilityExplanation = assessment.Explanation,
+                    },
+                    ThreatShareState.Pending,
+                    string.Empty,
+                    null);
+                changed = true;
+                continue;
+            }
 
             _items.Add(new ThreatShareItem(
                 new ThreatShareCandidate
@@ -281,42 +398,49 @@ public sealed class ThreatShareController : IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var today = DateTimeOffset.UtcNow.UtcDateTime.Date;
-            var items = _items
-                .OrderByDescending(item => item.State == ThreatShareState.Pending)
-                .ThenByDescending(item => item.State == ThreatShareState.Deferred)
-                .ThenByDescending(item => item.Candidate.ObservedUtc)
-                .Take(100)
-                .ToArray();
-
-            var pending = _items.Count(item => item.State == ThreatShareState.Pending);
-            var deferred = _items.Count(item => item.State == ThreatShareState.Deferred);
-            var unverified = _items.Count(item => item.State == ThreatShareState.Unverified);
-            var submitted = _items.Count(item => item.State == ThreatShareState.Submitted);
-            var todaySubmitted = _items.Count(item =>
-                item.State == ThreatShareState.Submitted &&
-                item.AttemptedUtc is { } attempted &&
-                attempted.UtcDateTime.Date == today);
-
-            return new ThreatShareQueueStatus
-            {
-                Pending = pending,
-                Deferred = deferred,
-                Unverified = unverified,
-                Submitted = submitted,
-                TodaySubmitted = todaySubmitted,
-                DailyLimit = ThreatShareVocabulary.MaxDailySubmissions,
-                Detail = pending == 0 && deferred == 0 && unverified == 0
-                    ? "No indicator is waiting for review."
-                    : $"{pending} waiting for your review, {deferred} deferred after a transient failure; " +
-                      "the desktop sends one only when you press Share or Send now.",
-                Items = items,
-            };
+            return SnapshotLocked();
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    private Task<ThreatShareQueueStatus> SnapshotAsyncLocked() => Task.FromResult(SnapshotLocked());
+
+    private ThreatShareQueueStatus SnapshotLocked()
+    {
+        var today = DateTimeOffset.UtcNow.UtcDateTime.Date;
+        var items = _items
+            .OrderByDescending(item => item.State == ThreatShareState.Pending)
+            .ThenByDescending(item => item.State == ThreatShareState.Deferred)
+            .ThenByDescending(item => item.Candidate.ObservedUtc)
+            .Take(100)
+            .ToArray();
+
+        var pending = _items.Count(item => item.State == ThreatShareState.Pending);
+        var deferred = _items.Count(item => item.State == ThreatShareState.Deferred);
+        var unverified = _items.Count(item => item.State == ThreatShareState.Unverified);
+        var submitted = _items.Count(item => item.State == ThreatShareState.Submitted);
+        var todaySubmitted = _items.Count(item =>
+            item.State == ThreatShareState.Submitted &&
+            item.AttemptedUtc is { } attempted &&
+            attempted.UtcDateTime.Date == today);
+
+        return new ThreatShareQueueStatus
+        {
+            Pending = pending,
+            Deferred = deferred,
+            Unverified = unverified,
+            Submitted = submitted,
+            TodaySubmitted = todaySubmitted,
+            DailyLimit = ThreatShareVocabulary.MaxDailySubmissions,
+            Detail = pending == 0 && deferred == 0 && unverified == 0
+                ? "No indicator is waiting for review."
+                : $"{pending} waiting for your review, {deferred} deferred after a transient failure; " +
+                  "the desktop sends one only when you press Share or Send now.",
+            Items = items,
+        };
     }
 
     private static ThreatShareEligibilityAssessment ResolveAssessment(

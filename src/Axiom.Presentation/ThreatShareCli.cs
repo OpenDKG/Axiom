@@ -124,7 +124,7 @@ public sealed class ThreatShareCli
         CancellationToken cancellationToken,
         bool manualReport = false)
     {
-        var root = BlackboxRoot();
+        var root = ResolveReporterRoot();
         var runtime = ThreatShareLauncher.FindRuntimePython();
         var venv = VenvPython();
         var home = BlackboxPaths.ResolveHermesHome();
@@ -351,7 +351,8 @@ public sealed class ThreatShareCli
         text.Contains("No module named", StringComparison.OrdinalIgnoreCase) ||
         text.Contains("is not recognized as an internal or external command", StringComparison.OrdinalIgnoreCase) ||
         text.Contains("cannot find the file", StringComparison.OrdinalIgnoreCase) ||
-        text.Contains("The system cannot find the file", StringComparison.OrdinalIgnoreCase);
+        text.Contains("The system cannot find the file", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("No such file or directory", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsOffline(string text) =>
         text.Contains("not running", StringComparison.OrdinalIgnoreCase) ||
@@ -659,6 +660,32 @@ public sealed class ThreatShareCli
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Axiom", "modules", "blackbox", "agent-blackbox");
+
+    /// <summary>
+    /// Resolves the directory containing <c>plugins/blackbox</c> for the reporter process: prefers
+    /// Axiom's managed module tree and falls back to the user's Hermes home when Blackbox was
+    /// installed through Hermes directly (Windows, Linux, macOS).
+    /// </summary>
+    public static string ResolveReporterRoot(
+        string? moduleRoot = null,
+        string? hermesHome = null,
+        Func<string, bool>? directoryExists = null)
+    {
+        var exists = directoryExists ?? Directory.Exists;
+        var managed = string.IsNullOrWhiteSpace(moduleRoot) ? BlackboxRoot() : moduleRoot;
+        if (exists(Path.Combine(managed, "plugins", "blackbox")))
+        {
+            return managed;
+        }
+
+        var hermes = string.IsNullOrWhiteSpace(hermesHome) ? BlackboxPaths.ResolveHermesHome() : hermesHome;
+        if (exists(Path.Combine(hermes, "plugins", "blackbox")))
+        {
+            return hermes;
+        }
+
+        return managed;
+    }
 
     /// <summary>
     /// The Blackbox venv interpreter: <c>venv\Scripts\python.exe</c> on Windows (unchanged),

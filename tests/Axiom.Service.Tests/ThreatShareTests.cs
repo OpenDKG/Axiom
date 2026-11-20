@@ -304,6 +304,165 @@ public sealed class ThreatShareTests
         }
     }
 
+    [Fact]
+    public async Task VerifyAsync_promotes_ai_candidate_and_still_blocks_local_or_shared_infra()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "axiom-threat-share", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "queue.json");
+
+        try
+        {
+            var store = new ThreatShareStore(path);
+            await using var controller = new ThreatShareController(store);
+            controller.Enqueue(new ThreatShareEnqueueRequest
+            {
+                IndicatorType = "domain",
+                Value = "c2.bad-domain.net",
+                Reason = "unknown",
+                Context = ThreatShareVocabulary.ObservedNetworkContext,
+                Source = ThreatShareSource.AiAnalyst,
+                Severity = "high",
+                EvidenceClass = ThreatShareEvidenceClass.HeuristicOrAiSuspected,
+                ProofGrade = ThreatShareProofGrade.Observed,
+            });
+            controller.Enqueue(new ThreatShareEnqueueRequest
+            {
+                IndicatorType = "domain",
+                Value = "github.io",
+                Reason = "phishing",
+                Context = ThreatShareVocabulary.ObservedNetworkContext,
+                Source = ThreatShareSource.AiAnalyst,
+                Severity = "high",
+                EvidenceClass = ThreatShareEvidenceClass.HeuristicOrAiSuspected,
+                ProofGrade = ThreatShareProofGrade.Observed,
+            });
+            controller.Enqueue(new ThreatShareEnqueueRequest
+            {
+                IndicatorType = "domain",
+                Value = "feed-hit.example",
+                Reason = "malware-delivery",
+                Context = "fetched-by-tool",
+                Source = ThreatShareSource.PrivacyShield,
+                Severity = "high",
+                EvidenceClass = ThreatShareEvidenceClass.PublicFeedMatch,
+                ProofGrade = ThreatShareProofGrade.Observed,
+            });
+            await controller.FlushAsync(CancellationToken.None);
+
+            var initial = await controller.GetStatusAsync(CancellationToken.None);
+            var aiItem = Assert.Single(initial.Items, item => item.Candidate.Value == "c2.bad-domain.net");
+            Assert.False(aiItem.Candidate.CanPublishToCommunity);
+            Assert.True(aiItem.CanVerify);
+
+            var verified = await controller.VerifyAsync(
+                new ThreatShareVerifyRequest
+                {
+                    Id = aiItem.Candidate.Id,
+                    Reason = "command-and-control",
+                    Context = "fetched-by-tool",
+                    Severity = "critical",
+                    Detail = "Verified C2 beacon capture.",
+                },
+                CancellationToken.None);
+            var promoted = Assert.Single(verified.Items, item => item.Candidate.Value == "c2.bad-domain.net");
+            Assert.True(promoted.Candidate.CanPublishToCommunity);
+            Assert.Equal(ThreatShareEvidenceClass.ReproducibleAttackArtifact, promoted.Candidate.EvidenceClass);
+            Assert.Equal(ThreatShareProofGrade.Reproduced, promoted.Candidate.ProofGrade);
+            Assert.Equal("critical", promoted.Candidate.Severity);
+            Assert.Equal("fetched-by-tool", promoted.Candidate.Context);
+
+            // Shared hosting apex stays blocked even if VerifyAsync is called.
+            var sharedAfter = await controller.VerifyAsync(
+                new ThreatShareVerifyRequest
+                {
+                    Id = "ioc:domain:github.io",
+                    Reason = "phishing",
+                    Context = "fetched-by-tool",
+                },
+                CancellationToken.None);
+            var sharedItem = Assert.Single(sharedAfter.Items, item => item.Candidate.Value == "github.io");
+            Assert.False(sharedItem.Candidate.CanPublishToCommunity);
+
+            // Public-feed matches stay local-only and cannot be promoted.
+            var feedAfter = await controller.VerifyAsync(
+                new ThreatShareVerifyRequest
+                {
+                    Id = "ioc:domain:feed-hit.example",
+                    Reason = "malware-delivery",
+                    Context = "fetched-by-tool",
+                },
+                CancellationToken.None);
+            var feedItem = Assert.Single(feedAfter.Items, item => item.Candidate.Value == "feed-hit.example");
+            Assert.False(feedItem.Candidate.CanPublishToCommunity);
+            Assert.Equal(ThreatSharePublicationEligibility.LocalOnly, feedItem.Candidate.PublicationEligibility);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Operator_manual_enqueue_requeues_dismissed_indicator_but_never_overrides_submitted()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "axiom-threat-share", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "queue.json");
+
+        try
+        {
+            await using var controller = new ThreatShareController(new ThreatShareStore(path));
+            controller.Enqueue(Candidate() with { Value = "manual-target.net" });
+            await controller.FlushAsync(CancellationToken.None);
+            await controller.DismissAsync("ioc:domain:manual-target.net", CancellationToken.None);
+
+            controller.Enqueue(new ThreatShareEnqueueRequest
+            {
+                IndicatorType = "domain",
+                Value = "manual-target.net",
+                Reason = "phishing",
+                Context = "fetched-by-tool",
+                Source = ThreatShareSource.Operator,
+                Detail = "Operator verified.",
+                EvidenceClass = ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+                ProofGrade = ThreatShareProofGrade.Reproduced,
+            });
+            var status = await controller.GetStatusAsync(CancellationToken.None);
+            var item = Assert.Single(status.Items, row => row.Candidate.Value == "manual-target.net");
+            Assert.Equal(ThreatShareState.Pending, item.State);
+            Assert.Equal(ThreatShareSource.Operator, item.Candidate.Source);
+            Assert.True(item.Candidate.CanPublishToCommunity);
+
+            await controller.RecordAsync(
+                new ThreatShareRecordRequest
+                {
+                    Id = item.Candidate.Id,
+                    Submitted = true,
+                    Outcome = "shared",
+                },
+                CancellationToken.None);
+
+            // Re-enqueuing an already submitted item must not reset its Submitted state.
+            controller.Enqueue(new ThreatShareEnqueueRequest
+            {
+                IndicatorType = "domain",
+                Value = "manual-target.net",
+                Reason = "phishing",
+                Context = "fetched-by-tool",
+                Source = ThreatShareSource.Operator,
+                EvidenceClass = ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+                ProofGrade = ThreatShareProofGrade.Reproduced,
+            });
+            var afterSubmitted = await controller.GetStatusAsync(CancellationToken.None);
+            Assert.Equal(ThreatShareState.Submitted, Assert.Single(afterSubmitted.Items).State);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static ThreatShareEnqueueRequest Candidate() => new()
     {
         IndicatorType = "domain",

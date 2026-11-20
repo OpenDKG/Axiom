@@ -301,6 +301,25 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     [ObservableProperty]
     private bool _canDisableBlackboxAutomaticSharing;
 
+    [ObservableProperty]
+    private bool _canToggleBlackboxAutomaticSharing;
+
+    public string BlackboxAutomaticSharingButtonText =>
+        BlackboxAutomaticSharing
+            ? "Turn off Blackbox automatic sharing"
+            : "Turn on Blackbox automatic sharing";
+
+    public string BlackboxAutomaticSharingStatusText =>
+        BlackboxAutomaticSharing
+            ? "Blackbox automatic sharing is active. Blackbox can publish eligible sightings and weekly digests independently of the Axiom queue (local custom rules and secrets never leave the machine)."
+            : "Blackbox automatic sharing is off. Turn it back on here for automatic Blackbox reports, or use Axiom manual reporting below.";
+
+    partial void OnBlackboxAutomaticSharingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(BlackboxAutomaticSharingButtonText));
+        OnPropertyChanged(nameof(BlackboxAutomaticSharingStatusText));
+    }
+
     public string ThreatSharingButtonText =>
         ThreatSharingEnabled ? "Turn off manual reporting" : "Allow manual reports";
 
@@ -327,6 +346,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     [ObservableProperty]
     private bool _canSubmitThreatShare;
+
+    [ObservableProperty]
+    private bool _canAddThreatShareIndicator;
 
     /// <summary>Per-row action availability; an unverified row must still be retryable on purpose.</summary>
     [ObservableProperty]
@@ -616,6 +638,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 SummaryText = "No live Blackbox data is available.";
                 _blackboxSharingKnown = false;
                 CanDisableBlackboxAutomaticSharing = false;
+                CanToggleBlackboxAutomaticSharing = false;
                 UpdateThreatSharingPermission();
                 ApplyHookEvidence();
                 await RefreshEnforcementAsync(guardAvailable: false, hookMode: null).ConfigureAwait(true);
@@ -1252,18 +1275,37 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     }
 
     [RelayCommand]
-    private async Task DisableBlackboxAutomaticSharingAsync()
+    private Task DisableBlackboxAutomaticSharingAsync() =>
+        SetBlackboxAutomaticSharingAsync(enable: false);
+
+    [RelayCommand]
+    private Task ToggleBlackboxAutomaticSharingAsync() =>
+        SetBlackboxAutomaticSharingAsync(enable: !BlackboxAutomaticSharing);
+
+    private async Task SetBlackboxAutomaticSharingAsync(bool enable)
     {
-        if (_client is null || !CanDisableBlackboxAutomaticSharing)
+        if (_client is null || !CanToggleBlackboxAutomaticSharing)
         {
             return;
         }
 
+        if (enable && !await _ui.ConfirmAsync(
+                "Turn on Blackbox automatic sharing?",
+                "Blackbox will publish eligible sightings and weekly digests to the shared community graph under your node's reporter identity. Local custom rules, secrets and prompts never leave this machine. Turning automatic sharing on pauses Axiom's separate manual reporting until turned off again.\n\n" +
+                ThreatSharingConsent.ReporterTermsUrl,
+                "Turn on automatic sharing",
+                destructive: false,
+                CancellationToken.None).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        CanToggleBlackboxAutomaticSharing = false;
         CanDisableBlackboxAutomaticSharing = false;
         try
         {
             var result = await _client.SaveSettingsAsync(
-                new JsonObject { ["report"] = false },
+                new JsonObject { ["report"] = enable },
                 CancellationToken.None).ConfigureAwait(true);
             if (!result.Ok)
             {
@@ -1273,9 +1315,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
             var settings = await _client.GetSettingsAsync(CancellationToken.None).ConfigureAwait(true);
             UpdateBlackboxSharing(settings);
-            ThreatShareActionText = _blackboxSharingKnown && !BlackboxAutomaticSharing
-                ? "Blackbox automatic sharing is off. Local protection continues."
-                : "Could not verify that Blackbox automatic sharing is off.";
+            ThreatShareActionText = _blackboxSharingKnown && BlackboxAutomaticSharing == enable
+                ? (enable
+                    ? "Blackbox automatic sharing is ON. Axiom manual submissions stay paused while it is on."
+                    : "Blackbox automatic sharing is off. Local protection continues.")
+                : (enable
+                    ? "Could not verify that Blackbox automatic sharing is ON."
+                    : "Could not verify that Blackbox automatic sharing is off.");
         }
         catch (Exception exception) when (exception is
                      HttpRequestException or TaskCanceledException or InvalidDataException or System.Text.Json.JsonException)
@@ -1286,7 +1332,78 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
         finally
         {
+            CanToggleBlackboxAutomaticSharing = _blackboxSharingKnown;
             CanDisableBlackboxAutomaticSharing = _blackboxSharingKnown && BlackboxAutomaticSharing;
+        }
+    }
+
+    [RelayCommand]
+    private async Task AddThreatShareIndicatorAsync()
+    {
+        if (_serviceClient is null || _threatShareSubmitting)
+        {
+            return;
+        }
+
+        var request = await _dialogs
+            .PromptManualThreatIndicatorAsync(CancellationToken.None)
+            .ConfigureAwait(true);
+        if (request is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var status = await _serviceClient
+                .SendAsync<ThreatShareQueueStatus>(
+                    IpcCommandTypes.ThreatShareEnqueue,
+                    request,
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyThreatShareStatus(status);
+            ThreatShareActionText = $"Queued {request.Value} for review. Press Share or Send now when ready.";
+        }
+        catch (Exception exception) when (exception is
+                     ServiceUnavailableException or TimeoutException or
+                     System.Text.Json.JsonException or System.IO.IOException)
+        {
+            ThreatShareActionText = "Could not queue the indicator: " + exception.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task VerifyThreatShareItemAsync(ThreatShareItem? item)
+    {
+        if (_serviceClient is null || item is null || !item.CanVerify || _threatShareSubmitting)
+        {
+            return;
+        }
+
+        var request = await _dialogs
+            .PromptVerifyThreatCandidateAsync(item.Candidate, CancellationToken.None)
+            .ConfigureAwait(true);
+        if (request is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var status = await _serviceClient
+                .SendAsync<ThreatShareQueueStatus>(
+                    IpcCommandTypes.ThreatShareVerify,
+                    request,
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyThreatShareStatus(status);
+            ThreatShareActionText = $"Verified {item.Candidate.Value} ({request.Reason} · {request.Context}). Press Share or Send now to publish.";
+        }
+        catch (Exception exception) when (exception is
+                     ServiceUnavailableException or TimeoutException or
+                     System.Text.Json.JsonException or System.IO.IOException)
+        {
+            ThreatShareActionText = "Could not verify the indicator: " + exception.Message;
         }
     }
 
@@ -1375,14 +1492,20 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             ? "Sandbox mode is active."
             : "Shared statements are signed under CC0 1.0 and replicated; curators exclusively decide novelty.";
 
+        var needsVerify = ThreatShareCandidates.Count(item => item.CanVerify);
+        var verifyNote = needsVerify > 0
+            ? $" {needsVerify} need(s) your verification before sharing."
+            : string.Empty;
+
         ThreatShareQueueText =
             $"{status.Pending} waiting for your review, {status.Submitted} shared in total, " +
-            $"{status.TodaySubmitted}/{status.DailyLimit} today.{deferred}{unverified} " +
+            $"{status.TodaySubmitted}/{status.DailyLimit} today.{verifyNote}{deferred}{unverified} " +
             (ThreatSharingEnabled ? $"Eligible reports need your confirmation. {sandboxNote}" : $"Manual reporting is off. {sandboxNote}");
     }
 
     private void UpdateThreatShareActions()
     {
+        CanAddThreatShareIndicator = IsAvailable && !_threatShareSubmitting && _serviceClient is not null;
         var canShare = !_threatShareSubmitting && ThreatSharingEnabled && _blackboxSharingKnown &&
                        !BlackboxAutomaticSharing && _threatShareStatus is { } status &&
                        status.TodaySubmitted < status.DailyLimit;
@@ -1406,6 +1529,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             : (bool?)null;
         _blackboxSharingKnown = report.HasValue;
         BlackboxAutomaticSharing = report == true;
+        CanToggleBlackboxAutomaticSharing = _blackboxSharingKnown;
         CanDisableBlackboxAutomaticSharing = _blackboxSharingKnown && BlackboxAutomaticSharing;
         UpdateThreatSharingPermission();
     }

@@ -58,7 +58,7 @@
             <StackPanel Margin="0,12,0,0">
               <CheckBox x:Name="DiscoverCheck" Content="Discovery and OSV lookups" Style="{StaticResource AppCheckBox}" />
               <CheckBox x:Name="OsvCheck" Content="Use OSV.dev for dependency lookups" Style="{StaticResource AppCheckBox}" Margin="0,6,0,0" />
-              <CheckBox x:Name="ReportCheck" Content="Turn off Blackbox automatic sharing on save" Style="{StaticResource AppCheckBox}" Margin="0,10,0,0" />
+              <CheckBox x:Name="ReportCheck" Content="Blackbox automatic community sharing" Style="{StaticResource AppCheckBox}" Margin="0,10,0,0" />
               <TextBlock Text="Threat sharing is off unless you explicitly enable it here. It never sends prompts, commands, paths or credentials."
                          Style="{StaticResource Caption}"
                          Margin="24,4,0,0"

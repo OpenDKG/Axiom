@@ -57,6 +57,8 @@ public sealed class IpcRequestHandlers
 
     public Func<ThreatShareEnqueueRequest, CancellationToken, Task<ThreatShareQueueStatus>>? ThreatShareEnqueue { get; init; }
 
+    public Func<ThreatShareVerifyRequest, CancellationToken, Task<ThreatShareQueueStatus>>? ThreatShareVerify { get; init; }
+
     public Func<ThreatShareDismissRequest, CancellationToken, Task<ThreatShareQueueStatus>>? ThreatShareDismiss { get; init; }
 
     public Func<ThreatShareRecordRequest, CancellationToken, Task<ThreatShareQueueStatus>>? ThreatShareRecord { get; init; }

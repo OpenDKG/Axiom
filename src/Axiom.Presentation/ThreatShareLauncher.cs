@@ -188,48 +188,73 @@ public static class ThreatShareLauncher
     /// <summary>
     /// The interpreter of the dependency environment Hermes commits in <c>facts.json</c>, newest
     /// install first. Missing or unreadable facts fall back to the newest environment directory.
+    /// Uses <c>Scripts\python.exe</c> on Windows and <c>bin/python</c> (or <c>bin/python3</c>) on
+    /// Linux and macOS.
     /// </summary>
-    public static string? FindRuntimePython(string? localAppData = null, Func<string, bool>? fileExists = null)
+    public static string? FindRuntimePython(
+        string? localAppData = null,
+        Func<string, bool>? fileExists = null,
+        bool? windows = null)
     {
         var exists = fileExists ?? File.Exists;
-        var local = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var installs = Path.Combine(local, "hermes", "installs");
-        if (!Directory.Exists(installs))
+        var isWindows = windows ?? AgentPlatform.IsWindows;
+        var installRoots = new List<string>();
+        if (!string.IsNullOrWhiteSpace(localAppData))
         {
-            return null;
+            installRoots.Add(Path.Combine(localAppData, "hermes", "installs"));
         }
+        else
+        {
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var resolvedHermes = BlackboxPaths.ResolveHermesHome(localAppData: local);
+            installRoots.Add(Path.Combine(resolvedHermes, "installs"));
 
-        IEnumerable<string> installDirectories;
-        try
-        {
-            installDirectories = Directory.GetDirectories(installs)
-                .OrderByDescending(path => SafeLastWrite(path))
-                .ToArray();
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            return null;
-        }
-
-        foreach (var install in installDirectories)
-        {
-            var fromFacts = ReadFactsPython(install, exists);
-            if (fromFacts is not null)
+            var localInstalls = Path.Combine(local, "hermes", "installs");
+            if (!installRoots.Contains(localInstalls, StringComparer.OrdinalIgnoreCase))
             {
-                return fromFacts;
+                installRoots.Add(localInstalls);
+            }
+        }
+
+        foreach (var installs in installRoots)
+        {
+            if (!Directory.Exists(installs))
+            {
+                continue;
             }
 
-            var fromEnvironments = NewestEnvironmentPython(install, exists);
-            if (fromEnvironments is not null)
+            IEnumerable<string> installDirectories;
+            try
             {
-                return fromEnvironments;
+                installDirectories = Directory.GetDirectories(installs)
+                    .OrderByDescending(path => SafeLastWrite(path))
+                    .ToArray();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var install in installDirectories)
+            {
+                var fromFacts = ReadFactsPython(install, exists, isWindows);
+                if (fromFacts is not null)
+                {
+                    return fromFacts;
+                }
+
+                var fromEnvironments = NewestEnvironmentPython(install, exists, isWindows);
+                if (fromEnvironments is not null)
+                {
+                    return fromEnvironments;
+                }
             }
         }
 
         return null;
     }
 
-    private static string? ReadFactsPython(string install, Func<string, bool> exists)
+    private static string? ReadFactsPython(string install, Func<string, bool> exists, bool windows)
     {
         try
         {
@@ -254,8 +279,7 @@ public static class ThreatShareLauncher
                 return null;
             }
 
-            var python = Path.Combine(root, "Scripts", "python.exe");
-            return exists(python) ? python : null;
+            return FindEnvironmentPython(root, exists, windows);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -263,7 +287,7 @@ public static class ThreatShareLauncher
         }
     }
 
-    private static string? NewestEnvironmentPython(string install, Func<string, bool> exists)
+    private static string? NewestEnvironmentPython(string install, Func<string, bool> exists, bool windows)
     {
         try
         {
@@ -276,8 +300,8 @@ public static class ThreatShareLauncher
             foreach (var environment in Directory.GetDirectories(root)
                          .OrderByDescending(SafeLastWrite))
             {
-                var python = Path.Combine(environment, "venv", "Scripts", "python.exe");
-                if (exists(python))
+                var python = FindEnvironmentPython(Path.Combine(environment, "venv"), exists, windows);
+                if (python is not null)
                 {
                     return python;
                 }
@@ -289,6 +313,24 @@ public static class ThreatShareLauncher
         }
 
         return null;
+    }
+
+    private static string? FindEnvironmentPython(string venvRoot, Func<string, bool> exists, bool windows)
+    {
+        if (windows)
+        {
+            var winPython = Path.Combine(venvRoot, "Scripts", "python.exe");
+            return exists(winPython) ? winPython : null;
+        }
+
+        var posixPython = Path.Combine(venvRoot, "bin", "python");
+        if (exists(posixPython))
+        {
+            return posixPython;
+        }
+
+        var posixPython3 = Path.Combine(venvRoot, "bin", "python3");
+        return exists(posixPython3) ? posixPython3 : null;
     }
 
     private static DateTime SafeLastWrite(string path)

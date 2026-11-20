@@ -7,6 +7,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Axiom.Contracts.Blackbox;
+using Axiom.Contracts.Threat;
 using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
@@ -36,6 +37,7 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
         var blockSeverity = new ComboBox { ItemsSource = Severities, Width = 140 };
         var discover = new CheckBox { Content = "Discover", Foreground = Foreground };
         var osv = new CheckBox { Content = "OSV lookup", Foreground = Foreground };
+        var report = new CheckBox { Content = "Automatic sharing", Foreground = Foreground };
         var paths = new ObservableCollection<string>();
         var pathList = new ListBox
         {
@@ -65,7 +67,7 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
         try
         {
             loaded = await client.GetSettingsAsync(cancellationToken).ConfigureAwait(true);
-            Populate(loaded, mode, blockSeverity, discover, osv, categories, paths);
+            Populate(loaded, mode, blockSeverity, discover, osv, report, categories, paths);
             status.Text = $"Loaded from http://127.0.0.1:9700 at {DateTimeOffset.Now:HH:mm:ss}.";
         }
         catch (Exception exception) when (exception is
@@ -119,6 +121,7 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
                 ["block_severity"] = blockSeverity.SelectedItem?.ToString() ?? "critical",
                 ["discover"] = discover.IsChecked == true,
                 ["osv_lookup"] = osv.IsChecked == true,
+                ["report"] = report.IsChecked == true,
                 ["categories"] = new JsonObject(
                     categories.ToDictionary(
                         category => category.Key,
@@ -142,7 +145,7 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
                     return;
                 }
 
-                var verification = Verify(result.Settings, mode, blockSeverity, paths);
+                var verification = Verify(result.Settings, mode, blockSeverity, report, paths);
                 if (verification is not null)
                 {
                     status.Text = $"Save verification failed: {verification}";
@@ -150,7 +153,7 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
                 }
 
                 loaded = result.Settings;
-                Populate(result.Settings, mode, blockSeverity, discover, osv, categories, paths);
+                Populate(result.Settings, mode, blockSeverity, discover, osv, report, categories, paths);
                 status.Text = $"Saved and verified at {DateTimeOffset.Now:HH:mm:ss}.";
             }
             catch (Exception exception) when (exception is
@@ -183,14 +186,15 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
         var settingsRow = new Grid { ColumnDefinitions = new ColumnDefinitions("140,140,Auto") };
         var modeField = Labeled("Mode", mode);
         var severityField = Labeled("Block severity", blockSeverity);
-        var toggles = new StackPanel
+        var toggles = new WrapPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 12,
             VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(20, 0, 0, 0),
-            Children = { discover, osv },
+            Margin = new Thickness(16, 0, 0, 0),
+            Children = { discover, osv, report },
         };
+        discover.Margin = new Thickness(0, 0, 12, 0);
+        osv.Margin = new Thickness(0, 0, 12, 0);
         settingsRow.Children.Add(modeField);
         Grid.SetColumn(severityField, 1);
         settingsRow.Children.Add(severityField);
@@ -261,10 +265,328 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
         cancellationToken.ThrowIfCancellationRequested();
     }
 
+    public async Task<ThreatShareEnqueueRequest?> PromptManualThreatIndicatorAsync(
+        CancellationToken cancellationToken)
+    {
+        var owner = ownerProvider();
+        if (owner is null)
+        {
+            return null;
+        }
+
+        var window = CreateWindow("Add threat indicator", 560, 520);
+        var typeBox = new ComboBox
+        {
+            ItemsSource = ThreatShareVocabulary.IndicatorTypes,
+            SelectedItem = "domain",
+            Width = 140,
+        };
+        var valueBox = new TextBox
+        {
+            PlaceholderText = "e.g. c2.bad-host.net, https://bad-host.net, 198.51.100.10 or SHA-256",
+        };
+        var reasonBox = new ComboBox
+        {
+            ItemsSource = ThreatShareVocabulary.PublishableReasons,
+            SelectedItem = "command-and-control",
+            Width = 200,
+        };
+        var contextBox = new ComboBox
+        {
+            ItemsSource = ThreatShareVocabulary.ReportableContexts,
+            SelectedItem = "fetched-by-tool",
+            Width = 170,
+        };
+        var severityBox = new ComboBox
+        {
+            ItemsSource = ThreatShareVocabulary.Severities,
+            SelectedItem = "high",
+            Width = 120,
+        };
+        var detailBox = new TextBox
+        {
+            PlaceholderText = "Optional local note explaining how you verified this indicator (never sent)",
+        };
+        var confirmed = new CheckBox
+        {
+            Content = "I verified reproducible malicious behavior for this indicator",
+            Foreground = Foreground,
+        };
+        var status = new TextBlock
+        {
+            Text = "The indicator is validated locally and queued for review. Nothing is sent until you press Share or Send now.",
+            Foreground = Muted,
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        ThreatShareEnqueueRequest? result = null;
+        var cancel = Button("Cancel", false);
+        var add = Button("Add to queue", true);
+        cancel.Click += (_, _) => window.Close();
+        add.Click += (_, _) =>
+        {
+            if (confirmed.IsChecked != true)
+            {
+                status.Text = "Confirm that you verified reproducible malicious behavior before queueing.";
+                return;
+            }
+
+            var type = typeBox.SelectedItem?.ToString() ?? "domain";
+            var rawValue = valueBox.Text?.Trim() ?? string.Empty;
+            var normalized = ThreatShareVocabulary.Normalize(type, rawValue);
+            if (normalized is null)
+            {
+                status.Text = "Invalid or unshareable indicator (private/reserved IPs, local domains, filenames and URL paths/queries are rejected).";
+                return;
+            }
+
+            var reason = reasonBox.SelectedItem?.ToString() ?? "command-and-control";
+            var context = contextBox.SelectedItem?.ToString() ?? "fetched-by-tool";
+            var severity = severityBox.SelectedItem?.ToString() ?? "high";
+            var detail = string.IsNullOrWhiteSpace(detailBox.Text)
+                ? "Operator-verified indicator added manually."
+                : detailBox.Text.Trim();
+
+            var assessment = ThreatShareVocabulary.EvaluatePublicationEligibility(
+                type,
+                normalized,
+                reason,
+                ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+                ThreatShareProofGrade.Reproduced,
+                listDerived: false);
+            if (assessment.Eligibility < ThreatSharePublicationEligibility.NeedsOperatorReview)
+            {
+                status.Text = assessment.Explanation;
+                return;
+            }
+
+            var categoryRefusal = ThreatSharePreflight.CategoryRefusal(type, normalized, detail);
+            if (categoryRefusal is not null)
+            {
+                status.Text = $"Cannot share: {categoryRefusal}.";
+                return;
+            }
+
+            var id = ThreatShareVocabulary.BuildId(type, normalized);
+            var novelty = ThreatShareCli.InspectLocalGraphNovelty(id);
+            if (novelty is ThreatShareNoveltyStatus.KnownVerified or
+                ThreatShareNoveltyStatus.Disputed or
+                ThreatShareNoveltyStatus.Revoked)
+            {
+                status.Text = $"Indicator is already marked '{novelty}' in the local Blackbox graph and cannot be submitted.";
+                return;
+            }
+
+            result = new ThreatShareEnqueueRequest
+            {
+                IndicatorType = type,
+                Value = normalized,
+                Reason = reason,
+                Context = context,
+                Source = ThreatShareSource.Operator,
+                Detail = detail,
+                ObservedUtc = DateTimeOffset.UtcNow,
+                Severity = severity,
+                EvidenceClass = ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+                ProofGrade = ThreatShareProofGrade.Reproduced,
+                PublicationEligibility = assessment.Eligibility,
+                NoveltyStatus = novelty,
+                EligibilityReasonCode = assessment.ReasonCode,
+                EligibilityExplanation = assessment.Explanation,
+            };
+            window.Close();
+        };
+
+        var row1 = new WrapPanel { Orientation = Orientation.Horizontal };
+        var typeField = Labeled("Indicator type", typeBox);
+        typeField.Margin = new Thickness(0, 0, 12, 0);
+        var severityField = Labeled("Severity", severityBox);
+        row1.Children.Add(typeField);
+        row1.Children.Add(severityField);
+
+        var row2 = new WrapPanel { Orientation = Orientation.Horizontal };
+        var reasonField = Labeled("Reason", reasonBox);
+        reasonField.Margin = new Thickness(0, 0, 12, 0);
+        var contextField = Labeled("Context", contextBox);
+        row2.Children.Add(reasonField);
+        row2.Children.Add(contextField);
+
+        var panel = new StackPanel { Spacing = 10, Margin = new Thickness(20) };
+        panel.Children.Add(new SelectableTextBlock
+        {
+            Text = "Queue an independently verified IOC for manual community reporting. Public DNS resolvers, private IPs, trackers, shared hosting and already-known entries are rejected locally.",
+            Foreground = Muted,
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(row1);
+        panel.Children.Add(Labeled("Value", valueBox));
+        panel.Children.Add(row2);
+        panel.Children.Add(Labeled("Local note (not published)", detailBox));
+        panel.Children.Add(confirmed);
+        panel.Children.Add(status);
+        panel.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 8,
+            Children = { cancel, add },
+        });
+        window.Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        await window.ShowDialog(owner).ConfigureAwait(true);
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
+    }
+
+    public async Task<ThreatShareVerifyRequest?> PromptVerifyThreatCandidateAsync(
+        ThreatShareCandidate candidate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        var owner = ownerProvider();
+        if (owner is null)
+        {
+            return null;
+        }
+
+        var window = CreateWindow("Verify indicator for sharing", 560, 490);
+        var reasonBox = new ComboBox
+        {
+            ItemsSource = ThreatShareVocabulary.PublishableReasons,
+            SelectedItem = ThreatShareVocabulary.IsPublishableReason(candidate.Reason)
+                ? candidate.Reason
+                : "command-and-control",
+            Width = 200,
+        };
+        var contextBox = new ComboBox
+        {
+            ItemsSource = ThreatShareVocabulary.ReportableContexts,
+            SelectedItem = ThreatShareVocabulary.ReportableContexts.Contains(candidate.Context, StringComparer.Ordinal)
+                ? candidate.Context
+                : "fetched-by-tool",
+            Width = 170,
+        };
+        var severityBox = new ComboBox
+        {
+            ItemsSource = ThreatShareVocabulary.Severities,
+            SelectedItem = ThreatShareVocabulary.NormalizeSeverity(candidate.Severity),
+            Width = 120,
+        };
+        var detailBox = new TextBox
+        {
+            Text = candidate.Detail,
+            PlaceholderText = "Optional local verification note (never sent)",
+        };
+        var confirmed = new CheckBox
+        {
+            Content = "I verified reproducible malicious behavior for this indicator",
+            Foreground = Foreground,
+        };
+        var status = new TextBlock
+        {
+            Text = "Verifying marks this indicator ready for manual review; nothing is sent until you press Share or Send now.",
+            Foreground = Muted,
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        ThreatShareVerifyRequest? result = null;
+        var cancel = Button("Cancel", false);
+        var verify = Button("Mark verified", true);
+        cancel.Click += (_, _) => window.Close();
+        verify.Click += (_, _) =>
+        {
+            if (confirmed.IsChecked != true)
+            {
+                status.Text = "Confirm that you verified reproducible malicious behavior before promoting this indicator.";
+                return;
+            }
+
+            var reason = reasonBox.SelectedItem?.ToString() ?? "command-and-control";
+            var context = contextBox.SelectedItem?.ToString() ?? "fetched-by-tool";
+            var severity = severityBox.SelectedItem?.ToString() ?? "high";
+            var detail = detailBox.Text?.Trim() ?? string.Empty;
+
+            var assessment = ThreatShareVocabulary.EvaluatePublicationEligibility(
+                candidate.IndicatorType,
+                candidate.Value,
+                reason,
+                ThreatShareEvidenceClass.ReproducibleAttackArtifact,
+                ThreatShareProofGrade.Reproduced,
+                listDerived: false);
+            if (assessment.Eligibility < ThreatSharePublicationEligibility.NeedsOperatorReview)
+            {
+                status.Text = assessment.Explanation;
+                return;
+            }
+
+            var categoryRefusal = ThreatSharePreflight.CategoryRefusal(candidate.IndicatorType, candidate.Value, detail);
+            if (categoryRefusal is not null)
+            {
+                status.Text = $"Cannot share: {categoryRefusal}.";
+                return;
+            }
+
+            result = new ThreatShareVerifyRequest
+            {
+                Id = candidate.Id,
+                Reason = reason,
+                Context = context,
+                Severity = severity,
+                Detail = detail,
+            };
+            window.Close();
+        };
+
+        var row = new WrapPanel { Orientation = Orientation.Horizontal };
+        var reasonField = Labeled("Reason", reasonBox);
+        reasonField.Margin = new Thickness(0, 0, 12, 0);
+        var contextField = Labeled("Context", contextBox);
+        contextField.Margin = new Thickness(0, 0, 12, 0);
+        var severityField = Labeled("Severity", severityBox);
+        row.Children.Add(reasonField);
+        row.Children.Add(contextField);
+        row.Children.Add(severityField);
+
+        var panel = new StackPanel { Spacing = 10, Margin = new Thickness(20) };
+        panel.Children.Add(new SelectableTextBlock
+        {
+            Text = $"{candidate.TypeLabel}: {candidate.Value}",
+            Foreground = Foreground,
+            FontSize = 13,
+            FontWeight = FontWeight.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(new SelectableTextBlock
+        {
+            Text = "AI Analyst suggestions stay local until you classify the threat reason, select an agent observation context, and confirm reproducible evidence.",
+            Foreground = Muted,
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(row);
+        panel.Children.Add(Labeled("Local note (not published)", detailBox));
+        panel.Children.Add(confirmed);
+        panel.Children.Add(status);
+        panel.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 8,
+            Children = { cancel, verify },
+        });
+        window.Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        await window.ShowDialog(owner).ConfigureAwait(true);
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
+    }
+
     private static string? Verify(
         JsonObject settings,
         ComboBox mode,
         ComboBox severity,
+        CheckBox report,
         ObservableCollection<string> paths)
     {
         if ((ReadString(settings, "mode") ?? "audit") != (mode.SelectedItem?.ToString() ?? "audit"))
@@ -276,6 +598,11 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
             (severity.SelectedItem?.ToString() ?? "critical"))
         {
             return "block severity did not persist.";
+        }
+
+        if (ReadBool(settings, "report", false) != (report.IsChecked == true))
+        {
+            return "automatic sharing did not persist.";
         }
 
         var savedPaths = (settings["protected_paths"] as JsonArray)?
@@ -292,6 +619,7 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
         ComboBox severity,
         CheckBox discover,
         CheckBox osv,
+        CheckBox report,
         IReadOnlyList<CategoryControls> categories,
         ObservableCollection<string> paths)
     {
@@ -306,6 +634,7 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
         severity.SelectedItem = ReadString(settings, "block_severity") ?? "critical";
         discover.IsChecked = ReadBool(settings, "discover", true);
         osv.IsChecked = ReadBool(settings, "osv_lookup", true);
+        report.IsChecked = ReadBool(settings, "report", false);
 
         var categoryRoot = settings["categories"] as JsonObject;
         foreach (var category in categories)
@@ -345,11 +674,11 @@ public sealed class AvaloniaBlackboxDialogs(Func<Window?> ownerProvider)
         return panel;
     }
 
-    private static Window CreateWindow(string title, int width) => new()
+    private static Window CreateWindow(string title, int width, int height = 700) => new()
     {
         Title = title,
         Width = width,
-        Height = 700,
+        Height = height,
         MinHeight = 320,
         WindowStartupLocation = WindowStartupLocation.CenterOwner,
         Background = Background,

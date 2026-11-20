@@ -623,6 +623,15 @@ public sealed class LifecycleAndLeakRegressionTests
 
         public Task ShowLogAsync(string title, string text, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+
+        public Task<Axiom.Contracts.Threat.ThreatShareEnqueueRequest?> PromptManualThreatIndicatorAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<Axiom.Contracts.Threat.ThreatShareEnqueueRequest?>(null);
+
+        public Task<Axiom.Contracts.Threat.ThreatShareVerifyRequest?> PromptVerifyThreatCandidateAsync(
+            Axiom.Contracts.Threat.ThreatShareCandidate candidate,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<Axiom.Contracts.Threat.ThreatShareVerifyRequest?>(null);
     }
 
     private sealed class FakeShellActions : IShellActions

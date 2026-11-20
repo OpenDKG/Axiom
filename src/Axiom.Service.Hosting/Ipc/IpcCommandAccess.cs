@@ -108,6 +108,7 @@ public static class IpcCommandAccess
         IpcCommandTypes.ProtectionDismiss,
         IpcCommandTypes.ProtectionLockdown,
         IpcCommandTypes.ThreatShareEnqueue,
+        IpcCommandTypes.ThreatShareVerify,
         IpcCommandTypes.ThreatShareDismiss,
         IpcCommandTypes.ThreatShareRecord,
         IpcCommandTypes.NetworkRecoveryCapture,

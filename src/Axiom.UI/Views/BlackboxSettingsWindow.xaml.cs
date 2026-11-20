@@ -64,7 +64,7 @@ public partial class BlackboxSettingsWindow : Window
 
         DiscoverCheck.IsChecked = ReadBool(settings, "discover", true);
         OsvCheck.IsChecked = ReadBool(settings, "osv_lookup", true);
-        ReportCheck.IsChecked = false;
+        ReportCheck.IsChecked = ReadBool(settings, "report", false);
 
         var categories = settings["categories"] as JsonObject;
         PopulateCategory(categories, "injection", InjectionCheck, InjectionSeverity, severities);
@@ -122,6 +122,7 @@ public partial class BlackboxSettingsWindow : Window
             ["block_severity"] = BlockSeverityBox.SelectedItem?.ToString() ?? "critical",
             ["discover"] = DiscoverCheck.IsChecked == true,
             ["osv_lookup"] = OsvCheck.IsChecked == true,
+            ["report"] = ReportCheck.IsChecked == true,
             ["categories"] = new JsonObject
             {
                 ["injection"] = CategoryPatch(InjectionCheck, InjectionSeverity),
@@ -133,11 +134,6 @@ public partial class BlackboxSettingsWindow : Window
             ["protected_paths"] = new JsonArray(
                 _paths.Select(path => (JsonNode?)JsonValue.Create(path)).ToArray()),
         };
-
-        if (ReportCheck.IsChecked == true)
-        {
-            patch["report"] = false;
-        }
 
         SaveButton.IsEnabled = false;
         SetStatus("Saving…");

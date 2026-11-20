@@ -115,7 +115,7 @@ public sealed class ThreatShareLauncherTests
                     packages = new { venv = new { environment = env } },
                 }));
 
-            var python = ThreatShareLauncher.FindRuntimePython(root);
+            var python = ThreatShareLauncher.FindRuntimePython(root, windows: true);
 
             Assert.Equal(Path.Combine(env, "Scripts", "python.exe"), python);
         }
@@ -130,6 +130,58 @@ public sealed class ThreatShareLauncherTests
                 // A locked temp file must not fail the test.
             }
         }
+    }
+
+    [Fact]
+    public void Posix_runtime_interpreter_uses_bin_python_or_python3()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "axiom-threatshare-posix-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var env = Path.Combine(root, "hermes", "installs", "abc", "environments", "env1", "venv");
+            Directory.CreateDirectory(Path.Combine(env, "bin"));
+            var py3 = Path.Combine(env, "bin", "python3");
+            File.WriteAllText(py3, string.Empty);
+            Directory.CreateDirectory(Path.Combine(root, "hermes", "installs", "abc"));
+            File.WriteAllText(
+                Path.Combine(root, "hermes", "installs", "abc", "facts.json"),
+                JsonSerializer.Serialize(new
+                {
+                    packages = new { venv = new { environment = env } },
+                }));
+
+            Assert.Equal(py3, ThreatShareLauncher.FindRuntimePython(root, windows: false));
+
+            var py = Path.Combine(env, "bin", "python");
+            File.WriteAllText(py, string.Empty);
+            Assert.Equal(py, ThreatShareLauncher.FindRuntimePython(root, windows: false));
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
+    [Fact]
+    public void Reporter_root_falls_back_to_hermes_home_when_managed_tree_is_absent()
+    {
+        var managed = Path.Combine("C:", "axiom", "modules", "blackbox", "agent-blackbox");
+        var hermes = Path.Combine("C:", "users", "me", ".hermes");
+        var hermesPlugin = Path.Combine(hermes, "plugins", "blackbox");
+
+        var resolved = ThreatShareCli.ResolveReporterRoot(
+            managed,
+            hermes,
+            path => string.Equals(path, hermesPlugin, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(hermes, resolved);
+        Assert.True(ThreatShareCli.IsUnavailable("python: No such file or directory"));
     }
 
     [Fact]

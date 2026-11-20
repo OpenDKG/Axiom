@@ -9,6 +9,9 @@ public enum ThreatShareSource
 
     /// <summary>An IOC the AI Analyst reported from agent evidence.</summary>
     AiAnalyst = 1,
+
+    /// <summary>An IOC explicitly added or verified by the operator.</summary>
+    Operator = 2,
 }
 
 /// <summary>Local evidence provenance class; never silently upgraded in storage.</summary>
@@ -131,6 +134,7 @@ public sealed record ThreatShareCandidate
     {
         ThreatShareSource.PrivacyShield => "Privacy Shield",
         ThreatShareSource.AiAnalyst => "AI Analyst",
+        ThreatShareSource.Operator => "Manual",
         _ => "Axiom",
     };
 
@@ -145,6 +149,18 @@ public sealed record ThreatShareCandidate
         ThreatShareVocabulary.EvaluatePublicationEligibility(
             IndicatorType, Value, Reason, EvidenceClass, ProofGrade).Eligibility >=
                 ThreatSharePublicationEligibility.NeedsOperatorReview;
+
+    /// <summary>
+    /// True when an operator can classify and confirm reproducible evidence to promote this candidate
+    /// into reviewable publication status (excludes local-only resolvers, public feeds, shared hosts,
+    /// and indicators already verified, disputed or revoked).
+    /// </summary>
+    public bool CanVerifyForOperatorReview =>
+        !CanPublishToCommunity &&
+        PublicationEligibility == ThreatSharePublicationEligibility.NeedsEvidence &&
+        EligibilityReasonCode is not ("SHARED_HOSTING_APEX" or "NEVER_PROMOTE_SHARED_IP") &&
+        NoveltyStatus is not (ThreatShareNoveltyStatus.KnownVerified or ThreatShareNoveltyStatus.Disputed or
+            ThreatShareNoveltyStatus.Revoked);
 
     public string NoveltyLabel => NoveltyStatus switch
     {
@@ -239,6 +255,9 @@ public sealed record ThreatShareItem(
     };
 
     public bool HasStateDetail => StateDetail.Length > 0;
+
+    /// <summary>True when this pending row can be promoted by explicit operator verification.</summary>
+    public bool CanVerify => State == ThreatShareState.Pending && Candidate.CanVerifyForOperatorReview;
 }
 
 /// <summary>The preview list and counters the Agents page shows.</summary>
@@ -266,6 +285,20 @@ public sealed record ThreatShareQueueStatus
 public sealed record ThreatShareDismissRequest
 {
     public required string Id { get; init; }
+}
+
+/// <summary>Operator verification of a queued candidate with closed-vocabulary reason, context and severity.</summary>
+public sealed record ThreatShareVerifyRequest
+{
+    public required string Id { get; init; }
+
+    public required string Reason { get; init; }
+
+    public required string Context { get; init; }
+
+    public string Severity { get; init; } = "high";
+
+    public string Detail { get; init; } = string.Empty;
 }
 
 /// <summary>Recorded by the desktop after it ran the Blackbox CLI in the user's own session.</summary>

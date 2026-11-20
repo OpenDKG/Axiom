@@ -165,6 +165,24 @@ public sealed class ThreatShareTests
         var retracted = new ThreatShareItem(candidate, ThreatShareState.Retracted, string.Empty, DateTimeOffset.UtcNow);
         Assert.Equal("retracted", retracted.StateLabel);
         Assert.Contains("CC0 replicas", retracted.StateDetail, StringComparison.Ordinal);
+
+        var needsVerify = candidate with
+        {
+            Context = ThreatShareVocabulary.ObservedNetworkContext,
+            EvidenceClass = ThreatShareEvidenceClass.HeuristicOrAiSuspected,
+            ProofGrade = ThreatShareProofGrade.Observed,
+            PublicationEligibility = ThreatSharePublicationEligibility.NeedsEvidence,
+            EligibilityReasonCode = "BEHAVIOR_NEEDS_VERIFICATION",
+        };
+        Assert.False(needsVerify.CanPublishToCommunity);
+        Assert.True(needsVerify.CanVerifyForOperatorReview);
+        Assert.True(new ThreatShareItem(needsVerify, ThreatShareState.Pending, string.Empty, null).CanVerify);
+        Assert.False(new ThreatShareItem(needsVerify, ThreatShareState.Dismissed, string.Empty, null).CanVerify);
+        Assert.False((needsVerify with { EligibilityReasonCode = "SHARED_HOSTING_APEX" }).CanVerifyForOperatorReview);
+        Assert.False((needsVerify with { EligibilityReasonCode = "NEVER_PROMOTE_SHARED_IP" }).CanVerifyForOperatorReview);
+        Assert.False((needsVerify with { PublicationEligibility = ThreatSharePublicationEligibility.LocalOnly }).CanVerifyForOperatorReview);
+        Assert.False((needsVerify with { NoveltyStatus = ThreatShareNoveltyStatus.KnownVerified }).CanVerifyForOperatorReview);
+        Assert.Equal("Manual", (candidate with { Source = ThreatShareSource.Operator }).SourceLabel);
     }
 
     [Theory]

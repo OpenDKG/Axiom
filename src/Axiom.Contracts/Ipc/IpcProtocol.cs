@@ -58,6 +58,7 @@ public static class IpcCommandTypes
     public const string ProtectionLockdown = "protection.lockdown";
     public const string ThreatShareStatus = "threatshare.status";
     public const string ThreatShareEnqueue = "threatshare.enqueue";
+    public const string ThreatShareVerify = "threatshare.verify";
     public const string ThreatShareDismiss = "threatshare.dismiss";
     public const string ThreatShareRecord = "threatshare.record";
     public const string NetworkRecoveryCapture = "networkRecovery.capture";
@@ -93,6 +94,7 @@ public static class IpcCommandTypes
         ProtectionLockdown,
         ThreatShareStatus,
         ThreatShareEnqueue,
+        ThreatShareVerify,
         ThreatShareDismiss,
         ThreatShareRecord,
         NetworkRecoveryCapture,

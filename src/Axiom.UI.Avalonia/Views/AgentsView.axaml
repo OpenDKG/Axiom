@@ -149,6 +149,7 @@
               </Border>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <Button Content="Add indicator…" Command="{Binding AddThreatShareIndicatorCommand}" IsEnabled="{Binding CanAddThreatShareIndicator}" Padding="12,6" />
               <Button Content="Send now" Command="{Binding SubmitThreatShareCommand}" IsEnabled="{Binding CanSubmitThreatShare}" Padding="12,6" />
               <Button Content="{Binding ThreatSharingButtonText}"
                       Command="{Binding ToggleThreatSharingCommand}" IsEnabled="{Binding CanToggleThreatSharing}"
@@ -156,15 +157,19 @@
             </StackPanel>
           </Grid>
           <controls:AxiomSelectableTextBlock
-                     Text="Axiom keeps AI suggestions, observed endpoints and public blocklist matches local. A manual report needs verified evidence and your confirmation of the exact indicator."
+                     Text="Axiom keeps AI suggestions, observed endpoints and public blocklist matches local until you verify evidence or add an indicator manually. Every manual report shows the exact indicator for confirmation."
                      FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-          <StackPanel Spacing="4" IsVisible="{Binding CanDisableBlackboxAutomaticSharing}">
+          <StackPanel Spacing="4" IsVisible="{Binding CanToggleBlackboxAutomaticSharing}">
             <controls:AxiomSelectableTextBlock
-                       Text="Blackbox automatic sharing is active. Blackbox can publish its own reports and digests independently of the Axiom queue."
+                       Text="{Binding BlackboxAutomaticSharingStatusText}"
                        IsVisible="{Binding BlackboxAutomaticSharing}"
                        FontSize="10" Foreground="{DynamicResource Axiom.Warning}" TextWrapping="Wrap" />
-            <Button Content="Turn off Blackbox automatic sharing"
-                    Command="{Binding DisableBlackboxAutomaticSharingCommand}" HorizontalAlignment="Left" Padding="10,5" />
+            <controls:AxiomSelectableTextBlock
+                       Text="{Binding BlackboxAutomaticSharingStatusText}"
+                       IsVisible="{Binding !BlackboxAutomaticSharing}"
+                       FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <Button Content="{Binding BlackboxAutomaticSharingButtonText}"
+                    Command="{Binding ToggleBlackboxAutomaticSharingCommand}" HorizontalAlignment="Left" Padding="10,5" />
           </StackPanel>
           <Border Background="{DynamicResource Axiom.SurfaceAlt}"
                   BorderBrush="{DynamicResource Axiom.Border}"
@@ -185,7 +190,7 @@
           <ItemsControl ItemsSource="{Binding ThreatShareCandidates}" IsVisible="{Binding HasThreatShareCandidates}">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
-                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" Margin="0,2">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8" Margin="0,2">
                   <StackPanel Grid.Column="0" Spacing="1">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                       <controls:AxiomSelectableTextBlock Text="{Binding Candidate.Value}" FontSize="11"
@@ -200,11 +205,16 @@
                     <controls:AxiomSelectableTextBlock Text="{Binding StateDetail}" IsVisible="{Binding HasStateDetail}"
                                FontSize="9" Foreground="{DynamicResource Axiom.Warning}" TextWrapping="Wrap" />
                   </StackPanel>
-                  <Button Grid.Column="1" Content="{Binding ActionLabel}" Padding="9,3" FontSize="10"
+                  <Button Grid.Column="1" Content="Verify…" Padding="9,3" FontSize="10"
+                          IsVisible="{Binding CanVerify}"
+                          Command="{Binding $parent[UserControl].DataContext.VerifyThreatShareItemCommand}"
+                          CommandParameter="{Binding}" />
+                  <Button Grid.Column="2" Content="{Binding ActionLabel}" Padding="9,3" FontSize="10"
+                          IsVisible="{Binding Candidate.CanPublishToCommunity}"
                           IsEnabled="{Binding $parent[UserControl].DataContext.CanShareThreatShareItem}"
                           Command="{Binding $parent[UserControl].DataContext.ShareThreatShareItemCommand}"
                           CommandParameter="{Binding}" />
-                  <Button Grid.Column="2" Content="Dismiss" Padding="9,3" FontSize="10"
+                  <Button Grid.Column="3" Content="Dismiss" Padding="9,3" FontSize="10"
                           Command="{Binding $parent[UserControl].DataContext.DismissThreatShareCommand}"
                           CommandParameter="{Binding}" />
                 </Grid>

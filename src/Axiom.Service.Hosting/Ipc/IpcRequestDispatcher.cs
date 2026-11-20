@@ -65,6 +65,8 @@ public sealed class IpcRequestDispatcher
 
     private readonly Func<ThreatShareEnqueueRequest, CancellationToken, Task<ThreatShareQueueStatus>>? _threatShareEnqueue;
 
+    private readonly Func<ThreatShareVerifyRequest, CancellationToken, Task<ThreatShareQueueStatus>>? _threatShareVerify;
+
     private readonly Func<ThreatShareDismissRequest, CancellationToken, Task<ThreatShareQueueStatus>>? _threatShareDismiss;
 
     private readonly Func<ThreatShareRecordRequest, CancellationToken, Task<ThreatShareQueueStatus>>? _threatShareRecord;
@@ -113,6 +115,7 @@ public sealed class IpcRequestDispatcher
         _protectionLockdown = handlers.ProtectionLockdown;
         _threatShareStatus = handlers.ThreatShareStatus;
         _threatShareEnqueue = handlers.ThreatShareEnqueue;
+        _threatShareVerify = handlers.ThreatShareVerify;
         _threatShareDismiss = handlers.ThreatShareDismiss;
         _threatShareRecord = handlers.ThreatShareRecord;
         _networkRecoveryCapture = handlers.NetworkRecoveryCapture;
@@ -662,6 +665,35 @@ public sealed class IpcRequestDispatcher
                     await WriteResultAsync(stream, envelope.Id, enqueued, cancellationToken).ConfigureAwait(false);
                     break;
 
+                case IpcCommandTypes.ThreatShareVerify:
+                    if (_threatShareVerify is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.NotSupported,
+                            "Threat sharing is not available in this build.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var verifyRequest = DeserializePayload<ThreatShareVerifyRequest>(envelope.Payload);
+                    if (verifyRequest is null)
+                    {
+                        await WriteErrorAsync(
+                            stream,
+                            envelope.Id,
+                            IpcErrorCodes.InvalidRequest,
+                            "Threat share verify payload is invalid.",
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+
+                    var verified = await _threatShareVerify(verifyRequest, cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteResultAsync(stream, envelope.Id, verified, cancellationToken).ConfigureAwait(false);
+                    break;
+
                 case IpcCommandTypes.ThreatShareDismiss:
                     if (_threatShareDismiss is null)
                     {
@@ -1037,6 +1069,11 @@ public sealed class IpcRequestDispatcher
         if (_threatShareEnqueue is not null)
         {
             commands.Add(IpcCommandTypes.ThreatShareEnqueue);
+        }
+
+        if (_threatShareVerify is not null)
+        {
+            commands.Add(IpcCommandTypes.ThreatShareVerify);
         }
 
         if (_threatShareDismiss is not null)
