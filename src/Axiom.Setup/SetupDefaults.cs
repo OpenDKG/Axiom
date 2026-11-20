@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using Axiom.Contracts.Blackbox;
 using Axiom.Contracts.Community;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.Privacy;
@@ -49,7 +50,8 @@ internal static class SetupDefaults
         Action<string> report,
         CancellationToken cancellationToken,
         bool serviceAlreadyRegistered = false,
-        bool allowManualThreatSharing = false)
+        bool allowManualThreatSharing = false,
+        bool enableAutomaticThreatSharing = false)
     {
         var marker = new Dictionary<string, object?>
         {
@@ -63,6 +65,18 @@ internal static class SetupDefaults
         if (allowManualThreatSharing && !ThreatSharingConsent.TrySetPermission(true))
         {
             report("The manual threat-reporting preference could not be saved. Review it in Agent Protection.");
+        }
+
+        if (enableAutomaticThreatSharing)
+        {
+            BlackboxAutomaticSharingProvisioner.TryMarkPending();
+            using var blackboxClient = new BlackboxDashboardClient();
+            var enabled = await BlackboxAutomaticSharingProvisioner
+                .TryApplyToDashboardAsync(blackboxClient, cancellationToken)
+                .ConfigureAwait(false);
+            report(enabled
+                ? "Blackbox automatic community threat sharing: enabled (consented during setup)."
+                : "Blackbox automatic community threat sharing: consented during setup; will activate when Blackbox starts.");
         }
 
         try

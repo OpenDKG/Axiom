@@ -146,6 +146,7 @@ internal sealed class SetupNativeWindow : IDisposable
     private bool _startAfterInstall;
     private bool _acceptRisk;
     private bool _allowManualThreatSharing;
+    private bool _enableAutomaticThreatSharing;
     private bool _installing;
     private bool _lastOperationWasUninstall;
     private bool _lastOperationWasRepair;
@@ -169,6 +170,7 @@ internal sealed class SetupNativeWindow : IDisposable
         _startAfterInstall = options.StartAfterInstall;
         _acceptRisk = options.AcceptRisk;
         _allowManualThreatSharing = options.AllowManualThreatSharing;
+        _enableAutomaticThreatSharing = options.EnableAutomaticThreatSharing;
         _appVersionText = ReadSetupVersion();
     }
 
@@ -730,7 +732,7 @@ internal sealed class SetupNativeWindow : IDisposable
             g, HitId.AgreeRow, rx, y + riskH - S(30), rw, S(24),
             _acceptRisk,
             _completeMode
-                ? "I accept these risks and allow manual threat reports I confirm."
+                ? "I accept these risks, Blackbox Reporter Terms, and enable automatic threat sharing."
                 : "I understand these risks and accept using Axiom at my own risk.");
     }
 
@@ -1218,6 +1220,7 @@ internal sealed class SetupNativeWindow : IDisposable
                 {
                     _acceptRisk = false;
                     _allowManualThreatSharing = false;
+                    _enableAutomaticThreatSharing = false;
                 }
 
                 _completeMode = true;
@@ -1366,6 +1369,7 @@ internal sealed class SetupNativeWindow : IDisposable
     {
         _acceptRisk = !_acceptRisk;
         _allowManualThreatSharing = _acceptRisk && _completeMode;
+        _enableAutomaticThreatSharing = _acceptRisk && _completeMode;
         InvalidateWindow();
     }
 
@@ -1400,6 +1404,7 @@ internal sealed class SetupNativeWindow : IDisposable
             CompleteInstallation = _completeMode,
             AllowManualThreatSharing = _completeMode &&
                 (isRepair ? ThreatSharingConsent.HasConsent() : _allowManualThreatSharing),
+            EnableAutomaticThreatSharing = _completeMode && !isRepair && _enableAutomaticThreatSharing,
         };
 
         var progress = new NativeLogProgress(message =>

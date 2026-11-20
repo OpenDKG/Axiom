@@ -609,7 +609,25 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 }
 
                 ApplyFindings(findingsTask.Result);
-                ApplyHealth(settingsTask.Result, graphTask.Result);
+                var effectiveSettings = settingsTask.Result;
+                if (BlackboxAutomaticSharingProvisioner.IsPending())
+                {
+                    var alreadyEnabled = effectiveSettings["report"] is JsonValue reportVal &&
+                                         reportVal.TryGetValue<bool>(out var reportEnabled) &&
+                                         reportEnabled;
+                    if (alreadyEnabled)
+                    {
+                        BlackboxAutomaticSharingProvisioner.TryMarkApplied();
+                    }
+                    else if (await BlackboxAutomaticSharingProvisioner
+                                 .TryApplyToDashboardAsync(_client, token)
+                                 .ConfigureAwait(true))
+                    {
+                        effectiveSettings = await _client.GetSettingsAsync(token).ConfigureAwait(true);
+                    }
+                }
+
+                ApplyHealth(effectiveSettings, graphTask.Result);
                 ApplyHookEvidence();
                 await RefreshEnforcementAsync(
                     guardAvailable: true,
@@ -1313,6 +1331,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                 return;
             }
 
+            BlackboxAutomaticSharingProvisioner.TryMarkApplied();
             var settings = await _client.GetSettingsAsync(CancellationToken.None).ConfigureAwait(true);
             UpdateBlackboxSharing(settings);
             ThreatShareActionText = _blackboxSharingKnown && BlackboxAutomaticSharing == enable

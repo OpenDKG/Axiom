@@ -88,8 +88,9 @@ internal static class Program
             if (!options.AcceptRisk)
             {
                 Console.Error.WriteLine(
-                    "Axiom is a development build. Pass --accept-risk with --silent to confirm that you use it at your own risk. "
-                    + "Manual threat reporting is a separate opt-in (--allow-manual-threat-sharing). Each report requires confirmation in Axiom.");
+                    "Axiom is a development build. Pass --accept-risk with --silent to confirm that you use it at your own risk "
+                    + "and enable Blackbox automatic community threat sharing on Complete installs (pass --no-automatic-threat-sharing to keep it off). "
+                    + "Manual threat reporting is a separate opt-in (--allow-manual-threat-sharing).");
                 Environment.ExitCode = 2;
                 return;
             }

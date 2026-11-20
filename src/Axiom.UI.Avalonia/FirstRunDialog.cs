@@ -6,6 +6,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Axiom.Contracts.Blackbox;
 using Axiom.Presentation;
 
 namespace Axiom.UI.Avalonia;
@@ -25,11 +26,12 @@ public sealed class FirstRunDialog : Window
     private readonly CheckBox _dkg = new() { Content = "OriginTrail DKG testnet (npm package, local node)", Foreground = ForegroundBrush, IsVisible = OperatingSystem.IsWindows() };
     private readonly CheckBox _blackbox = new() { Content = "Blackbox (Umanitek official installer; large third-party download)", Foreground = ForegroundBrush, IsVisible = OperatingSystem.IsWindows() };
     private readonly CheckBox _community = new() { Content = "Axiom starter community feed (bundled, offline)", IsChecked = true, Foreground = ForegroundBrush };
+    private readonly CheckBox _automaticSharing = new() { Content = "Enable Blackbox automatic community threat sharing (Reporter Terms apply; toggle anytime on Agents)", IsChecked = true, Foreground = ForegroundBrush };
     private readonly CheckBox _accept = new()
     {
         Content = new TextBlock
         {
-            Text = "I understand this is a development build and accept the third-party terms and changes above.",
+            Text = "I understand this is a development build and accept the third-party and Blackbox Reporter Terms for the selections above.",
             Foreground = ForegroundBrush,
             TextWrapping = TextWrapping.Wrap,
         },
@@ -110,6 +112,15 @@ public sealed class FirstRunDialog : Window
             }
         }
 
+        if (dialog._automaticSharing.IsChecked == true)
+        {
+            BlackboxAutomaticSharingProvisioner.TryMarkPending();
+            using var blackboxClient = new BlackboxDashboardClient();
+            await BlackboxAutomaticSharingProvisioner
+                .TryApplyToDashboardAsync(blackboxClient, CancellationToken.None)
+                .ConfigureAwait(true);
+        }
+
         var installer = new OptionalModuleInstaller();
         if (settings.Dkg)
         {
@@ -154,7 +165,8 @@ public sealed class FirstRunDialog : Window
             new SelectableTextBlock { Text = "Local file scanner — SHA-256 on demand, no upload (built in)", Foreground = MutedBrush, FontSize = 11, TextWrapping = TextWrapping.Wrap },
             _dkg,
             _blackbox,
-            _community));
+            _community,
+            _automaticSharing));
         panel.Children.Add(Card(
             "Before you apply",
             new SelectableTextBlock

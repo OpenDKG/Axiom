@@ -11,7 +11,11 @@ namespace Axiom.UI.Tests;
 
 public sealed class LifecycleAndSetupRegressionTests
 {
+    private static readonly string[] SetupBuildConfigurations = ["Release", "Debug"];
     private static readonly string[] EmptyInstallDirArgs = ["--install-dir", "   "];
+    private static readonly string[] ConsentedCompleteArgs = ["--silent", "--accept-risk"];
+    private static readonly string[] OptedOutCompleteArgs = ["--silent", "--accept-risk", "--no-automatic-threat-sharing"];
+    private static readonly string[] ConsentedPartialArgs = ["--silent", "--accept-risk", "--partial"];
     [Fact]
     public void Wpf_agents_merge_activity_caps_retained_entries_at_activity_max()
     {
@@ -58,15 +62,10 @@ public sealed class LifecycleAndSetupRegressionTests
     [Fact]
     public void Setup_options_and_service_query_name_handle_edge_cases()
     {
-        var setupAssemblyPath = Path.Combine(
-            FindRepoRoot(),
-            "src",
-            "Axiom.Setup",
-            "bin",
-            "Debug",
-            "net10.0-windows",
-            "Axiom.Setup.dll");
-        if (!File.Exists(setupAssemblyPath))
+        var setupAssemblyPath = SetupBuildConfigurations
+            .Select(config => Path.Combine(FindRepoRoot(), "src", "Axiom.Setup", "bin", config, "net10.0-windows", "Axiom.Setup.dll"))
+            .FirstOrDefault(File.Exists);
+        if (setupAssemblyPath is null)
         {
             return;
         }
@@ -80,6 +79,16 @@ public sealed class LifecycleAndSetupRegressionTests
         Assert.Equal(Path.GetFullPath(customDir), optionsType.GetProperty("InstallDir")!.GetValue(equalsParsed));
         Assert.True((bool)optionsType.GetProperty("Silent")!.GetValue(equalsParsed)!);
         Assert.False((bool)optionsType.GetProperty("StartAfterInstall")!.GetValue(equalsParsed)!);
+        Assert.False((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(equalsParsed)!);
+
+        var consentedComplete = parse.Invoke(null, [ConsentedCompleteArgs])!;
+        Assert.True((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(consentedComplete)!);
+
+        var optedOutComplete = parse.Invoke(null, [OptedOutCompleteArgs])!;
+        Assert.False((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(optedOutComplete)!);
+
+        var consentedPartial = parse.Invoke(null, [ConsentedPartialArgs])!;
+        Assert.False((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(consentedPartial)!);
 
         // Empty or invalid --install-dir values must fall back cleanly instead of throwing ArgumentException.
         var emptyParsed = parse.Invoke(null, [EmptyInstallDirArgs])!;

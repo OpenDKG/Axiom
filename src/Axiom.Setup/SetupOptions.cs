@@ -11,7 +11,8 @@ public sealed record SetupOptions(
     bool Silent = false,
     bool AcceptRisk = false,
     bool Uninstall = false,
-    bool AllowManualThreatSharing = false)
+    bool AllowManualThreatSharing = false,
+    bool EnableAutomaticThreatSharing = false)
 {
     public static SetupOptions Parse(string[] args)
     {
@@ -27,6 +28,7 @@ public sealed record SetupOptions(
         var acceptRisk = false;
         var uninstall = false;
         var allowManualThreatSharing = false;
+        var disableAutomaticThreatSharing = false;
 
         for (var index = 0; index < args.Length; index++)
         {
@@ -61,6 +63,9 @@ public sealed record SetupOptions(
                 case "--allow-manual-threat-sharing":
                     allowManualThreatSharing = true;
                     break;
+                case "--no-automatic-threat-sharing":
+                    disableAutomaticThreatSharing = true;
+                    break;
                 case "--uninstall":
                     uninstall = true;
                     break;
@@ -75,7 +80,8 @@ public sealed record SetupOptions(
             silent,
             acceptRisk,
             uninstall,
-            completeInstallation && allowManualThreatSharing);
+            completeInstallation && allowManualThreatSharing,
+            completeInstallation && acceptRisk && !disableAutomaticThreatSharing);
     }
 
     private static void TrySetInstallDir(string raw, ref string installDir)
