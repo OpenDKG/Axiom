@@ -252,6 +252,51 @@ public sealed class UpdateCheckServiceTests : IDisposable
         Assert.Equal(new Uri(url), handler.LastRequestUri);
     }
 
+    [Fact]
+    public async Task Release_notes_preserve_multiline_changelog_and_check_now_bypasses_cooldown()
+    {
+        var store = new UpdateSettingsStore(Path.Combine(_tempDir.FullName, "updates.json"));
+        var clock = new AdjustableTimeProvider(new DateTimeOffset(2026, 11, 21, 10, 0, 0, TimeSpan.Zero));
+        var handler = new QueueHandler();
+        handler.EnqueueJson(new
+        {
+            tag_name = "v1.4.8",
+            draft = false,
+            prerelease = false,
+            published_at = "2026-11-21T12:00:00Z",
+            html_url = "https://github.com/OpenDKG/Axiom/releases/tag/v1.4.8",
+            body = "## What's New\n- Fix **OpenChamber** hook registration\n- Add exact dates in findings",
+        });
+
+        using var http = new HttpClient(handler);
+        using var service = new UpdateCheckService(new Version(1, 4, 7), store, http, timeProvider: clock);
+
+        // Prime cooldown with a failed check first.
+        handler.EnqueueJson(new
+        {
+            tag_name = "v1.4.8",
+            draft = false,
+            prerelease = false,
+            published_at = "2026-11-21T12:00:00Z",
+            html_url = "https://github.com/OpenDKG/Axiom/releases/tag/v1.4.8",
+            body = "## What's New\n- Fix **OpenChamber** hook registration\n- Add exact dates in findings",
+        });
+
+        Assert.True(await service.CheckIfDueAsync());
+        Assert.Equal("What's New", service.SummaryText);
+        service.Dismiss();
+        Assert.False(service.IsUpdateAvailable);
+
+        // Within 6 hours, CheckNowAsync bypasses cooldown and dismissed state.
+        clock.Advance(TimeSpan.FromMinutes(10));
+        Assert.True(await service.CheckNowAsync());
+        Assert.True(service.LastCheckSucceeded);
+        Assert.True(service.IsUpdateAvailable);
+        Assert.Contains("• Fix OpenChamber hook registration", service.ReleaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("• Add exact dates in findings", service.ReleaseNotesText, StringComparison.Ordinal);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
     private sealed class RecordedProgress : IProgress<int>
     {
         public List<int> Values { get; } = [];

@@ -62,6 +62,10 @@ public sealed record SecurityModule(
             : Name.Length > 0 ? Name[..1] : string.Empty;
 
     public bool IsBlackbox => Name == "Blackbox";
+
+    public bool IsChecking => string.Equals(Status, "CHECKING", StringComparison.OrdinalIgnoreCase);
+
+    public bool IsDisconnected => !IsConnected && !IsChecking && !string.Equals(Status, "CONFIGURED", StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed partial class FileScanRow : ObservableObject
@@ -160,7 +164,7 @@ public sealed record ProtectedAgent(string Kind, string Target, string Status, s
 
     public bool ToneWarn => Status is "HOOK INSTALLED" or "TRUST REQUIRED" or "DETECTED" or "AUDIT ONLY" or "TESTING";
 
-    public bool ToneFail => Status is "DEGRADED" or "OFFLINE" or "FAIL";
+    public bool ToneFail => Status is "DEGRADED" or "OFFLINE" or "FAIL" or "NOT CONNECTED";
 
     public bool ToneIdle => !ToneOk && !ToneWarn && !ToneFail;
 
@@ -332,17 +336,25 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     public ObservableCollection<ModuleHealthSlot> ModuleHealthSlots { get; } = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DkgChecking))]
+    [NotifyPropertyChangedFor(nameof(DkgDisconnected))]
     private string _dkgBrandLabel = "OriginTrail DKG · checking";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BlackboxChecking))]
+    [NotifyPropertyChangedFor(nameof(BlackboxDisconnected))]
     private string _blackboxBrandLabel = "Umanitek Blackbox · checking";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DkgHealthLabel))]
+    [NotifyPropertyChangedFor(nameof(DkgChecking))]
+    [NotifyPropertyChangedFor(nameof(DkgDisconnected))]
     private bool _dkgConnected;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BlackboxHealthLabel))]
+    [NotifyPropertyChangedFor(nameof(BlackboxChecking))]
+    [NotifyPropertyChangedFor(nameof(BlackboxDisconnected))]
     private bool _blackboxConnected;
 
     [ObservableProperty]
@@ -351,6 +363,14 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     public string DkgHealthLabel => DkgConnected ? "CONNECTED" : "NOT CONNECTED";
 
     public string BlackboxHealthLabel => BlackboxConnected ? "CONNECTED" : "NOT CONNECTED";
+
+    public bool DkgChecking => !DkgConnected && DkgBrandLabel.Contains("checking", StringComparison.OrdinalIgnoreCase);
+
+    public bool DkgDisconnected => !DkgConnected && !DkgChecking;
+
+    public bool BlackboxChecking => !BlackboxConnected && BlackboxBrandLabel.Contains("checking", StringComparison.OrdinalIgnoreCase);
+
+    public bool BlackboxDisconnected => !BlackboxConnected && !BlackboxChecking;
 
     public ObservableCollection<SecurityModule> Modules { get; }
 
@@ -503,9 +523,11 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         }
     }
 
+    public bool IsAgentConnected => Modules.Any(module => module.IsAgentModule && module.IsConnected);
+
     public string AgentStatusBadge => DistributionContext.IsStorePackage
         ? "NOT INCLUDED"
-        : Modules.Any(module => module.IsAgentModule && module.IsConnected)
+        : IsAgentConnected
             ? "CONNECTED"
             : "OFFLINE";
 
@@ -533,7 +555,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         }
     }
 
-    public string SecurityStatusBadge => Modules.Any(module => module.IsSecurityModule && module.IsConnected)
+    public bool IsSecurityConnected => Modules.Any(module => module.IsSecurityModule && module.IsConnected);
+
+    public string SecurityStatusBadge => IsSecurityConnected
         ? "CONFIGURED"
         : "OFFLINE";
 
@@ -2503,9 +2527,11 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         OnPropertyChanged(nameof(StatusBadge));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(AgentStatusTitle));
+        OnPropertyChanged(nameof(IsAgentConnected));
         OnPropertyChanged(nameof(AgentStatusBadge));
         OnPropertyChanged(nameof(AgentStatusText));
         OnPropertyChanged(nameof(SecurityStatusTitle));
+        OnPropertyChanged(nameof(IsSecurityConnected));
         OnPropertyChanged(nameof(SecurityStatusBadge));
         OnPropertyChanged(nameof(SecurityStatusText));
     }

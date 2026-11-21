@@ -156,6 +156,8 @@ public sealed record BlackboxFinding(
 {
     public string TimeText => Timestamp?.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "—";
 
+    public string DateTimeText => Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? "—";
+
     public bool IsBlocked => string.Equals(Decision, "block", StringComparison.OrdinalIgnoreCase);
 
     public bool IsFlagged => string.Equals(Decision, "flag", StringComparison.OrdinalIgnoreCase);

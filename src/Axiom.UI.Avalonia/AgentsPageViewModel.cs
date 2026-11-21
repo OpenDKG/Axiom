@@ -81,6 +81,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     private bool _preservingFindingSelection;
 
+    private bool _preservingHookEvidenceSelection;
+
     private string? _selectedActivityIdentity;
 
     private bool _activityInitialized;
@@ -197,6 +199,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     public ObservableCollection<ActivityDetailRow> SelectedActivityDetails { get; } = [];
 
+    public ObservableCollection<ActivityDetailRow> SelectedHookEvidenceDetails { get; } = [];
+
     [ObservableProperty]
     private BlackboxAuditEntry? _selectedActivity;
 
@@ -208,6 +212,18 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     [ObservableProperty]
     private AgentEvidenceEvent? _selectedHookEvidence;
+
+    [ObservableProperty]
+    private bool _hasSelectedHookEvidence;
+
+    [ObservableProperty]
+    private string _selectedHookEvidenceTitle = "Select a hook evidence row to see what was evaluated or blocked.";
+
+    [ObservableProperty]
+    private bool _isSelectedHookEvidenceBlocked;
+
+    [ObservableProperty]
+    private bool _isSelectedHookEvidenceAllowed;
 
     [ObservableProperty]
     private string _selectedActivityTitle = "Select an activity row to see details.";
@@ -359,6 +375,9 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
     [ObservableProperty]
     private string _dkgHealthText = "DKG: unknown";
+
+    [ObservableProperty]
+    private bool _isBlackboxDkgReachable;
 
     [ObservableProperty]
     private string _axiomDkgHealthText = "Axiom DKG: unknown";
@@ -653,6 +672,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
                 ActivityStatusText = $"Blackbox is unavailable: {exception.Message}";
                 HealthStatusText = "Blackbox dashboard is offline or not responding.";
+                IsBlackboxDkgReachable = false;
                 SummaryText = "No live Blackbox data is available.";
                 _blackboxSharingKnown = false;
                 CanDisableBlackboxAutomaticSharing = false;
@@ -998,7 +1018,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         CopyToClipboard(string.Join(
             Environment.NewLine,
-            $"Time: {target.TimeText}",
+            $"Date & time: {target.DateTimeText}",
             $"Agent: {target.Agent}",
             $"Category: {target.Category}",
             $"Severity: {target.Severity}",
@@ -1019,7 +1039,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         CopyToClipboard(string.Join(
             Environment.NewLine,
-            $"Time: {target.Timestamp:O}",
+            $"Date & time: {target.DateTimeText} ({target.Timestamp:O})",
             $"Framework: {target.Framework}",
             $"Event: {target.EventType}",
             $"Tool: {target.Tool}",
@@ -2012,6 +2032,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         _activityTotal = Math.Max(page.Total, _allActivity.Count);
         UpdateActivitySummary();
         ApplyFilters();
+        if (SelectedHookEvidence is not null)
+        {
+            UpdateSelectedHookEvidenceDetails(SelectedHookEvidence);
+        }
     }
 
     internal void MergeActivity(BlackboxAuditPage page)
@@ -2222,7 +2246,11 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
             .FirstOrDefault();
         LastBlockedText = lastBlocked is null
             ? "No blocked action observed."
-            : $"{lastBlocked.TimeText} · {lastBlocked.Agent} · {lastBlocked.Tool} · {lastBlocked.Identifier}";
+            : $"{lastBlocked.DateTimeText} · {lastBlocked.Agent} · {lastBlocked.Tool} · {lastBlocked.Identifier}";
+        if (SelectedHookEvidence is not null)
+        {
+            UpdateSelectedHookEvidenceDetails(SelectedHookEvidence);
+        }
     }
 
     private static string FindingIdentity(BlackboxFinding finding) =>
@@ -2386,6 +2414,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
 
         var dkgUrl = ReadString(graph, "dkg_url") ?? "unknown";
         var reachable = ReadBool(graph, "node_reachable", false);
+        IsBlackboxDkgReachable = reachable;
         DkgHealthText = $"Blackbox DKG: {dkgUrl} · {(reachable ? "reachable" : "offline")}";
 
         var dkgModule = Security.Modules.FirstOrDefault(module => module.Name == "OriginTrail DKG");
@@ -2446,9 +2475,7 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                     }
 
                     var local = item.LastSeenUtc.ToLocalTime();
-                    var when = local.Date == DateTime.Today
-                        ? local.ToString("HH:mm", CultureInfo.InvariantCulture)
-                        : local.ToString("MM-dd HH:mm", CultureInfo.InvariantCulture);
+                    var when = local.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
                     return new AgentSessionRow(
                         ProviderLabel(item.Framework),
                         title,
@@ -2489,8 +2516,10 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         if (!HookEvidence.SequenceEqual(recent))
         {
             var selected = SelectedHookEvidence;
+            _preservingHookEvidenceSelection = true;
             CollectionSync.SyncInPlace(HookEvidence, recent);
 
+            _preservingHookEvidenceSelection = false;
             SelectedHookEvidence = selected is null
                 ? null
                 : HookEvidence.FirstOrDefault(item =>
@@ -2498,7 +2527,13 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
                     string.Equals(item.Framework, selected.Framework, StringComparison.Ordinal) &&
                     string.Equals(item.EventType, selected.EventType, StringComparison.Ordinal) &&
                     string.Equals(item.Tool, selected.Tool, StringComparison.Ordinal) &&
-                    string.Equals(item.Decision, selected.Decision, StringComparison.Ordinal));
+                    string.Equals(item.Decision, selected.Decision, StringComparison.Ordinal) &&
+                    string.Equals(item.Session, selected.Session, StringComparison.Ordinal) &&
+                    string.Equals(item.Call, selected.Call, StringComparison.Ordinal));
+            if (SelectedHookEvidence is null && HasSelectedHookEvidence)
+            {
+                UpdateSelectedHookEvidenceDetails(null);
+            }
         }
 
         _latestEvidenceUtc = HookEvidence.Count == 0
@@ -2680,6 +2715,203 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         SelectedActivityDetails.Add(new ActivityDetailRow(label, RedactAndClamp(value, 8_000)));
+    }
+
+    partial void OnSelectedHookEvidenceChanged(AgentEvidenceEvent? value)
+    {
+        if (value is null && _preservingHookEvidenceSelection)
+        {
+            return;
+        }
+
+        UpdateSelectedHookEvidenceDetails(value);
+    }
+
+    private void UpdateSelectedHookEvidenceDetails(AgentEvidenceEvent? evidence)
+    {
+        SelectedHookEvidenceDetails.Clear();
+        if (evidence is null)
+        {
+            HasSelectedHookEvidence = false;
+            IsSelectedHookEvidenceBlocked = false;
+            IsSelectedHookEvidenceAllowed = false;
+            SelectedHookEvidenceTitle = "Select a hook evidence row to see what was evaluated or blocked.";
+            return;
+        }
+
+        HasSelectedHookEvidence = true;
+        var isBlocked = string.Equals(evidence.EventType, "GUARD_BLOCKED", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(evidence.Decision, "block", StringComparison.OrdinalIgnoreCase);
+        IsSelectedHookEvidenceBlocked = isBlocked;
+        IsSelectedHookEvidenceAllowed = !isBlocked &&
+                                        string.Equals(evidence.EventType, "GUARD_ALLOWED", StringComparison.OrdinalIgnoreCase);
+
+        var actionLabel = isBlocked
+            ? "BLOCKED"
+            : IsSelectedHookEvidenceAllowed
+                ? "ALLOWED"
+                : evidence.EventType;
+        SelectedHookEvidenceTitle = string.IsNullOrWhiteSpace(evidence.Tool)
+            ? $"{evidence.Framework} · {actionLabel}"
+            : $"{evidence.Framework} · {actionLabel} · {evidence.Tool}";
+
+        AddHookEvidenceDetail("Date & time", evidence.DateTimeText);
+        AddHookEvidenceDetail("Framework", evidence.Framework);
+        AddHookEvidenceDetail("Event", evidence.EventType);
+        AddHookEvidenceDetail("Decision", evidence.Decision);
+        AddHookEvidenceDetail("Guard status", evidence.GuardStatus);
+        AddHookEvidenceDetail("Tool", evidence.Tool);
+        AddHookEvidenceDetail("Channel", evidence.EffectiveChannel);
+        if (evidence.DurationMs > 0)
+        {
+            AddHookEvidenceDetail("Duration", FormatDuration(evidence.DurationMs));
+        }
+
+        AddHookEvidenceDetail("Session", evidence.Session);
+        AddHookEvidenceDetail("Call ID", evidence.Call);
+        AddHookEvidenceDetail("Error", evidence.ErrorCode);
+
+        var finding = FindCorrelatedFinding(evidence, isBlocked);
+        var activity = FindCorrelatedActivity(evidence, isBlocked);
+        if (finding is not null)
+        {
+            AddHookEvidenceDetail("Blocked / finding", finding.Title);
+            AddHookEvidenceDetail("Category", finding.Category, redact: false);
+            AddHookEvidenceDetail("Severity", finding.Severity, redact: false);
+            AddHookEvidenceDetail("Identifier", finding.Identifier, redact: false);
+            AddHookEvidenceDetail("Outcome", finding.SecurityOutcome, redact: false);
+        }
+
+        if (activity is not null)
+        {
+            AddHookEvidenceDetail("Action", activity.ActionSummary);
+            AddHookEvidenceDetail("Command", activity.Detail?.Command);
+            AddHookEvidenceDetail("Path", activity.Detail?.Path);
+            AddHookEvidenceDetail("URL", activity.Detail?.Url);
+            if (finding is null)
+            {
+                AddHookEvidenceDetail("Activity finding", activity.Detail?.FindingTitle);
+                AddHookEvidenceDetail("Outcome", activity.SecurityOutcome);
+            }
+        }
+
+        if (finding is null && activity is null)
+        {
+            AddHookEvidenceDetail(
+                "Blocked / action",
+                "No correlated Blackbox finding or action detail is loaded for this event (hook evidence stores non-sensitive metadata only).");
+        }
+    }
+
+    private void AddHookEvidenceDetail(string label, string? value, bool redact = true)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        var formatted = redact
+            ? RedactAndClamp(value, 8_000)
+            : value.Length <= 8_000
+                ? value
+                : value[..8_000] + "\n… (truncated)";
+        SelectedHookEvidenceDetails.Add(new ActivityDetailRow(label, formatted));
+    }
+
+    private BlackboxFinding? FindCorrelatedFinding(AgentEvidenceEvent evidence, bool preferBlocked)
+    {
+        if (evidence.Timestamp == DateTimeOffset.MinValue || _allFindings.Count == 0)
+        {
+            return null;
+        }
+
+        var hasSession = !string.IsNullOrWhiteSpace(evidence.Session);
+        var hasTool = !string.IsNullOrWhiteSpace(evidence.Tool);
+
+        if (hasSession)
+        {
+            var bySession = _allFindings
+                .Where(finding => finding.Timestamp.HasValue &&
+                                  string.Equals(finding.Session, evidence.Session, StringComparison.OrdinalIgnoreCase) &&
+                                  (!hasTool || string.Equals(finding.Tool, evidence.Tool, StringComparison.OrdinalIgnoreCase)) &&
+                                  Math.Abs((finding.Timestamp!.Value - evidence.Timestamp).TotalSeconds) <= 15)
+                .OrderByDescending(finding => preferBlocked && finding.IsBlocked)
+                .ThenBy(finding => Math.Abs((finding.Timestamp!.Value - evidence.Timestamp).TotalSeconds))
+                .FirstOrDefault();
+            if (bySession is not null)
+            {
+                return bySession;
+            }
+        }
+
+        return _allFindings
+            .Where(finding => finding.Timestamp.HasValue &&
+                              MatchesFrameworkAgent(finding.Agent, evidence.Framework) &&
+                              (!hasTool || string.Equals(finding.Tool, evidence.Tool, StringComparison.OrdinalIgnoreCase)) &&
+                              Math.Abs((finding.Timestamp!.Value - evidence.Timestamp).TotalSeconds) <= 5)
+            .OrderByDescending(finding => preferBlocked && finding.IsBlocked)
+            .ThenBy(finding => Math.Abs((finding.Timestamp!.Value - evidence.Timestamp).TotalSeconds))
+            .FirstOrDefault();
+    }
+
+    private BlackboxAuditEntry? FindCorrelatedActivity(AgentEvidenceEvent evidence, bool preferBlocked)
+    {
+        if (_allActivity.Count == 0)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(evidence.Call))
+        {
+            var byCall = _allActivity.FirstOrDefault(entry =>
+                string.Equals(entry.Detail?.ToolCallId, evidence.Call, StringComparison.OrdinalIgnoreCase));
+            if (byCall is not null)
+            {
+                return byCall;
+            }
+        }
+
+        if (evidence.Timestamp == DateTimeOffset.MinValue)
+        {
+            return null;
+        }
+
+        var hasTool = !string.IsNullOrWhiteSpace(evidence.Tool);
+        if (!string.IsNullOrWhiteSpace(evidence.Session))
+        {
+            var bySession = _allActivity
+                .Where(entry => entry.Timestamp.HasValue &&
+                                string.Equals(entry.SessionFull, evidence.Session, StringComparison.OrdinalIgnoreCase) &&
+                                (!hasTool || string.Equals(entry.Tool, evidence.Tool, StringComparison.OrdinalIgnoreCase)) &&
+                                Math.Abs((entry.Timestamp!.Value - evidence.Timestamp).TotalSeconds) <= 15)
+                .OrderByDescending(entry => preferBlocked && entry.IsBlocked)
+                .ThenBy(entry => Math.Abs((entry.Timestamp!.Value - evidence.Timestamp).TotalSeconds))
+                .FirstOrDefault();
+            if (bySession is not null)
+            {
+                return bySession;
+            }
+        }
+
+        return _allActivity
+            .Where(entry => entry.Timestamp.HasValue &&
+                            MatchesFrameworkAgent(entry.Agent, evidence.Framework) &&
+                            (!hasTool || string.Equals(entry.Tool, evidence.Tool, StringComparison.OrdinalIgnoreCase)) &&
+                            Math.Abs((entry.Timestamp!.Value - evidence.Timestamp).TotalSeconds) <= 5)
+            .OrderByDescending(entry => preferBlocked && entry.IsBlocked)
+            .ThenBy(entry => Math.Abs((entry.Timestamp!.Value - evidence.Timestamp).TotalSeconds))
+            .FirstOrDefault();
+    }
+
+    private static bool MatchesFrameworkAgent(string? agent, string framework)
+    {
+        if (string.Equals(agent, framework, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return string.Equals(framework, "opencode", StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(agent, "openchamber", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool MatchesActivityFilter(BlackboxAuditEntry entry, string filter) =>

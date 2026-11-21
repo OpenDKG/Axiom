@@ -97,7 +97,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             timers);
         PrivacyOverview = new PrivacyOverviewPageViewModel(
             PrivacyShield,
-            openSettings: () => SelectedPage = PrivacyShield);
+            openSettings: () => SelectedPage = PrivacyShield,
+            traderShield: new TraderShieldSectionViewModel());
         Connections = new ConnectionsPageViewModel(
             _monitor,
             interaction,
@@ -334,9 +335,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public string UpdateSummaryText => _updateChecker.SummaryText;
 
+    public string UpdateReleaseNotesText => !string.IsNullOrWhiteSpace(_updateChecker.ReleaseNotesText)
+        ? _updateChecker.ReleaseNotesText
+        : _updateChecker.SummaryText;
+
     public bool HasUpdateReleaseDate => !string.IsNullOrWhiteSpace(UpdateReleaseDateText);
 
     public bool HasUpdateSummary => !string.IsNullOrWhiteSpace(UpdateSummaryText);
+
+    public bool HasUpdateReleaseNotes => !string.IsNullOrWhiteSpace(UpdateReleaseNotesText);
+
+    [RelayCommand]
+    private Task OpenReleasePageAsync() => OpenExternalUrlAsync(_updateChecker.ReleaseUrl);
 
     public string UpdateActionText => OperatingSystem.IsWindows() ? "Download and open installer" : "Release details";
 
@@ -465,8 +475,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(UpdateTooltip));
         OnPropertyChanged(nameof(UpdateReleaseDateText));
         OnPropertyChanged(nameof(UpdateSummaryText));
+        OnPropertyChanged(nameof(UpdateReleaseNotesText));
         OnPropertyChanged(nameof(HasUpdateReleaseDate));
         OnPropertyChanged(nameof(HasUpdateSummary));
+        OnPropertyChanged(nameof(HasUpdateReleaseNotes));
     }
 
     public UiMode CurrentUiMode => _uiMode.Current;

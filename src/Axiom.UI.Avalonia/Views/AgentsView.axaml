@@ -51,7 +51,7 @@
       <Setter Property="Background" Value="{DynamicResource Axiom.Success}" />
     </Style>
     <Style Selector="Border.sq-off">
-      <Setter Property="Background" Value="{DynamicResource Axiom.Border}" />
+      <Setter Property="Background" Value="{DynamicResource Axiom.Critical}" />
     </Style>
     <Style Selector="Border.sq-empty">
       <Setter Property="Background" Value="Transparent" />
@@ -106,7 +106,11 @@
                         Classes.sq-on="{Binding Security.DkgConnected}"
                         Classes.sq-off="{Binding !Security.DkgConnected}"
                         ToolTip.Tip="{Binding Security.DkgHealthLabel}" />
-                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Security.DkgBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Security.DkgBrandLabel}" FontSize="14" FontWeight="SemiBold"
+                                                   Classes.tone-ok="{Binding Security.DkgConnected}"
+                                                   Classes.tone-fail="{Binding Security.DkgDisconnected}"
+                                                   Classes.tone-idle="{Binding Security.DkgChecking}"
+                                                   TextWrapping="Wrap" />
               </Grid>
               <controls:AxiomSelectableTextBlock Text="Decentralized Knowledge Graph (DKG): optional local knowledge infrastructure and provenance. This status reflects a local node probe."
                          FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
@@ -130,7 +134,11 @@
                         Classes.sq-on="{Binding Security.BlackboxConnected}"
                         Classes.sq-off="{Binding !Security.BlackboxConnected}"
                         ToolTip.Tip="{Binding Security.BlackboxHealthLabel}" />
-                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Security.BlackboxBrandLabel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Security.BlackboxBrandLabel}" FontSize="14" FontWeight="SemiBold"
+                                                   Classes.tone-ok="{Binding Security.BlackboxConnected}"
+                                                   Classes.tone-fail="{Binding Security.BlackboxDisconnected}"
+                                                   Classes.tone-idle="{Binding Security.BlackboxChecking}"
+                                                   TextWrapping="Wrap" />
               </Grid>
               <controls:AxiomSelectableTextBlock Text="Guardian Agent Blackbox by Umanitek: optional local agent-safety module. Connection alone does not prove every agent is protected."
                          FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
@@ -258,7 +266,10 @@
                 <Button Content="Refresh" Command="{Binding RefreshAllCommand}" Padding="12,6" />
                 <Button Content="Open Dashboard" Command="{Binding OpenDashboardCommand}" Padding="12,6" />
               </StackPanel>
-              <controls:AxiomSelectableTextBlock Text="{Binding Security.AgentStatusBadge}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" HorizontalAlignment="Right" />
+              <controls:AxiomSelectableTextBlock Text="{Binding Security.AgentStatusBadge}" FontSize="10" FontWeight="SemiBold"
+                                                 Classes.tone-ok="{Binding Security.IsAgentConnected}"
+                                                 Classes.tone-fail="{Binding !Security.IsAgentConnected}"
+                                                 HorizontalAlignment="Right" />
             </StackPanel>
           </Grid>
           <controls:AxiomSelectableTextBlock Text="{Binding Security.LastCheckedText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
@@ -298,9 +309,10 @@
                           <controls:AxiomSelectableTextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
                                      Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
                           <Border Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2">
-                            <controls:AxiomSelectableTextBlock Text="{Binding Status}" FontSize="9"
+                            <controls:AxiomSelectableTextBlock Text="{Binding Status}" FontSize="9" FontWeight="SemiBold"
                                        Classes.tone-ok="{Binding IsConnected}"
-                                       Classes.tone-idle="{Binding !IsConnected}" />
+                                       Classes.tone-fail="{Binding IsDisconnected}"
+                                       Classes.tone-idle="{Binding IsChecking}" />
                           </Border>
                         </StackPanel>
                         <controls:AxiomSelectableTextBlock Text="{Binding Detail}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}"

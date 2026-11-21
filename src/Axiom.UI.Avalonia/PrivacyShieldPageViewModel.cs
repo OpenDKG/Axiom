@@ -89,6 +89,10 @@ public sealed class BlockedEventRow(PrivacyShieldBlockedEvent blocked, bool isAl
 
     public DateTimeOffset TimestampUtc => blocked.BlockedUtc;
 
+    public string DateTimeText => blocked.BlockedUtc == DateTimeOffset.MinValue
+        ? "—"
+        : blocked.BlockedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+
     public bool IsAllowed => isAllowed;
 
     public bool CanAllow => !isAllowed;
@@ -130,6 +134,10 @@ public sealed class RecentBlockedGroup(
 
     public DateTimeOffset LastUtc => lastUtc;
 
+    public string LastLocalDateTimeText => lastUtc == DateTimeOffset.MinValue
+        ? "—"
+        : lastUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+
     public BlockedEventRow Latest => latest;
 
     public bool CanAllow => latest.CanAllow;
@@ -156,6 +164,10 @@ public sealed class BlockedHistoryDomainRow(
     public string CountText => count > 1 ? $"{count}x" : string.Empty;
 
     public DateTimeOffset LastUtc => lastUtc;
+
+    public string LastLocalDateTimeText => lastUtc == DateTimeOffset.MinValue
+        ? "—"
+        : lastUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     public BlockedEventRow Latest => latest;
 
@@ -208,6 +220,10 @@ public sealed class BlockedHistoryAppGroup(
     public int DomainCount => domains.Count;
 
     public DateTimeOffset LastUtc => lastUtc;
+
+    public string LastLocalDateTimeText => lastUtc == DateTimeOffset.MinValue
+        ? "—"
+        : lastUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     public string SummaryText => $"{TotalBlocks} blocks · {DomainCount} domains";
 

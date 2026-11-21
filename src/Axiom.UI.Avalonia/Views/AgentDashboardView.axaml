@@ -118,8 +118,8 @@
 
           <Grid ColumnDefinitions="*,12,360">
             <StackPanel Grid.Column="0" Spacing="4">
-              <Grid ColumnDefinitions="64,90,110,*,70,76" Margin="8,0,8,2">
-                <controls:AxiomSelectableTextBlock Grid.Column="0" Text="TIME" Classes="table-header" />
+              <Grid ColumnDefinitions="136,90,110,*,70,76" Margin="8,0,8,2">
+                <controls:AxiomSelectableTextBlock Grid.Column="0" Text="DATE / TIME" Classes="table-header" />
                 <controls:AxiomSelectableTextBlock Grid.Column="1" Text="AGENT" Classes="table-header" />
                 <controls:AxiomSelectableTextBlock Grid.Column="2" Text="EVENT" Classes="table-header" />
                 <controls:AxiomSelectableTextBlock Grid.Column="3" Text="DETAILS" Classes="table-header" />
@@ -143,9 +143,9 @@
                 </ListBox.ContextMenu>
                 <ListBox.ItemTemplate>
                   <DataTemplate>
-                    <Grid ColumnDefinitions="64,90,110,*,70,76" Margin="0,1"
+                    <Grid ColumnDefinitions="136,90,110,*,70,76" Margin="0,1"
                           Background="Transparent">
-                      <TextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
+                      <TextBlock Grid.Column="0" Text="{Binding DateTimeText}" Classes="mono" FontSize="11"
                                  Foreground="{DynamicResource Axiom.TextMuted}" />
                       <TextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11"
                                  Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
@@ -221,8 +221,8 @@
                          FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
               <Grid ColumnDefinitions="*,12,320">
                 <StackPanel Grid.Column="0" Spacing="4">
-                  <Grid ColumnDefinitions="64,90,94,70,*,84" Margin="8,0,8,2">
-                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="TIME" Classes="table-header" />
+                  <Grid ColumnDefinitions="136,90,94,70,*,84" Margin="8,0,8,2">
+                    <controls:AxiomSelectableTextBlock Grid.Column="0" Text="DATE / TIME" Classes="table-header" />
                     <controls:AxiomSelectableTextBlock Grid.Column="1" Text="AGENT" Classes="table-header" />
                     <controls:AxiomSelectableTextBlock Grid.Column="2" Text="CATEGORY" Classes="table-header" />
                     <controls:AxiomSelectableTextBlock Grid.Column="3" Text="SEVERITY" Classes="table-header" />
@@ -242,9 +242,9 @@
                     </ListBox.ContextMenu>
                     <ListBox.ItemTemplate>
                       <DataTemplate>
-                        <Grid ColumnDefinitions="64,90,94,70,*,84" Margin="0,1"
+                        <Grid ColumnDefinitions="136,90,94,70,*,84" Margin="0,1"
                               Background="Transparent">
-                          <TextBlock Grid.Column="0" Text="{Binding TimeText}" Classes="mono" FontSize="11"
+                          <TextBlock Grid.Column="0" Text="{Binding DateTimeText}" Classes="mono" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextMuted}" />
                           <TextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11"
                                      Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" />
@@ -272,23 +272,25 @@
                                    Foreground="{DynamicResource Axiom.TextPrimary}" />
                         <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.SelectedFinding.Title}" FontSize="11"
                                    Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
-                        <Grid ColumnDefinitions="86,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="3">
-                          <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="Identifier" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Identifier}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Category" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Category}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="Severity" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Severity}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="Agent" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Agent}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="Tool" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Tool}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="0" Text="Session" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Session}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="0" Text="Source" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Source}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="7" Grid.Column="0" Text="Security" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
-                          <controls:AxiomSelectableTextBlock Grid.Row="7" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.SecurityOutcome}" FontSize="10.5" FontWeight="SemiBold" Classes="security"
+                        <Grid ColumnDefinitions="86,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="3">
+                          <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="Date &amp; time" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.DateTimeText}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="Identifier" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Identifier}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="0" Text="Category" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Category}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="0" Text="Severity" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Severity}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="0" Text="Agent" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Agent}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="0" Text="Tool" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="5" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Tool}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="0" Text="Session" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="6" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Session}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="7" Grid.Column="0" Text="Source" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="7" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.Source}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextPrimary}" TextWrapping="Wrap" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="8" Grid.Column="0" Text="Security" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+                          <controls:AxiomSelectableTextBlock Grid.Row="8" Grid.Column="1" Text="{Binding AgentActivity.SelectedFinding.SecurityOutcome}" FontSize="10.5" FontWeight="SemiBold" Classes="security"
                                      Classes.threat="{Binding AgentActivity.SelectedFinding.IsBlocked}"
                                      Classes.flagged="{Binding AgentActivity.SelectedFinding.IsFlagged}" />
                         </Grid>

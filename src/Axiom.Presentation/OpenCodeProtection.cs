@@ -94,7 +94,8 @@ public sealed class OpenCodeProtection
                 var source = File.ReadAllText(PluginPath);
                 return source.Contains("Managed by Axiom", StringComparison.Ordinal) &&
                        source.Contains("Plugin.define", StringComparison.Ordinal) &&
-                       source.Contains("ctx.tool.hook", StringComparison.Ordinal);
+                       source.Contains("ctx.tool.hook", StringComparison.Ordinal) &&
+                       !source.Contains("globalThis.__axiomBlackboxHooksInstalled", StringComparison.Ordinal);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
@@ -264,11 +265,12 @@ public sealed class OpenCodeProtection
               async setup(context) {
                 // V2 loads the directory plugin and passes ctx.app.version. Do not register twice.
                 if (context?.app?.version?.startsWith("2.")) return
-                if (globalThis.__axiomBlackboxHooksInstalled) return
-                globalThis.__axiomBlackboxHooksInstalled = true
-                record("HOOK_LOADED", "", "", "loaded", 0, "")
+                if (!globalThis.__axiomHookLoadedRecorded) {
+                  globalThis.__axiomHookLoadedRecorded = true
+                  record("HOOK_LOADED", "", "", "loaded", 0, "")
+                }
                 startLifecycle()
-                context.tool.hook("execute.before", async (event) => {
+                const registration = context.tool.hook("execute.before", async (event) => {
                   const started = Date.now()
                   let decision
                   try {
@@ -309,6 +311,7 @@ public sealed class OpenCodeProtection
                     throw new Error(decision.message || "Blocked by Axiom/Blackbox")
                   }
                 })
+                return () => registration?.dispose?.()
               },
             }
             """;
@@ -355,11 +358,15 @@ public sealed class OpenCodeProtection
             export default Plugin.define({
               id: "axiom-blackbox-v2",
               async setup(ctx) {
-                if (globalThis.__axiomBlackboxHooksInstalled) return
-                globalThis.__axiomBlackboxHooksInstalled = true
-                record("HOOK_LOADED", "", "", "loaded", 0, "")
+                // OpenCode 2 calls setup(ctx) once per workspace/directory with an isolated tool hook
+                // registry. Guard only the process-wide lifecycle listener and one-time load log, not
+                // ctx.tool.hook("execute.before"), otherwise subsequent workspaces run unguarded.
+                if (!globalThis.__axiomHookLoadedRecorded) {
+                  globalThis.__axiomHookLoadedRecorded = true
+                  record("HOOK_LOADED", "", "", "loaded", 0, "")
+                }
                 startLifecycle()
-                await ctx.tool.hook("execute.before", async (event) => {
+                const registration = await ctx.tool.hook("execute.before", async (event) => {
                   const started = Date.now()
                   let decision
                   try {
@@ -400,6 +407,7 @@ public sealed class OpenCodeProtection
                     throw new Error(decision.message || "Blocked by Axiom/Blackbox")
                   }
                 })
+                return () => registration?.dispose?.()
               },
             })
             """;

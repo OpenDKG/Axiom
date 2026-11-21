@@ -133,13 +133,13 @@
           <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding Agents.Security.BlackboxHealthLabel}">
             <Ellipse Width="8" Height="8" VerticalAlignment="Center"
                      Classes.tone-ok="{Binding Agents.Security.BlackboxConnected}"
-                     Classes.tone-idle="{Binding !Agents.Security.BlackboxConnected}" />
+                     Classes.tone-fail="{Binding !Agents.Security.BlackboxConnected}" />
             <TextBlock Text="Blackbox" FontSize="10.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
           </StackPanel>
           <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding Agents.Security.DkgHealthLabel}">
             <Ellipse Width="8" Height="8" VerticalAlignment="Center"
                      Classes.tone-ok="{Binding Agents.Security.DkgConnected}"
-                     Classes.tone-idle="{Binding !Agents.Security.DkgConnected}" />
+                     Classes.tone-fail="{Binding !Agents.Security.DkgConnected}" />
             <TextBlock Text="DKG" FontSize="10.5" Foreground="{DynamicResource Axiom.TextSecondary}" />
           </StackPanel>
         </StackPanel>
@@ -178,8 +178,8 @@
         <ItemsControl ItemsSource="{Binding RecentAgentActivity}" IsVisible="{Binding HasAgentActivity}">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <Grid ColumnDefinitions="64,90,*,Auto" ColumnSpacing="8" Margin="0,1">
-                <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding TimeText}" FontSize="10.5"
+              <Grid ColumnDefinitions="134,90,*,Auto" ColumnSpacing="8" Margin="0,1">
+                <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding DateTimeText}" FontSize="10.5"
                                                    Foreground="{DynamicResource Axiom.TextMuted}" />
                 <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Agent}" FontSize="11" FontWeight="SemiBold"
                                                    Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />

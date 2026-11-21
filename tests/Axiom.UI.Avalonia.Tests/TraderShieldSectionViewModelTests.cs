@@ -160,10 +160,15 @@ public sealed class TraderShieldSectionViewModelTests
     }
 
     [Fact]
-    public void Trader_shield_appears_only_on_integrations_and_not_on_agent_protection()
+    public void Trader_shield_appears_only_on_privacy_overview_and_not_on_integrations_or_agent_protection()
     {
         TestAppBuilder.RunOnUiThread(() =>
         {
+            var privacyOverview = new PrivacyOverviewView();
+            var privacyWindow = new Window { Width = 1024, Height = 768, Content = privacyOverview };
+            privacyWindow.Show();
+            Dispatcher.UIThread.RunJobs();
+
             var securityView = new SecurityView();
             var securityWindow = new Window { Width = 1024, Height = 768, Content = securityView };
             securityWindow.Show();
@@ -176,11 +181,13 @@ public sealed class TraderShieldSectionViewModelTests
 
             try
             {
-                Assert.Single(securityView.GetVisualDescendants().OfType<TraderShieldSectionView>());
+                Assert.Single(privacyOverview.GetVisualDescendants().OfType<TraderShieldSectionView>());
+                Assert.Empty(securityView.GetVisualDescendants().OfType<TraderShieldSectionView>());
                 Assert.Empty(agentsView.GetVisualDescendants().OfType<TraderShieldSectionView>());
             }
             finally
             {
+                privacyWindow.Close();
                 securityWindow.Close();
                 agentsWindow.Close();
             }

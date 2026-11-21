@@ -198,7 +198,7 @@
            Placement="BottomEdgeAlignedRight"
            IsLightDismissEnabled="True"
            HorizontalOffset="0" VerticalOffset="4">
-      <Border Classes="card" Background="{DynamicResource Axiom.PopupSurface}" Width="340" Padding="14">
+      <Border Classes="card" Background="{DynamicResource Axiom.PopupSurface}" Width="420" Padding="14">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Grid.Column="0" Text="Update available" FontSize="13" FontWeight="SemiBold"
@@ -211,15 +211,28 @@
           <TextBlock Text="{Binding UpdateReleaseDateText, StringFormat=Released {0}}"
                      IsVisible="{Binding HasUpdateReleaseDate}"
                      FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
-          <TextBlock Text="{Binding UpdateSummaryText}"
-                     IsVisible="{Binding HasUpdateSummary}"
-                     FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
-          <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+          <Border IsVisible="{Binding HasUpdateReleaseNotes}"
+                  Background="{DynamicResource Axiom.SurfaceAlt}"
+                  BorderBrush="{DynamicResource Axiom.Border}"
+                  BorderThickness="1" CornerRadius="6" Padding="10,8">
+            <StackPanel Spacing="4">
+              <TextBlock Text="WHAT'S NEW" FontSize="9.5" FontWeight="SemiBold"
+                         Foreground="{DynamicResource Axiom.TextMuted}" />
+              <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
+                <controls:AxiomSelectableTextBlock Text="{Binding UpdateReleaseNotesText}"
+                                                   FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}"
+                                                   TextWrapping="Wrap" />
+              </ScrollViewer>
+            </StackPanel>
+          </Border>
+          <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
             <Button Content="{Binding UpdateActionText}" Classes="primary" Command="{Binding OpenUpdateCommand}"
-                    Padding="12,5" FontSize="11" />
+                    Padding="12,5" FontSize="11" Margin="0,0,8,0" />
+            <Button Content="View on GitHub" Command="{Binding OpenReleasePageCommand}"
+                    Padding="10,5" FontSize="11" Margin="0,0,8,0" />
             <Button Content="Dismiss" Command="{Binding DismissUpdateCommand}"
-                    Click="OnUpdateDismissClicked" Padding="12,5" FontSize="11" />
-          </StackPanel>
+                    Click="OnUpdateDismissClicked" Padding="10,5" FontSize="11" />
+          </WrapPanel>
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding IsDownloadingUpdate}">
             <ProgressBar Minimum="0" Maximum="100" Height="5" VerticalAlignment="Center"
                          Value="{Binding UpdateDownloadProgress}" IsIndeterminate="{Binding IsUpdateDownloadIndeterminate}"

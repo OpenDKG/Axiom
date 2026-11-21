@@ -24,7 +24,7 @@ public sealed partial class AlertRecord : ObservableObject
 
     public DateTimeOffset At { get; }
 
-    public string TimeText => At.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
+    public string TimeText => At.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     public string Title { get; }
 

@@ -121,7 +121,7 @@ jobs:
         run: |
           version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
           test -n "$version"
-          build=24
+          build=25
           AXIOM_BUILD="$build" bash scripts/macos/package-app.sh osx-x64 --build-filter
           app=build/macos/osx-x64/Axiom.app
           codesign --verify --deep --strict "$app"

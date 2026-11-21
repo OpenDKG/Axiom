@@ -31,7 +31,7 @@
       <Setter Property="Background" Value="{DynamicResource Axiom.Success}" />
     </Style>
     <Style Selector="Border.sq-off">
-      <Setter Property="Background" Value="{DynamicResource Axiom.Border}" />
+      <Setter Property="Background" Value="{DynamicResource Axiom.Critical}" />
     </Style>
     <Style Selector="Border.sq-empty">
       <Setter Property="Background" Value="Transparent" />
@@ -140,9 +140,18 @@
           </Grid>
           <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.HealthStatusText}" FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
           <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnSpacing="12">
-            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="{Binding AgentActivity.BlackboxHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AgentActivity.DkgHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="{Binding AgentActivity.AxiomDkgHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="0" Text="{Binding AgentActivity.BlackboxHealthText}" FontSize="10"
+                                               Classes.tone-ok="{Binding Security.BlackboxConnected}"
+                                               Classes.tone-fail="{Binding !Security.BlackboxConnected}"
+                                               TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AgentActivity.DkgHealthText}" FontSize="10"
+                                               Classes.tone-ok="{Binding AgentActivity.IsBlackboxDkgReachable}"
+                                               Classes.tone-fail="{Binding !AgentActivity.IsBlackboxDkgReachable}"
+                                               TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="0" Text="{Binding AgentActivity.AxiomDkgHealthText}" FontSize="10"
+                                               Classes.tone-ok="{Binding Security.DkgConnected}"
+                                               Classes.tone-fail="{Binding !Security.DkgConnected}"
+                                               TextWrapping="Wrap" />
             <controls:AxiomSelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AgentActivity.GraphHealthText}" FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </Grid>
           <controls:AxiomSelectableTextBlock Text="{Binding AgentActivity.ProtectionTestText}" FontSize="10" Foreground="{DynamicResource Axiom.Accent}" TextWrapping="Wrap" />
@@ -154,7 +163,7 @@
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="2">
               <controls:AxiomSelectableTextBlock Text="Module health" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
-              <controls:AxiomSelectableTextBlock Text="One square per 5 s loopback check, last 30 kept. Green = connected, muted = not running, outlined = waiting for a sample."
+              <controls:AxiomSelectableTextBlock Text="One square per 5 s loopback check, last 30 kept. Green = connected, red = not connected / not running, outlined = waiting for a sample."
                          FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             </StackPanel>
             <Border Grid.Column="1" Background="{DynamicResource Axiom.SurfaceAlt}" CornerRadius="4" Padding="7,2" VerticalAlignment="Top">

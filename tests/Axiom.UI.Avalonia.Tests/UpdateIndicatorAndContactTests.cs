@@ -166,6 +166,15 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
             Assert.True(shell.UpdateAvailable);
             Assert.Equal("0.99.0", shell.LatestVersion);
             Assert.Equal("Update to version 0.99.0", shell.UpdateTooltip);
+            Assert.True(shell.HasUpdateReleaseNotes);
+            Assert.Equal("Security hardening release.", shell.UpdateReleaseNotesText);
+
+            shell.OpenReleasePageCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(
+                "https://github.com/OpenDKG/Axiom/releases/tag/v0.99.0",
+                Assert.Single(interaction.OpenedUrls));
+            interaction.OpenedUrls.Clear();
 
             updateButton = window.FindControl<Button>("UpdateButton");
             Assert.NotNull(updateButton);

@@ -55,6 +55,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
         CollectorText = monitor.SourceName;
         PollText = $"{monitor.PollInterval.TotalSeconds:0} s · read-only";
+        IsServiceConnected = serviceMode;
         ProtocolText = serviceMode
             ? $"IPC contract v{IpcProtocol.CurrentVersion} (service connected)"
             : $"IPC contract v{IpcProtocol.CurrentVersion} (not connected)";
@@ -89,6 +90,8 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
             : $"{Axiom.Contracts.ProductMilestone.Current} · Windows-first";
 
     public string ProtocolText { get; }
+
+    public bool IsServiceConnected { get; }
 
     public string DataModeText { get; }
 
@@ -245,6 +248,12 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     private bool _checkForUpdates = true;
 
     [ObservableProperty]
+    private bool _isCheckingForUpdates;
+
+    [ObservableProperty]
+    private string _updateCheckStatusText = string.Empty;
+
+    [ObservableProperty]
     private string _startupStatusText = "Autostart: off";
 
     [ObservableProperty]
@@ -268,6 +277,10 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         }
 
         NotificationSettingsStore.SetEnabled(value);
+        if (!value)
+        {
+            AlertCenter.MarkAllRead();
+        }
     }
 
     partial void OnHideBackgroundWindowsChanged(bool value)
@@ -288,6 +301,39 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         }
 
         _updateChecker.SetCheckForUpdatesEnabled(value);
+    }
+
+    [RelayCommand]
+    private async Task CheckForUpdatesNowAsync()
+    {
+        if (IsCheckingForUpdates)
+        {
+            return;
+        }
+
+        IsCheckingForUpdates = true;
+        UpdateCheckStatusText = "Checking GitHub for the latest release…";
+        try
+        {
+            var found = await _updateChecker.CheckNowAsync(CancellationToken.None).ConfigureAwait(true);
+            if (found)
+            {
+                UpdateCheckStatusText =
+                    $"Update available: v{_updateChecker.LatestVersion}. Click the download icon in the title bar to view what's new.";
+            }
+            else if (_updateChecker.LastCheckSucceeded)
+            {
+                UpdateCheckStatusText = $"Up to date ({AppVersion}).";
+            }
+            else
+            {
+                UpdateCheckStatusText = "Could not reach GitHub Releases right now.";
+            }
+        }
+        finally
+        {
+            IsCheckingForUpdates = false;
+        }
     }
 
     [RelayCommand]

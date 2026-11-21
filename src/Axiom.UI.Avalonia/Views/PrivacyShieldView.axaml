@@ -147,18 +147,18 @@
                 <Button Grid.Column="1" Content="{Binding RecentBlockedToggleText}" Command="{Binding ToggleRecentBlockedCommand}" Padding="10,4" FontSize="11" />
               </Grid>
               <controls:AxiomSelectableTextBlock Text="{Binding RecentBlockedSummary}" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
-              <Grid ColumnDefinitions="1.6*,1.1*,72,38,62,Auto,Auto,Auto" Margin="0,2">
+              <Grid ColumnDefinitions="1.6*,1.1*,72,38,134,Auto,Auto,Auto" Margin="0,2">
                 <controls:AxiomSelectableTextBlock Text="DOMAIN" Classes="table-header" />
                 <controls:AxiomSelectableTextBlock Grid.Column="1" Text="APP" Classes="table-header" />
                 <controls:AxiomSelectableTextBlock Grid.Column="2" Text="KIND" Classes="table-header" />
                 <controls:AxiomSelectableTextBlock Grid.Column="3" Text="N" Classes="table-header" />
-                <controls:AxiomSelectableTextBlock Grid.Column="4" Text="TIME" Classes="table-header" />
+                <controls:AxiomSelectableTextBlock Grid.Column="4" Text="DATE / TIME" Classes="table-header" />
               </Grid>
               <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding RecentBlockedGroups}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                      <Grid ColumnDefinitions="1.6*,1.1*,72,38,62,Auto,Auto,Auto" Margin="0,2" ToolTip.Tip="{Binding Tooltip}"
+                      <Grid ColumnDefinitions="1.6*,1.1*,72,38,134,Auto,Auto,Auto" Margin="0,2" ToolTip.Tip="{Binding Tooltip}"
                             Tag="{Binding $parent[ItemsControl].DataContext}">
                         <Grid.ContextMenu>
                           <ContextMenu>
@@ -183,7 +183,7 @@
                         <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding AppDisplay}" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                         <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding CategoryText}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                         <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding CountText}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.Accent}" VerticalAlignment="Center" />
-                        <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding LastUtc, StringFormat={}{0:HH:mm:ss}}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+                        <controls:AxiomSelectableTextBlock Grid.Column="4" Text="{Binding LastLocalDateTimeText}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
                         <Button Grid.Column="5" Content="Graph" Padding="8,2" Margin="4,0,0,0" FontSize="10.5"
                                 ToolTip.Tip="Look up this domain in the local Blackbox graph (read-only)."
                                 Command="{Binding $parent[ItemsControl].DataContext.CheckGraphCommand}"
@@ -239,14 +239,14 @@
                                        Foreground="{DynamicResource Axiom.TextPrimary}" TextTrimming="CharacterEllipsis" />
                             <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding SummaryText}" FontSize="10.5"
                                        Foreground="{DynamicResource Axiom.TextMuted}" />
-                            <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding LastUtc, StringFormat={}{0:MM-dd HH:mm}}" Classes="mono" FontSize="10.5"
+                            <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding LastLocalDateTimeText}" Classes="mono" FontSize="10.5"
                                        Foreground="{DynamicResource Axiom.TextMuted}" />
                           </Grid>
                         </Expander.Header>
                         <ItemsControl ItemsSource="{Binding Domains}" Margin="18,4,0,4">
                           <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                              <Grid ColumnDefinitions="1.4*,72,38,62,Auto,Auto,Auto" Margin="0,2" ToolTip.Tip="{Binding Tooltip}"
+                              <Grid ColumnDefinitions="1.4*,72,38,134,Auto,Auto,Auto" Margin="0,2" ToolTip.Tip="{Binding Tooltip}"
                                     Tag="{Binding $parent[UserControl].DataContext}">
                                 <Grid.ContextMenu>
                                   <ContextMenu>
@@ -270,7 +270,7 @@
                                 <controls:AxiomSelectableTextBlock Grid.Column="0" Text="{Binding Domain}" Classes="mono" FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                 <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding CategoryText}" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                 <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding CountText}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.Accent}" VerticalAlignment="Center" />
-                                <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding LastUtc, StringFormat={}{0:MM-dd HH:mm}}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
+                                <controls:AxiomSelectableTextBlock Grid.Column="3" Text="{Binding LastLocalDateTimeText}" Classes="mono" FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" VerticalAlignment="Center" />
                                 <Button Grid.Column="4" Content="Graph" Padding="8,2" Margin="4,0,0,0" FontSize="10.5"
                                         ToolTip.Tip="Look up this domain in the local Blackbox graph (read-only)."
                                         Command="{Binding $parent[UserControl].DataContext.CheckGraphCommand}"

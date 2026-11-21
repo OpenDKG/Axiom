@@ -34,9 +34,11 @@ public sealed class UpdateCheckService : IDisposable
     private string _latestVersion = string.Empty;
     private string _releaseDateText = string.Empty;
     private string _summaryText = string.Empty;
+    private string _releaseNotesText = string.Empty;
     private string _releaseUrl = DefaultReleasesPageUrl;
     private InstallerAsset? _windowsInstaller;
     private bool _isUpdateAvailable;
+    private bool _lastCheckSucceeded;
     private bool _disposed;
 
     public UpdateCheckService(
@@ -69,11 +71,15 @@ public sealed class UpdateCheckService : IDisposable
 
     public string SummaryText => _summaryText;
 
+    public string ReleaseNotesText => _releaseNotesText;
+
     public string ReleaseUrl => _releaseUrl;
 
     public string DismissedVersion => _dismissedVersion;
 
     public bool IsUpdateAvailable => _isUpdateAvailable;
+
+    public bool LastCheckSucceeded => _lastCheckSucceeded;
 
     private sealed record InstallerAsset(Uri DownloadUri, long Size, string Sha256);
 
@@ -190,7 +196,16 @@ public sealed class UpdateCheckService : IDisposable
     /// Checks GitHub Releases if update checking is enabled and at least <see cref="MinimumCheckInterval"/>
     /// has elapsed since the previous check attempt. Failures stay completely silent.
     /// </summary>
-    public async Task<bool> CheckIfDueAsync(CancellationToken cancellationToken = default)
+    public Task<bool> CheckIfDueAsync(CancellationToken cancellationToken = default) =>
+        CheckCoreAsync(force: false, cancellationToken);
+
+    /// <summary>
+    /// Checks GitHub Releases immediately when requested by the user, bypassing the 6-hour cooldown.
+    /// </summary>
+    public Task<bool> CheckNowAsync(CancellationToken cancellationToken = default) =>
+        CheckCoreAsync(force: true, cancellationToken);
+
+    private async Task<bool> CheckCoreAsync(bool force, CancellationToken cancellationToken)
     {
         if (_disposed)
         {
@@ -209,16 +224,17 @@ public sealed class UpdateCheckService : IDisposable
 
             var settings = _settingsStore.Load();
             _checkForUpdates = settings.CheckForUpdates;
-            _dismissedVersion = NormalizeDismissed(settings.DismissedVersion);
+            _dismissedVersion = force ? string.Empty : NormalizeDismissed(settings.DismissedVersion);
 
-            if (!settings.CheckForUpdates)
+            if (!force && !settings.CheckForUpdates)
             {
                 ClearAvailableState();
                 return false;
             }
 
             var now = _timeProvider.GetUtcNow();
-            if (settings.LastCheckedUtc != DateTimeOffset.MinValue &&
+            if (!force &&
+                settings.LastCheckedUtc != DateTimeOffset.MinValue &&
                 now - settings.LastCheckedUtc < MinimumCheckInterval)
             {
                 return _isUpdateAvailable;
@@ -226,7 +242,12 @@ public sealed class UpdateCheckService : IDisposable
 
             // Record attempt timestamp before hitting the network so rate limits, 404s, or offline restarts
             // cannot trigger retry storms against unauthenticated GitHub quotas.
-            _settingsStore.Save(settings with { LastCheckedUtc = now });
+            _settingsStore.Save(settings with
+            {
+                LastCheckedUtc = now,
+                DismissedVersion = force ? string.Empty : settings.DismissedVersion,
+            });
+            _lastCheckSucceeded = false;
 
             using var request = new HttpRequestMessage(HttpMethod.Get, _releaseEndpoint);
             request.Headers.UserAgent.Clear();
@@ -241,17 +262,18 @@ public sealed class UpdateCheckService : IDisposable
             }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            if (_disposed || !_checkForUpdates)
+            if (_disposed || (!force && !_checkForUpdates))
             {
                 return false;
             }
 
-            return ApplyReleaseJson(json);
+            return ApplyReleaseJson(json, force);
         }
         catch (Exception exception) when (exception is
                      HttpRequestException or TaskCanceledException or OperationCanceledException or
                      JsonException or ObjectDisposedException)
         {
+            _lastCheckSucceeded = false;
             return false;
         }
         finally
@@ -337,7 +359,7 @@ public sealed class UpdateCheckService : IDisposable
         }
     }
 
-    private bool ApplyReleaseJson(string json)
+    private bool ApplyReleaseJson(string json, bool force = false)
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -346,6 +368,7 @@ public sealed class UpdateCheckService : IDisposable
             return false;
         }
 
+        _lastCheckSucceeded = true;
         var isDraft = root.TryGetProperty("draft", out var draftProp) && draftProp.ValueKind == JsonValueKind.True;
         var isPrerelease = root.TryGetProperty("prerelease", out var preProp) && preProp.ValueKind == JsonValueKind.True;
         if (isDraft || isPrerelease)
@@ -375,9 +398,11 @@ public sealed class UpdateCheckService : IDisposable
                        pubProp.TryGetDateTimeOffset(out var publishedUtc)
             ? publishedUtc.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
             : string.Empty;
-        var summary = root.TryGetProperty("body", out var bodyProp) && bodyProp.ValueKind == JsonValueKind.String
-            ? SummarizeBody(bodyProp.GetString())
-            : string.Empty;
+        var rawBody = root.TryGetProperty("body", out var bodyProp) && bodyProp.ValueKind == JsonValueKind.String
+            ? bodyProp.GetString()
+            : null;
+        var summary = SummarizeBody(rawBody);
+        var releaseNotes = FormatReleaseNotes(rawBody);
         var htmlUrl = root.TryGetProperty("html_url", out var urlProp) &&
                       urlProp.ValueKind == JsonValueKind.String &&
                       urlProp.GetString() is { } candidateUrl &&
@@ -388,9 +413,10 @@ public sealed class UpdateCheckService : IDisposable
         _latestVersion = formattedRemote;
         _releaseDateText = dateText;
         _summaryText = summary;
+        _releaseNotesText = releaseNotes;
         _releaseUrl = htmlUrl;
         _windowsInstaller = ReadWindowsInstaller(root, tagName!);
-        _isUpdateAvailable = _checkForUpdates &&
+        _isUpdateAvailable = (_checkForUpdates || force) &&
                              !string.Equals(_dismissedVersion, formattedRemote, StringComparison.Ordinal);
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -404,6 +430,7 @@ public sealed class UpdateCheckService : IDisposable
         _latestVersion = string.Empty;
         _releaseDateText = string.Empty;
         _summaryText = string.Empty;
+        _releaseNotesText = string.Empty;
         _releaseUrl = DefaultReleasesPageUrl;
         _windowsInstaller = null;
         if (changed)
@@ -484,5 +511,72 @@ public sealed class UpdateCheckService : IDisposable
         }
 
         return string.Empty;
+    }
+
+    private static string FormatReleaseNotes(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return string.Empty;
+        }
+
+        const int maxLength = 2400;
+        var lines = new List<string>();
+        foreach (var rawLine in body.Split(['\r', '\n']))
+        {
+            var trimmed = rawLine.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                if (lines.Count > 0 && lines[^1].Length > 0)
+                {
+                    lines.Add(string.Empty);
+                }
+
+                continue;
+            }
+
+            if (trimmed.StartsWith("---", StringComparison.Ordinal) ||
+                trimmed.StartsWith("***", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string formatted;
+            if (trimmed.StartsWith('#'))
+            {
+                formatted = trimmed.TrimStart('#').Trim();
+            }
+            else if (trimmed.StartsWith("- ", StringComparison.Ordinal) ||
+                     trimmed.StartsWith("* ", StringComparison.Ordinal))
+            {
+                formatted = "• " + trimmed[2..].Trim();
+            }
+            else if (trimmed.StartsWith("> ", StringComparison.Ordinal))
+            {
+                formatted = trimmed[2..].Trim();
+            }
+            else
+            {
+                formatted = trimmed;
+            }
+
+            formatted = formatted.Replace("**", string.Empty, StringComparison.Ordinal)
+                                 .Replace("__", string.Empty, StringComparison.Ordinal)
+                                 .Replace("`", string.Empty, StringComparison.Ordinal);
+            if (!string.IsNullOrWhiteSpace(formatted))
+            {
+                lines.Add(formatted);
+            }
+        }
+
+        while (lines.Count > 0 && lines[^1].Length == 0)
+        {
+            lines.RemoveAt(lines.Count - 1);
+        }
+
+        var joined = string.Join(Environment.NewLine, lines);
+        return joined.Length <= maxLength
+            ? joined
+            : joined[..(maxLength - 3)].TrimEnd() + "...";
     }
 }

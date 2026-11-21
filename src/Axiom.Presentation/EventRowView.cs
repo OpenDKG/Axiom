@@ -37,10 +37,10 @@ public sealed class EventRowView(HistoryRow row)
     public DateTimeOffset LastSeenUtc => row.LastSeenUtc;
 
     public string FirstSeenText => row.FirstSeenUtc.ToLocalTime()
-        .ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+        .ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     public string LastSeenText => row.LastSeenUtc.ToLocalTime()
-        .ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+        .ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     public string RowTooltip =>
         $"{row.AppPath}\nFirst seen: {row.FirstSeenUtc:O}\nLast seen: {row.LastSeenUtc:O}";

@@ -24,6 +24,7 @@ using Xunit;
 
 namespace Axiom.UI.Avalonia.Tests;
 
+[Collection("AlertCenterSerial")]
 public sealed class LifecycleAndLeakRegressionTests
 {
     [Fact]

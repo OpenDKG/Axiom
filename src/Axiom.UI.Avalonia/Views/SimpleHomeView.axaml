@@ -278,7 +278,7 @@
                           <controls:AxiomSelectableTextBlock Text="{Binding ActionSummary}" FontSize="10.5"
                                                              Foreground="{DynamicResource Axiom.TextMuted}" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
-                        <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding TimeText}"
+                        <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding DateTimeText}"
                                                            FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}"
                                                            VerticalAlignment="Center" />
                       </Grid>

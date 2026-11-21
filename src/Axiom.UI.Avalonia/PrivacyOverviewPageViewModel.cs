@@ -15,14 +15,18 @@ public sealed partial class PrivacyOverviewPageViewModel : PageViewModel, IActiv
 
     public PrivacyOverviewPageViewModel(
         PrivacyShieldPageViewModel privacyShield,
-        Action? openSettings = null)
+        Action? openSettings = null,
+        TraderShieldSectionViewModel? traderShield = null)
         : base("Privacy Dashboard", "Live DNS filtering metrics, blocked activity and resolver health", "\uE72E")
     {
         PrivacyShield = privacyShield ?? throw new ArgumentNullException(nameof(privacyShield));
+        TraderShield = traderShield ?? new TraderShieldSectionViewModel();
         _openSettings = openSettings;
     }
 
     public PrivacyShieldPageViewModel PrivacyShield { get; }
+
+    public TraderShieldSectionViewModel TraderShield { get; }
 
     public void Activate() => PrivacyShield.Activate();
 

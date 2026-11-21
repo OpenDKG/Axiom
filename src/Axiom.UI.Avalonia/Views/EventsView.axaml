@@ -87,7 +87,7 @@
 
         <Grid Grid.Row="2">
           <Grid IsVisible="{Binding !IsGroupedByApp}" RowDefinitions="Auto,*">
-            <Grid Grid.Row="0" ColumnDefinitions="72,1.2*,58,58,1.1*,1.2*,44,86,80,76,76" Margin="16,10,16,6">
+            <Grid Grid.Row="0" ColumnDefinitions="72,1.2*,58,58,1.1*,1.2*,44,86,80,130,130" Margin="16,10,16,6">
               <controls:AxiomSelectableTextBlock Grid.Column="0" Text="TYPE" Classes="table-header" />
               <controls:AxiomSelectableTextBlock Grid.Column="1" Text="APPLICATION" Classes="table-header" />
               <controls:AxiomSelectableTextBlock Grid.Column="2" Text="PID" Classes="table-header" />
@@ -106,7 +106,7 @@
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
               <ListBox.ItemTemplate>
                 <DataTemplate>
-                  <Grid ColumnDefinitions="72,1.2*,58,58,1.1*,1.2*,44,86,80,76,76" Margin="0,2"
+                  <Grid ColumnDefinitions="72,1.2*,58,58,1.1*,1.2*,44,86,80,130,130" Margin="0,2"
                         Background="Transparent"
                         ToolTip.Tip="{Binding RowTooltip}"
                         Tag="{Binding $parent[UserControl].DataContext}">
@@ -187,7 +187,7 @@
                                MaxHeight="280" Margin="0,8,0,0">
                         <ListBox.ItemTemplate>
                           <DataTemplate>
-                            <Grid ColumnDefinitions="58,58,1.1*,1.2*,44,86,80,76,76" Margin="0,2"
+                            <Grid ColumnDefinitions="58,58,1.1*,1.2*,44,86,80,130,130" Margin="0,2"
                                   Background="Transparent"
                                   ToolTip.Tip="{Binding RowTooltip}"
                                   Tag="{Binding $parent[UserControl].DataContext}">

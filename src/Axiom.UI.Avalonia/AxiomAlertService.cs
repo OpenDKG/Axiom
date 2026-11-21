@@ -54,14 +54,14 @@ public static class AxiomAlertService
             return;
         }
 
-        // Keep every alert in the in-app history, even when the toast itself is suppressed
-        // because the window is active or tray notifications are disabled.
-        AlertCenter.Record(title, message, page, focusApps);
-
         if (!force && !NotificationSettingsStore.Enabled)
         {
             return;
         }
+
+        // Record alerts in the in-app bell history only while notifications are enabled (or forced
+        // by an explicit preview), so switching notifications off also keeps the red badge quiet.
+        AlertCenter.Record(title, message, page, focusApps);
 
         if (!force && !ShouldNotify())
         {

@@ -46,6 +46,10 @@ public sealed record AgentEvidenceEvent(
         ? "—"
         : Timestamp.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
 
+    public string DateTimeText => Timestamp == DateTimeOffset.MinValue
+        ? "—"
+        : Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+
     public bool IsFailure => EventType is "GUARD_FAILED" or "GUARD_TIMEOUT";
 }
 
