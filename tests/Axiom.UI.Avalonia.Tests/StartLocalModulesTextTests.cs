@@ -6,9 +6,8 @@ using Xunit;
 namespace Axiom.UI.Avalonia.Tests;
 
 /// <summary>
-/// The "Start local modules" result must point to actions the cards actually show. Off Windows
-/// the cards offer no Repair and guided installation is unsupported, so the text says the modules
-/// have to be installed and started manually. Windows keeps its text.
+/// The "Start local modules" result points to Complete setup and reports guard status accurately
+/// on Unix. Windows keeps the existing graphical setup and repair instructions.
 /// </summary>
 public sealed class StartLocalModulesTextTests
 {
@@ -33,21 +32,21 @@ public sealed class StartLocalModulesTextTests
         if (!blackboxUp)
         {
             Assert.Contains("manually", text, StringComparison.Ordinal);
+            Assert.Contains("--complete", text, StringComparison.Ordinal);
         }
     }
 
     [Fact]
-    public void Off_windows_neither_module_answering_says_install_and_start_manually()
+    public void Off_windows_dashboard_up_without_dkg_does_not_claim_blocking()
     {
         if (OperatingSystem.IsWindows())
         {
             return;
         }
 
-        var text = SecurityPageViewModel.StartLocalModulesResultText(dkgUp: false, blackboxUp: false);
+        var text = SecurityPageViewModel.StartLocalModulesResultText(dkgUp: false, blackboxUp: true);
 
-        Assert.StartsWith("Neither local module answered.", text, StringComparison.Ordinal);
-        Assert.Contains("installed and started manually", text, StringComparison.Ordinal);
+        Assert.Contains("blocking in the agent host remains unverified", text, StringComparison.Ordinal);
     }
 
     [Fact]

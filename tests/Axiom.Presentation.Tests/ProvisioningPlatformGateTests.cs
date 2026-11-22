@@ -88,9 +88,9 @@ public sealed class ProvisioningPlatformGateTests
         Assert.StartsWith(text + " On macOS ", noted, StringComparison.Ordinal);
         foreach (var part in new[]
                  {
-                     "guard runtime", "full-install provisioning", "Trader Shield", "protected-path checks",
-                     "prompt-injection quarantine", "post-install self-test", "unsupported and unverified",
-                     "a hooked or attached workspace is not protection",
+                     "--complete installer", "Blocking in the agent host", "Trader Shield", "protected-path checks",
+                     "prompt-injection quarantine", "post-install self-test", "remain unverified",
+                     "A hooked or attached workspace does not prove blocking",
                  })
         {
             Assert.Contains(part, noted, StringComparison.Ordinal);
