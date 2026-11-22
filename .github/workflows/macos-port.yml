@@ -6,7 +6,7 @@ on:
       ref:
         description: Branch, tag or commit to build
         required: true
-        default: feature/macos-port
+        default: main
         type: string
       runner:
         description: GitHub-hosted macOS runner
