@@ -58,19 +58,21 @@ install_linux() {
 install_macos() {
     [[ $(uname -m) == x86_64 ]] || fail 'The published macOS preview is for Intel x64.'
     # The system extension only activates from /Applications (see macos/README.md).
-    local application='/Applications/Axiom.app'
+    local applications_dir='/Applications'
+    local application="$applications_dir/Axiom.app"
     if [[ -d $application ]]; then
         printf 'Opening the existing Axiom installation in /Applications.\n'
     else
-        [[ -w /Applications ]] ||
+        [[ -w $applications_dir ]] ||
             fail 'This account cannot write to /Applications. Run the installer as an administrator account.'
-        download_package '^Axiom-[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-osx-x64-adhoc\.zip$' shasum
+        download_package '^Axiom-[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-osx-x64-adhoc\.zip$' shasum "$applications_dir"
         ditto -x -k "$package" "$scratch/unpacked"
         local bundle="$scratch/unpacked/Axiom.app"
         [[ -x $bundle/Contents/MacOS/Axiom ]] || fail 'The downloaded app bundle is incomplete.'
         codesign --verify --deep --strict "$bundle"
-        [[ ! -e $application ]] || fail 'The destination already exists.'
-        ditto "$bundle" "$application"
+        # Unpacking on the destination filesystem makes the final move an atomic rename.
+        mv -n "$bundle" "$applications_dir/"
+        [[ ! -e $bundle ]] || fail 'The destination already exists.'
     fi
     open "$application"
 }
