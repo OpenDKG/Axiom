@@ -38,19 +38,22 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
 
     private const int NetFwProtocolAny = 256;
 
-    private readonly StaComExecutor _com = new();
+    // Firewall COM identities may be shared across adapter instances. Keep their calls in one
+    // process-lifetime STA so disposing an adapter cannot tear down an apartment another uses.
+    private static readonly Lazy<StaComExecutor> Com = new();
+    private volatile bool _disposed;
 
     public Task<FirewallCapabilityReport> GetCapabilitiesAsync(CancellationToken ct) =>
-        _com.InvokeAsync(ProbeCapabilities, ct);
+        InvokeComAsync(ProbeCapabilities, ct);
 
     public Task<IReadOnlyList<ManagedRule>> ListOwnedRulesAsync(CancellationToken ct) =>
-        _com.InvokeAsync(ReadOwnedRules, ct);
+        InvokeComAsync(ReadOwnedRules, ct);
 
     public Task<RuleApplyResult> UpsertOwnedRuleAsync(RuleSpec spec, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(spec);
         EnsureWriteGate();
-        return _com.InvokeAsync(() => ApplyRule(spec), ct);
+        return InvokeComAsync(() => ApplyRule(spec), ct);
     }
 
     public Task<RuleApplyResult> RemoveOwnedRuleAsync(Guid managedRuleId, CancellationToken ct)
@@ -61,7 +64,7 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
         }
 
         EnsureWriteGate();
-        return _com.InvokeAsync(() => RemoveRule(managedRuleId), ct);
+        return InvokeComAsync(() => RemoveRule(managedRuleId), ct);
     }
 
     public Task<EffectiveRuleReport> VerifyAsync(RuleSpec spec, CancellationToken ct)
@@ -72,7 +75,7 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
             throw new ArgumentException("Managed rule id must not be empty.", nameof(spec));
         }
 
-        return _com.InvokeAsync(() => VerifyRule(spec), ct);
+        return InvokeComAsync(() => VerifyRule(spec), ct);
     }
 
     /// <summary>
@@ -90,7 +93,7 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
             throw new ArgumentException("Managed rule id must not be empty.", nameof(managedRuleId));
         }
 
-        return _com.InvokeAsync(() => InspectCapturedRule(managedRuleId, direction), ct);
+        return InvokeComAsync(() => InspectCapturedRule(managedRuleId, direction), ct);
     }
 
     /// <summary>
@@ -109,7 +112,7 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
         }
 
         EnsureRecoveryWriteAllowed();
-        return _com.InvokeAsync(() => RemoveCapturedRule(managedRuleId, direction), ct);
+        return InvokeComAsync(() => RemoveCapturedRule(managedRuleId, direction), ct);
     }
 
     /// <summary>
@@ -135,7 +138,13 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
             "Network recovery writes require the elevated Axiom service or an administrator command.");
     }
 
-    public void Dispose() => _com.Dispose();
+    public void Dispose() => _disposed = true;
+
+    private Task<T> InvokeComAsync<T>(Func<T> action, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return Com.Value.InvokeAsync(action, cancellationToken);
+    }
 
     /// <summary>
     /// True when the test override is present, or when the elevated service holds persisted user
