@@ -19,7 +19,7 @@ installer="$(curl -fsSL https://raw.githubusercontent.com/OpenDKG/Axiom/main/scr
 The scripts verify downloaded packages against their SHA-256 hashes. On Windows this installs
 the core app. Use the graphical setup for the optional Complete installation. On Ubuntu, APT
 installs the package and required dependencies and may prompt for `sudo`. On macOS, the installer
-opens Axiom from `~/Applications` and preserves any app already there. The ad hoc-signed macOS preview
+installs Axiom to `/Applications` and preserves any app already there. The ad hoc-signed macOS preview
 may need macOS approval, and its Network Extension has separate activation requirements.
 
 [Download Axiom](https://github.com/OpenDKG/Axiom/releases/latest)

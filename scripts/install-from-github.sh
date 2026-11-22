@@ -16,7 +16,10 @@ download_package() {
     local actual expected entry name='' checksum
     scratch=$(mktemp -d "$directory/.axiom-install.XXXXXX")
     trap 'rm -rf -- "$scratch"' EXIT
-    curl -fsSL "$release_url/SHA256SUMS-previews.txt" -o "$scratch/SHA256SUMS-previews.txt"
+    # Releases publish one SHA256SUMS.txt for every platform. Lines for other platforms do not
+    # match the pattern below; the file may have CRLF line endings.
+    curl -fsSL "$release_url/SHA256SUMS.txt" -o "$scratch/SHA256SUMS.txt" ||
+        fail 'Could not download SHA256SUMS.txt from the latest release.'
     while read -r checksum entry; do
         entry=${entry%$'\r'}
         entry=${entry#\*}
@@ -25,7 +28,7 @@ download_package() {
             name=$entry
             expected=$(printf '%s' "$checksum" | tr '[:upper:]' '[:lower:]')
         fi
-    done < "$scratch/SHA256SUMS-previews.txt"
+    done < "$scratch/SHA256SUMS.txt"
     [[ -n $name ]] || fail 'The latest release has no verified preview for this platform.'
     package="$scratch/$name"
     curl -fsSL "$release_url/$name" -o "$package"
@@ -54,18 +57,20 @@ install_linux() {
 
 install_macos() {
     [[ $(uname -m) == x86_64 ]] || fail 'The published macOS preview is for Intel x64.'
-    local application="$HOME/Applications/Axiom.app"
+    # The system extension only activates from /Applications (see macos/README.md).
+    local application='/Applications/Axiom.app'
     if [[ -d $application ]]; then
-        printf 'Opening the existing Axiom installation in ~/Applications.\n'
+        printf 'Opening the existing Axiom installation in /Applications.\n'
     else
-        mkdir -p "$HOME/Applications"
-        download_package '^Axiom-[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-osx-x64-adhoc\.zip$' shasum "$HOME/Applications"
+        [[ -w /Applications ]] ||
+            fail 'This account cannot write to /Applications. Run the installer as an administrator account.'
+        download_package '^Axiom-[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-osx-x64-adhoc\.zip$' shasum
         ditto -x -k "$package" "$scratch/unpacked"
         local bundle="$scratch/unpacked/Axiom.app"
         [[ -x $bundle/Contents/MacOS/Axiom ]] || fail 'The downloaded app bundle is incomplete.'
         codesign --verify --deep --strict "$bundle"
         [[ ! -e $application ]] || fail 'The destination already exists.'
-        mv "$bundle" "$application"
+        ditto "$bundle" "$application"
     fi
     open "$application"
 }
