@@ -194,6 +194,10 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         _ui.ShowDocumentAsync("Axiom contributors", AxiomDocuments.Authors, CancellationToken.None);
 
     [RelayCommand]
+    private Task ViewPrivacyPolicyAsync() =>
+        _ui.ShowDocumentAsync("Axiom Privacy Policy", AxiomDocuments.PrivacyPolicy, CancellationToken.None);
+
+    [RelayCommand]
     private Task OpenSourceAsync() => OpenExternalAsync(AxiomDocuments.SourceUrl, "Source code", "repository");
 
     [RelayCommand]

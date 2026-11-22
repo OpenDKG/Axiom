@@ -68,6 +68,8 @@ public static class AxiomDocuments
 
     private static readonly Lazy<string> AuthorsDocument = new(() => Read("Axiom.Documents.AUTHORS.md"));
 
+    private static readonly Lazy<string> PrivacyPolicyDocument = new(() => Read("Axiom.Documents.PRIVACY.md"));
+
     public static string License => LicenseDocument.Value;
 
     public static string Notice => NoticeDocument.Value;
@@ -75,6 +77,8 @@ public static class AxiomDocuments
     public static string ThirdPartyNotices => ThirdPartyDocument.Value;
 
     public static string Authors => AuthorsDocument.Value;
+
+    public static string PrivacyPolicy => PrivacyPolicyDocument.Value;
 
     /// <summary>The notice followed by the full GPL text, which is what "View license" shows.</summary>
     public static string LicenseBundle => Notice + "\n\n" + License;

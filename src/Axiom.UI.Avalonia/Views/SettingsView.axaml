@@ -165,6 +165,7 @@
               <Button Content="View license" Command="{Binding ViewLicenseCommand}" Padding="12,6" Margin="0,0,8,8" />
               <Button Content="Notices" Command="{Binding ViewThirdPartyNoticesCommand}" Padding="12,6" Margin="0,0,8,8" />
               <Button Content="Authors" Command="{Binding ViewContributorsCommand}" Padding="12,6" Margin="0,0,8,8" />
+              <Button Content="Privacy" Command="{Binding ViewPrivacyPolicyCommand}" Padding="12,6" Margin="0,0,8,8" />
               <Button Content="Source code" Command="{Binding OpenSourceCommand}" Padding="12,6" Margin="0,0,8,8" />
               <Button Content="OpenDKG" Command="{Binding OpenAffiliationCommand}" Padding="12,6" Margin="0,0,8,8" />
             </WrapPanel>

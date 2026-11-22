@@ -20,7 +20,7 @@ env:
 jobs:
   build-and-test:
     name: Build, Analyze & Test (Windows)
-    runs-on: [self-hosted, Windows, X64, axiom]
+    runs-on: windows-2025
     timeout-minutes: 45
 
     steps:
@@ -158,7 +158,7 @@ jobs:
   packaging-verification:
     name: Setup Packaging & Safe CLI Check
     needs: build-and-test
-    runs-on: [self-hosted, Windows, X64, axiom]
+    runs-on: windows-2025
     timeout-minutes: 30
 
     steps:

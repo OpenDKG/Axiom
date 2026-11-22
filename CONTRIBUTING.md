@@ -15,6 +15,11 @@ git commit -s -m "Short description"
 The `Signed-off-by` line certifies that you have the right to submit the change under this license.
 Do not copy GPL-incompatible or unlicensed code into the repository.
 
+Public pull requests also use the repository's Contributor License Agreement (CLA) check.
+Follow the CLA Assistant link shown on the pull request using your own GitHub account.
+If you previously accepted the agreement and the status is pending, use the bot's recheck link.
+Keep the DCO sign-off on each commit.
+
 ## Before you start
 
 - Read `README.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY_MODEL.md` and the current milestone in

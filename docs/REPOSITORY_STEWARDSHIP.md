@@ -4,8 +4,8 @@
 
 ## Project creator
 
-The original creator, [@a-51-50](https://github.com/a-51-50), is responsible for the canonical
-upstream's overall direction, the initial architecture and lead maintainership. This credit is
+The original creator, [@a-51-50](https://github.com/a-51-50), is responsible for the project's
+overall direction, the initial architecture and lead maintainership. This credit is
 permanent and is not changed by later contributions.
 
 ## Founding leadership
@@ -27,7 +27,7 @@ administration, revenue rights or legal ownership.
 
 ## Ownership boundaries
 
-The canonical repository remains [a-51-50/Axiom](https://github.com/a-51-50/Axiom). Project titles do
+[OpenDKG/Axiom](https://github.com/OpenDKG/Axiom) is the public source, contribution and release repository. Project titles do
 not transfer GitHub ownership, copyright, trademarks, signing authority or legal rights, and the
 existing signed founder agreements and contributor obligations are unaffected.
 
@@ -38,7 +38,7 @@ Being named in Git history does not by itself prove legal ownership of every con
 ## Review and access
 
 The default [CODEOWNERS](../.github/CODEOWNERS) entry requests review from `@a-51-50`
-for changes to the canonical repository. This is **not** an exclusive right, a copyright
+for changes to the public repository. This is **not** an exclusive right, a copyright
 assignment, or a substitute for protected-branch/ruleset configuration: administrators may
 override review settings where GitHub permissions allow. Every change must pass through
 a pull request as specified in [CONTRIBUTING.md](../CONTRIBUTING.md).
@@ -67,9 +67,8 @@ separately and must not prevent a platform maintainer from working on their plat
 
 ## OpenDKG working repository
 
-[OpenDKG/Axiom](https://github.com/OpenDKG/Axiom) hosts team development and
-distribution copies of Axiom releases. The original discussion history and official package
-builds stay with the canonical upstream.
+[OpenDKG/Axiom](https://github.com/OpenDKG/Axiom) hosts team development and official public
+release builds and downloads. Original discussion history stays in the repository where it began.
 
 The upstream importer advances the separate `opendkg/sync-main` review branch from
 OpenDKG's `main`. A maintainer opens and reviews the corresponding upstream PR.
