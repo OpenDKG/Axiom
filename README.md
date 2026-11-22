@@ -62,9 +62,7 @@ cross-platform development and maintenance. The team is expanding Axiom across W
 macOS; platform-specific responsibilities and actual implementations are documented separately as
 development progresses.
 
-**Development and downloads:** [OpenDKG/Axiom](https://github.com/OpenDKG/Axiom)
-
-**Canonical upstream:** [a-51-50/Axiom](https://github.com/a-51-50/Axiom)
+**Public source, contributions and downloads:** [OpenDKG/Axiom](https://github.com/OpenDKG/Axiom)
 
 **Affiliation:** [OpenDKG](https://github.com/OpenDKG)
 

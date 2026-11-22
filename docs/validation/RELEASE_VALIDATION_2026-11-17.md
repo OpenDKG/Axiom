@@ -80,7 +80,7 @@ Did not recover:
 - The desktop window is not shown after an `--autostart` logon. That is the tray-first design of
   "start with Windows", not a crash; the process stays running and the window opens on demand.
 
-Evidence: `F:\Pen Testing\Logs\reboot-recovery-097.png`.
+Local VM screenshot recorded during validation: `reboot-recovery-097.png`.
 
 ## 2c. Privacy Shield resolver crash and DNS continuity (17 November 2026)
 
@@ -113,8 +113,8 @@ Findings:
   "Recovery baseline not saved: Unavailable ..." from 15 November, so the current baseline under
   `%ProgramData%\Axiom` is the one that was used; it is SYSTEM-only and was not read directly. The
   restore command itself succeeded twice (restore, then re-point).
-- Evidence: `F:\Pen Testing\Logs\dns-crash-recovery-097.png` (after recovery) and
-  `F:\Pen Testing\Logs\dns-restore-button.png` (restore confirmation).
+- Local VM screenshots recorded during validation: `dns-crash-recovery-097.png` (after recovery) and
+  `dns-restore-button.png` (restore confirmation).
 
 ## 2d. Interactive installer: Complete vs Partial (17 November 2026)
 
@@ -144,7 +144,7 @@ Limits:
 - Partial mode's exit state (no service, no hooks, monitor-only) is covered by the installer's own
   code path and tests, not by this VM.
 
-Evidence: `F:\Pen Testing\Logs\setup-wizard-0101-2.png`.
+Local VM screenshot recorded during validation: `setup-wizard-0101-2.png`.
 
 ## 3. Signing decision (issues #119 and #289)
 
