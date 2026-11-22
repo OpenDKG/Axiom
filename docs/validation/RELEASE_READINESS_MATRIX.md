@@ -1,6 +1,6 @@
 # Axiom 1.0 — Baseline Release Readiness Matrix (v0.32.0 Audit)
 
-**Repository:** `a-51-50/Axiom`  
+**Repository:** `OpenDKG/Axiom`
 **Audited Baseline:** `v0.32.0` (`c9429be`, 2026-11-15)  
 **Primary Target:** Windows desktop/service production readiness (with separate Linux/macOS gates)  
 **Principle:** Detection is not enforcement. A requested block is not a verified block. A passing unit test is not independent runtime proof.
