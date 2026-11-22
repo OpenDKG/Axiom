@@ -58,9 +58,7 @@ irm https://raw.githubusercontent.com/OpenDKG/Axiom/main/scripts/install-from-gi
 ```
 
 The bootstrap installs from the public `OpenDKG/Axiom` releases by default; `-PublicRelease` is
-still accepted for backwards compatibility and forces that public source. To install from the
-private upstream instead, download the script and run it with `-Repository a-51-50/Axiom` plus an
-authenticated token (`-Token`, or `AXIOM_GITHUB_TOKEN` / `GH_TOKEN`).
+still accepted for backwards compatibility and forces that public source.
 
 This command executes a downloaded script immediately. Use it only if you trust the repository and
 have reviewed the script. You can instead download the graphical installer or release ZIP and run
