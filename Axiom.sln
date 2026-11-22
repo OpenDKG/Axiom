@@ -75,6 +75,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Desktop.Avalonia.Linu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Service.Hosting.Tests", "tests\Axiom.Service.Hosting.Tests\Axiom.Service.Hosting.Tests.csproj", "{8B3AC742-1BCD-44D3-91D5-3175744CB641}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Service.Unix.Tests", "tests\Axiom.Service.Unix.Tests\Axiom.Service.Unix.Tests.csproj", "{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -493,6 +495,18 @@ Global
 		{8B3AC742-1BCD-44D3-91D5-3175744CB641}.Release|x64.Build.0 = Release|Any CPU
 		{8B3AC742-1BCD-44D3-91D5-3175744CB641}.Release|x86.ActiveCfg = Release|Any CPU
 		{8B3AC742-1BCD-44D3-91D5-3175744CB641}.Release|x86.Build.0 = Release|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Debug|x64.Build.0 = Debug|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Debug|x86.Build.0 = Debug|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Release|Any CPU.Build.0 = Release|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Release|x64.ActiveCfg = Release|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Release|x64.Build.0 = Release|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Release|x86.ActiveCfg = Release|Any CPU
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -532,5 +546,6 @@ Global
 		{F37A0533-0A06-4A21-B87F-6E5E41444451} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{AA8D7D89-3F32-4370-99AB-1E14A672B50F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{8B3AC742-1BCD-44D3-91D5-3175744CB641} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{78B2E1AA-ACD1-4A34-A45E-4B80CC370E26} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
