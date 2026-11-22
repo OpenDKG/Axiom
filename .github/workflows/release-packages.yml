@@ -77,6 +77,7 @@ jobs:
         run: |
           dotnet test tests/Axiom.Infrastructure.Linux.Tests -c Release
           dotnet test tests/Axiom.Desktop.Avalonia.Linux.Tests -c Release
+          dotnet test tests/Axiom.Service.Unix.Tests -c Release
           dotnet test tests/Axiom.UI.Avalonia.Tests -c Release --filter 'FullyQualifiedName~AgentsViewLogoTests|FullyQualifiedName~UpdateIndicatorAndContactTests'
       - name: Package and verify Ubuntu amd64
         run: |
@@ -116,6 +117,7 @@ jobs:
           bash macos/build.sh test
           dotnet test tests/Axiom.Infrastructure.MacOS.Tests -c Release
           dotnet test tests/Axiom.Desktop.Avalonia.MacOS.Tests -c Release
+          dotnet test tests/Axiom.Service.Unix.Tests -c Release
           dotnet test tests/Axiom.UI.Avalonia.Tests -c Release --filter 'FullyQualifiedName~AgentsViewLogoTests|FullyQualifiedName~UpdateIndicatorAndContactTests'
       - name: Package and verify the Intel app
         run: |
