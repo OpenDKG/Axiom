@@ -24,6 +24,28 @@ public sealed class WindowsFirewallPolicyAdapterTests
     }
 
     [Fact]
+    public async Task Disposing_one_adapter_leaves_other_adapters_usable()
+    {
+        using var first = new WindowsFirewallPolicyAdapter();
+        using var second = new WindowsFirewallPolicyAdapter();
+
+        var reports = await Task.WhenAll(
+            first.GetCapabilitiesAsync(CancellationToken.None),
+            second.GetCapabilitiesAsync(CancellationToken.None));
+        Assert.All(reports, report => Assert.Equal(FirewallCapabilityStatus.Available, report.Status));
+
+        first.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() =>
+        {
+            _ = first.GetCapabilitiesAsync(CancellationToken.None);
+        });
+        var remaining = await second.GetCapabilitiesAsync(CancellationToken.None);
+        Assert.Equal(FirewallCapabilityStatus.Available, remaining.Status);
+        Assert.True(remaining.ManagedRulesReadable);
+    }
+
+    [Fact]
     public async Task Owned_rules_all_follow_the_naming_contract()
     {
         using var adapter = new WindowsFirewallPolicyAdapter();
