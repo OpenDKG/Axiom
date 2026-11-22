@@ -35,6 +35,7 @@
     <EmbeddedResource Include="..\..\NOTICE" LogicalName="Axiom.Documents.NOTICE.txt" />
     <EmbeddedResource Include="..\..\AUTHORS.md" LogicalName="Axiom.Documents.AUTHORS.md" />
     <EmbeddedResource Include="..\..\THIRD_PARTY_NOTICES.md" LogicalName="Axiom.Documents.THIRD_PARTY_NOTICES.md" />
+    <EmbeddedResource Include="..\..\PRIVACY.md" LogicalName="Axiom.Documents.PRIVACY.md" />
   </ItemGroup>
 
 </Project>
