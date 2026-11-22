@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# End-to-end proof of the connect-time BPF layer (docs/LINUX_EBPF.md §7) on a cgroup v2 box with
-# bpftool, kernel BTF, clang and libbpf-dev.
+# End-to-end proof of the connect-time BPF layer (src/Axiom.Infrastructure.Linux/Bpf/BpfEngine.cs,
+# programs in src/Axiom.Infrastructure.Linux/Bpf/native) on a cgroup v2 box with bpftool, kernel BTF,
+# clang and libbpf-dev.
 #
 #   scripts/linux/bpf/e2e.sh            # part A: the BPF objects alone (builds, then re-execs under sudo -n)
 #   scripts/linux/bpf/e2e.sh --daemon   # part A, then part B: the full axiomd path (install in place, IPC)
@@ -65,7 +66,8 @@ attached_ours() { local n=0 id; for id in $OURS; do bpftool cgroup tree "$CGROUP
 [ "$(attached_ours)" = 4 ] && pass "four axiom_* programs attached at $CGROUP_ROOT (ids $OURS)" || fail "expected four attachments"
 
 echo "## A3 verdict entry for $TARGET only"
-# Superblock dev (what the BPF program reads), not stat's st_dev: they differ on btrfs (LINUX_EBPF.md §2.1).
+# Superblock dev (what the BPF program reads), not stat's st_dev: they differ on btrfs (see
+# src/Axiom.Infrastructure.Linux/Bpf/BpfExeKey.cs).
 IFS=: read -r MAJ MIN < <(findmnt -no MAJ:MIN -T "$(realpath -e "$TARGET")" | tail -n1 | tr -d ' ')
 INO=$(stat -L -c '%i' "$TARGET")
 # ABI 2: + btrfs subvolume id (statx STATX_SUBVOL / BTRFS_IOC_INO_LOOKUP), 0 on other filesystems.
