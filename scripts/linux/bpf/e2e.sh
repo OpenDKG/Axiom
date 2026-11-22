@@ -123,9 +123,22 @@ if [ $DAEMON = 1 ]; then
   journalctl -u axiomd --since '-10s' --no-pager -o cat | grep 'BPF verdicts' | sed 's/^/  journal: /'
   OUT4=$(run_curl); echo "$OUT4"
   case "$OUT4" in *"rc=7"*) pass "daemon path: bare curl blocked immediately (rc=7)";; *) fail "daemon path: curl not blocked: $OUT4";; esac
-  sleep 1
-  python3 -I "$AXIPC" snapshot | grep -E '"id": *"bpf-|"state": *"Blocked"' | head -4 | sed 's/^/  snapshot: /'
-  python3 -I "$AXIPC" snapshot | grep -q '"bpf-' && pass "snapshot: blocked flow with verdict source bpf" || fail "snapshot: no bpf- flow"
+  # The snapshot's connections carry no flow id (the BPF monitor's "bpf-N" ids stay internal), and a
+  # blocked flow is listed only for about one poll interval: poll a few times for a Blocked entry of
+  # $TARGET. connect() was refused before any packet left, so nft never traced it: the entry comes
+  # from the BPF event helper.
+  SNAP=""
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    sleep 0.25
+    SNAP=$(python3 -I "$AXIPC" snapshot | python3 -I -c 'import json,sys
+r=json.load(sys.stdin).get("result") or {}
+for c in r.get("connections") or []:
+    if c.get("state") == "Blocked" and c.get("appPath") == sys.argv[1]:
+        print(c.get("appPath"), c.get("protocol"), c.get("remoteEndpoint"), c.get("ruleStatus"))' "$TARGET")
+    [ -n "$SNAP" ] && break
+  done
+  echo "$SNAP" | head -4 | sed 's/^/  snapshot: /'
+  [ -n "$SNAP" ] && pass "snapshot: blocked flow for $TARGET (BPF event path)" || fail "snapshot: no blocked flow for $TARGET"
   echo "## B3 rule.remove, protection.disable"
   python3 -I "$AXIPC" rule.remove "{\"managedRuleId\":\"$RULE_ID\"}" | head -3 | sed 's/^/  /'
   OUT5=$(run_curl); echo "$OUT5"
