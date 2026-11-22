@@ -193,6 +193,20 @@ public sealed class UiFixesRegressionTests
         Assert.False(settingsDisconnected.IsServiceConnected);
     }
 
+    [Fact]
+    public void Bundled_privacy_policy_covers_eu_switzerland_us_and_blackbox_sharing()
+    {
+        var policy = AxiomDocuments.PrivacyPolicy;
+
+        Assert.DoesNotContain("is missing from this build", policy, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("GDPR", policy, StringComparison.Ordinal);
+        Assert.Contains("Switzerland", policy, StringComparison.Ordinal);
+        Assert.Contains("revFADP", policy, StringComparison.Ordinal);
+        Assert.Contains("United States", policy, StringComparison.Ordinal);
+        Assert.Contains("Blackbox", policy, StringComparison.Ordinal);
+        Assert.Contains("contact@opendkg.org", policy, StringComparison.Ordinal);
+    }
+
     private sealed class EmptySnapshotSource : IConnectionSnapshotSource
     {
         public string Name => "test";

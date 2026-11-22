@@ -26,6 +26,7 @@ may need macOS approval, and its Network Extension has separate activation requi
 · [All releases](https://github.com/OpenDKG/Axiom/releases)
 · [Pentest results](docs/PENTESTING.md)
 · [Project website](https://opendkg.org/axiom/)
+· [Privacy policy](PRIVACY.md)
 · [GPL-3.0-or-later](LICENSE)
 
 Axiom monitors which apps use the network and gives you local control over connections and DNS.
@@ -61,9 +62,7 @@ cross-platform development and maintenance. The team is expanding Axiom across W
 macOS; platform-specific responsibilities and actual implementations are documented separately as
 development progresses.
 
-**Development and downloads:** [OpenDKG/Axiom](https://github.com/OpenDKG/Axiom)
-
-**Canonical upstream:** [a-51-50/Axiom](https://github.com/a-51-50/Axiom)
+**Public source, contributions and downloads:** [OpenDKG/Axiom](https://github.com/OpenDKG/Axiom)
 
 **Affiliation:** [OpenDKG](https://github.com/OpenDKG)
 
