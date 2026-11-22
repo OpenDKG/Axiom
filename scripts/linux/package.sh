@@ -131,6 +131,7 @@ mkdir -p "$PAYLOAD" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/usr
   "$STAGE/usr/share/doc/axiom-firewall" "$STAGE/usr/share/icons/hicolor" "$STAGE/usr/share/lintian/overrides" \
   "$STAGE/usr/share/man/man1"
 cp -a "$APP/." "$PAYLOAD/"
+printf '1\n' > "$PAYLOAD/axiom-unix-agent-setup"
 # Shared by prerm/%preun: verified BPF pin cleanup (see the file's header). Executable because a
 # maintainer script may run it directly; prerm sources it.
 install -m 0755 "$PKG/bpf-pins.sh" "$PAYLOAD/bpf-pins.sh"
