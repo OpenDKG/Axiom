@@ -77,6 +77,7 @@ jobs:
         run: |
           dotnet test tests/Axiom.Infrastructure.Linux.Tests -c Release
           dotnet test tests/Axiom.Desktop.Avalonia.Linux.Tests -c Release
+          dotnet test tests/Axiom.Service.Unix.Tests -c Release
           dotnet test tests/Axiom.UI.Avalonia.Tests -c Release --filter 'FullyQualifiedName~AgentsViewLogoTests|FullyQualifiedName~UpdateIndicatorAndContactTests'
       - name: Package and verify Ubuntu amd64
         run: |
@@ -116,12 +117,13 @@ jobs:
           bash macos/build.sh test
           dotnet test tests/Axiom.Infrastructure.MacOS.Tests -c Release
           dotnet test tests/Axiom.Desktop.Avalonia.MacOS.Tests -c Release
+          dotnet test tests/Axiom.Service.Unix.Tests -c Release
           dotnet test tests/Axiom.UI.Avalonia.Tests -c Release --filter 'FullyQualifiedName~AgentsViewLogoTests|FullyQualifiedName~UpdateIndicatorAndContactTests'
       - name: Package and verify the Intel app
         run: |
           version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
           test -n "$version"
-          build=25
+          build=26
           AXIOM_BUILD="$build" bash scripts/macos/package-app.sh osx-x64 --build-filter
           app=build/macos/osx-x64/Axiom.app
           codesign --verify --deep --strict "$app"
@@ -131,6 +133,8 @@ jobs:
           mkdir -p release
           git rev-parse HEAD > release/SOURCE-COMMIT.txt
           test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "$build"
+          extension_info="$app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension/Contents/Info.plist"
+          test "$(plutil -extract CFBundleVersion raw "$extension_info")" = "$build"
           package="Axiom-$version-$build-osx-x64-adhoc.zip"
           ditto -c -k --sequesterRsrc --keepParent "$app" "release/$package"
           cd release

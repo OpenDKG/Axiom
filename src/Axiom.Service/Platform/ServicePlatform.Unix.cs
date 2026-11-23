@@ -156,22 +156,35 @@ internal static class ServicePlatform
             return;
         }
 
-        var paths = MacServicePaths.Default;
-        builder.Services.AddSingleton(paths);
-        builder.Services.AddSingleton<FilterStatus>();
-        builder.Services.AddSingleton<FlowTable>();
-        builder.Services.AddSingleton<FilterEventServer>();
-        builder.Services.AddHostedService<FilterEventWorker>();
-        builder.Services.AddSingleton<IConnectionSnapshotSource>(provider => MacConnectionSource.Create(
+        ConfigureMacServices(builder.Services, MacServicePaths.Default);
+    }
+
+    /// <summary>
+    /// The macOS daemon's platform services. Separate from <see cref="ConfigureServices"/> so the
+    /// composition can be validated on any host (the Linux branch is taken there at run time).
+    /// </summary>
+    internal static void ConfigureMacServices(IServiceCollection services, MacServicePaths paths)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(paths);
+
+        services.AddSingleton(paths);
+        // The shared Unix types (FilterEventServer, UnixSocketIpcTransport) take the base record.
+        services.AddSingleton<UnixServicePaths>(paths);
+        services.AddSingleton<FilterStatus>();
+        services.AddSingleton<FlowTable>();
+        services.AddSingleton<FilterEventServer>();
+        services.AddHostedService<FilterEventWorker>();
+        services.AddSingleton<IConnectionSnapshotSource>(provider => MacConnectionSource.Create(
             provider.GetRequiredService<FlowTable>(),
             provider.GetRequiredService<FilterStatus>()));
-        builder.Services.AddSingleton<MacFirewallPolicyAdapter>();
-        builder.Services.AddSingleton<IFirewallPolicyAdapter>(provider => provider.GetRequiredService<MacFirewallPolicyAdapter>());
-        builder.Services.AddSingleton<IOwnedRuleRecoveryAdapter>(provider => provider.GetRequiredService<MacFirewallPolicyAdapter>());
-        builder.Services.AddSingleton<INetworkRecoveryDnsAdapter>(provider => MacDnsRecoveryAdapter.Create(
+        services.AddSingleton<MacFirewallPolicyAdapter>();
+        services.AddSingleton<IFirewallPolicyAdapter>(provider => provider.GetRequiredService<MacFirewallPolicyAdapter>());
+        services.AddSingleton<IOwnedRuleRecoveryAdapter>(provider => provider.GetRequiredService<MacFirewallPolicyAdapter>());
+        services.AddSingleton<INetworkRecoveryDnsAdapter>(provider => MacDnsRecoveryAdapter.Create(
             provider.GetRequiredService<MacServicePaths>()));
-        builder.Services.AddSingleton<IPrivacyDnsPlatform>(_ => CreateDefaultPrivacyDnsPlatform());
-        builder.Services.AddSingleton<IIpcTransport>(provider => new UnixSocketIpcTransport(
+        services.AddSingleton<IPrivacyDnsPlatform>(_ => CreateDefaultPrivacyDnsPlatform());
+        services.AddSingleton<IIpcTransport>(provider => new UnixSocketIpcTransport(
             provider.GetRequiredService<MacServicePaths>(),
             provider.GetRequiredService<ProtectionSettingsStore>()));
     }
