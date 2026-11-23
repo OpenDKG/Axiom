@@ -1197,18 +1197,19 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     }
 
     /// <summary>
-    /// Result line of "Start local modules". Off Windows the cards show no Repair and guided
-    /// installation is unsupported, so the text asks for a manual install and start instead.
+    /// Result line of "Start local modules". Unix Complete setup runs from the terminal.
     /// </summary>
     internal static string StartLocalModulesResultText(bool dkgUp, bool blackboxUp) => (dkgUp, blackboxUp) switch
     {
         (true, true) => "Local modules are up: DKG node and Blackbox dashboard connected.",
+        (false, true) when !OptionalModuleInstaller.IsInstallSupported =>
+            "The Blackbox dashboard is up. DKG is offline, and blocking in the agent host remains unverified.",
         (false, true) => "Blackbox is up. DKG is still offline, so local blocking works but shared-graph evidence is unavailable.",
         (true, false) when !OptionalModuleInstaller.IsInstallSupported =>
-            "DKG is up. Blackbox is still offline, so agent protection is not enforcing. Blackbox has to be installed and started manually; then click Check again.",
+            "DKG is up. Blackbox is still offline. Run the Axiom installer with --complete or start an existing Blackbox installation manually, then click Check again.",
         (true, false) => "DKG is up. Blackbox is still offline, so agent protection is not enforcing; use Repair on its card.",
         _ when !OptionalModuleInstaller.IsInstallSupported =>
-            "Neither local module answered. The modules have to be installed and started manually; then click Check again.",
+            "Neither local module answered. Run the Axiom installer with --complete or start existing modules manually, then click Check again.",
         _ => "Neither local module answered. Install or Repair each card, then try Start local modules again.",
     };
 
@@ -2004,8 +2005,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
     {
         await RefreshAgentsCoreAsync(blackboxConnected, cancellationToken).ConfigureAwait(true);
 
-        // Windows: unchanged. macOS/Linux: the shared status models are shown, with the sentence
-        // that the guard runtime and its provisioning are unsupported and unverified there.
+        // Show Unix installation availability separately from host-level blocking verification.
         if (IsAgentProtectionAvailable)
         {
             AgentsStatusText = BlackboxPlatformSupport.WithUnsupportedNote(

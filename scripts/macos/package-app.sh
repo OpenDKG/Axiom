@@ -111,6 +111,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/service"
 cp -R "$PUBLISH/app/." "$APP/Contents/MacOS/"
 cp -R "$PUBLISH/service/." "$APP/Contents/Resources/service/"
+printf '1\n' > "$APP/Contents/Resources/axiom-unix-agent-setup"
 # Debug symbols are not shipped.
 find "$APP/Contents" -name '*.pdb' -delete
 

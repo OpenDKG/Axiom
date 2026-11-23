@@ -14,9 +14,15 @@ public static class AgentPlatform
     public static string VenvPython(string root) => VenvPython(root, IsWindows);
 
     public static string VenvPython(string root, bool windows) =>
-        windows
-            ? Path.Combine(root, "venv", "Scripts", "python.exe")
-            : Path.Combine(root, "venv", "bin", "python");
+        windows ? Path.Combine(root, "venv", "Scripts", "python.exe") : PosixVenvPython(root, File.Exists);
+
+    private static string PosixVenvPython(string root, Func<string, bool> fileExists)
+    {
+        // Hermes may keep its environment outside the checkout. Complete setup writes an executable
+        // that dispatches directly to the selected interpreter. Older venv layouts still work.
+        var launcher = Path.Combine(root, "axiom-blackbox-python");
+        return fileExists(launcher) ? launcher : Path.Combine(root, "venv", "bin", "python");
+    }
 
     /// <summary>
     /// Interpreter used to start a background module without a console window. Windows: upstream's
@@ -30,7 +36,7 @@ public static class AgentPlatform
         ArgumentNullException.ThrowIfNull(fileExists);
         if (!windows)
         {
-            return VenvPython(root, windows: false);
+            return PosixVenvPython(root, fileExists);
         }
 
         var venvPythonW = Path.Combine(root, "venv", "Scripts", "pythonw.exe");
@@ -47,7 +53,9 @@ public static class AgentPlatform
     public static bool HasVenvPython(string root, bool windows, Func<string, bool> fileExists)
     {
         ArgumentNullException.ThrowIfNull(fileExists);
-        return fileExists(VenvPython(root, windows)) || fileExists(VenvPythonNoConsole(root, windows, fileExists));
+        return windows
+            ? fileExists(VenvPython(root, windows)) || fileExists(VenvPythonNoConsole(root, windows, fileExists))
+            : fileExists(PosixVenvPython(root, fileExists));
     }
 
     /// <summary>A console tool installed in a virtual environment (for example <c>hermes</c>).</summary>

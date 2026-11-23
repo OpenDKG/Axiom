@@ -4,9 +4,8 @@ namespace Axiom.Presentation;
 /// <summary>
 /// What the agent-first Blackbox contract (v0.23.x) may claim per platform. The shared models are
 /// used everywhere (<see cref="BlackboxLocalState.EvaluateContinuity"/>, hook status, receipts);
-/// the guard runtime with its provisioning exists and is verified on Windows only. On macOS and
-/// Linux nothing is provisioned, and a state that only says "a hook is installed" or "a workspace
-/// is attached" is never presented as protected.
+/// Unix Complete setup can provision local modules and hooks. Agent-host blocking and the
+/// Windows-specific protection features still require verification on macOS and Linux.
 /// </summary>
 public static class BlackboxPlatformSupport
 {
@@ -17,7 +16,7 @@ public static class BlackboxPlatformSupport
     public const string AttachedUnverifiedStatus = "HOOK INSTALLED";
 
     /// <summary>
-    /// Whether the guard runtime, full-install provisioning, Trader Shield, protected-path checks,
+    /// Whether agent-host blocking, Trader Shield, protected-path checks,
     /// prompt-injection quarantine and the post-install self-test are supported on this OS.
     /// </summary>
     public static bool IsGuardRuntimeSupported => GuardRuntimeSupported(AgentPlatform.IsWindows);
@@ -42,9 +41,9 @@ public static class BlackboxPlatformSupport
     public static string UnsupportedNote(bool windows, string osName) =>
         windows
             ? string.Empty
-            : $"On {osName} the Blackbox guard runtime, full-install provisioning, Trader Shield, " +
-              "protected-path checks, prompt-injection quarantine and the post-install self-test are " +
-              "unsupported and unverified; a hooked or attached workspace is not protection.";
+            : $"On {osName} the --complete installer provisions Blackbox, DKG and Axiom hooks. " +
+              "Blocking in the agent host, Trader Shield, protected-path checks, prompt-injection quarantine and " +
+              "the post-install self-test remain unverified. A hooked or attached workspace does not prove blocking.";
 
     /// <summary>Appends <see cref="UnsupportedNote"/> to a status text; unchanged on Windows.</summary>
     public static string WithUnsupportedNote(string text, bool windows, string osName)

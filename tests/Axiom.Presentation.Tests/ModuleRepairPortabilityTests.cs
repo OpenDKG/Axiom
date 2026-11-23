@@ -26,13 +26,24 @@ public sealed class ModuleRepairPortabilityTests
     }
 
     [Fact]
-    public void Posix_venv_check_uses_bin_python_only()
+    public void Posix_venv_check_uses_the_native_interpreter_layout()
     {
         var root = Path.Combine("modules", "agent-blackbox");
         Assert.True(AgentPlatform.HasVenvPython(
             root, windows: false, path => path == Path.Combine(root, "venv", "bin", "python")));
         Assert.False(AgentPlatform.HasVenvPython(
             root, windows: false, path => path == Path.Combine(root, "venv", "Scripts", "python.exe")));
+    }
+
+    [Fact]
+    public void Posix_venv_check_accepts_the_managed_hermes_interpreter_launcher()
+    {
+        var root = Path.Combine("modules", "agent-blackbox");
+        var launcher = Path.Combine(root, "axiom-blackbox-python");
+
+        Assert.Equal(launcher, AgentPlatform.VenvPythonNoConsole(root, windows: false, path => path == launcher));
+        Assert.True(AgentPlatform.HasVenvPython(root, windows: false, path => path == launcher));
+        Assert.False(AgentPlatform.HasVenvPython(root, windows: true, path => path == launcher));
     }
 
     [Fact]

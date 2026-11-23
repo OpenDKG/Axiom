@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Avalonia;
 using Axiom.Contracts;
+using Axiom.Presentation;
 
 namespace Axiom.Desktop.Avalonia.MacOS;
 
@@ -15,6 +16,11 @@ internal static class Program
         DistributionContext.ConfigureForProcess(false);
         try
         {
+            if (UnixAgentSetup.TryHandle(args, out var setupExitCode))
+            {
+                return setupExitCode;
+            }
+
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
         catch (Exception exception)

@@ -73,7 +73,8 @@ public sealed class OptionalModuleInstaller
     public static bool IsInstallSupported => OperatingSystem.IsWindows();
 
     public static string UnsupportedInstallMessage { get; } =
-        $"Guided module installation is not available on {UnsupportedPlatformName} yet. Install the module manually, then click Check again.";
+        $"Guided module installation is not available on {UnsupportedPlatformName} yet. " +
+        "Run the Axiom installer with --complete or install the module manually, then click Check again.";
 
     private static string UnsupportedPlatformName =>
         OperatingSystem.IsMacOS() ? "macOS" : OperatingSystem.IsLinux() ? "Linux" : "this platform";

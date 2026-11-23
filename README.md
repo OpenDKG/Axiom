@@ -19,8 +19,19 @@ installer="$(curl -fsSL https://raw.githubusercontent.com/OpenDKG/Axiom/main/scr
 The scripts verify downloaded packages against their SHA-256 hashes. On Windows this installs
 the core app. Use the graphical setup for the optional Complete installation. On Ubuntu, APT
 installs the package and required dependencies and may prompt for `sudo`. On macOS, the installer
-opens Axiom from `~/Applications` and preserves any app already there. The ad hoc-signed macOS preview
+installs Axiom to `/Applications` and preserves any app already there. The ad hoc-signed macOS preview
 may need macOS approval, and its Network Extension has separate activation requirements.
+
+For a package that includes Unix Complete setup, add `--complete` to also install Umanitek
+Blackbox, its bundled DKG node (Oxigraph, without Docker), and refresh Axiom's hooks for detected agents:
+
+```bash
+installer="$(curl -fsSL https://raw.githubusercontent.com/OpenDKG/Axiom/main/scripts/install-from-github.sh)" && bash -c "$installer" -- --complete
+```
+
+Run Complete as your desktop user with Git available. It downloads third-party dependencies,
+starts local services, and runs the initial Blackbox sync. Installing hooks alone does not
+verify blocking. Review the status of each agent in Axiom and approve Codex hooks in Codex if required.
 
 [Download Axiom](https://github.com/OpenDKG/Axiom/releases/latest)
 · [All releases](https://github.com/OpenDKG/Axiom/releases)

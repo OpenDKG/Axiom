@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Avalonia;
 using Axiom.Contracts;
+using Axiom.Presentation;
 
 namespace Axiom.Desktop.Avalonia.Linux;
 
@@ -12,6 +13,11 @@ internal static class Program
         DistributionContext.ConfigureForProcess(false);
         try
         {
+            if (UnixAgentSetup.TryHandle(args, out var setupExitCode))
+            {
+                return setupExitCode;
+            }
+
             // Single instance before any Avalonia initialisation: calling Shutdown() from inside
             // OnFrameworkInitializationCompleted throws "Dispatcher shut down" on the X11 backend,
             // and a second launch should be cheap anyway.
