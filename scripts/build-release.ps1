@@ -59,9 +59,17 @@ if (-not $OutputDir) {
     $OutputDir = Join-Path $root "artifacts\release"
 }
 
+$headCommit = ((& git -C $root rev-parse HEAD 2>$null) | Out-String).Trim()
 $highestTag = $null
 $existingTags = & git -C $root tag --list "v*" 2>$null
 foreach ($tag in $existingTags) {
+    if ($tag -eq "v$Version" -and $headCommit) {
+        $tagCommit = ((& git -C $root rev-parse "$tag^{commit}" 2>$null) | Out-String).Trim()
+        if ($tagCommit -eq $headCommit) {
+            continue
+        }
+    }
+
     $candidate = $tag.TrimStart("v")
     $parsed = $null
     if ([version]::TryParse($candidate, [ref]$parsed) -and
